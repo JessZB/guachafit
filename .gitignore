@@ -1,0 +1,12 @@
+# Archivos temporales del sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Archivos de caché y estado volátil de Obsidian (si se abre como sub-vault)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+*.tmp
+*.bak
+*.swp
+*~
