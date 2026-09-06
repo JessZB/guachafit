@@ -12,13 +12,15 @@ tags:
   - contratos
   - dtos
   - seguridad
-  - idempotencia
+  - rbac
+  - onboarding
+  - notificaciones
   - sdd
 ---
 
 # 🔌 Especificación de Contratos de API REST - GUACHAFIT
 
-> **Objetivo del Documento:** Definir formalmente las rutas HTTP, estructuras de petición y respuesta (DTOs en TypeScript y JSON Schemas), códigos de error, políticas de autorización (RBAC) y mecanismos de idempotencia para los tres módulos operacionales del MVP: **Entrenamiento**, **Antropometría** y **Conciliación Financiera**.
+> **Objetivo del Documento:** Definir formalmente las rutas HTTP, estructuras de petición y respuesta (DTOs en TypeScript y JSON Schemas), códigos de error, políticas de autorización (RBAC jerárquico SuperAdmin $\rightarrow$ Entrenador $\rightarrow$ Alumno) y mecanismos de idempotencia para la totalidad de módulos funcionales del sistema.
 
 ---
 
@@ -27,524 +29,348 @@ tags:
 - **URL Base:** `https://api.guachafit.com/api/v1`
 - **Formato de Carga:** `application/json; charset=utf-8` (salvo subidas binarias directas a Cloudflare R2 vía `image/webp`).
 - **Autenticación:** Esquema Bearer Token (`Authorization: Bearer <jwt_access_token>`). Los tokens expiran cada 15 minutos; la renovación utiliza una cookie segura `HttpOnly; Secure; SameSite=Strict` sobre `/api/v1/auth/refresh`.
+- **Contexto Multi-Tenant:** El JWT incluye los claims obligatorios `{ sub, rol, entrenador_id }`. En cada conexión de base de datos se ejecuta `SET LOCAL app.current_entrenador_id = '...'` activando el aislamiento por **Row-Level Security (RLS)** (`RNF-003`, `ADR-009`).
 - **Zonas Horarias y Fechas (`ADR-002`):**
   - Todo campo con fecha y hora (`*Utc`) se serializa estrictamente en formato ISO 8601 UTC terminado en `Z` (ej. `"2026-09-06T14:30:00.000Z"`).
-  - Las fechas sin hora (`fechaProgramada`, `fechaEvaluacion`) utilizan formato calendario `"YYYY-MM-DD"`.
+  - Las fechas sin hora (`fechaProgramada`, `fechaNacimiento`) utilizan formato calendario `"YYYY-MM-DD"`.
 - **Precisión Financiera (`RNF-002`):**
-  - Todos los montos monetarios se transmiten como cadenas de texto numéricas con 2 decimales (ej. `"50.00"` o `"1250.50"`) para evitar que parsers JSON en frontend conviertan números a floats binarios IEEE 754.
-  - Las tasas de cambio se transmiten como cadenas con 4 decimales (ej. `"65.4321"`).
-- **Encabezado de Idempotencia (`RNF-002`):**
-  - Toda mutación que registre o concilie fondos debe incluir el encabezado HTTP:
+  - Montos monetarios transmitidos como cadenas con 2 decimales (ej. `"50.00"` o `"1250.50"`).
+  - Tasas de cambio como cadenas con 4 decimales (ej. `"65.4321"`).
+- **Encabezado de Idempotencia (`RNF-002`, `RNF-004`):**
+  - Requerido para mutaciones financieras y despachos de notificaciones:
     ```http
     X-Idempotency-Key: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
     ```
-- **Esquema Estándar de Error (RFC 7807):**
+- **Esquema Estándar de Error (RFC 7807 Problem Details):**
   ```json
   {
-    "type": "https://api.guachafit.com/errors/financial-invariant-violation",
-    "title": "Violación de Invariante Financiera",
-    "status": 422,
-    "detail": "El monto abonado excede el saldo pendiente de la cuota.",
-    "instance": "/api/v1/finanzas/transacciones/a1b2c3d4/conciliar",
-    "code": "OVERPAYMENT_NOT_ALLOWED",
+    "type": "https://api.guachafit.com/errors/resource-not-found",
+    "title": "Recurso no encontrado",
+    "status": 404,
+    "detail": "El alumno especificado no existe o no pertenece a su cartera.",
+    "instance": "/api/v1/alumnos/a1b2c3d4",
+    "code": "ALUMNO_NOT_FOUND",
     "timestampUtc": "2026-09-06T14:32:00.123Z"
   }
   ```
 
 ---
 
-## 🏋️ 2. Módulo de Entrenamiento y Nutrición
+## 👤 2. Módulo de IAM, Onboarding y Ciclo de Vida de Clientes
 
-### 2.1. Obtener Sesión de Hoy del Alumno
-Permite a la PWA descargar la sesión programada para la fecha actual en la zona horaria del alumno, con soporte para almacenamiento local offline en IndexedDB.
+### 2.1. Establecer Contraseña con Token de Invitación (`RF-011`, `RNF-003`)
+Permite al alumno que fue dado de alta manualmente por su entrenador activar su cuenta ingresando la contraseña definitiva a partir del enlace de bienvenida recibido por correo.
 
-- **Método y Ruta:** `GET /alumnos/me/sesiones/hoy`
-- **Permisos (RBAC):** Rol `alumno`.
-- **Query Params:** `?timezone=America/Caracas` (Opcional, detectado del perfil si se omite).
+- **Método y Ruta:** `POST /auth/invitacion/establecer-password`
+- **Permisos:** Público (Protegido por token de un solo uso).
+- **Cuerpo de Petición:**
+```json
+{
+  "token": "d7a8f9c1b2e3456789abcdef0123456789abcdef0123456789abcdef01234567",
+  "password": "PasswordSegura#2026"
+}
+```
+- **Lógica de Ejecución:**
+  1. Hashea el token con SHA-256 y busca en `usuarios` donde `token_invitacion_hash == hash` y `token_invitacion_expira > now_utc()`.
+  2. Genera el hash seguro de contraseña (Argon2id / bcrypt).
+  3. Limpia `token_invitacion_hash` y `token_invitacion_expira` (un solo uso, `RNF-003`).
+  4. Retorna el par de tokens JWT (Access Token + Refresh Token).
 - **Respuesta Exitosa (`200 OK`):**
 ```json
 {
-  "id": "e8f6e9c2-5509-48e2-b13c-7435f29910d1",
-  "fechaProgramada": "2026-09-06",
-  "estado": "planificada",
-  "porcentajeCumplimiento": "0.00",
-  "fechaInicioUtc": null,
-  "fechaFinUtc": null,
-  "ejercicios": [
-    {
-      "ejercicioSesionId": "b1a7d6e4-4401-49b2-99cc-112233445566",
-      "ejercicioId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-      "nombre": "Press de Banca Plano con Barra",
-      "grupoMuscular": "Pecho",
-      "patronMovimiento": "Empuje Horizontal",
-      "orden": 1,
-      "notasCoach": "Mantener retracción escapular y pausa de 1 seg en el pecho",
-      "series": [
-        {
-          "serieId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
-          "numeroSerie": 1,
-          "repsObjetivo": 10,
-          "repsLogradas": null,
-          "pesoKg": "80.00",
-          "rpe": null,
-          "completada": false,
-          "anteriorRepsLogradas": 10,
-          "anteriorPesoKg": "75.00"
-        },
-        {
-          "serieId": "8d0e7780-8536-41ef-a55c-f18fd2001bf8",
-          "numeroSerie": 2,
-          "repsObjetivo": 8,
-          "repsLogradas": null,
-          "pesoKg": "85.00",
-          "rpe": null,
-          "completada": false,
-          "anteriorRepsLogradas": 8,
-          "anteriorPesoKg": "80.00"
-        }
-      ]
-    }
-  ]
+  "mensaje": "Contraseña establecida con éxito. Bienvenido a GUACHAFIT.",
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "usuario": {
+    "id": "e8f6e9c2-5509-48e2-b13c-7435f29910d1",
+    "email": "carlos.mendoza@email.com",
+    "rol": "alumno"
+  }
 }
 ```
 
-### 2.2. Iniciar Sesión de Entrenamiento
-Acción explícita (`comenzarEntrenamiento()`) al pulsar *"Comenzar a Entrenar"*. Sella el inicio formal y transiciona de `planificada` a `en_progreso`.
+### 2.2. Alta Manual de Alumno por el Entrenador (`RF-011`)
+Permite al coach inscribir a un alumno en el gimnasio presencialmente. Calcula automáticamente la edad y guarda la ficha médica confidencial.
 
-- **Método y Ruta:** `POST /sesiones/{id}/iniciar`
-- **Permisos:** Rol `alumno` (titular de la sesión).
+- **Método y Ruta:** `POST /alumnos/manual`
+- **Permisos:** Rol `entrenador`.
 - **Cuerpo de Petición:**
 ```json
 {
-  "timezoneCliente": "America/Caracas"
-}
-```
-- **Respuesta Exitosa (`200 OK`):**
-```json
-{
-  "id": "e8f6e9c2-5509-48e2-b13c-7435f29910d1",
-  "estado": "en_progreso",
-  "fechaInicioUtc": "2026-09-06T15:05:22.450Z",
-  "mensaje": "Sesión iniciada exitosamente"
-}
-```
-
-### 2.3. Marcar o Actualizar Serie (Sincronización Offline-First)
-Permite registrar una serie individual o un lote (*batch*) sincronizado desde IndexedDB cuando se recupera la conexión.
-
-- **Método y Ruta:** `PUT /sesiones/{id}/series`
-- **Permisos:** Rol `alumno`.
-- **Cuerpo de Petición:**
-```json
-{
-  "series": [
-    {
-      "serieId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
-      "repsLogradas": 10,
-      "pesoKg": "82.50",
-      "rpe": "8.5",
-      "completada": true,
-      "timestampCompletadaUtc": "2026-09-06T15:12:45.000Z"
-    }
-  ]
-}
-```
-- **Respuesta Exitosa (`200 OK`):**
-```json
-{
-  "sesionId": "e8f6e9c2-5509-48e2-b13c-7435f29910d1",
-  "seriesActualizadas": 1,
-  "porcentajeCumplimiento": "50.00"
-}
-```
-
-### 2.4. Finalizar Entrenamiento y Cálculo de Racha
-Calcula el volumen ejecutado, valida el umbral de completitud del 70% (`INV-01`), consolida la racha y bloquea la edición por el alumno (`INV-02`).
-
-- **Método y Ruta:** `POST /sesiones/{id}/finalizar`
-- **Permisos:** Rol `alumno`.
-- **Cuerpo de Petición:**
-```json
-{
-  "notasAlumno": "Excelente congestión en pectoral. Subí 2.5 kg en la segunda serie."
-}
-```
-- **Respuesta Exitosa (`200 OK`):**
-```json
-{
-  "id": "e8f6e9c2-5509-48e2-b13c-7435f29910d1",
-  "estado": "completada",
-  "fechaFinUtc": "2026-09-06T16:15:10.890Z",
-  "porcentajeCumplimiento": "100.00",
-  "creditoRachaOtorgado": true,
-  "rachaActualDias": 5,
-  "mensaje": "¡Entrenamiento completado! Has sumado 1 día a tu racha."
-}
-```
-
-### 2.5. Reporte de Semáforo Nutricional Diario (1-Tap)
-- **Método y Ruta:** `POST /nutricion/checkin-diario`
-- **Permisos:** Rol `alumno`.
-- **Cuerpo de Petición:**
-```json
-{
-  "fecha": "2026-09-06",
-  "semaforo": "cumplido",
-  "aguaLitros": "3.50",
-  "caloriasReportadas": 2450,
-  "proteinaGramosReportada": 165,
-  "notasAlumno": "Comí todas las comidas según el plan y tomé toda el agua.",
-  "fotosPlatos": [
-    {
-      "tipoComida": "almuerzo",
-      "storageKey": "comidas/a1b2c3d4/2026-09-06/foto-almuerzo-uuid.webp"
-    }
-  ]
-}
-```
-- **Respuesta Exitosa (`201 Created` / `200 OK` si actualiza):**
-```json
-{
-  "id": "3b7c9e10-1234-5678-abcd-ef0123456789",
-  "fecha": "2026-09-06",
-  "semaforo": "cumplido",
-  "mensaje": "Check-in nutricional registrado con éxito"
-}
-```
-
----
-
-## 📏 3. Módulo de Antropometría y Fotos de Progreso
-
-### 3.1. Solicitar URL Presignada de Subida Directa (Direct-to-Storage)
-Genera una URL temporal firmada en Cloudflare R2 con TTL de 15 minutos (`RNF-001`), evitando que los megabytes de fotos pasen por el servidor NestJS.
-
-- **Método y Ruta:** `POST /antropometria/presigned-upload-url`
-- **Permisos:** Roles `alumno` y `entrenador`.
-- **Cuerpo de Petición:**
-```json
-{
-  "modulo": "antropometria",
-  "alumnoId": "4a5b6c7d-8e9f-0a1b-2c3d-4e5f6a7b8c9d",
-  "angulo": "frontal",
-  "mimeType": "image/webp"
-}
-```
-- **Respuesta Exitosa (`200 OK`):**
-```json
-{
-  "uploadUrl": "https://guachafit-media.r2.cloudflarestorage.com/antropometria/4a5b6c7d/2026/frontal-9a8b7c6d.webp?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=900...",
-  "storageKey": "antropometria/4a5b6c7d/2026/frontal-9a8b7c6d.webp",
-  "expiraEnSegundos": 900
-}
-```
-
-### 3.2. Registrar Evaluación Antropométrica (Híbrido Presencial / Remoto)
-Implementa la máquina de estados de `ADR-001`. Si el usuario autenticado es el alumno (modalidad remota), el registro se crea en estado `pendiente_aprobacion`. Si es el coach (modalidad presencial), se aprueba de inmediato.
-
-- **Método y Ruta:** `POST /antropometria/checkin`
-- **Permisos:** Roles `alumno` y `entrenador`.
-- **Cuerpo de Petición:**
-```json
-{
-  "alumnoId": "4a5b6c7d-8e9f-0a1b-2c3d-4e5f6a7b8c9d",
-  "fechaEvaluacion": "2026-09-06",
-  "pesoKg": "78.40",
-  "alturaCm": "178.00",
-  "porcentajeGrasa": "14.50",
-  "perimetros": {
-    "cuelloCm": "39.00",
-    "pechoCm": "104.00",
-    "cinturaCm": "81.50",
-    "caderaCm": "98.00",
-    "brazoCm": "37.50",
-    "musloCm": "58.00"
-  },
-  "fotos": [
-    { "angulo": "frontal", "storageKey": "antropometria/4a5b6c7d/2026/frontal-9a8b7c6d.webp" },
-    { "angulo": "lateral", "storageKey": "antropometria/4a5b6c7d/2026/lateral-1a2b3c4d.webp" },
-    { "angulo": "posterior", "storageKey": "antropometria/4a5b6c7d/2026/posterior-5e6f7a8b.webp" }
-  ]
+  "nombres": "Carlos Alberto",
+  "apellidos": "Mendoza Silva",
+  "email": "carlos.mendoza@email.com",
+  "tipoDocumento": "V_",
+  "numeroDocumento": "24123456",
+  "fechaNacimiento": "1998-05-14",
+  "telefonoWhatsapp": "+584121234567",
+  "modalidad": "presencial",
+  "tasaFijadaOverride": "65.0000",
+  "fichaSaludPrivada": "Cirugía de ligamento cruzado anterior rodilla derecha en 2022. Evitar sentadilla profunda pesada."
 }
 ```
 - **Respuesta Exitosa (`201 Created`):**
 ```json
 {
-  "id": "f1e2d3c4-b5a6-7890-1234-567890abcdef",
-  "alumnoId": "4a5b6c7d-8e9f-0a1b-2c3d-4e5f6a7b8c9d",
-  "modalidad": "remoto",
-  "origen": "remoto_autoreporte",
-  "estado": "pendiente_aprobacion",
-  "mensaje": "Check-in enviado al entrenador para validación y aprobación."
+  "id": "4a5b6c7d-8e9f-0a1b-2c3d-4e5f6a7b8c9d",
+  "nombres": "Carlos Alberto",
+  "apellidos": "Mendoza Silva",
+  "email": "carlos.mendoza@email.com",
+  "edadCalculada": 28,
+  "modalidad": "presencial",
+  "estadoActivacion": "activo",
+  "mensaje": "Alumno registrado con éxito. Se ha enviado un correo con el enlace de activación."
 }
 ```
 
-### 3.3. Consultar Evolución Corporal y Fotos con URLs Firmadas
-Entrega el historial de mediciones aprobadas y genera URLs firmadas GET con TTL de 15 minutos para renderizar el comparador fotográfico (`RF-004`).
+### 2.3. Registro Público Autónomo de Alumno (Deep Link con `coachCode`, `RF-011`)
+Permite a un alumno registrarse por su cuenta utilizando el enlace de captación pública de su entrenador (`/registro?coach_code=GUACHA01`).
 
-- **Método y Ruta:** `GET /antropometria/evolucion/{alumnoId}`
-- **Permisos:** Rol `entrenador` o el propio `alumno` titular.
-- **Respuesta Exitosa (`200 OK`):**
+- **Método y Ruta:** `POST /alumnos/registro-publico`
+- **Permisos:** Público.
+- **Cuerpo de Petición:**
 ```json
 {
-  "alumnoId": "4a5b6c7d-8e9f-0a1b-2c3d-4e5f6a7b8c9d",
-  "historial": [
-    {
-      "id": "c1d2e3f4-5678-90ab-cdef-1234567890ab",
-      "fechaEvaluacion": "2026-08-06",
-      "pesoKg": "80.20",
-      "porcentajeGrasa": "15.80",
-      "cinturaCm": "83.50",
-      "estado": "aprobado",
-      "fotos": [
-        {
-          "angulo": "frontal",
-          "signedViewUrl": "https://guachafit-media.r2.cloudflarestorage.com/antropometria/...signed-token...",
-          "expiraEnSegundos": 900
-        }
-      ]
-    },
-    {
-      "id": "f1e2d3c4-b5a6-7890-1234-567890abcdef",
-      "fechaEvaluacion": "2026-09-06",
-      "pesoKg": "78.40",
-      "porcentajeGrasa": "14.50",
-      "cinturaCm": "81.50",
-      "estado": "aprobado",
-      "fotos": [
-        {
-          "angulo": "frontal",
-          "signedViewUrl": "https://guachafit-media.r2.cloudflarestorage.com/antropometria/...signed-token...",
-          "expiraEnSegundos": 900
-        }
-      ]
-    }
-  ],
-  "delta": {
-    "diasTranscurridos": 31,
-    "deltaPesoKg": "-1.80",
-    "deltaGrasa": "-1.30",
-    "deltaCinturaCm": "-2.00"
-  }
+  "coachCode": "GUACHA01",
+  "nombres": "Mariana",
+  "apellidos": "Pérez Gómez",
+  "email": "mariana.perez@email.com",
+  "password": "PasswordFuerte#123",
+  "tipoDocumento": "V_",
+  "numeroDocumento": "26987654",
+  "fechaNacimiento": "2001-11-20",
+  "telefonoWhatsapp": "+584149876543",
+  "modalidad": "remoto"
+}
+```
+- **Respuesta Exitosa (`201 Created`):**
+```json
+{
+  "id": "7b8c9d0e-1f2a-3b4c-5d6e-7f8a9b0c1d2e",
+  "nombres": "Mariana",
+  "email": "mariana.perez@email.com",
+  "coachAsignado": "GuachaFit Performance",
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "mensaje": "Registro completado con éxito."
 }
 ```
 
-### 3.4. Aprobar o Rechazar Check-in (Entrenador)
-- **Método y Ruta:** `PATCH /antropometria/{id}/conciliar`
+### 2.4. Cambio de Estado de Activación y Ciclo de Vida (`RF-012`)
+Permite pausar a un alumno (ej. por viaje o lesión) o reactivarlo.
+
+- **Método y Ruta:** `PATCH /alumnos/{id}/estado`
 - **Permisos:** Rol `entrenador`.
-- **Cuerpo de Petición (Aprobación):**
+- **Cuerpo de Petición:**
 ```json
 {
-  "accion": "aprobar",
-  "observacionesCoach": "Excelente reducción de cintura. Medición validada."
-}
-```
-- **Cuerpo de Petición (Rechazo con corrección):**
-```json
-{
-  "accion": "rechazar",
-  "motivoRechazo": "La foto lateral no se tomó con buena iluminación y la cinta métrica de cadera parece holgada. Por favor repetir medición."
+  "nuevoEstado": "inactivo_pausado",
+  "motivo": "Viaje de trabajo por 3 semanas. Pausar emisión de cuotas."
 }
 ```
 - **Respuesta Exitosa (`200 OK`):**
 ```json
 {
-  "id": "f1e2d3c4-b5a6-7890-1234-567890abcdef",
-  "estado": "aprobado",
-  "fechaAprobacionUtc": "2026-09-06T16:45:00.000Z"
+  "id": "4a5b6c7d-8e9f-0a1b-2c3d-4e5f6a7b8c9d",
+  "estadoActivacion": "inactivo_pausado",
+  "mensaje": "El alumno ha sido pausado. No se generarán recordatorios ni cuotas automáticas."
+}
+```
+
+### 2.5. Baja Lógica de Alumno (*Soft Delete*, `RF-012`)
+- **Método y Ruta:** `DELETE /alumnos/{id}`
+- **Permisos:** Rol `entrenador`.
+- **Respuesta Exitosa (`200 OK`):**
+```json
+{
+  "id": "4a5b6c7d-8e9f-0a1b-2c3d-4e5f6a7b8c9d",
+  "deletedAtUtc": "2026-09-06T15:30:00.000Z",
+  "mensaje": "Alumno dado de baja exitosamente. Su histórico deportivo y financiero ha sido preservado."
+}
+```
+
+### 2.6. Dashboard de Comando Central del Entrenador (`RF-013`)
+Provee la fotografía ejecutiva del negocio en un solo payload optimizado ($p95 < 200$ ms, `RNF-003`).
+
+- **Método y Ruta:** `GET /entrenador/dashboard-comando`
+- **Permisos:** Rol `entrenador`.
+- **Respuesta Exitosa (`200 OK`):**
+```json
+{
+  "kpisMacro": {
+    "alumnosActivos": 38,
+    "capacidadMaxima": 50,
+    "porcentajeOcupacion": "76.00",
+    "cobranzaMesUsd": "1900.00",
+    "metaCobranzaMesUsd": "2500.00",
+    "porcentajeCobranza": "76.00",
+    "tasaAdherenciaSemanal": "84.50",
+    "alumnosEnRiesgo": 4
+  },
+  "bandejasRapidas": {
+    "pagosPorConciliar": 3,
+    "checkinsAntropometricosPendientes": 2,
+    "alumnosEnMora": [
+      {
+        "alumnoId": "4a5b6c7d-8e9f-0a1b-2c3d-4e5f6a7b8c9d",
+        "nombre": "Carlos Mendoza",
+        "cuotaId": "c9d8e7f6-5a4b-3c2d-1e0f-9a8b7c6d5e4f",
+        "saldoPendienteUsd": "30.00",
+        "diasVencido": 5
+      }
+    ],
+    "alumnosInactivosEntrenamiento": [
+      {
+        "alumnoId": "9f8e7d6c-5b4a-3c2d-1e0f-1a2b3c4d5e6f",
+        "nombre": "Andrés Silva",
+        "diasSinEntrenar": 6
+      }
+    ]
+  }
 }
 ```
 
 ---
 
-## 💰 4. Módulo de Finanzas, Cobranza y Conciliación
+## 🔔 3. Módulo de Notificaciones, Preferencias y Dispositivos
 
-### 4.1. Consultar Tasas Cambiarias y Saldos Bimonetarios
-Provee la tasa oficial, la tasa activa del entrenador y la tasa personalizada de override del alumno si existe (`ADR-003`).
-
-- **Método y Ruta:** `GET /finanzas/tasas/vigente`
-- **Permisos:** Roles `alumno` y `entrenador`.
-- **Respuesta Exitosa (`200 OK`):**
-```json
-{
-  "tasaOficialBcv": "60.5000",
-  "tasaActivaEntrenador": "65.0000",
-  "tasaAplicableUsuario": "65.0000",
-  "tieneOverride": false,
-  "fechaActualizacionUtc": "2026-09-06T12:00:00.000Z"
-}
-```
-
-### 4.2. Reporte de Pago por el Alumno (Abono Fraccionado Bimonetario)
-Sella inmutablemente la tasa de cambio vigente al momento del reporte (`ADR-003`), genera la transacción en estado `pendiente`, coloca la cuota en `pendiente_revision` y exige cabecera de idempotencia (`RNF-002`).
-
-- **Método y Ruta:** `POST /finanzas/cuotas/{id}/reportar-pago`
-- **Encabezados Requeridos:**
-  - `Authorization: Bearer <token>`
-  - `X-Idempotency-Key: 7f8a9b0c-1d2e-3f4a-5b6c-7d8e9f0a1b2c`
-- **Permisos:** Rol `alumno` (titular de la cuota).
+### 3.1. Consultar y Actualizar Matriz de Preferencias (`RF-015`)
+- **Consultar:** `GET /notificaciones/preferencias` (Rol `alumno` o `entrenador`).
+- **Actualizar:** `PUT /notificaciones/preferencias`
 - **Cuerpo de Petición:**
 ```json
 {
-  "montoOriginal": "1300.00",
-  "monedaOriginal": "VES",
-  "metodoPago": "pago_movil",
-  "referenciaBancaria": "847291",
-  "fechaOperacion": "2026-09-06",
-  "comprobanteStorageKey": "comprobantes/coach-uuid/cuota-uuid/recibo-847291.webp"
+  "notifyPaymentsPush": true,
+  "notifyPaymentsEmail": true,
+  "notifyWorkoutsPush": true,
+  "notifyWorkoutsEmail": false,
+  "notifyCheckinsPush": true,
+  "notifyCheckinsEmail": false,
+  "digestWeeklyEmail": true
 }
 ```
-- **Lógica de Ejecución en Backend:**
-  1. Verifica el `X-Idempotency-Key` en Redis / DB. Si ya existe la misma operación, devuelve el resultado guardado sin duplicar.
-  2. Determina la tasa aplicable: `65.0000 Bs/USD`.
-  3. Calcula el crédito equivalente: $1,300.00 / 65.0000 = \$20.00 \text{ USD}$.
-  4. Inserta `transacciones_pago` con `estado_conciliacion = 'pendiente'`.
-  5. Actualiza `cuotas_membresia` con `estado = 'pendiente_revision'`.
-- **Respuesta Exitosa (`201 Created`):**
+- **Respuesta Exitosa (`200 OK`):**
 ```json
 {
-  "transaccionId": "3e4f5a6b-7c8d-9e0f-1a2b-3c4d5e6f7a8b",
-  "cuotaId": "c9d8e7f6-5a4b-3c2d-1e0f-9a8b7c6d5e4f",
-  "montoOriginal": "1300.00",
-  "monedaOriginal": "VES",
-  "tasaCambioFijada": "65.0000",
-  "montoEquivalenteUsd": "20.00",
-  "estadoConciliacion": "pendiente",
-  "estadoCuota": "pendiente_revision",
-  "mensaje": "Pago reportado exitosamente. Tu entrenador verificará el ingreso en breve."
+  "mensaje": "Preferencias de notificación actualizadas exitosamente."
 }
 ```
 
-### 4.3. Cobro Directo en Efectivo Registrado por el Entrenador
-Permite al coach cobrar en sala (dólares o bolívares en efectivo). Se aprueba y aplica inmediatamente sin requerir comprobante ni pasar por la bandeja de revisión (`INV-04` de `Entidad-TransaccionPago`).
-
-- **Método y Ruta:** `POST /finanzas/cuotas/{id}/cobro-directo`
-- **Encabezados Requeridos:** `X-Idempotency-Key: <UUID>`
-- **Permisos:** Rol `entrenador`.
+### 3.2. Registro y Rotación de Token Push de Dispositivo (`RF-016`)
+- **Método y Ruta:** `POST /dispositivos/registrar`
+- **Permisos:** Autenticado (`alumno`, `entrenador`).
 - **Cuerpo de Petición:**
 ```json
 {
-  "montoOriginal": "30.00",
-  "monedaOriginal": "USD",
-  "metodoPago": "efectivo_usd",
-  "fechaOperacion": "2026-09-06",
-  "notas": "Pago recibido en efectivo en el gimnasio"
+  "deviceToken": "fcm_token_c5k7d9...8x1",
+  "platform": "android"
 }
 ```
 - **Respuesta Exitosa (`200 OK`):**
 ```json
 {
-  "transaccionId": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-  "cuotaId": "c9d8e7f6-5a4b-3c2d-1e0f-9a8b7c6d5e4f",
-  "montoAbonadoUsd": "50.00",
-  "saldoPendienteUsd": "0.00",
-  "estadoCuota": "al_dia",
-  "mensaje": "Cobro directo registrado. La cuota ha sido liquidada al 100%."
+  "id": "d1e2f3a4-b5c6-7890-1234-567890abcdef",
+  "isActive": true,
+  "mensaje": "Dispositivo registrado para alertas push."
 }
 ```
 
-### 4.4. Bandeja de Conciliación: Aprobar o Rechazar Transacción
-Ejecuta la transacción ACID interactiva en PostgreSQL bloqueando la cuota con `SELECT ... FOR UPDATE` (`RNF-002`).
-
-- **Método y Ruta:** `PATCH /finanzas/transacciones/{id}/conciliar`
-- **Permisos:** Rol `entrenador`.
-- **Cuerpo de Petición (Aprobar):**
+### 3.3. Centro de Alertas In-App (`RF-014`)
+- **Consultar Alertas:** `GET /notificaciones/in-app?limit=20&soloNoLeidas=false`
+- **Marcar Leída:** `PATCH /notificaciones/in-app/{id}/leer`
+- **Respuesta Exitosa de Consulta (`200 OK`):**
 ```json
 {
-  "accion": "aprobar"
-}
-```
-- **Cuerpo de Petición (Rechazar):**
-```json
-{
-  "accion": "rechazar",
-  "motivoRechazo": "Los fondos no aparecen reflejados en la cuenta de Pago Móvil con la referencia provista."
-}
-```
-- **Respuesta Exitosa (`200 OK` - Tras Aprobación):**
-```json
-{
-  "transaccionId": "3e4f5a6b-7c8d-9e0f-1a2b-3c4d5e6f7a8b",
-  "estadoConciliacion": "aprobado",
-  "fechaConciliacionUtc": "2026-09-06T17:02:15.340Z",
-  "impactoCuota": {
-    "cuotaId": "c9d8e7f6-5a4b-3c2d-1e0f-9a8b7c6d5e4f",
-    "montoAcreditadoUsd": "20.00",
-    "montoAbonadoTotalUsd": "20.00",
-    "saldoPendienteUsd": "30.00",
-    "nuevoEstadoCuota": "abonada_parcial"
-  }
-}
-```
-
-### 4.5. Tablero de Control de Cartera y Morosidad (`RF-009`)
-Entrega las métricas agregadas en tiempo real para el entrenador: total facturado, cobrado, por cobrar, en mora y la lista clasificada de alumnos.
-
-- **Método y Ruta:** `GET /finanzas/cartera/dashboard`
-- **Permisos:** Rol `entrenador`.
-- **Query Params:** `?periodo=2026-09` (Opcional, mes actual por defecto).
-- **Respuesta Exitosa (`200 OK`):**
-```json
-{
-  "periodo": "2026-09",
-  "kpis": {
-    "carteraTotalUsd": "1500.00",
-    "totalCobradoUsd": "950.00",
-    "totalPendienteUsd": "450.00",
-    "totalEnMoraUsd": "100.00",
-    "tasaCobranzaPorcentaje": "63.33",
-    "totalAlumnosActivos": 30,
-    "alumnosAlDia": 19,
-    "alumnosConAbonoParcial": 5,
-    "alumnosEnMora": 2,
-    "transaccionesPendientesRevision": 4
-  },
-  "bandejaConciliacionPendiente": [
+  "totalNoLeidas": 2,
+  "notificaciones": [
     {
-      "transaccionId": "3e4f5a6b-7c8d-9e0f-1a2b-3c4d5e6f7a8b",
-      "clienteNombre": "Carlos Mendoza",
-      "montoOriginal": "1300.00",
-      "monedaOriginal": "VES",
-      "montoEquivalenteUsd": "20.00",
-      "metodoPago": "pago_movil",
-      "referenciaBancaria": "847291",
-      "comprobanteSignedUrl": "https://guachafit-media.r2.cloudflarestorage.com/comprobantes/...signed-url..."
+      "id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+      "titulo": "Pago Recibido",
+      "cuerpo": "Tu entrenador ha validado tu abono de $20.00 USD.",
+      "tipoEvento": "PAGO",
+      "leida": false,
+      "linkAccion": "/finanzas/cuotas/c9d8e7f6",
+      "createdAtUtc": "2026-09-06T14:10:00.000Z"
     }
   ]
 }
 ```
 
+### 3.4. Sincronización Cross-Device de Tema de Interfaz (Dark Mode Persistente)
+Permite almacenar la preferencia de visualización en la cuenta del usuario para que persista al cambiar de dispositivo, respetando la elección local inmediata en `localStorage`.
+
+- **Método y Ruta:** `PATCH /usuarios/me/preferencias`
+- **Permisos:** Autenticado (`superadmin`, `entrenador`, `alumno`).
+- **Cuerpo de Petición:**
+```json
+{
+  "temaUi": "dark"
+}
+```
+- **Valores Permitidos:** `"system"`, `"dark"`, `"light"`.
+- **Respuesta Exitosa (`200 OK`):**
+```json
+{
+  "temaUi": "dark",
+  "mensaje": "Preferencia de interfaz actualizada con éxito."
+}
+```
+
 ---
 
-## 🔒 5. Matriz de Autorización (RBAC Endpoints)
+## 🏋️ 4. Módulo de Entrenamiento y Nutrición
 
-| Endpoint | Rol Alumno | Rol Entrenador | Validación Especial |
-| :--- | :---: | :---: | :--- |
-| `GET /alumnos/me/sesiones/hoy` | ✅ | ❌ | Solo accede a sus propias sesiones. |
-| `POST /sesiones/{id}/iniciar` | ✅ | ❌ | Debe ser el titular de la sesión. |
-| `PUT /sesiones/{id}/series` | ✅ | ❌ | Solo si estado es `en_progreso`. |
-| `POST /sesiones/{id}/finalizar` | ✅ | ❌ | Calcula racha si cumplimiento $\ge 70\%$. |
-| `POST /antropometria/presigned-upload-url` | ✅ | ✅ | Valida cupo de fotos y tipo MIME `image/webp`. |
-| `POST /antropometria/checkin` | ✅ (Remoto) | ✅ (Presencial) | Si es alumno $\rightarrow$ `pendiente_aprobacion`. |
-| `PATCH /antropometria/{id}/conciliar` | ❌ | ✅ | Requiere motivo si es rechazo. |
-| `POST /finanzas/cuotas/{id}/reportar-pago` | ✅ | ❌ | Exige `X-Idempotency-Key` y comprobante. |
-| `POST /finanzas/cuotas/{id}/cobro-directo` | ❌ | ✅ | Auto-aprobación inmediata en efectivo. |
-| `PATCH /finanzas/transacciones/{id}/conciliar` | ❌ | ✅ | Mutación bajo transacción interactiva ACID. |
-| `GET /finanzas/cartera/dashboard` | ❌ | ✅ | Filtra únicamente alumnos del entrenador. |
+- `GET /alumnos/me/sesiones/hoy`: Consulta la sesión programada de hoy en zona horaria local.
+- `POST /sesiones/{id}/iniciar`: Acción explícita `comenzarEntrenamiento()`.
+- `PUT /sesiones/{id}/series`: Checklist de series (compatible con sincronización offline en batch).
+- `POST /sesiones/{id}/finalizar`: Finaliza, evalúa regla de racha ($\ge 70\%$) y emite `SesionEntrenamientoCompletadaEvent`.
+- `POST /nutricion/checkin-diario`: Semáforo 1-Tap con fotos de comida y agua.
 
 ---
 
-## 🔗 6. Trazabilidad y Referencias
-- **Problemas resueltos:** [[PROB-001-adherencia-trazabilidad]], [[PROB-002-cobranza-bimonetaria-fraccionada]].
-- **Requerimientos asociados:** [[RF-001-checklist-entrenamiento-diario]] al [[RF-009-tablero-control-cartera-morosidad]].
-- **Requerimientos No Funcionales:** [[RNF-001-almacenamiento-seguridad-fotos-progreso]], [[RNF-002-consistencia-financiera-idempotencia-pagos]].
-- **Decisiones arquitecturales:**
-  - [[ADR-001-modelo-hibrido-auditoria-antropometrica]]
-  - [[ADR-002-gestion-fechas-utc-zonas-horarias]]
-  - [[ADR-003-deuda-maestra-usd-liquidacion-multitasa]]
-  - [[ADR-004-stack-frontend-pwa-offline-first]]
-  - [[ADR-005-arquitectura-backend-monolito-modular-nestjs]]
-  - [[ADR-006-persistencia-postgresql-drizzle-orm]]
-  - [[ADR-007-almacenamiento-fotos-privadas-cloudflare-r2-presigned-urls]]
-  - [[ADR-008-motor-colas-background-workers-bullmq]]
-- **Documento de Esquema:** [[02_Esquema_Base_de_Datos_PostgreSQL]]
+## 📏 5. Módulo de Antropometría y Fotos de Progreso
+
+- `POST /antropometria/presigned-upload-url`: Genera URL PUT directa a Cloudflare R2 (TTL 15 min, `RNF-001`).
+- `POST /antropometria/checkin`: Envío de evaluación corporal (Presencial $\rightarrow$ Aprobado; Remoto $\rightarrow$ Pendiente según `ADR-001`).
+- `GET /antropometria/evolucion/{alumnoId}`: Historial y URLs presignadas GET de 15 minutos para el comparador (`RF-004`).
+- `PATCH /antropometria/{id}/conciliar`: Aprobación o rechazo con observaciones por el coach.
+
+---
+
+## 💰 6. Módulo de Finanzas, Cobranza y Conciliación
+
+- `GET /finanzas/tasas/vigente`: Consulta de tasa BCV, tasa activa del coach y tasa acordada (`ADR-003`).
+- `POST /finanzas/cuotas/{id}/reportar-pago`: Abono bimonetario reportado con `X-Idempotency-Key`. Congela tasa snapshot.
+- `POST /finanzas/cuotas/{id}/cobro-directo`: Cobro en efectivo en sala registrado por el coach (auto-aprobado inmediato).
+- `PATCH /finanzas/transacciones/{id}/conciliar`: Conciliación bancaria bajo transacción interactiva ACID en PostgreSQL con lock pesimista `SELECT ... FOR UPDATE` (`RNF-002`).
+- `GET /finanzas/cartera/dashboard`: Tablero analítico de cobranza y morosidad (`RF-009`).
+
+---
+
+## 🔒 7. Matriz Global de Autorización (RBAC Jerárquico)
+
+| Endpoint | Rol SuperAdmin | Rol Entrenador | Rol Alumno | Regla de Tenancy / Seguridad |
+| :--- | :---: | :---: | :---: | :--- |
+| `POST /auth/invitacion/establecer-password` | Público | Público | Público | Token SHA-256 de un solo uso con TTL $\le 48$h. |
+| `POST /alumnos/manual` | ❌ | ✅ | ❌ | Asocia el alumno al `entrenador_id` activo. |
+| `POST /alumnos/registro-publico` | Público | Público | Público | Requiere un `coach_code` válido. |
+| `PATCH /alumnos/{id}/estado` | ❌ | ✅ | ❌ | Solo sobre alumnos de su propio tenant. |
+| `DELETE /alumnos/{id}` | ❌ | ✅ | ❌ | Aplica Soft Delete (`deleted_at_utc`). |
+| `GET /entrenador/dashboard-comando` | ❌ | ✅ | ❌ | Agrega métricas exclusivas de su cartera. |
+| `GET /alumnos/me/sesiones/hoy` | ❌ | ❌ | ✅ | Acceso exclusivo a sus propios datos. |
+| `POST /sesiones/{id}/iniciar` | ❌ | ❌ | ✅ | Titular de la sesión. |
+| `PUT /sesiones/{id}/series` | ❌ | ❌ | ✅ | Solo en sesiones `en_progreso`. |
+| `POST /antropometria/checkin` | ❌ | ✅ (Presencial) | ✅ (Remoto) | RBAC híbrido (`ADR-001`). |
+| `PATCH /antropometria/{id}/conciliar` | ❌ | ✅ | ❌ | Requiere motivo descriptivo si se rechaza. |
+| `POST /finanzas/cuotas/{id}/reportar-pago` | ❌ | ❌ | ✅ | Exige `X-Idempotency-Key` y comprobante. |
+| `POST /finanzas/cuotas/{id}/cobro-directo` | ❌ | ✅ | ❌ | Efectivo en sala auto-aprobado. |
+| `PATCH /finanzas/transacciones/{id}/conciliar` | ❌ | ✅ | ❌ | Transacción interactiva ACID en PostgreSQL. |
+| `GET /notificaciones/in-app` | ✅ | ✅ | ✅ | Bandeja privada de cada usuario autenticado. |
+| `POST /dispositivos/registrar` | ✅ | ✅ | ✅ | Asocia token FCM/APNs a la cuenta activa. |
+
+---
+
+## 🔗 8. Trazabilidad y Referencias
+- **Problemas resueltos:** [[PROB-001-adherencia-trazabilidad]] al [[PROB-004-orquestacion-preferencias-notificaciones]].
+- **Requerimientos funcionales:** [[RF-001-checklist-entrenamiento-diario]] al [[RF-016-gestion-dispositivos-tokens-push-ciclo-vida]].
+- **Requerimientos no funcionales:** [[RNF-001-almacenamiento-seguridad-fotos-progreso]] al [[RNF-004-resiliencia-notificaciones-idempotencia-fallbacks]].
+- **Decisiones arquitecturales:** [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-010-arquitectura-event-driven-notificaciones-multicanal]].
+- **Documentos de diseño:** [[01_Evaluacion_Stack_Tecnologico]], [[02_Esquema_Base_de_Datos_PostgreSQL]].

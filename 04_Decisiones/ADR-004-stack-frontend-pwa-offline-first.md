@@ -62,7 +62,15 @@ Elegimos la **Opción C: PWA Instalable con Enfoque Offline-First**:
 1. **Capa de Persistencia Local:** Se utiliza **Dexie.js** sobre IndexedDB para almacenar la sesión activa de entrenamiento del día y una tabla `sync_mutations` que registra cada acción no sincronizada con un UUID determinista.
 2. **Actualizaciones Optimistas:** TanStack Query v5 actualiza el estado en memoria de forma inmediata. Si la llamada HTTP falla por desconexión de red, la mutación queda retenida en IndexedDB y se reintenta automáticamente mediante `online` event listeners.
 3. **Compresión Fotográfica Client-Side:** Antes de solicitar cualquier presigned URL a Cloudflare R2, la imagen capturada por `<input type="file" capture="environment">` o la cámara se procesa en un Web Worker utilizando `OffscreenCanvas`, reduciéndola a un blob `image/webp` con calidad 85% y dimensión máxima de 1920px (garantizando $< 600$ KB en $< 500$ ms, cumpliendo `RNF-001`).
-4. **Camino de Migración Nativa:** La arquitectura de la PWA desacopla la capa de presentación de los servicios de sincronización. Si a futuro se requiere distribución en Google Play o Apple App Store, la aplicación se envolverá en **Capacitor 6** sin necesidad de reescribir la lógica ni la UI.
+4. **Sistema de Diseño y UI Kit (Tailwind CSS v4 + shadcn/ui):**
+   - Motor de estilos CSS-first en Rust (**Tailwind CSS v4**) que acelera la compilación en Vite ($< 10$ ms HMR) y permite configurar tokens de diseño directamente mediante directivas `@theme`.
+   - Componentes headless y accesibles de **shadcn/ui** (basados en primitivas de **Radix UI** y **Lucide Icons**): Data Tables para el entrenador (`RF-013`), Drawers táctiles para el alumno (`vaul`), Toasts con **Sonner** y Command Palette para búsqueda rápida.
+5. **Soporte de Dark Mode Persistente y Ergonómico:**
+   - Detección automática del sistema operativo mediante media query `prefers-color-scheme: dark`.
+   - Selector tri-estado (`system`, `dark`, `light`) con almacenamiento síncrono en `localStorage` y script inline en `<head>` para prevenir parpadeos blancos (*Zero FOUC*).
+   - Paleta de colores optimizada para pantallas OLED de gimnasio (fondo `zinc-950` `#09090b` / `black` para reducir consumo de batería y fatiga visual, acentos de alto contraste en esmeralda `#10b981` y ámbar `#f59e0b`).
+   - Sincronización cross-device opcional mediante la columna `usuarios.tema_ui` en base de datos.
+6. **Camino de Migración Nativa:** La arquitectura de la PWA desacopla la capa de presentación de los servicios de sincronización. Si a futuro se requiere distribución en Google Play o Apple App Store, la aplicación se envolverá en **Capacitor 6** sin necesidad de reescribir la lógica ni la UI.
 
 ---
 
