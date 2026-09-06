@@ -1,4 +1,4 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable, Optional, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -17,7 +17,7 @@ export class R2StorageService {
 
   constructor(
     @Optional() configOrBucket?: ConfigService | string,
-    endpointOrBucket?: string
+    @Optional() @Inject('ENDPOINT_OR_BUCKET') endpointOrBucket?: string
   ) {
     let accessKeyId = 'mock-access-key-id-guachafit';
     let secretAccessKey = 'mock-secret-access-key-guachafit-32chars';

@@ -98,5 +98,9 @@ SORT id asc
 Reglas de desarrollo asistido por IA, ecosistema de 4 subagentes y estructura de workspaces.
 
 - [[00_Reglas_Desarrollo_SDD|00_Reglas_Desarrollo_SDD.md]] - *Protocolo de 4 subagentes (Ingestion, TestGen, Reviewer, Doc-Sync), seguridad estricta pnpm y scripts de verificación de drift.*
+- **Backend API (`apps/api`):** Listo en `http://localhost:4000/api/v1` (Swagger en `/api/docs`) con comando `pnpm dev:api`.
+- **Frontend PWA (`apps/web`):** Listo en `http://localhost:3000` con comando `pnpm dev:web`.
+- **Persistencia Docker:** PostgreSQL 16 (`:5432`), Redis 7 (`:6379`), MinIO (`:9000`/`:9001`) con comandos `pnpm db:migrate` y `pnpm db:seed`.
+
 
 

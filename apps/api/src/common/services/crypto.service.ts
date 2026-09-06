@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional, Inject } from '@nestjs/common';
 import * as crypto from 'node:crypto';
 import * as bcrypt from 'bcryptjs';
 
@@ -7,7 +7,7 @@ export class CryptoService {
   private readonly encryptionKey: Buffer;
   private readonly algorithm = 'aes-256-gcm';
 
-  constructor(customKey?: string) {
+  constructor(@Optional() @Inject('ENCRYPTION_KEY') customKey?: string) {
     // Clave de 32 bytes requerida para AES-256-GCM
     const keyString = customKey || process.env.ENCRYPTION_KEY || '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
     this.encryptionKey = Buffer.from(keyString.slice(0, 64), 'hex');

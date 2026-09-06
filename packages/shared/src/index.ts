@@ -1,3 +1,3 @@
-export * from './enums';
-export * from './schemas';
-export * from './types';
+export * from './enums/index';
+export * from './schemas/index';
+export * from './types/index';
