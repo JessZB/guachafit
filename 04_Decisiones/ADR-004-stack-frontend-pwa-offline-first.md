@@ -2,7 +2,8 @@
 id: ADR-004
 titulo: "ADR-004: Adopción de PWA Instalable Offline-First con IndexedDB y Compresión de Imágenes en Cliente"
 fecha: 2026-09-06
-estado: aceptado
+estado: implementado
+fecha_verificacion: 2026-09-06
 decisores:
   - "Tech Lead & Principal Software Architect"
   - "Equipo de Ingeniería"

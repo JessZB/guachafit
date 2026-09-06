@@ -156,6 +156,7 @@ export interface PerfilAlumnoDetalleDTO {
   numeroDocumento: string;
   nombres: string;
   apellidos: string;
+  email?: string | null;
   fechaNacimiento: string;
   edadCalculada: number;
   telefonoWhatsapp: string;

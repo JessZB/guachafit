@@ -39,18 +39,19 @@ if (specMissing) {
 
 // 2. Comprobar diferencias en git
 try {
-  const statusOutput = execSync('git status --porcelain', { encoding: 'utf-8' }).trim();
-  if (!statusOutput) {
+  const statusOutput = execSync('git status --porcelain', { encoding: 'utf-8' });
+  if (!statusOutput.trim()) {
     console.log('✅ [SDD Drift Check] Árbol de trabajo limpio. Sin divergencias detectadas.');
     process.exit(0);
   }
 
-  const lines = statusOutput.split('\n');
+  const lines = statusOutput.split(/\r?\n/);
   const codeChanges = [];
   const specChanges = [];
 
   for (const line of lines) {
-    const file = line.slice(3).trim();
+    if (!line.trim()) continue;
+    const file = line.replace(/^[MADRCU?! ]{1,2}\s+/, '').trim().replace(/\\/g, '/');
     if (file.startsWith('apps/') || file.startsWith('packages/')) {
       codeChanges.push(file);
     }
