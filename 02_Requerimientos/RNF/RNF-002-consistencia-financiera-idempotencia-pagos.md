@@ -3,7 +3,9 @@ id: RNF-002
 modulo: Finanzas
 categoria: consistencia-financiera # consistencia-financiera | seguridad | rendimiento
 prioridad: alta
-estado: aprobado
+estado: implementado
+version_implementada: v1.0.0
+fecha_verificacion: 2026-09-06
 requisito_origen: "[[RF-006-motor-bimonetario-liquidacion-abonos]]"
 metrica_objetivo: "100% precisión decimal (cero floating-point error) / Idempotencia estricta"
 fecha_creacion: 2026-09-06

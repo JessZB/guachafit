@@ -368,6 +368,7 @@ export const controlesAntropometricos = pgTable('controles_antropometricos', {
     .references(() => usuarios.id, { onDelete: 'restrict' }),
   estado: estadoMedicionEnum('estado').default(EstadoMedicion.PENDIENTE_APROBACION).notNull(),
   observacionesCoach: text('observaciones_coach'),
+  motivoRechazo: text('motivo_rechazo'),
   fechaAprobacionUtc: timestamp('fecha_aprobacion_utc', { withTimezone: true }),
   createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
   updatedAtUtc: timestamp('updated_at_utc', { withTimezone: true }).defaultNow().notNull(),

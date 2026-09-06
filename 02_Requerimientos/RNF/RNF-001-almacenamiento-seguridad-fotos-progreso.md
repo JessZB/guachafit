@@ -3,7 +3,9 @@ id: RNF-001
 modulo: Antropometria
 categoria: seguridad # seguridad | rendimiento | disponibilidad
 prioridad: alta
-estado: aprobado
+estado: implementado
+version_implementada: v1.0.0
+fecha_verificacion: 2026-09-06
 requisito_origen: "[[RF-003-checkin-antropometrico-rbac-hibrido]]"
 metrica_objetivo: "p95 < 800ms subida / URLs firmadas TTL < 15 min"
 fecha_creacion: 2026-09-05

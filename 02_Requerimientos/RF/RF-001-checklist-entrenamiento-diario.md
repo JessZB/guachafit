@@ -2,7 +2,9 @@
 id: RF-001
 modulo: Entrenamiento
 prioridad: alta
-estado: aprobado
+estado: implementado
+version_implementada: v1.0.0
+fecha_verificacion: 2026-09-06
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0

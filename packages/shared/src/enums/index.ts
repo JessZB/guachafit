@@ -74,6 +74,20 @@ export enum AnguloFoto {
   POSTERIOR = 'posterior',
 }
 
+export enum PeriodoEvolucion {
+  UN_MES = '1M',
+  TRES_MESES = '3M',
+  SEIS_MESES = '6M',
+  UN_ANIO = '1A',
+  TODO = 'todo',
+}
+
+export enum ModuloUpload {
+  ANTROPOMETRIA = 'antropometria',
+  COMIDAS = 'comidas',
+  COMPROBANTES = 'comprobantes',
+}
+
 export enum EstadoCuota {
   EMITIDA = 'emitida',
   ABONADA_PARCIAL = 'abonada_parcial',
@@ -118,3 +132,8 @@ export enum TemaUi {
 
 export { TemaUi as TemaUI };
 
+export enum SemaforoAdherencia {
+  VERDE = 'verde',
+  AMARILLO = 'amarillo',
+  ROJO = 'rojo',
+}
