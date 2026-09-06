@@ -957,3 +957,38 @@ CREATE POLICY rls_transacciones_pago ON transacciones_pago
 - Entidades vinculadas: [[Entidad-Usuario]], [[Entidad-PerfilEntrenador]], [[Entidad-PerfilAlumno]], [[Entidad-PreferenciaNotificacion]], [[Entidad-DispositivoUsuario]], [[Entidad-NotificacionInApp]], [[Entidad-SesionEntrenamiento]], [[Entidad-CheckinNutricional]], [[Entidad-ControlAntropometrico]], [[Entidad-PlanMembresia]], [[Entidad-CuotaMembresia]], [[Entidad-TransaccionPago]].
 - Requerimientos asociados: [[RF-001-checklist-entrenamiento-diario]] al [[RF-016-gestion-dispositivos-tokens-push-ciclo-vida]], [[RNF-001-almacenamiento-seguridad-fotos-progreso]] al [[RNF-004-resiliencia-notificaciones-idempotencia-fallbacks]].
 - Decisiones arquitecturales: [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-010-arquitectura-event-driven-notificaciones-multicanal]].
+
+---
+
+## 🐳 5. Entorno Local Docker, Migraciones y Seeding Enriquecido
+
+Para levantar y operar la persistencia local en desarrollo:
+
+1. **Levantar Contenedores:**
+   ```bash
+   docker compose up -d
+   ```
+   *Servicios:* `guachafit-postgres` (PostgreSQL 16 en `:5432`), `guachafit-redis` (Redis 7 en `:6379`), `guachafit-minio` (API S3 en `:9000`, Consola Web en `:9001`) y `guachafit-minio-init` (crea el bucket `guachafit-r2-local`).
+
+2. **Aplicar Migraciones DDL (Drizzle ORM):**
+   ```bash
+   pnpm db:generate   # Genera el SQL en packages/database/drizzle/
+   pnpm db:migrate    # Aplica las migraciones al contenedor PostgreSQL
+   ```
+
+3. **Poblar Dataset Realista de Prueba:**
+   ```bash
+   pnpm db:seed       # Ejecuta packages/database/src/seed.ts
+   ```
+   *Datos generados:*
+   - **1 Entrenador Demo:** `entrenador@guachafit.com` (password: `Password123!`, hash bcrypt).
+   - **5 Alumnos Demo:** Al día ($35 USD), con pago reportado en VES (Bs. 1.295 a tasa BCV 37.00), moroso con cuota vencida ($40 USD), invitado con código de vinculación (`GUACHA-8821`), e inactivo pausado.
+   - **Catálogo:** 20 ejercicios clasificados por grupo muscular y plantilla Push/Pull/Legs.
+   - **Finanzas:** Historial de 7 días de tasas BCV fluctuando entre 36.50 y 37.20 VES/USD.
+   - **Salud & Antropometría:** Registro con fotos mock en MinIO y ficha médica confidencial cifrada con `AES-256-GCM` (`RNF-003`).
+
+4. **Explorador Visual:**
+   ```bash
+   pnpm db:studio     # Drizzle Studio en http://localhost:4983
+   ```
+
