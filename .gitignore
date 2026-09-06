@@ -1,12 +1,55 @@
+# ==============================================================================
+# .gitignore - GUACHAFIT Monorepo & Obsidian Vault
+# ==============================================================================
+
+# Dependencias de paquetes y gestores
+node_modules/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Compilados y artefactos de build
+dist/
+build/
+out/
+.next/
+.turbo/
+.cache/
+coverage/
+*.tsbuildinfo
+
+# Entornos y secretos
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+
 # Archivos temporales del sistema operativo
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# Archivos de caché y estado volátil de Obsidian (si se abre como sub-vault)
-.obsidian/workspace.json
-.obsidian/workspace-mobile.json
 *.tmp
 *.bak
 *.swp
 *~
+
+# IDEs y Editores
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.sublime-workspace
+
+# Obsidian: Cache volátil (preservando notas y plantillas)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+
+# Logs y pruebas
+logs/
+*.log

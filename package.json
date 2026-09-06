@@ -1,0 +1,26 @@
+{
+  "name": "guachafit-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo de GUACHAFIT: Plataforma integral de gestión fitness, entrenamiento offline-first y control de cartera bimonetaria",
+  "packageManager": "pnpm@11.6.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"./apps/*\" dev",
+    "dev:api": "pnpm --filter @guachafit/api dev",
+    "dev:web": "pnpm --filter @guachafit/web dev",
+    "build": "pnpm --recursive run build",
+    "test": "pnpm --recursive run test",
+    "test:bdd": "pnpm --filter @guachafit/api test:bdd",
+    "lint": "pnpm --recursive run lint",
+    "typecheck": "pnpm --recursive run typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "db:generate": "pnpm --filter @guachafit/database db:generate",
+    "db:migrate": "pnpm --filter @guachafit/database db:migrate",
+    "db:studio": "pnpm --filter @guachafit/database db:studio",
+    "sdd:drift-check": "node scripts/sdd-drift-check.js"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4"
+  }
+}

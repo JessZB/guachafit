@@ -1,0 +1,23 @@
+{
+  "name": "@guachafit/database",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@guachafit/shared": "workspace:*",
+    "drizzle-orm": "^0.33.0",
+    "postgres": "^3.4.4"
+  },
+  "devDependencies": {
+    "@guachafit/typescript-config": "workspace:*",
+    "drizzle-kit": "^0.24.2",
+    "typescript": "^5.5.4"
+  }
+}

@@ -92,3 +92,11 @@ WHERE !contains(file.name, "tpl-") AND file.name != "README"
 SORT id asc
 ```
 
+---
+
+## 🤖 7. Gobernanza SDD y Monorepo
+Reglas de desarrollo asistido por IA, ecosistema de 4 subagentes y estructura de workspaces.
+
+- [[00_Reglas_Desarrollo_SDD|00_Reglas_Desarrollo_SDD.md]] - *Protocolo de 4 subagentes (Ingestion, TestGen, Reviewer, Doc-Sync), seguridad estricta pnpm y scripts de verificación de drift.*
+
+
