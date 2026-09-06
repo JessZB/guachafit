@@ -72,6 +72,7 @@ Elegimos la **Opción C: PWA Instalable con Enfoque Offline-First**:
    - Paleta de colores optimizada para pantallas OLED de gimnasio (fondo `zinc-950` `#09090b` / `black` para reducir consumo de batería y fatiga visual, acentos de alto contraste en esmeralda `#10b981` y ámbar `#f59e0b`).
    - Sincronización cross-device opcional mediante la columna `usuarios.tema_ui` en base de datos.
 6. **Camino de Migración Nativa:** La arquitectura de la PWA desacopla la capa de presentación de los servicios de sincronización. Si a futuro se requiere distribución en Google Play o Apple App Store, la aplicación se envolverá en **Capacitor 6** sin necesidad de reescribir la lógica ni la UI.
+7. **Resolución de Módulos Compartidos en Monorepo:** Para compatibilidad cruzada sin fricción entre Vite (ESM en browser) y NestJS (CommonJS en backend), `@guachafit/shared` implementa exportaciones condicionales (`import: ./src/index.ts` y `require: ./dist/index.js`) con alias explícito en `apps/web/vite.config.ts`, permitiendo HMR instantáneo y resolución directa de enums como `Rol`.
 
 ---
 
