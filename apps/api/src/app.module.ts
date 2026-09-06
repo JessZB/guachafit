@@ -11,6 +11,7 @@ import { FinanzasModule } from './modules/finanzas/finanzas.module';
 import { EntrenamientoModule } from './modules/entrenamiento/entrenamiento.module';
 import { NutricionModule } from './modules/nutricion/nutricion.module';
 import { AntropometriaModule } from './modules/antropometria/antropometria.module';
+import { EntrenadorModule } from './modules/entrenador/entrenador.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { AntropometriaModule } from './modules/antropometria/antropometria.modul
     EntrenamientoModule,
     NutricionModule,
     AntropometriaModule,
+    EntrenadorModule,
   ],
   controllers: [AppController],
   providers: [AppService],

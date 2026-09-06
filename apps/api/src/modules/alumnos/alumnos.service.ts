@@ -72,6 +72,7 @@ export class AlumnosService {
       numeroDocumento: perfil.numeroDocumento,
       nombres: perfil.nombres,
       apellidos: perfil.apellidos,
+      email: perfil.email ?? null,
       fechaNacimiento: perfil.fechaNacimiento,
       edadCalculada: this.calcularEdad(perfil.fechaNacimiento),
       telefonoWhatsapp: perfil.telefonoWhatsapp,
@@ -294,12 +295,65 @@ export class AlumnosService {
   }
 
   /**
+   * Listar Directorio de Alumnos del Entrenador (RF-011, RF-012)
+   */
+  async listarAlumnos(entrenadorId: string): Promise<PerfilAlumnoDetalleDTO[]> {
+    const records = await this.db
+      .select({
+        id: perfilesAlumno.id,
+        usuarioId: perfilesAlumno.usuarioId,
+        entrenadorId: perfilesAlumno.entrenadorId,
+        tipoDocumento: perfilesAlumno.tipoDocumento,
+        numeroDocumento: perfilesAlumno.numeroDocumento,
+        nombres: perfilesAlumno.nombres,
+        apellidos: perfilesAlumno.apellidos,
+        email: usuarios.email,
+        fechaNacimiento: perfilesAlumno.fechaNacimiento,
+        telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
+        fichaSaludPrivada: perfilesAlumno.fichaSaludPrivada,
+        estadoActivacion: perfilesAlumno.estadoActivacion,
+        modalidad: perfilesAlumno.modalidad,
+        tasaFijadaOverride: perfilesAlumno.tasaFijadaOverride,
+        deletedAtUtc: perfilesAlumno.deletedAtUtc,
+        createdAtUtc: perfilesAlumno.createdAtUtc,
+      })
+      .from(perfilesAlumno)
+      .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
+      .where(
+        and(
+          eq(perfilesAlumno.entrenadorId, entrenadorId),
+          isNull(perfilesAlumno.deletedAtUtc)
+        )
+      );
+
+    return records.map((perfil) => this.sanitizarPerfilParaRol(perfil, Rol.ENTRENADOR));
+  }
+
+  /**
    * Obtener perfil por ID con aislamiento de Tenancy
    */
   async obtenerPorId(alumnoId: string, actorUserId: string, actorRole: Rol, actorEntrenadorId?: string) {
     const [perfil] = await this.db
-      .select()
+      .select({
+        id: perfilesAlumno.id,
+        usuarioId: perfilesAlumno.usuarioId,
+        entrenadorId: perfilesAlumno.entrenadorId,
+        tipoDocumento: perfilesAlumno.tipoDocumento,
+        numeroDocumento: perfilesAlumno.numeroDocumento,
+        nombres: perfilesAlumno.nombres,
+        apellidos: perfilesAlumno.apellidos,
+        email: usuarios.email,
+        fechaNacimiento: perfilesAlumno.fechaNacimiento,
+        telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
+        fichaSaludPrivada: perfilesAlumno.fichaSaludPrivada,
+        estadoActivacion: perfilesAlumno.estadoActivacion,
+        modalidad: perfilesAlumno.modalidad,
+        tasaFijadaOverride: perfilesAlumno.tasaFijadaOverride,
+        deletedAtUtc: perfilesAlumno.deletedAtUtc,
+        createdAtUtc: perfilesAlumno.createdAtUtc,
+      })
       .from(perfilesAlumno)
+      .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
       .where(eq(perfilesAlumno.id, alumnoId));
 
     if (!perfil) {

@@ -77,6 +77,17 @@ export class AlumnosController {
   }
 
   /**
+   * Listar Directorio de Alumnos del Entrenador (RF-011, RF-012)
+   */
+  @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR, Rol.SUPERADMIN)
+  async listarAlumnos(@Req() req: any) {
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    return this.alumnosService.listarAlumnos(entrenadorId);
+  }
+
+  /**
    * Consultar Perfil de Alumno por ID con RBAC y Aislamiento Tenancy
    */
   @Get(':id')
