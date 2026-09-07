@@ -29,6 +29,7 @@ import { getTableName } from '@guachafit/database';
 describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & FinanzasController)', () => {
   let finanzasService: FinanzasService;
   let finanzasController: FinanzasController;
+  let mockDb: any;
 
   // In-memory data store for the mock database
   let mockUsuarios: any[];
@@ -246,7 +247,7 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
       },
     ];
 
-    const mockDb = createMockDb();
+    mockDb = createMockDb();
     finanzasService = new FinanzasService(mockDb);
     finanzasController = new FinanzasController(finanzasService);
   });
@@ -537,6 +538,33 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
         )
       ).rejects.toThrow(ForbiddenException);
     });
+
+    it('debe disparar notificación PAGO_REPORTADO al entrenador si dispatcherService está configurado', async () => {
+      const mockDispatcher: any = {
+        despacharEvento: vi.fn().mockResolvedValue({ inAppId: 'inapp-1' }),
+      };
+      const serviceConNotif = new FinanzasService(mockDb, mockDispatcher);
+
+      await serviceConNotif.reportarPago(
+        'cuota-test-1',
+        'alumno-uuid-1',
+        {
+          montoOriginal: '50.00',
+          monedaOriginal: Moneda.USD,
+          metodoPago: MetodoPago.EFECTIVO_USD,
+          fechaOperacion: '2026-09-06',
+        }
+      );
+
+      expect(mockDispatcher.despacharEvento).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tipoEvento: 'PAGO_REPORTADO',
+          destinatarioUserId: 'coach-uuid-1',
+          categoria: 'FINANZAS',
+          esCriticoSeguridad: false,
+        })
+      );
+    });
   });
 
   // ===========================================================================
@@ -693,6 +721,50 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
           { accion: 'rechazar', motivoRechazo: '' }
         )
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('debe despachar evento PAGO_APROBADO con esCriticoSeguridad=true al conciliar exitosamente', async () => {
+      const mockDispatcher: any = {
+        despacharEvento: vi.fn().mockResolvedValue({ inAppId: 'inapp-2' }),
+      };
+      const serviceConNotif = new FinanzasService(mockDb, mockDispatcher);
+
+      await serviceConNotif.conciliarTransaccion(
+        'tx-conciliar-1',
+        'coach-uuid-1',
+        { accion: 'aprobar' }
+      );
+
+      expect(mockDispatcher.despacharEvento).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tipoEvento: 'PAGO_APROBADO',
+          destinatarioUserId: 'alumno-uuid-1',
+          categoria: 'FINANZAS',
+          esCriticoSeguridad: true,
+        })
+      );
+    });
+
+    it('debe despachar evento PAGO_RECHAZADO al rechazar un pago', async () => {
+      const mockDispatcher: any = {
+        despacharEvento: vi.fn().mockResolvedValue({ inAppId: 'inapp-3' }),
+      };
+      const serviceConNotif = new FinanzasService(mockDb, mockDispatcher);
+
+      await serviceConNotif.conciliarTransaccion(
+        'tx-conciliar-1',
+        'coach-uuid-1',
+        { accion: 'rechazar', motivoRechazo: 'Comprobante ilegible' }
+      );
+
+      expect(mockDispatcher.despacharEvento).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tipoEvento: 'PAGO_RECHAZADO',
+          destinatarioUserId: 'alumno-uuid-1',
+          categoria: 'FINANZAS',
+          esCriticoSeguridad: false,
+        })
+      );
     });
   });
 

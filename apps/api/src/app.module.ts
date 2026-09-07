@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { BullModule } from '@nestjs/bullmq';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
@@ -12,12 +13,24 @@ import { EntrenamientoModule } from './modules/entrenamiento/entrenamiento.modul
 import { NutricionModule } from './modules/nutricion/nutricion.module';
 import { AntropometriaModule } from './modules/antropometria/antropometria.module';
 import { EntrenadorModule } from './modules/entrenador/entrenador.module';
+import { NotificacionesModule } from './modules/notificaciones/notificaciones.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
+    }),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          host: config.get<string>('REDIS_HOST', 'localhost'),
+          port: Number(config.get<number>('REDIS_PORT', 6379)),
+          maxRetriesPerRequest: null,
+        },
+      }),
     }),
     DatabaseModule,
     CommonModule,
@@ -29,6 +42,7 @@ import { EntrenadorModule } from './modules/entrenador/entrenador.module';
     NutricionModule,
     AntropometriaModule,
     EntrenadorModule,
+    NotificacionesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

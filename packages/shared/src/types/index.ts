@@ -40,6 +40,8 @@ import {
   PreferenciasNotificacionSchema,
   RegistrarDispositivoSchema,
   ActualizarTemaUiSchema,
+  ActualizarPreferenciasNotificacionSchema,
+  MarcarNotificacionLeidaSchema,
 } from '../schemas';
 import {
   Rol,
@@ -59,6 +61,7 @@ import {
   AnguloFoto,
   PeriodoEvolucion,
   ModuloUpload,
+  PlataformaDispositivo,
 } from '../enums';
 
 // Tipos inferidos de DTOs - IAM & Onboarding
@@ -107,8 +110,10 @@ export type CobroDirectoDTO = z.infer<typeof CobroDirectoSchema>;
 export type ConciliarTransaccionDTO = z.infer<typeof ConciliarTransaccionSchema>;
 
 // Notificaciones & Preferencias DTOs
-export type PreferenciasNotificacionDTO = z.infer<typeof PreferenciasNotificacionSchema>;
+export type PreferenciasNotificacionInputDTO = z.infer<typeof PreferenciasNotificacionSchema>;
+export type ActualizarPreferenciasNotificacionDTO = z.infer<typeof ActualizarPreferenciasNotificacionSchema>;
 export type RegistrarDispositivoDTO = z.infer<typeof RegistrarDispositivoSchema>;
+export type MarcarNotificacionLeidaDTO = z.infer<typeof MarcarNotificacionLeidaSchema>;
 export type ActualizarTemaUiDTO = z.infer<typeof ActualizarTemaUiSchema>;
 
 // Estructura de error RFC 7807
@@ -454,3 +459,66 @@ export interface ComparativaAngularDTO {
   diferenciaPesoKg?: string | null;
   diferenciaGrasaPorcentaje?: string | null;
 }
+
+// =============================================================================
+// NOTIFICACIONES & DISPOSITIVOS DTOs (RF-014, RF-015, RF-016)
+// =============================================================================
+
+export interface PreferenciasNotificacionDTO {
+  id: string;
+  usuarioId: string;
+  notifyPaymentsPush: boolean;
+  notifyPaymentsEmail: boolean;
+  notifyWorkoutsPush: boolean;
+  notifyWorkoutsEmail: boolean;
+  notifyCheckinsPush: boolean;
+  notifyCheckinsEmail: boolean;
+  digestWeeklyEmail: boolean;
+  updatedAtUtc: string;
+}
+
+export interface RegistrarDispositivoPushDTO {
+  deviceToken: string;
+  platform: PlataformaDispositivo;
+}
+
+export interface DispositivoUsuarioDTO {
+  id: string;
+  usuarioId: string;
+  deviceToken: string;
+  platform: PlataformaDispositivo;
+  isActive: boolean;
+  updatedAtUtc: string;
+}
+
+export interface NotificacionInAppDTO {
+  id: string;
+  usuarioId: string;
+  titulo: string;
+  cuerpo: string;
+  tipoEvento: string;
+  leida: boolean;
+  linkAccion?: string | null;
+  createdAtUtc: string;
+}
+
+export type CategoriaNotificacion =
+  | 'FINANZAS'
+  | 'ENTRENAMIENTO'
+  | 'ANTROPOMETRIA'
+  | 'RESUMEN_SEMANAL'
+  | 'SEGURIDAD';
+
+export interface EventoNotificacionPayload {
+  tipoEvento: string;
+  destinatarioUserId: string;
+  entrenadorId?: string;
+  titulo: string;
+  cuerpo: string;
+  categoria: CategoriaNotificacion;
+  linkAccion?: string | null;
+  datosAdicionales?: Record<string, any>;
+  esCriticoSeguridad?: boolean;
+  timestampUtc?: string;
+}
+

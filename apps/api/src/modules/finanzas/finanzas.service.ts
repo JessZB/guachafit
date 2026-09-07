@@ -1,11 +1,13 @@
 import {
   Injectable,
   Inject,
+  Optional,
   NotFoundException,
   ConflictException,
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { NotificationDispatcherService } from '../notificaciones/notification-dispatcher.service';
 import { DRIZZLE_DB } from '../../database/database.module';
 import {
   Database,
@@ -148,7 +150,10 @@ export class FinanzasService {
     { transaccion: TransaccionPagoDetalleDTO; cuota: CuotaDetalleDTO }
   >();
 
-  constructor(@Inject(DRIZZLE_DB) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE_DB) private readonly db: Database,
+    @Optional() private readonly dispatcherService?: NotificationDispatcherService
+  ) {}
 
   // ===========================================================================
   // 1. MOTOR BIMONETARIO (RF-006, ADR-003, RNF-002)
@@ -871,6 +876,29 @@ export class FinanzasService {
       });
     }
 
+    if (this.dispatcherService) {
+      this.dispatcherService
+        .despacharEvento({
+          tipoEvento: 'PAGO_REPORTADO',
+          destinatarioUserId: nuevaTx.entrenadorId,
+          entrenadorId: nuevaTx.entrenadorId,
+          categoria: 'FINANZAS',
+          titulo: 'Nuevo pago por verificar',
+          cuerpo: `Se ha reportado un pago de ${nuevaTx.montoOriginal} ${nuevaTx.monedaOriginal} pendiente por conciliar.`,
+          linkAccion: '/finanzas/conciliacion',
+          datosAdicionales: {
+            transaccionId: nuevaTx.id,
+            cuotaId: nuevaTx.cuotaId,
+            clienteId: nuevaTx.clienteId,
+            montoOriginal: nuevaTx.montoOriginal,
+            monedaOriginal: nuevaTx.monedaOriginal,
+            referenciaBancaria: nuevaTx.referenciaBancaria,
+          },
+          esCriticoSeguridad: false,
+        })
+        .catch(() => {});
+    }
+
     return {
       transaccion: txDto,
       cuota: cuotaDto,
@@ -1049,7 +1077,7 @@ export class FinanzasService {
       throw new BadRequestException('El motivo de rechazo es obligatorio al rechazar una transacción.');
     }
 
-    return await this.db.transaction(async (tx) => {
+    const resultado = await this.db.transaction(async (tx) => {
       // 1. Contexto RLS
       await tx.execute(sql`SET LOCAL app.current_entrenador_id = ${entrenadorId}`);
 
@@ -1186,6 +1214,48 @@ export class FinanzasService {
         };
       }
     });
+
+    if (this.dispatcherService) {
+      if (dto.accion === 'aprobar') {
+        this.dispatcherService
+          .despacharEvento({
+            tipoEvento: 'PAGO_APROBADO',
+            destinatarioUserId: resultado.transaccion.clienteId,
+            entrenadorId,
+            categoria: 'FINANZAS',
+            titulo: '¡Pago verificado y aprobado!',
+            cuerpo: `Tu pago de ${resultado.transaccion.montoOriginal} ${resultado.transaccion.monedaOriginal} fue aprobado con éxito.`,
+            linkAccion: '/finanzas',
+            datosAdicionales: {
+              transaccionId: resultado.transaccion.id,
+              cuotaId: resultado.cuota.id,
+              montoEquivalenteUsd: resultado.transaccion.montoEquivalenteUsd,
+            },
+            esCriticoSeguridad: true, // Recibo financiero / comprobante crítico garantizado por Email (RF-015 RN-03)
+          })
+          .catch(() => {});
+      } else {
+        this.dispatcherService
+          .despacharEvento({
+            tipoEvento: 'PAGO_RECHAZADO',
+            destinatarioUserId: resultado.transaccion.clienteId,
+            entrenadorId,
+            categoria: 'FINANZAS',
+            titulo: 'Pago no verificado',
+            cuerpo: `Tu pago fue rechazado. Motivo: ${resultado.transaccion.motivoRechazo || 'Rechazado por el entrenador'}.`,
+            linkAccion: '/finanzas',
+            datosAdicionales: {
+              transaccionId: resultado.transaccion.id,
+              cuotaId: resultado.cuota.id,
+              motivoRechazo: resultado.transaccion.motivoRechazo,
+            },
+            esCriticoSeguridad: false,
+          })
+          .catch(() => {});
+      }
+    }
+
+    return resultado;
   }
 
   // ===========================================================================

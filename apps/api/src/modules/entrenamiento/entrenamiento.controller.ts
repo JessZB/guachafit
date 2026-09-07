@@ -7,6 +7,7 @@ import {
   Param,
   Query,
   Req,
+  Res,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -36,9 +37,18 @@ export class EntrenamientoController {
   @Get(['alumnos/me/sesiones/hoy', 'sesiones/hoy'])
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ALUMNO)
-  async obtenerSesionHoy(@Req() req: any, @Query('timezone') timezone?: string) {
+  async obtenerSesionHoy(
+    @Req() req: any,
+    @Query('timezone') timezone?: string,
+    @Res({ passthrough: true }) res?: any
+  ) {
     const alumnoId = req.user.sub;
-    return this.entrenamientoService.obtenerSesionHoy(alumnoId, timezone);
+    const sesion = await this.entrenamientoService.obtenerSesionHoy(alumnoId, timezone);
+    if (!sesion && res) {
+      res.status(HttpStatus.NO_CONTENT);
+      return null;
+    }
+    return sesion;
   }
 
   /**

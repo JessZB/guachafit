@@ -29,23 +29,32 @@ export function EntrenamientoPage() {
       setIsLoading(true);
       try {
         if (navigator.onLine) {
-          const data = await apiClient<SesionEntrenamientoDetalleDTO>('/alumnos/me/sesiones/hoy');
-          setSesion(data);
-          // Cache in IndexedDB
-          if (data && data.id) {
-            await offlineDb.rutinaHoy.put({
-              id: data.id,
-              alumnoId: user?.id || '',
-              fechaProgramada: data.fechaProgramada,
-              sesion: data,
-              updatedAt: Date.now(),
-            });
+          const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas';
+          const data = await apiClient<SesionEntrenamientoDetalleDTO | null>(
+            `/alumnos/me/sesiones/hoy?timezone=${encodeURIComponent(tz)}`
+          );
+          if (data) {
+            setSesion(data);
+            // Cache in IndexedDB
+            if (data.id) {
+              await offlineDb.rutinaHoy.put({
+                id: data.id,
+                alumnoId: user?.id || '',
+                fechaProgramada: data.fechaProgramada,
+                sesion: data,
+                updatedAt: Date.now(),
+              });
+            }
+          } else {
+            setSesion(null);
           }
         } else {
           // Offline fallback
           const cached = await offlineDb.rutinaHoy.toCollection().last();
           if (cached) {
             setSesion(cached.sesion);
+          } else {
+            setSesion(null);
           }
         }
       } catch (err) {

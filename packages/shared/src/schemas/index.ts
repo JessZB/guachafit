@@ -458,9 +458,15 @@ export const PreferenciasNotificacionSchema = z.object({
   digestWeeklyEmail: z.boolean(),
 });
 
+export const ActualizarPreferenciasNotificacionSchema = PreferenciasNotificacionSchema.partial();
+
 export const RegistrarDispositivoSchema = z.object({
   deviceToken: z.string().min(10).max(255),
   platform: z.nativeEnum(PlataformaDispositivo),
+});
+
+export const MarcarNotificacionLeidaSchema = z.object({
+  leida: z.boolean().default(true),
 });
 
 export const ActualizarTemaUiSchema = z.object({

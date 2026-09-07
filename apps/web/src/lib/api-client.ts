@@ -75,7 +75,16 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
   if (!response.ok) {
     let problem: ProblemDetails;
     try {
-      problem = await response.json();
+      const errorText = await response.text();
+      problem = errorText
+        ? JSON.parse(errorText)
+        : {
+            type: 'https://api.guachafit.com/errors/unexpected',
+            title: 'Error Inesperado',
+            status: response.status,
+            detail: response.statusText || 'Error de comunicación con el servidor',
+            timestampUtc: new Date().toISOString(),
+          };
     } catch {
       problem = {
         type: 'https://api.guachafit.com/errors/unexpected',
@@ -88,9 +97,20 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
     throw new ApiError(response.status, problem);
   }
 
+  // Si la respuesta es 204 No Content o no tiene cuerpo
   if (response.status === 204) {
-    return undefined as unknown as T;
+    return null as unknown as T;
   }
 
-  return response.json() as Promise<T>;
+  const text = await response.text();
+  if (!text || text.trim() === '') {
+    return null as unknown as T;
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch (error) {
+    console.warn('[apiClient] Advertencia al deserializar JSON de respuesta:', error);
+    return null as unknown as T;
+  }
 }

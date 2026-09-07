@@ -6,6 +6,7 @@ import {
   Param,
   Query,
   Req,
+  Res,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -45,9 +46,18 @@ export class NutricionController {
   @Get('checkin/hoy')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ALUMNO)
-  async obtenerCheckinHoy(@Req() req: any, @Query('fecha') fecha?: string) {
+  async obtenerCheckinHoy(
+    @Req() req: any,
+    @Query('fecha') fecha?: string,
+    @Res({ passthrough: true }) res?: any
+  ) {
     const alumnoId = req.user.sub;
-    return this.nutricionService.obtenerCheckinHoy(alumnoId, fecha);
+    const checkin = await this.nutricionService.obtenerCheckinHoy(alumnoId, fecha);
+    if (!checkin && res) {
+      res.status(HttpStatus.NO_CONTENT);
+      return null;
+    }
+    return checkin;
   }
 
   /**

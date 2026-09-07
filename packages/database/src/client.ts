@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm';
 import postgres from 'postgres';
 import * as schema from './schema/index';
 
-const connectionString = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/guachafit';
+const connectionString = process.env.DATABASE_URL || 'postgres://postgres:postgres@127.0.0.1:5432/guachafit';
 
 // Client for queries
 export const queryClient = postgres(connectionString);
