@@ -20,6 +20,7 @@ import {
   AltaManualAlumnoSchema,
   RegistroPublicoAlumnoSchema,
   CambioEstadoAlumnoSchema,
+  ActualizarPerfilAlumnoSchema,
 } from '@guachafit/shared';
 
 @Controller('alumnos')
@@ -63,6 +64,22 @@ export class AlumnosController {
     const dto = CambioEstadoAlumnoSchema.parse(body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.alumnosService.cambiarEstado(entrenadorId, alumnoId, dto);
+  }
+
+  /**
+   * Edición completa de la ficha e información de alumnos por el entrenador (RF-011, RF-012)
+   */
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR)
+  async actualizarAlumno(
+    @Req() req: any,
+    @Param('id') alumnoId: string,
+    @Body() body: unknown
+  ) {
+    const dto = ActualizarPerfilAlumnoSchema.parse(body);
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    return this.alumnosService.actualizarAlumno(entrenadorId, alumnoId, dto);
   }
 
   /**

@@ -15,8 +15,8 @@ export default defineConfig({
         name: 'GUACHAFIT - High-Performance Training',
         short_name: 'GUACHAFIT',
         description: 'Plataforma integral para entrenadores y atletas de alto rendimiento',
-        theme_color: '#09090b',
-        background_color: '#09090b',
+        theme_color: '#11161f',
+        background_color: '#11161f',
         display: 'standalone',
         orientation: 'portrait',
         icons: [

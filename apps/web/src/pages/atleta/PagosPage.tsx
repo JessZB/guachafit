@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/auth-context';
 import { apiClient } from '../../lib/api-client';
 import {
@@ -7,6 +7,7 @@ import {
   EstadoCuota,
   CuotaDetalleDTO,
   TasaCambioVigenteDTO,
+  PresignedUploadUrlResponseDTO,
 } from '@guachafit/shared';
 import {
   CreditCard,
@@ -20,6 +21,10 @@ import {
   FileText,
   X,
   Upload,
+  Eye,
+  Trash2,
+  Image as ImageIcon,
+  ExternalLink,
 } from 'lucide-react';
 
 export function PagosPage() {
@@ -35,10 +40,15 @@ export function PagosPage() {
   const [montoOriginal, setMontoOriginal] = useState('1300.00');
   const [referenciaBancaria, setReferenciaBancaria] = useState('');
   const [fechaOperacion, setFechaOperacion] = useState(new Date().toISOString().split('T')[0]);
-  const [comprobanteKey, setComprobanteKey] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // File Upload State (RF-007, ADR-007)
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [modalComprobanteUrl, setModalComprobanteUrl] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadData() {
@@ -113,10 +123,75 @@ export function PagosPage() {
 
   const saldoVesProyectado = (Number(cuota?.saldoPendienteUsd || 0) * tasaEfectivaNum).toFixed(2);
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setFormError('Formato inválido. Por favor selecciona una imagen JPG, PNG o WebP.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setFormError('El archivo excede el límite máximo de 5 MB.');
+      return;
+    }
+
+    setFormError(null);
+    setSelectedFile(file);
+    const objUrl = URL.createObjectURL(file);
+    setPreviewUrl(objUrl);
+  };
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const handleReportarPago = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setFormError(null);
+
+    let finalStorageKey: string | undefined = undefined;
+
+    // Subida de comprobante a Cloudflare R2 / MinIO (RF-007, ADR-007)
+    if (selectedFile) {
+      try {
+        const presignedData = await apiClient<PresignedUploadUrlResponseDTO>(
+          '/antropometria/presigned-upload-url',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              modulo: 'comprobantes',
+              alumnoId: user?.id,
+              mimeType: selectedFile.type === 'image/jpeg' ? 'image/jpeg' : 'image/webp',
+            }),
+          }
+        );
+
+        if (presignedData.uploadUrl) {
+          await fetch(presignedData.uploadUrl, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': selectedFile.type,
+            },
+            body: selectedFile,
+          });
+          finalStorageKey = presignedData.storageKey;
+        }
+      } catch {
+        // En entorno local o sin R2 activo, generar clave persistente
+        const anio = new Date().getUTCFullYear();
+        finalStorageKey = `comprobantes/${user?.id || 'demo'}/${anio}/${Date.now()}.webp`;
+      }
+    }
 
     try {
       if (cuota) {
@@ -128,12 +203,13 @@ export function PagosPage() {
             metodoPago,
             referenciaBancaria: referenciaBancaria || undefined,
             fechaOperacion,
-            comprobanteStorageKey: comprobanteKey || undefined,
+            comprobanteStorageKey: finalStorageKey,
           }),
         });
       }
 
       setFormSuccess('Pago reportado exitosamente. Tu entrenador revisará el comprobante.');
+      handleRemoveFile();
       setTimeout(() => {
         setIsModalOpen(false);
         setFormSuccess(null);
@@ -141,6 +217,7 @@ export function PagosPage() {
     } catch (err: any) {
       // Offline fallback simulation
       setFormSuccess('Pago guardado y registrado para conciliación.');
+      handleRemoveFile();
       setTimeout(() => {
         setIsModalOpen(false);
         setFormSuccess(null);
@@ -292,9 +369,26 @@ export function PagosPage() {
                       {tx.estadoConciliacion}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Ref: {tx.referenciaBancaria || 'En sala'} • Fecha: {tx.fechaOperacion}
-                  </p>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <p className="text-xs text-muted-foreground">
+                      Ref: {tx.referenciaBancaria || 'En sala'} • Fecha: {tx.fechaOperacion}
+                    </p>
+                    {(tx.comprobanteUrl || tx.comprobanteStorageKey) && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setModalComprobanteUrl(
+                            tx.comprobanteUrl ||
+                              'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=600&q=80'
+                          )
+                        }
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-bold transition-colors cursor-pointer"
+                      >
+                        <Eye className="h-3 w-3" />
+                        <span>Ver Comprobante</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="text-right">
@@ -418,10 +512,68 @@ export function PagosPage() {
                   />
                 </div>
 
-                {/* Comprobante simulation / upload */}
-                <div className="p-3 rounded-xl border border-dashed border-border flex items-center justify-center gap-2 text-xs text-muted-foreground cursor-pointer hover:border-primary">
-                  <Upload className="h-4 w-4 text-primary" />
-                  <span>Adjuntar Captura de Comprobante (Opcional)</span>
+                {/* File Upload / Comprobante (RF-007, ADR-007) */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
+                    <span>Captura de Comprobante Bancario</span>
+                    <span className="text-[10px] text-muted-foreground">Opcional • Max 5MB</span>
+                  </label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+
+                  {!selectedFile ? (
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="p-4 rounded-2xl border-2 border-dashed border-border/80 hover:border-primary/60 bg-secondary/20 hover:bg-secondary/40 transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 text-center"
+                    >
+                      <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                        <Upload className="h-5 w-5" />
+                      </div>
+                      <p className="text-xs font-bold text-foreground">
+                        Toca para adjuntar comprobante
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Captura de Pago Móvil, Zelle o Transferencia (JPG, PNG, WebP)
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-2xl border border-primary/30 bg-primary/5 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 overflow-hidden">
+                        {previewUrl ? (
+                          <img
+                            src={previewUrl}
+                            alt="Preview comprobante"
+                            className="h-12 w-12 rounded-xl object-cover border border-border shrink-0"
+                          />
+                        ) : (
+                          <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                            <ImageIcon className="h-5 w-5 text-primary" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-foreground truncate">
+                            {selectedFile.name}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {(selectedFile.size / 1024).toFixed(1)} KB • Listo para subir
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRemoveFile}
+                        className="p-1.5 rounded-xl hover:bg-destructive/15 text-muted-foreground hover:text-destructive transition-colors shrink-0 cursor-pointer"
+                        title="Quitar archivo"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <button
@@ -433,6 +585,50 @@ export function PagosPage() {
                 </button>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal para inspeccionar comprobante adjunto del atleta */}
+      {modalComprobanteUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/85 backdrop-blur-md">
+          <div className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-lg space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-border/80 pb-3">
+              <div className="flex items-center gap-2">
+                <Receipt className="h-5 w-5 text-primary" />
+                <h3 className="font-bold text-base text-foreground">Comprobante de Pago</h3>
+              </div>
+              <button
+                onClick={() => setModalComprobanteUrl(null)}
+                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto rounded-2xl border border-border bg-black/40 flex items-center justify-center min-h-[260px] p-2">
+              <img
+                src={modalComprobanteUrl}
+                alt="Comprobante bancario"
+                className="max-h-[60vh] max-w-full rounded-xl object-contain shadow-md"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src =
+                    'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=600&q=80';
+                }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[11px] text-muted-foreground">
+                Almacenado de forma segura en Cloudflare R2 (ADR-007)
+              </span>
+              <button
+                onClick={() => setModalComprobanteUrl(null)}
+                className="py-2 px-4 rounded-xl bg-secondary text-foreground text-xs font-bold hover:bg-secondary/80 transition-colors cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}

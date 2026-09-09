@@ -1,50 +1,78 @@
 @import "tailwindcss";
 
+@theme {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    /* Athletic Slate - Soft ergonomic light canvas (no pure white glare) */
+    --background: 216 28% 97%;
+    --foreground: 222 35% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 222 35% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 142.1 76.2% 36.3%; /* High-performance energetic Emerald / Lime accent */
-    --primary-foreground: 355.7 100% 97.3%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
+    --popover-foreground: 222 35% 12%;
+    --primary: 158 75% 36%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 216 20% 92%;
+    --secondary-foreground: 222 35% 15%;
+    --muted: 216 20% 93%;
+    --muted-foreground: 215 16% 45%;
+    --accent: 216 20% 90%;
+    --accent-foreground: 222 35% 12%;
+    --destructive: 350 84% 54%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 142.1 76.2% 36.3%;
-    --radius: 0.75rem;
+    --border: 215 20% 86%;
+    --input: 215 20% 86%;
+    --ring: 158 75% 36%;
+    --radius: 0.875rem;
   }
 
   .dark {
-    /* OLED-optimized Zinc/Neutral deep black background */
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 5.5%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 4.5%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 142.1 70.6% 45.3%;
-    --primary-foreground: 144.9 80.4% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+    /* Athletic Slate - Deep cold slate with elevation tiers (zero pitch black #000000 / #09090b) */
+    --background: 222 22% 8.5%;        /* #11161f - Inmersive deep slate base */
+    --foreground: 214 32% 91%;          /* #e2e8f0 - Crisp pearl white, zero glare/halo */
+    --card: 222 20% 12.5%;              /* #18202c - Tier 1 elevated card surface */
+    --card-foreground: 214 32% 91%;     /* #e2e8f0 - Clear primary text */
+    --popover: 222 20% 16%;             /* #202938 - Tier 2 floating modal/dropdown */
+    --popover-foreground: 214 32% 91%;  /* #e2e8f0 */
+    --primary: 158 72% 46%;             /* #1cd38d - High-performance athletic emerald */
+    --primary-foreground: 222 47% 11%;  /* #0f172a - Dark slate text on vibrant primary */
+    --secondary: 222 18% 18%;           /* #252e3e - Refined chip/action surface */
+    --secondary-foreground: 210 25% 88%;/* #d5dde7 */
+    --muted: 222 18% 16%;               /* #222937 - Subtle placeholder surface */
+    --muted-foreground: 215 18% 62%;    /* #8b9cb0 - Slate-400, relaxed eye-strain-free reading */
+    --accent: 222 18% 20%;              /* #293344 - Active interactive state */
+    --accent-foreground: 210 25% 92%;   /* #eaf0f6 */
+    --destructive: 350 84% 60%;         /* #f43f5e - Rose-500 */
     --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 18%;
-    --input: 240 3.7% 18%;
-    --ring: 142.1 70.6% 45.3%;
+    --border: 222 16% 22%;              /* #2d3749 - Refined border separator */
+    --input: 222 16% 20%;               /* #283243 */
+    --ring: 158 72% 46%;                /* Focus ring */
+    --radius: 0.875rem;
   }
 }
 

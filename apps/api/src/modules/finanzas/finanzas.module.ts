@@ -4,9 +4,15 @@ import { FinanzasController } from './finanzas.controller';
 import { DatabaseModule } from '../../database/database.module';
 import { CommonModule } from '../../common/common.module';
 import { NotificacionesModule } from '../notificaciones/notificaciones.module';
+import { AntropometriaModule } from '../antropometria/antropometria.module';
 
 @Module({
-  imports: [DatabaseModule, CommonModule, forwardRef(() => NotificacionesModule)],
+  imports: [
+    DatabaseModule,
+    CommonModule,
+    forwardRef(() => NotificacionesModule),
+    AntropometriaModule,
+  ],
   controllers: [FinanzasController],
   providers: [FinanzasService],
   exports: [FinanzasService],

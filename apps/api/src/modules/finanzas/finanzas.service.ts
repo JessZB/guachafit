@@ -8,6 +8,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { NotificationDispatcherService } from '../notificaciones/notification-dispatcher.service';
+import { R2StorageService } from '../antropometria/r2-storage.service';
 import { DRIZZLE_DB } from '../../database/database.module';
 import {
   Database,
@@ -152,8 +153,18 @@ export class FinanzasService {
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
-    @Optional() private readonly dispatcherService?: NotificationDispatcherService
+    @Optional() private readonly dispatcherService?: NotificationDispatcherService,
+    @Optional() private readonly r2StorageService?: R2StorageService
   ) {}
+
+  private async resolverComprobanteUrl(storageKey?: string | null): Promise<string | null> {
+    if (!storageKey || !this.r2StorageService) return null;
+    try {
+      return await this.r2StorageService.generarPresignedGetUrl(storageKey, 900);
+    } catch {
+      return null;
+    }
+  }
 
   // ===========================================================================
   // 1. MOTOR BIMONETARIO (RF-006, ADR-003, RNF-002)
@@ -676,27 +687,30 @@ export class FinanzasService {
       .where(eq(transaccionesPago.cuotaId, cuotaId))
       .orderBy(asc(transaccionesPago.fechaReporteUtc));
 
-    const transacciones: TransaccionPagoDetalleDTO[] = txRecords.map((t) => ({
-      id: t.id,
-      cuotaId: t.cuotaId,
-      clienteId: t.clienteId,
-      entrenadorId: t.entrenadorId,
-      registradoPor: t.registradoPor,
-      montoOriginal: t.montoOriginal,
-      monedaOriginal: t.monedaOriginal,
-      tasaCambioFijada: t.tasaCambioFijada,
-      montoEquivalenteUsd: t.montoEquivalenteUsd,
-      metodoPago: t.metodoPago,
-      referenciaBancaria: t.referenciaBancaria,
-      fechaOperacion: t.fechaOperacion,
-      comprobanteStorageKey: t.comprobanteStorageKey,
-      estadoConciliacion: t.estadoConciliacion,
-      motivoRechazo: t.motivoRechazo,
-      fechaReporteUtc: t.fechaReporteUtc.toISOString(),
-      fechaConciliacionUtc: t.fechaConciliacionUtc?.toISOString() || null,
-      createdAtUtc: t.createdAtUtc.toISOString(),
-      updatedAtUtc: t.updatedAtUtc.toISOString(),
-    }));
+    const transacciones: TransaccionPagoDetalleDTO[] = await Promise.all(
+      txRecords.map(async (t) => ({
+        id: t.id,
+        cuotaId: t.cuotaId,
+        clienteId: t.clienteId,
+        entrenadorId: t.entrenadorId,
+        registradoPor: t.registradoPor,
+        montoOriginal: t.montoOriginal,
+        monedaOriginal: t.monedaOriginal,
+        tasaCambioFijada: t.tasaCambioFijada,
+        montoEquivalenteUsd: t.montoEquivalenteUsd,
+        metodoPago: t.metodoPago,
+        referenciaBancaria: t.referenciaBancaria,
+        fechaOperacion: t.fechaOperacion,
+        comprobanteStorageKey: t.comprobanteStorageKey,
+        comprobanteUrl: await this.resolverComprobanteUrl(t.comprobanteStorageKey),
+        estadoConciliacion: t.estadoConciliacion,
+        motivoRechazo: t.motivoRechazo,
+        fechaReporteUtc: t.fechaReporteUtc.toISOString(),
+        fechaConciliacionUtc: t.fechaConciliacionUtc?.toISOString() || null,
+        createdAtUtc: t.createdAtUtc.toISOString(),
+        updatedAtUtc: t.updatedAtUtc.toISOString(),
+      }))
+    );
 
     const tasa = await this.obtenerTasaVigente(cuota.entrenadorId, cuota.clienteId);
     const saldoPendienteVes = this.proyectarVES(cuota.saldoPendienteUsd, tasa.tasaEfectiva);
@@ -861,6 +875,7 @@ export class FinanzasService {
       referenciaBancaria: nuevaTx.referenciaBancaria,
       fechaOperacion: nuevaTx.fechaOperacion,
       comprobanteStorageKey: nuevaTx.comprobanteStorageKey,
+      comprobanteUrl: await this.resolverComprobanteUrl(nuevaTx.comprobanteStorageKey),
       estadoConciliacion: nuevaTx.estadoConciliacion,
       motivoRechazo: nuevaTx.motivoRechazo,
       fechaReporteUtc: nuevaTx.fechaReporteUtc.toISOString(),
@@ -1278,28 +1293,31 @@ export class FinanzasService {
       )
       .orderBy(asc(transaccionesPago.fechaReporteUtc)); // FIFO
 
-    return records.map(({ tx, alumno }) => ({
-      id: tx.id,
-      cuotaId: tx.cuotaId,
-      clienteId: tx.clienteId,
-      entrenadorId: tx.entrenadorId,
-      registradoPor: tx.registradoPor,
-      montoOriginal: tx.montoOriginal,
-      monedaOriginal: tx.monedaOriginal,
-      tasaCambioFijada: tx.tasaCambioFijada,
-      montoEquivalenteUsd: tx.montoEquivalenteUsd,
-      metodoPago: tx.metodoPago,
-      referenciaBancaria: tx.referenciaBancaria,
-      fechaOperacion: tx.fechaOperacion,
-      comprobanteStorageKey: tx.comprobanteStorageKey,
-      estadoConciliacion: tx.estadoConciliacion,
-      motivoRechazo: tx.motivoRechazo,
-      fechaReporteUtc: tx.fechaReporteUtc.toISOString(),
-      fechaConciliacionUtc: tx.fechaConciliacionUtc?.toISOString() || null,
-      clienteNombre: alumno ? `${alumno.nombres} ${alumno.apellidos}` : undefined,
-      createdAtUtc: tx.createdAtUtc.toISOString(),
-      updatedAtUtc: tx.updatedAtUtc.toISOString(),
-    }));
+    return Promise.all(
+      records.map(async ({ tx, alumno }) => ({
+        id: tx.id,
+        cuotaId: tx.cuotaId,
+        clienteId: tx.clienteId,
+        entrenadorId: tx.entrenadorId,
+        registradoPor: tx.registradoPor,
+        montoOriginal: tx.montoOriginal,
+        monedaOriginal: tx.monedaOriginal,
+        tasaCambioFijada: tx.tasaCambioFijada,
+        montoEquivalenteUsd: tx.montoEquivalenteUsd,
+        metodoPago: tx.metodoPago,
+        referenciaBancaria: tx.referenciaBancaria,
+        fechaOperacion: tx.fechaOperacion,
+        comprobanteStorageKey: tx.comprobanteStorageKey,
+        comprobanteUrl: await this.resolverComprobanteUrl(tx.comprobanteStorageKey),
+        estadoConciliacion: tx.estadoConciliacion,
+        motivoRechazo: tx.motivoRechazo,
+        fechaReporteUtc: tx.fechaReporteUtc.toISOString(),
+        fechaConciliacionUtc: tx.fechaConciliacionUtc?.toISOString() || null,
+        clienteNombre: alumno ? `${alumno.nombres} ${alumno.apellidos}` : undefined,
+        createdAtUtc: tx.createdAtUtc.toISOString(),
+        updatedAtUtc: tx.updatedAtUtc.toISOString(),
+      }))
+    );
   }
 
   // ===========================================================================

@@ -7,6 +7,7 @@ import {
   AltaManualAlumnoSchema,
   RegistroPublicoAlumnoSchema,
   CambioEstadoAlumnoSchema,
+  ActualizarPerfilAlumnoSchema,
   CrearEjercicioCatalogoSchema,
   ActualizarEjercicioCatalogoSchema,
   SeriePrescritaInputSchema,
@@ -72,6 +73,7 @@ export type EstablecerPasswordConTokenDTO = z.infer<typeof EstablecerPasswordCon
 export type AltaManualAlumnoDTO = z.infer<typeof AltaManualAlumnoSchema>;
 export type RegistroPublicoAlumnoDTO = z.infer<typeof RegistroPublicoAlumnoSchema>;
 export type CambioEstadoAlumnoDTO = z.infer<typeof CambioEstadoAlumnoSchema>;
+export type ActualizarPerfilAlumnoDTO = z.infer<typeof ActualizarPerfilAlumnoSchema>;
 
 // Tipos inferidos de DTOs - Entrenamiento & Nutrición (Módulo 3)
 export type CrearEjercicioCatalogoDTO = z.infer<typeof CrearEjercicioCatalogoSchema>;

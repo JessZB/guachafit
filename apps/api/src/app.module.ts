@@ -19,14 +19,14 @@ import { NotificacionesModule } from './modules/notificaciones/notificaciones.mo
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.local', '.env'],
+      envFilePath: ['.env.local', '.env', '../../.env', 'apps/api/.env'],
     }),
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         connection: {
-          host: config.get<string>('REDIS_HOST', 'localhost'),
+          host: config.get<string>('REDIS_HOST', '127.0.0.1'),
           port: Number(config.get<number>('REDIS_PORT', 6379)),
           maxRetriesPerRequest: null,
         },

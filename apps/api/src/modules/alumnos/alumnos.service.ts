@@ -10,6 +10,7 @@ import {
   Database,
   eq,
   and,
+  or,
   isNull,
   usuarios,
   perfilesAlumno,
@@ -20,6 +21,7 @@ import {
   AltaManualAlumnoDTO,
   RegistroPublicoAlumnoDTO,
   CambioEstadoAlumnoDTO,
+  ActualizarPerfilAlumnoDTO,
   PerfilAlumnoDetalleDTO,
   Rol,
   EstadoUsuario,
@@ -256,6 +258,99 @@ export class AlumnosService {
       estadoActivacion: actualizado.estadoActivacion,
       mensaje: `El estado del alumno ha sido actualizado a ${actualizado.estadoActivacion}.`,
     };
+  }
+
+  /**
+   * Edición completa de la ficha e información de alumnos por el entrenador (RF-011, RF-012)
+   */
+  async actualizarAlumno(
+    entrenadorId: string,
+    alumnoId: string,
+    dto: ActualizarPerfilAlumnoDTO
+  ): Promise<PerfilAlumnoDetalleDTO> {
+    const [perfil] = await this.db
+      .select({
+        id: perfilesAlumno.id,
+        usuarioId: perfilesAlumno.usuarioId,
+        entrenadorId: perfilesAlumno.entrenadorId,
+        tipoDocumento: perfilesAlumno.tipoDocumento,
+        numeroDocumento: perfilesAlumno.numeroDocumento,
+        nombres: perfilesAlumno.nombres,
+        apellidos: perfilesAlumno.apellidos,
+        email: usuarios.email,
+        fechaNacimiento: perfilesAlumno.fechaNacimiento,
+        telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
+        fichaSaludPrivada: perfilesAlumno.fichaSaludPrivada,
+        estadoActivacion: perfilesAlumno.estadoActivacion,
+        modalidad: perfilesAlumno.modalidad,
+        tasaFijadaOverride: perfilesAlumno.tasaFijadaOverride,
+        deletedAtUtc: perfilesAlumno.deletedAtUtc,
+        createdAtUtc: perfilesAlumno.createdAtUtc,
+      })
+      .from(perfilesAlumno)
+      .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
+      .where(
+        or(
+          eq(perfilesAlumno.id, alumnoId),
+          eq(perfilesAlumno.usuarioId, alumnoId)
+        )
+      );
+
+    if (!perfil) {
+      throw new NotFoundException('Alumno no encontrado');
+    }
+
+    if (perfil.entrenadorId !== entrenadorId) {
+      throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');
+    }
+
+    const valoresAActualizar: Record<string, any> = {
+      updatedAtUtc: new Date(),
+    };
+
+    if (dto.nombres !== undefined) {
+      valoresAActualizar.nombres = dto.nombres.trim();
+    }
+    if (dto.apellidos !== undefined) {
+      valoresAActualizar.apellidos = dto.apellidos.trim();
+    }
+    if (dto.tipoDocumento !== undefined) {
+      valoresAActualizar.tipoDocumento = dto.tipoDocumento;
+    }
+    if (dto.numeroDocumento !== undefined) {
+      valoresAActualizar.numeroDocumento = dto.numeroDocumento.trim();
+    }
+    if (dto.fechaNacimiento !== undefined) {
+      valoresAActualizar.fechaNacimiento = dto.fechaNacimiento;
+    }
+    if (dto.telefonoWhatsapp !== undefined) {
+      valoresAActualizar.telefonoWhatsapp = dto.telefonoWhatsapp.trim();
+    }
+    if (dto.modalidad !== undefined) {
+      valoresAActualizar.modalidad = dto.modalidad;
+    }
+    if (dto.tasaFijadaOverride !== undefined) {
+      valoresAActualizar.tasaFijadaOverride = dto.tasaFijadaOverride || null;
+    }
+    if (dto.fichaSaludPrivada !== undefined) {
+      valoresAActualizar.fichaSaludPrivada =
+        dto.fichaSaludPrivada && dto.fichaSaludPrivada.trim().length > 0
+          ? this.cryptoService.encryptHealthRecord(dto.fichaSaludPrivada)
+          : null;
+    }
+
+    const [actualizado] = await this.db
+      .update(perfilesAlumno)
+      .set(valoresAActualizar)
+      .where(eq(perfilesAlumno.id, perfil.id))
+      .returning();
+
+    const perfilActualizadoConEmail = {
+      ...actualizado,
+      email: perfil.email,
+    };
+
+    return this.sanitizarPerfilParaRol(perfilActualizadoConEmail, Rol.ENTRENADOR);
   }
 
   /**

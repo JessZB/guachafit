@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { AlumnosService } from '../../src/modules/alumnos/alumnos.service';
-import { Rol } from '@guachafit/shared';
+import {
+  Rol,
+  TipoDocumento,
+  Modalidad,
+  EstadoAlumno,
+  ActualizarPerfilAlumnoDTO,
+} from '@guachafit/shared';
+import { NotFoundException, ForbiddenException } from '@nestjs/common';
 
 describe('RF-011: Onboarding Híbrido de Alumnos (Registro Manual y Enlace Deep Link)', () => {
   const mockDb = {} as any;
@@ -63,6 +70,121 @@ describe('RF-011: Onboarding Híbrido de Alumnos (Registro Manual y Enlace Deep 
     it('el Alumno NO tiene acceso ni visibilidad sobre la ficha de salud privada', () => {
       const dto = alumnosService.sanitizarPerfilParaRol(rawPerfil as any, Rol.ALUMNO);
       expect(dto.fichaSaludPrivada).toBeNull();
+    });
+  });
+
+  describe('Escenario 4: Edición Completa de la Ficha de Alumno por el Entrenador (RF-011, RF-012)', () => {
+    const alumnoOriginal = {
+      id: 'alumno-uuid-1',
+      usuarioId: 'user-uuid-1',
+      entrenadorId: 'coach-uuid-1',
+      tipoDocumento: TipoDocumento.V,
+      numeroDocumento: '24123456',
+      nombres: 'Carlos',
+      apellidos: 'Mendoza',
+      email: 'carlos@guachafit.com',
+      fechaNacimiento: '1998-05-14',
+      telefonoWhatsapp: '+584121234567',
+      modalidad: Modalidad.PRESENCIAL,
+      estadoActivacion: EstadoAlumno.ACTIVO,
+      tasaFijadaOverride: null,
+      fichaSaludPrivada: 'encrypted:Ficha previa',
+      deletedAtUtc: null,
+      createdAtUtc: '2026-01-01T00:00:00.000Z',
+      updatedAtUtc: '2026-01-01T00:00:00.000Z',
+    };
+
+    function createMockDbForUpdate(initialRecord: any) {
+      return {
+        select: () => ({
+          from: () => ({
+            innerJoin: () => ({
+              where: () => Promise.resolve(initialRecord ? [{ ...initialRecord }] : []),
+            }),
+          }),
+        }),
+        update: () => ({
+          set: (valores: any) => ({
+            where: () => ({
+              returning: () => Promise.resolve([{ ...initialRecord, ...valores }]),
+            }),
+          }),
+        }),
+      } as any;
+    }
+
+    it('debe actualizar los campos del perfil y recalcular la edad dinámicamente', async () => {
+      const mockDbInstance = createMockDbForUpdate(alumnoOriginal);
+      const service = new AlumnosService(mockDbInstance, mockCrypto);
+
+      const dto: ActualizarPerfilAlumnoDTO = {
+        nombres: 'Carlos Antonio',
+        apellidos: 'Mendoza Pérez',
+        fechaNacimiento: '2000-01-01',
+        modalidad: Modalidad.REMOTO,
+        telefonoWhatsapp: '+584149998877',
+      };
+
+      const resultado = await service.actualizarAlumno('coach-uuid-1', 'alumno-uuid-1', dto);
+
+      expect(resultado.nombres).toBe('Carlos Antonio');
+      expect(resultado.apellidos).toBe('Mendoza Pérez');
+      expect(resultado.modalidad).toBe(Modalidad.REMOTO);
+      expect(resultado.telefonoWhatsapp).toBe('+584149998877');
+      expect(resultado.fechaNacimiento).toBe('2000-01-01');
+      expect(resultado.edadCalculada).toBe(service.calcularEdad('2000-01-01'));
+    });
+
+    it('debe cifrar la nueva ficha médica con AES-256-GCM y desencriptarla para el entrenador', async () => {
+      const mockDbInstance = createMockDbForUpdate(alumnoOriginal);
+      const service = new AlumnosService(mockDbInstance, mockCrypto);
+
+      const dto: ActualizarPerfilAlumnoDTO = {
+        fichaSaludPrivada: 'Nueva lesión en hombro derecho',
+      };
+
+      const resultado = await service.actualizarAlumno('coach-uuid-1', 'alumno-uuid-1', dto);
+
+      // Al retornar sanitizado para el entrenador, debe mostrarse desencriptado
+      expect(resultado.fichaSaludPrivada).toBe('Nueva lesión en hombro derecho');
+    });
+
+    it('debe permitir vaciar la ficha de salud privada enviando null o string vacío', async () => {
+      const mockDbInstance = createMockDbForUpdate(alumnoOriginal);
+      const service = new AlumnosService(mockDbInstance, mockCrypto);
+
+      const dto: ActualizarPerfilAlumnoDTO = {
+        fichaSaludPrivada: null,
+      };
+
+      const resultado = await service.actualizarAlumno('coach-uuid-1', 'alumno-uuid-1', dto);
+      expect(resultado.fichaSaludPrivada).toBeNull();
+    });
+
+    it('debe lanzar ForbiddenException ante intento de edición cruzada entre entrenadores (Aislamiento de Tenant)', async () => {
+      const mockDbInstance = createMockDbForUpdate(alumnoOriginal);
+      const service = new AlumnosService(mockDbInstance, mockCrypto);
+
+      const dto: ActualizarPerfilAlumnoDTO = {
+        nombres: 'Intento Hacker',
+      };
+
+      await expect(
+        service.actualizarAlumno('coach-uuid-2-intruso', 'alumno-uuid-1', dto)
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('debe lanzar NotFoundException si el alumno no existe en la base de datos', async () => {
+      const mockDbInstance = createMockDbForUpdate(null);
+      const service = new AlumnosService(mockDbInstance, mockCrypto);
+
+      const dto: ActualizarPerfilAlumnoDTO = {
+        nombres: 'No Existe',
+      };
+
+      await expect(
+        service.actualizarAlumno('coach-uuid-1', 'alumno-inexistente', dto)
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

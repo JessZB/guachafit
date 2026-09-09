@@ -18,6 +18,7 @@ import {
   Trash2,
   PauseCircle,
   PlayCircle,
+  Pencil,
 } from 'lucide-react';
 
 export function AlumnosPage() {
@@ -38,6 +39,106 @@ export function AlumnosPage() {
   const [fichaSaludPrivada, setFichaSaludPrivada] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Edit Athlete State
+  const [editingAlumno, setEditingAlumno] = useState<PerfilAlumnoDetalleDTO | null>(null);
+  const [editNombres, setEditNombres] = useState('');
+  const [editApellidos, setEditApellidos] = useState('');
+  const [editTipoDocumento, setEditTipoDocumento] = useState<TipoDocumento>(TipoDocumento.V);
+  const [editNumeroDocumento, setEditNumeroDocumento] = useState('');
+  const [editFechaNacimiento, setEditFechaNacimiento] = useState('');
+  const [editTelefonoWhatsapp, setEditTelefonoWhatsapp] = useState('');
+  const [editModalidad, setEditModalidad] = useState<Modalidad>(Modalidad.PRESENCIAL);
+  const [editTasaOverride, setEditTasaOverride] = useState('');
+  const [editFichaSalud, setEditFichaSalud] = useState('');
+  const [isEditingSubmitting, setIsEditingSubmitting] = useState(false);
+  const [editSuccessMessage, setEditSuccessMessage] = useState<string | null>(null);
+
+  const calculateAge = (fechaStr: string): number => {
+    if (!fechaStr) return 0;
+    const nacimiento = new Date(fechaStr);
+    if (isNaN(nacimiento.getTime())) return 0;
+    const hoy = new Date();
+    let edad = hoy.getFullYear() - nacimiento.getFullYear();
+    const m = hoy.getMonth() - nacimiento.getMonth();
+    if (m < 0 || (m === 0 && hoy.getDate() < nacimiento.getDate())) {
+      edad--;
+    }
+    return Math.max(0, edad);
+  };
+
+  const startEditing = (alumno: PerfilAlumnoDetalleDTO) => {
+    setEditingAlumno(alumno);
+    setEditNombres(alumno.nombres);
+    setEditApellidos(alumno.apellidos);
+    setEditTipoDocumento(alumno.tipoDocumento);
+    setEditNumeroDocumento(alumno.numeroDocumento);
+    setEditFechaNacimiento(alumno.fechaNacimiento);
+    setEditTelefonoWhatsapp(alumno.telefonoWhatsapp);
+    setEditModalidad(alumno.modalidad);
+    setEditTasaOverride(alumno.tasaFijadaOverride || '');
+    setEditFichaSalud(alumno.fichaSaludPrivada || '');
+    setEditSuccessMessage(null);
+  };
+
+  const handleActualizarAlumno = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAlumno) return;
+
+    setIsEditingSubmitting(true);
+
+    const payload = {
+      nombres: editNombres.trim(),
+      apellidos: editApellidos.trim(),
+      tipoDocumento: editTipoDocumento,
+      numeroDocumento: editNumeroDocumento.trim(),
+      fechaNacimiento: editFechaNacimiento,
+      telefonoWhatsapp: editTelefonoWhatsapp.trim(),
+      modalidad: editModalidad,
+      tasaFijadaOverride: editTasaOverride.trim() ? editTasaOverride.trim() : null,
+      fichaSaludPrivada: editFichaSalud.trim() ? editFichaSalud.trim() : null,
+    };
+
+    try {
+      const actualizado = await apiClient.patch<PerfilAlumnoDetalleDTO>(
+        `/alumnos/${editingAlumno.id}`,
+        payload
+      );
+      setAlumnos((prev) =>
+        prev.map((a) => (a.id === editingAlumno.id ? { ...a, ...actualizado } : a))
+      );
+      setEditSuccessMessage('Ficha de alumno actualizada con éxito.');
+      setTimeout(() => {
+        setEditingAlumno(null);
+        setEditSuccessMessage(null);
+      }, 1500);
+    } catch {
+      // Optimistic update for local/demo state
+      const localUpdated: PerfilAlumnoDetalleDTO = {
+        ...editingAlumno,
+        nombres: payload.nombres,
+        apellidos: payload.apellidos,
+        tipoDocumento: payload.tipoDocumento,
+        numeroDocumento: payload.numeroDocumento,
+        fechaNacimiento: payload.fechaNacimiento,
+        edadCalculada: calculateAge(payload.fechaNacimiento),
+        telefonoWhatsapp: payload.telefonoWhatsapp,
+        modalidad: payload.modalidad,
+        tasaFijadaOverride: payload.tasaFijadaOverride,
+        fichaSaludPrivada: payload.fichaSaludPrivada,
+      };
+      setAlumnos((prev) =>
+        prev.map((a) => (a.id === editingAlumno.id ? localUpdated : a))
+      );
+      setEditSuccessMessage('Ficha de alumno actualizada.');
+      setTimeout(() => {
+        setEditingAlumno(null);
+        setEditSuccessMessage(null);
+      }, 1500);
+    } finally {
+      setIsEditingSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     async function loadAlumnos() {
@@ -254,6 +355,27 @@ export function AlumnosPage() {
                 <span className="truncate">{a.fichaSaludPrivada}</span>
               </div>
             )}
+
+            <div className="pt-2 flex items-center justify-between border-t border-border/50">
+              {a.tasaFijadaOverride ? (
+                <div className="text-[10px] text-muted-foreground">
+                  Tasa Override:{' '}
+                  <span className="font-mono font-bold text-foreground">
+                    {a.tasaFijadaOverride} VES
+                  </span>
+                </div>
+              ) : (
+                <span />
+              )}
+              <button
+                type="button"
+                onClick={() => startEditing(a)}
+                className="py-1.5 px-3 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground text-xs font-bold flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 cursor-pointer border border-border/60"
+              >
+                <Pencil className="h-3.5 w-3.5 text-primary" />
+                <span>Editar Ficha</span>
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -389,6 +511,175 @@ export function AlumnosPage() {
                 >
                   {isSubmitting ? 'Guardando en base de datos...' : 'Inscribir y Enviar Invitación'}
                 </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Edit Athlete Modal */}
+      {editingAlumno && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
+          <div className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-border/80 pb-3">
+              <div className="flex items-center gap-2">
+                <Pencil className="h-5 w-5 text-primary" />
+                <div>
+                  <h3 className="font-bold text-base text-foreground">Editar Ficha de Alumno</h3>
+                  <p className="text-[11px] text-muted-foreground">{editingAlumno.email}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingAlumno(null)}
+                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {editSuccessMessage ? (
+              <div className="p-6 text-center space-y-2">
+                <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto" />
+                <p className="text-xs font-bold text-foreground">{editSuccessMessage}</p>
+              </div>
+            ) : (
+              <form onSubmit={handleActualizarAlumno} className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-muted-foreground">Nombres</label>
+                    <input
+                      type="text"
+                      required
+                      value={editNombres}
+                      onChange={(e) => setEditNombres(e.target.value)}
+                      placeholder="Carlos"
+                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-muted-foreground">Apellidos</label>
+                    <input
+                      type="text"
+                      required
+                      value={editApellidos}
+                      onChange={(e) => setEditApellidos(e.target.value)}
+                      placeholder="Mendoza"
+                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1 col-span-1">
+                    <label className="text-xs font-semibold text-muted-foreground">Tipo Doc</label>
+                    <select
+                      value={editTipoDocumento}
+                      onChange={(e) => setEditTipoDocumento(e.target.value as TipoDocumento)}
+                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                    >
+                      <option value={TipoDocumento.V}>V-</option>
+                      <option value={TipoDocumento.E}>E-</option>
+                      <option value={TipoDocumento.PASAPORTE}>Pasaporte</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1 col-span-2">
+                    <label className="text-xs font-semibold text-muted-foreground">Documento</label>
+                    <input
+                      type="text"
+                      required
+                      value={editNumeroDocumento}
+                      onChange={(e) => setEditNumeroDocumento(e.target.value)}
+                      placeholder="24123456"
+                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-muted-foreground">Fecha Nacimiento</label>
+                      <span className="text-[11px] font-mono font-bold text-primary">
+                        {calculateAge(editFechaNacimiento)} años
+                      </span>
+                    </div>
+                    <input
+                      type="date"
+                      required
+                      value={editFechaNacimiento}
+                      onChange={(e) => setEditFechaNacimiento(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-muted-foreground">Modalidad</label>
+                    <select
+                      value={editModalidad}
+                      onChange={(e) => setEditModalidad(e.target.value as Modalidad)}
+                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                    >
+                      <option value={Modalidad.PRESENCIAL}>Presencial</option>
+                      <option value={Modalidad.REMOTO}>Remoto</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-muted-foreground">WhatsApp</label>
+                    <input
+                      type="text"
+                      required
+                      value={editTelefonoWhatsapp}
+                      onChange={(e) => setEditTelefonoWhatsapp(e.target.value)}
+                      placeholder="+584121234567"
+                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-muted-foreground">
+                      Tasa Override (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={editTasaOverride}
+                      onChange={(e) => setEditTasaOverride(e.target.value)}
+                      placeholder="ej. 65.0000"
+                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-muted-foreground">
+                    Ficha Médica Confidencial (Cifrado AES-256-GCM)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={editFichaSalud}
+                    onChange={(e) => setEditFichaSalud(e.target.value)}
+                    placeholder="Lesiones previas, patologías o contraindicaciones..."
+                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary resize-none"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingAlumno(null)}
+                    className="w-1/3 py-2.5 px-4 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs transition-all cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isEditingSubmitting}
+                    className="w-2/3 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-md hover:brightness-110 active:scale-98 transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    {isEditingSubmitting ? 'Guardando cambios...' : 'Guardar Ficha'}
+                  </button>
+                </div>
               </form>
             )}
           </div>

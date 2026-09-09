@@ -32,13 +32,13 @@ export function generateIdempotencyKey(): string {
   return 'idem_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
 }
 
-interface RequestOptions extends RequestInit {
+export interface RequestOptions extends RequestInit {
   idempotent?: boolean;
   idempotencyKey?: string;
   skipAuth?: boolean;
 }
 
-export async function apiClient<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+async function apiClientBase<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const { idempotent, idempotencyKey, skipAuth, headers = {}, ...rest } = options;
 
   const requestHeaders: Record<string, string> = {
@@ -114,3 +114,22 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
     return null as unknown as T;
   }
 }
+
+export const apiClient = Object.assign(apiClientBase, {
+  get: <T>(endpoint: string, options: RequestOptions = {}) =>
+    apiClientBase<T>(endpoint, { ...options, method: 'GET' }),
+  post: <T>(endpoint: string, body?: any, options: RequestOptions = {}) =>
+    apiClientBase<T>(endpoint, {
+      ...options,
+      method: 'POST',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+  patch: <T>(endpoint: string, body?: any, options: RequestOptions = {}) =>
+    apiClientBase<T>(endpoint, {
+      ...options,
+      method: 'PATCH',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+  delete: <T>(endpoint: string, options: RequestOptions = {}) =>
+    apiClientBase<T>(endpoint, { ...options, method: 'DELETE' }),
+});

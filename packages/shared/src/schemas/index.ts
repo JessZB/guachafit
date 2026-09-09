@@ -84,6 +84,18 @@ export const CambioEstadoAlumnoSchema = z.object({
   motivo: z.string().max(500).optional(),
 });
 
+export const ActualizarPerfilAlumnoSchema = z.object({
+  nombres: z.string().min(2).max(100).optional(),
+  apellidos: z.string().min(2).max(100).optional(),
+  tipoDocumento: z.nativeEnum(TipoDocumento).optional(),
+  numeroDocumento: z.string().min(5).max(30).optional(),
+  fechaNacimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD').optional(),
+  telefonoWhatsapp: z.string().min(8).max(30).optional(),
+  modalidad: z.nativeEnum(Modalidad).optional(),
+  tasaFijadaOverride: z.string().regex(TASA_STRING_REGEX).optional().nullable(),
+  fichaSaludPrivada: z.string().max(2000).optional().nullable(),
+});
+
 // =============================================================================
 // ENTRENAMIENTO & NUTRICIÓN SCHEMAS (Módulo 3: Sesiones de Entrenamiento & Check-ins Nutricionales)
 // =============================================================================

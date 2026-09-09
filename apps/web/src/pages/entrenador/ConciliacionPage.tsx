@@ -11,12 +11,15 @@ import {
   X,
   ExternalLink,
   ShieldCheck,
+  Eye,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 export function ConciliacionPage() {
   const [transacciones, setTransacciones] = useState<TransaccionPagoDetalleDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [rejectingTx, setRejectingTx] = useState<TransaccionPagoDetalleDTO | null>(null);
+  const [viewingComprobanteTx, setViewingComprobanteTx] = useState<TransaccionPagoDetalleDTO | null>(null);
   const [motivoRechazo, setMotivoRechazo] = useState('');
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
@@ -27,7 +30,7 @@ export function ConciliacionPage() {
         const data = await apiClient<TransaccionPagoDetalleDTO[]>('/finanzas/conciliacion/bandeja');
         setTransacciones(data);
       } catch {
-        // Fallback demo queue
+        // Fallback demo queue con soporte de comprobantes digitales (RF-007, ADR-007)
         const demoQueue: TransaccionPagoDetalleDTO[] = [
           {
             id: 'tx-pending-1',
@@ -43,6 +46,8 @@ export function ConciliacionPage() {
             metodoPago: MetodoPago.PAGO_MOVIL,
             referenciaBancaria: '445566',
             fechaOperacion: '2026-09-06',
+            comprobanteStorageKey: 'comprobantes/cli-01/2026/demo-recibo-1.webp',
+            comprobanteUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80',
             estadoConciliacion: 'pendiente' as any,
             fechaReporteUtc: new Date().toISOString(),
             createdAtUtc: new Date().toISOString(),
@@ -62,6 +67,8 @@ export function ConciliacionPage() {
             metodoPago: MetodoPago.ZELLE,
             referenciaBancaria: 'ZEL-998811',
             fechaOperacion: '2026-09-05',
+            comprobanteStorageKey: 'comprobantes/cli-02/2026/demo-recibo-2.webp',
+            comprobanteUrl: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=800&q=80',
             estadoConciliacion: 'pendiente' as any,
             fechaReporteUtc: new Date().toISOString(),
             createdAtUtc: new Date().toISOString(),
@@ -170,10 +177,27 @@ export function ConciliacionPage() {
                       {tx.metodoPago.replace('_', ' ')}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Ref: <span className="font-mono font-bold text-foreground">{tx.referenciaBancaria}</span> •
-                    Fecha Operación: {tx.fechaOperacion}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <p className="text-xs text-muted-foreground">
+                      Ref: <span className="font-mono font-bold text-foreground">{tx.referenciaBancaria}</span> •
+                      Fecha Operación: {tx.fechaOperacion}
+                    </p>
+                    {tx.comprobanteUrl || tx.comprobanteStorageKey ? (
+                      <button
+                        type="button"
+                        onClick={() => setViewingComprobanteTx(tx)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-bold transition-all cursor-pointer"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        <span>Ver Comprobante</span>
+                      </button>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-secondary text-muted-foreground text-[10px] font-medium">
+                        <FileText className="h-3 w-3" />
+                        <span>Sin captura digital</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="text-left sm:text-right">
@@ -264,6 +288,119 @@ export function ConciliacionPage() {
               >
                 Confirmar Rechazo
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Inspección de Comprobante Bancario (RF-007, ADR-007) */}
+      {viewingComprobanteTx && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/85 backdrop-blur-md">
+          <div className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-2xl space-y-4 max-h-[92vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-border/80 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                  <Receipt className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-foreground">
+                    Auditoría de Comprobante Bancario
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Atleta: <span className="font-bold text-foreground">{viewingComprobanteTx.clienteNombre || 'Atleta'}</span> • {viewingComprobanteTx.metodoPago.replace('_', ' ').toUpperCase()}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewingComprobanteTx(null)}
+                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Cross-Referenced Transaction Details Bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl bg-secondary/30 border border-border text-xs">
+              <div>
+                <span className="text-[10px] text-muted-foreground uppercase font-bold">Monto Declarado</span>
+                <p className="font-mono font-black text-foreground mt-0.5">
+                  {viewingComprobanteTx.montoOriginal} {viewingComprobanteTx.monedaOriginal}
+                </p>
+              </div>
+              <div>
+                <span className="text-[10px] text-muted-foreground uppercase font-bold">Equivalente USD</span>
+                <p className="font-mono font-black text-primary mt-0.5">
+                  +${viewingComprobanteTx.montoEquivalenteUsd}
+                </p>
+              </div>
+              <div>
+                <span className="text-[10px] text-muted-foreground uppercase font-bold">Referencia</span>
+                <p className="font-mono font-bold text-foreground mt-0.5">
+                  {viewingComprobanteTx.referenciaBancaria || 'Sin referencia'}
+                </p>
+              </div>
+              <div>
+                <span className="text-[10px] text-muted-foreground uppercase font-bold">Fecha Operación</span>
+                <p className="font-medium text-foreground mt-0.5">
+                  {viewingComprobanteTx.fechaOperacion}
+                </p>
+              </div>
+            </div>
+
+            {/* High-Resolution Receipt Image Frame */}
+            <div className="flex-1 overflow-auto rounded-2xl border border-border bg-black/50 flex flex-col items-center justify-center p-3 relative min-h-[280px]">
+              <img
+                src={
+                  viewingComprobanteTx.comprobanteUrl ||
+                  'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80'
+                }
+                alt="Comprobante Bancario"
+                className="max-h-[48vh] max-w-full rounded-xl object-contain shadow-lg"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src =
+                    'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80';
+                }}
+              />
+              {viewingComprobanteTx.comprobanteUrl && (
+                <a
+                  href={viewingComprobanteTx.comprobanteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="absolute top-4 right-4 p-2 rounded-xl bg-background/80 hover:bg-background text-foreground text-xs font-bold backdrop-blur-md shadow-md flex items-center gap-1.5 transition-all"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span>Abrir original</span>
+                </a>
+              )}
+            </div>
+
+            {/* Direct Action Footer */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-border/80">
+              <span className="text-[11px] text-muted-foreground">
+                Presigned URL segura temporal de lectura (TTL 15 min, ADR-007)
+              </span>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  onClick={() => {
+                    const tx = viewingComprobanteTx;
+                    setViewingComprobanteTx(null);
+                    setRejectingTx(tx);
+                  }}
+                  className="flex-1 sm:flex-initial py-2 px-4 rounded-xl border border-destructive/40 text-destructive hover:bg-destructive/10 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Rechazar Pago
+                </button>
+                <button
+                  onClick={() => {
+                    handleAprobar(viewingComprobanteTx.id);
+                    setViewingComprobanteTx(null);
+                  }}
+                  className="flex-1 sm:flex-initial py-2 px-5 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+                >
+                  Aprobar y Descontar Saldo
+                </button>
+              </div>
             </div>
           </div>
         </div>
