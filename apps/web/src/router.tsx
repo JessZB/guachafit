@@ -14,6 +14,8 @@ import { EntrenamientoPage } from './pages/atleta/EntrenamientoPage';
 import { NutricionPage } from './pages/atleta/NutricionPage';
 import { PagosPage } from './pages/atleta/PagosPage';
 import { ProgresoPage } from './pages/atleta/ProgresoPage';
+import { AtletaMenuPage } from './pages/atleta/AtletaMenuPage';
+import { CoachMenuPage } from './pages/entrenador/CoachMenuPage';
 import { DashboardPage } from './pages/entrenador/DashboardPage';
 import { ConciliacionPage } from './pages/entrenador/ConciliacionPage';
 import { AlumnosPage } from './pages/entrenador/AlumnosPage';
@@ -58,6 +60,10 @@ export const router = createBrowserRouter([
             element: <EntrenamientoPage />,
           },
           {
+            path: '/app/menu',
+            element: <AtletaMenuPage />,
+          },
+          {
             path: '/app/nutricion',
             element: <NutricionPage />,
           },
@@ -84,6 +90,10 @@ export const router = createBrowserRouter([
           {
             path: '/coach/dashboard',
             element: <DashboardPage />,
+          },
+          {
+            path: '/coach/menu',
+            element: <CoachMenuPage />,
           },
           {
             path: '/coach/conciliacion',

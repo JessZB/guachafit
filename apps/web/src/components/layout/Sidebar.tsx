@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/auth-context';
 import {
   Dumbbell,
+  LayoutGrid,
   Utensils,
   TrendingUp,
   CreditCard,
@@ -19,17 +20,19 @@ export function Sidebar() {
   const isCoach = user?.rol === 'entrenador';
 
   const athleteLinks = [
-    { to: '/app/hoy', label: 'Sesión de Hoy', icon: Dumbbell, description: 'Rutina y checklist' },
-    { to: '/app/nutricion', label: 'Check-in Nutrición', icon: Utensils, description: 'Semáforo 1-Tap' },
-    { to: '/app/progreso', label: 'Evolución Corporal', icon: TrendingUp, description: 'Métricas y fotos R2' },
-    { to: '/app/pagos', label: 'Cuotas y Pagos', icon: CreditCard, description: 'Deuda maestra USD' },
+    { to: '/app/hoy', label: '¡A entrenar!', icon: Dumbbell, description: 'Sesión activa del día' },
+    { to: '/app/menu', label: 'Menú de Acciones', icon: LayoutGrid, description: 'Hub central de accesos' },
+    { to: '/app/nutricion', label: 'Mi Comida', icon: Utensils, description: 'Semáforo y macros' },
+    { to: '/app/progreso', label: 'Mi Progreso', icon: TrendingUp, description: 'Fotos y medidas' },
+    { to: '/app/pagos', label: 'Pagos y Cuotas', icon: CreditCard, description: 'Saldo y comprobantes' },
   ];
 
   const coachLinks = [
-    { to: '/coach/dashboard', label: 'Comando Central', icon: LayoutDashboard, description: 'Métricas de cartera' },
-    { to: '/coach/conciliacion', label: 'Bandeja de Pagos', icon: DollarSign, description: 'Conciliación bancaria' },
-    { to: '/coach/alumnos', label: 'Directorio Atletas', icon: Users, description: 'Monitor de adherencia' },
-    { to: '/coach/antropometria', label: 'Auditoría Antropométrica', icon: Camera, description: 'Comparador fotográfico' },
+    { to: '/coach/dashboard', label: 'Comando Central', icon: LayoutDashboard, description: 'KPIs y finanzas' },
+    { to: '/coach/menu', label: 'Menú de Acciones', icon: LayoutGrid, description: 'Hub operativo rápido' },
+    { to: '/coach/conciliacion', label: 'Validar Pagos', icon: DollarSign, description: 'Bandeja de verificación' },
+    { to: '/coach/alumnos', label: 'Directorio Atletas', icon: Users, description: 'Gestión y retención' },
+    { to: '/coach/antropometria', label: 'Revisar Evaluaciones', icon: Camera, description: 'Auditoría de fotos' },
   ];
 
   const links = isCoach ? coachLinks : athleteLinks;

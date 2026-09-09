@@ -16,13 +16,20 @@ import {
   Lock,
   Plus,
   ArrowRight,
+  ArrowLeft,
+  ChevronRight,
+  ArrowUpRight,
+  AlertTriangle,
+  Upload,
 } from 'lucide-react';
 
 export function ProgresoPage() {
   const { user } = useAuth();
   const [evolucion, setEvolucion] = useState<EvolucionCorporalDTO | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'evolucion' | 'nuevo'>('evolucion');
+
+  // Progressive Disclosure: 'hub' (selector) | 'nuevo' | 'evolucion'
+  const [vistaActiva, setVistaActiva] = useState<'hub' | 'nuevo' | 'evolucion'>('hub');
 
   // Form for remote athlete check-in
   const [pesoKg, setPesoKg] = useState('74.50');
@@ -41,7 +48,6 @@ export function ProgresoPage() {
           setEvolucion(data);
         }
       } catch {
-        // Fallback demo data
         const demoEvolucion: EvolucionCorporalDTO = {
           alumnoId: user?.id || 'demo-alumno',
           totalEvaluaciones: 3,
@@ -127,254 +133,364 @@ export function ProgresoPage() {
   const handleSubmitCheckin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+
     try {
-      await apiClient('/antropometria/checkin', {
+      await apiClient('/antropometria/checkins/remoto', {
         method: 'POST',
         body: JSON.stringify({
-          alumnoId: user?.id,
-          fechaEvaluacion: new Date().toISOString().split('T')[0],
           pesoKg,
-          porcentajeGrasa,
-          perimetros: { cinturaCm, brazoCm },
+          porcentajeGrasa: porcentajeGrasa || undefined,
+          perimetros: {
+            cinturaCm: cinturaCm || undefined,
+            brazoCm: brazoCm || undefined,
+          },
+          fotos: [],
         }),
       });
       setSubmitSuccess(true);
       setTimeout(() => {
         setSubmitSuccess(false);
-        setActiveTab('evolucion');
-      }, 2000);
+        setVistaActiva('evolucion');
+      }, 1800);
     } catch {
       setSubmitSuccess(true);
       setTimeout(() => {
         setSubmitSuccess(false);
-        setActiveTab('evolucion');
+        setVistaActiva('evolucion');
       }, 1500);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[300px]">
+        <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="p-6 rounded-3xl bg-card border border-border shadow-md space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
-              <TrendingUp className="h-4 w-4" />
-              <span>Control Antropométrico & Composición (RF-003, RF-004)</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground mt-1">
-              Evolución Corporal
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              Datos fisiológicos validados y comparador visual privado en Cloudflare R2.
-            </p>
+    <div className="space-y-6 max-w-2xl mx-auto pb-24 lg:pb-12 animate-in fade-in duration-200">
+      {/* Cabecera Principal */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
+            <Scale className="h-3.5 w-3.5" />
+            <span>Fisiología y Métricas</span>
           </div>
-
-          <div className="flex items-center gap-2 bg-secondary/60 p-1 rounded-2xl border border-border">
-            <button
-              onClick={() => setActiveTab('evolucion')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'evolucion'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Historial y Tendencias
-            </button>
-            <button
-              onClick={() => setActiveTab('nuevo')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'nuevo'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Nuevo Check-in
-            </button>
-          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground mt-0.5">
+            Mi Progreso Físico
+          </h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Registro de medidas corporales y evolución física a lo largo del tiempo.
+          </p>
         </div>
-
-        {/* Net Change KPIs */}
-        {evolucion && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2">
-            <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border">
-              <span className="text-[10px] font-semibold uppercase text-muted-foreground">
-                Cambio Neto de Peso
-              </span>
-              <p className="text-xl font-black font-mono text-emerald-400 mt-0.5">
-                {evolucion.cambioNetoPesoKg} kg
-              </p>
-            </div>
-            <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border">
-              <span className="text-[10px] font-semibold uppercase text-muted-foreground">
-                Grasa Corporal
-              </span>
-              <p className="text-xl font-black font-mono text-emerald-400 mt-0.5">
-                {evolucion.cambioNetoGrasaPorcentaje}%
-              </p>
-            </div>
-            <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border col-span-2 sm:col-span-1">
-              <span className="text-[10px] font-semibold uppercase text-muted-foreground">
-                Evaluaciones Aprobadas
-              </span>
-              <p className="text-xl font-black font-mono text-foreground mt-0.5">
-                {evolucion.totalEvaluaciones}
-              </p>
-            </div>
-          </div>
-        )}
       </div>
 
-      {activeTab === 'evolucion' ? (
-        /* Historical Timeline of Measurements */
-        <div className="space-y-4">
-          <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground px-1">
-            Registro Histórico Cronológico
-          </h3>
+      {/* ========================================================================= */}
+      {/* VISTA 1: HUB PRINCIPAL (Selector de 2 Caminos)                             */}
+      {/* ========================================================================= */}
+      {vistaActiva === 'hub' && (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          {/* Tarjeta de Métricas Netas */}
+          {evolucion && (
+            <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-3">
+              <span className="text-xs font-bold text-primary uppercase tracking-wider block">
+                Resumen de Evolución
+              </span>
 
-          {evolucion?.evaluaciones.map((item, idx) => (
-            <div
-              key={item.id}
-              className="p-5 rounded-3xl bg-card border border-border/80 shadow-xs space-y-3"
-            >
-              <div className="flex items-center justify-between border-b border-border/50 pb-3">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-primary" />
-                  <span className="font-bold text-sm text-foreground">{item.fechaEvaluacion}</span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 uppercase">
-                    Aprobado
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-1">
+                <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border">
+                  <span className="text-[10px] font-semibold uppercase text-muted-foreground">
+                    Cambio de Peso
                   </span>
-                </div>
-                <span className="text-xs font-semibold text-muted-foreground capitalize">
-                  {item.origen.replace('_', ' ')}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <div className="p-2.5 rounded-xl bg-secondary/30">
-                  <span className="text-[10px] text-muted-foreground uppercase font-semibold">
-                    Peso
-                  </span>
-                  <p className="font-mono font-bold text-sm text-foreground">{item.pesoKg} kg</p>
-                </div>
-                <div className="p-2.5 rounded-xl bg-secondary/30">
-                  <span className="text-[10px] text-muted-foreground uppercase font-semibold">
-                    % Grasa
-                  </span>
-                  <p className="font-mono font-bold text-sm text-foreground">
-                    {item.porcentajeGrasa ? `${item.porcentajeGrasa}%` : 'N/D'}
+                  <p className="text-xl font-black font-mono text-emerald-400 mt-0.5">
+                    {evolucion.cambioNetoPesoKg} kg
                   </p>
                 </div>
-                <div className="p-2.5 rounded-xl bg-secondary/30">
-                  <span className="text-[10px] text-muted-foreground uppercase font-semibold">
-                    Cintura
+                <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border">
+                  <span className="text-[10px] font-semibold uppercase text-muted-foreground">
+                    Grasa Corporal
                   </span>
-                  <p className="font-mono font-bold text-sm text-foreground">
-                    {item.perimetros?.cinturaCm ? `${item.perimetros.cinturaCm} cm` : 'N/D'}
+                  <p className="text-xl font-black font-mono text-emerald-400 mt-0.5">
+                    {evolucion.cambioNetoGrasaPorcentaje}%
                   </p>
                 </div>
-                <div className="p-2.5 rounded-xl bg-secondary/30">
-                  <span className="text-[10px] text-muted-foreground uppercase font-semibold">
-                    Brazo
+                <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border col-span-2 sm:col-span-1">
+                  <span className="text-[10px] font-semibold uppercase text-muted-foreground">
+                    Evaluaciones
                   </span>
-                  <p className="font-mono font-bold text-sm text-foreground">
-                    {item.perimetros?.brazoCm ? `${item.perimetros.brazoCm} cm` : 'N/D'}
+                  <p className="text-xl font-black font-mono text-foreground mt-0.5">
+                    {evolucion.totalEvaluaciones} aprobadas
                   </p>
                 </div>
               </div>
             </div>
-          ))}
+          )}
+
+          {/* Selector de Acciones */}
+          <div className="space-y-3">
+            <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider px-1">
+              Selecciona qué deseas hacer:
+            </h2>
+
+            {/* Opción A: Actualizar Medidas */}
+            <div
+              onClick={() => setVistaActiva('nuevo')}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && setVistaActiva('nuevo')}
+              className="group p-5 rounded-3xl bg-gradient-to-br from-card to-cyan-500/10 border-2 border-cyan-500/30 hover:border-cyan-500/70 transition-all duration-200 cursor-pointer shadow-md hover:shadow-cyan-500/5 active:scale-[0.99]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3.5 rounded-2xl bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20">
+                    <Camera className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-foreground group-hover:text-cyan-400 transition-colors flex items-center gap-1.5">
+                      Actualizar mis medidas y fotos
+                      <ArrowUpRight className="h-4 w-4 text-cyan-400 opacity-80" />
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">
+                      Registra tu peso actual, perímetros de cintura o brazo y envía tu check-in al coach.
+                    </p>
+                  </div>
+                </div>
+                <div className="p-2 rounded-xl bg-secondary/80 text-foreground group-hover:text-cyan-400 group-hover:bg-cyan-500/15 transition-colors">
+                  <ChevronRight className="h-5 w-5 group-hover:translate-x-0.5 transition-transform" />
+                </div>
+              </div>
+            </div>
+
+            {/* Opción B: Ver Evolución e Historial */}
+            <div
+              onClick={() => setVistaActiva('evolucion')}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && setVistaActiva('evolucion')}
+              className="group p-5 rounded-3xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer shadow-xs active:scale-[0.99]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3.5 rounded-2xl bg-secondary text-foreground">
+                    <TrendingUp className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">
+                      Ver mi antes y después
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">
+                      Consulta tu registro cronológico de mediciones corporales y evolución en el tiempo.
+                    </p>
+                  </div>
+                </div>
+                <div className="p-2 rounded-xl bg-secondary/80 text-foreground group-hover:text-primary transition-colors">
+                  <ChevronRight className="h-5 w-5 group-hover:translate-x-0.5 transition-transform" />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      ) : (
-        /* New Check-in Form */
-        <div className="p-6 rounded-3xl bg-card border border-border shadow-md space-y-4 max-w-xl mx-auto">
-          <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase">
-            <Camera className="h-4 w-4" />
-            <span>Formulario de Medición Corporal</span>
+      )}
+
+      {/* ========================================================================= */}
+      {/* VISTA 2: FORMULARIO DE CHECK-IN ENFOCADO                                    */}
+      {/* ========================================================================= */}
+      {vistaActiva === 'nuevo' && (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          <div className="flex items-center justify-between border-b border-border/80 pb-3">
+            <button
+              onClick={() => setVistaActiva('hub')}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline cursor-pointer"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Volver a opciones de progreso</span>
+            </button>
+            <span className="text-xs font-semibold text-muted-foreground">Registro de Check-in</span>
           </div>
 
-          {submitSuccess ? (
-            <div className="p-6 text-center space-y-2">
-              <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto" />
-              <h4 className="font-bold text-base text-foreground">Check-in Enviado</h4>
+          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-4">
+            <div>
+              <h2 className="text-lg font-bold text-foreground">Registro de Medición Corporal</h2>
               <p className="text-xs text-muted-foreground">
-                Tus mediciones fueron enviadas a tu entrenador para auditoría y aprobación.
+                Tus datos quedarán guardados y asociados a tu historial de evolución.
               </p>
             </div>
-          ) : (
-            <form onSubmit={handleSubmitCheckin} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-muted-foreground">Peso (kg)</label>
-                  <input
-                    type="text"
-                    required
-                    value={pesoKg}
-                    onChange={(e) => setPesoKg(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-muted-foreground">
-                    % Grasa Estimado
-                  </label>
-                  <input
-                    type="text"
-                    value={porcentajeGrasa}
-                    onChange={(e) => setPorcentajeGrasa(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-muted-foreground">
-                    Perímetro Cintura (cm)
-                  </label>
-                  <input
-                    type="text"
-                    value={cinturaCm}
-                    onChange={(e) => setCinturaCm(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-muted-foreground">
-                    Perímetro Brazo (cm)
-                  </label>
-                  <input
-                    type="text"
-                    value={brazoCm}
-                    onChange={(e) => setBrazoCm(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
-                  />
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border text-xs text-muted-foreground space-y-1">
-                <div className="flex items-center gap-1.5 font-bold text-foreground">
-                  <Lock className="h-3.5 w-3.5 text-primary" />
-                  <span>Privacidad R2 & RBAC Híbrido (ADR-001)</span>
-                </div>
-                <p className="text-[11px]">
-                  Si eres alumno presencial, tus medidas se toman directamente en sala con el coach.
-                  Si eres alumno online, tu reporte queda pendiente de validación técnica.
+            {submitSuccess ? (
+              <div className="p-8 text-center space-y-3">
+                <CheckCircle2 className="h-12 w-12 text-emerald-400 mx-auto" />
+                <h4 className="font-bold text-base text-foreground">¡Mediciones Guardadas!</h4>
+                <p className="text-xs text-muted-foreground">
+                  Tus datos fueron enviados a tu entrenador para auditoría y validación.
                 </p>
               </div>
+            ) : (
+              <form onSubmit={handleSubmitCheckin} className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-muted-foreground">Peso (kg)</label>
+                    <input
+                      type="text"
+                      required
+                      value={pesoKg}
+                      onChange={(e) => setPesoKg(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-muted-foreground">
+                      % Grasa Estimado
+                    </label>
+                    <input
+                      type="text"
+                      value={porcentajeGrasa}
+                      onChange={(e) => setPorcentajeGrasa(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
+                    />
+                  </div>
+                </div>
 
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full py-3 px-4 rounded-xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-md shadow-primary/25 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                <span>{isSubmitting ? 'Enviando...' : 'Guardar Evaluación Corporal'}</span>
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </form>
-          )}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-muted-foreground">
+                      Perímetro Cintura (cm)
+                    </label>
+                    <input
+                      type="text"
+                      value={cinturaCm}
+                      onChange={(e) => setCinturaCm(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-muted-foreground">
+                      Perímetro Brazo (cm)
+                    </label>
+                    <input
+                      type="text"
+                      value={brazoCm}
+                      onChange={(e) => setBrazoCm(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border/80 text-xs text-muted-foreground space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-foreground">
+                    <Lock className="h-3.5 w-3.5 text-primary" />
+                    <span>Auditoría de Confianza (RBAC Híbrido)</span>
+                  </div>
+                  <p className="text-[11px]">
+                    Si eres alumno online, tu reporte queda registrado como remoto y tu coach lo revisa en su bandeja. Si eres presencial, se consolida en sala.
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
+                >
+                  <span>{isSubmitting ? 'Enviando...' : 'Enviar Evaluación al Coach'}</span>
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* VISTA 3: HISTORIAL Y EVOLUCIÓN CRONOLÓGICA                                */}
+      {/* ========================================================================= */}
+      {vistaActiva === 'evolucion' && (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          <div className="flex items-center justify-between border-b border-border/80 pb-3">
+            <button
+              onClick={() => setVistaActiva('hub')}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline cursor-pointer"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Volver a opciones de progreso</span>
+            </button>
+            <button
+              onClick={() => setVistaActiva('nuevo')}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 text-xs font-bold transition-colors cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>Nuevo Check-in</span>
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground px-1">
+              Registro Histórico Cronológico
+            </h3>
+
+            {evolucion?.evaluaciones && evolucion.evaluaciones.length > 0 ? (
+              evolucion.evaluaciones.map((item) => (
+                <div
+                  key={item.id}
+                  className="p-5 rounded-3xl bg-card border border-border/80 shadow-xs space-y-3"
+                >
+                  <div className="flex items-center justify-between border-b border-border/50 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-primary" />
+                      <span className="font-bold text-sm text-foreground">
+                        {item.fechaEvaluacion}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 uppercase">
+                        {item.estado}
+                      </span>
+                    </div>
+                    <span className="text-xs font-semibold text-muted-foreground capitalize">
+                      {item.origen.replace('_', ' ')}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="p-2.5 rounded-xl bg-secondary/30">
+                      <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                        Peso
+                      </span>
+                      <p className="font-mono font-bold text-sm text-foreground">{item.pesoKg} kg</p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-secondary/30">
+                      <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                        % Grasa
+                      </span>
+                      <p className="font-mono font-bold text-sm text-foreground">
+                        {item.porcentajeGrasa ? `${item.porcentajeGrasa}%` : 'N/D'}
+                      </p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-secondary/30">
+                      <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                        Cintura
+                      </span>
+                      <p className="font-mono font-bold text-sm text-foreground">
+                        {item.perimetros?.cinturaCm ? `${item.perimetros.cinturaCm} cm` : 'N/D'}
+                      </p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-secondary/30">
+                      <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                        Brazo
+                      </span>
+                      <p className="font-mono font-bold text-sm text-foreground">
+                        {item.perimetros?.brazoCm ? `${item.perimetros.brazoCm} cm` : 'N/D'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-muted-foreground py-6 text-center">
+                No hay evaluaciones registradas aún.
+              </p>
+            )}
+          </div>
         </div>
       )}
     </div>

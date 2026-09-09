@@ -3,13 +3,10 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/auth-context';
 import {
   Dumbbell,
-  Utensils,
-  TrendingUp,
+  LayoutGrid,
   CreditCard,
   LayoutDashboard,
-  DollarSign,
   Users,
-  Camera,
 } from 'lucide-react';
 
 export function BottomNav() {
@@ -18,31 +15,29 @@ export function BottomNav() {
 
   const athleteLinks = [
     { to: '/app/hoy', label: 'Hoy', icon: Dumbbell },
-    { to: '/app/nutricion', label: 'Nutrición', icon: Utensils },
-    { to: '/app/progreso', label: 'Progreso', icon: TrendingUp },
-    { to: '/app/pagos', label: 'Cuotas', icon: CreditCard },
+    { to: '/app/menu', label: 'Menú', icon: LayoutGrid, isCenter: true },
+    { to: '/app/pagos', label: 'Pagos', icon: CreditCard },
   ];
 
   const coachLinks = [
     { to: '/coach/dashboard', label: 'Comando', icon: LayoutDashboard },
-    { to: '/coach/conciliacion', label: 'Conciliar', icon: DollarSign },
+    { to: '/coach/menu', label: 'Menú', icon: LayoutGrid, isCenter: true },
     { to: '/coach/alumnos', label: 'Alumnos', icon: Users },
-    { to: '/coach/antropometria', label: 'Auditoría', icon: Camera },
   ];
 
   const links = isCoach ? coachLinks : athleteLinks;
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-lg border-t border-border/80 px-2 py-1.5 safe-area-pb">
-      <div className="flex items-center justify-around max-w-lg mx-auto">
-        {links.map(({ to, label, icon: Icon }) => (
+    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-lg border-t border-border/80 px-4 py-2 safe-area-pb">
+      <div className="flex items-center justify-around max-w-md mx-auto">
+        {links.map(({ to, label, icon: Icon, isCenter }) => (
           <NavLink
             key={to}
             to={to}
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all duration-200 min-w-[64px] ${
+              `flex flex-col items-center justify-center py-1 px-4 rounded-2xl transition-all duration-200 min-w-[72px] ${
                 isActive
-                  ? 'text-primary font-bold scale-105'
+                  ? 'text-primary font-bold'
                   : 'text-muted-foreground hover:text-foreground font-medium'
               }`
             }
@@ -50,13 +45,21 @@ export function BottomNav() {
             {({ isActive }) => (
               <>
                 <div
-                  className={`p-1 rounded-lg transition-colors ${
-                    isActive ? 'bg-primary/15' : ''
+                  className={`p-1.5 rounded-xl transition-all duration-200 ${
+                    isCenter
+                      ? isActive
+                        ? 'bg-primary text-primary-foreground shadow-md shadow-primary/25 scale-110'
+                        : 'bg-secondary text-foreground hover:bg-secondary/80'
+                      : isActive
+                      ? 'bg-primary/15 text-primary scale-105'
+                      : ''
                   }`}
                 >
                   <Icon className="h-5 w-5" />
                 </div>
-                <span className="text-[11px] mt-0.5 tracking-tight">{label}</span>
+                <span className={`text-[11px] mt-1 tracking-tight ${isCenter && isActive ? 'text-primary font-bold' : ''}`}>
+                  {label}
+                </span>
               </>
             )}
           </NavLink>

@@ -11,28 +11,30 @@ import {
 } from '@guachafit/shared';
 import {
   CreditCard,
-  DollarSign,
   TrendingUp,
   Receipt,
   Plus,
-  Clock,
   CheckCircle2,
   AlertTriangle,
-  FileText,
   X,
   Upload,
   Eye,
   Trash2,
   Image as ImageIcon,
-  ExternalLink,
+  ArrowLeft,
+  ChevronRight,
+  ArrowUpRight,
+  ShieldCheck,
 } from 'lucide-react';
 
 export function PagosPage() {
   const { user } = useAuth();
   const [cuota, setCuota] = useState<CuotaDetalleDTO | null>(null);
   const [tasa, setTasa] = useState<TasaCambioVigenteDTO | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Progressive Disclosure: 'hub' (selector) | 'nuevo-pago' | 'historial'
+  const [vistaActiva, setVistaActiva] = useState<'hub' | 'nuevo-pago' | 'historial'>('hub');
 
   // Form State
   const [metodoPago, setMetodoPago] = useState<MetodoPago>(MetodoPago.PAGO_MOVIL);
@@ -54,11 +56,9 @@ export function PagosPage() {
     async function loadData() {
       setIsLoading(true);
       try {
-        // Load rate
         const tasaData = await apiClient<TasaCambioVigenteDTO>('/finanzas/tasas/vigente');
         setTasa(tasaData);
       } catch {
-        // Fallback default rate
         setTasa({
           entrenadorId: user?.entrenadorId || 'demo-coach',
           tasaOficialBcv: '65.0000',
@@ -69,7 +69,6 @@ export function PagosPage() {
         });
       }
 
-      // Demo/API active cuota
       const demoCuota: CuotaDetalleDTO = {
         id: 'cuota-demo-001',
         clienteId: user?.id || 'demo-alumno',
@@ -113,7 +112,6 @@ export function PagosPage() {
     loadData();
   }, [user]);
 
-  // Projected conversion calculation
   const tasaEfectivaNum = Number(tasa?.tasaEfectiva || '65.0000');
   const montoNum = Number(montoOriginal) || 0;
   const contravalorUsd =
@@ -161,7 +159,6 @@ export function PagosPage() {
 
     let finalStorageKey: string | undefined = undefined;
 
-    // Subida de comprobante a Cloudflare R2 / MinIO (RF-007, ADR-007)
     if (selectedFile) {
       try {
         const presignedData = await apiClient<PresignedUploadUrlResponseDTO>(
@@ -187,7 +184,6 @@ export function PagosPage() {
           finalStorageKey = presignedData.storageKey;
         }
       } catch {
-        // En entorno local o sin R2 activo, generar clave persistente
         const anio = new Date().getUTCFullYear();
         finalStorageKey = `comprobantes/${user?.id || 'demo'}/${anio}/${Date.now()}.webp`;
       }
@@ -208,243 +204,239 @@ export function PagosPage() {
         });
       }
 
-      setFormSuccess('Pago reportado exitosamente. Tu entrenador revisará el comprobante.');
+      setFormSuccess('¡Pago reportado con éxito! Tu coach lo validará en la bandeja.');
       handleRemoveFile();
       setTimeout(() => {
-        setIsModalOpen(false);
         setFormSuccess(null);
-      }, 2000);
-    } catch (err: any) {
-      // Offline fallback simulation
+        setVistaActiva('historial');
+      }, 1800);
+    } catch {
       setFormSuccess('Pago guardado y registrado para conciliación.');
       handleRemoveFile();
       setTimeout(() => {
-        setIsModalOpen(false);
         setFormSuccess(null);
+        setVistaActiva('historial');
       }, 1500);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[300px]">
+        <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="p-6 rounded-3xl bg-card border border-border shadow-md space-y-2">
-        <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
-          <CreditCard className="h-4 w-4" />
-          <span>Gestión Financiera Bimonetaria (RF-006, RF-007)</span>
-        </div>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
-              Cuotas y Estado de Cuenta
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Deuda maestra anclada en USD con liquidación flexible en Bolívares.
-            </p>
+    <div className="space-y-6 max-w-2xl mx-auto pb-24 lg:pb-12 animate-in fade-in duration-200">
+      {/* Cabecera / Título */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
+            <CreditCard className="h-3.5 w-3.5" />
+            <span>Membresía y Finanzas</span>
           </div>
-          {/* Rate pill */}
-          <div className="flex items-center gap-2 p-2.5 rounded-2xl bg-secondary/70 border border-border">
-            <TrendingUp className="h-4 w-4 text-primary" />
-            <div className="flex flex-col">
-              <span className="text-[10px] text-muted-foreground font-semibold uppercase">
-                Tasa Activa del Día
-              </span>
-              <span className="text-xs font-bold font-mono text-foreground">
-                1 USD = {tasa?.tasaEfectiva || '65.0000'} VES
-              </span>
-            </div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground mt-0.5">
+            Pagos y Cuotas
+          </h1>
+        </div>
+
+        {/* Tasa del Día */}
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-secondary/70 border border-border/80 self-start sm:self-auto">
+          <TrendingUp className="h-3.5 w-3.5 text-primary" />
+          <div className="text-right">
+            <span className="text-[10px] text-muted-foreground font-semibold uppercase block">
+              Tasa del Día
+            </span>
+            <span className="text-xs font-bold font-mono text-foreground">
+              1 USD = {tasa?.tasaEfectiva || '65.0000'} VES
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Active Cuota Card */}
-      {cuota && (
-        <div className="p-6 rounded-3xl bg-card border border-primary/30 shadow-lg relative overflow-hidden">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-5">
-            <div>
-              <span className="text-xs font-bold text-primary uppercase tracking-wider">
-                {cuota.planNombre}
-              </span>
-              <h2 className="text-xl font-black text-foreground mt-0.5">
-                Periodo {cuota.periodo}
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                Vencimiento:{' '}
-                {new Date(cuota.fechaCorteUtc).toLocaleDateString('es-ES', {
-                  day: '2-digit',
-                  month: 'long',
-                })}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span
-                className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${
-                  cuota.estado === EstadoCuota.AL_DIA
-                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
-                    : cuota.estado === EstadoCuota.ABONADA_PARCIAL
-                    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
-                    : 'bg-destructive/15 text-destructive border border-destructive/20'
-                }`}
-              >
-                {cuota.estado.replace('_', ' ')}
-              </span>
-            </div>
-          </div>
-
-          {/* Balances Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 my-5">
-            <div className="p-4 rounded-2xl bg-secondary/40 border border-border">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase">
-                Monto Total
-              </span>
-              <p className="text-2xl font-black font-mono text-foreground mt-1">
-                ${cuota.montoTotalUsd} <span className="text-xs text-muted-foreground">USD</span>
-              </p>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-secondary/40 border border-border">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase">
-                Abonado
-              </span>
-              <p className="text-2xl font-black font-mono text-emerald-400 mt-1">
-                ${cuota.montoAbonadoUsd} <span className="text-xs text-muted-foreground">USD</span>
-              </p>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-primary/10 border border-primary/30">
-              <span className="text-[11px] font-bold text-primary uppercase">Saldo Pendiente</span>
-              <p className="text-2xl font-black font-mono text-foreground mt-1">
-                ${cuota.saldoPendienteUsd} <span className="text-xs text-primary font-bold">USD</span>
-              </p>
-              <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
-                ≈ {saldoVesProyectado} VES
-              </p>
-            </div>
-          </div>
-
-          {/* Action to Report Payment */}
-          {Number(cuota.saldoPendienteUsd) > 0 && (
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="w-full py-3 px-4 rounded-2xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-md shadow-primary/25 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <Plus className="h-5 w-5" />
-              <span>Reportar Nuevo Abono o Pago</span>
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Transactions History */}
-      <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4">
-        <h3 className="font-bold text-base text-foreground flex items-center gap-2">
-          <Receipt className="h-5 w-5 text-primary" />
-          <span>Historial de Pagos y Abonos Registrados</span>
-        </h3>
-
-        {cuota?.transacciones && cuota.transacciones.length > 0 ? (
-          <div className="space-y-3">
-            {cuota.transacciones.map((tx) => (
-              <div
-                key={tx.id}
-                className="p-4 rounded-2xl bg-secondary/30 border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-              >
+      {/* ========================================================================= */}
+      {/* VISTA 1: HUB PRINCIPAL (Divulgación Progresiva - Nivel 1)                  */}
+      {/* ========================================================================= */}
+      {vistaActiva === 'hub' && (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          {/* Tarjeta de Resumen de Saldo */}
+          {cuota && (
+            <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md relative overflow-hidden">
+              <div className="flex items-center justify-between border-b border-border/60 pb-4">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm text-foreground capitalize">
-                      {tx.metodoPago.replace('_', ' ')}
-                    </span>
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                        tx.estadoConciliacion === 'aprobado'
-                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
-                          : tx.estadoConciliacion === 'rechazado'
-                          ? 'bg-destructive/15 text-destructive border border-destructive/20'
-                          : 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
-                      }`}
-                    >
-                      {tx.estadoConciliacion}
-                    </span>
+                  <span className="text-xs font-bold text-primary uppercase tracking-wider">
+                    {cuota.planNombre}
+                  </span>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    Corte:{' '}
+                    {new Date(cuota.fechaCorteUtc).toLocaleDateString('es-ES', {
+                      day: '2-digit',
+                      month: 'long',
+                    })}
                   </div>
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <p className="text-xs text-muted-foreground">
-                      Ref: {tx.referenciaBancaria || 'En sala'} • Fecha: {tx.fechaOperacion}
-                    </p>
-                    {(tx.comprobanteUrl || tx.comprobanteStorageKey) && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setModalComprobanteUrl(
-                            tx.comprobanteUrl ||
-                              'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=600&q=80'
-                          )
-                        }
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-bold transition-colors cursor-pointer"
-                      >
-                        <Eye className="h-3 w-3" />
-                        <span>Ver Comprobante</span>
-                      </button>
-                    )}
+                </div>
+
+                <span
+                  className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${
+                    cuota.estado === EstadoCuota.AL_DIA
+                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                      : cuota.estado === EstadoCuota.ABONADA_PARCIAL
+                      ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
+                      : 'bg-destructive/15 text-destructive border border-destructive/20'
+                  }`}
+                >
+                  {cuota.estado.replace('_', ' ')}
+                </span>
+              </div>
+
+              {/* Saldo Grande */}
+              <div className="my-5 flex items-baseline justify-between">
+                <div>
+                  <span className="text-xs font-semibold text-muted-foreground block">
+                    Saldo Pendiente
+                  </span>
+                  <div className="text-3xl sm:text-4xl font-black font-mono text-foreground mt-0.5">
+                    ${cuota.saldoPendienteUsd}{' '}
+                    <span className="text-sm font-semibold text-primary">USD</span>
+                  </div>
+                  <div className="text-xs font-mono text-muted-foreground mt-0.5">
+                    ≈ {saldoVesProyectado} Bolívares
                   </div>
                 </div>
 
                 <div className="text-right">
-                  <p className="font-mono font-black text-base text-foreground">
-                    +${tx.montoEquivalenteUsd} USD
-                  </p>
-                  <p className="text-[11px] font-mono text-muted-foreground">
-                    {tx.montoOriginal} {tx.monedaOriginal} (Tasa: {tx.tasaCambioFijada})
-                  </p>
+                  <span className="text-xs font-semibold text-muted-foreground block">
+                    Total Cuota
+                  </span>
+                  <span className="text-lg font-bold font-mono text-muted-foreground">
+                    ${cuota.montoTotalUsd} USD
+                  </span>
                 </div>
               </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground py-4 text-center">
-            No hay transacciones registradas para este periodo.
-          </p>
-        )}
-      </div>
+            </div>
+          )}
 
-      {/* Report Payment Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
-          <div className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <div className="flex items-center gap-2">
-                <Receipt className="h-5 w-5 text-primary" />
-                <h3 className="font-bold text-base text-foreground">Reportar Abono</h3>
+          {/* Selector de Acciones: 2 Caminos Claros */}
+          <div className="space-y-3">
+            <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider px-1">
+              Selecciona qué deseas hacer:
+            </h2>
+
+            {/* Opción A: Realizar Abono */}
+            <div
+              onClick={() => setVistaActiva('nuevo-pago')}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && setVistaActiva('nuevo-pago')}
+              className="group p-5 rounded-3xl bg-gradient-to-br from-card to-primary/10 border-2 border-primary/40 hover:border-primary transition-all duration-200 cursor-pointer shadow-md hover:shadow-primary/5 active:scale-[0.99]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3.5 rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/25">
+                    <Plus className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors flex items-center gap-1.5">
+                      Reportar un nuevo abono o pago
+                      <ArrowUpRight className="h-4 w-4 text-primary opacity-80" />
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">
+                      Paga vía Pago Móvil, Zelle o divisas y adjunta tu comprobante en 30 segundos.
+                    </p>
+                  </div>
+                </div>
+                <div className="p-2 rounded-xl bg-secondary/80 text-foreground group-hover:text-primary group-hover:bg-primary/15 transition-colors">
+                  <ChevronRight className="h-5 w-5 group-hover:translate-x-0.5 transition-transform" />
+                </div>
               </div>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
+            </div>
+
+            {/* Opción B: Ver Historial */}
+            <div
+              onClick={() => setVistaActiva('historial')}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && setVistaActiva('historial')}
+              className="group p-5 rounded-3xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer shadow-xs active:scale-[0.99]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3.5 rounded-2xl bg-secondary text-foreground">
+                    <Receipt className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">
+                        Ver recibos e historial
+                      </h3>
+                      {cuota?.transacciones && cuota.transacciones.length > 0 && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
+                          {cuota.transacciones.length} pago(s)
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">
+                      Consulta comprobantes verificados, estados de cuota y aclaratorias de pagos.
+                    </p>
+                  </div>
+                </div>
+                <div className="p-2 rounded-xl bg-secondary/80 text-foreground group-hover:text-primary transition-colors">
+                  <ChevronRight className="h-5 w-5 group-hover:translate-x-0.5 transition-transform" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* VISTA 2: FORMULARIO LIMPIO DE REPORTE (Sin modal invasivo)                 */}
+      {/* ========================================================================= */}
+      {vistaActiva === 'nuevo-pago' && (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          <div className="flex items-center justify-between border-b border-border/80 pb-3">
+            <button
+              onClick={() => setVistaActiva('hub')}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline cursor-pointer"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Volver a opciones de pago</span>
+            </button>
+            <span className="text-xs font-semibold text-muted-foreground">Paso guiado</span>
+          </div>
+
+          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-4">
+            <div>
+              <h2 className="text-lg font-bold text-foreground">Reportar Abono o Cuota</h2>
+              <p className="text-xs text-muted-foreground">
+                Introduce los datos de la transferencia o pago móvil para que tu entrenador lo verifique.
+              </p>
             </div>
 
             {formError && (
-              <div className="p-3 rounded-xl bg-destructive/15 border border-destructive/30 text-destructive text-xs font-semibold">
+              <div className="p-3 rounded-2xl bg-destructive/15 border border-destructive/30 text-destructive text-xs font-semibold">
                 {formError}
               </div>
             )}
 
             {formSuccess ? (
-              <div className="p-6 text-center space-y-2">
-                <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto" />
-                <p className="text-xs font-bold text-foreground">{formSuccess}</p>
+              <div className="p-8 text-center space-y-3">
+                <CheckCircle2 className="h-12 w-12 text-emerald-400 mx-auto" />
+                <p className="text-sm font-bold text-foreground">{formSuccess}</p>
+                <p className="text-xs text-muted-foreground">Redirigiendo a tu historial...</p>
               </div>
             ) : (
-              <form onSubmit={handleReportarPago} className="space-y-3">
-                <div className="space-y-1">
+              <form onSubmit={handleReportarPago} className="space-y-4">
+                <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-muted-foreground">Método de Pago</label>
                   <select
                     value={metodoPago}
                     onChange={(e) => setMetodoPago(e.target.value as MetodoPago)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                    className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
                   >
                     <option value={MetodoPago.PAGO_MOVIL}>Pago Móvil (VES)</option>
                     <option value={MetodoPago.TRANSFERENCIA_BANCARIA}>Transferencia Bancaria (VES)</option>
@@ -456,39 +448,39 @@ export function PagosPage() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-muted-foreground">Moneda</label>
                     <select
                       value={moneda}
                       onChange={(e) => setMoneda(e.target.value as Moneda)}
-                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                      className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
                     >
                       <option value={Moneda.VES}>VES (Bolívares)</option>
                       <option value={Moneda.USD}>USD (Dólares)</option>
                     </select>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-muted-foreground">Monto</label>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-muted-foreground">Monto Pagado</label>
                     <input
                       type="text"
                       required
                       value={montoOriginal}
                       onChange={(e) => setMontoOriginal(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
+                      className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
                     />
                   </div>
                 </div>
 
-                {/* Real-time conversion preview */}
-                <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Contravalor acreditado:</span>
-                  <span className="font-mono font-extrabold text-sm text-primary">
+                {/* Previsualización de conversión */}
+                <div className="p-3.5 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Contravalor acreditado a tu cuota:</span>
+                  <span className="font-mono font-black text-sm text-primary">
                     ${contravalorUsd} USD
                   </span>
                 </div>
 
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-muted-foreground">
                     Referencia Bancaria (Últimos 4-6 dígitos)
                   </label>
@@ -497,26 +489,26 @@ export function PagosPage() {
                     value={referenciaBancaria}
                     onChange={(e) => setReferenciaBancaria(e.target.value)}
                     placeholder="Ej: 987654"
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
+                    className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-muted-foreground">Fecha Operación</label>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">Fecha de Operación</label>
                   <input
                     type="date"
                     required
                     value={fechaOperacion}
                     onChange={(e) => setFechaOperacion(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                    className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
                   />
                 </div>
 
-                {/* File Upload / Comprobante (RF-007, ADR-007) */}
-                <div className="space-y-1.5">
+                {/* Subida de Comprobante */}
+                <div className="space-y-2">
                   <label className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
-                    <span>Captura de Comprobante Bancario</span>
-                    <span className="text-[10px] text-muted-foreground">Opcional • Max 5MB</span>
+                    <span>Captura del Comprobante Bancario</span>
+                    <span className="text-[10px] text-muted-foreground">Recomendado • Max 5MB</span>
                   </label>
                   <input
                     ref={fileInputRef}
@@ -529,21 +521,21 @@ export function PagosPage() {
                   {!selectedFile ? (
                     <div
                       onClick={() => fileInputRef.current?.click()}
-                      className="p-4 rounded-2xl border-2 border-dashed border-border/80 hover:border-primary/60 bg-secondary/20 hover:bg-secondary/40 transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 text-center"
+                      className="p-5 rounded-2xl border-2 border-dashed border-border/80 hover:border-primary/60 bg-secondary/20 hover:bg-secondary/40 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center"
                     >
-                      <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                      <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
                         <Upload className="h-5 w-5" />
                       </div>
                       <p className="text-xs font-bold text-foreground">
-                        Toca para adjuntar comprobante
+                        Toca para adjuntar foto o captura
                       </p>
                       <p className="text-[10px] text-muted-foreground">
                         Captura de Pago Móvil, Zelle o Transferencia (JPG, PNG, WebP)
                       </p>
                     </div>
                   ) : (
-                    <div className="p-3 rounded-2xl border border-primary/30 bg-primary/5 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5 overflow-hidden">
+                    <div className="p-3.5 rounded-2xl border border-primary/30 bg-primary/5 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 overflow-hidden">
                         {previewUrl ? (
                           <img
                             src={previewUrl}
@@ -560,15 +552,15 @@ export function PagosPage() {
                             {selectedFile.name}
                           </p>
                           <p className="text-[10px] text-muted-foreground">
-                            {(selectedFile.size / 1024).toFixed(1)} KB • Listo para subir
+                            {(selectedFile.size / 1024).toFixed(1)} KB • Listo para enviar
                           </p>
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={handleRemoveFile}
-                        className="p-1.5 rounded-xl hover:bg-destructive/15 text-muted-foreground hover:text-destructive transition-colors shrink-0 cursor-pointer"
-                        title="Quitar archivo"
+                        className="p-2 rounded-xl hover:bg-destructive/15 text-muted-foreground hover:text-destructive transition-colors shrink-0 cursor-pointer"
+                        title="Quitar comprobante"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -579,9 +571,9 @@ export function PagosPage() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full py-3 px-4 rounded-xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="w-full py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
                 >
-                  {isSubmitting ? 'Enviando reporte...' : 'Confirmar Reporte de Pago'}
+                  {isSubmitting ? 'Enviando al coach...' : 'Enviar Comprobante de Pago'}
                 </button>
               </form>
             )}
@@ -589,7 +581,137 @@ export function PagosPage() {
         </div>
       )}
 
-      {/* Modal para inspeccionar comprobante adjunto del atleta */}
+      {/* ========================================================================= */}
+      {/* VISTA 3: HISTORIAL LIMPIO CON VISIBILIDAD DE RECHAZOS (UX Transparente)    */}
+      {/* ========================================================================= */}
+      {vistaActiva === 'historial' && (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          <div className="flex items-center justify-between border-b border-border/80 pb-3">
+            <button
+              onClick={() => setVistaActiva('hub')}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline cursor-pointer"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Volver a opciones de pago</span>
+            </button>
+            <button
+              onClick={() => setVistaActiva('nuevo-pago')}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 text-xs font-bold transition-colors cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>Nuevo Abono</span>
+            </button>
+          </div>
+
+          <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-base text-foreground flex items-center gap-2">
+                <Receipt className="h-5 w-5 text-primary" />
+                <span>Historial de Pagos y Recibos</span>
+              </h2>
+              <span className="text-xs text-muted-foreground font-mono">
+                {cuota?.transacciones?.length || 0} registro(s)
+              </span>
+            </div>
+
+            {cuota?.transacciones && cuota.transacciones.length > 0 ? (
+              <div className="space-y-3">
+                {cuota.transacciones.map((tx) => (
+                  <div
+                    key={tx.id}
+                    className="p-4 rounded-2xl bg-secondary/30 border border-border/80 flex flex-col gap-2.5"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm text-foreground capitalize">
+                            {tx.metodoPago.replace('_', ' ')}
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase ${
+                              tx.estadoConciliacion === 'aprobado'
+                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                                : tx.estadoConciliacion === 'rechazado'
+                                ? 'bg-destructive/15 text-destructive border border-destructive/20'
+                                : 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
+                            }`}
+                          >
+                            {tx.estadoConciliacion === 'aprobado'
+                              ? 'Verificado'
+                              : tx.estadoConciliacion === 'rechazado'
+                              ? 'Rechazado'
+                              : 'En Revisión'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Ref: {tx.referenciaBancaria || 'Sin referencia'} • Fecha: {tx.fechaOperacion}
+                        </p>
+                      </div>
+
+                      <div className="text-left sm:text-right">
+                        <p className="font-mono font-black text-base text-foreground">
+                          +${tx.montoEquivalenteUsd} USD
+                        </p>
+                        <p className="text-[11px] font-mono text-muted-foreground">
+                          {tx.montoOriginal} {tx.monedaOriginal} (Tasa: {tx.tasaCambioFijada})
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* UX CRÍTICA: VISIBILIDAD DEL MOTIVO DE RECHAZO */}
+                    {tx.estadoConciliacion === 'rechazado' && (
+                      <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/25 text-xs text-destructive flex flex-col sm:flex-row sm:items-center justify-between gap-2 mt-1">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="font-bold">Motivo del Coach: </span>
+                            <span>
+                              {tx.motivoRechazo ||
+                                'La referencia no coincide con el estado de cuenta bancario.'}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setVistaActiva('nuevo-pago')}
+                          className="self-end sm:self-auto px-3 py-1 rounded-lg bg-destructive text-destructive-foreground font-bold text-[11px] hover:brightness-110 cursor-pointer transition-all shrink-0"
+                        >
+                          Corregir y Reenviar
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Botón Ver Comprobante */}
+                    {(tx.comprobanteUrl || tx.comprobanteStorageKey) && (
+                      <div className="pt-2 border-t border-border/50 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setModalComprobanteUrl(
+                              tx.comprobanteUrl ||
+                                'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=600&q=80'
+                            )
+                          }
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          <span>Ver Comprobante Subido</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground py-6 text-center">
+                No hay transacciones registradas para este periodo.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Comprobante SigV4 */}
       {modalComprobanteUrl && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/85 backdrop-blur-md">
           <div className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-lg space-y-4 max-h-[90vh] flex flex-col">
@@ -619,8 +741,9 @@ export function PagosPage() {
             </div>
 
             <div className="flex items-center justify-between pt-1">
-              <span className="text-[11px] text-muted-foreground">
-                Almacenado de forma segura en Cloudflare R2 (ADR-007)
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                Almacenamiento seguro en Cloudflare R2
               </span>
               <button
                 onClick={() => setModalComprobanteUrl(null)}
