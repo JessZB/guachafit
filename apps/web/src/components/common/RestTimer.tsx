@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Timer, Play, Pause, RotateCcw, Plus, Minus, X, Volume2 } from 'lucide-react';
+import { triggerHaptic } from '../../lib/haptics';
 
 interface RestTimerProps {
   initialSeconds?: number;
@@ -29,9 +30,7 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen }: RestTimerPro
     } else if (isRunning && secondsLeft === 0) {
       setIsRunning(false);
       setIsFinished(true);
-      if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        navigator.vibrate([200, 100, 200, 100, 300]);
-      }
+      triggerHaptic('timer');
     }
     return () => clearInterval(interval);
   }, [isRunning, secondsLeft]);

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { Rol } from '@guachafit/shared';
 import { useAuth } from './context/auth-context';
@@ -7,19 +7,61 @@ import { useAuth } from './context/auth-context';
 import { AppLayout } from './components/layout/AppLayout';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
 
-// Pages
-import { LoginPage } from './pages/auth/LoginPage';
-import { OnboardingPage } from './pages/auth/OnboardingPage';
-import { EntrenamientoPage } from './pages/atleta/EntrenamientoPage';
-import { NutricionPage } from './pages/atleta/NutricionPage';
-import { PagosPage } from './pages/atleta/PagosPage';
-import { ProgresoPage } from './pages/atleta/ProgresoPage';
-import { AtletaMenuPage } from './pages/atleta/AtletaMenuPage';
-import { CoachMenuPage } from './pages/entrenador/CoachMenuPage';
-import { DashboardPage } from './pages/entrenador/DashboardPage';
-import { ConciliacionPage } from './pages/entrenador/ConciliacionPage';
-import { AlumnosPage } from './pages/entrenador/AlumnosPage';
-import { AntropometriaPage } from './pages/entrenador/AntropometriaPage';
+// Public Page Fallback
+function PublicFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-background">
+      <div className="flex flex-col items-center gap-3">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary/20 border-t-primary" />
+        <span className="text-xs font-mono font-medium text-muted-foreground animate-pulse">
+          Cargando GUACHAFIT...
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// Lazy Public Pages
+const LoginPage = lazy(() =>
+  import('./pages/auth/LoginPage').then((m) => ({ default: m.LoginPage }))
+);
+const OnboardingPage = lazy(() =>
+  import('./pages/auth/OnboardingPage').then((m) => ({ default: m.OnboardingPage }))
+);
+
+// Lazy Athlete Pages
+const EntrenamientoPage = lazy(() =>
+  import('./pages/atleta/EntrenamientoPage').then((m) => ({ default: m.EntrenamientoPage }))
+);
+const AtletaMenuPage = lazy(() =>
+  import('./pages/atleta/AtletaMenuPage').then((m) => ({ default: m.AtletaMenuPage }))
+);
+const NutricionPage = lazy(() =>
+  import('./pages/atleta/NutricionPage').then((m) => ({ default: m.NutricionPage }))
+);
+const ProgresoPage = lazy(() =>
+  import('./pages/atleta/ProgresoPage').then((m) => ({ default: m.ProgresoPage }))
+);
+const PagosPage = lazy(() =>
+  import('./pages/atleta/PagosPage').then((m) => ({ default: m.PagosPage }))
+);
+
+// Lazy Coach Pages
+const DashboardPage = lazy(() =>
+  import('./pages/entrenador/DashboardPage').then((m) => ({ default: m.DashboardPage }))
+);
+const CoachMenuPage = lazy(() =>
+  import('./pages/entrenador/CoachMenuPage').then((m) => ({ default: m.CoachMenuPage }))
+);
+const ConciliacionPage = lazy(() =>
+  import('./pages/entrenador/ConciliacionPage').then((m) => ({ default: m.ConciliacionPage }))
+);
+const AlumnosPage = lazy(() =>
+  import('./pages/entrenador/AlumnosPage').then((m) => ({ default: m.AlumnosPage }))
+);
+const AntropometriaPage = lazy(() =>
+  import('./pages/entrenador/AntropometriaPage').then((m) => ({ default: m.AntropometriaPage }))
+);
 
 function RootRedirect() {
   const { user, isAuthenticated } = useAuth();
@@ -37,11 +79,19 @@ export const router = createBrowserRouter([
   // Public Routes
   {
     path: '/login',
-    element: <LoginPage />,
+    element: (
+      <Suspense fallback={<PublicFallback />}>
+        <LoginPage />
+      </Suspense>
+    ),
   },
   {
     path: '/onboarding',
-    element: <OnboardingPage />,
+    element: (
+      <Suspense fallback={<PublicFallback />}>
+        <OnboardingPage />
+      </Suspense>
+    ),
   },
   {
     path: '/',

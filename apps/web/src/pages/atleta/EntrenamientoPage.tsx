@@ -3,6 +3,7 @@ import { useAuth } from '../../context/auth-context';
 import { apiClient } from '../../lib/api-client';
 import { queueOfflineMutation, offlineDb } from '../../lib/offline-db';
 import { RestTimer } from '../../components/common/RestTimer';
+import { triggerHaptic } from '../../lib/haptics';
 import { SesionEntrenamientoDetalleDTO, EstadoSesion } from '@guachafit/shared';
 import {
   Dumbbell,
@@ -151,9 +152,12 @@ export function EntrenamientoPage() {
     serie.completada = willBeCompleted;
     if (willBeCompleted) {
       serie.timestampCompletadaUtc = new Date().toISOString();
+      triggerHaptic('success');
       // Trigger rest timer
       setTimerSeconds(90);
       setIsRestTimerOpen(true);
+    } else {
+      triggerHaptic('light');
     }
 
     // Recompute compliance percentage
@@ -231,6 +235,29 @@ export function EntrenamientoPage() {
     if (field === 'pesoKg') serie.pesoKg = value;
     if (field === 'rpe') serie.rpe = value;
     if (field === 'repsLogradas') serie.repsLogradas = Number(value) || 0;
+    setSesion(updated);
+  };
+
+  // Step set value (+ / -) for weight and reps with haptic feedback
+  const handleStepSerieValue = (
+    ejercicioIndex: number,
+    serieIndex: number,
+    field: 'pesoKg' | 'repsLogradas',
+    delta: number
+  ) => {
+    if (!sesion) return;
+    triggerHaptic('light');
+    const updated = { ...sesion };
+    const serie = updated.ejercicios[ejercicioIndex].series[serieIndex];
+    if (field === 'pesoKg') {
+      const current = parseFloat(serie.pesoKg || '0') || 0;
+      const next = Math.max(0, Math.round((current + delta) * 100) / 100);
+      serie.pesoKg = next > 0 ? String(next) : '';
+    } else if (field === 'repsLogradas') {
+      const current = serie.repsLogradas ?? serie.repsObjetivo ?? 0;
+      const next = Math.max(0, current + delta);
+      serie.repsLogradas = next;
+    }
     setSesion(updated);
   };
 
@@ -405,9 +432,9 @@ export function EntrenamientoPage() {
 
             {/* Sets Grid */}
             <div className="space-y-2">
-              <div className="grid grid-cols-12 gap-2 text-[11px] font-bold text-muted-foreground uppercase tracking-wider px-2">
-                <span className="col-span-2 text-center">Set</span>
-                <span className="col-span-3 text-center">Peso (kg)</span>
+              <div className="grid grid-cols-12 gap-1.5 sm:gap-2 text-[11px] font-bold text-muted-foreground uppercase tracking-wider px-2">
+                <span className="col-span-1 text-center">#</span>
+                <span className="col-span-4 text-center">Peso (kg)</span>
                 <span className="col-span-3 text-center">Reps</span>
                 <span className="col-span-2 text-center">RPE</span>
                 <span className="col-span-2 text-center">Listo</span>
@@ -416,43 +443,87 @@ export function EntrenamientoPage() {
               {ejercicioSesion.series.map((serie, sIdx) => (
                 <div
                   key={serie.id}
-                  className={`grid grid-cols-12 gap-2 items-center p-2 rounded-xl border transition-all ${
+                  className={`grid grid-cols-12 gap-1.5 sm:gap-2 items-center p-2 rounded-xl border transition-all ${
                     serie.completada
                       ? 'bg-emerald-500/10 border-emerald-500/25'
                       : 'bg-secondary/30 border-border hover:border-primary/40'
                   }`}
                 >
-                  <span className="col-span-2 text-center font-mono font-bold text-xs text-foreground">
+                  <span className="col-span-1 text-center font-mono font-bold text-xs text-foreground">
                     #{serie.numeroSerie}
                   </span>
 
-                  {/* Weight Input */}
-                  <div className="col-span-3">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      disabled={isCompleted || isPlanned}
-                      value={serie.pesoKg || ''}
-                      onChange={(e) =>
-                        handleUpdateSerieValue(ejIdx, sIdx, 'pesoKg', e.target.value)
-                      }
-                      placeholder="kg"
-                      className="w-full text-center py-1.5 px-2 rounded-lg bg-background border border-border text-xs font-mono font-semibold text-foreground focus:outline-hidden focus:border-primary"
-                    />
+                  {/* Weight Input with Steppers (- / + 2.5kg) */}
+                  <div className="col-span-4">
+                    <div className="flex items-center rounded-lg bg-background border border-border focus-within:border-primary overflow-hidden transition-colors">
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        disabled={isCompleted || isPlanned}
+                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'pesoKg', -2.5)}
+                        aria-label="Restar 2.5 kg"
+                        className="h-8 w-6 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-xs font-bold shrink-0 select-none disabled:opacity-30"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        disabled={isCompleted || isPlanned}
+                        value={serie.pesoKg || ''}
+                        onChange={(e) =>
+                          handleUpdateSerieValue(ejIdx, sIdx, 'pesoKg', e.target.value)
+                        }
+                        placeholder="kg"
+                        className="w-full min-w-0 text-center py-1.5 px-0.5 bg-transparent text-xs font-mono font-bold text-foreground focus:outline-hidden"
+                      />
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        disabled={isCompleted || isPlanned}
+                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'pesoKg', 2.5)}
+                        aria-label="Sumar 2.5 kg"
+                        className="h-8 w-6 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-xs font-bold shrink-0 select-none disabled:opacity-30"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Reps Input */}
+                  {/* Reps Input with Steppers (- / + 1 rep) */}
                   <div className="col-span-3">
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      disabled={isCompleted || isPlanned}
-                      value={serie.repsLogradas ?? serie.repsObjetivo}
-                      onChange={(e) =>
-                        handleUpdateSerieValue(ejIdx, sIdx, 'repsLogradas', e.target.value)
-                      }
-                      className="w-full text-center py-1.5 px-2 rounded-lg bg-background border border-border text-xs font-mono font-semibold text-foreground focus:outline-hidden focus:border-primary"
-                    />
+                    <div className="flex items-center rounded-lg bg-background border border-border focus-within:border-primary overflow-hidden transition-colors">
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        disabled={isCompleted || isPlanned}
+                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'repsLogradas', -1)}
+                        aria-label="Restar 1 repetición"
+                        className="h-8 w-5 sm:w-6 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-xs font-bold shrink-0 select-none disabled:opacity-30"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        disabled={isCompleted || isPlanned}
+                        value={serie.repsLogradas ?? serie.repsObjetivo}
+                        onChange={(e) =>
+                          handleUpdateSerieValue(ejIdx, sIdx, 'repsLogradas', e.target.value)
+                        }
+                        className="w-full min-w-0 text-center py-1.5 px-0.5 bg-transparent text-xs font-mono font-bold text-foreground focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        disabled={isCompleted || isPlanned}
+                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'repsLogradas', 1)}
+                        aria-label="Sumar 1 repetición"
+                        className="h-8 w-5 sm:w-6 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-xs font-bold shrink-0 select-none disabled:opacity-30"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
 
                   {/* RPE Input */}
