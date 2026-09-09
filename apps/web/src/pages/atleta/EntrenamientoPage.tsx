@@ -258,7 +258,7 @@ export function EntrenamientoPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary/20 border-t-primary" />
       </div>
     );
   }
@@ -430,6 +430,7 @@ export function EntrenamientoPage() {
                   <div className="col-span-3">
                     <input
                       type="text"
+                      inputMode="decimal"
                       disabled={isCompleted || isPlanned}
                       value={serie.pesoKg || ''}
                       onChange={(e) =>
@@ -444,6 +445,7 @@ export function EntrenamientoPage() {
                   <div className="col-span-3">
                     <input
                       type="number"
+                      inputMode="numeric"
                       disabled={isCompleted || isPlanned}
                       value={serie.repsLogradas ?? serie.repsObjetivo}
                       onChange={(e) =>
@@ -457,6 +459,7 @@ export function EntrenamientoPage() {
                   <div className="col-span-2">
                     <input
                       type="text"
+                      inputMode="decimal"
                       disabled={isCompleted || isPlanned}
                       value={serie.rpe || ''}
                       onChange={(e) =>
@@ -473,13 +476,14 @@ export function EntrenamientoPage() {
                       type="button"
                       disabled={isPlanned || isCompleted}
                       onClick={() => handleToggleSet(ejIdx, sIdx)}
-                      className={`h-8 w-8 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                      aria-label={`Marcar serie ${serie.numeroSerie} como ${serie.completada ? 'pendiente' : 'completada'}`}
+                      className={`h-10 w-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
                         serie.completada
                           ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25 scale-105'
                           : 'bg-background border-2 border-border text-muted-foreground hover:border-primary'
                       }`}
                     >
-                      {serie.completada && <Check className="h-4 w-4 stroke-[3]" />}
+                      {serie.completada && <Check className="h-5 w-5 stroke-[3]" />}
                     </button>
                   </div>
                 </div>

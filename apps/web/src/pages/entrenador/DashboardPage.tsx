@@ -87,7 +87,7 @@ export function DashboardPage() {
       <div className="p-6 rounded-3xl bg-card border border-border shadow-md space-y-2">
         <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
           <LayoutDashboard className="h-4 w-4" />
-          <span>Comando Central del Negocio (RF-013)</span>
+          <span>Comando Central del Negocio</span>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>

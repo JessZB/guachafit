@@ -102,13 +102,13 @@ export function AntropometriaPage() {
           <div>
             <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
               <Camera className="h-4 w-4" />
-              <span>Auditoría y Comparador Fotográfico (RF-003, RF-004)</span>
+              <span>Auditoría y Comparador Fotográfico</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground mt-1">
               Bóveda Antropométrica
             </h1>
             <p className="text-xs text-muted-foreground">
-              Validación de autoreportes remotos y comparador visual interactivo en Cloudflare R2.
+              Validación de autoreportes remotos y comparador visual interactivo de evolución física.
             </p>
           </div>
 

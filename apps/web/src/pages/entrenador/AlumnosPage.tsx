@@ -263,7 +263,7 @@ export function AlumnosPage() {
           <div>
             <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
               <Users className="h-4 w-4" />
-              <span>Gestión de Atletas & Onboarding (RF-011, RF-012)</span>
+              <span>Gestión de Atletas & Onboarding</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground mt-1">
               Directorio de Alumnos

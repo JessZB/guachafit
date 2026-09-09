@@ -95,7 +95,7 @@ export function NutricionPage() {
       <div className="p-6 rounded-3xl bg-card border border-border shadow-md space-y-2">
         <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
           <Utensils className="h-4 w-4" />
-          <span>Reporte Diario Ágil (RF-002)</span>
+          <span>Reporte Diario Ágil</span>
         </div>
         <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
           Check-in Nutricional 1-Tap

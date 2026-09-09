@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/auth-context';
 import {
   Dumbbell,
@@ -16,7 +16,6 @@ import {
 
 export function AtletaMenuPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
 
   const emailName = user?.email ? user.email.split('@')[0] : 'Atleta';
   const primerNombre = emailName.charAt(0).toUpperCase() + emailName.slice(1);
@@ -55,12 +54,9 @@ export function AtletaMenuPage() {
       {/* Bento Grid de Acciones */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* TARJETA HERO (Acción Prioritaria): ¡A Entrenar! */}
-        <div
-          onClick={() => navigate('/app/hoy')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && navigate('/app/hoy')}
-          className="sm:col-span-2 group relative overflow-hidden p-6 rounded-3xl bg-gradient-to-br from-card/90 via-card/60 to-primary/10 border-2 border-primary/40 hover:border-primary/80 transition-all duration-200 shadow-lg hover:shadow-primary/5 cursor-pointer active:scale-[0.99]"
+        <Link
+          to="/app/hoy"
+          className="sm:col-span-2 group relative block overflow-hidden p-6 rounded-3xl bg-gradient-to-br from-card/90 via-card/60 to-primary/10 border-2 border-primary/40 hover:border-primary/80 transition-all duration-200 shadow-lg hover:shadow-primary/5 cursor-pointer active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-primary"
         >
           <div className="absolute top-0 right-0 w-48 h-48 bg-primary/10 rounded-full blur-3xl -z-10 group-hover:bg-primary/20 transition-all" />
 
@@ -93,15 +89,12 @@ export function AtletaMenuPage() {
               Empezar ahora <ChevronRight className="h-4 w-4" />
             </span>
           </div>
-        </div>
+        </Link>
 
         {/* TARJETA 2: Mi Comida de Hoy (Nutrición) */}
-        <div
-          onClick={() => navigate('/app/nutricion')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && navigate('/app/nutricion')}
-          className="group p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] flex flex-col justify-between"
+        <Link
+          to="/app/nutricion"
+          className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
         >
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -124,15 +117,12 @@ export function AtletaMenuPage() {
             <span>Reportar día</span>
             <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
           </div>
-        </div>
+        </Link>
 
         {/* TARJETA 3: Mi Progreso Físico (Antropometría y Fotos) */}
-        <div
-          onClick={() => navigate('/app/progreso')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && navigate('/app/progreso')}
-          className="group p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] flex flex-col justify-between"
+        <Link
+          to="/app/progreso"
+          className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
         >
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -155,15 +145,12 @@ export function AtletaMenuPage() {
             <span>Ver evolución</span>
             <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
           </div>
-        </div>
+        </Link>
 
         {/* TARJETA 4: Pagos y Cuotas (Finanzas con Divulgación Progresiva) */}
-        <div
-          onClick={() => navigate('/app/pagos')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && navigate('/app/pagos')}
-          className="sm:col-span-2 group p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98]"
+        <Link
+          to="/app/pagos"
+          className="sm:col-span-2 group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary"
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3.5">
@@ -189,7 +176,7 @@ export function AtletaMenuPage() {
               <ChevronRight className="h-5 w-5 group-hover:translate-x-0.5 transition-transform" />
             </div>
           </div>
-        </div>
+        </Link>
       </div>
     </div>
   );

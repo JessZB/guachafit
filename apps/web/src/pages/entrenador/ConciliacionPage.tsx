@@ -127,7 +127,7 @@ export function ConciliacionPage() {
       <div className="p-6 rounded-3xl bg-card border border-border shadow-md space-y-2">
         <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
           <DollarSign className="h-4 w-4" />
-          <span>Conciliación Bancaria y Auditoría (RF-007, RF-008)</span>
+          <span>Auditoría de Pagos y Conciliación</span>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
@@ -217,7 +217,7 @@ export function ConciliacionPage() {
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <ShieldCheck className="h-4 w-4 text-emerald-500" />
-                  <span>Transacción interactiva ACID protegida con lock pesimista.</span>
+                  <span>Acreditación segura con comprobante verificado.</span>
                 </div>
 
                 <div className="flex items-center gap-2 w-full sm:w-auto">

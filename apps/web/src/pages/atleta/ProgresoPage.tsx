@@ -246,7 +246,7 @@ export function ProgresoPage() {
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="p-3.5 rounded-2xl bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20">
+                  <div className="p-3.5 rounded-2xl bg-cyan-500 text-cyan-950 shadow-md shadow-cyan-500/20">
                     <Camera className="h-6 w-6" />
                   </div>
                   <div>

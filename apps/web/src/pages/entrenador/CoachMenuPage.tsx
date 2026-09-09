@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/auth-context';
 import {
   DollarSign,
@@ -11,12 +11,10 @@ import {
   Sparkles,
   ArrowUpRight,
   ShieldCheck,
-  ClipboardList,
 } from 'lucide-react';
 
 export function CoachMenuPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
 
   const emailName = user?.email ? user.email.split('@')[0] : 'Coach';
   const primerNombre = emailName.charAt(0).toUpperCase() + emailName.slice(1);
@@ -43,7 +41,7 @@ export function CoachMenuPage() {
         <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-2xl bg-secondary/60 border border-border/80">
           <ShieldCheck className="h-4 w-4 text-emerald-400" />
           <div className="text-right">
-            <div className="text-xs font-bold font-mono text-foreground">Multi-tenant RLS</div>
+            <div className="text-xs font-bold font-mono text-foreground">Sesión Segura</div>
             <div className="text-[10px] text-muted-foreground">Datos Protegidos</div>
           </div>
         </div>
@@ -52,15 +50,12 @@ export function CoachMenuPage() {
       {/* Bento Grid de Acciones Operativas */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* TARJETA 1: Validar Pagos (Hero Operativo) */}
-        <div
-          onClick={() => navigate('/coach/conciliacion')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && navigate('/coach/conciliacion')}
-          className="sm:col-span-2 lg:col-span-2 group relative overflow-hidden p-6 rounded-3xl bg-gradient-to-br from-card/90 via-card/60 to-emerald-500/10 border-2 border-emerald-500/30 hover:border-emerald-500/70 transition-all duration-200 shadow-lg hover:shadow-emerald-500/5 cursor-pointer active:scale-[0.99]"
+        <Link
+          to="/coach/conciliacion"
+          className="sm:col-span-2 lg:col-span-2 group relative block overflow-hidden p-6 rounded-3xl bg-gradient-to-br from-card/90 via-card/60 to-emerald-500/10 border-2 border-emerald-500/30 hover:border-emerald-500/70 transition-all duration-200 shadow-lg hover:shadow-emerald-500/5 cursor-pointer active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-primary"
         >
           <div className="flex items-start justify-between">
-            <div className="p-3 rounded-2xl bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20">
+            <div className="p-3 rounded-2xl bg-emerald-500 text-emerald-950 shadow-md shadow-emerald-500/20">
               <DollarSign className="h-7 w-7" />
             </div>
             <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
@@ -86,15 +81,12 @@ export function CoachMenuPage() {
               Abrir bandeja <ChevronRight className="h-4 w-4" />
             </span>
           </div>
-        </div>
+        </Link>
 
         {/* TARJETA 2: Revisar Evaluaciones Físicas */}
-        <div
-          onClick={() => navigate('/coach/antropometria')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && navigate('/coach/antropometria')}
-          className="group p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] flex flex-col justify-between"
+        <Link
+          to="/coach/antropometria"
+          className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
         >
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -117,15 +109,12 @@ export function CoachMenuPage() {
             <span>Auditar fotos</span>
             <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
           </div>
-        </div>
+        </Link>
 
         {/* TARJETA 3: Alumnos en Alerta */}
-        <div
-          onClick={() => navigate('/coach/alumnos')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && navigate('/coach/alumnos')}
-          className="group p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-amber-500/40 transition-all duration-200 cursor-pointer active:scale-[0.98] flex flex-col justify-between"
+        <Link
+          to="/coach/alumnos"
+          className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-amber-500/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
         >
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -148,15 +137,12 @@ export function CoachMenuPage() {
             <span>Ver semáforo</span>
             <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
           </div>
-        </div>
+        </Link>
 
         {/* TARJETA 4: Directorio de Alumnos */}
-        <div
-          onClick={() => navigate('/coach/alumnos')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && navigate('/coach/alumnos')}
-          className="group p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] flex flex-col justify-between"
+        <Link
+          to="/coach/alumnos"
+          className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
         >
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -179,15 +165,12 @@ export function CoachMenuPage() {
             <span>Ver listado</span>
             <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
           </div>
-        </div>
+        </Link>
 
         {/* TARJETA 5: Comando Central / KPIs */}
-        <div
-          onClick={() => navigate('/coach/dashboard')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && navigate('/coach/dashboard')}
-          className="group p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] flex flex-col justify-between"
+        <Link
+          to="/coach/dashboard"
+          className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
         >
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -210,7 +193,7 @@ export function CoachMenuPage() {
             <span>Ir al dashboard</span>
             <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
           </div>
-        </div>
+        </Link>
       </div>
     </div>
   );
