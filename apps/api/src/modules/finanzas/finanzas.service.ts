@@ -47,6 +47,7 @@ import {
   TransaccionPagoDetalleDTO,
   CalculoConversionDTO,
   TasaCambioVigenteDTO,
+  ResumenFinancieroAlumnoDTO,
 } from '@guachafit/shared';
 
 // =============================================================================
@@ -1385,5 +1386,188 @@ export class FinanzasService {
       createdAtUtc: toIsoSafe(c.createdAtUtc),
       updatedAtUtc: toIsoSafe(c.updatedAtUtc),
     };
+  }
+
+  /**
+   * Obtener historial financiero completo y resumen 360 del alumno
+   */
+  async obtenerHistorialCliente(
+    entrenadorId: string,
+    clienteId: string,
+    actorUserId: string,
+    actorRole: Rol
+  ): Promise<ResumenFinancieroAlumnoDTO> {
+    const clienteUsuarioId = await this.resolveClienteUsuarioId(clienteId);
+
+    if (actorRole === Rol.ALUMNO && clienteUsuarioId !== actorUserId) {
+      throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a finanzas de otro alumno.');
+    }
+
+    const cuotas = await this.db
+      .select()
+      .from(cuotasMembresia)
+      .where(
+        and(
+          eq(cuotasMembresia.clienteId, clienteUsuarioId),
+          eq(cuotasMembresia.entrenadorId, entrenadorId)
+        )
+      )
+      .orderBy(desc(cuotasMembresia.createdAtUtc));
+
+    const txs = await this.db
+      .select()
+      .from(transaccionesPago)
+      .where(
+        and(
+          eq(transaccionesPago.clienteId, clienteUsuarioId),
+          eq(transaccionesPago.entrenadorId, entrenadorId)
+        )
+      )
+      .orderBy(desc(transaccionesPago.createdAtUtc));
+
+    let saldoTotalCents = 0;
+    for (const c of cuotas) {
+      if (c.estado !== EstadoCuota.AL_DIA) {
+        saldoTotalCents += toCents(c.saldoPendienteUsd);
+      }
+    }
+
+    let totalPagadoHistCents = 0;
+    let totalPagadoMesCents = 0;
+    const hoy = new Date();
+    const currentYear = hoy.getFullYear();
+    const currentMonth = hoy.getMonth();
+
+    for (const t of txs) {
+      if (t.estadoConciliacion === EstadoConciliacion.APROBADO) {
+        const txCents = toCents(t.montoEquivalenteUsd);
+        totalPagadoHistCents += txCents;
+
+        const txDate = t.createdAtUtc ? new Date(t.createdAtUtc) : null;
+        if (
+          txDate &&
+          txDate.getFullYear() === currentYear &&
+          txDate.getMonth() === currentMonth
+        ) {
+          totalPagadoMesCents += txCents;
+        }
+      }
+    }
+
+    const currentPeriod = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+    const cuotaMes = cuotas.find((c) => c.periodo === currentPeriod) || cuotas[0] || null;
+
+    return {
+      alumnoId: clienteId,
+      usuarioId: clienteUsuarioId,
+      saldoPendienteTotalUsd: fromCents(saldoTotalCents),
+      totalPagadoHistoricoUsd: fromCents(totalPagadoHistCents),
+      totalPagadoMesActualUsd: fromCents(totalPagadoMesCents),
+      cuotaMesActual: cuotaMes
+        ? {
+            id: cuotaMes.id,
+            periodo: cuotaMes.periodo,
+            montoTotalUsd: cuotaMes.montoTotalUsd,
+            montoPagadoUsd: cuotaMes.montoAbonadoUsd,
+            saldoPendienteUsd: cuotaMes.saldoPendienteUsd,
+            estado: cuotaMes.estado,
+            fechaVencimiento: toIsoSafe(cuotaMes.fechaCorteUtc),
+          }
+        : null,
+      transacciones: txs.map((t) => ({
+        id: t.id,
+        cuotaId: t.cuotaId,
+        montoUsd: t.montoEquivalenteUsd,
+        montoBs: t.monedaOriginal === Moneda.VES ? t.montoOriginal : undefined,
+        metodoPago: t.metodoPago,
+        referencia: t.referenciaBancaria || undefined,
+        estado: t.estadoConciliacion,
+        createdAtUtc: toIsoSafe(t.createdAtUtc),
+      })),
+    };
+  }
+
+  /**
+   * Cobro directo inteligente en 1 paso: Si no hay cuota del mes, la emite automáticamente y cobra
+   */
+  async cobroDirectoInteligente(
+    entrenadorId: string,
+    clienteId: string,
+    dto: CobroDirectoDTO
+  ) {
+    const clienteUsuarioId = await this.resolveClienteUsuarioId(clienteId);
+
+    // 1. Buscar si hay una cuota abierta
+    const [cuotaAbierta] = await this.db
+      .select()
+      .from(cuotasMembresia)
+      .where(
+        and(
+          eq(cuotasMembresia.clienteId, clienteUsuarioId),
+          eq(cuotasMembresia.entrenadorId, entrenadorId),
+          ne(cuotasMembresia.estado, EstadoCuota.AL_DIA)
+        )
+      )
+      .orderBy(desc(cuotasMembresia.createdAtUtc));
+
+    let targetCuotaId = cuotaAbierta?.id;
+
+    // 2. Si no hay cuota abierta, buscar plan asignado o crear cuota para el mes actual
+    if (!targetCuotaId) {
+      const hoy = new Date();
+      const periodo = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
+
+      // Buscar override de plan para este alumno
+      const [override] = await this.db
+        .select()
+        .from(overridesClientePlan)
+        .where(eq(overridesClientePlan.clienteId, clienteUsuarioId));
+
+      let planIdToUse = override?.planId;
+      let montoUsd = override?.precioAcordadoUsd;
+
+      if (!planIdToUse) {
+        // Buscar el primer plan activo del entrenador
+        const [planGeneral] = await this.db
+          .select()
+          .from(planesMembresia)
+          .where(
+            and(
+              eq(planesMembresia.entrenadorId, entrenadorId),
+              eq(planesMembresia.activo, true)
+            )
+          )
+          .limit(1);
+
+        if (planGeneral) {
+          planIdToUse = planGeneral.id;
+          montoUsd = planGeneral.precioBaseUsd;
+        } else {
+          // Crear un plan estándar por defecto
+          const nuevoPlan = await this.crearPlan(entrenadorId, {
+            nombre: 'Plan Estándar General',
+            descripcion: 'Plan base mensual para entrenamientos presenciales y remotos',
+            precioBaseUsd: dto.montoOriginal || '40.00',
+            duracionMeses: 1,
+            beneficios: ['Entrenamiento guiado', 'Seguimiento mensual'],
+          });
+          planIdToUse = nuevoPlan.id;
+          montoUsd = nuevoPlan.precioBaseUsd;
+        }
+      }
+
+      const fechaCorte = new Date(hoy.getTime() + 30 * 24 * 3600 * 1000).toISOString();
+      const cuotaEmitida = await this.emitirCuota(entrenadorId, {
+        clienteId: clienteUsuarioId,
+        planId: planIdToUse,
+        periodo,
+        montoTotalUsd: montoUsd || dto.montoOriginal || '40.00',
+        fechaCorteUtc: fechaCorte,
+      });
+      targetCuotaId = cuotaEmitida.id;
+    }
+
+    // 3. Ejecutar el cobro directo sobre la cuota
+    return this.cobroDirecto(targetCuotaId, entrenadorId, dto);
   }
 }

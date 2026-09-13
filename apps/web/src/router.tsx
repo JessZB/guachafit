@@ -59,6 +59,9 @@ const ConciliacionPage = lazy(() =>
 const AlumnosPage = lazy(() =>
   import('./pages/entrenador/AlumnosPage').then((m) => ({ default: m.AlumnosPage }))
 );
+const AlumnoDetallePage = lazy(() =>
+  import('./pages/entrenador/AlumnoDetallePage').then((m) => ({ default: m.AlumnoDetallePage }))
+);
 const AntropometriaPage = lazy(() =>
   import('./pages/entrenador/AntropometriaPage').then((m) => ({ default: m.AntropometriaPage }))
 );
@@ -152,6 +155,10 @@ export const router = createBrowserRouter([
           {
             path: '/coach/alumnos',
             element: <AlumnosPage />,
+          },
+          {
+            path: '/coach/alumnos/:id',
+            element: <AlumnoDetallePage />,
           },
           {
             path: '/coach/antropometria',

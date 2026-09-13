@@ -96,6 +96,42 @@ export const ActualizarPerfilAlumnoSchema = z.object({
   fichaSaludPrivada: z.string().max(2000).optional().nullable(),
 });
 
+export const FiltroDirectorioAlumnosSchema = z.object({
+  busqueda: z.string().max(200, 'El término de búsqueda no puede exceder 200 caracteres').optional(),
+  estado: z.nativeEnum(EstadoAlumno, {
+    errorMap: () => ({ message: 'El estado del alumno no es válido' }),
+  }).optional(),
+  modalidad: z.nativeEnum(Modalidad, {
+    errorMap: () => ({ message: 'La modalidad especificada no es válida' }),
+  }).optional(),
+  incluirArchivados: z
+    .union([
+      z.boolean(),
+      z.enum(['true', 'false', '1', '0']).transform((val) => val === 'true' || val === '1'),
+    ])
+    .optional()
+    .default(false),
+  limit: z
+    .coerce
+    .number()
+    .int('El límite debe ser un número entero')
+    .min(1, 'El límite debe ser al menos 1')
+    .max(100, 'El límite no puede exceder 100')
+    .optional()
+    .default(50),
+  offset: z
+    .coerce
+    .number()
+    .int('El offset debe ser un número entero')
+    .min(0, 'El offset debe ser mayor o igual a 0')
+    .optional()
+    .default(0),
+});
+
+export const RestaurarAlumnoSchema = z.object({
+  motivo: z.string().trim().max(500, 'El motivo no puede exceder 500 caracteres').optional(),
+});
+
 // =============================================================================
 // ENTRENAMIENTO & NUTRICIÓN SCHEMAS (Módulo 3: Sesiones de Entrenamiento & Check-ins Nutricionales)
 // =============================================================================
@@ -425,22 +461,40 @@ export const CobroDirectoSchema = z
     clienteId: z.string().uuid().optional(),
     montoOriginal: z
       .string()
-      .regex(DECIMAL_STRING_REGEX, 'El monto original debe ser una cadena decimal con hasta 2 decimales'),
-    monedaOriginal: z.nativeEnum(Moneda),
-    metodoPago: z.nativeEnum(MetodoPago).default(MetodoPago.EFECTIVO_USD),
+      .regex(DECIMAL_STRING_REGEX, 'El monto original debe ser una cadena decimal con hasta 2 decimales')
+      .refine((val) => Number(val) > 0, 'El monto original debe ser mayor a 0.00')
+      .refine((val) => Number(val) <= 100000, 'El monto original no puede exceder 100,000.00'),
+    monedaOriginal: z.nativeEnum(Moneda, {
+      errorMap: () => ({ message: 'La moneda original debe ser válida (USD o VES)' }),
+    }),
+    metodoPago: z.nativeEnum(MetodoPago, {
+      errorMap: () => ({ message: 'El método de pago no es válido' }),
+    }).default(MetodoPago.EFECTIVO_USD),
     fechaOperacion: z.string().regex(FECHA_CALENDARIO_REGEX, 'La fecha de operación debe tener formato YYYY-MM-DD'),
     referenciaBancaria: z.string().max(64).optional(),
     notas: z.string().max(500).optional(),
-  })
-  .superRefine((data, ctx) => {
-    if (Number(data.montoOriginal) <= 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['montoOriginal'],
-        message: 'El monto original debe ser mayor a 0.00',
-      });
-    }
   });
+
+export const CobroDirectoInteligenteSchema = z.object({
+  montoOriginal: z
+    .string({ required_error: 'El monto original es obligatorio' })
+    .regex(DECIMAL_STRING_REGEX, 'El monto original debe ser una cadena decimal con hasta 2 decimales')
+    .refine((val) => Number(val) > 0, 'El monto original debe ser mayor a 0.00')
+    .refine((val) => Number(val) <= 100000, 'El monto original no puede exceder 100,000.00'),
+  monedaOriginal: z.nativeEnum(Moneda, {
+    errorMap: () => ({ message: 'La moneda original debe ser válida (USD o VES)' }),
+  }),
+  metodoPago: z.nativeEnum(MetodoPago, {
+    errorMap: () => ({ message: 'El método de pago no es válido' }),
+  }).default(MetodoPago.EFECTIVO_USD),
+  fechaOperacion: z
+    .string()
+    .regex(FECHA_CALENDARIO_REGEX, 'La fecha de operación debe tener formato YYYY-MM-DD')
+    .optional()
+    .default(() => new Date().toISOString().split('T')[0]),
+  referenciaBancaria: z.string().max(64, 'La referencia bancaria no puede exceder 64 caracteres').optional(),
+  notas: z.string().max(500, 'Las notas no pueden exceder 500 caracteres').optional(),
+});
 
 export const ConciliarTransaccionSchema = z
   .object({

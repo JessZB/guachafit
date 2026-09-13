@@ -20,6 +20,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import {
   Rol,
+  UUID_REGEX,
   CrearPlanMembresiaSchema,
   CrearOverridePlanSchema,
   EmitirCuotaSchema,
@@ -27,6 +28,7 @@ import {
   CalcularConversionSchema,
   ReportarPagoSchema,
   CobroDirectoSchema,
+  CobroDirectoInteligenteSchema,
   ConciliarTransaccionSchema,
 } from '@guachafit/shared';
 
@@ -241,5 +243,52 @@ export class FinanzasController {
     const dto = ConciliarTransaccionSchema.parse(body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.finanzasService.conciliarTransaccion(transaccionId, entrenadorId, dto);
+  }
+
+  /**
+   * Historial financiero y resumen del alumno (cuotas, transacciones, saldos)
+   * Rol: Entrenador, Alumno titular, SuperAdmin
+   */
+  @Get('clientes/:clienteId/historial')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR, Rol.ALUMNO, Rol.SUPERADMIN)
+  async obtenerHistorialCliente(
+    @Req() req: any,
+    @Param('clienteId') clienteId: string
+  ) {
+    if (!UUID_REGEX.test(clienteId)) {
+      throw new BadRequestException('El ID del cliente debe ser un UUID válido.');
+    }
+    const entrenadorId =
+      req.user.rol === Rol.ALUMNO
+        ? req.user.entrenadorId
+        : req.user.entrenadorId || req.user.sub;
+    return this.finanzasService.obtenerHistorialCliente(
+      entrenadorId,
+      clienteId,
+      req.user.sub,
+      req.user.rol
+    );
+  }
+
+  /**
+   * Cobro directo inteligente en sala (1 paso): si no hay cuota del mes, la emite automáticamente
+   * Rol: Entrenador
+   */
+  @Post('clientes/:clienteId/cobro-directo-inteligente')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR)
+  @HttpCode(HttpStatus.CREATED)
+  async cobroDirectoInteligente(
+    @Req() req: any,
+    @Param('clienteId') clienteId: string,
+    @Body() body: unknown
+  ) {
+    if (!UUID_REGEX.test(clienteId)) {
+      throw new BadRequestException('El ID del cliente debe ser un UUID válido.');
+    }
+    const dto = CobroDirectoInteligenteSchema.parse(body);
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    return this.finanzasService.cobroDirectoInteligente(entrenadorId, clienteId, dto);
   }
 }

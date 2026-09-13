@@ -67,6 +67,7 @@ tags:
 - `suspenderPorMora()`: Cambia el estado a `SuspendidoPago` y bloquea nuevas rutinas.
 - `reactivar()`: Restaura el estado a `Activo` y emite `AlumnoReactivadoEvent`.
 - `eliminarLogico()`: Sella `deleted_at_utc = now_utc()`.
+- `restaurarDeBaja()`: Limpia `deleted_at_utc = null`, reactiva el estado y emite `AlumnoRestauradoEvent`.
 
 ---
 
@@ -74,3 +75,4 @@ tags:
 - `AlumnoRegistradoEvent`: Disparado tras el alta manual o vía deep link.
 - `AlumnoPausadoEvent`: Notifica a los módulos de facturación para detener el cron de cuotas automáticas.
 - `AlumnoReactivadoEvent`: Restaura los permisos de entrenamiento y check-in del alumno.
+- `AlumnoRestauradoEvent`: Disparado al recuperar una baja lógica, reactivando la cuenta de usuario y reincorporando al cliente al directorio activo.

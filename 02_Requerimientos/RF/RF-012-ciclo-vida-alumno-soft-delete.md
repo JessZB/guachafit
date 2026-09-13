@@ -57,6 +57,13 @@ Permite al entrenador modular el acceso de los alumnos según su situación fís
 - **RN-01 (Prohibición de Borrado Físico):** Queda terminantemente prohibido ejecutar sentencias `DELETE` sobre las tablas de `usuarios`, `alumnos`, `controles_antropometricos`, `sesiones_entrenamiento` y `transacciones_pago`.
 - **RN-02 (Campo `deleted_at`):** Si el entrenador decide "dar de baja" a un alumno, el sistema sella un timestamp `deleted_at = now_utc()`. El cliente desaparece de las listas activas pero su información se conserva intacta en base de datos.
 - **RN-03 (Reactivación Transparente):** Si un alumno inactivo o dado de baja regresa meses después, el coach puede reactivarlo con un solo clic: el sistema limpia el estado y el alumno recupera inmediatamente todo su histórico de peso, gráficos corporales y marcas de fuerza previas.
+- **RN-04 (Endpoint de Restauración de Bajas Lógicas):** El backend expone `PATCH /alumnos/:id/restaurar`. Esta operación es idempotente:
+  1. Verifica que el alumno pertenezca a la cartera del entrenador (aislamiento Tenancy `ADR-009`).
+  2. Limpia `deleted_at_utc = NULL`.
+  3. Establece `estadoActivacion = 'activo'`.
+  4. Reactiva la cuenta de usuario vinculada (`usuarios.activo = true`).
+  5. Emite `AlumnoRestauradoEvent`.
+- **RN-05 (Consulta y Pestaña de Archivados):** El listado general soporta el filtro `?incluirArchivados=true` para permitir al coach auditar a clientes dados de baja en una pestaña dedicada `[Archivados]` con botón directo de restauración.
 
 ---
 
@@ -91,7 +98,18 @@ Then el estado debe cambiar a "Activo"
   And no debe haberse perdido ningún registro antropométrico ni comprobante anterior
 ```
 
+### Escenario 4: Restauración de Alumno Dado de Baja (Soft Delete)
+```gherkin
+Given que el alumno "Fernando Castro" fue dado de baja lógica hace 6 meses (deleted_at_utc sellado)
+When el entrenador filtra por "Archivados" y pulsa "Restaurar Alumno"
+Then el sistema debe ejecutar PATCH /alumnos/:id/restaurar
+  And limpiar deleted_at_utc a NULL
+  And cambiar su estado de activación a "Activo"
+  And reincorporar a Fernando en la lista activa con todas sus sesiones históricas y pagos intactos
+```
+
 ---
 
 ## 6. Casos Borde y Excepciones
 - **Transición Manual vs Automática:** El entrenador siempre tiene potestad de anular un bloqueo automático por pago si acuerda una prórroga de palabra con el alumno, manteniendo su estatus en `Activo` mediante una bandera de excepción temporal.
+- **Intento de Restaurar Alumno No Dado de Baja:** Si se invoca la restauración sobre un alumno que no está en baja lógica (`deleted_at_utc IS NULL`), el sistema responde exitosamente de forma idempotente confirmando que el alumno ya está activo.

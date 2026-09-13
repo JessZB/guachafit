@@ -12,6 +12,7 @@ import {
   and,
   or,
   isNull,
+  isNotNull,
   usuarios,
   perfilesAlumno,
   perfilesEntrenador,
@@ -23,6 +24,8 @@ import {
   CambioEstadoAlumnoDTO,
   ActualizarPerfilAlumnoDTO,
   PerfilAlumnoDetalleDTO,
+  FiltroDirectorioAlumnosDTO,
+  RestaurarAlumnoDTO,
   Rol,
   EstadoUsuario,
   EstadoAlumno,
@@ -390,9 +393,93 @@ export class AlumnosService {
   }
 
   /**
+   * Restauración de Alumno Dado de Baja Lógica (RF-012, RN-04)
+   */
+  async restaurarAlumno(entrenadorId: string, alumnoId: string, _dto?: RestaurarAlumnoDTO) {
+    const [perfil] = await this.db
+      .select()
+      .from(perfilesAlumno)
+      .where(
+        and(
+          eq(perfilesAlumno.id, alumnoId),
+          eq(perfilesAlumno.entrenadorId, entrenadorId)
+        )
+      );
+
+    if (!perfil) {
+      // Verificar si el alumno existe pero pertenece a otro entrenador
+      const [perfilOtroCoach] = await this.db
+        .select()
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.id, alumnoId));
+
+      if (perfilOtroCoach) {
+        throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a restaurar alumno de otro entrenador.');
+      }
+
+      throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
+    }
+
+    // Idempotencia: si ya está activo
+    if (!perfil.deletedAtUtc && perfil.estadoActivacion === EstadoAlumno.ACTIVO) {
+      return {
+        id: alumnoId,
+        estadoActivacion: EstadoAlumno.ACTIVO,
+        deletedAtUtc: null,
+        mensaje: 'El alumno ya se encuentra activo en su cartera.',
+      };
+    }
+
+    const nowUtc = new Date();
+    await this.db
+      .update(perfilesAlumno)
+      .set({
+        deletedAtUtc: null,
+        estadoActivacion: EstadoAlumno.ACTIVO,
+        updatedAtUtc: nowUtc,
+      })
+      .where(eq(perfilesAlumno.id, alumnoId));
+
+    await this.db
+      .update(usuarios)
+      .set({
+        activo: true,
+        estado: EstadoUsuario.ACTIVO,
+        updatedAtUtc: nowUtc,
+      })
+      .where(eq(usuarios.id, perfil.usuarioId));
+
+    return {
+      id: alumnoId,
+      estadoActivacion: EstadoAlumno.ACTIVO,
+      deletedAtUtc: null,
+      mensaje: 'Alumno restaurado exitosamente. Todo su histórico deportivo y financiero ha sido reactivado.',
+    };
+  }
+
+  /**
    * Listar Directorio de Alumnos del Entrenador (RF-011, RF-012)
    */
-  async listarAlumnos(entrenadorId: string): Promise<PerfilAlumnoDetalleDTO[]> {
+  async listarAlumnos(
+    entrenadorId: string,
+    filtro?: FiltroDirectorioAlumnosDTO
+  ): Promise<PerfilAlumnoDetalleDTO[]> {
+    const conditions = [eq(perfilesAlumno.entrenadorId, entrenadorId)];
+
+    if (filtro?.incluirArchivados) {
+      conditions.push(isNotNull(perfilesAlumno.deletedAtUtc));
+    } else {
+      conditions.push(isNull(perfilesAlumno.deletedAtUtc));
+    }
+
+    if (filtro?.estado) {
+      conditions.push(eq(perfilesAlumno.estadoActivacion, filtro.estado));
+    }
+
+    if (filtro?.modalidad) {
+      conditions.push(eq(perfilesAlumno.modalidad, filtro.modalidad));
+    }
+
     const records = await this.db
       .select({
         id: perfilesAlumno.id,
@@ -414,14 +501,28 @@ export class AlumnosService {
       })
       .from(perfilesAlumno)
       .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
-      .where(
-        and(
-          eq(perfilesAlumno.entrenadorId, entrenadorId),
-          isNull(perfilesAlumno.deletedAtUtc)
-        )
-      );
+      .where(and(...conditions));
 
-    return records.map((perfil) => this.sanitizarPerfilParaRol(perfil, Rol.ENTRENADOR));
+    let resultados = records.map((perfil) => this.sanitizarPerfilParaRol(perfil, Rol.ENTRENADOR));
+
+    if (filtro?.busqueda && filtro.busqueda.trim().length > 0) {
+      const q = filtro.busqueda.toLowerCase().trim();
+      resultados = resultados.filter(
+        (a) =>
+          a.nombres.toLowerCase().includes(q) ||
+          a.apellidos.toLowerCase().includes(q) ||
+          (a.email || '').toLowerCase().includes(q) ||
+          a.numeroDocumento.includes(q)
+      );
+    }
+
+    if (filtro?.offset !== undefined || filtro?.limit !== undefined) {
+      const offset = filtro.offset ?? 0;
+      const limit = filtro.limit ?? 50;
+      resultados = resultados.slice(offset, offset + limit);
+    }
+
+    return resultados;
   }
 
   /**

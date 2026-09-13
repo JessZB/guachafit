@@ -8,6 +8,8 @@ import {
   RegistroPublicoAlumnoSchema,
   CambioEstadoAlumnoSchema,
   ActualizarPerfilAlumnoSchema,
+  FiltroDirectorioAlumnosSchema,
+  RestaurarAlumnoSchema,
   CrearEjercicioCatalogoSchema,
   ActualizarEjercicioCatalogoSchema,
   SeriePrescritaInputSchema,
@@ -37,6 +39,7 @@ import {
   CalcularConversionSchema,
   ReportarPagoSchema,
   CobroDirectoSchema,
+  CobroDirectoInteligenteSchema,
   ConciliarTransaccionSchema,
   PreferenciasNotificacionSchema,
   RegistrarDispositivoSchema,
@@ -74,6 +77,8 @@ export type AltaManualAlumnoDTO = z.infer<typeof AltaManualAlumnoSchema>;
 export type RegistroPublicoAlumnoDTO = z.infer<typeof RegistroPublicoAlumnoSchema>;
 export type CambioEstadoAlumnoDTO = z.infer<typeof CambioEstadoAlumnoSchema>;
 export type ActualizarPerfilAlumnoDTO = z.infer<typeof ActualizarPerfilAlumnoSchema>;
+export type FiltroDirectorioAlumnosDTO = z.infer<typeof FiltroDirectorioAlumnosSchema>;
+export type RestaurarAlumnoDTO = z.infer<typeof RestaurarAlumnoSchema>;
 
 // Tipos inferidos de DTOs - Entrenamiento & Nutrición (Módulo 3)
 export type CrearEjercicioCatalogoDTO = z.infer<typeof CrearEjercicioCatalogoSchema>;
@@ -109,6 +114,7 @@ export type ActualizarTasaCambioDTO = z.infer<typeof ActualizarTasaCambioSchema>
 export type CalcularConversionDTO = z.infer<typeof CalcularConversionSchema>;
 export type ReportarPagoDTO = z.infer<typeof ReportarPagoSchema>;
 export type CobroDirectoDTO = z.infer<typeof CobroDirectoSchema>;
+export type CobroDirectoInteligenteDTO = z.infer<typeof CobroDirectoInteligenteSchema>;
 export type ConciliarTransaccionDTO = z.infer<typeof ConciliarTransaccionSchema>;
 
 // Notificaciones & Preferencias DTOs
@@ -171,8 +177,40 @@ export interface PerfilAlumnoDetalleDTO {
   estadoActivacion: EstadoAlumno;
   tasaFijadaOverride?: string | null;
   fichaSaludPrivada?: string | null; // Cifrado AES-256-GCM solo visible para el coach
+  planActivoId?: string | null;
+  planActivoNombre?: string | null;
+  precioAcordadoOverride?: string | null;
+  semaforoPago?: 'al_dia' | 'por_vencer' | 'moroso' | 'sin_cuota';
+  ultimaSesionFecha?: string | null;
   deletedAtUtc?: string | null;
   createdAtUtc: string;
+}
+
+export interface ResumenFinancieroAlumnoDTO {
+  alumnoId: string;
+  usuarioId: string;
+  saldoPendienteTotalUsd: string;
+  totalPagadoHistoricoUsd: string;
+  totalPagadoMesActualUsd: string;
+  cuotaMesActual?: {
+    id: string;
+    periodo: string;
+    montoTotalUsd: string;
+    montoPagadoUsd: string;
+    saldoPendienteUsd: string;
+    estado: string;
+    fechaVencimiento: string;
+  } | null;
+  transacciones: Array<{
+    id: string;
+    cuotaId: string;
+    montoUsd: string;
+    montoBs?: string;
+    metodoPago: string;
+    referencia?: string;
+    estado: string;
+    createdAtUtc: string;
+  }>;
 }
 
 export interface DashboardComandoDTO {

@@ -68,6 +68,17 @@ Permite al entrenador captar e incorporar alumnos tanto en el entorno físico de
   3. Establece la contraseña definida por el usuario en el formulario.
   4. Envía una notificación push y correo al coach: *"Nuevo alumno registrado: [Nombre Completo]"*.
 
+### Vía C: Gestión Centralizada y Expediente Deportivo 360°
+- **RN-08 (Directorio Dinámico con Toggle Cards / Tabla):** El listado principal de alumnos cuenta con un selector de visualización:
+  - *Cards Compactas Densas:* Tarjetas escaneables de ~120px de altura con avatar circular, semáforo de pagos (`Al Día`, `Por Vencer`, `Moroso`), badges de modalidad y estado, botón directo de WhatsApp y navegación al expediente.
+  - *Vista Tabla:* Filas ordenables de alta densidad operativa.
+  - KPIs en cabecera con recuento de alumnos totales, activos, pausados, morosos y modalidades.
+- **RN-09 (Expediente Deportivo 360° - `/coach/alumnos/:id`):** Al seleccionar un alumno, se accede a una pantalla dedicada con cabecera fija de identidad y 4 pestañas de gestión operativa:
+  1. *Resumen & Ficha Médica:* Datos personales, ficha médica cifrada (AES-256-GCM) y asignación de Plan del catálogo (`RF-005`) con override de precio/tasa.
+  2. *Finanzas & Pagos:* Resumen del mes actual, histórico acumulado de cobros y modal de Cobro Directo Inteligente en sala.
+  3. *Antropometría & Medidas:* Métricas biométricas con deltas comparativos, histórico de check-ins y fotos evolutivas.
+  4. *Entrenamiento & Rutinas:* Planificación semanal por bloques de días con series/reps y auditoría de última sesión con RPE y reporte de molestias.
+
 ---
 
 ## 5. Criterios de Aceptación (Given-When-Then / Gherkin)
@@ -98,8 +109,18 @@ Then el alumno NO debe tener acceso ni visibilidad sobre este campo de notas pri
   And el entrenador sí debe poder consultarlo rápidamente antes de cada entrenamiento
 ```
 
+### Escenario 4: Navegación al Expediente 360° desde Tarjeta Compacta
+```gherkin
+Given que el entrenador está en el Directorio de Alumnos en vista de Cards Compactas
+When hace clic sobre la tarjeta del alumno "Carlos Mendoza"
+Then la aplicación debe navegar a "/coach/alumnos/al-001"
+  And renderizar la cabecera fija con sus datos personales, estado y semáforo de pago
+  And cargar las 4 pestañas 360° (Resumen, Finanzas, Antropometría, Rutinas)
+```
+
 ---
 
 ## 6. Casos Borde y Excepciones
 - **Enlace con Coach Code Invalido o Desactivado:** Si un usuario intenta registrarse con un `coach_code` que no existe o cuyo entrenador está suspendido, el sistema debe mostrar un mensaje amigable: *"El código de entrenador no es válido o no está disponible. Por favor contacta a tu coach."*
 - **Correo Electrónico Duplicado:** Si el email ya existe en la base de datos de la plataforma, el sistema debe indicar: *"Este correo ya se encuentra registrado. Si eres tú, inicia sesión o recupera tu contraseña."*
+- **Alumno Sin Cuotas Emitidas en el Semáforo:** Si un alumno recién registrado no posee aún ninguna cuota emitida, el semáforo se mostrará en gris neutro con etiqueta "Sin Cuota Emitida".

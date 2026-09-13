@@ -6,10 +6,12 @@ import {
   Get,
   Body,
   Param,
+  Query,
   UseGuards,
   Req,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { AlumnosService } from './alumnos.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -17,10 +19,13 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import {
   Rol,
+  UUID_REGEX,
   AltaManualAlumnoSchema,
   RegistroPublicoAlumnoSchema,
   CambioEstadoAlumnoSchema,
   ActualizarPerfilAlumnoSchema,
+  FiltroDirectorioAlumnosSchema,
+  RestaurarAlumnoSchema,
 } from '@guachafit/shared';
 
 @Controller('alumnos')
@@ -61,6 +66,9 @@ export class AlumnosController {
     @Param('id') alumnoId: string,
     @Body() body: unknown
   ) {
+    if (!UUID_REGEX.test(alumnoId)) {
+      throw new BadRequestException('El ID del alumno debe ser un UUID válido.');
+    }
     const dto = CambioEstadoAlumnoSchema.parse(body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.alumnosService.cambiarEstado(entrenadorId, alumnoId, dto);
@@ -77,6 +85,9 @@ export class AlumnosController {
     @Param('id') alumnoId: string,
     @Body() body: unknown
   ) {
+    if (!UUID_REGEX.test(alumnoId)) {
+      throw new BadRequestException('El ID del alumno debe ser un UUID válido.');
+    }
     const dto = ActualizarPerfilAlumnoSchema.parse(body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.alumnosService.actualizarAlumno(entrenadorId, alumnoId, dto);
@@ -89,8 +100,32 @@ export class AlumnosController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
   async softDelete(@Req() req: any, @Param('id') alumnoId: string) {
+    if (!UUID_REGEX.test(alumnoId)) {
+      throw new BadRequestException('El ID del alumno debe ser un UUID válido.');
+    }
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.alumnosService.softDelete(entrenadorId, alumnoId);
+  }
+
+  /**
+   * Restauración de Alumno Dado de Baja Lógica (RF-012)
+   */
+  @Patch(':id/restaurar')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR)
+  async restaurarAlumno(
+    @Req() req: any,
+    @Param('id') alumnoId: string,
+    @Body() body: unknown
+  ) {
+    if (!UUID_REGEX.test(alumnoId)) {
+      throw new BadRequestException('El ID del alumno debe ser un UUID válido.');
+    }
+    const dto = body && typeof body === 'object' && Object.keys(body).length > 0
+      ? RestaurarAlumnoSchema.parse(body)
+      : undefined;
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    return this.alumnosService.restaurarAlumno(entrenadorId, alumnoId, dto);
   }
 
   /**
@@ -99,9 +134,12 @@ export class AlumnosController {
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR, Rol.SUPERADMIN)
-  async listarAlumnos(@Req() req: any) {
+  async listarAlumnos(@Req() req: any, @Query() query: unknown) {
+    const filtro = query && typeof query === 'object' && Object.keys(query).length > 0
+      ? FiltroDirectorioAlumnosSchema.parse(query)
+      : undefined;
     const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.alumnosService.listarAlumnos(entrenadorId);
+    return this.alumnosService.listarAlumnos(entrenadorId, filtro);
   }
 
   /**
@@ -111,6 +149,9 @@ export class AlumnosController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR, Rol.ALUMNO, Rol.SUPERADMIN)
   async obtenerPorId(@Req() req: any, @Param('id') alumnoId: string) {
+    if (!UUID_REGEX.test(alumnoId)) {
+      throw new BadRequestException('El ID del alumno debe ser un UUID válido.');
+    }
     return this.alumnosService.obtenerPorId(
       alumnoId,
       req.user.sub,
