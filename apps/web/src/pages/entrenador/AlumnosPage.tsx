@@ -5,6 +5,7 @@ import {
   Modalidad,
   TipoDocumento,
   EstadoAlumno,
+  SesionEntrenamientoDetalleDTO,
 } from '@guachafit/shared';
 import {
   Users,
@@ -19,6 +20,11 @@ import {
   PauseCircle,
   PlayCircle,
   Pencil,
+  Dumbbell,
+  AlertTriangle,
+  MessageSquare,
+  Award,
+  Clock,
 } from 'lucide-react';
 
 export function AlumnosPage() {
@@ -26,6 +32,11 @@ export function AlumnosPage() {
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Auditoría de Sesión del Alumno
+  const [alumnoSesionSeleccionado, setAlumnoSesionSeleccionado] = useState<PerfilAlumnoDetalleDTO | null>(null);
+  const [sesionAuditada, setSesionAuditada] = useState<SesionEntrenamientoDetalleDTO | null>(null);
+  const [isLoadingSesion, setIsLoadingSesion] = useState(false);
 
   // New Athlete Form State
   const [nombres, setNombres] = useState('');
@@ -65,6 +76,114 @@ export function AlumnosPage() {
       edad--;
     }
     return Math.max(0, edad);
+  };
+
+  // Accesibilidad: Cierre de modales con tecla Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (alumnoSesionSeleccionado) {
+          setAlumnoSesionSeleccionado(null);
+        } else if (editingAlumno) {
+          setEditingAlumno(null);
+        } else if (isModalOpen) {
+          setIsModalOpen(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [alumnoSesionSeleccionado, editingAlumno, isModalOpen]);
+
+  const handleVerUltimaSesion = async (alumno: PerfilAlumnoDetalleDTO) => {
+    setAlumnoSesionSeleccionado(alumno);
+    setIsLoadingSesion(true);
+    setSesionAuditada(null);
+
+    try {
+      const res = await apiClient<SesionEntrenamientoDetalleDTO>(
+        `/sesiones/alumno/${alumno.id}/ultima`
+      ).catch(() => null);
+
+      if (res) {
+        setSesionAuditada(res);
+      } else if (alumno.id.startsWith('al-')) {
+        // Fallback demo local diferenciado para cuentas de prueba predeterminadas
+        if (alumno.id === 'al-001') {
+          // Carlos Mendoza: Sesión de tren inferior / piernas sin dolor
+          setSesionAuditada({
+            id: `sesion-${alumno.id}`,
+            alumnoId: alumno.usuarioId,
+            fechaProgramada: new Date().toISOString().split('T')[0],
+            estado: 'completada' as any,
+            porcentajeCumplimiento: '100.00',
+            timezoneCliente: 'America/Caracas',
+            notasAlumno: '[RPE: 8.0/10] • [Molestia: Ninguna 👍] • Buen estímulo en cuádriceps, cuidando rango en rodilla.',
+            createdAtUtc: new Date().toISOString(),
+            updatedAtUtc: new Date().toISOString(),
+            ejercicios: [
+              {
+                id: 'ej-1',
+                sesionId: `sesion-${alumno.id}`,
+                ejercicioId: 'ej-prensa',
+                orden: 1,
+                notasCoach: 'Rango controlado, pausa abajo',
+                ejercicio: { id: 'ej-prensa', nombre: 'Prensa Inclinada 45°', grupoMuscular: 'Cuádriceps', activo: true, createdAtUtc: new Date().toISOString() },
+                series: [
+                  { id: 's-1', ejercicioSesionId: 'ej-1', numeroSerie: 1, repsObjetivo: 12, repsLogradas: 12, pesoKg: '120.00', rpe: '7.5', completada: true },
+                  { id: 's-2', ejercicioSesionId: 'ej-1', numeroSerie: 2, repsObjetivo: 10, repsLogradas: 10, pesoKg: '140.00', rpe: '8.0', completada: true },
+                  { id: 's-3', ejercicioSesionId: 'ej-1', numeroSerie: 3, repsObjetivo: 10, repsLogradas: 10, pesoKg: '150.00', rpe: '8.5', completada: true },
+                ]
+              },
+              {
+                id: 'ej-2',
+                sesionId: `sesion-${alumno.id}`,
+                ejercicioId: 'ej-curl-femoral',
+                orden: 2,
+                notasCoach: 'Énfasis en fase excéntrica',
+                ejercicio: { id: 'ej-curl-femoral', nombre: 'Curl Femoral Tumbado', grupoMuscular: 'Isquiosurales', activo: true, createdAtUtc: new Date().toISOString() },
+                series: [
+                  { id: 's-4', ejercicioSesionId: 'ej-2', numeroSerie: 1, repsObjetivo: 12, repsLogradas: 12, pesoKg: '40.00', rpe: '8.0', completada: true },
+                  { id: 's-5', ejercicioSesionId: 'ej-2', numeroSerie: 2, repsObjetivo: 12, repsLogradas: 12, pesoKg: '45.00', rpe: '8.5', completada: true },
+                ]
+              }
+            ]
+          });
+        } else {
+          // Mariana Pérez: Sesión de empujes
+          setSesionAuditada({
+            id: `sesion-${alumno.id}`,
+            alumnoId: alumno.usuarioId,
+            fechaProgramada: new Date().toISOString().split('T')[0],
+            estado: 'completada' as any,
+            porcentajeCumplimiento: '95.00',
+            timezoneCliente: 'America/Caracas',
+            notasAlumno: '[RPE: 7.5/10] • [Molestia: Ninguna 👍] • Excelente congestión y ritmo.',
+            createdAtUtc: new Date().toISOString(),
+            updatedAtUtc: new Date().toISOString(),
+            ejercicios: [
+              {
+                id: 'ej-3',
+                sesionId: `sesion-${alumno.id}`,
+                ejercicioId: 'ej-press',
+                orden: 1,
+                notasCoach: 'Control escapular',
+                ejercicio: { id: 'ej-press', nombre: 'Press Plano con Mancuernas', grupoMuscular: 'Pectoral', activo: true, createdAtUtc: new Date().toISOString() },
+                series: [
+                  { id: 's-6', ejercicioSesionId: 'ej-3', numeroSerie: 1, repsObjetivo: 12, repsLogradas: 12, pesoKg: '14.00', rpe: '7.0', completada: true },
+                  { id: 's-7', ejercicioSesionId: 'ej-3', numeroSerie: 2, repsObjetivo: 10, repsLogradas: 10, pesoKg: '16.00', rpe: '8.0', completada: true },
+                ]
+              }
+            ]
+          });
+        }
+      } else {
+        // Alumno real sin sesiones registradas
+        setSesionAuditada(null);
+      }
+    } finally {
+      setIsLoadingSesion(false);
+    }
   };
 
   const startEditing = (alumno: PerfilAlumnoDetalleDTO) => {
@@ -367,14 +486,25 @@ export function AlumnosPage() {
               ) : (
                 <span />
               )}
-              <button
-                type="button"
-                onClick={() => startEditing(a)}
-                className="py-1.5 px-3 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground text-xs font-bold flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 cursor-pointer border border-border/60"
-              >
-                <Pencil className="h-3.5 w-3.5 text-primary" />
-                <span>Editar Ficha</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleVerUltimaSesion(a)}
+                  className="py-1.5 px-3 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 cursor-pointer border border-primary/25"
+                  title="Auditar última sesión y notas del atleta"
+                >
+                  <Dumbbell className="h-3.5 w-3.5" />
+                  <span>Sesión</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => startEditing(a)}
+                  className="py-1.5 px-3 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground text-xs font-bold flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 cursor-pointer border border-border/60"
+                >
+                  <Pencil className="h-3.5 w-3.5 text-primary" />
+                  <span>Editar</span>
+                </button>
+              </div>
             </div>
           </div>
         ))}
@@ -382,12 +512,22 @@ export function AlumnosPage() {
 
       {/* Manual Registration Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
-          <div className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-manual-title"
+            className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto"
+          >
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
               <div className="flex items-center gap-2">
                 <UserPlus className="h-5 w-5 text-primary" />
-                <h3 className="font-bold text-base text-foreground">Inscripción Manual en Sala</h3>
+                <h3 id="modal-manual-title" className="font-bold text-base text-foreground">Inscripción Manual en Sala</h3>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -519,13 +659,23 @@ export function AlumnosPage() {
 
       {/* Edit Athlete Modal */}
       {editingAlumno && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
-          <div className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setEditingAlumno(null);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-edit-title"
+            className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto"
+          >
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
               <div className="flex items-center gap-2">
                 <Pencil className="h-5 w-5 text-primary" />
                 <div>
-                  <h3 className="font-bold text-base text-foreground">Editar Ficha de Alumno</h3>
+                  <h3 id="modal-edit-title" className="font-bold text-base text-foreground">Editar Ficha de Alumno</h3>
                   <p className="text-[11px] text-muted-foreground">{editingAlumno.email}</p>
                 </div>
               </div>
@@ -681,6 +831,160 @@ export function AlumnosPage() {
                   </button>
                 </div>
               </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Auditoría de Sesión del Alumno (Feedback Entrenador ↔ Alumno) */}
+      {alumnoSesionSeleccionado && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setAlumnoSesionSeleccionado(null);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-session-audit-title"
+            className="p-6 rounded-3xl bg-card border border-border/80 shadow-2xl w-full max-w-xl space-y-4 max-h-[90vh] overflow-y-auto"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-border/80 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-primary/15 text-primary">
+                  <Dumbbell className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 id="modal-session-audit-title" className="font-bold text-base text-foreground">
+                    Entrenamiento de {alumnoSesionSeleccionado.nombres} {alumnoSesionSeleccionado.apellidos}
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    Auditoría de cargas reales, RPE y sensaciones reportadas
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAlumnoSesionSeleccionado(null)}
+                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {isLoadingSesion ? (
+              <div className="py-12 flex items-center justify-center">
+                <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+              </div>
+            ) : sesionAuditada ? (
+              <div className="space-y-4">
+                {/* Resumen Superior */}
+                <div className="grid grid-cols-3 gap-2.5">
+                  <div className="p-3 rounded-2xl bg-secondary/30 border border-border/60">
+                    <span className="text-[10px] uppercase font-semibold text-muted-foreground block">
+                      Fecha
+                    </span>
+                    <span className="font-mono font-bold text-xs text-foreground">
+                      {sesionAuditada.fechaProgramada}
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-secondary/30 border border-border/60">
+                    <span className="text-[10px] uppercase font-semibold text-muted-foreground block">
+                      Cumplimiento
+                    </span>
+                    <span className="font-mono font-bold text-xs text-emerald-400">
+                      {sesionAuditada.porcentajeCumplimiento}%
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-secondary/30 border border-border/60">
+                    <span className="text-[10px] uppercase font-semibold text-muted-foreground block">
+                      Estado
+                    </span>
+                    <span className="font-mono font-bold text-xs text-primary capitalize">
+                      {sesionAuditada.estado}
+                    </span>
+                  </div>
+                </div>
+
+                {/* ALERTA CRÍTICA: Sensaciones y Notas del Atleta */}
+                {sesionAuditada.notasAlumno && (
+                  <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-amber-400 font-bold uppercase tracking-wider text-[10px]">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      <span>Reporte de Sensaciones y Notas del Atleta</span>
+                    </div>
+                    <p className="text-foreground font-medium leading-relaxed">
+                      {sesionAuditada.notasAlumno}
+                    </p>
+                  </div>
+                )}
+
+                {/* Lista de Ejercicios y Series Realizadas */}
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">
+                    Cargas y Repeticiones Ejecutadas
+                  </h4>
+                  <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                    {sesionAuditada.ejercicios.map((ej, idx) => (
+                      <div
+                        key={ej.id}
+                        className="p-3 rounded-2xl bg-secondary/20 border border-border/60 space-y-2 text-xs"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-foreground">
+                            {idx + 1}. {ej.ejercicio?.nombre || 'Ejercicio'}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {ej.series.length} series
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {ej.series.map((s) => (
+                            <span
+                              key={s.id}
+                              className={`px-2 py-1 rounded-lg font-mono text-[11px] font-bold border ${
+                                s.completada
+                                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
+                                  : 'bg-secondary text-muted-foreground border-border'
+                              }`}
+                            >
+                              S{s.numeroSerie}: {s.pesoKg ? `${s.pesoKg}kg` : '0kg'} × {s.repsLogradas ?? s.repsObjetivo} reps {s.rpe ? `(RPE ${s.rpe})` : ''}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Acción de Comunicación Directa: WhatsApp Deep Link */}
+                <div className="pt-2 border-t border-border/80">
+                  {(() => {
+                    const notas = sesionAuditada.notasAlumno || '';
+                    const tieneMolestiaReal = notas.includes('[Molestia:') && !notas.includes('[Molestia: Ninguna');
+                    const whatsappMsg = tieneMolestiaReal
+                      ? `Hola ${alumnoSesionSeleccionado.nombres}, estuve revisando tu sesión de hoy en Guachafit y vi que reportaste una molestia. ¿Cómo te sientes? Vamos a cuidar esa zona y ajustar el plan si es necesario.`
+                      : `¡Hola ${alumnoSesionSeleccionado.nombres}! Estuve revisando tu sesión de hoy en Guachafit. ¡Gran trabajo completando el ${sesionAuditada.porcentajeCumplimiento}% del volumen prescrito! A seguir con esa constancia 💪.`;
+
+                    return (
+                      <a
+                        href={`https://wa.me/${alumnoSesionSeleccionado.telefonoWhatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(whatsappMsg)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs tracking-wide shadow-md shadow-emerald-600/20 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <MessageSquare className="h-4 w-4" />
+                        <span>Enviar Feedback por WhatsApp en 1-Clic</span>
+                      </a>
+                    );
+                  })()}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground py-6 text-center">
+                No hay registros de entrenamiento recientes para este alumno.
+              </p>
             )}
           </div>
         </div>

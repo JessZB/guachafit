@@ -371,6 +371,83 @@ export class EntrenamientoService {
     return this.hidratarSesion(sesion);
   }
 
+  /**
+   * Obtener la última sesión registrada (completada o en progreso) de un alumno específico.
+   * Con validación de aislamiento de Tenancy (el alumno debe pertenecer al entrenador).
+   * Acepta alumnoId como `perfiles_alumno.id` o como `usuarios.id` (perfiles_alumno.usuario_id).
+   */
+  async obtenerUltimaSesionAlumno(
+    entrenadorId: string,
+    alumnoId: string,
+    rol: Rol
+  ): Promise<SesionEntrenamientoDetalleDTO | null> {
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!UUID_REGEX.test(alumnoId)) {
+      return null;
+    }
+
+    let targetUsuarioId = alumnoId;
+
+    if (rol !== Rol.SUPERADMIN) {
+      const [perfil] = await this.db
+        .select()
+        .from(perfilesAlumno)
+        .where(
+          and(
+            or(
+              eq(perfilesAlumno.id, alumnoId),
+              eq(perfilesAlumno.usuarioId, alumnoId)
+            ),
+            isNull(perfilesAlumno.deletedAtUtc)
+          )
+        )
+        .limit(1);
+
+      if (!perfil) {
+        throw new NotFoundException(`Alumno con ID '${alumnoId}' no encontrado.`);
+      }
+
+      if (perfil.entrenadorId !== entrenadorId) {
+        throw new ForbiddenException(
+          'Aislamiento de Tenant: El alumno pertenece a otro entrenador.'
+        );
+      }
+
+      targetUsuarioId = perfil.usuarioId;
+    } else {
+      const [perfil] = await this.db
+        .select()
+        .from(perfilesAlumno)
+        .where(
+          or(
+            eq(perfilesAlumno.id, alumnoId),
+            eq(perfilesAlumno.usuarioId, alumnoId)
+          )
+        )
+        .limit(1);
+
+      if (perfil) {
+        targetUsuarioId = perfil.usuarioId;
+      }
+    }
+
+    const [sesion] = await this.db
+      .select()
+      .from(sesionesEntrenamiento)
+      .where(eq(sesionesEntrenamiento.alumnoId, targetUsuarioId))
+      .orderBy(
+        desc(sesionesEntrenamiento.fechaProgramada),
+        desc(sesionesEntrenamiento.createdAtUtc)
+      )
+      .limit(1);
+
+    if (!sesion) {
+      return null;
+    }
+
+    return this.hidratarSesion(sesion);
+  }
+
   // ---------------------------------------------------------------------------
   // 4. INICIO DE SESIÓN (ACCIÓN EXPLÍCITA, RN-04, RN-05, ADR-002)
   // ---------------------------------------------------------------------------

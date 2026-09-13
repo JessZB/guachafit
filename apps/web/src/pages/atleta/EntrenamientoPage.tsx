@@ -15,6 +15,9 @@ import {
   Info,
   Check,
   Award,
+  X,
+  MessageSquare,
+  AlertTriangle,
 } from 'lucide-react';
 
 export function EntrenamientoPage() {
@@ -23,6 +26,34 @@ export function EntrenamientoPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRestTimerOpen, setIsRestTimerOpen] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(90);
+
+  // Modal de Finalización y Feedback al Coach
+  const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
+  const [rpeSesion, setRpeSesion] = useState(8);
+  const [molestia, setMolestia] = useState('Ninguna 👍');
+  const [notasCoachInput, setNotasCoachInput] = useState('');
+  const [isFinishing, setIsFinishing] = useState(false);
+
+  const getRpeDescription = (val: number): string => {
+    if (val <= 3) return 'Descarga / Muy ligero';
+    if (val <= 5) return 'Ligero / Cómodo';
+    if (val === 6) return 'Exigencia media';
+    if (val === 7) return 'Esfuerzo notable';
+    if (val === 8) return 'Óptimo (RIR 2)';
+    if (val === 9) return 'Casi al límite (RIR 1-0)';
+    return 'Fallo muscular (10/10)';
+  };
+
+  // Accesibilidad: Cierre de modal con Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFinishModalOpen) {
+        setIsFinishModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFinishModalOpen]);
 
   // Load session (from API or IndexedDB fallback)
   useEffect(() => {
@@ -261,25 +292,62 @@ export function EntrenamientoPage() {
     setSesion(updated);
   };
 
-  // Finish session
-  const handleFinishSession = async () => {
+  // Finish session handlers (Modal de Feedback)
+  const handleOpenFinishModal = () => {
+    setIsFinishModalOpen(true);
+  };
+
+  const confirmFinishSession = async () => {
     if (!sesion) return;
+    setIsFinishing(true);
+
+    const notasCompletas = [
+      `[RPE: ${rpeSesion}/10]`,
+      molestia !== 'Ninguna 👍' ? `[Molestia: ${molestia}]` : null,
+      notasCoachInput.trim() ? notasCoachInput.trim() : null,
+    ]
+      .filter(Boolean)
+      .join(' • ');
+
     const updated: SesionEntrenamientoDetalleDTO = {
       ...sesion,
       estado: EstadoSesion.COMPLETADA,
       fechaFinUtc: new Date().toISOString(),
+      notasAlumno: notasCompletas,
     };
     setSesion(updated);
 
+    const payload = {
+      notasAlumno: notasCompletas,
+      fechaFinUtc: new Date().toISOString(),
+    };
+
     if (navigator.onLine) {
       try {
-        await apiClient(`/sesiones/${sesion.id}/finalizar`, { method: 'POST' });
+        await apiClient(`/sesiones/${sesion.id}/finalizar`, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
       } catch {
-        await queueOfflineMutation(`/sesiones/${sesion.id}/finalizar`, 'POST', {}, 'Finalizar sesión');
+        await queueOfflineMutation(`/sesiones/${sesion.id}/finalizar`, 'POST', payload, 'Finalizar sesión con feedback');
       }
     } else {
-      await queueOfflineMutation(`/sesiones/${sesion.id}/finalizar`, 'POST', {}, 'Finalizar sesión');
+      await queueOfflineMutation(`/sesiones/${sesion.id}/finalizar`, 'POST', payload, 'Finalizar sesión con feedback');
     }
+
+    if (sesion.id) {
+      await offlineDb.rutinaHoy.put({
+        id: sesion.id,
+        alumnoId: user?.id || '',
+        fechaProgramada: sesion.fechaProgramada,
+        sesion: updated,
+        updatedAt: Date.now(),
+      });
+    }
+
+    setIsFinishing(false);
+    setIsFinishModalOpen(false);
+    triggerHaptic('success');
   };
 
   if (isLoading) {
@@ -379,7 +447,7 @@ export function EntrenamientoPage() {
               <span>Sesión activa. Marca tus series y pesos al completarlas.</span>
             </div>
             <button
-              onClick={handleFinishSession}
+              onClick={handleOpenFinishModal}
               className="py-2.5 px-5 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-md hover:bg-emerald-500 active:scale-95 transition-all cursor-pointer"
             >
               Finalizar Rutina
@@ -388,16 +456,28 @@ export function EntrenamientoPage() {
         )}
 
         {isCompleted && (
-          <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center gap-3">
-            <Award className="h-6 w-6 shrink-0" />
-            <div>
-              <p className="text-xs font-bold">¡Sesión de entrenamiento finalizada con éxito!</p>
-              <p className="text-[11px] text-emerald-400/80">
-                {Number(sesion.porcentajeCumplimiento) >= 70
-                  ? 'Cumpliste la regla del 70% de volumen. Tu racha se ha incrementado.'
-                  : 'Buen esfuerzo. No superó el 70% prescrito para racha, pero cada repetición cuenta.'}
-              </p>
+          <div className="space-y-3">
+            <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center gap-3">
+              <Award className="h-6 w-6 shrink-0" />
+              <div>
+                <p className="text-xs font-bold">¡Sesión de entrenamiento finalizada con éxito!</p>
+                <p className="text-[11px] text-emerald-400/80">
+                  {Number(sesion.porcentajeCumplimiento) >= 70
+                    ? 'Cumpliste la regla del 70% de volumen. Tu racha se ha incrementado.'
+                    : 'Buen esfuerzo. No superó el 70% prescrito para racha, pero cada repetición cuenta.'}
+                </p>
+              </div>
             </div>
+
+            {sesion.notasAlumno && (
+              <div className="p-3.5 rounded-2xl bg-secondary/50 border border-border/80 text-xs space-y-1">
+                <span className="font-bold text-muted-foreground text-[10px] uppercase tracking-wider flex items-center gap-1.5">
+                  <MessageSquare className="h-3 w-3 text-primary" />
+                  Sensaciones y notas enviadas a tu coach:
+                </span>
+                <p className="text-foreground font-medium">{sesion.notasAlumno}</p>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -563,6 +643,132 @@ export function EntrenamientoPage() {
           </div>
         ))}
       </div>
+
+      {/* Modal de Finalización y Feedback al Coach */}
+      {isFinishModalOpen && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsFinishModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-finish-title"
+            className="p-6 rounded-3xl bg-card border border-border/80 shadow-2xl w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto"
+          >
+            {/* Header del Modal */}
+            <div className="flex items-center justify-between border-b border-border/80 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-primary/15 text-primary">
+                  <Award className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 id="modal-finish-title" className="font-bold text-base text-foreground leading-tight">
+                    Finalizar Sesión
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground">Feedback directo para tu entrenador</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsFinishModalOpen(false)}
+                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* RPE Global de la Sesión (Escala completa 1-10) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-foreground">
+                  Esfuerzo Percibido Global (RPE)
+                </label>
+                <span className="text-primary font-mono font-black text-sm">
+                  {rpeSesion} / 10 · <span className="text-[11px] font-semibold text-muted-foreground">{getRpeDescription(rpeSesion)}</span>
+                </span>
+              </div>
+              <div className="grid grid-cols-5 gap-1.5">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((val) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('light');
+                      setRpeSesion(val);
+                    }}
+                    className={`py-2 px-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      rpeSesion === val
+                        ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/25 scale-105'
+                        : 'bg-secondary/60 text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {val === 1 ? '1 (Bajo)' : val === 8 ? '8 (Ideal)' : val === 10 ? '10 (Max)' : val}
+                  </button>
+                ))}
+              </div>
+              <div className="flex justify-between text-[10px] text-muted-foreground px-1 font-medium">
+                <span>1-4: Descarga / Ligero</span>
+                <span>5-6: Moderado</span>
+                <span>7-8: Óptimo</span>
+                <span>9-10: Al límite</span>
+              </div>
+            </div>
+
+            {/* Molestias o dolores articulares */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-foreground">
+                ¿Sentiste alguna molestia articular o dolor?
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {['Ninguna 👍', 'Hombro', 'Rodilla', 'Lumbar', 'Codo', 'Muñeca', 'Otra'].map((zona) => (
+                  <button
+                    key={zona}
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('light');
+                      setMolestia(zona);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      molestia === zona
+                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-xs'
+                        : 'bg-secondary/40 text-muted-foreground hover:text-foreground border border-transparent'
+                    }`}
+                  >
+                    {zona}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Notas para el coach */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-foreground flex items-center justify-between">
+                <span>Notas u observaciones para tu coach</span>
+                <span className="text-[10px] text-muted-foreground font-normal">Opcional</span>
+              </label>
+              <textarea
+                rows={3}
+                value={notasCoachInput}
+                onChange={(e) => setNotasCoachInput(e.target.value)}
+                placeholder="Ej: Tuve que usar mancuernas porque la barra estaba ocupada. Sentí buena energía en sentadillas..."
+                className="w-full p-3 rounded-2xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:border-primary resize-none"
+              />
+            </div>
+
+            {/* Botón de Enviar */}
+            <button
+              onClick={confirmFinishSession}
+              disabled={isFinishing}
+              className="w-full py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs tracking-wide shadow-md shadow-emerald-600/25 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              <span>{isFinishing ? 'Guardando sesión...' : 'Guardar y Enviar al Coach'}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Floating Rest Timer */}
       <RestTimer

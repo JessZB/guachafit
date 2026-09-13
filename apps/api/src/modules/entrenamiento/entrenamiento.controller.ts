@@ -115,6 +115,31 @@ export class EntrenamientoController {
   }
 
   /**
+   * Obtener la última sesión registrada de un alumno (auditoría coach).
+   * Roles: Entrenador, SuperAdmin
+   */
+  @Get(['sesiones/alumno/:alumnoId/ultima', 'sesiones/:alumnoId/ultima'])
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR, Rol.SUPERADMIN)
+  async obtenerUltimaSesionAlumno(
+    @Req() req: any,
+    @Param('alumnoId') alumnoId: string,
+    @Res({ passthrough: true }) res?: any
+  ) {
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    const sesion = await this.entrenamientoService.obtenerUltimaSesionAlumno(
+      entrenadorId,
+      alumnoId,
+      req.user.rol
+    );
+    if (!sesion && res) {
+      res.status(HttpStatus.NO_CONTENT);
+      return null;
+    }
+    return sesion;
+  }
+
+  /**
    * Consultar detalle de sesión por ID con aislamiento Tenancy.
    * Roles: Alumno, Entrenador, SuperAdmin
    */
