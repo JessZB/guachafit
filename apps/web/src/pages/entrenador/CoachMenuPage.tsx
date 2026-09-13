@@ -11,6 +11,7 @@ import {
   Sparkles,
   ArrowUpRight,
   ShieldCheck,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 export function CoachMenuPage() {
@@ -191,6 +192,34 @@ export function CoachMenuPage() {
 
           <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs font-semibold text-primary">
             <span>Ir al dashboard</span>
+            <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+          </div>
+        </Link>
+
+        {/* TARJETA 6: Ajustes Operativos (Planes & Tasa) */}
+        <Link
+          to="/coach/ajustes"
+          className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
+        >
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="p-2.5 rounded-xl bg-purple-500/15 text-purple-400">
+                <SlidersHorizontal className="h-6 w-6" />
+              </div>
+              <span className="text-[11px] font-medium text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md">
+                Configuración
+              </span>
+            </div>
+            <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">
+              Planes & Tasa Global
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Administra el catálogo comercial de membresías y define las tasas de cambio de referencia en Bs/USD.
+            </p>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs font-semibold text-primary">
+            <span>Gestionar catálogo</span>
             <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
           </div>
         </Link>

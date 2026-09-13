@@ -325,6 +325,58 @@ export class EntrenamientoService {
   }
 
   /**
+   * Obtener historial cronológico de sesiones completadas o registradas de un alumno.
+   */
+  async obtenerHistorialSesionesAlumno(
+    entrenadorId: string,
+    alumnoId: string,
+    rol: Rol,
+    limit = 30
+  ): Promise<SesionEntrenamientoDetalleDTO[]> {
+    // 1. Validar si alumnoId es perfilesAlumno.id o perfilesAlumno.usuarioId
+    let [perfil] = await this.db
+      .select()
+      .from(perfilesAlumno)
+      .where(eq(perfilesAlumno.id, alumnoId));
+
+    if (!perfil) {
+      [perfil] = await this.db
+        .select()
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.usuarioId, alumnoId));
+    }
+
+    if (!perfil) {
+      throw new NotFoundException('El alumno especificado no existe.');
+    }
+
+    if (rol === Rol.ENTRENADOR && perfil.entrenadorId !== entrenadorId) {
+      throw new ForbiddenException(
+        'Aislamiento de Tenant: Acceso denegado a sesiones de un alumno de otro entrenador.'
+      );
+    }
+
+    const usuarioAlumnoId = perfil.usuarioId;
+
+    const sesiones = await this.db
+      .select()
+      .from(sesionesEntrenamiento)
+      .where(eq(sesionesEntrenamiento.alumnoId, usuarioAlumnoId))
+      .orderBy(
+        desc(sesionesEntrenamiento.fechaProgramada),
+        desc(sesionesEntrenamiento.createdAtUtc)
+      )
+      .limit(limit);
+
+    const resultado: SesionEntrenamientoDetalleDTO[] = [];
+    for (const s of sesiones) {
+      resultado.push(await this.hidratarSesion(s));
+    }
+
+    return resultado;
+  }
+
+  /**
    * Obtener detalle completo de una sesión por ID con verificación de permisos.
    */
   async obtenerSesionPorId(

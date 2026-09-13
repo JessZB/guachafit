@@ -15,6 +15,8 @@ import {
   SeriePrescritaInputSchema,
   EjercicioPrescritoInputSchema,
   CrearSesionEntrenamientoSchema,
+  BloqueDiaRutinaSchema,
+  GuardarRutinaSemanalSchema,
   IniciarSesionSchema,
   RegistrarSerieSchema,
   SincronizarSeriesBatchSchema,
@@ -86,6 +88,8 @@ export type ActualizarEjercicioCatalogoDTO = z.infer<typeof ActualizarEjercicioC
 export type SeriePrescritaInputDTO = z.infer<typeof SeriePrescritaInputSchema>;
 export type EjercicioPrescritoInputDTO = z.infer<typeof EjercicioPrescritoInputSchema>;
 export type CrearSesionEntrenamientoDTO = z.infer<typeof CrearSesionEntrenamientoSchema>;
+export type BloqueDiaRutinaDTO = z.infer<typeof BloqueDiaRutinaSchema>;
+export type GuardarRutinaSemanalDTO = z.infer<typeof GuardarRutinaSemanalSchema>;
 export type IniciarSesionDTO = z.infer<typeof IniciarSesionSchema>;
 export type RegistrarSerieDTO = z.infer<typeof RegistrarSerieSchema>;
 export type SincronizarSeriesBatchDTO = z.infer<typeof SincronizarSeriesBatchSchema>;

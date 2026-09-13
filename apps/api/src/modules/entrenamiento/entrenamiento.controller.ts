@@ -11,6 +11,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { EntrenamientoService } from './entrenamiento.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -18,6 +19,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import {
   Rol,
+  UUID_REGEX,
   CrearEjercicioCatalogoSchema,
   CrearSesionEntrenamientoSchema,
   IniciarSesionSchema,
@@ -137,6 +139,31 @@ export class EntrenamientoController {
       return null;
     }
     return sesion;
+  }
+
+  /**
+   * Consultar historial cronológico de sesiones de un alumno (auditoría coach).
+   * Roles: Entrenador, Alumno titular, SuperAdmin
+   */
+  @Get(['sesiones/alumno/:alumnoId/historial', 'sesiones/:alumnoId/historial'])
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR, Rol.ALUMNO, Rol.SUPERADMIN)
+  async obtenerHistorialSesionesAlumno(
+    @Req() req: any,
+    @Param('alumnoId') alumnoId: string,
+    @Query('limit') limit?: string
+  ) {
+    if (!UUID_REGEX.test(alumnoId)) {
+      throw new BadRequestException(`El ID de alumno '${alumnoId}' no es un UUID válido.`);
+    }
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    const limitNum = limit ? Math.min(Math.max(parseInt(limit, 10) || 30, 1), 100) : 30;
+    return this.entrenamientoService.obtenerHistorialSesionesAlumno(
+      entrenadorId,
+      alumnoId,
+      req.user.rol,
+      limitNum
+    );
   }
 
   /**

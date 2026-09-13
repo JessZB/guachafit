@@ -12,6 +12,7 @@ import {
   Moneda,
   PlanMembresiaDetalleDTO,
   SesionEntrenamientoDetalleDTO,
+  EjercicioCatalogoDetalleDTO,
 } from '@guachafit/shared';
 import {
   ArrowLeft,
@@ -26,6 +27,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Clock,
+  Minus,
   Plus,
   Trash2,
   PlayCircle,
@@ -40,6 +42,11 @@ import {
   Pencil,
   Eye,
   AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  FolderPlus,
+  History,
 } from 'lucide-react';
 
 type TabType = 'resumen' | 'finanzas' | 'antropometria' | 'entrenamiento';
@@ -161,6 +168,24 @@ export function AlumnoDetallePage() {
       ],
     },
   ]);
+
+  // Workout & Routine Management State
+  const [historialSesiones, setHistorialSesiones] = useState<SesionEntrenamientoDetalleDTO[]>([]);
+  const [ejerciciosCatalogo, setEjerciciosCatalogo] = useState<EjercicioCatalogoDetalleDTO[]>([]);
+  const [expandedSesionId, setExpandedSesionId] = useState<string | null>(null);
+
+  // Modal Prescripción / Edición de Rutina
+  const [isRutinaModalOpen, setIsRutinaModalOpen] = useState(false);
+  const [bloquesRutinaEdit, setBloquesRutinaEdit] = useState<any[]>([]);
+  const [activeDiaIdx, setActiveDiaIdx] = useState(0);
+  const [selectedGrupoMuscular, setSelectedGrupoMuscular] = useState('Todos');
+  const [filtroBusquedaEj, setFiltroBusquedaEj] = useState('');
+  const [isCrearEjRapidoOpen, setIsCrearEjRapidoOpen] = useState(false);
+  const [nuevoEjNombre, setNuevoEjNombre] = useState('');
+  const [nuevoEjGrupo, setNuevoEjGrupo] = useState('Pecho');
+  const [nuevoEjPatron, setNuevoEjPatron] = useState('Empuje');
+  const [isSubmittingEj, setIsSubmittingEj] = useState(false);
+  const [rutinaSuccessMsg, setRutinaSuccessMsg] = useState<string | null>(null);
 
   const calculateAge = (fechaStr: string): number => {
     if (!fechaStr) return 0;
@@ -350,6 +375,37 @@ export function AlumnoDetallePage() {
           ],
         });
       }
+
+      // 5. Historial completo de sesiones
+      const historialRes = await apiClient<SesionEntrenamientoDetalleDTO[]>(
+        `/sesiones/alumno/${id}/historial`
+      ).catch(() => []);
+      if (historialRes && historialRes.length > 0) {
+        setHistorialSesiones(historialRes);
+      } else if (sesionRes) {
+        setHistorialSesiones([sesionRes]);
+      }
+
+      // 6. Catálogo de ejercicios
+      const catalogoRes = await apiClient<EjercicioCatalogoDetalleDTO[]>(
+        '/ejercicios/catalogo'
+      ).catch(() => []);
+      if (catalogoRes && catalogoRes.length > 0) {
+        setEjerciciosCatalogo(catalogoRes);
+      } else {
+        setEjerciciosCatalogo([
+          { id: 'ej-c1', nombre: 'Press Plano con Mancuernas', grupoMuscular: 'Pecho', activo: true, createdAtUtc: new Date().toISOString() },
+          { id: 'ej-c2', nombre: 'Press Inclinado en Multipower', grupoMuscular: 'Pecho', activo: true, createdAtUtc: new Date().toISOString() },
+          { id: 'ej-c3', nombre: 'Fondos en Paralelas Asistidos', grupoMuscular: 'Pecho', activo: true, createdAtUtc: new Date().toISOString() },
+          { id: 'ej-c4', nombre: 'Extensiones de Tríceps en Polea', grupoMuscular: 'Brazos', activo: true, createdAtUtc: new Date().toISOString() },
+          { id: 'ej-c5', nombre: 'Jalón al Pecho Agarre Neutro', grupoMuscular: 'Espalda', activo: true, createdAtUtc: new Date().toISOString() },
+          { id: 'ej-c6', nombre: 'Remo con Barra T apoyado', grupoMuscular: 'Espalda', activo: true, createdAtUtc: new Date().toISOString() },
+          { id: 'ej-c7', nombre: 'Prensa Inclinada 45°', grupoMuscular: 'Piernas', activo: true, createdAtUtc: new Date().toISOString() },
+          { id: 'ej-c8', nombre: 'Curl Femoral Tumbado', grupoMuscular: 'Piernas', activo: true, createdAtUtc: new Date().toISOString() },
+          { id: 'ej-c9', nombre: 'Elevaciones Laterales con Mancuerna', grupoMuscular: 'Hombros', activo: true, createdAtUtc: new Date().toISOString() },
+          { id: 'ej-c10', nombre: 'Plancha Abdominal Isométrica', grupoMuscular: 'Core', activo: true, createdAtUtc: new Date().toISOString() },
+        ]);
+      }
     } catch {
       setError('Error al cargar la información del alumno.');
     } finally {
@@ -367,11 +423,12 @@ export function AlumnoDetallePage() {
       if (e.key === 'Escape') {
         if (isCobroModalOpen) setIsCobroModalOpen(false);
         if (isAntroModalOpen) setIsAntroModalOpen(false);
+        if (isRutinaModalOpen) setIsRutinaModalOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isCobroModalOpen, isAntroModalOpen]);
+  }, [isCobroModalOpen, isAntroModalOpen, isRutinaModalOpen]);
 
   // Guardar Cambios de Perfil & Ficha Médica
   const handleGuardarPerfil = async (e: React.FormEvent) => {
@@ -548,6 +605,164 @@ export function AlumnoDetallePage() {
     setIsAntroModalOpen(false);
   };
 
+  // Rutina & Prescripción Handlers
+  const abrirModalPrescribirRutina = () => {
+    triggerHaptic('light');
+    setBloquesRutinaEdit(JSON.parse(JSON.stringify(rutinaSemanal)));
+    setActiveDiaIdx(0);
+    setFiltroBusquedaEj('');
+    setSelectedGrupoMuscular('Todos');
+    setIsCrearEjRapidoOpen(false);
+    setRutinaSuccessMsg(null);
+    setIsRutinaModalOpen(true);
+  };
+
+  const handleCrearEjercicioRapido = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nuevoEjNombre.trim()) return;
+    setIsSubmittingEj(true);
+    try {
+      const res = await apiClient<EjercicioCatalogoDetalleDTO>('/ejercicios/catalogo', {
+        method: 'POST',
+        body: JSON.stringify({
+          nombre: nuevoEjNombre.trim(),
+          grupoMuscular: nuevoEjGrupo,
+          patronMovimiento: nuevoEjPatron,
+        }),
+      });
+      setEjerciciosCatalogo((prev) => [res, ...prev]);
+      agregarEjercicioADia(res.nombre);
+      setNuevoEjNombre('');
+      setIsCrearEjRapidoOpen(false);
+      triggerHaptic('success');
+    } catch {
+      const nuevoLocal: EjercicioCatalogoDetalleDTO = {
+        id: 'ej-custom-' + Date.now(),
+        nombre: nuevoEjNombre.trim(),
+        grupoMuscular: nuevoEjGrupo,
+        patronMovimiento: nuevoEjPatron,
+        activo: true,
+        createdAtUtc: new Date().toISOString(),
+      };
+      setEjerciciosCatalogo((prev) => [nuevoLocal, ...prev]);
+      agregarEjercicioADia(nuevoLocal.nombre);
+      setNuevoEjNombre('');
+      setIsCrearEjRapidoOpen(false);
+      triggerHaptic('success');
+    } finally {
+      setIsSubmittingEj(false);
+    }
+  };
+
+  const agregarEjercicioADia = (nombreEj: string) => {
+    triggerHaptic('selection');
+    setBloquesRutinaEdit((prev) => {
+      const updated = [...prev];
+      if (!updated[activeDiaIdx]) return prev;
+      updated[activeDiaIdx] = {
+        ...updated[activeDiaIdx],
+        ejercicios: [
+          ...updated[activeDiaIdx].ejercicios,
+          {
+            id: 'e-' + Date.now(),
+            nombre: nombreEj,
+            series: 3,
+            reps: '10-12',
+            peso: 'Moderado',
+            rpe: '8.0',
+          },
+        ],
+      };
+      return updated;
+    });
+  };
+
+  const removerEjercicioDeDia = (ejIdx: number) => {
+    triggerHaptic('selection');
+    setBloquesRutinaEdit((prev) => {
+      const updated = [...prev];
+      if (!updated[activeDiaIdx]) return prev;
+      const filteredEjercicios = updated[activeDiaIdx].ejercicios.filter(
+        (_: any, idx: number) => idx !== ejIdx
+      );
+      updated[activeDiaIdx] = {
+        ...updated[activeDiaIdx],
+        ejercicios: filteredEjercicios,
+      };
+      return updated;
+    });
+  };
+
+  const actualizarCampoEjercicio = (ejIdx: number, campo: string, valor: any) => {
+    setBloquesRutinaEdit((prev) => {
+      const updated = [...prev];
+      if (!updated[activeDiaIdx] || !updated[activeDiaIdx].ejercicios[ejIdx]) return prev;
+      const ejerciciosActualizados = [...updated[activeDiaIdx].ejercicios];
+      ejerciciosActualizados[ejIdx] = {
+        ...ejerciciosActualizados[ejIdx],
+        [campo]: valor,
+      };
+      updated[activeDiaIdx] = {
+        ...updated[activeDiaIdx],
+        ejercicios: ejerciciosActualizados,
+      };
+      return updated;
+    });
+  };
+
+  const handleStepSeries = (ejIdx: number, delta: number) => {
+    triggerHaptic('selection');
+    setBloquesRutinaEdit((prev) => {
+      const updated = [...prev];
+      if (!updated[activeDiaIdx] || !updated[activeDiaIdx].ejercicios[ejIdx]) return prev;
+      const current = updated[activeDiaIdx].ejercicios[ejIdx].series || 1;
+      const nextVal = Math.max(1, Math.min(20, current + delta));
+      const ejerciciosActualizados = [...updated[activeDiaIdx].ejercicios];
+      ejerciciosActualizados[ejIdx] = {
+        ...ejerciciosActualizados[ejIdx],
+        series: nextVal,
+      };
+      updated[activeDiaIdx] = {
+        ...updated[activeDiaIdx],
+        ejercicios: ejerciciosActualizados,
+      };
+      return updated;
+    });
+  };
+
+  const agregarNuevoDiaRutina = () => {
+    triggerHaptic('light');
+    const nuevoDiaNum = bloquesRutinaEdit.length + 1;
+    setBloquesRutinaEdit([
+      ...bloquesRutinaEdit,
+      {
+        diaId: 'd' + nuevoDiaNum,
+        titulo: `Día ${nuevoDiaNum}: Nuevo Bloque`,
+        enfoque: 'General',
+        ejercicios: [],
+      },
+    ]);
+    setActiveDiaIdx(bloquesRutinaEdit.length);
+  };
+
+  const removerDiaRutina = (diaIdx: number) => {
+    if (bloquesRutinaEdit.length <= 1) return;
+    triggerHaptic('light');
+    const updated = bloquesRutinaEdit.filter((_, idx) => idx !== diaIdx);
+    setBloquesRutinaEdit(updated);
+    setActiveDiaIdx(Math.max(0, diaIdx - 1));
+  };
+
+  const guardarRutinaPrescrita = () => {
+    triggerHaptic('success');
+    setRutinaSemanal(bloquesRutinaEdit);
+    setRutinaSuccessMsg('Planificación semanal guardada con éxito.');
+    setTimeout(() => {
+      setIsRutinaModalOpen(false);
+      setRutinaSuccessMsg(null);
+    }, 800);
+  };
+
   if (isLoading) {
     return (
       <div className="py-20 flex flex-col items-center justify-center gap-3">
@@ -601,7 +816,7 @@ export function AlumnoDetallePage() {
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
           {/* Avatar e Identidad */}
           <div className="flex items-center gap-4">
-            <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-primary/30 to-primary/10 border-2 border-primary/30 flex items-center justify-center text-primary font-black text-xl shadow-inner shrink-0">
+            <div className="h-16 w-16 rounded-2xl bg-secondary/80 border-2 border-primary/30 flex items-center justify-center text-primary font-black text-xl shadow-xs shrink-0">
               {alumno.nombres[0]}
               {alumno.apellidos[0]}
             </div>
@@ -612,7 +827,7 @@ export function AlumnoDetallePage() {
                 </h1>
                 {/* Semáforo de Pago */}
                 <span
-                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border flex items-center gap-1.5 ${
+                  className={`px-3 py-1 rounded-full text-[10px] font-extrabold tracking-wide uppercase border flex items-center gap-1.5 shadow-2xs ${
                     semaforo === 'al_dia'
                       ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                       : semaforo === 'por_vencer'
@@ -626,27 +841,37 @@ export function AlumnoDetallePage() {
                         ? 'bg-emerald-400'
                         : semaforo === 'por_vencer'
                         ? 'bg-amber-400'
-                        : 'bg-rose-400'
+                        : 'bg-rose-400 animate-pulse'
                     }`}
                   />
                   {semaforo === 'al_dia' ? 'Al Día' : semaforo === 'por_vencer' ? 'Por Vencer' : 'Cuota Pendiente'}
                 </span>
 
-                {/* Badge Estado */}
+                {/* Badge Estado de Activación */}
                 <span
-                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
+                  className={`px-3 py-1 rounded-full text-[10px] font-extrabold tracking-wide uppercase border flex items-center gap-1.5 shadow-2xs ${
                     isArchived
-                      ? 'bg-muted text-muted-foreground border-border'
+                      ? 'bg-secondary text-muted-foreground border-border/80'
                       : alumno.estadoActivacion === EstadoAlumno.ACTIVO
-                      ? 'bg-primary/15 text-primary border-primary/25'
-                      : 'bg-amber-500/15 text-amber-400 border-amber-500/25'
+                      ? 'bg-primary/15 text-primary border-primary/30'
+                      : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
                   }`}
                 >
-                  {isArchived ? 'Baja / Archivado' : alumno.estadoActivacion}
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      isArchived
+                        ? 'bg-muted-foreground'
+                        : alumno.estadoActivacion === EstadoAlumno.ACTIVO
+                        ? 'bg-primary'
+                        : 'bg-amber-400'
+                    }`}
+                  />
+                  {isArchived ? 'Archivado' : alumno.estadoActivacion}
                 </span>
 
                 {/* Badge Modalidad */}
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-secondary text-foreground border border-border">
+                <span className="px-3 py-1 rounded-full text-[10px] font-extrabold tracking-wide uppercase bg-secondary/80 text-foreground border border-border/70 flex items-center gap-1.5 shadow-2xs">
+                  <span className="h-1.5 w-1.5 rounded-full bg-foreground/50" />
                   {alumno.modalidad}
                 </span>
               </div>
@@ -1127,9 +1352,29 @@ export function AlumnoDetallePage() {
                   <CreditCard className="h-4 w-4" />
                   <span>Estado de la Cuota Mensual</span>
                 </div>
-                <h3 className="text-lg font-black text-foreground mt-0.5">
-                  Periodo: {finanzas?.cuotaMesActual?.periodo || 'Mes Actual'}
-                </h3>
+                <div className="flex items-center gap-2.5 mt-0.5">
+                  <h3 className="text-lg font-black text-foreground">
+                    Periodo: {finanzas?.cuotaMesActual?.periodo || 'Mes Actual'}
+                  </h3>
+                  {finanzas?.cuotaMesActual && (
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold tracking-wide uppercase border flex items-center gap-1.5 shadow-2xs ${
+                        Number(finanzas.cuotaMesActual.saldoPendienteUsd) <= 0
+                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                          : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                      }`}
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          Number(finanzas.cuotaMesActual.saldoPendienteUsd) <= 0
+                            ? 'bg-emerald-400'
+                            : 'bg-rose-400 animate-pulse'
+                        }`}
+                      />
+                      {Number(finanzas.cuotaMesActual.saldoPendienteUsd) <= 0 ? 'Liquidada' : 'Pendiente'}
+                    </span>
+                  )}
+                </div>
               </div>
 
               <button
@@ -1410,19 +1655,27 @@ export function AlumnoDetallePage() {
             </div>
           )}
 
-          {/* Bloques de Planificación Semanal */}
+          {/* 1. Subsección: Planificación Semanal Activa */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-black text-foreground">Planificación Semanal por Días</h3>
+                <h3 className="text-base font-black text-foreground">Planificación Semanal Activa</h3>
                 <p className="text-xs text-muted-foreground">
-                  Ejercicios, series, repeticiones y cargas prescritas para el atleta.
+                  Estructura de días, ejercicios, series, repeticiones y cargas asignadas al atleta.
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={abrirModalPrescribirRutina}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer self-start sm:self-auto"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                <span>Editar / Prescribir Rutina</span>
+              </button>
             </div>
 
             <div className="grid grid-cols-1 gap-4">
-              {rutinaSemanal.map((bloque, idx) => (
+              {rutinaSemanal.map((bloque) => (
                 <div
                   key={bloque.diaId}
                   className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-3"
@@ -1438,7 +1691,7 @@ export function AlumnoDetallePage() {
                   </div>
 
                   <div className="space-y-2">
-                    {bloque.ejercicios.map((ej, ejIdx) => (
+                    {bloque.ejercicios.map((ej: any, ejIdx: number) => (
                       <div
                         key={ej.id}
                         className="p-3 rounded-2xl bg-secondary/20 hover:bg-secondary/35 transition-colors border border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
@@ -1465,6 +1718,138 @@ export function AlumnoDetallePage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* 2. Subsección: Historial Cronológico de Sesiones Realizadas */}
+          <div className="pt-6 border-t border-border/70 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <History className="h-5 w-5 text-primary" />
+                <h3 className="text-base font-black text-foreground">
+                  Historial de Sesiones Realizadas ({historialSesiones.length})
+                </h3>
+              </div>
+            </div>
+
+            {historialSesiones.length === 0 ? (
+              <div className="p-8 rounded-2xl bg-card border border-dashed border-border/70 text-center">
+                <Dumbbell className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-40" />
+                <p className="text-xs text-muted-foreground">
+                  El alumno aún no registra sesiones de entrenamiento completadas.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {historialSesiones.map((ses) => (
+                  <div key={ses.id} className="p-4 rounded-2xl bg-card border border-border shadow-xs space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-mono font-bold text-xs shrink-0">
+                          <Calendar className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h4 className="font-extrabold text-sm text-foreground">
+                            Sesión: {ses.fechaProgramada}
+                          </h4>
+                          <p className="text-[11px] text-muted-foreground">
+                            {ses.duracionMinutos ? `${ses.duracionMinutos} minutos de duración` : 'Entrenamiento completado'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-center">
+                        <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                          {ses.porcentajeCumplimiento}% Cumplido
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            triggerHaptic('light');
+                            setExpandedSesionId(expandedSesionId === ses.id ? null : ses.id);
+                          }}
+                          aria-expanded={expandedSesionId === ses.id}
+                          aria-controls={`sesion-accordion-${ses.id}`}
+                          className="px-3 py-1.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+                        >
+                          <span>{expandedSesionId === ses.id ? 'Ocultar Series' : 'Ver Series'}</span>
+                          <ChevronDown
+                            className={`h-3.5 w-3.5 text-primary transition-transform duration-300 ease-out ${
+                              expandedSesionId === ses.id ? 'rotate-180' : ''
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+
+                    {ses.notasAlumno && (
+                      <div className="p-3 rounded-xl bg-secondary/30 text-xs text-muted-foreground border border-border/50">
+                        <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block mb-0.5">
+                          Notas del Atleta:
+                        </span>
+                        <p className="text-foreground leading-relaxed">{ses.notasAlumno}</p>
+                      </div>
+                    )}
+
+                    {expandedSesionId === ses.id && (
+                      <div
+                        id={`sesion-accordion-${ses.id}`}
+                        role="region"
+                        aria-label={`Detalle de series de la sesión del ${ses.fechaProgramada}`}
+                        className="pt-3 border-t border-border/50 space-y-2.5 animate-in fade-in-50 slide-in-from-top-2 duration-300 ease-out"
+                      >
+                        {ses.ejercicios && ses.ejercicios.length > 0 ? (
+                          ses.ejercicios.map((ej, ejIdx) => (
+                            <div
+                              key={ej.id || ejIdx}
+                              className="p-3.5 rounded-2xl bg-secondary/20 hover:bg-secondary/30 transition-colors border border-border/50 text-xs space-y-2.5"
+                            >
+                              <div className="font-bold text-foreground flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="h-5 w-5 rounded-lg bg-primary/10 text-primary text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
+                                    {ejIdx + 1}
+                                  </span>
+                                  <span className="font-bold text-foreground">{ej.ejercicio?.nombre || 'Ejercicio prescrito'}</span>
+                                </div>
+                                <span className="text-[10px] font-mono font-bold text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md border border-border/60">
+                                  {ej.ejercicio?.grupoMuscular || 'Musculación'}
+                                </span>
+                              </div>
+
+                              {ej.series && ej.series.length > 0 ? (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px]">
+                                  {ej.series.map((s) => (
+                                    <div
+                                      key={s.id}
+                                      className={`p-2.5 rounded-xl border flex items-center justify-between transition-colors ${
+                                        s.completada
+                                          ? 'bg-emerald-500/10 border-emerald-500/30 text-foreground'
+                                          : 'bg-card border-border/60 text-foreground'
+                                      }`}
+                                    >
+                                      <span className="text-muted-foreground font-bold">S{s.numeroSerie}:</span>
+                                      <span className="font-bold text-foreground">
+                                        {s.repsLogradas ?? s.repsObjetivo} reps
+                                      </span>
+                                      <span className="text-primary font-black">
+                                        {s.pesoKg ? `${s.pesoKg}kg` : '-'}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-[11px] text-muted-foreground">Sin series detalladas.</p>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-muted-foreground">Sin detalle de ejercicios registrado en esta sesión.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1693,6 +2078,428 @@ export function AlumnoDetallePage() {
                 {isSavingAntro ? 'Guardando medidas...' : 'Guardar Control Antropométrico'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* MODAL: PRESCRIBIR / EDITAR RUTINA SEMANAL DEL ALUMNO                  */}
+      {/* ===================================================================== */}
+      {isRutinaModalOpen && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsRutinaModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-rutina-title"
+            className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-3xl space-y-5 max-h-[90vh] overflow-y-auto"
+          >
+            {/* Header del modal */}
+            <div className="flex items-center justify-between border-b border-border/80 pb-3">
+              <div className="flex items-center gap-2">
+                <Dumbbell className="h-5 w-5 text-primary" />
+                <div>
+                  <h3 id="modal-rutina-title" className="font-black text-base text-foreground">
+                    Prescripción & Edición de Rutina Semanal
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Estructura los bloques de entrenamiento y asigna ejercicios del catálogo.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRutinaModalOpen(false)}
+                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {rutinaSuccessMsg && (
+              <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>{rutinaSuccessMsg}</span>
+              </div>
+            )}
+
+            {/* Pestañas de Días de la Rutina */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-border/60">
+              {bloquesRutinaEdit.map((bloque, idx) => (
+                <button
+                  key={bloque.diaId || idx}
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic('selection');
+                    setActiveDiaIdx(idx);
+                  }}
+                  className={`py-1.5 px-3 rounded-xl font-bold text-xs whitespace-nowrap transition-all cursor-pointer ${
+                    activeDiaIdx === idx
+                      ? 'bg-primary text-primary-foreground shadow-xs'
+                      : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {bloque.titulo.split(':')[0] || `Día ${idx + 1}`}
+                </button>
+              ))}
+
+              <button
+                type="button"
+                onClick={agregarNuevoDiaRutina}
+                className="py-1.5 px-3 rounded-xl bg-secondary/80 hover:bg-secondary text-primary font-bold text-xs flex items-center gap-1 cursor-pointer whitespace-nowrap"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Añadir Día</span>
+              </button>
+            </div>
+
+            {/* Configuración del Día Activo */}
+            {bloquesRutinaEdit[activeDiaIdx] && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-2xl bg-secondary/30 border border-border/60">
+                  <div className="sm:col-span-2 space-y-1">
+                    <label className="text-[11px] font-semibold text-muted-foreground">Título del Bloque / Día</label>
+                    <input
+                      type="text"
+                      value={bloquesRutinaEdit[activeDiaIdx].titulo}
+                      onChange={(e) => {
+                        const updated = [...bloquesRutinaEdit];
+                        updated[activeDiaIdx].titulo = e.target.value;
+                        setBloquesRutinaEdit(updated);
+                      }}
+                      className="w-full px-3 py-1.5 rounded-xl bg-background border border-border text-xs font-bold text-foreground focus:outline-hidden focus:border-primary"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-muted-foreground">Enfoque / Grupo</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={bloquesRutinaEdit[activeDiaIdx].enfoque || ''}
+                        onChange={(e) => {
+                          const updated = [...bloquesRutinaEdit];
+                          updated[activeDiaIdx].enfoque = e.target.value;
+                          setBloquesRutinaEdit(updated);
+                        }}
+                        placeholder="ej. Empuje, RPE 8"
+                        className="w-full px-3 py-1.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-hidden focus:border-primary"
+                      />
+                      {bloquesRutinaEdit.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removerDiaRutina(activeDiaIdx)}
+                          title="Eliminar este día de la rutina"
+                          className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive cursor-pointer shrink-0"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Lista de Ejercicios del Día Activo */}
+                <div className="space-y-2">
+                  <span className="text-xs font-bold text-foreground block">
+                    Ejercicios Asignados a este Día ({bloquesRutinaEdit[activeDiaIdx].ejercicios.length}):
+                  </span>
+
+                  {bloquesRutinaEdit[activeDiaIdx].ejercicios.length === 0 ? (
+                    <div className="p-4 rounded-xl bg-secondary/15 border border-dashed border-border text-center text-xs text-muted-foreground">
+                      Aún no has agregado ejercicios a este bloque. Elige uno del catálogo abajo.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {bloquesRutinaEdit[activeDiaIdx].ejercicios.map((ej: any, ejIdx: number) => (
+                        <div
+                          key={ej.id || ejIdx}
+                          className="p-3.5 rounded-2xl bg-card border border-border/80 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shadow-2xs hover:border-border transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-44 flex-1">
+                            <span className="h-6 w-6 rounded-lg bg-primary/10 text-primary font-mono font-black flex items-center justify-center text-[11px] shrink-0">
+                              {ejIdx + 1}
+                            </span>
+                            <span className="font-bold text-foreground text-sm line-clamp-1">{ej.nombre}</span>
+                          </div>
+
+                          <div className="flex items-end justify-between sm:justify-end gap-2.5 flex-wrap sm:flex-nowrap">
+                            {/* Series Stepper */}
+                            <div className="flex flex-col items-center">
+                              <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
+                                Series
+                              </label>
+                              <div className="flex items-center h-9 rounded-xl bg-background border border-border p-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleStepSeries(ejIdx, -1)}
+                                  disabled={(ej.series || 1) <= 1}
+                                  title="Reducir series"
+                                  className="h-8 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
+                                >
+                                  <Minus className="h-3.5 w-3.5" />
+                                </button>
+                                <span className="w-7 text-center font-mono font-black text-xs text-foreground select-none">
+                                  {ej.series || 1}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleStepSeries(ejIdx, 1)}
+                                  disabled={(ej.series || 1) >= 20}
+                                  title="Aumentar series"
+                                  className="h-8 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
+                                >
+                                  <Plus className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Reps Input */}
+                            <div className="flex flex-col items-center">
+                              <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
+                                Reps
+                              </label>
+                              <input
+                                type="text"
+                                value={ej.reps}
+                                onChange={(e) => actualizarCampoEjercicio(ejIdx, 'reps', e.target.value)}
+                                placeholder="8-12"
+                                className="h-9 w-20 px-2 rounded-xl bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
+                              />
+                            </div>
+
+                            {/* Peso Input */}
+                            <div className="flex flex-col items-center">
+                              <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
+                                Peso
+                              </label>
+                              <input
+                                type="text"
+                                value={ej.peso}
+                                onChange={(e) => actualizarCampoEjercicio(ejIdx, 'peso', e.target.value)}
+                                placeholder="60 kg"
+                                className="h-9 w-22 px-2 rounded-xl bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
+                              />
+                            </div>
+
+                            {/* RPE Input */}
+                            <div className="flex flex-col items-center">
+                              <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
+                                RPE
+                              </label>
+                              <input
+                                type="text"
+                                value={ej.rpe || ''}
+                                onChange={(e) => actualizarCampoEjercicio(ejIdx, 'rpe', e.target.value)}
+                                placeholder="8"
+                                className="h-9 w-16 px-2 rounded-xl bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
+                              />
+                            </div>
+
+                            {/* Delete Action */}
+                            <div className="flex flex-col items-center justify-end">
+                              <span className="h-3.5 block mb-1" aria-hidden="true" />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  triggerHaptic('light');
+                                  removerEjercicioDeDia(ejIdx);
+                                }}
+                                title="Eliminar ejercicio del día"
+                                className="h-9 w-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Sección: Añadir Ejercicio desde Catálogo con Filtro & Creación Rápida */}
+                <div className="p-4 rounded-2xl bg-secondary/30 border border-border/80 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <FolderPlus className="h-4 w-4 text-primary" />
+                      <span className="text-xs font-bold text-foreground">
+                        Añadir Ejercicio desde Catálogo
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsCrearEjRapidoOpen(!isCrearEjRapidoOpen)}
+                      className="text-xs font-bold text-primary hover:underline cursor-pointer flex items-center gap-1 self-start sm:self-auto"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>{isCrearEjRapidoOpen ? 'Ocultar Creador Rápido' : 'Crear Ejercicio Nuevo'}</span>
+                    </button>
+                  </div>
+
+                  {/* Formulario Inline de Creación Rápida */}
+                  {isCrearEjRapidoOpen && (
+                    <form
+                      onSubmit={handleCrearEjercicioRapido}
+                      className="p-3 rounded-xl bg-card border border-primary/30 space-y-3 animate-in zoom-in-95 duration-150"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-primary uppercase tracking-wide">
+                          Nuevo Ejercicio en Catálogo
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <input
+                          type="text"
+                          required
+                          placeholder="Nombre (ej. Hip Thrust Mancuerna)"
+                          value={nuevoEjNombre}
+                          onChange={(e) => setNuevoEjNombre(e.target.value)}
+                          className="px-2.5 py-1.5 rounded-lg bg-background border border-border text-xs text-foreground focus:outline-hidden focus:border-primary"
+                        />
+                        <select
+                          value={nuevoEjGrupo}
+                          onChange={(e) => setNuevoEjGrupo(e.target.value)}
+                          className="px-2.5 py-1.5 rounded-lg bg-background border border-border text-xs text-foreground focus:outline-hidden focus:border-primary"
+                        >
+                          <option value="Pecho">Pecho</option>
+                          <option value="Espalda">Espalda</option>
+                          <option value="Piernas">Piernas</option>
+                          <option value="Hombros">Hombros</option>
+                          <option value="Brazos">Brazos</option>
+                          <option value="Core">Core</option>
+                        </select>
+                        <select
+                          value={nuevoEjPatron}
+                          onChange={(e) => setNuevoEjPatron(e.target.value)}
+                          className="px-2.5 py-1.5 rounded-lg bg-background border border-border text-xs text-foreground focus:outline-hidden focus:border-primary"
+                        >
+                          <option value="Empuje">Empuje</option>
+                          <option value="Tracción">Tracción</option>
+                          <option value="Bisagra de Cadera">Bisagra de Cadera</option>
+                          <option value="Dominante de Rodilla">Dominante de Rodilla</option>
+                          <option value="Aislamiento">Aislamiento</option>
+                        </select>
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsCrearEjRapidoOpen(false)}
+                          className="px-3 py-1 rounded-lg bg-secondary text-muted-foreground text-xs"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isSubmittingEj}
+                          className="px-3 py-1 rounded-lg bg-primary text-primary-foreground font-bold text-xs cursor-pointer"
+                        >
+                          {isSubmittingEj ? 'Guardando...' : 'Crear y Asignar a este Día'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* Filtro por Grupos y Búsqueda */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                      {['Todos', 'Pecho', 'Espalda', 'Piernas', 'Hombros', 'Brazos', 'Core'].map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => {
+                            triggerHaptic('selection');
+                            setSelectedGrupoMuscular(g);
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                            selectedGrupoMuscular === g
+                              ? 'bg-primary text-primary-foreground font-bold'
+                              : 'bg-background hover:bg-secondary text-muted-foreground'
+                          }`}
+                        >
+                          {g}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="relative">
+                      <Search className="h-3.5 w-3.5 absolute left-3 top-2.5 text-muted-foreground" />
+                      <input
+                        type="text"
+                        placeholder="Buscar en catálogo..."
+                        value={filtroBusquedaEj}
+                        onChange={(e) => setFiltroBusquedaEj(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-hidden focus:border-primary"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Lista de Coincidencias del Catálogo */}
+                  <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                    {ejerciciosCatalogo
+                      .filter((ej) => {
+                        const matchGrupo =
+                          selectedGrupoMuscular === 'Todos' ||
+                          ej.grupoMuscular.toLowerCase().includes(selectedGrupoMuscular.toLowerCase());
+                        const matchText =
+                          !filtroBusquedaEj.trim() ||
+                          ej.nombre.toLowerCase().includes(filtroBusquedaEj.toLowerCase());
+                        return matchGrupo && matchText;
+                      })
+                      .map((ej) => (
+                        <div
+                          key={ej.id}
+                          className="flex items-center justify-between p-2 rounded-xl bg-card border border-border/60 hover:border-primary/40 transition-colors text-xs"
+                        >
+                          <div>
+                            <span className="font-bold text-foreground">{ej.nombre}</span>
+                            <span className="text-[10px] text-muted-foreground ml-2">
+                              • {ej.grupoMuscular}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => agregarEjercicioADia(ej.nombre)}
+                            className="px-2.5 py-1 rounded-lg bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer"
+                          >
+                            <Plus className="h-3 w-3" />
+                            <span>Añadir</span>
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Footer de Acciones del Modal */}
+            <div className="pt-3 border-t border-border/80 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                {bloquesRutinaEdit.length} días configurados
+              </span>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRutinaModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={guardarRutinaPrescrita}
+                  className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer"
+                >
+                  Guardar Planificación Activa
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

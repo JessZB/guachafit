@@ -2,7 +2,7 @@
  * Haptic feedback utility using the Web Vibration API.
  * Gracefully degrades to a no-op if unsupported or running on desktop.
  */
-export type HapticType = 'light' | 'medium' | 'success' | 'warning' | 'timer';
+export type HapticType = 'light' | 'medium' | 'success' | 'warning' | 'timer' | 'selection';
 
 export function triggerHaptic(type: HapticType = 'light'): void {
   if (typeof window === 'undefined' || !('vibrate' in navigator)) {
@@ -12,7 +12,8 @@ export function triggerHaptic(type: HapticType = 'light'): void {
   try {
     switch (type) {
       case 'light':
-        // Short crisp tick for button steppers (+ / -)
+      case 'selection':
+        // Short crisp tick for button steppers (+ / -) or item selection
         navigator.vibrate(12);
         break;
       case 'medium':

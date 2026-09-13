@@ -11,6 +11,7 @@ import {
   DollarSign,
   Users,
   Camera,
+  SlidersHorizontal,
   Shield,
   Activity,
 } from 'lucide-react';
@@ -33,6 +34,7 @@ export function Sidebar() {
     { to: '/coach/conciliacion', label: 'Validar Pagos', icon: DollarSign, description: 'Bandeja de verificación' },
     { to: '/coach/alumnos', label: 'Directorio Atletas', icon: Users, description: 'Gestión y retención' },
     { to: '/coach/antropometria', label: 'Revisar Evaluaciones', icon: Camera, description: 'Auditoría de fotos' },
+    { to: '/coach/ajustes', label: 'Ajustes Operativos', icon: SlidersHorizontal, description: 'Planes y tasas' },
   ];
 
   const links = isCoach ? coachLinks : athleteLinks;

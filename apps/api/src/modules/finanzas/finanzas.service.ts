@@ -14,6 +14,7 @@ import {
   Database,
   eq,
   and,
+  or,
   desc,
   asc,
   ne,
@@ -34,12 +35,14 @@ import {
   EstadoConciliacion,
   MetodoPago,
   CrearPlanMembresiaDTO,
+  ActualizarPlanMembresiaDTO,
   CrearOverridePlanDTO,
   EmitirCuotaDTO,
   ActualizarTasaCambioDTO,
   CalcularConversionDTO,
   ReportarPagoDTO,
   CobroDirectoDTO,
+  CobroDirectoInteligenteDTO,
   ConciliarTransaccionDTO,
   PlanMembresiaDetalleDTO,
   OverridePlanDetalleDTO,
@@ -426,6 +429,56 @@ export class FinanzasService {
       createdAtUtc: plan.createdAtUtc.toISOString(),
       updatedAtUtc: plan.updatedAtUtc.toISOString(),
     }));
+  }
+
+  async actualizarPlan(
+    entrenadorId: string,
+    planId: string,
+    dto: ActualizarPlanMembresiaDTO
+  ): Promise<PlanMembresiaDetalleDTO> {
+    const [plan] = await this.db
+      .select()
+      .from(planesMembresia)
+      .where(eq(planesMembresia.id, planId))
+      .limit(1);
+
+    if (!plan) {
+      throw new NotFoundException(`Plan con ID '${planId}' no encontrado.`);
+    }
+
+    if (plan.entrenadorId !== entrenadorId) {
+      throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a planes de otro entrenador.');
+    }
+
+    const updates: Partial<typeof planesMembresia.$inferInsert> = {
+      updatedAtUtc: new Date(),
+    };
+
+    if (dto.nombre !== undefined) updates.nombre = dto.nombre.trim();
+    if (dto.descripcion !== undefined) updates.descripcion = dto.descripcion.trim();
+    if (dto.beneficios !== undefined) updates.beneficios = dto.beneficios;
+    if (dto.precioBaseUsd !== undefined) updates.precioBaseUsd = dto.precioBaseUsd;
+    if (dto.duracionMeses !== undefined) updates.duracionMeses = dto.duracionMeses;
+    if (dto.activo !== undefined) updates.activo = dto.activo;
+
+    const [actualizado] = await this.db
+      .update(planesMembresia)
+      .set(updates)
+      .where(eq(planesMembresia.id, planId))
+      .returning();
+
+    return {
+      id: actualizado.id,
+      entrenadorId: actualizado.entrenadorId,
+      nombre: actualizado.nombre,
+      descripcion: actualizado.descripcion,
+      beneficios: (actualizado.beneficios as string[]) || [],
+      precioBaseUsd: actualizado.precioBaseUsd,
+      duracionMeses: actualizado.duracionMeses,
+      activo: actualizado.activo,
+      createdAtUtc: actualizado.createdAtUtc.toISOString(),
+      updatedAtUtc: actualizado.updatedAtUtc.toISOString(),
+    };
   }
 
   async crearOverride(
@@ -1397,11 +1450,36 @@ export class FinanzasService {
     actorUserId: string,
     actorRole: Rol
   ): Promise<ResumenFinancieroAlumnoDTO> {
-    const clienteUsuarioId = await this.resolveClienteUsuarioId(clienteId);
+    // 1. Validar existencia del alumno y aislamiento de tenant
+    let [perfil] = await this.db
+      .select()
+      .from(perfilesAlumno)
+      .where(eq(perfilesAlumno.id, clienteId));
 
-    if (actorRole === Rol.ALUMNO && clienteUsuarioId !== actorUserId) {
+    if (!perfil) {
+      [perfil] = await this.db
+        .select()
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.usuarioId, clienteId));
+    }
+
+    if (!perfil) {
+      throw new NotFoundException('El alumno especificado no existe.');
+    }
+
+    if (actorRole === Rol.ALUMNO && perfil.usuarioId !== actorUserId) {
       throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a finanzas de otro alumno.');
     }
+
+    if (
+      actorRole === Rol.ENTRENADOR &&
+      perfil.entrenadorId !== entrenadorId &&
+      perfil.entrenadorId !== actorUserId
+    ) {
+      throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a finanzas de un alumno de otro entrenador.');
+    }
+
+    const clienteUsuarioId = perfil.usuarioId;
 
     const cuotas = await this.db
       .select()
@@ -1458,7 +1536,7 @@ export class FinanzasService {
     const cuotaMes = cuotas.find((c) => c.periodo === currentPeriod) || cuotas[0] || null;
 
     return {
-      alumnoId: clienteId,
+      alumnoId: perfil.id,
       usuarioId: clienteUsuarioId,
       saldoPendienteTotalUsd: fromCents(saldoTotalCents),
       totalPagadoHistoricoUsd: fromCents(totalPagadoHistCents),
@@ -1493,11 +1571,32 @@ export class FinanzasService {
   async cobroDirectoInteligente(
     entrenadorId: string,
     clienteId: string,
-    dto: CobroDirectoDTO
+    dto: CobroDirectoInteligenteDTO | CobroDirectoDTO
   ) {
-    const clienteUsuarioId = await this.resolveClienteUsuarioId(clienteId);
+    // 1. Validar existencia del alumno y aislamiento de tenant
+    let [perfil] = await this.db
+      .select()
+      .from(perfilesAlumno)
+      .where(eq(perfilesAlumno.id, clienteId));
 
-    // 1. Buscar si hay una cuota abierta
+    if (!perfil) {
+      [perfil] = await this.db
+        .select()
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.usuarioId, clienteId));
+    }
+
+    if (!perfil) {
+      throw new NotFoundException('El alumno especificado no existe.');
+    }
+
+    if (perfil.entrenadorId !== entrenadorId) {
+      throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a operaciones de un alumno de otro entrenador.');
+    }
+
+    const clienteUsuarioId = perfil.usuarioId;
+
+    // 2. Buscar si hay una cuota abierta
     const [cuotaAbierta] = await this.db
       .select()
       .from(cuotasMembresia)
@@ -1512,11 +1611,8 @@ export class FinanzasService {
 
     let targetCuotaId = cuotaAbierta?.id;
 
-    // 2. Si no hay cuota abierta, buscar plan asignado o crear cuota para el mes actual
+    // 3. Si no hay cuota abierta, buscar plan asignado
     if (!targetCuotaId) {
-      const hoy = new Date();
-      const periodo = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
-
       // Buscar override de plan para este alumno
       const [override] = await this.db
         .select()
@@ -1527,47 +1623,63 @@ export class FinanzasService {
       let montoUsd = override?.precioAcordadoUsd;
 
       if (!planIdToUse) {
-        // Buscar el primer plan activo del entrenador
-        const [planGeneral] = await this.db
-          .select()
-          .from(planesMembresia)
+        // Buscar si tiene alguna cuota previa para identificar su plan habitual
+        const [ultimaCuota] = await this.db
+          .select({ planId: cuotasMembresia.planId })
+          .from(cuotasMembresia)
           .where(
             and(
-              eq(planesMembresia.entrenadorId, entrenadorId),
-              eq(planesMembresia.activo, true)
+              eq(cuotasMembresia.clienteId, clienteUsuarioId),
+              eq(cuotasMembresia.entrenadorId, entrenadorId)
             )
           )
+          .orderBy(desc(cuotasMembresia.createdAtUtc))
           .limit(1);
 
-        if (planGeneral) {
-          planIdToUse = planGeneral.id;
-          montoUsd = planGeneral.precioBaseUsd;
-        } else {
-          // Crear un plan estándar por defecto
-          const nuevoPlan = await this.crearPlan(entrenadorId, {
-            nombre: 'Plan Estándar General',
-            descripcion: 'Plan base mensual para entrenamientos presenciales y remotos',
-            precioBaseUsd: dto.montoOriginal || '40.00',
-            duracionMeses: 1,
-            beneficios: ['Entrenamiento guiado', 'Seguimiento mensual'],
-          });
-          planIdToUse = nuevoPlan.id;
-          montoUsd = nuevoPlan.precioBaseUsd;
+        if (ultimaCuota) {
+          planIdToUse = ultimaCuota.planId;
         }
       }
 
+      if (!planIdToUse) {
+        throw new BadRequestException(
+          'No se puede procesar el cobro directo inteligente: El alumno no tiene un plan asignado ni una cuota abierta previa.'
+        );
+      }
+
+      // Validar que el plan asignado exista y pertenezca al entrenador
+      const [plan] = await this.db
+        .select()
+        .from(planesMembresia)
+        .where(
+          and(
+            eq(planesMembresia.id, planIdToUse),
+            eq(planesMembresia.entrenadorId, entrenadorId)
+          )
+        );
+
+      if (!plan) {
+        throw new BadRequestException(
+          'El plan asignado al alumno no existe o no pertenece a su catálogo de planes.'
+        );
+      }
+
+      const hoy = new Date();
+      const periodo = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
       const fechaCorte = new Date(hoy.getTime() + 30 * 24 * 3600 * 1000).toISOString();
+
       const cuotaEmitida = await this.emitirCuota(entrenadorId, {
         clienteId: clienteUsuarioId,
-        planId: planIdToUse,
+        planId: plan.id,
         periodo,
-        montoTotalUsd: montoUsd || dto.montoOriginal || '40.00',
+        montoTotalUsd: montoUsd || plan.precioBaseUsd || dto.montoOriginal,
         fechaCorteUtc: fechaCorte,
       });
+
       targetCuotaId = cuotaEmitida.id;
     }
 
-    // 3. Ejecutar el cobro directo sobre la cuota
+    // 4. Ejecutar el cobro directo sobre la cuota
     return this.cobroDirecto(targetCuotaId, entrenadorId, dto);
   }
 }

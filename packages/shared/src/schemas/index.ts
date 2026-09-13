@@ -174,6 +174,31 @@ export const CrearSesionEntrenamientoSchema = z.object({
   ejercicios: z.array(EjercicioPrescritoInputSchema).min(1, 'Debe incluir al menos un ejercicio en la sesión'),
 });
 
+export const BloqueDiaRutinaSchema = z.object({
+  diaId: z.string().min(1),
+  titulo: z.string().min(2, 'El título debe tener al menos 2 caracteres').max(120),
+  enfoque: z.string().max(200).optional(),
+  ejercicios: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        ejercicioId: z.string().uuid().optional(),
+        nombre: z.string().min(2, 'El nombre debe tener al menos 2 caracteres').max(120),
+        series: z.number().int().min(1).max(50),
+        reps: z.string().min(1).max(30),
+        peso: z.string().min(1).max(30),
+        rpe: z.string().max(10).optional(),
+      })
+    )
+    .min(1, 'Cada día debe tener al menos un ejercicio'),
+});
+
+export const GuardarRutinaSemanalSchema = z.object({
+  alumnoId: z.string().uuid('El ID del alumno debe ser un UUID válido'),
+  nombreRutina: z.string().max(120).optional(),
+  bloques: z.array(BloqueDiaRutinaSchema).min(1, 'Debe definir al menos un bloque de día de entrenamiento'),
+});
+
 export const IniciarSesionSchema = z.object({
   timezoneCliente: z.string().min(2).max(64),
   fechaInicioUtc: z.string().datetime({ message: 'La fecha de inicio debe ser un timestamp ISO 8601 UTC válido' }).optional(),

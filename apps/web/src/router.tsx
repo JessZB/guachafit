@@ -65,6 +65,9 @@ const AlumnoDetallePage = lazy(() =>
 const AntropometriaPage = lazy(() =>
   import('./pages/entrenador/AntropometriaPage').then((m) => ({ default: m.AntropometriaPage }))
 );
+const AjustesPage = lazy(() =>
+  import('./pages/entrenador/AjustesPage').then((m) => ({ default: m.AjustesPage }))
+);
 
 function RootRedirect() {
   const { user, isAuthenticated } = useAuth();
@@ -163,6 +166,10 @@ export const router = createBrowserRouter([
           {
             path: '/coach/antropometria',
             element: <AntropometriaPage />,
+          },
+          {
+            path: '/coach/ajustes',
+            element: <AjustesPage />,
           },
         ],
       },

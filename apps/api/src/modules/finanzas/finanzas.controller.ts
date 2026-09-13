@@ -22,6 +22,7 @@ import {
   Rol,
   UUID_REGEX,
   CrearPlanMembresiaSchema,
+  ActualizarPlanMembresiaSchema,
   CrearOverridePlanSchema,
   EmitirCuotaSchema,
   ActualizarTasaCambioSchema,
@@ -128,6 +129,26 @@ export class FinanzasController {
   async listarPlanes(@Req() req: any) {
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.finanzasService.listarPlanesPorEntrenador(entrenadorId);
+  }
+
+  /**
+   * Actualizar un plan comercial del catálogo
+   * Rol: Entrenador
+   */
+  @Patch('planes/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR)
+  async actualizarPlan(
+    @Req() req: any,
+    @Param('id') planId: string,
+    @Body() body: unknown
+  ) {
+    if (!UUID_REGEX.test(planId)) {
+      throw new BadRequestException(`El ID de plan '${planId}' no es un UUID válido.`);
+    }
+    const dto = ActualizarPlanMembresiaSchema.parse(body);
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    return this.finanzasService.actualizarPlan(entrenadorId, planId, dto);
   }
 
   /**
