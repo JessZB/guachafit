@@ -162,14 +162,20 @@ export function EntrenamientoPage() {
     };
     setSesion(updated);
 
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas';
+    const initPayload = { timezoneCliente: tz, fechaInicioUtc: nowUtc };
+
     if (navigator.onLine) {
       try {
-        await apiClient(`/sesiones/${sesion.id}/iniciar`, { method: 'POST' });
+        await apiClient(`/sesiones/${sesion.id}/iniciar`, {
+          method: 'POST',
+          body: JSON.stringify(initPayload),
+        });
       } catch (err) {
-        await queueOfflineMutation(`/sesiones/${sesion.id}/iniciar`, 'POST', {}, 'Iniciar sesión');
+        await queueOfflineMutation(`/sesiones/${sesion.id}/iniciar`, 'POST', initPayload, 'Iniciar sesión');
       }
     } else {
-      await queueOfflineMutation(`/sesiones/${sesion.id}/iniciar`, 'POST', {}, 'Iniciar sesión');
+      await queueOfflineMutation(`/sesiones/${sesion.id}/iniciar`, 'POST', initPayload, 'Iniciar sesión');
     }
   };
 
@@ -267,6 +273,15 @@ export function EntrenamientoPage() {
     if (field === 'rpe') serie.rpe = value;
     if (field === 'repsLogradas') serie.repsLogradas = Number(value) || 0;
     setSesion(updated);
+
+    // Auto-guardado inmediato en IndexedDB
+    offlineDb.rutinaHoy.put({
+      id: updated.id,
+      alumnoId: user?.id || '',
+      fechaProgramada: updated.fechaProgramada,
+      sesion: updated,
+      updatedAt: Date.now(),
+    }).catch(() => {});
   };
 
   // Step set value (+ / -) for weight and reps with haptic feedback
@@ -290,6 +305,15 @@ export function EntrenamientoPage() {
       serie.repsLogradas = next;
     }
     setSesion(updated);
+
+    // Auto-guardado inmediato en IndexedDB
+    offlineDb.rutinaHoy.put({
+      id: updated.id,
+      alumnoId: user?.id || '',
+      fechaProgramada: updated.fechaProgramada,
+      sesion: updated,
+      updatedAt: Date.now(),
+    }).catch(() => {});
   };
 
   // Finish session handlers (Modal de Feedback)
@@ -322,12 +346,17 @@ export function EntrenamientoPage() {
       fechaFinUtc: new Date().toISOString(),
     };
 
+    let finalUpdated = updated;
     if (navigator.onLine) {
       try {
-        await apiClient(`/sesiones/${sesion.id}/finalizar`, {
+        const res: any = await apiClient(`/sesiones/${sesion.id}/finalizar`, {
           method: 'POST',
           body: JSON.stringify(payload),
         });
+        if (res?.sesion) {
+          finalUpdated = res.sesion;
+          setSesion(res.sesion);
+        }
       } catch {
         await queueOfflineMutation(`/sesiones/${sesion.id}/finalizar`, 'POST', payload, 'Finalizar sesión con feedback');
       }
@@ -340,7 +369,7 @@ export function EntrenamientoPage() {
         id: sesion.id,
         alumnoId: user?.id || '',
         fechaProgramada: sesion.fechaProgramada,
-        sesion: updated,
+        sesion: finalUpdated,
         updatedAt: Date.now(),
       });
     }
@@ -417,6 +446,20 @@ export function EntrenamientoPage() {
               </div>
             </div>
 
+            {sesion.volumenTotalKg && sesion.volumenTotalKg !== '0.00' && (
+              <div className="flex items-center gap-2 p-2.5 rounded-2xl bg-secondary/60 border border-border">
+                <Dumbbell className="h-5 w-5 text-primary" />
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                    Volumen
+                  </span>
+                  <span className="text-sm font-extrabold font-mono text-foreground">
+                    {sesion.volumenTotalKg} kg
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Quick Rest Timer Trigger */}
             <button
               onClick={() => setIsRestTimerOpen(!isRestTimerOpen)}
@@ -444,13 +487,13 @@ export function EntrenamientoPage() {
           <div className="flex items-center justify-between gap-3 pt-1">
             <div className="text-xs text-muted-foreground flex items-center gap-1.5">
               <Clock className="h-4 w-4 text-primary animate-spin" />
-              <span>Sesión activa. Marca tus series y pesos al completarlas.</span>
+              <span>Entrenamiento activo. Marca tus series y pesos al completarlas.</span>
             </div>
             <button
               onClick={handleOpenFinishModal}
               className="py-2.5 px-5 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-md hover:bg-emerald-500 active:scale-95 transition-all cursor-pointer"
             >
-              Finalizar Rutina
+              Finalizar Entrenamiento
             </button>
           </div>
         )}
@@ -516,7 +559,7 @@ export function EntrenamientoPage() {
                 <span className="col-span-1 text-center">#</span>
                 <span className="col-span-4 text-center">Peso (kg)</span>
                 <span className="col-span-3 text-center">Reps</span>
-                <span className="col-span-2 text-center">RPE</span>
+                <span className="col-span-2 text-center" title="Nivel de esfuerzo percibido (1 a 10)">RPE (1-10)</span>
                 <span className="col-span-2 text-center">Listo</span>
               </div>
 
@@ -666,7 +709,7 @@ export function EntrenamientoPage() {
                 </div>
                 <div>
                   <h3 id="modal-finish-title" className="font-bold text-base text-foreground leading-tight">
-                    Finalizar Sesión
+                    Finalizar Entrenamiento
                   </h3>
                   <p className="text-[11px] text-muted-foreground">Feedback directo para tu entrenador</p>
                 </div>
@@ -764,7 +807,7 @@ export function EntrenamientoPage() {
               className="w-full py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs tracking-wide shadow-md shadow-emerald-600/25 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <CheckCircle2 className="h-4 w-4" />
-              <span>{isFinishing ? 'Guardando sesión...' : 'Guardar y Enviar al Coach'}</span>
+              <span>{isFinishing ? 'Guardando entrenamiento...' : 'Guardar y Enviar al Coach'}</span>
             </button>
           </div>
         </div>

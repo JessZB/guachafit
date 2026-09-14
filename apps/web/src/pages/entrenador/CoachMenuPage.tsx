@@ -130,7 +130,7 @@ export function CoachMenuPage() {
               Alumnos en Alerta
             </h3>
             <p className="text-xs text-muted-foreground mt-1">
-              Detecta atletas con baja adherencia semanal o cuotas en mora para activar recordatorios.
+              Detecta alumnos con baja asistencia semanal o cuotas pendientes para activar recordatorios.
             </p>
           </div>
 
@@ -155,10 +155,10 @@ export function CoachMenuPage() {
               </span>
             </div>
             <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">
-              Directorio de Atletas
+              Directorio de Alumnos
             </h3>
             <p className="text-xs text-muted-foreground mt-1">
-              Gestiona el ciclo de vida de clientes, planes asignados, overrides de precios y altas manuales.
+              Gestiona a tus alumnos, planes asignados, precios personalizados y altas manuales.
             </p>
           </div>
 

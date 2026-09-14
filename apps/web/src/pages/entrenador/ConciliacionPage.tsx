@@ -117,7 +117,7 @@ export function ConciliacionPage() {
     setTransacciones((prev) => prev.filter((t) => t.id !== rejectingTx.id));
     setRejectingTx(null);
     setMotivoRechazo('');
-    setActionSuccess('Transacción rechazada con observaciones notificadas al atleta.');
+    setActionSuccess('Transacción rechazada con observaciones notificadas al alumno.');
     setTimeout(() => setActionSuccess(null), 3000);
   };
 
@@ -132,7 +132,7 @@ export function ConciliacionPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
-              Bandeja FIFO de Pagos
+              Bandeja de Pagos por Validar
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">
               Revisión estricta de transferencias, comprobantes y acreditación en dólares.
@@ -171,7 +171,7 @@ export function ConciliacionPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="font-black text-lg text-foreground">
-                      {tx.clienteNombre || 'Atleta'}
+                      {tx.clienteNombre || 'Alumno'}
                     </h2>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border uppercase">
                       {tx.metodoPago.replace('_', ' ')}
@@ -258,8 +258,7 @@ export function ConciliacionPage() {
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Por normativa financiera (RNF-002), se exige registrar un motivo descriptivo para que
-              el atleta conozca la razón y pueda corregir el reporte.
+              Se requiere registrar un motivo para que el alumno conozca la razón y pueda corregir el reporte o comprobante.
             </p>
 
             <div className="space-y-1">
@@ -308,7 +307,7 @@ export function ConciliacionPage() {
                     Auditoría de Comprobante Bancario
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    Atleta: <span className="font-bold text-foreground">{viewingComprobanteTx.clienteNombre || 'Atleta'}</span> • {viewingComprobanteTx.metodoPago.replace('_', ' ').toUpperCase()}
+                    Alumno: <span className="font-bold text-foreground">{viewingComprobanteTx.clienteNombre || 'Alumno'}</span> • {viewingComprobanteTx.metodoPago.replace('_', ' ').toUpperCase()}
                   </p>
                 </div>
               </div>

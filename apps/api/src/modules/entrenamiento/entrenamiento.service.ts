@@ -25,6 +25,7 @@ import {
   seriesRegistro,
   perfilesAlumno,
   usuarios,
+  rutinas,
 } from '@guachafit/database';
 import {
   Rol,
@@ -34,6 +35,10 @@ import {
   CrearEjercicioCatalogoSchema,
   CrearSesionEntrenamientoDTO,
   CrearSesionEntrenamientoSchema,
+  GuardarRutinaSemanalDTO,
+  GuardarRutinaSemanalSchema,
+  RutinaSemanalDetalleDTO,
+  BloqueDiaRutinaDTO,
   IniciarSesionDTO,
   IniciarSesionSchema,
   SincronizarSeriesBatchDTO,
@@ -290,8 +295,153 @@ export class EntrenamientoService {
   // ---------------------------------------------------------------------------
 
   /**
+   * Prescripción y activación de la planificación semanal por bloques de días.
+   * Desactiva de forma atómica cualquier rutina previa del alumno.
+   */
+  async guardarRutinaSemanal(
+    entrenadorId: string,
+    alumnoId: string,
+    input: GuardarRutinaSemanalDTO
+  ): Promise<RutinaSemanalDetalleDTO> {
+    const validado = GuardarRutinaSemanalSchema.parse(input);
+
+    let [perfil] = await this.db
+      .select()
+      .from(perfilesAlumno)
+      .where(eq(perfilesAlumno.id, alumnoId));
+
+    if (!perfil) {
+      [perfil] = await this.db
+        .select()
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.usuarioId, alumnoId));
+    }
+
+    if (!perfil) {
+      throw new NotFoundException('El alumno especificado no existe.');
+    }
+
+    if (perfil.entrenadorId !== entrenadorId) {
+      throw new ForbiddenException(
+        'Aislamiento de Tenant: Acceso denegado. El alumno pertenece a otro entrenador.'
+      );
+    }
+
+    const usuarioAlumnoId = perfil.usuarioId;
+
+    // Desactivar rutinas previas
+    await this.db
+      .update(rutinas)
+      .set({
+        activa: false,
+        updatedAtUtc: new Date(),
+      })
+      .where(
+        and(
+          eq(rutinas.alumnoId, usuarioAlumnoId),
+          eq(rutinas.activa, true)
+        )
+      );
+
+    const ahora = new Date();
+    const nuevaRutinaId = crypto.randomUUID();
+    const nombre = validado.nombreRutina?.trim() || 'Planificación Semanal Activa';
+
+    const [nuevaRutina] = await this.db
+      .insert(rutinas)
+      .values({
+        id: nuevaRutinaId,
+        alumnoId: usuarioAlumnoId,
+        entrenadorId,
+        nombre,
+        bloques: validado.bloques,
+        activa: true,
+        createdAtUtc: ahora,
+        updatedAtUtc: ahora,
+      })
+      .returning();
+
+    return {
+      id: nuevaRutina.id,
+      alumnoId: nuevaRutina.alumnoId,
+      entrenadorId: nuevaRutina.entrenadorId,
+      nombre: nuevaRutina.nombre,
+      activa: nuevaRutina.activa,
+      bloques: nuevaRutina.bloques as BloqueDiaRutinaDTO[],
+      createdAtUtc: toIsoUtcString(nuevaRutina.createdAtUtc)!,
+      updatedAtUtc: toIsoUtcString(nuevaRutina.updatedAtUtc)!,
+    };
+  }
+
+  /**
+   * Consulta de la rutina semanal activa del alumno.
+   */
+  async obtenerRutinaSemanalActiva(
+    entrenadorId: string,
+    alumnoId: string,
+    rol: Rol,
+    currentUserId?: string
+  ): Promise<RutinaSemanalDetalleDTO | null> {
+    let [perfil] = await this.db
+      .select()
+      .from(perfilesAlumno)
+      .where(eq(perfilesAlumno.id, alumnoId));
+
+    if (!perfil) {
+      [perfil] = await this.db
+        .select()
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.usuarioId, alumnoId));
+    }
+
+    if (!perfil) {
+      throw new NotFoundException('El alumno especificado no existe.');
+    }
+
+    if (rol === Rol.ENTRENADOR && perfil.entrenadorId !== entrenadorId) {
+      throw new ForbiddenException(
+        'Aislamiento de Tenant: Acceso denegado. El alumno pertenece a otro entrenador.'
+      );
+    }
+
+    if (rol === Rol.ALUMNO && currentUserId && perfil.usuarioId !== currentUserId) {
+      throw new ForbiddenException('No tienes permiso para consultar esta rutina.');
+    }
+
+    const usuarioAlumnoId = perfil.usuarioId;
+
+    const [rutina] = await this.db
+      .select()
+      .from(rutinas)
+      .where(
+        and(
+          eq(rutinas.alumnoId, usuarioAlumnoId),
+          eq(rutinas.activa, true)
+        )
+      )
+      .orderBy(desc(rutinas.createdAtUtc))
+      .limit(1);
+
+    if (!rutina) {
+      return null;
+    }
+
+    return {
+      id: rutina.id,
+      alumnoId: rutina.alumnoId,
+      entrenadorId: rutina.entrenadorId,
+      nombre: rutina.nombre,
+      activa: rutina.activa,
+      bloques: rutina.bloques as BloqueDiaRutinaDTO[],
+      createdAtUtc: toIsoUtcString(rutina.createdAtUtc)!,
+      updatedAtUtc: toIsoUtcString(rutina.updatedAtUtc)!,
+    };
+  }
+
+  /**
    * Consulta pasiva de rutina programada de hoy para el alumno (RN-04).
-   * No modifica el estado 'planificada' ni registra timestamps.
+   * Si no existe sesión puntual para la fecha actual, auto-instancia la sesión del día
+   * en BD basada en la rutina semanal activa del alumno.
    */
   async obtenerSesionHoy(
     alumnoId: string,
@@ -317,11 +467,128 @@ export class EntrenamientoService {
       .orderBy(desc(sesionesEntrenamiento.createdAtUtc))
       .limit(1);
 
-    if (!sesion) {
+    if (sesion) {
+      return this.hidratarSesion(sesion);
+    }
+
+    // Auto-generación desde rutina semanal activa
+    const [rutinaActiva] = await this.db
+      .select()
+      .from(rutinas)
+      .where(
+        and(
+          eq(rutinas.alumnoId, alumnoId),
+          eq(rutinas.activa, true)
+        )
+      )
+      .orderBy(desc(rutinas.createdAtUtc))
+      .limit(1);
+
+    if (!rutinaActiva || !Array.isArray(rutinaActiva.bloques) || rutinaActiva.bloques.length === 0) {
       return null;
     }
 
-    return this.hidratarSesion(sesion);
+    const bloques = rutinaActiva.bloques as BloqueDiaRutinaDTO[];
+    let dayOfWeek = 1;
+    try {
+      const fechaLocal = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
+      const jsDay = fechaLocal.getDay();
+      dayOfWeek = jsDay === 0 ? 7 : jsDay;
+    } catch {
+      const jsDay = new Date().getDay();
+      dayOfWeek = jsDay === 0 ? 7 : jsDay;
+    }
+
+    let bloqueSeleccionado = bloques.find((b) => b.diaId === `dia-${dayOfWeek}`);
+    if (!bloqueSeleccionado) {
+      const idx = (dayOfWeek - 1) % bloques.length;
+      bloqueSeleccionado = bloques[idx];
+    }
+
+    if (!bloqueSeleccionado || !bloqueSeleccionado.ejercicios || bloqueSeleccionado.ejercicios.length === 0) {
+      return null;
+    }
+
+    const nuevaSesionId = crypto.randomUUID();
+    const ahora = new Date();
+
+    const [nuevaSesion] = await this.db
+      .insert(sesionesEntrenamiento)
+      .values({
+        id: nuevaSesionId,
+        alumnoId,
+        rutinaId: rutinaActiva.id,
+        fechaProgramada: hoyStr,
+        timezoneCliente: tz,
+        estado: EstadoSesion.PLANIFICADA,
+        porcentajeCumplimiento: '0.00',
+        volumenTotalKg: '0.00',
+        createdAtUtc: ahora,
+        updatedAtUtc: ahora,
+      })
+      .returning();
+
+    for (let i = 0; i < bloqueSeleccionado.ejercicios.length; i++) {
+      const ej = bloqueSeleccionado.ejercicios[i];
+      let ejercicioCatalogoId = ej.ejercicioId;
+
+      if (!ejercicioCatalogoId) {
+        const [ejCatExistente] = await this.db
+          .select()
+          .from(ejerciciosCatalogo)
+          .where(eq(ejerciciosCatalogo.nombre, ej.nombre))
+          .limit(1);
+
+        if (ejCatExistente) {
+          ejercicioCatalogoId = ejCatExistente.id;
+        } else {
+          const nuevoEjId = crypto.randomUUID();
+          const [creado] = await this.db
+            .insert(ejerciciosCatalogo)
+            .values({
+              id: nuevoEjId,
+              entrenadorId: rutinaActiva.entrenadorId,
+              nombre: ej.nombre,
+              grupoMuscular: 'GENERAL',
+              activo: true,
+              createdAtUtc: ahora,
+            })
+            .returning();
+          ejercicioCatalogoId = creado.id;
+        }
+      }
+
+      const ejSesionId = crypto.randomUUID();
+      await this.db.insert(ejerciciosSesion).values({
+        id: ejSesionId,
+        sesionId: nuevaSesionId,
+        ejercicioId: ejercicioCatalogoId,
+        orden: i + 1,
+        notasCoach: `Bloque: ${bloqueSeleccionado.titulo} • Reps: ${ej.reps} • Peso: ${ej.peso || 'Sugerido'}`,
+      });
+
+      const numSeries = Math.max(1, ej.series || 3);
+      const repsMatch = (ej.reps || '10').match(/\d+/);
+      const targetReps = repsMatch ? parseInt(repsMatch[0], 10) : 10;
+      const pesoMatch = (ej.peso || '0').match(/\d+(\.\d+)?/);
+      const targetPeso = pesoMatch ? parseFloat(pesoMatch[0]).toFixed(2) : '0.00';
+      const targetRpe = ej.rpe ? parseFloat(ej.rpe).toFixed(1) : null;
+
+      for (let s = 1; s <= numSeries; s++) {
+        await this.db.insert(seriesRegistro).values({
+          id: crypto.randomUUID(),
+          ejercicioSesionId: ejSesionId,
+          numeroSerie: s,
+          repsObjetivo: targetReps,
+          repsLogradas: null,
+          pesoKg: targetPeso,
+          rpe: targetRpe,
+          completada: false,
+        });
+      }
+    }
+
+    return this.hidratarSesion(nuevaSesion);
   }
 
   /**
@@ -620,10 +887,19 @@ export class EntrenamientoService {
         );
       }
 
-      if (!DECIMAL_STRING_REGEX.test(sInput.pesoKg)) {
-        throw new BadRequestException(
-          `Formato de peso inválido: '${sInput.pesoKg}'. Debe ser un string decimal con hasta 2 decimales.`
-        );
+      let pesoKgFinal = '0.00';
+      if (sInput.pesoKg !== null && sInput.pesoKg !== undefined && sInput.pesoKg !== '') {
+        if (!DECIMAL_STRING_REGEX.test(sInput.pesoKg)) {
+          throw new BadRequestException(
+            `Formato de peso inválido: '${sInput.pesoKg}'. Debe ser un string decimal con hasta 2 decimales.`
+          );
+        }
+        pesoKgFinal = sInput.pesoKg;
+      }
+
+      let rpeFinal: string | null = null;
+      if (sInput.rpe !== null && sInput.rpe !== undefined && sInput.rpe !== '') {
+        rpeFinal = sInput.rpe;
       }
 
       if (sInput.repsLogradas < 0) {
@@ -638,8 +914,8 @@ export class EntrenamientoService {
         .update(seriesRegistro)
         .set({
           repsLogradas: sInput.repsLogradas,
-          pesoKg: sInput.pesoKg,
-          rpe: sInput.rpe ?? null,
+          pesoKg: pesoKgFinal,
+          rpe: rpeFinal,
           completada: sInput.completada,
           timestampCompletadaUtc: timestampUtc,
         })
@@ -700,6 +976,7 @@ export class EntrenamientoService {
     const ejSesionIds = ejSesiones.map((e) => e.id);
     let totalSeries = 0;
     let seriesCompletadas = 0;
+    let volumenTotalKgStr = '0.00';
 
     if (ejSesionIds.length > 0) {
       const allSeries: any[] = [];
@@ -712,11 +989,22 @@ export class EntrenamientoService {
       }
 
       totalSeries = allSeries.length;
-      seriesCompletadas = allSeries.filter((s) => s.completada).length;
+      let volumenAcumuladoKg = 0;
+      for (const s of allSeries) {
+        if (s.completada) {
+          seriesCompletadas++;
+          const reps = s.repsLogradas ?? s.repsObjetivo ?? 0;
+          const peso = parseFloat(s.pesoKg || '0') || 0;
+          volumenAcumuladoKg += reps * peso;
+        }
+      }
+
+      volumenTotalKgStr = volumenAcumuladoKg.toFixed(2);
     }
 
     const porcentajeNumero = totalSeries > 0 ? (seriesCompletadas / totalSeries) * 100 : 0;
     const porcentajeCumplimientoStr = porcentajeNumero.toFixed(2);
+    const volumenTotalKgFinal = volumenTotalKgStr;
     const cumpleReglaRacha = porcentajeNumero >= 70.0;
     const nuevaRacha = cumpleReglaRacha ? rachaActual + 1 : rachaActual;
 
@@ -735,6 +1023,7 @@ export class EntrenamientoService {
         estado: EstadoSesion.COMPLETADA,
         fechaFinUtc: new Date(fechaFinUtc),
         porcentajeCumplimiento: porcentajeCumplimientoStr,
+        volumenTotalKg: volumenTotalKgFinal,
         notasAlumno: validado.notasAlumno !== undefined ? validado.notasAlumno : sesion.notasAlumno,
         updatedAtUtc: new Date(),
       })
@@ -743,12 +1032,14 @@ export class EntrenamientoService {
     const sesionDetalle = await this.obtenerSesionPorId(sesionId, alumnoId, Rol.ALUMNO);
     sesionDetalle.cumpleReglaRacha = cumpleReglaRacha;
     sesionDetalle.duracionMinutos = duracionMinutos;
+    sesionDetalle.volumenTotalKg = volumenTotalKgFinal;
 
     return {
       sesion: sesionDetalle,
       cumpleReglaRacha,
       nuevaRacha,
       duracionMinutos,
+      volumenTotalKg: volumenTotalKgFinal,
     };
   }
 
@@ -969,6 +1260,7 @@ export class EntrenamientoService {
       timezoneCliente: sesion.timezoneCliente,
       estado: sesion.estado,
       porcentajeCumplimiento: sesion.porcentajeCumplimiento || '0.00',
+      volumenTotalKg: (sesion as any).volumenTotalKg || '0.00',
       notasAlumno: sesion.notasAlumno,
       ejercicios: ejerciciosHydrated,
       alumnoNombre,

@@ -207,8 +207,18 @@ export const IniciarSesionSchema = z.object({
 export const RegistrarSerieSchema = z.object({
   serieId: z.string().uuid('El ID de la serie debe ser un UUID válido'),
   repsLogradas: z.number().int().min(0).max(200),
-  pesoKg: z.string().regex(DECIMAL_STRING_REGEX, 'El peso en kg debe tener formato decimal con hasta 2 decimales'),
-  rpe: z.string().regex(/^\d+(\.\d)?$/, 'El RPE debe ser un valor decimal (ej. 8 o 8.5)').optional(),
+  pesoKg: z
+    .string()
+    .regex(DECIMAL_STRING_REGEX, 'El peso en kg debe tener formato decimal con hasta 2 decimales')
+    .nullable()
+    .optional()
+    .or(z.literal('')),
+  rpe: z
+    .string()
+    .regex(/^\d+(\.\d)?$/, 'El RPE debe ser un valor decimal (ej. 8 o 8.5)')
+    .nullable()
+    .optional()
+    .or(z.literal('')),
   completada: z.boolean(),
   timestampCompletadaUtc: z.string().datetime({ message: 'El timestamp debe estar en formato ISO 8601 UTC' }).optional(),
 });

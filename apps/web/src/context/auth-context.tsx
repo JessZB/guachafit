@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         : {
             id: '99999999-8888-7777-6666-555555555555',
-            email: 'atleta@guachafit.com',
+            email: 'alumno@guachafit.com',
             rol: Rol.ALUMNO,
             entrenadorId: '11111111-2222-3333-4444-555555555555',
           };

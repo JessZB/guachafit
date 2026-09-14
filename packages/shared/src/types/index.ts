@@ -391,11 +391,23 @@ export interface SesionEntrenamientoDetalleDTO {
   timezoneCliente: string;
   estado: EstadoSesion;
   porcentajeCumplimiento: string; // Decimal string con hasta 2 decimales (ej. "85.00")
+  volumenTotalKg?: string | null; // Tonelaje total acumulado (kg * reps)
   notasAlumno?: string | null;
   ejercicios: EjercicioSesionDetalleDTO[];
   alumnoNombre?: string;
   duracionMinutos?: number | null;
   cumpleReglaRacha?: boolean; // RN-02: True si completó >= 70% del volumen prescrito
+  createdAtUtc: string;
+  updatedAtUtc: string;
+}
+
+export interface RutinaSemanalDetalleDTO {
+  id: string;
+  alumnoId: string;
+  entrenadorId: string;
+  nombre: string;
+  activa: boolean;
+  bloques: BloqueDiaRutinaDTO[];
   createdAtUtc: string;
   updatedAtUtc: string;
 }

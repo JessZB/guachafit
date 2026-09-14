@@ -13,6 +13,9 @@ import {
   PlanMembresiaDetalleDTO,
   SesionEntrenamientoDetalleDTO,
   EjercicioCatalogoDetalleDTO,
+  GuardarRutinaSemanalDTO,
+  RutinaSemanalDetalleDTO,
+  BloqueDiaRutinaDTO,
 } from '@guachafit/shared';
 import {
   ArrowLeft,
@@ -133,7 +136,7 @@ export function AlumnoDetallePage() {
   ]);
 
   // Planificación semanal de entrenamiento por bloques de días
-  const [rutinaSemanal, setRutinaSemanal] = useState([
+  const [rutinaSemanal, setRutinaSemanal] = useState<BloqueDiaRutinaDTO[]>([
     {
       diaId: 'd1',
       titulo: 'Día 1 (Lunes): Empuje & Pectoral / Tríceps',
@@ -186,6 +189,8 @@ export function AlumnoDetallePage() {
   const [nuevoEjPatron, setNuevoEjPatron] = useState('Empuje');
   const [isSubmittingEj, setIsSubmittingEj] = useState(false);
   const [rutinaSuccessMsg, setRutinaSuccessMsg] = useState<string | null>(null);
+  const [isSavingRutina, setIsSavingRutina] = useState(false);
+  const [rutinaErrorMsg, setRutinaErrorMsg] = useState<string | null>(null);
 
   const calculateAge = (fechaStr: string): number => {
     if (!fechaStr) return 0;
@@ -405,6 +410,14 @@ export function AlumnoDetallePage() {
           { id: 'ej-c9', nombre: 'Elevaciones Laterales con Mancuerna', grupoMuscular: 'Hombros', activo: true, createdAtUtc: new Date().toISOString() },
           { id: 'ej-c10', nombre: 'Plancha Abdominal Isométrica', grupoMuscular: 'Core', activo: true, createdAtUtc: new Date().toISOString() },
         ]);
+      }
+
+      // 7. Rutina semanal activa persistida
+      const rutinaActivaRes = await apiClient<RutinaSemanalDetalleDTO>(
+        `/rutinas/alumno/${id}/activa`
+      ).catch(() => null);
+      if (rutinaActivaRes && Array.isArray(rutinaActivaRes.bloques) && rutinaActivaRes.bloques.length > 0) {
+        setRutinaSemanal(rutinaActivaRes.bloques);
       }
     } catch {
       setError('Error al cargar la información del alumno.');
@@ -631,7 +644,7 @@ export function AlumnoDetallePage() {
         }),
       });
       setEjerciciosCatalogo((prev) => [res, ...prev]);
-      agregarEjercicioADia(res.nombre);
+      agregarEjercicioADia(res.nombre, res.id);
       setNuevoEjNombre('');
       setIsCrearEjRapidoOpen(false);
       triggerHaptic('success');
@@ -645,7 +658,7 @@ export function AlumnoDetallePage() {
         createdAtUtc: new Date().toISOString(),
       };
       setEjerciciosCatalogo((prev) => [nuevoLocal, ...prev]);
-      agregarEjercicioADia(nuevoLocal.nombre);
+      agregarEjercicioADia(nuevoLocal.nombre, nuevoLocal.id);
       setNuevoEjNombre('');
       setIsCrearEjRapidoOpen(false);
       triggerHaptic('success');
@@ -654,7 +667,7 @@ export function AlumnoDetallePage() {
     }
   };
 
-  const agregarEjercicioADia = (nombreEj: string) => {
+  const agregarEjercicioADia = (nombreEj: string, ejercicioId?: string) => {
     triggerHaptic('selection');
     setBloquesRutinaEdit((prev) => {
       const updated = [...prev];
@@ -665,6 +678,7 @@ export function AlumnoDetallePage() {
           ...updated[activeDiaIdx].ejercicios,
           {
             id: 'e-' + Date.now(),
+            ejercicioId,
             nombre: nombreEj,
             series: 3,
             reps: '10-12',
@@ -753,14 +767,33 @@ export function AlumnoDetallePage() {
     setActiveDiaIdx(Math.max(0, diaIdx - 1));
   };
 
-  const guardarRutinaPrescrita = () => {
-    triggerHaptic('success');
-    setRutinaSemanal(bloquesRutinaEdit);
-    setRutinaSuccessMsg('Planificación semanal guardada con éxito.');
-    setTimeout(() => {
-      setIsRutinaModalOpen(false);
-      setRutinaSuccessMsg(null);
-    }, 800);
+  const guardarRutinaPrescrita = async () => {
+    if (!alumno) return;
+    try {
+      setIsSavingRutina(true);
+      setRutinaErrorMsg(null);
+      const payload: GuardarRutinaSemanalDTO = {
+        alumnoId: alumno.id,
+        nombreRutina: 'Planificación Semanal Activa',
+        bloques: bloquesRutinaEdit,
+      };
+      await apiClient(`/rutinas/alumno/${alumno.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      triggerHaptic('success');
+      setRutinaSemanal(bloquesRutinaEdit);
+      setRutinaSuccessMsg('Planificación semanal guardada y activada en el sistema.');
+      setTimeout(() => {
+        setIsRutinaModalOpen(false);
+        setRutinaSuccessMsg(null);
+      }, 800);
+    } catch (err: any) {
+      triggerHaptic('warning');
+      setRutinaErrorMsg(err?.message || 'Error al guardar la planificación en el servidor.');
+    } finally {
+      setIsSavingRutina(false);
+    }
   };
 
   if (isLoading) {
@@ -915,7 +948,7 @@ export function AlumnoDetallePage() {
                   <button
                     onClick={() => handleCambiarEstado(EstadoAlumno.INACTIVO_PAUSADO)}
                     className="py-2 px-3 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs border border-border flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                    title="Pausar cliente temporalmente por viaje o lesión"
+                    title="Pausar alumno temporalmente por viaje o lesión"
                   >
                     <PauseCircle className="h-4 w-4 text-amber-400" />
                     <span>Pausar</span>
@@ -924,7 +957,7 @@ export function AlumnoDetallePage() {
                   <button
                     onClick={() => handleCambiarEstado(EstadoAlumno.ACTIVO)}
                     className="py-2 px-3 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs border border-border flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                    title="Reactivar cliente a pleno servicio"
+                    title="Reactivar alumno"
                   >
                     <PlayCircle className="h-4 w-4 text-emerald-400" />
                     <span>Reactivar</span>
@@ -1340,7 +1373,7 @@ export function AlumnoDetallePage() {
               <p className="text-2xl font-black font-mono tracking-tight text-primary">
                 ${finanzas?.totalPagadoHistoricoUsd || '0.00'} <span className="text-xs font-bold text-muted-foreground">USD</span>
               </p>
-              <span className="text-[11px] text-muted-foreground block">Total ingresado por este cliente</span>
+              <span className="text-[11px] text-muted-foreground block">Total abonado por este alumno</span>
             </div>
           </div>
 
@@ -1629,14 +1662,14 @@ export function AlumnoDetallePage() {
           aria-labelledby="tab-entrenamiento"
           className="space-y-6 animate-in fade-in-50 duration-200 slide-in-from-bottom-1"
         >
-          {/* Auditoría de Última Sesión del Atleta */}
+          {/* Auditoría del Último Entrenamiento del Alumno */}
           {ultimaSesion && (
             <div className="p-6 rounded-3xl bg-card border border-border shadow-md space-y-4">
               <div className="flex items-center justify-between border-b border-border/80 pb-3">
                 <div className="flex items-center gap-2">
                   <Dumbbell className="h-4 w-4 text-primary" />
                   <h3 className="font-extrabold text-sm text-foreground">
-                    Última Sesión Realizada ({ultimaSesion.fechaProgramada})
+                    Último Entrenamiento Realizado ({ultimaSesion.fechaProgramada})
                   </h3>
                 </div>
                 <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
@@ -1647,7 +1680,7 @@ export function AlumnoDetallePage() {
               {ultimaSesion.notasAlumno && (
                 <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-1">
                   <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
-                    Reporte del Atleta:
+                    Comentarios del Alumno:
                   </span>
                   <p className="text-foreground leading-relaxed">{ultimaSesion.notasAlumno}</p>
                 </div>
@@ -1655,13 +1688,13 @@ export function AlumnoDetallePage() {
             </div>
           )}
 
-          {/* 1. Subsección: Planificación Semanal Activa */}
+          {/* 1. Subsección: Rutina Semanal Asignada */}
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-black text-foreground">Planificación Semanal Activa</h3>
+                <h3 className="text-base font-black text-foreground">Rutina Semanal Asignada</h3>
                 <p className="text-xs text-muted-foreground">
-                  Estructura de días, ejercicios, series, repeticiones y cargas asignadas al atleta.
+                  Estructura de días, ejercicios, series, repeticiones y cargas asignadas al alumno.
                 </p>
               </div>
               <button
@@ -1670,7 +1703,7 @@ export function AlumnoDetallePage() {
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer self-start sm:self-auto"
               >
                 <Pencil className="h-3.5 w-3.5" />
-                <span>Editar / Prescribir Rutina</span>
+                <span>Editar / Asignar Rutina</span>
               </button>
             </div>
 
@@ -1720,13 +1753,13 @@ export function AlumnoDetallePage() {
             </div>
           </div>
 
-          {/* 2. Subsección: Historial Cronológico de Sesiones Realizadas */}
+          {/* 2. Subsección: Historial Cronológico de Entrenamientos Realizados */}
           <div className="pt-6 border-t border-border/70 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <History className="h-5 w-5 text-primary" />
                 <h3 className="text-base font-black text-foreground">
-                  Historial de Sesiones Realizadas ({historialSesiones.length})
+                  Historial de Entrenamientos ({historialSesiones.length})
                 </h3>
               </div>
             </div>
@@ -1735,7 +1768,7 @@ export function AlumnoDetallePage() {
               <div className="p-8 rounded-2xl bg-card border border-dashed border-border/70 text-center">
                 <Dumbbell className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-40" />
                 <p className="text-xs text-muted-foreground">
-                  El alumno aún no registra sesiones de entrenamiento completadas.
+                  El alumno aún no registra entrenamientos completados.
                 </p>
               </div>
             ) : (
@@ -1749,7 +1782,7 @@ export function AlumnoDetallePage() {
                         </div>
                         <div>
                           <h4 className="font-extrabold text-sm text-foreground">
-                            Sesión: {ses.fechaProgramada}
+                            Entrenamiento: {ses.fechaProgramada}
                           </h4>
                           <p className="text-[11px] text-muted-foreground">
                             {ses.duracionMinutos ? `${ses.duracionMinutos} minutos de duración` : 'Entrenamiento completado'}
@@ -1757,7 +1790,13 @@ export function AlumnoDetallePage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 self-end sm:self-center">
+                      <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
+                        {ses.volumenTotalKg && ses.volumenTotalKg !== '0.00' && (
+                          <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/30 flex items-center gap-1">
+                            <Dumbbell className="h-3 w-3" />
+                            <span>{ses.volumenTotalKg} kg</span>
+                          </span>
+                        )}
                         <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                           {ses.porcentajeCumplimiento}% Cumplido
                         </span>
@@ -1784,7 +1823,7 @@ export function AlumnoDetallePage() {
                     {ses.notasAlumno && (
                       <div className="p-3 rounded-xl bg-secondary/30 text-xs text-muted-foreground border border-border/50">
                         <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block mb-0.5">
-                          Notas del Atleta:
+                          Comentarios del Alumno:
                         </span>
                         <p className="text-foreground leading-relaxed">{ses.notasAlumno}</p>
                       </div>
@@ -1794,7 +1833,7 @@ export function AlumnoDetallePage() {
                       <div
                         id={`sesion-accordion-${ses.id}`}
                         role="region"
-                        aria-label={`Detalle de series de la sesión del ${ses.fechaProgramada}`}
+                        aria-label={`Detalle de series del entrenamiento del ${ses.fechaProgramada}`}
                         className="pt-3 border-t border-border/50 space-y-2.5 animate-in fade-in-50 slide-in-from-top-2 duration-300 ease-out"
                       >
                         {ses.ejercicios && ses.ejercicios.length > 0 ? (
@@ -1830,9 +1869,16 @@ export function AlumnoDetallePage() {
                                       <span className="font-bold text-foreground">
                                         {s.repsLogradas ?? s.repsObjetivo} reps
                                       </span>
-                                      <span className="text-primary font-black">
-                                        {s.pesoKg ? `${s.pesoKg}kg` : '-'}
-                                      </span>
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-primary font-black">
+                                          {s.pesoKg ? `${s.pesoKg}kg` : '-'}
+                                        </span>
+                                        {s.rpe && (
+                                          <span className="text-[10px] text-amber-400 font-bold">
+                                            @{s.rpe}
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
                                   ))}
                                 </div>
@@ -2104,7 +2150,7 @@ export function AlumnoDetallePage() {
                 <Dumbbell className="h-5 w-5 text-primary" />
                 <div>
                   <h3 id="modal-rutina-title" className="font-black text-base text-foreground">
-                    Prescripción & Edición de Rutina Semanal
+                    Asignar & Editar Rutina Semanal
                   </h3>
                   <p className="text-xs text-muted-foreground">
                     Estructura los bloques de entrenamiento y asigna ejercicios del catálogo.
@@ -2464,7 +2510,7 @@ export function AlumnoDetallePage() {
                           </div>
                           <button
                             type="button"
-                            onClick={() => agregarEjercicioADia(ej.nombre)}
+                            onClick={() => agregarEjercicioADia(ej.nombre, ej.id)}
                             className="px-2.5 py-1 rounded-lg bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer"
                           >
                             <Plus className="h-3 w-3" />
@@ -2477,6 +2523,13 @@ export function AlumnoDetallePage() {
               </div>
             )}
 
+            {rutinaErrorMsg && (
+              <div className="p-3 rounded-xl bg-destructive/15 border border-destructive/30 text-destructive text-xs flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{rutinaErrorMsg}</span>
+              </div>
+            )}
+
             {/* Footer de Acciones del Modal */}
             <div className="pt-3 border-t border-border/80 flex items-center justify-between">
               <span className="text-xs text-muted-foreground">
@@ -2486,17 +2539,26 @@ export function AlumnoDetallePage() {
               <div className="flex gap-2">
                 <button
                   type="button"
+                  disabled={isSavingRutina}
                   onClick={() => setIsRutinaModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs cursor-pointer disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button
                   type="button"
+                  disabled={isSavingRutina}
                   onClick={guardarRutinaPrescrita}
-                  className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  Guardar Planificación Activa
+                  {isSavingRutina ? (
+                    <>
+                      <div className="h-3 w-3 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin" />
+                      <span>Guardando...</span>
+                    </>
+                  ) : (
+                    <span>Guardar Planificación Activa</span>
+                  )}
                 </button>
               </div>
             </div>

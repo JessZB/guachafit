@@ -33,6 +33,7 @@ import {
   EstadoConciliacion,
   PlataformaDispositivo,
   TemaUi,
+  BloqueDiaRutinaDTO,
 } from '@guachafit/shared';
 
 // =============================================================================
@@ -264,6 +265,21 @@ export const ejerciciosCatalogo = pgTable('ejercicios_catalogo', {
   createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const rutinas = pgTable('rutinas', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  alumnoId: uuid('alumno_id')
+    .notNull()
+    .references(() => usuarios.id, { onDelete: 'cascade' }),
+  entrenadorId: uuid('entrenador_id')
+    .notNull()
+    .references(() => usuarios.id, { onDelete: 'cascade' }),
+  nombre: varchar('nombre', { length: 120 }).default('Planificación Semanal').notNull(),
+  bloques: jsonb('bloques').$type<BloqueDiaRutinaDTO[]>().notNull(),
+  activa: boolean('activa').default(true).notNull(),
+  createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
+  updatedAtUtc: timestamp('updated_at_utc', { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const sesionesEntrenamiento = pgTable('sesiones_entrenamiento', {
   id: uuid('id').defaultRandom().primaryKey(),
   alumnoId: uuid('alumno_id')
@@ -276,6 +292,9 @@ export const sesionesEntrenamiento = pgTable('sesiones_entrenamiento', {
   timezoneCliente: varchar('timezone_cliente', { length: 64 }).default('America/Caracas').notNull(),
   estado: estadoSesionEnum('estado').default(EstadoSesion.PLANIFICADA).notNull(),
   porcentajeCumplimiento: numeric('porcentaje_cumplimiento', { precision: 5, scale: 2 })
+    .default('0.00')
+    .notNull(),
+  volumenTotalKg: numeric('volumen_total_kg', { precision: 8, scale: 2 })
     .default('0.00')
     .notNull(),
   notasAlumno: text('notas_alumno'),

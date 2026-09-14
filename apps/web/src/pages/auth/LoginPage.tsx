@@ -67,7 +67,7 @@ export function LoginPage() {
               className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-secondary text-foreground font-bold text-xs border border-border hover:bg-secondary/80 active:scale-95 transition-all cursor-pointer"
             >
               <UserCheck className="h-4 w-4" />
-              <span>Modo Atleta</span>
+              <span>Modo Alumno</span>
             </button>
           </div>
         </div>
@@ -92,7 +92,7 @@ export function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="atleta@guachafit.com"
+                placeholder="alumno@guachafit.com"
                 className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-foreground text-sm focus:outline-hidden focus:border-primary transition-colors"
               />
             </div>

@@ -170,14 +170,14 @@ export function DashboardPage() {
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Abonos en Bolívares y Dólares reportados por atletas que requieren verificación bancaria.
+            Abonos en Bolívares y Dólares reportados por alumnos que requieren verificación bancaria.
           </p>
 
           <Link
             to="/coach/conciliacion"
             className="w-full py-2.5 px-4 rounded-xl bg-secondary text-foreground hover:bg-secondary/80 font-bold text-xs flex items-center justify-between transition-colors"
           >
-            <span>Abrir bandeja FIFO de conciliación</span>
+            <span>Abrir bandeja de pagos</span>
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
@@ -195,7 +195,7 @@ export function DashboardPage() {
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Autoreportes de clientes online con fotografías de progreso privadas en Cloudflare R2.
+            Autoreportes de alumnos online con fotos de progreso privadas.
           </p>
 
           <Link

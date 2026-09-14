@@ -22,6 +22,7 @@ import {
   UUID_REGEX,
   CrearEjercicioCatalogoSchema,
   CrearSesionEntrenamientoSchema,
+  GuardarRutinaSemanalSchema,
   IniciarSesionSchema,
   SincronizarSeriesBatchSchema,
   FinalizarSesionSchema,
@@ -51,6 +52,50 @@ export class EntrenamientoController {
       return null;
     }
     return sesion;
+  }
+
+  /**
+   * Prescripción / actualización de rutina semanal por bloques de días.
+   * Rol: Entrenador
+   */
+  @Put('rutinas/alumno/:alumnoId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR)
+  async guardarRutinaSemanal(
+    @Req() req: any,
+    @Param('alumnoId') alumnoId: string,
+    @Body() body: any
+  ) {
+    const raw = typeof body === 'object' && body !== null ? { ...body, alumnoId } : { alumnoId };
+    const dto = GuardarRutinaSemanalSchema.parse(raw);
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    return this.entrenamientoService.guardarRutinaSemanal(entrenadorId, alumnoId, dto);
+  }
+
+  /**
+   * Consulta de la rutina semanal activa del alumno.
+   * Roles: Entrenador, Alumno, SuperAdmin
+   */
+  @Get('rutinas/alumno/:alumnoId/activa')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR, Rol.ALUMNO, Rol.SUPERADMIN)
+  async obtenerRutinaActivaAlumno(
+    @Req() req: any,
+    @Param('alumnoId') alumnoId: string,
+    @Res({ passthrough: true }) res?: any
+  ) {
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    const rutina = await this.entrenamientoService.obtenerRutinaSemanalActiva(
+      entrenadorId,
+      alumnoId,
+      req.user.rol,
+      req.user.sub
+    );
+    if (!rutina && res) {
+      res.status(HttpStatus.NO_CONTENT);
+      return null;
+    }
+    return rutina;
   }
 
   /**

@@ -278,7 +278,7 @@ export class FinanzasController {
     @Param('clienteId') clienteId: string
   ) {
     if (!UUID_REGEX.test(clienteId)) {
-      throw new BadRequestException('El ID del cliente debe ser un UUID válido.');
+      throw new BadRequestException('El ID del alumno debe ser un UUID válido.');
     }
     const entrenadorId =
       req.user.rol === Rol.ALUMNO
@@ -306,7 +306,7 @@ export class FinanzasController {
     @Body() body: unknown
   ) {
     if (!UUID_REGEX.test(clienteId)) {
-      throw new BadRequestException('El ID del cliente debe ser un UUID válido.');
+      throw new BadRequestException('El ID del alumno debe ser un UUID válido.');
     }
     const dto = CobroDirectoInteligenteSchema.parse(body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;

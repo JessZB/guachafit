@@ -88,7 +88,7 @@ export function App() {
         </div>
 
         <h2 className="text-4xl sm:text-6xl font-extrabold tracking-tight max-w-3xl">
-          Entrenamiento, nutrición y gestión de atletas sin fricción.
+          Entrenamiento, nutrición y gestión de alumnos sin fricción.
         </h2>
 
         <p className="text-muted-foreground text-base sm:text-lg max-w-2xl">

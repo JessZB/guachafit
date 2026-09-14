@@ -17,7 +17,7 @@ import {
 export function AtletaMenuPage() {
   const { user } = useAuth();
 
-  const emailName = user?.email ? user.email.split('@')[0] : 'Atleta';
+  const emailName = user?.email ? user.email.split('@')[0] : 'Alumno';
   const primerNombre = emailName.charAt(0).toUpperCase() + emailName.slice(1);
 
   return (
@@ -76,7 +76,7 @@ export function AtletaMenuPage() {
               <ArrowUpRight className="h-5 w-5 text-primary opacity-80 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
             </h2>
             <p className="text-sm text-muted-foreground mt-1 max-w-md">
-              Abre el checklist de tu sesión del día, registra series, pesos y descansos con cero bloqueos de red.
+              Abre el checklist de tu entrenamiento de hoy, registra series, pesos y descansos sin interrupciones.
             </p>
           </div>
 

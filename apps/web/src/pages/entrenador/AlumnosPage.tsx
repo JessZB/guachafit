@@ -318,7 +318,7 @@ export function AlumnosPage() {
           <div>
             <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
               <Users className="h-4 w-4" />
-              <span>Directorio de Atletas & Clientes</span>
+              <span>Directorio de Alumnos</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground mt-1">
               Gestión de Alumnos
