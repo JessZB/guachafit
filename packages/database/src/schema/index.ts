@@ -312,6 +312,7 @@ export const ejerciciosSesion = pgTable('ejercicios_sesion', {
     .references(() => ejerciciosCatalogo.id, { onDelete: 'restrict' }),
   orden: integer('orden').default(1).notNull(),
   notasCoach: text('notas_coach'),
+  descansoPrescritoSegundos: integer('descanso_prescrito_segundos').default(90).notNull(),
 });
 
 export const seriesRegistro = pgTable('series_registro', {
@@ -324,6 +325,7 @@ export const seriesRegistro = pgTable('series_registro', {
   repsLogradas: integer('reps_logradas'),
   pesoKg: numeric('peso_kg', { precision: 6, scale: 2 }),
   rpe: numeric('rpe', { precision: 3, scale: 1 }),
+  descansoSegundos: integer('descanso_segundos'),
   completada: boolean('completada').default(false).notNull(),
   timestampCompletadaUtc: timestamp('timestamp_completada_utc', { withTimezone: true }),
 });

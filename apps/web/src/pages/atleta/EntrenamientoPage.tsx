@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/auth-context';
 import { apiClient } from '../../lib/api-client';
 import { queueOfflineMutation, offlineDb } from '../../lib/offline-db';
@@ -26,6 +26,7 @@ export function EntrenamientoPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRestTimerOpen, setIsRestTimerOpen] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(90);
+  const [activeSerieKey, setActiveSerieKey] = useState<{ ejercicioIndex: number; serieIndex: number } | null>(null);
 
   // Modal de Finalización y Feedback al Coach
   const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
@@ -179,6 +180,55 @@ export function EntrenamientoPage() {
     }
   };
 
+  // Notificación de cambio de duración en el temporizador (Alumno ajusta descanso)
+  const handleRestDurationChange = useCallback(
+    async (newSeconds: number) => {
+      setTimerSeconds(newSeconds);
+      if (!activeSerieKey || !sesion) return;
+      const { ejercicioIndex, serieIndex } = activeSerieKey;
+      const ejercicio = sesion.ejercicios[ejercicioIndex];
+      if (!ejercicio) return;
+      const serie = ejercicio.series[serieIndex];
+      if (!serie) return;
+
+      if (serie.descansoSegundos === newSeconds) return;
+
+      const updated = { ...sesion };
+      updated.ejercicios[ejercicioIndex].series[serieIndex].descansoSegundos = newSeconds;
+      setSesion(updated);
+
+      offlineDb.rutinaHoy.put({
+        id: updated.id,
+        alumnoId: user?.id || '',
+        fechaProgramada: updated.fechaProgramada,
+        sesion: updated,
+        updatedAt: Date.now(),
+      }).catch(() => {});
+
+      if (navigator.onLine) {
+        try {
+          await apiClient(`/sesiones/${sesion.id}/series`, {
+            method: 'PUT',
+            body: JSON.stringify({
+              series: [
+                {
+                  serieId: serie.id,
+                  repsLogradas: serie.repsLogradas ?? serie.repsObjetivo,
+                  pesoKg: serie.pesoKg,
+                  rpe: serie.rpe,
+                  descansoSegundos: newSeconds,
+                  completada: serie.completada,
+                  timestampCompletadaUtc: serie.timestampCompletadaUtc,
+                },
+              ],
+            }),
+          });
+        } catch {}
+      }
+    },
+    [activeSerieKey, sesion, user]
+  );
+
   // Toggle set completion and trigger rest timer
   const handleToggleSet = async (ejercicioIndex: number, serieIndex: number) => {
     if (!sesion) return;
@@ -208,8 +258,13 @@ export function EntrenamientoPage() {
         }
       }
 
-      // Trigger rest timer
-      setTimerSeconds(90);
+      // Descanso prescrito para este ejercicio (o 90s por defecto)
+      const prescrito = updated.ejercicios[ejercicioIndex].descansoPrescritoSegundos || 90;
+      serie.descansoSegundos = serie.descansoSegundos ?? prescrito;
+
+      // Iniciar el temporizador con el tiempo del ejercicio
+      setTimerSeconds(serie.descansoSegundos);
+      setActiveSerieKey({ ejercicioIndex, serieIndex });
       setIsRestTimerOpen(true);
     } else {
       triggerHaptic('light');
@@ -247,6 +302,7 @@ export function EntrenamientoPage() {
           repsLogradas: serie.repsLogradas ?? serie.repsObjetivo,
           pesoKg: serie.pesoKg,
           rpe: serie.rpe,
+          descansoSegundos: serie.descansoSegundos ?? null,
           completada: willBeCompleted,
           timestampCompletadaUtc: serie.timestampCompletadaUtc,
         },
@@ -343,9 +399,35 @@ export function EntrenamientoPage() {
     if (!sesion) return;
     setIsFinishing(true);
 
+    // Cálculo comparativo de descansos (Prescrito vs. Real)
+    let totalDescansoReal = 0;
+    let countSeriesDescanso = 0;
+    let totalDescansoPrescrito = 0;
+
+    sesion.ejercicios.forEach((ej) => {
+      const prescrito = ej.descansoPrescritoSegundos || 90;
+      ej.series.forEach((s) => {
+        if (s.completada && s.descansoSegundos) {
+          totalDescansoReal += s.descansoSegundos;
+          totalDescansoPrescrito += prescrito;
+          countSeriesDescanso++;
+        }
+      });
+    });
+
+    let descansoTag: string | null = null;
+    if (countSeriesDescanso > 0) {
+      const avgReal = Math.round(totalDescansoReal / countSeriesDescanso);
+      const avgPrescrito = Math.round(totalDescansoPrescrito / countSeriesDescanso);
+      const diff = avgReal - avgPrescrito;
+      const diffStr = diff > 0 ? `+${diff}s` : diff < 0 ? `${diff}s` : 'exacto';
+      descansoTag = `[Descanso prom: ${avgReal}s (prescrito: ${avgPrescrito}s • ${diffStr})]`;
+    }
+
     const notasCompletas = [
       `[RPE: ${rpeSesion}/10]`,
       molestia !== 'Ninguna 👍' ? `[Molestia: ${molestia}]` : null,
+      descansoTag,
       notasCoachInput.trim() ? notasCoachInput.trim() : null,
     ]
       .filter(Boolean)
@@ -559,9 +641,15 @@ export function EntrenamientoPage() {
                 <h3 className="font-black text-lg sm:text-xl text-foreground tracking-tight mt-0.5">
                   {ejercicioSesion.ejercicio?.nombre || `Ejercicio #${ejIdx + 1}`}
                 </h3>
-                <span className="text-xs sm:text-sm text-muted-foreground font-semibold">
-                  {ejercicioSesion.ejercicio?.grupoMuscular}
-                </span>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  <span className="text-xs sm:text-sm text-muted-foreground font-semibold">
+                    {ejercicioSesion.ejercicio?.grupoMuscular}
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-secondary text-foreground border border-border">
+                    <Timer className="h-3 w-3 text-primary" />
+                    <span>Descanso: {ejercicioSesion.descansoPrescritoSegundos || 90}s</span>
+                  </span>
+                </div>
               </div>
               {ejercicioSesion.notasCoach && (
                 <div className="p-2.5 rounded-2xl bg-secondary/60 text-muted-foreground flex items-center gap-2 max-w-xs text-xs">
@@ -818,6 +906,54 @@ export function EntrenamientoPage() {
               />
             </div>
 
+            {/* Resumen comparativo de descansos */}
+            {(() => {
+              if (!sesion) return null;
+              let totalReal = 0;
+              let totalPresc = 0;
+              let count = 0;
+              sesion.ejercicios.forEach((ej) => {
+                const prescrito = ej.descansoPrescritoSegundos || 90;
+                ej.series.forEach((s) => {
+                  if (s.completada && s.descansoSegundos) {
+                    totalReal += s.descansoSegundos;
+                    totalPresc += prescrito;
+                    count++;
+                  }
+                });
+              });
+              if (count === 0) return null;
+              const avgReal = Math.round(totalReal / count);
+              const avgPresc = Math.round(totalPresc / count);
+              const diff = avgReal - avgPresc;
+
+              return (
+                <div className="p-3 rounded-2xl bg-secondary/40 border border-border/70 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <Timer className="h-4 w-4 text-primary" />
+                    <div>
+                      <span className="font-bold text-foreground block">Descanso Promedio</span>
+                      <span className="text-[11px] text-muted-foreground">Prescrito: {avgPresc}s</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-mono font-black text-sm text-foreground">{avgReal}s</span>
+                    <span
+                      className={`text-[10px] font-bold block ${
+                        diff > 15
+                          ? 'text-amber-400'
+                          : diff < -15
+                          ? 'text-sky-400'
+                          : 'text-emerald-400'
+                      }`}
+                    >
+                      {diff > 0 ? `+${diff}s extra` : diff < 0 ? `${diff}s menos` : 'Adherido al plan'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Botón de Enviar */}
             <button
               onClick={confirmFinishSession}
@@ -835,7 +971,11 @@ export function EntrenamientoPage() {
       <RestTimer
         isOpen={isRestTimerOpen}
         initialSeconds={timerSeconds}
-        onClose={() => setIsRestTimerOpen(false)}
+        onDurationChange={handleRestDurationChange}
+        onClose={() => {
+          setIsRestTimerOpen(false);
+          setActiveSerieKey(null);
+        }}
       />
     </div>
   );

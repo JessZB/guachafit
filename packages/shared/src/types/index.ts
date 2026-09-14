@@ -367,6 +367,7 @@ export interface SerieRegistroDetalleDTO {
   repsLogradas?: number | null;
   pesoKg?: string | null;
   rpe?: string | null;
+  descansoSegundos?: number | null;
   completada: boolean;
   timestampCompletadaUtc?: string | null;
 }
@@ -377,6 +378,7 @@ export interface EjercicioSesionDetalleDTO {
   ejercicioId: string;
   orden: number;
   notasCoach?: string | null;
+  descansoPrescritoSegundos?: number | null;
   ejercicio?: EjercicioCatalogoDetalleDTO;
   series: SerieRegistroDetalleDTO[];
 }

@@ -163,6 +163,7 @@ export const EjercicioPrescritoInputSchema = z.object({
   ejercicioId: z.string().uuid('El ID del ejercicio debe ser un UUID válido'),
   orden: z.number().int().min(1).default(1),
   notasCoach: z.string().max(1000, 'Las notas no pueden exceder 1000 caracteres').optional(),
+  descansoSegundos: z.number().int().min(5).max(1800).optional().default(90),
   series: z.array(SeriePrescritaInputSchema).min(1, 'Debe incluir al menos una serie prescrita'),
 });
 
@@ -188,6 +189,7 @@ export const BloqueDiaRutinaSchema = z.object({
         reps: z.string().min(1).max(30),
         peso: z.string().min(1).max(30),
         rpe: z.string().max(10).optional(),
+        descansoSegundos: z.number().int().min(5).max(1800).optional(),
       })
     )
     .min(1, 'Cada día debe tener al menos un ejercicio'),
@@ -219,6 +221,7 @@ export const RegistrarSerieSchema = z.object({
     .nullable()
     .optional()
     .or(z.literal('')),
+  descansoSegundos: z.number().int().min(0).max(3600).nullable().optional(),
   completada: z.boolean(),
   timestampCompletadaUtc: z.string().datetime({ message: 'El timestamp debe estar en formato ISO 8601 UTC' }).optional(),
 });

@@ -14,6 +14,7 @@ interface RestTimerProps {
   initialSeconds?: number;
   onClose?: () => void;
   isOpen: boolean;
+  onDurationChange?: (totalSeconds: number) => void;
 }
 
 /**
@@ -54,7 +55,7 @@ function playGymTimerBeep() {
   }
 }
 
-export function RestTimer({ initialSeconds = 90, onClose, isOpen }: RestTimerProps) {
+export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChange }: RestTimerProps) {
   const [secondsLeft, setSecondsLeft] = useState(initialSeconds);
   const [totalSeconds, setTotalSeconds] = useState(initialSeconds);
   const [isRunning, setIsRunning] = useState(false);
@@ -68,6 +69,7 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen }: RestTimerPro
     setIsRunning(true);
     setIsFinished(false);
     setIsMinimized(true); // Abre en modo píldora discreta para no tapar la rutina
+    onDurationChange?.(initialSeconds);
   }, [initialSeconds, isOpen]);
 
   // Intervalo del cronómetro
@@ -94,11 +96,17 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen }: RestTimerPro
     setIsRunning(true);
     setIsFinished(false);
     triggerHaptic('selection');
+    onDurationChange?.(sec);
   };
 
   const adjustSeconds = (delta: number) => {
     triggerHaptic('light');
     setSecondsLeft((prev) => Math.max(0, prev + delta));
+    setTotalSeconds((prev) => {
+      const next = Math.max(10, prev + delta);
+      onDurationChange?.(next);
+      return next;
+    });
   };
 
   const formatTime = (totalSec: number) => {

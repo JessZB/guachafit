@@ -684,6 +684,7 @@ export function AlumnoDetallePage() {
             reps: '10-12',
             peso: 'Moderado',
             rpe: '8.0',
+            descansoSegundos: 90,
           },
         ],
       };
@@ -1744,6 +1745,9 @@ export function AlumnoDetallePage() {
                             {ej.peso}
                           </span>
                           <span className="text-[10px]">RPE {ej.rpe}</span>
+                          <span className="px-2 py-0.5 rounded-md bg-secondary text-muted-foreground font-mono font-bold text-[10px] border border-border/60 flex items-center gap-1">
+                            ⏱️ {ej.descansoSegundos || 90}s
+                          </span>
                         </div>
                       </div>
                     ))}
@@ -1849,9 +1853,14 @@ export function AlumnoDetallePage() {
                                   </span>
                                   <span className="font-bold text-foreground">{ej.ejercicio?.nombre || 'Ejercicio prescrito'}</span>
                                 </div>
-                                <span className="text-[10px] font-mono font-bold text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md border border-border/60">
-                                  {ej.ejercicio?.grupoMuscular || 'Musculación'}
-                                </span>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-[10px] font-mono font-bold text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md border border-border/60">
+                                    ⏱️ Prescrito: {ej.descansoPrescritoSegundos || 90}s
+                                  </span>
+                                  <span className="text-[10px] font-mono font-bold text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md border border-border/60">
+                                    {ej.ejercicio?.grupoMuscular || 'Musculación'}
+                                  </span>
+                                </div>
                               </div>
 
                               {ej.series && ej.series.length > 0 ? (
@@ -1869,13 +1878,27 @@ export function AlumnoDetallePage() {
                                       <span className="font-bold text-foreground">
                                         {s.repsLogradas ?? s.repsObjetivo} reps
                                       </span>
-                                      <div className="flex items-center gap-1">
+                                      <div className="flex items-center gap-1 flex-wrap justify-end">
                                         <span className="text-primary font-black">
                                           {s.pesoKg ? `${s.pesoKg}kg` : '-'}
                                         </span>
                                         {s.rpe && (
                                           <span className="text-[10px] text-amber-400 font-bold">
                                             @{s.rpe}
+                                          </span>
+                                        )}
+                                        {s.descansoSegundos !== undefined && s.descansoSegundos !== null && (
+                                          <span
+                                            title={`Descanso tomado: ${s.descansoSegundos}s (prescrito: ${ej.descansoPrescritoSegundos || 90}s)`}
+                                            className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md border ${
+                                              s.descansoSegundos - (ej.descansoPrescritoSegundos || 90) > 15
+                                                ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                                : (ej.descansoPrescritoSegundos || 90) - s.descansoSegundos > 15
+                                                ? 'bg-sky-500/15 text-sky-400 border-sky-500/30'
+                                                : 'bg-secondary text-muted-foreground border-border/60'
+                                            }`}
+                                          >
+                                            ⏱️{s.descansoSegundos}s
                                           </span>
                                         )}
                                       </div>
@@ -2344,6 +2367,28 @@ export function AlumnoDetallePage() {
                                 placeholder="8"
                                 className="h-9 w-16 px-2 rounded-xl bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
                               />
+                            </div>
+
+                            {/* Descanso Input */}
+                            <div className="flex flex-col items-center">
+                              <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
+                                Descanso
+                              </label>
+                              <select
+                                value={ej.descansoSegundos || 90}
+                                onChange={(e) => actualizarCampoEjercicio(ejIdx, 'descansoSegundos', parseInt(e.target.value, 10))}
+                                className="h-9 px-2 rounded-xl bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors cursor-pointer"
+                              >
+                                <option value={30}>30s</option>
+                                <option value={45}>45s</option>
+                                <option value={60}>60s (1m)</option>
+                                <option value={90}>90s (1.5m)</option>
+                                <option value={120}>120s (2m)</option>
+                                <option value={150}>150s (2.5m)</option>
+                                <option value={180}>180s (3m)</option>
+                                <option value={240}>240s (4m)</option>
+                                <option value={300}>300s (5m)</option>
+                              </select>
                             </div>
 
                             {/* Delete Action */}

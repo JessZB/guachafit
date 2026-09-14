@@ -264,6 +264,7 @@ export class EntrenamientoService {
             ejercicioId: ejInput.ejercicioId,
             orden,
             notasCoach: ejInput.notasCoach ?? null,
+            descansoPrescritoSegundos: ejInput.descansoSegundos ?? 90,
           })
           .returning();
 
@@ -565,6 +566,7 @@ export class EntrenamientoService {
         ejercicioId: ejercicioCatalogoId,
         orden: i + 1,
         notasCoach: `Bloque: ${bloqueSeleccionado.titulo} • Reps: ${ej.reps} • Peso: ${ej.peso || 'Sugerido'}`,
+        descansoPrescritoSegundos: ej.descansoSegundos || 90,
       });
 
       const numSeries = Math.max(1, ej.series || 3);
@@ -916,6 +918,7 @@ export class EntrenamientoService {
           repsLogradas: sInput.repsLogradas,
           pesoKg: pesoKgFinal,
           rpe: rpeFinal,
+          descansoSegundos: sInput.descansoSegundos !== undefined ? sInput.descansoSegundos : (serie.descansoSegundos ?? null),
           completada: sInput.completada,
           timestampCompletadaUtc: timestampUtc,
         })
@@ -1204,6 +1207,7 @@ export class EntrenamientoService {
           repsLogradas: s.repsLogradas,
           pesoKg: s.pesoKg,
           rpe: s.rpe,
+          descansoSegundos: s.descansoSegundos ?? null,
           completada: s.completada,
           timestampCompletadaUtc: toIsoUtcString(s.timestampCompletadaUtc),
         });
@@ -1234,6 +1238,7 @@ export class EntrenamientoService {
         ejercicioId: e.ejercicioId,
         orden: e.orden,
         notasCoach: e.notasCoach,
+        descansoPrescritoSegundos: e.descansoPrescritoSegundos ?? 90,
         ejercicio: cat
           ? {
               id: cat.id,

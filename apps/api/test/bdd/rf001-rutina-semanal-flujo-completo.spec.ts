@@ -506,6 +506,32 @@ describe('BDD: RF-001 & RF-017 - Cierre End-to-End del Flujo de Entrenamiento (C
       expect(s1.pesoKg).toBe('0.00');
     });
 
+    it('debe registrar el tiempo de descanso real (descansoSegundos) y persistirlo al sincronizar series', async () => {
+      mockSesionesEntrenamiento[0].estado = EstadoSesion.EN_PROGRESO;
+
+      const res = await entrenamientoController.sincronizarSeries(
+        { user: { sub: ALUMNO_A_USER_ID, rol: Rol.ALUMNO } },
+        sesionId,
+        {
+          series: [
+            {
+              serieId: serie1Id,
+              repsLogradas: 10,
+              pesoKg: '50.00',
+              rpe: '8.0',
+              descansoSegundos: 150, // Alumno ajustó/descansó 150s
+              completada: true,
+            },
+          ],
+        }
+      );
+
+      expect(res).toBeDefined();
+      const s1 = mockSeriesRegistro.find((s) => s.id === serie1Id);
+      expect(s1.descansoSegundos).toBe(150);
+      expect(res.ejercicios[0].series[0].descansoSegundos).toBe(150);
+    });
+
     it('debe finalizar la sesión calculando cumplimiento y volumen total en kg', async () => {
       mockSesionesEntrenamiento[0].estado = EstadoSesion.EN_PROGRESO;
       mockSesionesEntrenamiento[0].fechaInicioUtc = new Date(Date.now() - 45 * 60000);
@@ -563,6 +589,7 @@ describe('BDD: RF-001 & RF-017 - Cierre End-to-End del Flujo de Entrenamiento (C
         sesionId: sesionCompletadaId,
         ejercicioId: EJERCICIO_CAT_ID,
         orden: 1,
+        descansoPrescritoSegundos: 120,
       });
 
       mockSeriesRegistro.push({
@@ -573,6 +600,7 @@ describe('BDD: RF-001 & RF-017 - Cierre End-to-End del Flujo de Entrenamiento (C
         repsLogradas: 10,
         pesoKg: '70.00',
         rpe: '8.5',
+        descansoSegundos: 150,
         completada: true,
       });
 
@@ -584,6 +612,8 @@ describe('BDD: RF-001 & RF-017 - Cierre End-to-End del Flujo de Entrenamiento (C
       expect(historial.length).toBe(1);
       expect(historial[0].volumenTotalKg).toBe('1250.50');
       expect(historial[0].porcentajeCumplimiento).toBe('100.00');
+      expect(historial[0].ejercicios[0].descansoPrescritoSegundos).toBe(120);
+      expect(historial[0].ejercicios[0].series[0].descansoSegundos).toBe(150);
       expect(historial[0].ejercicios[0].series[0].rpe).toBe('8.5');
     });
   });
