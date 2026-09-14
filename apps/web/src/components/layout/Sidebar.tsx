@@ -12,7 +12,6 @@ import {
   Users,
   Camera,
   SlidersHorizontal,
-  Shield,
   Activity,
 } from 'lucide-react';
 
@@ -69,17 +68,6 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
-
-      {/* Security badge at bottom */}
-      <div className="mt-auto p-3 rounded-xl bg-secondary/40 border border-border/60">
-        <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
-          <Shield className="h-4 w-4 text-emerald-500" />
-          <span>RLS & Offline-First</span>
-        </div>
-        <p className="text-[10px] text-muted-foreground mt-1">
-          Aislamiento multi-tenant PostgreSQL y persistencia local activa.
-        </p>
-      </div>
     </aside>
   );
 }

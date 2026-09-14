@@ -585,13 +585,16 @@ export function EntrenamientoPage() {
 
         {isInProgress && (
           <div className="flex items-center justify-between gap-3 pt-1">
-            <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-              <Clock className="h-4 w-4 text-primary animate-spin" />
+            <div className="text-xs text-muted-foreground flex items-center gap-2">
+              <div className="relative flex items-center justify-center">
+                <Clock className="h-4 w-4 text-primary" />
+                <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-primary animate-ping" />
+              </div>
               <span>Entrenamiento activo. Marca tus series y pesos al completarlas.</span>
             </div>
             <button
               onClick={handleOpenFinishModal}
-              className="py-2.5 px-5 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-md hover:bg-emerald-500 active:scale-95 transition-all cursor-pointer"
+              className="py-2.5 px-5 rounded-xl bg-primary hover:brightness-110 text-primary-foreground font-bold text-xs shadow-md shadow-primary/25 active:scale-95 transition-all cursor-pointer"
             >
               Finalizar Entrenamiento
             </button>
@@ -958,7 +961,7 @@ export function EntrenamientoPage() {
             <button
               onClick={confirmFinishSession}
               disabled={isFinishing}
-              className="w-full py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs tracking-wide shadow-md shadow-emerald-600/25 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              className="w-full py-3 px-4 rounded-2xl bg-primary hover:brightness-110 text-primary-foreground font-bold text-xs tracking-wide shadow-md shadow-primary/25 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <CheckCircle2 className="h-4 w-4" />
               <span>{isFinishing ? 'Guardando entrenamiento...' : 'Guardar y Enviar al Coach'}</span>

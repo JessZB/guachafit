@@ -126,7 +126,7 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
         <div
           className={`flex items-center gap-2 sm:gap-3 px-3.5 py-2 rounded-full border shadow-2xl backdrop-blur-xl transition-all select-none ${
             isFinished
-              ? 'bg-rose-600 text-white border-rose-400 animate-bounce'
+              ? 'bg-card border-destructive/50 text-destructive shadow-lg shadow-destructive/20 animate-pulse'
               : 'bg-card/95 border-primary/40 text-foreground'
           }`}
         >
@@ -143,7 +143,7 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
             <div
               className={`p-1.5 rounded-full ${
                 isFinished
-                  ? 'bg-white/20 text-white'
+                  ? 'bg-destructive/20 text-destructive'
                   : isRunning
                   ? 'bg-primary/20 text-primary animate-pulse'
                   : 'bg-secondary text-muted-foreground'
@@ -152,7 +152,11 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
               <Timer className="h-4 w-4" />
             </div>
             <div className="flex flex-col text-left">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground leading-none tracking-wider">
+              <span
+                className={`text-[10px] uppercase font-bold leading-none tracking-wider ${
+                  isFinished ? 'text-destructive' : 'text-muted-foreground'
+                }`}
+              >
                 {isFinished ? '¡Listo!' : 'Descanso'}
               </span>
               <span className="text-base sm:text-lg font-black font-mono tracking-tight leading-tight">
@@ -220,15 +224,19 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
         <div
           className={`p-4 sm:p-5 rounded-3xl border shadow-2xl backdrop-blur-2xl transition-all duration-300 w-80 sm:w-88 ${
             isFinished
-              ? 'bg-rose-600/95 text-white border-rose-400 animate-pulse'
+              ? 'bg-card/95 border-destructive/50 text-card-foreground animate-pulse'
               : 'bg-card/95 border-primary/40 text-card-foreground'
           }`}
         >
           {/* Header */}
           <div className="flex items-center justify-between pb-2.5 border-b border-border/50">
             <div className="flex items-center gap-2">
-              <Timer className="h-4 w-4 text-primary" />
-              <span className="text-xs font-black uppercase tracking-wider">
+              <Timer className={`h-4 w-4 ${isFinished ? 'text-destructive' : 'text-primary'}`} />
+              <span
+                className={`text-xs font-black uppercase tracking-wider ${
+                  isFinished ? 'text-destructive' : ''
+                }`}
+              >
                 {isFinished ? '¡Tiempo Cumplido!' : 'Tiempo de Descanso'}
               </span>
             </div>
@@ -259,12 +267,12 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
 
           {/* Display & Barra de Progreso */}
           <div className="my-4 flex flex-col items-center">
-            <div className="text-5xl font-black tracking-tight font-mono">
+            <div className={`text-5xl font-black tracking-tight font-mono ${isFinished ? 'text-destructive' : ''}`}>
               {formatTime(secondsLeft)}
             </div>
             <div className="w-full bg-secondary/80 h-2 rounded-full overflow-hidden mt-3.5">
               <div
-                className="h-full bg-primary transition-all duration-300 rounded-full"
+                className={`h-full ${isFinished ? 'bg-destructive' : 'bg-primary'} transition-all duration-300 rounded-full`}
                 style={{ width: `${progress}%` }}
               />
             </div>

@@ -1864,46 +1864,54 @@ export function AlumnoDetallePage() {
                               </div>
 
                               {ej.series && ej.series.length > 0 ? (
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px]">
-                                  {ej.series.map((s) => (
-                                    <div
-                                      key={s.id}
-                                      className={`p-2.5 rounded-xl border flex items-center justify-between transition-colors ${
-                                        s.completada
-                                          ? 'bg-emerald-500/10 border-emerald-500/30 text-foreground'
-                                          : 'bg-card border-border/60 text-foreground'
-                                      }`}
-                                    >
-                                      <span className="text-muted-foreground font-bold">S{s.numeroSerie}:</span>
-                                      <span className="font-bold text-foreground">
-                                        {s.repsLogradas ?? s.repsObjetivo} reps
-                                      </span>
-                                      <div className="flex items-center gap-1 flex-wrap justify-end">
-                                        <span className="text-primary font-black">
-                                          {s.pesoKg ? `${s.pesoKg}kg` : '-'}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 font-mono text-[11px]">
+                                  {ej.series.map((s) => {
+                                    const prescrito = ej.descansoPrescritoSegundos || 90;
+                                    const descansoReal = s.descansoSegundos;
+                                    const delta = descansoReal != null ? descansoReal - prescrito : 0;
+                                    const isExcessive = delta > 15;
+                                    const isRushed = delta < -15;
+
+                                    return (
+                                      <div
+                                        key={s.id}
+                                        className={`p-2.5 rounded-xl border flex items-center justify-between transition-colors ${
+                                          s.completada
+                                            ? 'bg-emerald-500/10 border-emerald-500/30 text-foreground'
+                                            : 'bg-card border-border/60 text-foreground'
+                                        }`}
+                                      >
+                                        <span className="text-muted-foreground font-bold">S{s.numeroSerie}:</span>
+                                        <span className="font-bold text-foreground">
+                                          {s.repsLogradas ?? s.repsObjetivo} reps
                                         </span>
-                                        {s.rpe && (
-                                          <span className="text-[10px] text-amber-400 font-bold">
-                                            @{s.rpe}
+                                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                          <span className="text-primary font-black">
+                                            {s.pesoKg ? `${s.pesoKg}kg` : '-'}
                                           </span>
-                                        )}
-                                        {s.descansoSegundos !== undefined && s.descansoSegundos !== null && (
-                                          <span
-                                            title={`Descanso tomado: ${s.descansoSegundos}s (prescrito: ${ej.descansoPrescritoSegundos || 90}s)`}
-                                            className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md border ${
-                                              s.descansoSegundos - (ej.descansoPrescritoSegundos || 90) > 15
-                                                ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                                                : (ej.descansoPrescritoSegundos || 90) - s.descansoSegundos > 15
-                                                ? 'bg-sky-500/15 text-sky-400 border-sky-500/30'
-                                                : 'bg-secondary text-muted-foreground border-border/60'
-                                            }`}
-                                          >
-                                            ⏱️{s.descansoSegundos}s
-                                          </span>
-                                        )}
+                                          {s.rpe && (
+                                            <span className="text-[10px] text-amber-400 font-bold">
+                                              @{s.rpe}
+                                            </span>
+                                          )}
+                                          {descansoReal != null && (
+                                            <span
+                                              title={`Descanso tomado: ${descansoReal}s (prescrito: ${prescrito}s, desviación: ${delta > 0 ? `+${delta}s` : `${delta}s`})`}
+                                              className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md border whitespace-nowrap ${
+                                                isExcessive
+                                                  ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                                  : isRushed
+                                                  ? 'bg-sky-500/15 text-sky-400 border-sky-500/30'
+                                                  : 'bg-secondary text-muted-foreground border-border/60'
+                                              }`}
+                                            >
+                                              ⏱️ {descansoReal}s {isExcessive ? `(+${delta}s)` : isRushed ? `(${delta}s)` : '(en meta)'}
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
-                                    </div>
-                                  ))}
+                                    );
+                                  })}
                                 </div>
                               ) : (
                                 <p className="text-[11px] text-muted-foreground">Sin series detalladas.</p>
@@ -2296,115 +2304,122 @@ export function AlumnoDetallePage() {
                             <span className="font-bold text-foreground text-sm line-clamp-1">{ej.nombre}</span>
                           </div>
 
-                          <div className="flex items-end justify-between sm:justify-end gap-2.5 flex-wrap sm:flex-nowrap">
-                            {/* Series Stepper */}
-                            <div className="flex flex-col items-center">
-                              <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
-                                Series
-                              </label>
-                              <div className="flex items-center h-9 rounded-xl bg-background border border-border p-0.5">
-                                <button
-                                  type="button"
-                                  onClick={() => handleStepSeries(ejIdx, -1)}
-                                  disabled={(ej.series || 1) <= 1}
-                                  title="Reducir series"
-                                  className="h-8 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
-                                >
-                                  <Minus className="h-3.5 w-3.5" />
-                                </button>
-                                <span className="w-7 text-center font-mono font-black text-xs text-foreground select-none">
-                                  {ej.series || 1}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleStepSeries(ejIdx, 1)}
-                                  disabled={(ej.series || 1) >= 20}
-                                  title="Aumentar series"
-                                  className="h-8 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
-                                >
-                                  <Plus className="h-3.5 w-3.5" />
-                                </button>
+                          <div className="flex items-end justify-between sm:justify-end gap-2 sm:gap-2.5 flex-wrap">
+                            {/* Bloque A: Carga de Trabajo (Series, Reps, Peso) */}
+                            <div className="flex items-end gap-1.5 sm:gap-2 p-1.5 rounded-xl bg-secondary/30 border border-border/50">
+                              {/* Series Stepper */}
+                              <div className="flex flex-col items-center">
+                                <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
+                                  Series
+                                </label>
+                                <div className="flex items-center h-9 rounded-xl bg-background border border-border p-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStepSeries(ejIdx, -1)}
+                                    disabled={(ej.series || 1) <= 1}
+                                    title="Reducir series"
+                                    className="h-8 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
+                                  >
+                                    <Minus className="h-3.5 w-3.5" />
+                                  </button>
+                                  <span className="w-7 text-center font-mono font-black text-xs text-foreground select-none">
+                                    {ej.series || 1}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStepSeries(ejIdx, 1)}
+                                    disabled={(ej.series || 1) >= 20}
+                                    title="Aumentar series"
+                                    className="h-8 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
+                                  >
+                                    <Plus className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Reps Input */}
+                              <div className="flex flex-col items-center">
+                                <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
+                                  Reps
+                                </label>
+                                <input
+                                  type="text"
+                                  value={ej.reps}
+                                  onChange={(e) => actualizarCampoEjercicio(ejIdx, 'reps', e.target.value)}
+                                  placeholder="8-12"
+                                  className="h-9 w-18 sm:w-20 px-2 rounded-xl bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
+                                />
+                              </div>
+
+                              {/* Peso Input */}
+                              <div className="flex flex-col items-center">
+                                <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
+                                  Peso
+                                </label>
+                                <input
+                                  type="text"
+                                  value={ej.peso}
+                                  onChange={(e) => actualizarCampoEjercicio(ejIdx, 'peso', e.target.value)}
+                                  placeholder="60 kg"
+                                  className="h-9 w-20 sm:w-22 px-2 rounded-xl bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
+                                />
                               </div>
                             </div>
 
-                            {/* Reps Input */}
-                            <div className="flex flex-col items-center">
-                              <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
-                                Reps
-                              </label>
-                              <input
-                                type="text"
-                                value={ej.reps}
-                                onChange={(e) => actualizarCampoEjercicio(ejIdx, 'reps', e.target.value)}
-                                placeholder="8-12"
-                                className="h-9 w-20 px-2 rounded-xl bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
-                              />
-                            </div>
+                            {/* Bloque B: Intensidad y Control (RPE, Descanso) + Botón Eliminar */}
+                            <div className="flex items-end gap-1.5 sm:gap-2 shrink-0">
+                              <div className="flex items-end gap-1.5 sm:gap-2 p-1.5 rounded-xl bg-secondary/30 border border-border/50">
+                                {/* RPE Input */}
+                                <div className="flex flex-col items-center">
+                                  <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
+                                    RPE
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={ej.rpe || ''}
+                                    onChange={(e) => actualizarCampoEjercicio(ejIdx, 'rpe', e.target.value)}
+                                    placeholder="8"
+                                    className="h-9 w-14 sm:w-16 px-2 rounded-xl bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
+                                  />
+                                </div>
 
-                            {/* Peso Input */}
-                            <div className="flex flex-col items-center">
-                              <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
-                                Peso
-                              </label>
-                              <input
-                                type="text"
-                                value={ej.peso}
-                                onChange={(e) => actualizarCampoEjercicio(ejIdx, 'peso', e.target.value)}
-                                placeholder="60 kg"
-                                className="h-9 w-22 px-2 rounded-xl bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
-                              />
-                            </div>
+                                {/* Descanso Input */}
+                                <div className="flex flex-col items-center">
+                                  <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
+                                    Descanso
+                                  </label>
+                                  <select
+                                    value={ej.descansoSegundos || 90}
+                                    onChange={(e) => actualizarCampoEjercicio(ejIdx, 'descansoSegundos', parseInt(e.target.value, 10))}
+                                    className="h-9 px-2 rounded-xl bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors cursor-pointer"
+                                  >
+                                    <option value={30}>30s</option>
+                                    <option value={45}>45s</option>
+                                    <option value={60}>60s (1m)</option>
+                                    <option value={90}>90s (1.5m)</option>
+                                    <option value={120}>120s (2m)</option>
+                                    <option value={150}>150s (2.5m)</option>
+                                    <option value={180}>180s (3m)</option>
+                                    <option value={240}>240s (4m)</option>
+                                    <option value={300}>300s (5m)</option>
+                                  </select>
+                                </div>
+                              </div>
 
-                            {/* RPE Input */}
-                            <div className="flex flex-col items-center">
-                              <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
-                                RPE
-                              </label>
-                              <input
-                                type="text"
-                                value={ej.rpe || ''}
-                                onChange={(e) => actualizarCampoEjercicio(ejIdx, 'rpe', e.target.value)}
-                                placeholder="8"
-                                className="h-9 w-16 px-2 rounded-xl bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
-                              />
-                            </div>
-
-                            {/* Descanso Input */}
-                            <div className="flex flex-col items-center">
-                              <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
-                                Descanso
-                              </label>
-                              <select
-                                value={ej.descansoSegundos || 90}
-                                onChange={(e) => actualizarCampoEjercicio(ejIdx, 'descansoSegundos', parseInt(e.target.value, 10))}
-                                className="h-9 px-2 rounded-xl bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors cursor-pointer"
-                              >
-                                <option value={30}>30s</option>
-                                <option value={45}>45s</option>
-                                <option value={60}>60s (1m)</option>
-                                <option value={90}>90s (1.5m)</option>
-                                <option value={120}>120s (2m)</option>
-                                <option value={150}>150s (2.5m)</option>
-                                <option value={180}>180s (3m)</option>
-                                <option value={240}>240s (4m)</option>
-                                <option value={300}>300s (5m)</option>
-                              </select>
-                            </div>
-
-                            {/* Delete Action */}
-                            <div className="flex flex-col items-center justify-end">
-                              <span className="h-3.5 block mb-1" aria-hidden="true" />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  triggerHaptic('light');
-                                  removerEjercicioDeDia(ejIdx);
-                                }}
-                                title="Eliminar ejercicio del día"
-                                className="h-9 w-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                              {/* Delete Action */}
+                              <div className="flex items-end pb-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    triggerHaptic('light');
+                                    removerEjercicioDeDia(ejIdx);
+                                  }}
+                                  title="Eliminar ejercicio del día"
+                                  className="h-9 w-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer shrink-0"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         </div>
