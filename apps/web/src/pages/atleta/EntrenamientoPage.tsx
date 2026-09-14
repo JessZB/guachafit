@@ -190,6 +190,24 @@ export function EntrenamientoPage() {
     if (willBeCompleted) {
       serie.timestampCompletadaUtc = new Date().toISOString();
       triggerHaptic('success');
+
+      // Pre-rellenado inteligente: si la siguiente serie del ejercicio no tiene peso asignado,
+      // hereda automáticamente el peso y repeticiones de la serie que se acaba de completar
+      const seriesDelEjercicio = updated.ejercicios[ejercicioIndex].series;
+      const nextSerie = seriesDelEjercicio[serieIndex + 1];
+      if (
+        nextSerie &&
+        !nextSerie.completada &&
+        (!nextSerie.pesoKg || nextSerie.pesoKg === '0.00' || nextSerie.pesoKg === '')
+      ) {
+        if (serie.pesoKg && serie.pesoKg !== '0.00') {
+          nextSerie.pesoKg = serie.pesoKg;
+        }
+        if (serie.repsLogradas !== null && serie.repsLogradas !== undefined) {
+          nextSerie.repsLogradas = serie.repsLogradas;
+        }
+      }
+
       // Trigger rest timer
       setTimerSeconds(90);
       setIsRestTimerOpen(true);
@@ -430,30 +448,30 @@ export function EntrenamientoPage() {
 
           {/* Compliance & Streak Badge */}
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 p-2.5 rounded-2xl bg-secondary/60 border border-border">
+            <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-secondary/60 border border-border">
               <Flame
-                className={`h-5 w-5 ${
+                className={`h-6 w-6 ${
                   sesion.cumpleReglaRacha ? 'text-amber-500 fill-amber-500 animate-pulse' : 'text-muted-foreground'
                 }`}
               />
               <div className="flex flex-col">
-                <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                <span className="text-xs text-muted-foreground font-bold uppercase tracking-wider">
                   Progreso
                 </span>
-                <span className="text-sm font-extrabold font-mono">
+                <span className="text-base sm:text-lg font-black font-mono">
                   {sesion.porcentajeCumplimiento}%
                 </span>
               </div>
             </div>
 
             {sesion.volumenTotalKg && sesion.volumenTotalKg !== '0.00' && (
-              <div className="flex items-center gap-2 p-2.5 rounded-2xl bg-secondary/60 border border-border">
-                <Dumbbell className="h-5 w-5 text-primary" />
+              <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-secondary/60 border border-border">
+                <Dumbbell className="h-6 w-6 text-primary" />
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                  <span className="text-xs text-muted-foreground font-bold uppercase tracking-wider">
                     Volumen
                   </span>
-                  <span className="text-sm font-extrabold font-mono text-foreground">
+                  <span className="text-base sm:text-lg font-black font-mono text-foreground">
                     {sesion.volumenTotalKg} kg
                   </span>
                 </div>
@@ -463,11 +481,11 @@ export function EntrenamientoPage() {
             {/* Quick Rest Timer Trigger */}
             <button
               onClick={() => setIsRestTimerOpen(!isRestTimerOpen)}
-              className="p-2.5 rounded-2xl bg-secondary/60 border border-border hover:border-primary/50 text-foreground transition-colors flex items-center gap-1.5"
+              className="p-3 rounded-2xl bg-secondary/60 border border-border hover:border-primary/50 text-foreground transition-colors flex items-center gap-2 cursor-pointer"
               title="Abrir cronómetro de descanso"
             >
-              <Timer className="h-5 w-5 text-primary" />
-              <span className="text-xs font-bold hidden sm:inline">Cronómetro</span>
+              <Timer className="h-6 w-6 text-primary" />
+              <span className="text-xs font-bold hidden sm:inline">Descanso</span>
             </button>
           </div>
         </div>
@@ -535,57 +553,57 @@ export function EntrenamientoPage() {
             {/* Exercise Header */}
             <div className="flex items-start justify-between gap-2 border-b border-border/50 pb-3">
               <div>
-                <span className="text-[11px] font-bold text-primary uppercase tracking-wider">
+                <span className="text-xs font-black text-primary uppercase tracking-wider">
                   Ejercicio {ejIdx + 1}
                 </span>
-                <h3 className="font-extrabold text-base sm:text-lg text-foreground">
+                <h3 className="font-black text-lg sm:text-xl text-foreground tracking-tight mt-0.5">
                   {ejercicioSesion.ejercicio?.nombre || `Ejercicio #${ejIdx + 1}`}
                 </h3>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs sm:text-sm text-muted-foreground font-semibold">
                   {ejercicioSesion.ejercicio?.grupoMuscular}
                 </span>
               </div>
               {ejercicioSesion.notasCoach && (
-                <div className="p-2 rounded-xl bg-secondary/60 text-muted-foreground flex items-center gap-1.5 max-w-xs text-[11px]">
-                  <Info className="h-3.5 w-3.5 text-primary shrink-0" />
+                <div className="p-2.5 rounded-2xl bg-secondary/60 text-muted-foreground flex items-center gap-2 max-w-xs text-xs">
+                  <Info className="h-4 w-4 text-primary shrink-0" />
                   <span className="truncate">{ejercicioSesion.notasCoach}</span>
                 </div>
               )}
             </div>
 
             {/* Sets Grid */}
-            <div className="space-y-2">
-              <div className="grid grid-cols-12 gap-1.5 sm:gap-2 text-[11px] font-bold text-muted-foreground uppercase tracking-wider px-2">
+            <div className="space-y-2.5">
+              <div className="grid grid-cols-12 gap-1.5 sm:gap-2.5 text-xs font-black text-muted-foreground uppercase tracking-wider px-2">
                 <span className="col-span-1 text-center">#</span>
                 <span className="col-span-4 text-center">Peso (kg)</span>
                 <span className="col-span-3 text-center">Reps</span>
-                <span className="col-span-2 text-center" title="Nivel de esfuerzo percibido (1 a 10)">RPE (1-10)</span>
+                <span className="col-span-2 text-center" title="Nivel de esfuerzo percibido (1 a 10)">RPE</span>
                 <span className="col-span-2 text-center">Listo</span>
               </div>
 
               {ejercicioSesion.series.map((serie, sIdx) => (
                 <div
                   key={serie.id}
-                  className={`grid grid-cols-12 gap-1.5 sm:gap-2 items-center p-2 rounded-xl border transition-all ${
+                  className={`grid grid-cols-12 gap-1.5 sm:gap-2.5 items-center p-2 sm:p-2.5 rounded-2xl border transition-all ${
                     serie.completada
-                      ? 'bg-emerald-500/10 border-emerald-500/25'
+                      ? 'bg-emerald-500/10 border-emerald-500/30'
                       : 'bg-secondary/30 border-border hover:border-primary/40'
                   }`}
                 >
-                  <span className="col-span-1 text-center font-mono font-bold text-xs text-foreground">
+                  <span className="col-span-1 text-center font-mono font-black text-sm sm:text-base text-foreground">
                     #{serie.numeroSerie}
                   </span>
 
                   {/* Weight Input with Steppers (- / + 2.5kg) */}
                   <div className="col-span-4">
-                    <div className="flex items-center rounded-lg bg-background border border-border focus-within:border-primary overflow-hidden transition-colors">
+                    <div className="flex items-center rounded-xl bg-background border border-border focus-within:border-primary overflow-hidden transition-colors h-10 sm:h-11 shadow-2xs">
                       <button
                         type="button"
                         tabIndex={-1}
                         disabled={isCompleted || isPlanned}
                         onClick={() => handleStepSerieValue(ejIdx, sIdx, 'pesoKg', -2.5)}
                         aria-label="Restar 2.5 kg"
-                        className="h-8 w-6 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-xs font-bold shrink-0 select-none disabled:opacity-30"
+                        className="h-full w-8 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-sm sm:text-base font-black shrink-0 select-none disabled:opacity-30"
                       >
                         -
                       </button>
@@ -598,7 +616,7 @@ export function EntrenamientoPage() {
                           handleUpdateSerieValue(ejIdx, sIdx, 'pesoKg', e.target.value)
                         }
                         placeholder="kg"
-                        className="w-full min-w-0 text-center py-1.5 px-0.5 bg-transparent text-xs font-mono font-bold text-foreground focus:outline-hidden"
+                        className="w-full min-w-0 text-center py-2 px-0.5 bg-transparent text-sm sm:text-base font-mono font-black text-foreground focus:outline-hidden"
                       />
                       <button
                         type="button"
@@ -606,7 +624,7 @@ export function EntrenamientoPage() {
                         disabled={isCompleted || isPlanned}
                         onClick={() => handleStepSerieValue(ejIdx, sIdx, 'pesoKg', 2.5)}
                         aria-label="Sumar 2.5 kg"
-                        className="h-8 w-6 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-xs font-bold shrink-0 select-none disabled:opacity-30"
+                        className="h-full w-8 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-sm sm:text-base font-black shrink-0 select-none disabled:opacity-30"
                       >
                         +
                       </button>
@@ -615,14 +633,14 @@ export function EntrenamientoPage() {
 
                   {/* Reps Input with Steppers (- / + 1 rep) */}
                   <div className="col-span-3">
-                    <div className="flex items-center rounded-lg bg-background border border-border focus-within:border-primary overflow-hidden transition-colors">
+                    <div className="flex items-center rounded-xl bg-background border border-border focus-within:border-primary overflow-hidden transition-colors h-10 sm:h-11 shadow-2xs">
                       <button
                         type="button"
                         tabIndex={-1}
                         disabled={isCompleted || isPlanned}
                         onClick={() => handleStepSerieValue(ejIdx, sIdx, 'repsLogradas', -1)}
                         aria-label="Restar 1 repetición"
-                        className="h-8 w-5 sm:w-6 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-xs font-bold shrink-0 select-none disabled:opacity-30"
+                        className="h-full w-7 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-sm sm:text-base font-black shrink-0 select-none disabled:opacity-30"
                       >
                         -
                       </button>
@@ -634,7 +652,7 @@ export function EntrenamientoPage() {
                         onChange={(e) =>
                           handleUpdateSerieValue(ejIdx, sIdx, 'repsLogradas', e.target.value)
                         }
-                        className="w-full min-w-0 text-center py-1.5 px-0.5 bg-transparent text-xs font-mono font-bold text-foreground focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        className="w-full min-w-0 text-center py-2 px-0.5 bg-transparent text-sm sm:text-base font-mono font-black text-foreground focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                       <button
                         type="button"
@@ -642,7 +660,7 @@ export function EntrenamientoPage() {
                         disabled={isCompleted || isPlanned}
                         onClick={() => handleStepSerieValue(ejIdx, sIdx, 'repsLogradas', 1)}
                         aria-label="Sumar 1 repetición"
-                        className="h-8 w-5 sm:w-6 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-xs font-bold shrink-0 select-none disabled:opacity-30"
+                        className="h-full w-7 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-sm sm:text-base font-black shrink-0 select-none disabled:opacity-30"
                       >
                         +
                       </button>
@@ -660,7 +678,7 @@ export function EntrenamientoPage() {
                         handleUpdateSerieValue(ejIdx, sIdx, 'rpe', e.target.value)
                       }
                       placeholder="8.5"
-                      className="w-full text-center py-1.5 px-1 rounded-lg bg-background border border-border text-xs font-mono font-semibold text-foreground focus:outline-hidden focus:border-primary"
+                      className="w-full text-center py-2 px-1 rounded-xl bg-background border border-border text-xs sm:text-sm font-mono font-bold text-foreground focus:outline-hidden focus:border-primary h-10 sm:h-11 shadow-2xs"
                     />
                   </div>
 
@@ -671,13 +689,13 @@ export function EntrenamientoPage() {
                       disabled={isPlanned || isCompleted}
                       onClick={() => handleToggleSet(ejIdx, sIdx)}
                       aria-label={`Marcar serie ${serie.numeroSerie} como ${serie.completada ? 'pendiente' : 'completada'}`}
-                      className={`h-10 w-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                      className={`h-10 w-10 sm:h-11 sm:w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${
                         serie.completada
                           ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25 scale-105'
                           : 'bg-background border-2 border-border text-muted-foreground hover:border-primary'
                       }`}
                     >
-                      {serie.completada && <Check className="h-5 w-5 stroke-[3]" />}
+                      {serie.completada && <Check className="h-5 w-5 sm:h-6 sm:w-6 stroke-[3.5]" />}
                     </button>
                   </div>
                 </div>
