@@ -54,6 +54,89 @@ import {
 
 type TabType = 'resumen' | 'finanzas' | 'antropometria' | 'entrenamiento';
 
+const DIAS_SEMANA_MAP: Record<string, number> = {
+  lunes: 1,
+  martes: 2,
+  miercoles: 3,
+  miércoles: 3,
+  jueves: 4,
+  viernes: 5,
+  sabado: 6,
+  sábado: 6,
+  domingo: 7,
+};
+
+const NOMBRES_DIAS_SEMANA: Record<number, string> = {
+  1: 'Lunes',
+  2: 'Martes',
+  3: 'Miércoles',
+  4: 'Jueves',
+  5: 'Viernes',
+  6: 'Sábado',
+  7: 'Domingo',
+};
+
+const OPCIONES_DIAS_SEMANA = [
+  { valor: 0, label: 'Flexible (Sin día fijo)' },
+  { valor: 1, label: 'Lunes' },
+  { valor: 2, label: 'Martes' },
+  { valor: 3, label: 'Miércoles' },
+  { valor: 4, label: 'Jueves' },
+  { valor: 5, label: 'Viernes' },
+  { valor: 6, label: 'Sábado' },
+  { valor: 7, label: 'Domingo' },
+];
+
+function generarTituloBloque(diaNumero: number, diaSugerido?: number, anotacion?: string): string {
+  const diaPrefijo = `Día ${diaNumero}`;
+  const nombreDia = diaSugerido && NOMBRES_DIAS_SEMANA[diaSugerido] ? NOMBRES_DIAS_SEMANA[diaSugerido] : undefined;
+  const diaSugeridoStr = nombreDia ? ` (${nombreDia})` : '';
+  const anotacionLimpia = (anotacion || '').trim();
+  return anotacionLimpia ? `${diaPrefijo}${diaSugeridoStr}: ${anotacionLimpia}` : `${diaPrefijo}${diaSugeridoStr}`;
+}
+
+function parsearBloqueParaEdicion(bloque: any, idx: number) {
+  const diaId = bloque.diaId || `d${idx + 1}`;
+  let diaNumero = idx + 1;
+  let diaSugerido =
+    typeof bloque.diaSugerido === 'number' && bloque.diaSugerido >= 1 && bloque.diaSugerido <= 7
+      ? bloque.diaSugerido
+      : undefined;
+  let anotacion = '';
+
+  const rawTitulo = (bloque.titulo || '').trim();
+
+  // Regex para detectar "Día 1 (Lunes): Anotación" o "Día 1: Anotación" o "Día 1 (Lunes)" o "Día 1"
+  const match = rawTitulo.match(/^(?:D[ií]a|Bloque)\s*(\d+)(?:\s*\(([^)]+)\))?(?:\s*:\s*(.*))?$/i);
+
+  if (match) {
+    diaNumero = parseInt(match[1], 10) || idx + 1;
+    const diaTexto = (match[2] || '').toLowerCase().trim();
+    if (diaTexto && DIAS_SEMANA_MAP[diaTexto] && !diaSugerido) {
+      diaSugerido = DIAS_SEMANA_MAP[diaTexto];
+    }
+    anotacion = (match[3] || '').trim();
+  } else {
+    const colonIdx = rawTitulo.indexOf(':');
+    if (colonIdx !== -1) {
+      anotacion = rawTitulo.slice(colonIdx + 1).trim();
+    } else {
+      anotacion = rawTitulo;
+    }
+  }
+
+  const tituloFinal = generarTituloBloque(diaNumero, diaSugerido, anotacion);
+
+  return {
+    ...bloque,
+    diaId,
+    diaNumero,
+    diaSugerido,
+    anotacion,
+    titulo: tituloFinal,
+  };
+}
+
 export function AlumnoDetallePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -139,35 +222,38 @@ export function AlumnoDetallePage() {
   const [rutinaSemanal, setRutinaSemanal] = useState<BloqueDiaRutinaDTO[]>([
     {
       diaId: 'd1',
+      diaSugerido: 1,
       titulo: 'Día 1 (Lunes): Empuje & Pectoral / Tríceps',
       enfoque: 'Hipertrofia e Intensidad RPE 8',
       ejercicios: [
-        { id: 'e1', nombre: 'Press Plano con Mancuernas', series: 4, reps: '8-10', peso: '28kg', rpe: '8.0' },
-        { id: 'e2', nombre: 'Press Inclinado en Multipower', series: 3, reps: '10-12', peso: '60kg', rpe: '8.5' },
-        { id: 'e3', nombre: 'Fondos en Paralelas Asistidos', series: 3, reps: '12', peso: 'Corporal', rpe: '8.0' },
-        { id: 'e4', nombre: 'Extensiones de Tríceps en Polea', series: 4, reps: '12-15', peso: '25kg', rpe: '9.0' },
+        { id: 'e1', nombre: 'Press Plano con Mancuernas', series: 4, reps: '8-10', peso: '28kg', rpe: '8.0', descansoSegundos: 90 },
+        { id: 'e2', nombre: 'Press Inclinado en Multipower', series: 3, reps: '10-12', peso: '60kg', rpe: '8.5', descansoSegundos: 90 },
+        { id: 'e3', nombre: 'Fondos en Paralelas Asistidos', series: 3, reps: '12', peso: 'Corporal', rpe: '8.0', descansoSegundos: 90 },
+        { id: 'e4', nombre: 'Extensiones de Tríceps en Polea', series: 4, reps: '12-15', peso: '25kg', rpe: '9.0', descansoSegundos: 60 },
       ],
     },
     {
       diaId: 'd2',
+      diaSugerido: 3,
       titulo: 'Día 2 (Miércoles): Tracción & Espalda / Bíceps',
       enfoque: 'Volumen y Control Escapular',
       ejercicios: [
-        { id: 'e5', nombre: 'Jalón al Pecho Agarre Neutro', series: 4, reps: '10-12', peso: '65kg', rpe: '8.0' },
-        { id: 'e6', nombre: 'Remo con Barra T apoyado', series: 4, reps: '8-10', peso: '50kg', rpe: '8.5' },
-        { id: 'e7', nombre: 'Face Pulls en Polea Alta', series: 3, reps: '15', peso: '20kg', rpe: '7.5' },
-        { id: 'e8', nombre: 'Curl con Barra Z de Pie', series: 3, reps: '10-12', peso: '30kg', rpe: '8.5' },
+        { id: 'e5', nombre: 'Jalón al Pecho Agarre Neutro', series: 4, reps: '10-12', peso: '65kg', rpe: '8.0', descansoSegundos: 90 },
+        { id: 'e6', nombre: 'Remo con Barra T apoyado', series: 4, reps: '8-10', peso: '50kg', rpe: '8.5', descansoSegundos: 90 },
+        { id: 'e7', nombre: 'Face Pulls en Polea Alta', series: 3, reps: '15', peso: '20kg', rpe: '7.5', descansoSegundos: 60 },
+        { id: 'e8', nombre: 'Curl con Barra Z de Pie', series: 3, reps: '10-12', peso: '30kg', rpe: '8.5', descansoSegundos: 60 },
       ],
     },
     {
       diaId: 'd3',
+      diaSugerido: 5,
       titulo: 'Día 3 (Viernes): Pierna & Enfoque Cuádriceps / Isquios',
       enfoque: 'Fuerza Controlada (Cuidar Rodilla)',
       ejercicios: [
-        { id: 'e9', nombre: 'Prensa Inclinada 45°', series: 4, reps: '10-12', peso: '140kg', rpe: '8.0' },
-        { id: 'e10', nombre: 'Curl Femoral Tumbado', series: 4, reps: '12', peso: '45kg', rpe: '8.5' },
-        { id: 'e11', nombre: 'Extensión de Cuádriceps en Máquina', series: 3, reps: '15', peso: '50kg', rpe: '9.0' },
-        { id: 'e12', nombre: 'Elevación de Gemelos en Máquina', series: 4, reps: '15', peso: '60kg', rpe: '8.0' },
+        { id: 'e9', nombre: 'Prensa Inclinada 45°', series: 4, reps: '10-12', peso: '140kg', rpe: '8.0', descansoSegundos: 120 },
+        { id: 'e10', nombre: 'Curl Femoral Tumbado', series: 4, reps: '12', peso: '45kg', rpe: '8.5', descansoSegundos: 90 },
+        { id: 'e11', nombre: 'Extensión de Cuádriceps en Máquina', series: 3, reps: '15', peso: '50kg', rpe: '9.0', descansoSegundos: 60 },
+        { id: 'e12', nombre: 'Elevación de Gemelos en Máquina', series: 4, reps: '15', peso: '60kg', rpe: '8.0', descansoSegundos: 60 },
       ],
     },
   ]);
@@ -188,6 +274,7 @@ export function AlumnoDetallePage() {
   const [nuevoEjGrupo, setNuevoEjGrupo] = useState('Pecho');
   const [nuevoEjPatron, setNuevoEjPatron] = useState('Empuje');
   const [isSubmittingEj, setIsSubmittingEj] = useState(false);
+  const [editingEjNombreIdx, setEditingEjNombreIdx] = useState<number | null>(null);
   const [rutinaSuccessMsg, setRutinaSuccessMsg] = useState<string | null>(null);
   const [isSavingRutina, setIsSavingRutina] = useState(false);
   const [rutinaErrorMsg, setRutinaErrorMsg] = useState<string | null>(null);
@@ -621,11 +708,13 @@ export function AlumnoDetallePage() {
   // Rutina & Prescripción Handlers
   const abrirModalPrescribirRutina = () => {
     triggerHaptic('light');
-    setBloquesRutinaEdit(JSON.parse(JSON.stringify(rutinaSemanal)));
+    const bloquesNormalizados = rutinaSemanal.map((b, idx) => parsearBloqueParaEdicion(b, idx));
+    setBloquesRutinaEdit(bloquesNormalizados);
     setActiveDiaIdx(0);
     setFiltroBusquedaEj('');
     setSelectedGrupoMuscular('Todos');
     setIsCrearEjRapidoOpen(false);
+    setEditingEjNombreIdx(null);
     setRutinaSuccessMsg(null);
     setIsRutinaModalOpen(true);
   };
@@ -745,20 +834,59 @@ export function AlumnoDetallePage() {
     });
   };
 
+  const actualizarConfiguracionDiaActivo = (cambios: {
+    diaNumero?: number;
+    diaSugerido?: number | null;
+    anotacion?: string;
+    enfoque?: string;
+  }) => {
+    setBloquesRutinaEdit((prev) => {
+      const updated = [...prev];
+      const actual = updated[activeDiaIdx];
+      if (!actual) return prev;
+
+      const diaNumero =
+        cambios.diaNumero !== undefined ? cambios.diaNumero : actual.diaNumero || activeDiaIdx + 1;
+      const diaSugerido =
+        cambios.diaSugerido !== undefined
+          ? cambios.diaSugerido === null || cambios.diaSugerido === 0
+            ? undefined
+            : cambios.diaSugerido
+          : actual.diaSugerido;
+      const anotacion =
+        cambios.anotacion !== undefined ? cambios.anotacion : actual.anotacion || '';
+      const enfoque =
+        cambios.enfoque !== undefined ? cambios.enfoque : actual.enfoque;
+
+      const titulo = generarTituloBloque(diaNumero, diaSugerido, anotacion);
+
+      updated[activeDiaIdx] = {
+        ...actual,
+        diaNumero,
+        diaSugerido,
+        anotacion,
+        titulo,
+        enfoque,
+      };
+      return updated;
+    });
+  };
+
   const agregarNuevoDiaRutina = () => {
     if (bloquesRutinaEdit.length >= 7) return;
     triggerHaptic('light');
     const nuevoDiaNum = bloquesRutinaEdit.length + 1;
-    setBloquesRutinaEdit([
-      ...bloquesRutinaEdit,
-      {
-        diaId: 'd' + nuevoDiaNum,
-        diaSugerido: nuevoDiaNum <= 7 ? nuevoDiaNum : undefined,
-        titulo: `Día ${nuevoDiaNum}: Nuevo Bloque`,
-        enfoque: 'General',
-        ejercicios: [],
-      },
-    ]);
+    const diaSugerido = nuevoDiaNum <= 7 ? nuevoDiaNum : undefined;
+    const nuevoBloque = {
+      diaId: 'd' + nuevoDiaNum,
+      diaNumero: nuevoDiaNum,
+      diaSugerido,
+      anotacion: '',
+      titulo: generarTituloBloque(nuevoDiaNum, diaSugerido, ''),
+      enfoque: 'General',
+      ejercicios: [],
+    };
+    setBloquesRutinaEdit([...bloquesRutinaEdit, nuevoBloque]);
     setActiveDiaIdx(bloquesRutinaEdit.length);
   };
 
@@ -775,17 +903,30 @@ export function AlumnoDetallePage() {
     try {
       setIsSavingRutina(true);
       setRutinaErrorMsg(null);
+      const bloquesNormalizados: BloqueDiaRutinaDTO[] = bloquesRutinaEdit.map((b, idx) => {
+        const diaNumero = b.diaNumero || idx + 1;
+        const diaSugerido = b.diaSugerido;
+        const titulo = b.titulo || generarTituloBloque(diaNumero, diaSugerido, b.anotacion);
+        return {
+          diaId: b.diaId || `d${idx + 1}`,
+          diaSugerido,
+          titulo,
+          enfoque: b.enfoque,
+          ejercicios: b.ejercicios,
+        };
+      });
+
       const payload: GuardarRutinaSemanalDTO = {
         alumnoId: alumno.id,
         nombreRutina: 'Planificación Semanal Activa',
-        bloques: bloquesRutinaEdit,
+        bloques: bloquesNormalizados,
       };
       await apiClient(`/rutinas/alumno/${alumno.id}`, {
         method: 'PUT',
         body: JSON.stringify(payload),
       });
       triggerHaptic('success');
-      setRutinaSemanal(bloquesRutinaEdit);
+      setRutinaSemanal(bloquesNormalizados);
       setRutinaSuccessMsg('Planificación semanal guardada y activada en el sistema.');
       setTimeout(() => {
         setIsRutinaModalOpen(false);
@@ -1732,11 +1873,11 @@ export function AlumnoDetallePage() {
                         key={ej.id}
                         className="p-3 rounded-2xl bg-secondary/20 hover:bg-secondary/35 transition-colors border border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                           <span className="h-5 w-5 rounded-lg bg-primary/10 text-primary font-bold flex items-center justify-center text-[10px] shrink-0">
                             {ejIdx + 1}
                           </span>
-                          <span className="font-bold text-foreground">{ej.nombre}</span>
+                          <span className="font-bold text-foreground break-words">{ej.nombre}</span>
                         </div>
 
                         <div className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground self-end sm:self-center">
@@ -2232,77 +2373,163 @@ export function AlumnoDetallePage() {
 
             {/* Pestañas de Días de la Rutina */}
             <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-border/60">
-              {bloquesRutinaEdit.map((bloque, idx) => (
-                <button
-                  key={bloque.diaId || idx}
-                  type="button"
-                  onClick={() => {
-                    triggerHaptic('selection');
-                    setActiveDiaIdx(idx);
-                  }}
-                  className={`py-1.5 px-3 rounded-xl font-bold text-xs whitespace-nowrap transition-all cursor-pointer ${
-                    activeDiaIdx === idx
-                      ? 'bg-primary text-primary-foreground shadow-xs'
-                      : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {bloque.titulo.split(':')[0] || `Día ${idx + 1}`}
-                </button>
-              ))}
+              {bloquesRutinaEdit.map((bloque, idx) => {
+                const diaNum = bloque.diaNumero || idx + 1;
+                const diaSugeridoNombre = bloque.diaSugerido ? NOMBRES_DIAS_SEMANA[bloque.diaSugerido] : undefined;
+                const tabLabel = diaSugeridoNombre ? `Día ${diaNum} (${diaSugeridoNombre})` : `Día ${diaNum}`;
+                return (
+                  <button
+                    key={bloque.diaId || idx}
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('selection');
+                      setActiveDiaIdx(idx);
+                      setEditingEjNombreIdx(null);
+                    }}
+                    className={`py-1.5 px-3 rounded-xl font-bold text-xs whitespace-nowrap transition-all cursor-pointer ${
+                      activeDiaIdx === idx
+                        ? 'bg-primary text-primary-foreground shadow-xs'
+                        : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {tabLabel}
+                  </button>
+                );
+              })}
 
-              <button
-                type="button"
-                onClick={agregarNuevoDiaRutina}
-                className="py-1.5 px-3 rounded-xl bg-secondary/80 hover:bg-secondary text-primary font-bold text-xs flex items-center gap-1 cursor-pointer whitespace-nowrap"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Añadir Día</span>
-              </button>
+              {bloquesRutinaEdit.length < 7 && (
+                <button
+                  type="button"
+                  onClick={agregarNuevoDiaRutina}
+                  className="py-1.5 px-3 rounded-xl bg-secondary/80 hover:bg-secondary text-primary font-bold text-xs flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Añadir Día</span>
+                </button>
+              )}
             </div>
 
             {/* Configuración del Día Activo */}
             {bloquesRutinaEdit[activeDiaIdx] && (
               <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-2xl bg-secondary/30 border border-border/60">
-                  <div className="sm:col-span-2 space-y-1">
-                    <label className="text-[11px] font-semibold text-muted-foreground">Título del Bloque / Día</label>
-                    <input
-                      type="text"
-                      value={bloquesRutinaEdit[activeDiaIdx].titulo}
-                      onChange={(e) => {
-                        const updated = [...bloquesRutinaEdit];
-                        updated[activeDiaIdx].titulo = e.target.value;
-                        setBloquesRutinaEdit(updated);
-                      }}
-                      className="w-full px-3 py-1.5 rounded-xl bg-background border border-border text-xs font-bold text-foreground focus:outline-hidden focus:border-primary"
-                    />
+                <div className="p-4 rounded-2xl bg-secondary/30 border border-border/60 space-y-3.5">
+                  {/* Fila 1: Selectores Estructurados para Evitar Falla Humana */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {/* 1. Selector de Número de Día / Bloque */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">
+                        Número de Bloque / Día
+                      </label>
+                      <select
+                        value={bloquesRutinaEdit[activeDiaIdx].diaNumero || activeDiaIdx + 1}
+                        onChange={(e) => {
+                          triggerHaptic('selection');
+                          actualizarConfiguracionDiaActivo({ diaNumero: parseInt(e.target.value, 10) });
+                        }}
+                        className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs font-bold text-foreground focus:outline-hidden focus:border-primary transition-colors cursor-pointer"
+                      >
+                        {[1, 2, 3, 4, 5, 6, 7].map((num) => (
+                          <option key={num} value={num}>
+                            Día {num}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 2. Selector de Día Sugerido de la Semana */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">
+                        Día Sugerido (Calendario)
+                      </label>
+                      <select
+                        value={bloquesRutinaEdit[activeDiaIdx].diaSugerido || 0}
+                        onChange={(e) => {
+                          triggerHaptic('selection');
+                          const val = parseInt(e.target.value, 10);
+                          actualizarConfiguracionDiaActivo({ diaSugerido: val === 0 ? null : val });
+                        }}
+                        className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs font-bold text-foreground focus:outline-hidden focus:border-primary transition-colors cursor-pointer"
+                      >
+                        {OPCIONES_DIAS_SEMANA.map((d) => (
+                          <option key={d.valor} value={d.valor}>
+                            {d.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 3. Acción de Eliminar Bloque */}
+                    <div className="flex items-end justify-between sm:justify-start gap-2">
+                      <div className="flex-1 sm:flex-none">
+                        <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
+                          Acción
+                        </label>
+                        {bloquesRutinaEdit.length > 1 ? (
+                          <button
+                            type="button"
+                            onClick={() => removerDiaRutina(activeDiaIdx)}
+                            title="Eliminar este bloque de la rutina"
+                            className="px-3 py-2 rounded-xl bg-destructive/10 hover:bg-destructive text-destructive hover:text-destructive-foreground text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span>Eliminar Bloque</span>
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground italic py-2 block">
+                            Mínimo 1 bloque
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-muted-foreground">Enfoque / Grupo</label>
-                    <div className="flex items-center gap-2">
+                  {/* Fila 2: Anotaciones y Enfoque del Día */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border/50">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">
+                        Anotaciones en el Título
+                      </label>
+                      <input
+                        type="text"
+                        value={bloquesRutinaEdit[activeDiaIdx].anotacion ?? ''}
+                        onChange={(e) => {
+                          actualizarConfiguracionDiaActivo({ anotacion: e.target.value });
+                        }}
+                        placeholder="ej. Empuje & Pectoral / Tríceps"
+                        className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs font-semibold text-foreground focus:outline-hidden focus:border-primary transition-colors"
+                      />
+                      <span className="text-[10px] text-muted-foreground block">
+                        Se añade al título tras el día seleccionado para evitar errores manuales.
+                      </span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">
+                        Enfoque o Indicaciones (Opcional)
+                      </label>
                       <input
                         type="text"
                         value={bloquesRutinaEdit[activeDiaIdx].enfoque || ''}
                         onChange={(e) => {
-                          const updated = [...bloquesRutinaEdit];
-                          updated[activeDiaIdx].enfoque = e.target.value;
-                          setBloquesRutinaEdit(updated);
+                          actualizarConfiguracionDiaActivo({ enfoque: e.target.value });
                         }}
-                        placeholder="ej. Empuje, RPE 8"
-                        className="w-full px-3 py-1.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-hidden focus:border-primary"
+                        placeholder="ej. Hipertrofia e Intensidad RPE 8"
+                        className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
                       />
-                      {bloquesRutinaEdit.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removerDiaRutina(activeDiaIdx)}
-                          title="Eliminar este día de la rutina"
-                          className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive cursor-pointer shrink-0"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
+                      <span className="text-[10px] text-muted-foreground block">
+                        Instrucciones de esfuerzo o técnica para el alumno.
+                      </span>
                     </div>
+                  </div>
+
+                  {/* Previsualización del Título Resultante */}
+                  <div className="px-3 py-2 rounded-xl bg-background/80 border border-border/70 flex items-center gap-2 text-xs">
+                    <span className="text-[11px] font-bold text-primary uppercase tracking-wider shrink-0">
+                      🏷️ Título generado:
+                    </span>
+                    <span className="font-extrabold text-foreground truncate">
+                      {bloquesRutinaEdit[activeDiaIdx].titulo}
+                    </span>
                   </div>
                 </div>
 
@@ -2317,38 +2544,93 @@ export function AlumnoDetallePage() {
                       Aún no has agregado ejercicios a este bloque. Elige uno del catálogo abajo.
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
                       {bloquesRutinaEdit[activeDiaIdx].ejercicios.map((ej: any, ejIdx: number) => (
                         <div
                           key={ej.id || ejIdx}
-                          className="p-3.5 rounded-2xl bg-card border border-border/80 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shadow-2xs hover:border-border transition-colors"
+                          className="p-3.5 rounded-2xl bg-card border border-border/80 text-xs shadow-2xs hover:border-primary/40 transition-all space-y-2.5"
                         >
-                          <div className="flex items-center gap-2.5 min-w-44 flex-1">
-                            <span className="h-6 w-6 rounded-lg bg-primary/10 text-primary font-mono font-black flex items-center justify-center text-[11px] shrink-0">
-                              {ejIdx + 1}
-                            </span>
-                            <span className="font-bold text-foreground text-sm line-clamp-1">{ej.nombre}</span>
+                          {/* Fila Superior: Número de orden, Nombre completo (sin truncar), Edición inline y Eliminar */}
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                              <span className="h-6 w-6 rounded-lg bg-primary/10 text-primary font-mono font-black flex items-center justify-center text-[11px] shrink-0 mt-0.5">
+                                {ejIdx + 1}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                {editingEjNombreIdx === ejIdx ? (
+                                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                    <input
+                                      type="text"
+                                      value={ej.nombre}
+                                      onChange={(e) => actualizarCampoEjercicio(ejIdx, 'nombre', e.target.value)}
+                                      onBlur={() => setEditingEjNombreIdx(null)}
+                                      onKeyDown={(e) => e.key === 'Enter' && setEditingEjNombreIdx(null)}
+                                      autoFocus
+                                      className="w-full px-2 py-1 rounded-lg bg-background border border-primary text-xs font-bold text-foreground focus:outline-hidden"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingEjNombreIdx(null)}
+                                      className="p-1 rounded-md text-primary hover:bg-primary/10 cursor-pointer"
+                                      title="Confirmar nombre"
+                                    >
+                                      <Check className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 group/name flex-wrap">
+                                    <h4
+                                      title={ej.nombre}
+                                      className="font-bold text-foreground text-sm sm:text-base leading-snug break-words"
+                                    >
+                                      {ej.nombre}
+                                    </h4>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingEjNombreIdx(ejIdx)}
+                                      title="Editar o personalizar nombre del ejercicio"
+                                      className="opacity-0 group-hover/name:opacity-100 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-opacity cursor-pointer shrink-0"
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                triggerHaptic('light');
+                                removerEjercicioDeDia(ejIdx);
+                              }}
+                              title="Eliminar este ejercicio"
+                              className="p-1.5 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer shrink-0"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
                           </div>
 
-                          <div className="flex items-end justify-between sm:justify-end gap-2 sm:gap-2.5 flex-wrap">
-                            {/* Bloque A: Carga de Trabajo (Series, Reps, Peso) */}
-                            <div className="flex items-end gap-1.5 sm:gap-2 p-1.5 rounded-xl bg-secondary/30 border border-border/50">
+                          {/* Fila Inferior: Pods de Carga (Series, Reps, Peso, RPE, Descanso) */}
+                          <div className="flex items-center gap-2 sm:gap-3 flex-wrap pt-2 border-t border-border/40">
+                            {/* Bloque A: Volumen & Cargas */}
+                            <div className="flex items-center gap-2 p-1.5 rounded-xl bg-secondary/30 border border-border/50">
                               {/* Series Stepper */}
                               <div className="flex flex-col items-center">
-                                <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
+                                <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
                                   Series
                                 </label>
-                                <div className="flex items-center h-9 rounded-xl bg-background border border-border p-0.5">
+                                <div className="flex items-center h-8 rounded-lg bg-background border border-border p-0.5">
                                   <button
                                     type="button"
                                     onClick={() => handleStepSeries(ejIdx, -1)}
                                     disabled={(ej.series || 1) <= 1}
                                     title="Reducir series"
-                                    className="h-8 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
+                                    className="h-7 w-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
                                   >
-                                    <Minus className="h-3.5 w-3.5" />
+                                    <Minus className="h-3 w-3" />
                                   </button>
-                                  <span className="w-7 text-center font-mono font-black text-xs text-foreground select-none">
+                                  <span className="w-6 text-center font-mono font-black text-xs text-foreground select-none">
                                     {ej.series || 1}
                                   </span>
                                   <button
@@ -2356,16 +2638,16 @@ export function AlumnoDetallePage() {
                                     onClick={() => handleStepSeries(ejIdx, 1)}
                                     disabled={(ej.series || 1) >= 20}
                                     title="Aumentar series"
-                                    className="h-8 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
+                                    className="h-7 w-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
                                   >
-                                    <Plus className="h-3.5 w-3.5" />
+                                    <Plus className="h-3 w-3" />
                                   </button>
                                 </div>
                               </div>
 
-                              {/* Reps Input */}
+                              {/* Reps */}
                               <div className="flex flex-col items-center">
-                                <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
+                                <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
                                   Reps
                                 </label>
                                 <input
@@ -2373,13 +2655,13 @@ export function AlumnoDetallePage() {
                                   value={ej.reps}
                                   onChange={(e) => actualizarCampoEjercicio(ejIdx, 'reps', e.target.value)}
                                   placeholder="8-12"
-                                  className="h-9 w-18 sm:w-20 px-2 rounded-xl bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
+                                  className="h-8 w-16 sm:w-20 px-2 rounded-lg bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
                                 />
                               </div>
 
-                              {/* Peso Input */}
+                              {/* Peso */}
                               <div className="flex flex-col items-center">
-                                <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
+                                <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
                                   Peso
                                 </label>
                                 <input
@@ -2387,64 +2669,47 @@ export function AlumnoDetallePage() {
                                   value={ej.peso}
                                   onChange={(e) => actualizarCampoEjercicio(ejIdx, 'peso', e.target.value)}
                                   placeholder="60 kg"
-                                  className="h-9 w-20 sm:w-22 px-2 rounded-xl bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
+                                  className="h-8 w-18 sm:w-22 px-2 rounded-lg bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
                                 />
                               </div>
                             </div>
 
-                            {/* Bloque B: Intensidad y Control (RPE, Descanso) + Botón Eliminar */}
-                            <div className="flex items-end gap-1.5 sm:gap-2 shrink-0">
-                              <div className="flex items-end gap-1.5 sm:gap-2 p-1.5 rounded-xl bg-secondary/30 border border-border/50">
-                                {/* RPE Input */}
-                                <div className="flex flex-col items-center">
-                                  <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
-                                    RPE
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={ej.rpe || ''}
-                                    onChange={(e) => actualizarCampoEjercicio(ejIdx, 'rpe', e.target.value)}
-                                    placeholder="8"
-                                    className="h-9 w-14 sm:w-16 px-2 rounded-xl bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
-                                  />
-                                </div>
-
-                                {/* Descanso Input */}
-                                <div className="flex flex-col items-center">
-                                  <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
-                                    Descanso
-                                  </label>
-                                  <select
-                                    value={ej.descansoSegundos || 90}
-                                    onChange={(e) => actualizarCampoEjercicio(ejIdx, 'descansoSegundos', parseInt(e.target.value, 10))}
-                                    className="h-9 px-2 rounded-xl bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors cursor-pointer"
-                                  >
-                                    <option value={30}>30s</option>
-                                    <option value={45}>45s</option>
-                                    <option value={60}>60s (1m)</option>
-                                    <option value={90}>90s (1.5m)</option>
-                                    <option value={120}>120s (2m)</option>
-                                    <option value={150}>150s (2.5m)</option>
-                                    <option value={180}>180s (3m)</option>
-                                    <option value={240}>240s (4m)</option>
-                                    <option value={300}>300s (5m)</option>
-                                  </select>
-                                </div>
+                            {/* Bloque B: Intensidad & Descanso */}
+                            <div className="flex items-center gap-2 p-1.5 rounded-xl bg-secondary/30 border border-border/50">
+                              {/* RPE */}
+                              <div className="flex flex-col items-center">
+                                <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
+                                  RPE
+                                </label>
+                                <input
+                                  type="text"
+                                  value={ej.rpe || ''}
+                                  onChange={(e) => actualizarCampoEjercicio(ejIdx, 'rpe', e.target.value)}
+                                  placeholder="8"
+                                  className="h-8 w-12 sm:w-14 px-1.5 rounded-lg bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
+                                />
                               </div>
 
-                              {/* Delete Action */}
-                              <div className="flex items-end pb-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    triggerHaptic('light');
-                                    removerEjercicioDeDia(ejIdx);
-                                  }}
-                                  title="Eliminar ejercicio del día"
-                                  className="h-9 w-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer shrink-0"
+                              {/* Descanso */}
+                              <div className="flex flex-col items-center">
+                                <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
+                                  Descanso
+                                </label>
+                                <select
+                                  value={ej.descansoSegundos || 90}
+                                  onChange={(e) => actualizarCampoEjercicio(ejIdx, 'descansoSegundos', parseInt(e.target.value, 10))}
+                                  className="h-8 px-2 rounded-lg bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors cursor-pointer"
                                 >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
+                                  <option value={30}>30s</option>
+                                  <option value={45}>45s</option>
+                                  <option value={60}>60s (1m)</option>
+                                  <option value={90}>90s (1.5m)</option>
+                                  <option value={120}>120s (2m)</option>
+                                  <option value={150}>150s (2.5m)</option>
+                                  <option value={180}>180s (3m)</option>
+                                  <option value={240}>240s (4m)</option>
+                                  <option value={300}>300s (5m)</option>
+                                </select>
                               </div>
                             </div>
                           </div>
@@ -2586,18 +2851,18 @@ export function AlumnoDetallePage() {
                       .map((ej) => (
                         <div
                           key={ej.id}
-                          className="flex items-center justify-between p-2 rounded-xl bg-card border border-border/60 hover:border-primary/40 transition-colors text-xs"
+                          className="flex items-center justify-between p-2.5 rounded-xl bg-card border border-border/60 hover:border-primary/40 transition-colors text-xs gap-2"
                         >
-                          <div>
-                            <span className="font-bold text-foreground">{ej.nombre}</span>
-                            <span className="text-[10px] text-muted-foreground ml-2">
+                          <div className="min-w-0 flex-1 pr-1">
+                            <span className="font-bold text-foreground break-words block">{ej.nombre}</span>
+                            <span className="text-[10px] text-muted-foreground">
                               • {ej.grupoMuscular}
                             </span>
                           </div>
                           <button
                             type="button"
                             onClick={() => agregarEjercicioADia(ej.nombre, ej.id)}
-                            className="px-2.5 py-1 rounded-lg bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer"
+                            className="px-2.5 py-1 rounded-lg bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer shrink-0"
                           >
                             <Plus className="h-3 w-3" />
                             <span>Añadir</span>
