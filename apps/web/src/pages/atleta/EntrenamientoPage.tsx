@@ -31,6 +31,248 @@ import {
   ArrowRight,
 } from 'lucide-react';
 
+const DEMO_BLOQUES_CATALOGO = [
+  {
+    bloqueId: 'd1',
+    titulo: 'Día 1 (Lunes): Empuje & Pectoral / Tríceps',
+    enfoque: 'Hipertrofia e Intensidad RPE 8',
+    diaSugerido: 1,
+    completado: true,
+    ejercicios: [
+      {
+        nombre: 'Press Plano con Mancuernas',
+        grupoMuscular: 'Pectoral / Deltoides',
+        series: 4,
+        reps: '8-10',
+        peso: '28.00',
+        rpe: '8.0',
+        descansoSegundos: 90,
+      },
+      {
+        nombre: 'Press Inclinado en Multipower',
+        grupoMuscular: 'Pectoral Superior',
+        series: 3,
+        reps: '10-12',
+        peso: '60.00',
+        rpe: '8.5',
+        descansoSegundos: 90,
+      },
+      {
+        nombre: 'Fondos en Paralelas Asistidos',
+        grupoMuscular: 'Tríceps / Pecho',
+        series: 3,
+        reps: '12',
+        peso: '0.00',
+        rpe: '8.0',
+        descansoSegundos: 90,
+      },
+      {
+        nombre: 'Extensiones de Tríceps en Polea',
+        grupoMuscular: 'Tríceps',
+        series: 4,
+        reps: '12-15',
+        peso: '25.00',
+        rpe: '9.0',
+        descansoSegundos: 60,
+      },
+    ],
+  },
+  {
+    bloqueId: 'd2',
+    titulo: 'Día 2 (Miércoles): Tracción & Espalda / Bíceps',
+    enfoque: 'Volumen y Control Escapular',
+    diaSugerido: 3,
+    completado: false,
+    ejercicios: [
+      {
+        nombre: 'Jalón al Pecho Agarre Neutro',
+        grupoMuscular: 'Dorsal Ancho',
+        series: 4,
+        reps: '10-12',
+        peso: '65.00',
+        rpe: '8.0',
+        descansoSegundos: 90,
+      },
+      {
+        nombre: 'Remo con Barra T apoyado',
+        grupoMuscular: 'Espalda Media',
+        series: 4,
+        reps: '8-10',
+        peso: '50.00',
+        rpe: '8.5',
+        descansoSegundos: 90,
+      },
+      {
+        nombre: 'Face Pulls en Polea Alta',
+        grupoMuscular: 'Deltoides Posterior',
+        series: 3,
+        reps: '15',
+        peso: '20.00',
+        rpe: '7.5',
+        descansoSegundos: 60,
+      },
+      {
+        nombre: 'Curl con Barra Z de Pie',
+        grupoMuscular: 'Bíceps',
+        series: 3,
+        reps: '10-12',
+        peso: '30.00',
+        rpe: '8.5',
+        descansoSegundos: 60,
+      },
+    ],
+  },
+  {
+    bloqueId: 'd3',
+    titulo: 'Día 3 (Viernes): Pierna & Enfoque Cuádriceps / Isquios',
+    enfoque: 'Fuerza Controlada (Cuidar Rodilla)',
+    diaSugerido: 5,
+    completado: false,
+    ejercicios: [
+      {
+        nombre: 'Sentadilla Trasera con Barra',
+        grupoMuscular: 'Cuádriceps / Glúteos',
+        series: 4,
+        reps: '8-10',
+        peso: '85.00',
+        rpe: '8.0',
+        descansoSegundos: 120,
+      },
+      {
+        nombre: 'Prensa Inclinada 45°',
+        grupoMuscular: 'Cuádriceps',
+        series: 4,
+        reps: '10-12',
+        peso: '140.00',
+        rpe: '8.0',
+        descansoSegundos: 120,
+      },
+      {
+        nombre: 'Curl Femoral Tumbado',
+        grupoMuscular: 'Isquiosurales',
+        series: 4,
+        reps: '12',
+        peso: '45.00',
+        rpe: '8.5',
+        descansoSegundos: 90,
+      },
+      {
+        nombre: 'Elevación de Gemelos en Máquina',
+        grupoMuscular: 'Pantorrillas',
+        series: 4,
+        reps: '15',
+        peso: '60.00',
+        rpe: '8.0',
+        descansoSegundos: 60,
+      },
+    ],
+  },
+  {
+    bloqueId: 'd4',
+    titulo: 'Día 4 (Sábado): Full Body & Core',
+    enfoque: 'Acondicionamiento y Estabilidad',
+    diaSugerido: 6,
+    completado: false,
+    ejercicios: [
+      {
+        nombre: 'Peso Muerto Rumano con Mancuernas',
+        grupoMuscular: 'Cadena Posterior',
+        series: 4,
+        reps: '10-12',
+        peso: '32.00',
+        rpe: '8.0',
+        descansoSegundos: 90,
+      },
+      {
+        nombre: 'Press Militar con Mancuernas',
+        grupoMuscular: 'Hombros',
+        series: 3,
+        reps: '10-12',
+        peso: '20.00',
+        rpe: '8.5',
+        descansoSegundos: 90,
+      },
+      {
+        nombre: 'Plancha Abdominal Isométrica',
+        grupoMuscular: 'Core',
+        series: 3,
+        reps: '45s',
+        peso: '0.00',
+        rpe: '8.0',
+        descansoSegundos: 60,
+      },
+    ],
+  },
+];
+
+export function buildDemoSemanaProgreso(selectedBloqueId?: string): SemanaEntrenamientoProgresoDTO {
+  const activoId = selectedBloqueId || 'd2';
+  return {
+    semanaIso: '2026-W38',
+    inicioSemana: '14 sep',
+    finSemana: '20 sep',
+    totalBloques: 4,
+    bloquesCompletados: 1,
+    porcentajeCumplimiento: '25.00',
+    siguienteBloqueSugeridoId: 'd2',
+    esDiaDescansoHoy: false,
+    bloques: DEMO_BLOQUES_CATALOGO.map((b) => ({
+      bloqueId: b.bloqueId,
+      titulo: b.titulo,
+      enfoque: b.enfoque,
+      diaSugerido: b.diaSugerido,
+      totalEjercicios: b.ejercicios.length,
+      completado: b.bloqueId === 'd1',
+      esSugeridoHoy: b.bloqueId === activoId,
+    })),
+  };
+}
+
+function buildDemoSesion(bloqueId: string = 'd2', alumnoId: string = 'demo-alumno'): SesionEntrenamientoDetalleDTO {
+  const b = DEMO_BLOQUES_CATALOGO.find((x) => x.bloqueId === bloqueId) || DEMO_BLOQUES_CATALOGO[1];
+  const fechaHoy = new Date().toISOString().split('T')[0];
+
+  return {
+    id: `sesion-demo-${b.bloqueId}`,
+    alumnoId,
+    bloqueId: b.bloqueId,
+    esDiaDescansoOriginal: b.diaSugerido === 6,
+    fechaProgramada: fechaHoy,
+    estado: b.completado ? EstadoSesion.COMPLETADA : EstadoSesion.PLANIFICADA,
+    timezoneCliente: 'America/Caracas',
+    porcentajeCumplimiento: b.completado ? '100.00' : '0.00',
+    volumenTotalKg: b.completado ? '3420.00' : '0.00',
+    ejercicios: b.ejercicios.map((ej, ejIdx) => ({
+      id: `es-demo-${b.bloqueId}-${ejIdx}`,
+      sesionId: `sesion-demo-${b.bloqueId}`,
+      ejercicioId: `ej-demo-${b.bloqueId}-${ejIdx}`,
+      orden: ejIdx + 1,
+      notasCoach: `Enfoque técnico: ${ej.nombre} (${b.enfoque})`,
+      descansoPrescritoSegundos: ej.descansoSegundos,
+      ejercicio: {
+        id: `ej-demo-${b.bloqueId}-${ejIdx}`,
+        nombre: ej.nombre,
+        grupoMuscular: ej.grupoMuscular,
+        activo: true,
+        createdAtUtc: new Date().toISOString(),
+      },
+      series: Array.from({ length: ej.series }, (_, sIdx) => ({
+        id: `s-demo-${b.bloqueId}-${ejIdx}-${sIdx}`,
+        ejercicioSesionId: `es-demo-${b.bloqueId}-${ejIdx}`,
+        numeroSerie: sIdx + 1,
+        repsObjetivo: parseInt(ej.reps.split('-')[0], 10) || 10,
+        repsLogradas: b.completado ? parseInt(ej.reps.split('-')[0], 10) || 10 : 0,
+        pesoKg: ej.peso,
+        rpe: ej.rpe,
+        completada: b.completado,
+        descansoSegundos: ej.descansoSegundos,
+      })),
+    })),
+    createdAtUtc: new Date().toISOString(),
+    updatedAtUtc: new Date().toISOString(),
+  };
+}
+
 export function EntrenamientoPage() {
   const { user } = useAuth();
   const [sesion, setSesion] = useState<SesionEntrenamientoDetalleDTO | null>(null);
@@ -70,103 +312,70 @@ export function EntrenamientoPage() {
   }, [isFinishModalOpen]);
 
   // Cargar sesión de hoy y progreso semanal de bloques (con soporte de bloque específico)
-  const loadSessionAndProgress = useCallback(async (selectedBloqueId?: string) => {
-    setIsLoading(true);
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas';
-    try {
-      if (navigator.onLine) {
-        // 1. Cargar progreso de la semana actual
-        const progresoRes = await apiClient<SemanaEntrenamientoProgresoDTO>(
-          `/alumnos/me/rutina/semana-actual?timezone=${encodeURIComponent(tz)}`
-        ).catch(() => null);
-        if (progresoRes) {
-          setSemanaProgreso(progresoRes);
-        }
+  const loadSessionAndProgress = useCallback(
+    async (selectedBloqueId?: string) => {
+      setIsLoading(true);
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas';
+      try {
+        if (navigator.onLine) {
+          // 1. Cargar progreso de la semana actual
+          const progresoRes = await apiClient<SemanaEntrenamientoProgresoDTO>(
+            `/alumnos/me/rutina/semana-actual?timezone=${encodeURIComponent(tz)}`
+          ).catch(() => null);
 
-        // 2. Cargar sesión de hoy (o del bloque seleccionado)
-        const url = selectedBloqueId
-          ? `/alumnos/me/sesiones/hoy?timezone=${encodeURIComponent(tz)}&bloqueId=${encodeURIComponent(selectedBloqueId)}`
-          : `/alumnos/me/sesiones/hoy?timezone=${encodeURIComponent(tz)}`;
+          let activeBloqueId = selectedBloqueId;
 
-        const data = await apiClient<SesionEntrenamientoDetalleDTO | null>(url);
-        if (data) {
-          setSesion(data);
-          // Cache en IndexedDB
-          if (data.id) {
-            await offlineDb.rutinaHoy.put({
-              id: data.id,
-              alumnoId: user?.id || '',
-              fechaProgramada: data.fechaProgramada,
-              sesion: data,
-              updatedAt: Date.now(),
-            });
+          if (progresoRes && progresoRes.totalBloques > 0) {
+            setSemanaProgreso(progresoRes);
+            if (!activeBloqueId) {
+              activeBloqueId = progresoRes.siguienteBloqueSugeridoId || undefined;
+            }
+          } else {
+            // Si no hay rutina asignada en la BD o estamos en modo demo, proveer bloques demo
+            const demoProgreso = buildDemoSemanaProgreso(selectedBloqueId);
+            setSemanaProgreso(demoProgreso);
+            if (!activeBloqueId) {
+              activeBloqueId = demoProgreso.siguienteBloqueSugeridoId || 'd2';
+            }
+          }
+
+          // 2. Cargar sesión de hoy (o del bloque seleccionado)
+          const url = activeBloqueId
+            ? `/alumnos/me/sesiones/hoy?timezone=${encodeURIComponent(tz)}&bloqueId=${encodeURIComponent(activeBloqueId)}`
+            : `/alumnos/me/sesiones/hoy?timezone=${encodeURIComponent(tz)}`;
+
+          const data = await apiClient<SesionEntrenamientoDetalleDTO | null>(url).catch(() => null);
+          if (data) {
+            setSesion(data);
+            // Cache en IndexedDB
+            if (data.id) {
+              await offlineDb.rutinaHoy.put({
+                id: data.id,
+                alumnoId: user?.id || '',
+                fechaProgramada: data.fechaProgramada,
+                sesion: data,
+                updatedAt: Date.now(),
+              });
+            }
+          } else {
+            // Fallback a sesión demo del bloque seleccionado
+            const demoSes = buildDemoSesion(activeBloqueId || 'd2', user?.id);
+            setSesion(demoSes);
           }
         } else {
-          setSesion(null);
+          // Offline fallback
+          const cached = await offlineDb.rutinaHoy.toCollection().last();
+          if (cached) {
+            setSesion(cached.sesion);
+          } else {
+            setSesion(buildDemoSesion(selectedBloqueId || 'd2', user?.id));
+          }
+          setSemanaProgreso((prev) => prev || buildDemoSemanaProgreso(selectedBloqueId));
         }
-      } else {
-        // Offline fallback
-        const cached = await offlineDb.rutinaHoy.toCollection().last();
-        if (cached) {
-          setSesion(cached.sesion);
-        } else {
-          setSesion(null);
-        }
-      }
-    } catch (err) {
-      console.warn('Fallback a datos locales o simulación de sesión:', err);
-        // Fallback demo session so the user can test the UI offline or without backend
-        const demoSesion: SesionEntrenamientoDetalleDTO = {
-          id: 'sesion-demo-001',
-          alumnoId: user?.id || 'demo-alumno',
-          fechaProgramada: new Date().toISOString().split('T')[0],
-          estado: EstadoSesion.PLANIFICADA,
-          timezoneCliente: 'America/Caracas',
-          porcentajeCumplimiento: '0.00',
-          ejercicios: [
-            {
-              id: 'es-1',
-              sesionId: 'sesion-demo-001',
-              ejercicioId: 'ej-1',
-              orden: 1,
-              notasCoach: 'Enfoque en pausa de 1s abajo',
-              ejercicio: {
-                id: 'ej-1',
-                nombre: 'Sentadilla Trasera con Barra',
-                grupoMuscular: 'Cuádriceps / Glúteos',
-                activo: true,
-                createdAtUtc: new Date().toISOString(),
-              },
-              series: [
-                { id: 's-1', ejercicioSesionId: 'es-1', numeroSerie: 1, repsObjetivo: 8, repsLogradas: 8, pesoKg: '80.00', rpe: '7.5', completada: false },
-                { id: 's-2', ejercicioSesionId: 'es-1', numeroSerie: 2, repsObjetivo: 8, repsLogradas: 8, pesoKg: '85.00', rpe: '8.0', completada: false },
-                { id: 's-3', ejercicioSesionId: 'es-1', numeroSerie: 3, repsObjetivo: 8, repsLogradas: 8, pesoKg: '85.00', rpe: '8.5', completada: false },
-              ],
-            },
-            {
-              id: 'es-2',
-              sesionId: 'sesion-demo-001',
-              ejercicioId: 'ej-2',
-              orden: 2,
-              notasCoach: 'Codos pegados a 45 grados',
-              ejercicio: {
-                id: 'ej-2',
-                nombre: 'Press de Banca Plano',
-                grupoMuscular: 'Pectoral / Tríceps',
-                activo: true,
-                createdAtUtc: new Date().toISOString(),
-              },
-              series: [
-                { id: 's-4', ejercicioSesionId: 'es-2', numeroSerie: 1, repsObjetivo: 10, repsLogradas: 10, pesoKg: '60.00', rpe: '7.0', completada: false },
-                { id: 's-5', ejercicioSesionId: 'es-2', numeroSerie: 2, repsObjetivo: 10, repsLogradas: 10, pesoKg: '65.00', rpe: '8.0', completada: false },
-                { id: 's-6', ejercicioSesionId: 'es-2', numeroSerie: 3, repsObjetivo: 10, repsLogradas: 9, pesoKg: '65.00', rpe: '9.0', completada: false },
-              ],
-            },
-          ],
-          createdAtUtc: new Date().toISOString(),
-          updatedAtUtc: new Date().toISOString(),
-        };
-        setSesion(demoSesion);
+      } catch (err) {
+        console.warn('Fallback a datos locales o simulación de sesión:', err);
+        setSemanaProgreso(buildDemoSemanaProgreso(selectedBloqueId));
+        setSesion(buildDemoSesion(selectedBloqueId || 'd2', user?.id));
       } finally {
         setIsLoading(false);
         setIsSwitchingBloque(false);
@@ -182,6 +391,16 @@ export function EntrenamientoPage() {
   const handleSelectBloque = async (bloqueId: string) => {
     triggerHaptic('selection');
     setIsSwitchingBloque(true);
+    setSemanaProgreso((prev) => {
+      if (!prev) return buildDemoSemanaProgreso(bloqueId);
+      return {
+        ...prev,
+        bloques: prev.bloques.map((b) => ({
+          ...b,
+          esSugeridoHoy: b.bloqueId === bloqueId,
+        })),
+      };
+    });
     await loadSessionAndProgress(bloqueId);
   };
 

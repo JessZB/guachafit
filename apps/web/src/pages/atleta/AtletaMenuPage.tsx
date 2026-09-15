@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/auth-context';
 import { apiClient } from '../../lib/api-client';
 import { SemanaEntrenamientoProgresoDTO } from '@guachafit/shared';
+import { buildDemoSemanaProgreso } from './EntrenamientoPage';
 import {
   Dumbbell,
   Utensils,
@@ -27,9 +28,15 @@ export function AtletaMenuPage() {
       `/alumnos/me/rutina/semana-actual?timezone=${encodeURIComponent(tz)}`
     )
       .then((data) => {
-        if (data) setSemanaProgreso(data);
+        if (data && data.totalBloques > 0) {
+          setSemanaProgreso(data);
+        } else {
+          setSemanaProgreso(buildDemoSemanaProgreso());
+        }
       })
-      .catch(() => {});
+      .catch(() => {
+        setSemanaProgreso(buildDemoSemanaProgreso());
+      });
   }, []);
 
   const emailName = user?.email ? user.email.split('@')[0] : 'Alumno';

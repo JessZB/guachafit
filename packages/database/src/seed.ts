@@ -8,6 +8,7 @@ import {
   perfilesAlumno,
   preferenciasNotificacion,
   ejerciciosCatalogo,
+  rutinas,
   sesionesEntrenamiento,
   ejerciciosSesion,
   seriesRegistro,
@@ -35,6 +36,7 @@ import {
   Moneda,
   MetodoPago,
   EstadoConciliacion,
+  BloqueDiaRutinaDTO,
 } from '@guachafit/shared';
 
 // =============================================================================
@@ -89,6 +91,7 @@ async function seed() {
     await db.delete(seriesRegistro);
     await db.delete(ejerciciosSesion);
     await db.delete(sesionesEntrenamiento);
+    await db.delete(rutinas);
     await db.delete(ejerciciosCatalogo);
     await db.delete(transaccionesPago);
     await db.delete(cuotasMembresia);
@@ -706,29 +709,172 @@ async function seed() {
     console.log('📅 Configurando plantilla de rutina semanal "Fuerza & Hipertrofia (Push/Pull/Legs)"...');
     const rutinaId = crypto.randomUUID(); // Identificador compartido de la rutina cíclica
 
+    const ejercicioBancaId = mapaEjercicios.get('Press de Banca Plano con Barra')!;
+    const ejercicioInclinadoId = mapaEjercicios.get('Press Inclinado con Mancuernas')!;
+    const ejercicioMilitarId = mapaEjercicios.get('Press Militar de Pie con Barra (Overhead Press)')!;
+    const ejercicioFondosId = mapaEjercicios.get('Fondos en Paralelas (Dips)')!;
+    const ejercicioDominadasId = mapaEjercicios.get('Dominadas en Barra (Pull-ups)')!;
+    const ejercicioRemoId = mapaEjercicios.get('Remo con Barra Prono')!;
+    const ejercicioCurlZId = mapaEjercicios.get('Curl de Bíceps con Barra Z')!;
+    const ejercicioSentadillaId = mapaEjercicios.get('Sentadilla Trasera con Barra (Back Squat)')!;
+    const ejercicioPrensaId = mapaEjercicios.get('Prensa Inclinada de Piernas a 45°')!;
+    const ejercicioRdlId = mapaEjercicios.get('Peso Muerto Rumano con Barra (RDL)')!;
+
+    const bloquesRutina: BloqueDiaRutinaDTO[] = [
+      {
+        diaId: 'd1',
+        titulo: 'Día 1 (Lunes): Empuje & Pectoral / Tríceps',
+        enfoque: 'Hipertrofia e Intensidad RPE 8',
+        diaSugerido: 1,
+        ejercicios: [
+          {
+            ejercicioId: ejercicioBancaId,
+            nombre: 'Press de Banca Plano con Barra',
+            series: 4,
+            reps: '8-10',
+            peso: '75.00',
+            rpe: '8.0',
+            descansoSegundos: 90,
+          },
+          {
+            ejercicioId: ejercicioInclinadoId,
+            nombre: 'Press Inclinado con Mancuernas',
+            series: 3,
+            reps: '10-12',
+            peso: '24.00',
+            rpe: '8.5',
+            descansoSegundos: 90,
+          },
+          {
+            ejercicioId: ejercicioMilitarId,
+            nombre: 'Press Militar de Pie con Barra (Overhead Press)',
+            series: 3,
+            reps: '8-10',
+            peso: '45.00',
+            rpe: '8.5',
+            descansoSegundos: 90,
+          },
+          {
+            ejercicioId: ejercicioFondosId,
+            nombre: 'Fondos en Paralelas (Dips)',
+            series: 3,
+            reps: '12',
+            peso: '0.00',
+            rpe: '8.0',
+            descansoSegundos: 90,
+          },
+        ],
+      },
+      {
+        diaId: 'd2',
+        titulo: 'Día 2 (Miércoles): Tracción & Espalda / Bíceps',
+        enfoque: 'Volumen y Control Escapular',
+        diaSugerido: 3,
+        ejercicios: [
+          {
+            ejercicioId: ejercicioDominadasId,
+            nombre: 'Dominadas en Barra (Pull-ups)',
+            series: 4,
+            reps: '8-10',
+            peso: '0.00',
+            rpe: '8.0',
+            descansoSegundos: 90,
+          },
+          {
+            ejercicioId: ejercicioRemoId,
+            nombre: 'Remo con Barra Prono',
+            series: 4,
+            reps: '10-12',
+            peso: '60.00',
+            rpe: '8.5',
+            descansoSegundos: 90,
+          },
+          {
+            ejercicioId: ejercicioCurlZId,
+            nombre: 'Curl de Bíceps con Barra Z',
+            series: 3,
+            reps: '10-12',
+            peso: '30.00',
+            rpe: '8.5',
+            descansoSegundos: 60,
+          },
+        ],
+      },
+      {
+        diaId: 'd3',
+        titulo: 'Día 3 (Viernes): Pierna & Enfoque Cuádriceps / Isquios',
+        enfoque: 'Fuerza Controlada',
+        diaSugerido: 5,
+        ejercicios: [
+          {
+            ejercicioId: ejercicioSentadillaId,
+            nombre: 'Sentadilla Trasera con Barra (Back Squat)',
+            series: 4,
+            reps: '8-10',
+            peso: '85.00',
+            rpe: '8.0',
+            descansoSegundos: 120,
+          },
+          {
+            ejercicioId: ejercicioPrensaId,
+            nombre: 'Prensa Inclinada de Piernas a 45°',
+            series: 4,
+            reps: '10-12',
+            peso: '140.00',
+            rpe: '8.0',
+            descansoSegundos: 120,
+          },
+        ],
+      },
+      {
+        diaId: 'd4',
+        titulo: 'Día 4 (Sábado): Full Body & Core',
+        enfoque: 'Acondicionamiento y Estabilidad',
+        diaSugerido: 6,
+        ejercicios: [
+          {
+            ejercicioId: ejercicioRdlId,
+            nombre: 'Peso Muerto Rumano con Barra (RDL)',
+            series: 4,
+            reps: '10-12',
+            peso: '80.00',
+            rpe: '8.0',
+            descansoSegundos: 90,
+          },
+        ],
+      },
+    ];
+
+    await db.insert(rutinas).values({
+      id: rutinaId,
+      alumnoId: user1.id,
+      entrenadorId: coachUser.id,
+      nombre: 'Fuerza & Hipertrofia (Push/Pull/Legs)',
+      bloques: bloquesRutina,
+      activa: true,
+      createdAtUtc: nowUtc,
+      updatedAtUtc: nowUtc,
+    });
+
     // Sesión 1: PUSH (Completada hoy por Alumno 1)
     const [sesionPush] = await db
       .insert(sesionesEntrenamiento)
       .values({
         alumnoId: user1.id,
         rutinaId: rutinaId,
+        bloqueId: 'd1',
         fechaProgramada: nowUtc.toISOString().split('T')[0],
         fechaInicioUtc: new Date(Date.now() - 3600 * 1000), // Hace 1 hora
         fechaFinUtc: nowUtc,
         timezoneCliente: 'America/Caracas',
         estado: EstadoSesion.COMPLETADA,
         porcentajeCumplimiento: '100.00',
+        volumenTotalKg: '3420.00',
         notasAlumno: 'Gran congestión en pecho y hombro anterior. Pesos logrados según lo planificado.',
         createdAtUtc: nowUtc,
         updatedAtUtc: nowUtc,
       })
       .returning();
-
-    // Ejercicios Sesión Push
-    const ejercicioBancaId = mapaEjercicios.get('Press de Banca Plano con Barra')!;
-    const ejercicioInclinadoId = mapaEjercicios.get('Press Inclinado con Mancuernas')!;
-    const ejercicioMilitarId = mapaEjercicios.get('Press Militar de Pie con Barra (Overhead Press)')!;
-    const ejercicioFondosId = mapaEjercicios.get('Fondos en Paralelas (Dips)')!;
 
     const [ejSesion1] = await db
       .insert(ejerciciosSesion)
@@ -841,6 +987,7 @@ async function seed() {
       .values({
         alumnoId: user1.id,
         rutinaId: rutinaId,
+        bloqueId: 'd2',
         fechaProgramada: fechaManana.toISOString().split('T')[0],
         timezoneCliente: 'America/Caracas',
         estado: EstadoSesion.PLANIFICADA,
@@ -850,10 +997,6 @@ async function seed() {
         updatedAtUtc: nowUtc,
       })
       .returning();
-
-    const ejercicioDominadasId = mapaEjercicios.get('Dominadas en Barra (Pull-ups)')!;
-    const ejercicioRemoId = mapaEjercicios.get('Remo con Barra Prono')!;
-    const ejercicioCurlZId = mapaEjercicios.get('Curl de Bíceps con Barra Z')!;
 
     await db.insert(ejerciciosSesion).values([
       {
