@@ -387,6 +387,8 @@ export interface SesionEntrenamientoDetalleDTO {
   id: string;
   alumnoId: string;
   rutinaId?: string | null;
+  bloqueId?: string | null;
+  esDiaDescansoOriginal?: boolean;
   fechaProgramada: string; // Formato YYYY-MM-DD
   fechaInicioUtc?: string | null; // ISO 8601 UTC
   fechaFinUtc?: string | null; // ISO 8601 UTC
@@ -401,6 +403,31 @@ export interface SesionEntrenamientoDetalleDTO {
   cumpleReglaRacha?: boolean; // RN-02: True si completó >= 70% del volumen prescrito
   createdAtUtc: string;
   updatedAtUtc: string;
+}
+
+export interface BloqueSemanaProgresoDTO {
+  bloqueId: string;
+  titulo: string;
+  enfoque?: string | null;
+  diaSugerido?: number;
+  totalEjercicios: number;
+  completado: boolean;
+  fechaCompletadaUtc?: string | null;
+  fechaProgramada?: string | null;
+  sesionId?: string | null;
+  esSugeridoHoy?: boolean;
+}
+
+export interface SemanaEntrenamientoProgresoDTO {
+  semanaIso: string; // ej. '2026-W38'
+  inicioSemana: string; // YYYY-MM-DD (Lunes)
+  finSemana: string; // YYYY-MM-DD (Domingo)
+  totalBloques: number;
+  bloquesCompletados: number;
+  porcentajeCumplimiento: string;
+  bloques: BloqueSemanaProgresoDTO[];
+  siguienteBloqueSugeridoId?: string | null;
+  esDiaDescansoHoy: boolean;
 }
 
 export interface RutinaSemanalDetalleDTO {

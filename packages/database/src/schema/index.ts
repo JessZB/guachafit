@@ -297,6 +297,8 @@ export const sesionesEntrenamiento = pgTable('sesiones_entrenamiento', {
   volumenTotalKg: numeric('volumen_total_kg', { precision: 8, scale: 2 })
     .default('0.00')
     .notNull(),
+  bloqueId: varchar('bloque_id', { length: 64 }),
+  esDiaDescansoOriginal: boolean('es_dia_descanso_original').default(false).notNull(),
   notasAlumno: text('notas_alumno'),
   createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
   updatedAtUtc: timestamp('updated_at_utc', { withTimezone: true }).defaultNow().notNull(),

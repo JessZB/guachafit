@@ -34,6 +34,7 @@ export class EntrenamientoController {
 
   /**
    * Consulta pasiva de rutina programada de hoy para el alumno (RN-04).
+   * Admite bloqueId opcional para alternar o recuperar un bloque específico.
    * No altera estado 'planificada'.
    * Rol: Alumno
    */
@@ -43,15 +44,31 @@ export class EntrenamientoController {
   async obtenerSesionHoy(
     @Req() req: any,
     @Query('timezone') timezone?: string,
+    @Query('bloqueId') bloqueId?: string,
     @Res({ passthrough: true }) res?: any
   ) {
     const alumnoId = req.user.sub;
-    const sesion = await this.entrenamientoService.obtenerSesionHoy(alumnoId, timezone);
+    const sesion = await this.entrenamientoService.obtenerSesionHoy(alumnoId, timezone, bloqueId);
     if (!sesion && res) {
       res.status(HttpStatus.NO_CONTENT);
       return null;
     }
     return sesion;
+  }
+
+  /**
+   * Progreso de la semana en curso (Lunes a Domingo) por bloques de entrenamiento.
+   * Rol: Alumno
+   */
+  @Get('alumnos/me/rutina/semana-actual')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ALUMNO)
+  async obtenerSemanaActualProgreso(
+    @Req() req: any,
+    @Query('timezone') timezone?: string
+  ) {
+    const alumnoId = req.user.sub;
+    return this.entrenamientoService.obtenerSemanaActualProgreso(alumnoId, timezone);
   }
 
   /**

@@ -39,6 +39,8 @@ import {
   GuardarRutinaSemanalSchema,
   RutinaSemanalDetalleDTO,
   BloqueDiaRutinaDTO,
+  BloqueSemanaProgresoDTO,
+  SemanaEntrenamientoProgresoDTO,
   IniciarSesionDTO,
   IniciarSesionSchema,
   SincronizarSeriesBatchDTO,
@@ -116,6 +118,57 @@ export function toIsoUtcString(date: Date | string | null | undefined): string |
   if (!date) return null;
   const d = typeof date === 'string' ? new Date(date) : date;
   return d.toISOString();
+}
+
+export function calcularRangoSemanaIso(fechaYyyyMmDd: string): {
+  semanaIso: string;
+  inicioSemana: string;
+  finSemana: string;
+  isoDay: number;
+} {
+  const [y, m, d] = fechaYyyyMmDd.split('-').map(Number);
+  const fecha = new Date(Date.UTC(y, m - 1, d));
+  const jsDay = fecha.getUTCDay(); // 0 = Dom, 1 = Lun, ..., 6 = Sab
+  const isoDay = jsDay === 0 ? 7 : jsDay;
+
+  const diffToMonday = isoDay - 1;
+  const lunesUtcMs = fecha.getTime() - diffToMonday * 86400000;
+  const lunesDate = new Date(lunesUtcMs);
+  const inicioSemana = lunesDate.toISOString().split('T')[0];
+
+  const domingoUtcMs = lunesUtcMs + 6 * 86400000;
+  const domingoDate = new Date(domingoUtcMs);
+  const finSemana = domingoDate.toISOString().split('T')[0];
+
+  const target = new Date(fecha.valueOf());
+  const dayNr = (fecha.getUTCDay() + 6) % 7;
+  target.setUTCDate(target.getUTCDate() - dayNr + 3);
+  const firstThursday = target.valueOf();
+  target.setUTCMonth(0, 1);
+  if (target.getUTCDay() !== 4) {
+    target.setUTCMonth(0, 1 + ((4 - target.getUTCDay()) + 7) % 7);
+  }
+  const weekNum = 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
+  const semanaIso = `${target.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+
+  return {
+    semanaIso,
+    inicioSemana,
+    finSemana,
+    isoDay,
+  };
+}
+
+export function obtenerDiaSugeridoBloque(bloque: BloqueDiaRutinaDTO, fallbackIndex: number): number {
+  if (typeof bloque.diaSugerido === 'number' && bloque.diaSugerido >= 1 && bloque.diaSugerido <= 7) {
+    return bloque.diaSugerido;
+  }
+  const match = bloque.diaId.match(/\d+/);
+  if (match) {
+    const n = parseInt(match[0], 10);
+    if (n >= 1 && n <= 7) return n;
+  }
+  return fallbackIndex + 1 <= 7 ? fallbackIndex + 1 : 1;
 }
 
 // =============================================================================
@@ -440,14 +493,13 @@ export class EntrenamientoService {
   }
 
   /**
-   * Consulta pasiva de rutina programada de hoy para el alumno (RN-04).
-   * Si no existe sesión puntual para la fecha actual, auto-instancia la sesión del día
-   * en BD basada en la rutina semanal activa del alumno.
+   * Consulta de progreso semanal de la rutina activa del alumno (Lunes a Domingo).
+   * Determina qué bloques han sido completados en la semana ISO actual y sugiere el siguiente.
    */
-  async obtenerSesionHoy(
+  async obtenerSemanaActualProgreso(
     alumnoId: string,
     timezoneCliente?: string
-  ): Promise<SesionEntrenamientoDetalleDTO | null> {
+  ): Promise<SemanaEntrenamientoProgresoDTO> {
     const tz = timezoneCliente || 'America/Caracas';
     let hoyStr: string;
     try {
@@ -456,23 +508,8 @@ export class EntrenamientoService {
       hoyStr = new Date().toISOString().split('T')[0];
     }
 
-    const [sesion] = await this.db
-      .select()
-      .from(sesionesEntrenamiento)
-      .where(
-        and(
-          eq(sesionesEntrenamiento.alumnoId, alumnoId),
-          eq(sesionesEntrenamiento.fechaProgramada, hoyStr)
-        )
-      )
-      .orderBy(desc(sesionesEntrenamiento.createdAtUtc))
-      .limit(1);
+    const { semanaIso, inicioSemana, finSemana, isoDay } = calcularRangoSemanaIso(hoyStr);
 
-    if (sesion) {
-      return this.hidratarSesion(sesion);
-    }
-
-    // Auto-generación desde rutina semanal activa
     const [rutinaActiva] = await this.db
       .select()
       .from(rutinas)
@@ -486,27 +523,266 @@ export class EntrenamientoService {
       .limit(1);
 
     if (!rutinaActiva || !Array.isArray(rutinaActiva.bloques) || rutinaActiva.bloques.length === 0) {
-      return null;
+      return {
+        semanaIso,
+        inicioSemana,
+        finSemana,
+        totalBloques: 0,
+        bloquesCompletados: 0,
+        porcentajeCumplimiento: '0.00',
+        bloques: [],
+        siguienteBloqueSugeridoId: null,
+        esDiaDescansoHoy: true,
+      };
     }
 
     const bloques = rutinaActiva.bloques as BloqueDiaRutinaDTO[];
-    let dayOfWeek = 1;
+
+    // Sesiones registradas en la ventana semanal actual
+    const sesionesSemana = await this.db
+      .select()
+      .from(sesionesEntrenamiento)
+      .where(
+        and(
+          eq(sesionesEntrenamiento.alumnoId, alumnoId),
+          gte(sesionesEntrenamiento.fechaProgramada, inicioSemana),
+          lte(sesionesEntrenamiento.fechaProgramada, finSemana)
+        )
+      )
+      .orderBy(asc(sesionesEntrenamiento.fechaProgramada), asc(sesionesEntrenamiento.createdAtUtc));
+
+    // Determinar si hoy es día de descanso prescrito
+    const bloquePrescritoParaHoy = bloques.find(
+      (b, idx) => obtenerDiaSugeridoBloque(b, idx) === isoDay
+    );
+    const esDiaDescansoHoy = !bloquePrescritoParaHoy;
+
+    // Primer bloque pendiente en orden secuencial
+    const primerBloquePendiente = bloques.find((b) => {
+      const completado = sesionesSemana.some(
+        (s) =>
+          s.estado === EstadoSesion.COMPLETADA &&
+          (s.bloqueId === b.diaId || (!s.bloqueId && s.rutinaId === rutinaActiva.id))
+      );
+      return !completado;
+    });
+
+    const siguienteBloqueSugeridoId = primerBloquePendiente ? primerBloquePendiente.diaId : null;
+
+    const bloquesProgreso: BloqueSemanaProgresoDTO[] = bloques.map((b, idx) => {
+      const diaSugerido = obtenerDiaSugeridoBloque(b, idx);
+      const sesionCompletada = sesionesSemana.find(
+        (s) =>
+          s.estado === EstadoSesion.COMPLETADA &&
+          (s.bloqueId === b.diaId || (!s.bloqueId && s.rutinaId === rutinaActiva.id))
+      );
+      const sesionHoyBloque = sesionesSemana.find(
+        (s) => s.bloqueId === b.diaId && s.fechaProgramada === hoyStr
+      );
+      const sesionRef = sesionCompletada || sesionHoyBloque;
+
+      return {
+        bloqueId: b.diaId,
+        titulo: b.titulo,
+        enfoque: b.enfoque ?? null,
+        diaSugerido,
+        totalEjercicios: b.ejercicios?.length ?? 0,
+        completado: !!sesionCompletada,
+        fechaCompletadaUtc: sesionCompletada
+          ? toIsoUtcString(sesionCompletada.fechaFinUtc || sesionCompletada.updatedAtUtc)
+          : null,
+        fechaProgramada: sesionRef ? sesionRef.fechaProgramada : null,
+        sesionId: sesionRef ? sesionRef.id : null,
+        esSugeridoHoy: b.diaId === siguienteBloqueSugeridoId,
+      };
+    });
+
+    const bloquesCompletados = bloquesProgreso.filter((b) => b.completado).length;
+    const porcentajeCumplimiento = ((bloquesCompletados / bloques.length) * 100).toFixed(2);
+
+    return {
+      semanaIso,
+      inicioSemana,
+      finSemana,
+      totalBloques: bloques.length,
+      bloquesCompletados,
+      porcentajeCumplimiento,
+      bloques: bloquesProgreso,
+      siguienteBloqueSugeridoId,
+      esDiaDescansoHoy,
+    };
+  }
+
+  /**
+   * Consulta pasiva de rutina programada de hoy para el alumno (RN-04).
+   * Soporta selección de bloque específico (bloqueId) y recuperación en días de descanso.
+   * Si no se especifica bloqueId, sugiere de forma inteligente el primer bloque pendiente de la semana.
+   */
+  async obtenerSesionHoy(
+    alumnoId: string,
+    timezoneCliente?: string,
+    bloqueId?: string
+  ): Promise<SesionEntrenamientoDetalleDTO | null> {
+    const tz = timezoneCliente || 'America/Caracas';
+    let hoyStr: string;
     try {
-      const fechaLocal = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
-      const jsDay = fechaLocal.getDay();
-      dayOfWeek = jsDay === 0 ? 7 : jsDay;
+      hoyStr = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
     } catch {
-      const jsDay = new Date().getDay();
-      dayOfWeek = jsDay === 0 ? 7 : jsDay;
+      hoyStr = new Date().toISOString().split('T')[0];
     }
 
-    let bloqueSeleccionado = bloques.find((b) => b.diaId === `dia-${dayOfWeek}`);
-    if (!bloqueSeleccionado) {
-      const idx = (dayOfWeek - 1) % bloques.length;
-      bloqueSeleccionado = bloques[idx];
+    const { inicioSemana, finSemana, isoDay } = calcularRangoSemanaIso(hoyStr);
+
+    // Cargar rutina semanal activa
+    const [rutinaActiva] = await this.db
+      .select()
+      .from(rutinas)
+      .where(
+        and(
+          eq(rutinas.alumnoId, alumnoId),
+          eq(rutinas.activa, true)
+        )
+      )
+      .orderBy(desc(rutinas.createdAtUtc))
+      .limit(1);
+
+    const bloques: BloqueDiaRutinaDTO[] =
+      rutinaActiva && Array.isArray(rutinaActiva.bloques)
+        ? (rutinaActiva.bloques as BloqueDiaRutinaDTO[])
+        : [];
+
+    // Buscar sesiones de hoy para este alumno
+    const sesionesHoy = await this.db
+      .select()
+      .from(sesionesEntrenamiento)
+      .where(
+        and(
+          eq(sesionesEntrenamiento.alumnoId, alumnoId),
+          eq(sesionesEntrenamiento.fechaProgramada, hoyStr)
+        )
+      )
+      .orderBy(desc(sesionesEntrenamiento.createdAtUtc));
+
+    // CASO A: El usuario especificó un bloqueId explícito (1-tap switch o recuperación)
+    if (bloqueId && rutinaActiva) {
+      // 1. ¿Existe ya una sesión para hoy con ese bloqueId?
+      const sesionBloqueHoy = sesionesHoy.find((s) => s.bloqueId === bloqueId);
+      if (sesionBloqueHoy) {
+        return this.hidratarSesion(sesionBloqueHoy);
+      }
+
+      // 2. Si hay una sesión planificada no iniciada de hoy con otro bloque, reemplazarla limpiamente
+      const sesionPlanificada = sesionesHoy.find((s) => s.estado === EstadoSesion.PLANIFICADA);
+      if (sesionPlanificada) {
+        const ejSesiones = await this.db
+          .select({ id: ejerciciosSesion.id })
+          .from(ejerciciosSesion)
+          .where(eq(ejerciciosSesion.sesionId, sesionPlanificada.id));
+        for (const ej of ejSesiones) {
+          await this.db.delete(seriesRegistro).where(eq(seriesRegistro.ejercicioSesionId, ej.id));
+        }
+        await this.db.delete(ejerciciosSesion).where(eq(ejerciciosSesion.sesionId, sesionPlanificada.id));
+        await this.db.delete(sesionesEntrenamiento).where(eq(sesionesEntrenamiento.id, sesionPlanificada.id));
+      }
+
+      // 3. Obtener el bloque solicitado
+      const bloqueTarget = bloques.find((b) => b.diaId === bloqueId);
+      if (!bloqueTarget) {
+        return null;
+      }
+
+      const bloquePrescritoParaHoy = bloques.find(
+        (b, idx) => obtenerDiaSugeridoBloque(b, idx) === isoDay
+      );
+      // Si hoy no estaba prescrito este bloque o es día de descanso, marcar como recuperación
+      const esDiaDescansoOriginal = !bloquePrescritoParaHoy;
+
+      return this.instanciarSesionDesdeBloque(
+        alumnoId,
+        rutinaActiva.id,
+        rutinaActiva.entrenadorId,
+        bloqueTarget,
+        hoyStr,
+        tz,
+        esDiaDescansoOriginal
+      );
     }
 
-    if (!bloqueSeleccionado || !bloqueSeleccionado.ejercicios || bloqueSeleccionado.ejercicios.length === 0) {
+    // CASO B: Consulta pasiva estándar (sin bloqueId)
+    // 1. Si ya existe una sesión para hoy, retornarla directamente
+    if (sesionesHoy.length > 0) {
+      return this.hidratarSesion(sesionesHoy[0]);
+    }
+
+    // 2. Si no hay rutina activa, no hay auto-generación posible
+    if (!rutinaActiva || bloques.length === 0) {
+      return null;
+    }
+
+    // 3. Consultar progreso semanal para encontrar el primer bloque pendiente
+    const sesionesSemana = await this.db
+      .select()
+      .from(sesionesEntrenamiento)
+      .where(
+        and(
+          eq(sesionesEntrenamiento.alumnoId, alumnoId),
+          gte(sesionesEntrenamiento.fechaProgramada, inicioSemana),
+          lte(sesionesEntrenamiento.fechaProgramada, finSemana)
+        )
+      )
+      .orderBy(asc(sesionesEntrenamiento.fechaProgramada), asc(sesionesEntrenamiento.createdAtUtc));
+
+    const bloquePrescritoParaHoy = bloques.find(
+      (b, idx) => obtenerDiaSugeridoBloque(b, idx) === isoDay
+    );
+    const esDiaDescansoHoy = !bloquePrescritoParaHoy;
+
+    // Si hoy es día de descanso prescrito y el alumno no pidió un bloque puntual:
+    // Retornar null para que la UI muestre el estado de descanso y los accesos de recuperación
+    if (esDiaDescansoHoy) {
+      return null;
+    }
+
+    // Primer bloque pendiente de la semana
+    const primerBloquePendiente = bloques.find((b) => {
+      const comp = sesionesSemana.some(
+        (s) =>
+          s.estado === EstadoSesion.COMPLETADA &&
+          (s.bloqueId === b.diaId || (!s.bloqueId && s.rutinaId === rutinaActiva.id))
+      );
+      return !comp;
+    });
+
+    // Si todos los bloques de la semana ya están completados:
+    if (!primerBloquePendiente) {
+      return null;
+    }
+
+    // Auto-generar para hoy el bloque sugerido (primer bloque pendiente)
+    return this.instanciarSesionDesdeBloque(
+      alumnoId,
+      rutinaActiva.id,
+      rutinaActiva.entrenadorId,
+      primerBloquePendiente,
+      hoyStr,
+      tz,
+      false
+    );
+  }
+
+  /**
+   * Helper atómico para crear e hidratar una sesión a partir de un bloque de rutina.
+   */
+  private async instanciarSesionDesdeBloque(
+    alumnoId: string,
+    rutinaId: string,
+    entrenadorId: string,
+    bloque: BloqueDiaRutinaDTO,
+    fechaProgramada: string,
+    timezoneCliente: string,
+    esDiaDescansoOriginal: boolean
+  ): Promise<SesionEntrenamientoDetalleDTO | null> {
+    if (!bloque.ejercicios || bloque.ejercicios.length === 0) {
       return null;
     }
 
@@ -518,9 +794,11 @@ export class EntrenamientoService {
       .values({
         id: nuevaSesionId,
         alumnoId,
-        rutinaId: rutinaActiva.id,
-        fechaProgramada: hoyStr,
-        timezoneCliente: tz,
+        rutinaId,
+        bloqueId: bloque.diaId,
+        esDiaDescansoOriginal,
+        fechaProgramada,
+        timezoneCliente,
         estado: EstadoSesion.PLANIFICADA,
         porcentajeCumplimiento: '0.00',
         volumenTotalKg: '0.00',
@@ -529,8 +807,8 @@ export class EntrenamientoService {
       })
       .returning();
 
-    for (let i = 0; i < bloqueSeleccionado.ejercicios.length; i++) {
-      const ej = bloqueSeleccionado.ejercicios[i];
+    for (let i = 0; i < bloque.ejercicios.length; i++) {
+      const ej = bloque.ejercicios[i];
       let ejercicioCatalogoId = ej.ejercicioId;
 
       if (!ejercicioCatalogoId) {
@@ -548,7 +826,7 @@ export class EntrenamientoService {
             .insert(ejerciciosCatalogo)
             .values({
               id: nuevoEjId,
-              entrenadorId: rutinaActiva.entrenadorId,
+              entrenadorId,
               nombre: ej.nombre,
               grupoMuscular: 'GENERAL',
               activo: true,
@@ -565,7 +843,7 @@ export class EntrenamientoService {
         sesionId: nuevaSesionId,
         ejercicioId: ejercicioCatalogoId,
         orden: i + 1,
-        notasCoach: `Bloque: ${bloqueSeleccionado.titulo} • Reps: ${ej.reps} • Peso: ${ej.peso || 'Sugerido'}`,
+        notasCoach: `Bloque: ${bloque.titulo} • Reps: ${ej.reps} • Peso: ${ej.peso || 'Sugerido'}`,
         descansoPrescritoSegundos: ej.descansoSegundos || 90,
       });
 
@@ -947,6 +1225,7 @@ export class EntrenamientoService {
     cumpleReglaRacha: boolean;
     nuevaRacha: number;
     duracionMinutos: number | null;
+    volumenTotalKg?: string;
   }> {
     const validado = FinalizarSesionSchema.parse(input);
 
@@ -1259,6 +1538,8 @@ export class EntrenamientoService {
       id: sesion.id,
       alumnoId: sesion.alumnoId,
       rutinaId: sesion.rutinaId,
+      bloqueId: sesion.bloqueId ?? null,
+      esDiaDescansoOriginal: sesion.esDiaDescansoOriginal ?? false,
       fechaProgramada: sesion.fechaProgramada,
       fechaInicioUtc: toIsoUtcString(sesion.fechaInicioUtc),
       fechaFinUtc: toIsoUtcString(sesion.fechaFinUtc),

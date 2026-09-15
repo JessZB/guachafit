@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/auth-context';
+import { apiClient } from '../../lib/api-client';
+import { SemanaEntrenamientoProgresoDTO } from '@guachafit/shared';
 import {
   Dumbbell,
   Utensils,
@@ -12,10 +14,23 @@ import {
   Flame,
   CheckCircle2,
   Calendar,
+  Zap,
 } from 'lucide-react';
 
 export function AtletaMenuPage() {
   const { user } = useAuth();
+  const [semanaProgreso, setSemanaProgreso] = useState<SemanaEntrenamientoProgresoDTO | null>(null);
+
+  useEffect(() => {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas';
+    apiClient<SemanaEntrenamientoProgresoDTO>(
+      `/alumnos/me/rutina/semana-actual?timezone=${encodeURIComponent(tz)}`
+    )
+      .then((data) => {
+        if (data) setSemanaProgreso(data);
+      })
+      .catch(() => {});
+  }, []);
 
   const emailName = user?.email ? user.email.split('@')[0] : 'Alumno';
   const primerNombre = emailName.charAt(0).toUpperCase() + emailName.slice(1);
@@ -64,10 +79,19 @@ export function AtletaMenuPage() {
             <div className="p-3 rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
               <Dumbbell className="h-7 w-7" />
             </div>
-            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/20 text-primary border border-primary/30">
-              <Calendar className="h-3 w-3" />
-              Rutina de Hoy
-            </span>
+            {semanaProgreso && semanaProgreso.totalBloques > 0 ? (
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full bg-primary/20 text-primary border border-primary/30">
+                <Zap className="h-3 w-3" />
+                <span>
+                  {semanaProgreso.bloquesCompletados}/{semanaProgreso.totalBloques} Bloques ({semanaProgreso.porcentajeCumplimiento}%)
+                </span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/20 text-primary border border-primary/30">
+                <Calendar className="h-3 w-3" />
+                Rutina de Hoy
+              </span>
+            )}
           </div>
 
           <div className="mt-4">
@@ -80,10 +104,31 @@ export function AtletaMenuPage() {
             </p>
           </div>
 
-          <div className="mt-5 flex items-center justify-between pt-4 border-t border-border/60">
+          {semanaProgreso && semanaProgreso.totalBloques > 0 && (
+            <div className="mt-4 pt-3 border-t border-border/50">
+              <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground mb-1.5">
+                <span className="font-semibold text-foreground">Progreso Semanal ({semanaProgreso.semanaIso})</span>
+                <span className="font-bold text-primary">
+                  {semanaProgreso.bloquesCompletados === semanaProgreso.totalBloques
+                    ? '¡100% Completado! 🎉'
+                    : `${semanaProgreso.bloquesCompletados} de ${semanaProgreso.totalBloques} completados`}
+                </span>
+              </div>
+              <div className="w-full h-1.5 rounded-full bg-secondary overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all duration-500"
+                  style={{
+                    width: `${Math.min(100, Math.max(0, parseFloat(semanaProgreso.porcentajeCumplimiento)))}%`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="mt-4 flex items-center justify-between pt-3 border-t border-border/60">
             <span className="text-xs font-medium text-foreground flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              Listo para iniciar
+              {semanaProgreso?.esDiaDescansoHoy ? 'Día de descanso (recuperación activa)' : 'Listo para iniciar'}
             </span>
             <span className="text-xs font-bold text-primary flex items-center gap-1 group-hover:translate-x-1 transition-transform">
               Empezar ahora <ChevronRight className="h-4 w-4" />

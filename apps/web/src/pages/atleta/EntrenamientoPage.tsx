@@ -4,7 +4,12 @@ import { apiClient } from '../../lib/api-client';
 import { queueOfflineMutation, offlineDb } from '../../lib/offline-db';
 import { RestTimer } from '../../components/common/RestTimer';
 import { triggerHaptic } from '../../lib/haptics';
-import { SesionEntrenamientoDetalleDTO, EstadoSesion } from '@guachafit/shared';
+import {
+  SesionEntrenamientoDetalleDTO,
+  EstadoSesion,
+  SemanaEntrenamientoProgresoDTO,
+  BloqueSemanaProgresoDTO,
+} from '@guachafit/shared';
 import {
   Dumbbell,
   Play,
@@ -18,12 +23,20 @@ import {
   X,
   MessageSquare,
   AlertTriangle,
+  Calendar,
+  Zap,
+  RotateCcw,
+  Sparkles,
+  Coffee,
+  ArrowRight,
 } from 'lucide-react';
 
 export function EntrenamientoPage() {
   const { user } = useAuth();
   const [sesion, setSesion] = useState<SesionEntrenamientoDetalleDTO | null>(null);
+  const [semanaProgreso, setSemanaProgreso] = useState<SemanaEntrenamientoProgresoDTO | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSwitchingBloque, setIsSwitchingBloque] = useState(false);
   const [isRestTimerOpen, setIsRestTimerOpen] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(90);
   const [activeSerieKey, setActiveSerieKey] = useState<{ ejercicioIndex: number; serieIndex: number } | null>(null);
@@ -56,42 +69,52 @@ export function EntrenamientoPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFinishModalOpen]);
 
-  // Load session (from API or IndexedDB fallback)
-  useEffect(() => {
-    async function loadTodaySession() {
-      setIsLoading(true);
-      try {
-        if (navigator.onLine) {
-          const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas';
-          const data = await apiClient<SesionEntrenamientoDetalleDTO | null>(
-            `/alumnos/me/sesiones/hoy?timezone=${encodeURIComponent(tz)}`
-          );
-          if (data) {
-            setSesion(data);
-            // Cache in IndexedDB
-            if (data.id) {
-              await offlineDb.rutinaHoy.put({
-                id: data.id,
-                alumnoId: user?.id || '',
-                fechaProgramada: data.fechaProgramada,
-                sesion: data,
-                updatedAt: Date.now(),
-              });
-            }
-          } else {
-            setSesion(null);
+  // Cargar sesión de hoy y progreso semanal de bloques (con soporte de bloque específico)
+  const loadSessionAndProgress = useCallback(async (selectedBloqueId?: string) => {
+    setIsLoading(true);
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas';
+    try {
+      if (navigator.onLine) {
+        // 1. Cargar progreso de la semana actual
+        const progresoRes = await apiClient<SemanaEntrenamientoProgresoDTO>(
+          `/alumnos/me/rutina/semana-actual?timezone=${encodeURIComponent(tz)}`
+        ).catch(() => null);
+        if (progresoRes) {
+          setSemanaProgreso(progresoRes);
+        }
+
+        // 2. Cargar sesión de hoy (o del bloque seleccionado)
+        const url = selectedBloqueId
+          ? `/alumnos/me/sesiones/hoy?timezone=${encodeURIComponent(tz)}&bloqueId=${encodeURIComponent(selectedBloqueId)}`
+          : `/alumnos/me/sesiones/hoy?timezone=${encodeURIComponent(tz)}`;
+
+        const data = await apiClient<SesionEntrenamientoDetalleDTO | null>(url);
+        if (data) {
+          setSesion(data);
+          // Cache en IndexedDB
+          if (data.id) {
+            await offlineDb.rutinaHoy.put({
+              id: data.id,
+              alumnoId: user?.id || '',
+              fechaProgramada: data.fechaProgramada,
+              sesion: data,
+              updatedAt: Date.now(),
+            });
           }
         } else {
-          // Offline fallback
-          const cached = await offlineDb.rutinaHoy.toCollection().last();
-          if (cached) {
-            setSesion(cached.sesion);
-          } else {
-            setSesion(null);
-          }
+          setSesion(null);
         }
-      } catch (err) {
-        console.warn('Fallback a datos locales o simulación de sesión:', err);
+      } else {
+        // Offline fallback
+        const cached = await offlineDb.rutinaHoy.toCollection().last();
+        if (cached) {
+          setSesion(cached.sesion);
+        } else {
+          setSesion(null);
+        }
+      }
+    } catch (err) {
+      console.warn('Fallback a datos locales o simulación de sesión:', err);
         // Fallback demo session so the user can test the UI offline or without backend
         const demoSesion: SesionEntrenamientoDetalleDTO = {
           id: 'sesion-demo-001',
@@ -146,11 +169,21 @@ export function EntrenamientoPage() {
         setSesion(demoSesion);
       } finally {
         setIsLoading(false);
+        setIsSwitchingBloque(false);
       }
-    }
+    },
+    [user]
+  );
 
-    loadTodaySession();
-  }, [user]);
+  useEffect(() => {
+    loadSessionAndProgress();
+  }, [loadSessionAndProgress]);
+
+  const handleSelectBloque = async (bloqueId: string) => {
+    triggerHaptic('selection');
+    setIsSwitchingBloque(true);
+    await loadSessionAndProgress(bloqueId);
+  };
 
   // Start workout session
   const handleStartSession = async () => {
@@ -474,12 +507,20 @@ export function EntrenamientoPage() {
       });
     }
 
+    // Actualizar progreso semanal reactivo
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas';
+    apiClient<SemanaEntrenamientoProgresoDTO>(
+      `/alumnos/me/rutina/semana-actual?timezone=${encodeURIComponent(tz)}`
+    ).then((p) => {
+      if (p) setSemanaProgreso(p);
+    }).catch(() => {});
+
     setIsFinishing(false);
     setIsFinishModalOpen(false);
     triggerHaptic('success');
   };
 
-  if (isLoading) {
+  if (isLoading && !sesion && !semanaProgreso) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
         <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary/20 border-t-primary" />
@@ -487,46 +528,204 @@ export function EntrenamientoPage() {
     );
   }
 
-  if (!sesion) {
-    return (
-      <div className="p-8 text-center space-y-3 bg-card rounded-2xl border border-border">
-        <Dumbbell className="h-10 w-10 text-muted-foreground mx-auto" />
-        <h3 className="font-bold text-base">No hay entrenamiento programado para hoy</h3>
-        <p className="text-xs text-muted-foreground">
-          Disfruta tu día de descanso o consulta con tu entrenador.
-        </p>
-      </div>
-    );
-  }
-
-  const isCompleted = sesion.estado === EstadoSesion.COMPLETADA;
-  const isInProgress = sesion.estado === EstadoSesion.EN_PROGRESO;
-  const isPlanned = sesion.estado === EstadoSesion.PLANIFICADA;
+  const isCompleted = sesion?.estado === EstadoSesion.COMPLETADA;
+  const isInProgress = sesion?.estado === EstadoSesion.EN_PROGRESO;
+  const isPlanned = sesion?.estado === EstadoSesion.PLANIFICADA;
 
   return (
     <div className="space-y-6">
-      {/* Session Hero Banner */}
-      <div className="p-5 sm:p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-4">
-          <div>
+      {/* Barra de Progreso Semanal Interactiva */}
+      {semanaProgreso && semanaProgreso.totalBloques > 0 && (
+        <div className="p-4 sm:p-5 rounded-3xl bg-card border border-border/80 shadow-md space-y-3.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-3">
             <div className="flex items-center gap-2">
-              <span
-                className={`text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-                  isCompleted
-                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
-                    : isInProgress
-                    ? 'bg-primary/15 text-primary border border-primary/20'
-                    : 'bg-secondary text-muted-foreground border border-border'
-                }`}
-              >
-                {isCompleted ? 'Completada' : isInProgress ? 'En Progreso' : 'Planificada'}
-              </span>
-              <span className="text-xs text-muted-foreground">{sesion.fechaProgramada}</span>
+              <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                <Calendar className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="text-xs sm:text-sm font-bold text-foreground">
+                  Planificación Semanal · {semanaProgreso.semanaIso}
+                </h2>
+                <p className="text-[11px] text-muted-foreground">
+                  Lunes {semanaProgreso.inicioSemana} al Domingo {semanaProgreso.finSemana}
+                </p>
+              </div>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground mt-1">
-              Checklist de Entrenamiento
-            </h1>
+
+            <div className="flex items-center gap-2.5 self-end sm:self-center">
+              <div className="text-right">
+                <span className="text-xs font-black font-mono text-foreground">
+                  {semanaProgreso.bloquesCompletados}/{semanaProgreso.totalBloques} Bloques
+                </span>
+                <span className="text-[10px] text-muted-foreground ml-1.5 font-bold">
+                  ({semanaProgreso.porcentajeCumplimiento}%)
+                </span>
+              </div>
+              <div className="w-20 sm:w-24 h-2 rounded-full bg-secondary overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all duration-500"
+                  style={{
+                    width: `${Math.min(100, Math.max(0, parseFloat(semanaProgreso.porcentajeCumplimiento)))}%`,
+                  }}
+                />
+              </div>
+            </div>
           </div>
+
+          {/* Chips de Bloques de la Semana */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+            {semanaProgreso.bloques.map((b) => {
+              const esActivo = sesion?.bloqueId === b.bloqueId;
+              const esCompletado = b.completado;
+              const esSugerido = b.esSugeridoHoy;
+
+              let badgeStyle =
+                'bg-secondary/60 text-muted-foreground border-border hover:bg-secondary hover:text-foreground';
+              if (esCompletado) {
+                badgeStyle = esActivo
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 ring-2 ring-emerald-500/30 font-extrabold'
+                  : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 font-bold';
+              } else if (esActivo) {
+                badgeStyle =
+                  'bg-primary text-primary-foreground border-primary font-black shadow-md shadow-primary/25 ring-2 ring-primary/30';
+              } else if (esSugerido) {
+                badgeStyle =
+                  'bg-primary/15 text-primary border-primary/40 hover:bg-primary/25 font-extrabold';
+              }
+
+              return (
+                <button
+                  key={b.bloqueId}
+                  type="button"
+                  disabled={isSwitchingBloque}
+                  onClick={() => handleSelectBloque(b.bloqueId)}
+                  className={`py-2 px-3.5 rounded-2xl border text-xs whitespace-nowrap transition-all duration-200 flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50 ${badgeStyle}`}
+                  title={`Seleccionar ${b.titulo}`}
+                >
+                  {esCompletado ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                  ) : esActivo ? (
+                    <Zap className="h-3.5 w-3.5 shrink-0 fill-current" />
+                  ) : esSugerido ? (
+                    <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
+                  ) : (
+                    <Clock className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                  )}
+                  <span className="font-semibold">{b.titulo.split(':')[0]}</span>
+                  {esCompletado && <span className="text-[10px] font-bold opacity-80">✓</span>}
+                  {esActivo && <span className="text-[10px] font-mono uppercase tracking-wider ml-0.5">Hoy</span>}
+                  {!esCompletado && !esActivo && esSugerido && (
+                    <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">
+                      Sugerido
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Si NO hay sesión activa seleccionada (Día de descanso o semana completada) */}
+      {!sesion && (
+        <div className="p-6 sm:p-8 rounded-3xl bg-card border border-border/80 shadow-md text-center space-y-5">
+          <div className="h-16 w-16 rounded-3xl bg-primary/10 text-primary flex items-center justify-center mx-auto shadow-inner">
+            {semanaProgreso?.esDiaDescansoHoy ? (
+              <Coffee className="h-8 w-8" />
+            ) : (
+              <Dumbbell className="h-8 w-8" />
+            )}
+          </div>
+
+          <div className="max-w-md mx-auto space-y-1.5">
+            <h3 className="text-xl font-black text-foreground">
+              {semanaProgreso?.esDiaDescansoHoy
+                ? 'Día de descanso según tu plan'
+                : 'No hay sesión activa seleccionada'}
+            </h3>
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+              {semanaProgreso?.bloquesCompletados === semanaProgreso?.totalBloques &&
+              (semanaProgreso?.totalBloques ?? 0) > 0
+                ? '¡Excelente trabajo! Has completado el 100% de tus bloques semanales. Disfruta tu recuperación.'
+                : 'Puedes descansar hoy o aprovechar el día para recuperar cualquiera de tus bloques semanales pendientes:'}
+            </p>
+          </div>
+
+          {/* Bloques Pendientes para Recuperación con 1-Toque */}
+          {semanaProgreso && semanaProgreso.bloques.filter((b) => !b.completado).length > 0 && (
+            <div className="pt-3 border-t border-border/60 max-w-lg mx-auto space-y-2.5">
+              <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">
+                Bloques pendientes de esta semana
+              </span>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {semanaProgreso.bloques
+                  .filter((b) => !b.completado)
+                  .map((b) => (
+                    <button
+                      key={b.bloqueId}
+                      type="button"
+                      disabled={isSwitchingBloque}
+                      onClick={() => handleSelectBloque(b.bloqueId)}
+                      className="p-3.5 rounded-2xl bg-secondary/50 hover:bg-secondary border border-border hover:border-primary/50 text-left transition-all duration-200 active:scale-98 cursor-pointer flex flex-col justify-between group disabled:opacity-50"
+                    >
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className="text-xs font-black text-foreground group-hover:text-primary transition-colors">
+                          {b.titulo}
+                        </span>
+                        {b.esSugeridoHoy && (
+                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-primary/20 text-primary">
+                            Sugerido
+                          </span>
+                        )}
+                      </div>
+                      {b.enfoque && (
+                        <span className="text-[11px] text-muted-foreground line-clamp-1">
+                          {b.enfoque}
+                        </span>
+                      )}
+                      <div className="mt-2.5 flex items-center justify-between text-[11px] font-bold text-primary">
+                        <span>Entrenar este bloque hoy</span>
+                        <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
+                      </div>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Si HAY sesión cargada */}
+      {sesion && (
+        <>
+          {/* Session Hero Banner */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-4">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span
+                    className={`text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                      isCompleted
+                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                        : isInProgress
+                        ? 'bg-primary/15 text-primary border border-primary/20'
+                        : 'bg-secondary text-muted-foreground border border-border'
+                    }`}
+                  >
+                    {isCompleted ? 'Completada' : isInProgress ? 'En Progreso' : 'Planificada'}
+                  </span>
+                  <span className="text-xs text-muted-foreground font-mono">{sesion.fechaProgramada}</span>
+                  {sesion.esDiaDescansoOriginal && (
+                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/25 flex items-center gap-1">
+                      ⏱️ Recuperada en Descanso
+                    </span>
+                  )}
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground mt-1">
+                  Checklist de Entrenamiento
+                </h1>
+              </div>
 
           {/* Compliance & Streak Badge */}
           <div className="flex items-center gap-3">
@@ -624,6 +823,18 @@ export function EntrenamientoPage() {
                 <p className="text-foreground font-medium">{sesion.notasAlumno}</p>
               </div>
             )}
+
+            <div className="pt-2 flex items-center justify-end">
+              <button
+                type="button"
+                disabled={isSwitchingBloque}
+                onClick={() => handleSelectBloque(sesion.bloqueId || '')}
+                className="text-xs font-bold text-muted-foreground hover:text-foreground flex items-center gap-1.5 py-1.5 px-3.5 rounded-xl bg-secondary/80 hover:bg-secondary border border-border/60 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+              >
+                <RotateCcw className="h-3.5 w-3.5 text-primary" />
+                <span>Volver a entrenar este bloque</span>
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -968,6 +1179,8 @@ export function EntrenamientoPage() {
             </button>
           </div>
         </div>
+      )}
+      </>
       )}
 
       {/* Floating Rest Timer */}

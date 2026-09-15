@@ -179,6 +179,7 @@ export const BloqueDiaRutinaSchema = z.object({
   diaId: z.string().min(1),
   titulo: z.string().min(2, 'El título debe tener al menos 2 caracteres').max(120),
   enfoque: z.string().max(200).optional(),
+  diaSugerido: z.number().int().min(1).max(7).optional(),
   ejercicios: z
     .array(
       z.object({
@@ -198,7 +199,10 @@ export const BloqueDiaRutinaSchema = z.object({
 export const GuardarRutinaSemanalSchema = z.object({
   alumnoId: z.string().uuid('El ID del alumno debe ser un UUID válido'),
   nombreRutina: z.string().max(120).optional(),
-  bloques: z.array(BloqueDiaRutinaSchema).min(1, 'Debe definir al menos un bloque de día de entrenamiento'),
+  bloques: z
+    .array(BloqueDiaRutinaSchema)
+    .min(1, 'Debe definir al menos un bloque de día de entrenamiento')
+    .max(7, 'Una planificación semanal no puede exceder 7 bloques de entrenamiento'),
 });
 
 export const IniciarSesionSchema = z.object({

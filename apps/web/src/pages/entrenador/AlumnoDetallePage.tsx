@@ -746,12 +746,14 @@ export function AlumnoDetallePage() {
   };
 
   const agregarNuevoDiaRutina = () => {
+    if (bloquesRutinaEdit.length >= 7) return;
     triggerHaptic('light');
     const nuevoDiaNum = bloquesRutinaEdit.length + 1;
     setBloquesRutinaEdit([
       ...bloquesRutinaEdit,
       {
         diaId: 'd' + nuevoDiaNum,
+        diaSugerido: nuevoDiaNum <= 7 ? nuevoDiaNum : undefined,
         titulo: `Día ${nuevoDiaNum}: Nuevo Bloque`,
         enfoque: 'General',
         ejercicios: [],
@@ -1777,22 +1779,45 @@ export function AlumnoDetallePage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {historialSesiones.map((ses) => (
-                  <div key={ses.id} className="p-4 rounded-2xl bg-card border border-border shadow-xs space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div className="flex items-center gap-2.5">
-                        <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-mono font-bold text-xs shrink-0">
-                          <Calendar className="h-4 w-4" />
+                {historialSesiones.map((ses) => {
+                  const bloqueEncontrado = rutinaSemanal.find((b) => b.diaId === ses.bloqueId);
+                  const diaSemanaNombre = (() => {
+                    if (!ses.fechaProgramada) return '';
+                    try {
+                      const [y, m, d] = ses.fechaProgramada.split('-').map(Number);
+                      const fecha = new Date(Date.UTC(y, m - 1, d));
+                      return new Intl.DateTimeFormat('es-ES', { weekday: 'long', timeZone: 'UTC' }).format(fecha);
+                    } catch {
+                      return '';
+                    }
+                  })();
+                  const diaSemanaCapitalizado = diaSemanaNombre
+                    ? diaSemanaNombre.charAt(0).toUpperCase() + diaSemanaNombre.slice(1)
+                    : '';
+
+                  return (
+                    <div key={ses.id} className="p-4 rounded-2xl bg-card border border-border shadow-xs space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-mono font-bold text-xs shrink-0">
+                            <Calendar className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="font-extrabold text-sm text-foreground">
+                                {bloqueEncontrado ? bloqueEncontrado.titulo : `Entrenamiento: ${ses.fechaProgramada}`}
+                              </h4>
+                              {ses.esDiaDescansoOriginal && (
+                                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                                  ⏱️ Recuperada en {diaSemanaCapitalizado || 'Descanso'} (Día de descanso)
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">
+                              {ses.fechaProgramada} · {ses.duracionMinutos ? `${ses.duracionMinutos} minutos de duración` : 'Entrenamiento completado'}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <h4 className="font-extrabold text-sm text-foreground">
-                            Entrenamiento: {ses.fechaProgramada}
-                          </h4>
-                          <p className="text-[11px] text-muted-foreground">
-                            {ses.duracionMinutos ? `${ses.duracionMinutos} minutos de duración` : 'Entrenamiento completado'}
-                          </p>
-                        </div>
-                      </div>
 
                       <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
                         {ses.volumenTotalKg && ses.volumenTotalKg !== '0.00' && (
@@ -1924,7 +1949,8 @@ export function AlumnoDetallePage() {
                       </div>
                     )}
                   </div>
-                ))}
+                );
+              })}
               </div>
             )}
           </div>
