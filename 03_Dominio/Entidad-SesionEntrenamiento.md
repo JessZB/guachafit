@@ -59,7 +59,11 @@ tags:
 - **Raíz del Agregado:** `SesionEntrenamiento`.
 - **Entidades Contenidas:**
   - `EjercicioEjecutado` (Entidad interna identificada por `ejercicio_id`).
-  - `SerieRegistro` (Value Object con: `numero_serie`, `reps_objetivo`, `reps_logradas`, `peso_kg` (real, se sobrescribe al sincronizar), `peso_prescrito_kg` (null si la prescripción es cualitativa), `rpe`, `descanso_segundos` (real), `completada: boolean`).
+  - `SerieRegistro` (Value Object con: `numero_serie`, `reps_objetivo`, `reps_logradas`, `peso_kg` (real, se sobrescribe al sincronizar), `peso_prescrito_kg` (null si la prescripción es cualitativa), `rpe`, `descanso_segundos` (valor del TEMPORIZADOR visible en pantalla: objetivo, no medición), `completada: boolean`, `timestamp_inicio_utc` (WU17: marca REAL de inicio de la serie; null si el alumno no la marcó) y `timestamp_completada_utc`).
+- **Medición del descanso real (WU17):** el descanso se mide con marcas del mismo dispositivo, no se estima:
+  - Por serie: `descanso_real(serie N) = timestamp_inicio_utc(serie N) − timestamp_completada_utc(serie N−1)`.
+  - Entre ejercicios: `descanso_real(ejercicio M) = timestamp_inicio_utc(primera serie de M) − timestamp_completada_utc(última serie de M−1)`.
+  - Límite honesto: si falta la marca de inicio no hay medición (`—`); nunca se inventa ni se muestran valores negativos. La precisión depende de que el alumno interactúe con la serie o pulse "Iniciar serie".
 
 ---
 

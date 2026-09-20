@@ -145,3 +145,8 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
 - Caché de idempotencia en memoria (§7.3).
 - RLS multi-tenant por etapas: ver [[RNF-003-aislamiento-multitenant-seguridad-datos-salud]].
 - Verificación visual manual pendiente en algunas pantallas móviles (layout/accesibilidad del modal de video y hints); no afecta la funcionalidad.
+
+### 7.7. Medición del descanso real (WU17)
+- **Fórmula:** `descanso_real = timestamp_inicio_utc(serie siguiente) − timestamp_completada_utc(serie anterior)` (misma fórmula entre ejercicios: inicio de la primera serie del siguiente − completada de la última del anterior). `series_registro.timestamp_inicio_utc` se captura sin fricción al interactuar con la serie (peso/reps/RPE) o con el botón "Iniciar serie", una sola vez y solo en series pendientes de una sesión `EnProgreso`; las series ya completadas nunca se retro-marcan y el prefill programático no la dispara.
+- **UI:** con marcas se muestra "Descanso real" y "Ejecución" (fin − inicio); sin marcas se conserva el Δ entre marcas de WU15 (cota superior) o "—". Nunca se muestran valores negativos.
+- **Límite honesto:** la precisión depende de que el alumno marque el inicio; sin marca no se inventa la medición y `descansoSegundos` sigue siendo el valor del temporizador (objetivo), no el descanso efectivo.

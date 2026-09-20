@@ -207,8 +207,9 @@ erDiagram
         numeric peso_kg "NUMERIC(6,2) real"
         numeric peso_prescrito_kg "NULL si cualitativo"
         numeric rpe "NUMERIC(3,1)"
-        int descanso_segundos "Real"
+        int descanso_segundos "Temporizador (objetivo)"
         boolean completada
+        timestamptz timestamp_inicio_utc "Marca real de inicio (WU17); NULL sin marca"
         timestamptz timestamp_completada_utc
     }
 
@@ -724,9 +725,13 @@ CREATE TABLE series_registro (
     peso_kg NUMERIC(6, 2), -- Peso real levantado (se sobrescribe al sincronizar)
     peso_prescrito_kg NUMERIC(6, 2), -- NULL si la prescripción es cualitativa (sin materializar 0.00)
     rpe NUMERIC(3, 1),
-    descanso_segundos INT, -- Descanso real registrado por el alumno
+    descanso_segundos INT, -- Valor del TEMPORIZADOR de descanso en pantalla (objetivo), no una medición
     completada BOOLEAN NOT NULL DEFAULT FALSE,
+    timestamp_inicio_utc TIMESTAMP WITH TIME ZONE, -- WU17: marca real de inicio de la serie (NULL si el alumno no la marcó)
     timestamp_completada_utc TIMESTAMP WITH TIME ZONE,
+    -- Descanso real derivado (solo lectura): inicio(serie N) - completada(serie N-1);
+    -- entre ejercicios: inicio(primera del siguiente) - completada(última del anterior).
+    -- Sin marca de inicio no hay medición (nunca se inventa).
     CONSTRAINT fk_serie_ejercicio_sesion FOREIGN KEY (ejercicio_sesion_id) REFERENCES ejercicios_sesion(id) ON DELETE CASCADE,
     CONSTRAINT chk_serie_positiva CHECK (reps_objetivo > 0 AND (reps_logradas IS NULL OR reps_logradas >= 0)),
     CONSTRAINT chk_peso_positivo CHECK (peso_kg IS NULL OR peso_kg >= 0.00)
