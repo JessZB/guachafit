@@ -1,5 +1,7 @@
 import {
   EstadoSesion,
+  MotivoOmision,
+  TipoCierreSesion,
   SemaforoNutricional,
   TipoComida,
   SemaforoAdherencia,
@@ -17,6 +19,30 @@ import {
   FotoComidaInputDTO,
   DECIMAL_STRING_REGEX,
 } from '@guachafit/shared';
+// D9: la lógica pura de RN-02/RN-03 NO se duplica en el test engine. Se importa y
+// re-exporta desde el código real de producción para eliminar el riesgo de deriva:
+// si la semántica cambia en src, estos tests fallan en lugar de enmascararlo.
+import {
+  evaluarCumplimientoRachaPorVolumen,
+  actualizarRacha,
+  calcularRachaEfectiva,
+  type RachaEstado,
+  type EvaluacionRacha,
+} from '../../../src/modules/entrenamiento/entrenamiento.service';
+import {
+  evaluarAdherenciaSemanal,
+  obtenerFechaLocalYyyyMmDd,
+  fechaAnteriorYyyyMmDd,
+} from '../../../src/common/adherencia.util';
+
+export {
+  evaluarCumplimientoRachaPorVolumen,
+  actualizarRacha,
+  calcularRachaEfectiva,
+  obtenerFechaLocalYyyyMmDd,
+  fechaAnteriorYyyyMmDd,
+};
+export type { RachaEstado, EvaluacionRacha };
 
 // =============================================================================
 // MODELOS DE ESTADO EN MEMORIA (INVARIANTE DE DOMINIO - MÓDULO 3)
@@ -28,7 +54,10 @@ export interface SerieRegistroState {
   numeroSerie: number;
   repsObjetivo: number;
   repsLogradas: number | null;
+  /** Peso real levantado. */
   pesoKg: string | null;
+  /** Peso prescrito por el coach (null si la prescripción es cualitativa o a peso corporal). */
+  pesoPrescritoKg?: string | null;
   rpe: string | null;
   completada: boolean;
   timestampCompletadaUtc: string | null;
@@ -52,11 +81,20 @@ export interface SesionEntrenamientoState {
   fechaFinUtc: string | null; // ISO 8601 UTC ('Z')
   timezoneCliente: string;
   estado: EstadoSesion;
+  motivoOmision?: MotivoOmision | null;
   porcentajeCumplimiento: string; // Decimal string con 2 decimales (ej. "80.00")
   notasAlumno?: string | null;
   ejercicios: EjercicioSesionState[];
   cumpleReglaRacha?: boolean;
+  rachaDias?: number;
+  rachaUltimaFecha?: string | null;
 }
+
+// =============================================================================
+// NOTA (D9): `evaluarCumplimientoRachaPorVolumen`, `actualizarRacha`,
+// `calcularRachaEfectiva`, `obtenerFechaLocalYyyyMmDd` y `fechaAnteriorYyyyMmDd`
+// se re-exportan arriba directamente desde `src/` — el engine no las reimplementa.
+// =============================================================================
 
 export interface FotoComidaState {
   id: string;
@@ -173,20 +211,25 @@ export class WorkoutTestEngine {
   }
 
   /**
-   * Finalización de sesión y evaluación de regla de racha (RN-02).
-   * Calcula porcentajeCumplimiento = (series completadas / series totales * 100).
-   * Si >= 70% -> cumpleReglaRacha = true e incrementa racha en +1.
-   * Si < 70%  -> cumpleReglaRacha = false y racha no se incrementa.
+   * Finalización de sesión y evaluación de regla de racha (RN-02) por VOLUMEN.
+   * `porcentajeCumplimiento` sigue siendo (series completadas / series totales * 100).
+   * Si >= 70% del volumen/partes → cumpleReglaRacha = true y la racha se actualiza según
+   * la fecha local (mismo día no duplica; ayer +1; gap reinicia a 1).
+   * Cierre vacío (Escenario 5): exige `tipoCierre`; DESCANSADA/INCOMPLETA → OMITIDA sin racha.
    */
   finalizarSesion(
     sesion: SesionEntrenamientoState,
     input: FinalizarSesionDTO,
-    rachaActual: number
+    racha: RachaEstado = { rachaDias: 0, rachaUltimaFecha: null }
   ): {
     sesion: SesionEntrenamientoState;
     cumpleReglaRacha: boolean;
+    cumpleRacha: boolean;
     nuevaRacha: number;
+    rachaDias: number;
+    rachaUltimaFecha: string | null;
     duracionMinutos: number | null;
+    motivoOmision: MotivoOmision | null;
   } {
     const validado = FinalizarSesionSchema.parse(input);
 
@@ -196,34 +239,67 @@ export class WorkoutTestEngine {
       );
     }
 
-    // Calcular volumen de series prescritas vs completadas
-    let totalSeries = 0;
+    // Calcular series totales, completadas y volumen
+    const allSeries: SerieRegistroState[] = [];
     let seriesCompletadas = 0;
 
     for (const ej of sesion.ejercicios) {
       for (const s of ej.series) {
-        totalSeries++;
-        if (s.completada) {
-          seriesCompletadas++;
-        }
+        allSeries.push(s);
+        if (s.completada) seriesCompletadas++;
       }
     }
 
+    const totalSeries = allSeries.length;
     const porcentajeNumero = totalSeries > 0 ? (seriesCompletadas / totalSeries) * 100 : 0;
     const porcentajeCumplimientoStr = porcentajeNumero.toFixed(2);
 
-    const cumpleReglaRacha = porcentajeNumero >= 70.0;
-    const nuevaRacha = cumpleReglaRacha ? rachaActual + 1 : rachaActual;
+    // RF-001 Escenario 5: cierre vacío exige decisión explícita del alumno.
+    if (seriesCompletadas === 0) {
+      if (!validado.tipoCierre) {
+        throw new Error(
+          'La sesión no registra series completadas. Indica si el día fue descansado o incompleto.'
+        );
+      }
+      if (validado.tipoCierre === TipoCierreSesion.COMPLETADA) {
+        throw new Error(
+          'No se puede cerrar como COMPLETADA una sesión sin series completadas. Indica si el día fue descansado o incompleto.'
+        );
+      }
+    }
+
+    const esOmision =
+      validado.tipoCierre === TipoCierreSesion.DESCANSADA ||
+      validado.tipoCierre === TipoCierreSesion.INCOMPLETA;
+    const motivoOmision: MotivoOmision | null = esOmision
+      ? validado.tipoCierre === TipoCierreSesion.DESCANSADA
+        ? MotivoOmision.DESCANSO
+        : MotivoOmision.INCOMPLETO
+      : null;
 
     const fechaFinUtc = validado.fechaFinUtc ?? new Date().toISOString();
     if (!fechaFinUtc.endsWith('Z')) {
       throw new Error(`El timestamp de finalización '${fechaFinUtc}' debe terminar en 'Z' (UTC).`);
     }
 
-    sesion.estado = EstadoSesion.COMPLETADA;
+    const evaluacion = evaluarCumplimientoRachaPorVolumen(allSeries);
+    const cumpleReglaRacha = !esOmision && evaluacion.cumple;
+
+    const fechaLocal = obtenerFechaLocalYyyyMmDd(fechaFinUtc, sesion.timezoneCliente);
+    const rachaActualizada = actualizarRacha(racha, fechaLocal, cumpleReglaRacha);
+    const nuevaRacha = calcularRachaEfectiva(
+      rachaActualizada.rachaDias,
+      rachaActualizada.rachaUltimaFecha,
+      fechaLocal
+    );
+
+    sesion.estado = esOmision ? EstadoSesion.OMITIDA : EstadoSesion.COMPLETADA;
+    sesion.motivoOmision = motivoOmision;
     sesion.fechaFinUtc = fechaFinUtc;
     sesion.porcentajeCumplimiento = porcentajeCumplimientoStr;
     sesion.cumpleReglaRacha = cumpleReglaRacha;
+    sesion.rachaDias = rachaActualizada.rachaDias;
+    sesion.rachaUltimaFecha = rachaActualizada.rachaUltimaFecha;
     if (validado.notasAlumno !== undefined) {
       sesion.notasAlumno = validado.notasAlumno;
     }
@@ -239,8 +315,12 @@ export class WorkoutTestEngine {
     return {
       sesion,
       cumpleReglaRacha,
+      cumpleRacha: cumpleReglaRacha,
       nuevaRacha,
+      rachaDias: rachaActualizada.rachaDias,
+      rachaUltimaFecha: rachaActualizada.rachaUltimaFecha,
       duracionMinutos,
+      motivoOmision,
     };
   }
 
@@ -260,40 +340,8 @@ export class WorkoutTestEngine {
     semaforoAdherencia: SemaforoAdherencia;
     nivelRiesgo: 'ALTO' | 'MEDIO' | 'BAJO';
   } {
-    if (sesionesPrescritas <= 0) {
-      return {
-        porcentajeCumplimientoSemanal: '0.00',
-        semaforoAdherencia: SemaforoAdherencia.ROJO,
-        nivelRiesgo: 'ALTO',
-      };
-    }
-
-    const porcentaje = (sesionesCompletadas / sesionesPrescritas) * 100;
-    const porcentajeStr = porcentaje.toFixed(2);
-
-    // Regla RN-03: Inactividad > 4 días consecutivos fuerza automáticamente a ROJO
-    if (diasInactivo > 4 || porcentaje < 50.0) {
-      return {
-        porcentajeCumplimientoSemanal: porcentajeStr,
-        semaforoAdherencia: SemaforoAdherencia.ROJO,
-        nivelRiesgo: 'ALTO',
-      };
-    }
-
-    if (porcentaje >= 80.0) {
-      return {
-        porcentajeCumplimientoSemanal: porcentajeStr,
-        semaforoAdherencia: SemaforoAdherencia.VERDE,
-        nivelRiesgo: 'BAJO',
-      };
-    }
-
-    // 50% <= porcentaje < 80%
-    return {
-      porcentajeCumplimientoSemanal: porcentajeStr,
-      semaforoAdherencia: SemaforoAdherencia.AMARILLO,
-      nivelRiesgo: 'MEDIO',
-    };
+    // D9: delega en la función real compartida (adherencia.util.ts), sin duplicar umbrales.
+    return evaluarAdherenciaSemanal(sesionesPrescritas, sesionesCompletadas, diasInactivo);
   }
 }
 

@@ -299,11 +299,13 @@ describe('BDD: RF-005, RF-006 & RF-001 - Ajustes Operativos e Historial de Entre
 
     const mockDb = createMockDb();
     const mockEventEmitter = { emit: vi.fn() } as any;
+    // RNF-003/ADR-009: passthrough del envoltorio RLS para el mock in-memory.
+    const withTenantMock = vi.fn(async (_ctx: any, fn: any) => fn(mockDb));
 
     finanzasService = new FinanzasService(mockDb, mockEventEmitter);
     finanzasController = new FinanzasController(finanzasService);
 
-    entrenamientoService = new EntrenamientoService(mockDb, mockEventEmitter);
+    entrenamientoService = new EntrenamientoService(mockDb, withTenantMock, mockEventEmitter);
     entrenamientoController = new EntrenamientoController(entrenamientoService);
   });
 

@@ -217,7 +217,9 @@ describe('BDD: RF-001 & RF-017 - Cierre End-to-End del Flujo de Entrenamiento (C
     mockSeriesRegistro = [];
 
     const mockDb = createMockDb();
-    entrenamientoService = new EntrenamientoService(mockDb as any);
+    // RNF-003/ADR-009: passthrough del envoltorio RLS para el mock in-memory.
+    const withTenantMock = vi.fn(async (_ctx: any, fn: any) => fn(mockDb));
+    entrenamientoService = new EntrenamientoService(mockDb as any, withTenantMock);
     entrenamientoController = new EntrenamientoController(entrenamientoService);
   });
 
@@ -360,15 +362,33 @@ describe('BDD: RF-001 & RF-017 - Cierre End-to-End del Flujo de Entrenamiento (C
       });
     });
 
-    it('debe instanciar automáticamente la sesión del día si no existe en BD para la fecha actual', async () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('mantiene la consulta pasiva en solo lectura (RN-04) y la acción explícita instancia la sesión del día', async () => {
+      // Fecha fija (lunes) para que el bloque prescrito aplique sin depender del día real de ejecución
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-14T10:00:00.000Z'));
+
       expect(mockSesionesEntrenamiento.length).toBe(0);
 
-      const sesion = await entrenamientoController.obtenerSesionHoy(
+      // RN-04: consultar la rutina del día es READ-ONLY: no instancia ni muta nada
+      const sesionPasiva = await entrenamientoController.obtenerSesionHoy(
         { user: { sub: ALUMNO_A_USER_ID, rol: Rol.ALUMNO } },
         'America/Caracas'
       );
+      expect(sesionPasiva).toBeNull();
+      expect(mockSesionesEntrenamiento.length).toBe(0);
 
-      expect(sesion).toBeDefined();
+      // Acción explícita del alumno: instanciar el bloque del día
+      const sesion = await entrenamientoController.entrenarBloqueHoy(
+        { user: { sub: ALUMNO_A_USER_ID, rol: Rol.ALUMNO } },
+        'dia-1',
+        { timezoneCliente: 'America/Caracas' }
+      );
+
+      expect(sesion).not.toBeNull();
       expect(sesion?.estado).toBe(EstadoSesion.PLANIFICADA);
       expect(sesion?.ejercicios.length).toBe(1);
       expect(sesion?.ejercicios[0].series.length).toBe(3);
@@ -561,6 +581,75 @@ describe('BDD: RF-001 & RF-017 - Cierre End-to-End del Flujo de Entrenamiento (C
       expect(res.volumenTotalKg).toBe('980.00');
       expect(res.sesion.volumenTotalKg).toBe('980.00');
       expect(res.cumpleReglaRacha).toBe(true);
+      expect(res.cumpleRacha).toBe(true);
+    });
+
+    it('debe exigir la decisión del alumno (400) al intentar cerrar una sesión sin series completadas', async () => {
+      mockSesionesEntrenamiento[0].estado = EstadoSesion.EN_PROGRESO;
+      mockSesionesEntrenamiento[0].fechaInicioUtc = new Date(Date.now() - 5 * 60000);
+
+      // Ninguna serie completada (Escenario 5)
+      await expect(
+        entrenamientoController.finalizarSesion(
+          { user: { sub: ALUMNO_A_USER_ID, rol: Rol.ALUMNO } },
+          sesionId,
+          { fechaFinUtc: new Date().toISOString() }
+        )
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('debe registrar el día como OMITIDA (DESCANSO) sin incrementar la racha cuando el alumno lo decide', async () => {
+      mockSesionesEntrenamiento[0].estado = EstadoSesion.EN_PROGRESO;
+      mockSesionesEntrenamiento[0].fechaInicioUtc = new Date(Date.now() - 5 * 60000);
+      const ayer = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      mockPerfilesAlumno[0].rachaDias = 4;
+      mockPerfilesAlumno[0].rachaUltimaFecha = ayer;
+
+      const res = await entrenamientoController.finalizarSesion(
+        { user: { sub: ALUMNO_A_USER_ID, rol: Rol.ALUMNO } },
+        sesionId,
+        { fechaFinUtc: new Date().toISOString(), tipoCierre: 'DESCANSADA' }
+      );
+
+      expect(res.sesion.estado).toBe(EstadoSesion.OMITIDA);
+      expect(res.sesion.motivoOmision).toBe('DESCANSO');
+      expect(res.cumpleReglaRacha).toBe(false);
+      expect(res.nuevaRacha).toBe(4); // racha intacta (no incrementa por omisión)
+      expect(mockPerfilesAlumno[0].rachaDias).toBe(4);
+    });
+  });
+
+  // ===========================================================================
+  // FASE 3.b: AISLAMIENTO DEL HISTORIAL ENTRE ALUMNOS (SEGURIDAD)
+  // ===========================================================================
+  describe('Escenario 3.b: Aislamiento del Historial (Alumno solo ve su propio expediente)', () => {
+    it('debe permitir a un alumno consultar su propio historial', async () => {
+      mockSesionesEntrenamiento.push({
+        id: 'sesion-propia',
+        alumnoId: ALUMNO_A_USER_ID,
+        fechaProgramada: '2026-09-12',
+        estado: EstadoSesion.COMPLETADA,
+        porcentajeCumplimiento: '100.00',
+        createdAtUtc: new Date(),
+        updatedAtUtc: new Date(),
+      });
+
+      const historial = await entrenamientoController.obtenerHistorialSesionesAlumno(
+        { user: { sub: ALUMNO_A_USER_ID, entrenadorId: COACH_A_ID, rol: Rol.ALUMNO } },
+        ALUMNO_A_PERFIL_ID
+      );
+
+      expect(historial.length).toBe(1);
+      expect(historial[0].alumnoId).toBe(ALUMNO_A_USER_ID);
+    });
+
+    it('debe rechazar con 403 cuando un alumno intenta leer el historial de otro alumno', async () => {
+      await expect(
+        entrenamientoController.obtenerHistorialSesionesAlumno(
+          { user: { sub: ALUMNO_B_USER_ID, entrenadorId: COACH_B_ID, rol: Rol.ALUMNO } },
+          ALUMNO_A_PERFIL_ID
+        )
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 

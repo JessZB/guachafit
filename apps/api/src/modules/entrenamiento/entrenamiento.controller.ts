@@ -8,6 +8,7 @@ import {
   Query,
   Req,
   Res,
+  Headers,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -26,6 +27,7 @@ import {
   IniciarSesionSchema,
   SincronizarSeriesBatchSchema,
   FinalizarSesionSchema,
+  EntrenarBloqueHoySchema,
 } from '@guachafit/shared';
 
 @Controller()
@@ -33,9 +35,9 @@ export class EntrenamientoController {
   constructor(private readonly entrenamientoService: EntrenamientoService) {}
 
   /**
-   * Consulta pasiva de rutina programada de hoy para el alumno (RN-04).
-   * Admite bloqueId opcional para alternar o recuperar un bloque específico.
-   * No altera estado 'planificada'.
+   * Consulta pasiva y READ-ONLY de la sesión de hoy para el alumno (RF-001 Escenario 1 / RN-04).
+   * Admite bloqueId opcional para consultar un bloque específico; NO crea, reemplaza ni elimina sesiones.
+   * Para instanciar o cambiar de bloque existe la acción explícita `entrenarBloqueHoy`.
    * Rol: Alumno
    */
   @Get(['alumnos/me/sesiones/hoy', 'sesiones/hoy'])
@@ -54,6 +56,31 @@ export class EntrenamientoController {
       return null;
     }
     return sesion;
+  }
+
+  /**
+   * Acción explícita del alumno para entrenar un bloque hoy (RN-04): instancia o cambia la sesión
+   * del día sin destruir sesiones existentes. Con `iniciarInmediato: true` (repetir un bloque ya
+   * completado) la nueva sesión arranca directamente 'en_progreso' conservando el historial previo.
+   * Rol: Alumno
+   */
+  @Post('alumnos/me/sesiones/bloques/:bloqueId/entrenar-hoy')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ALUMNO)
+  @HttpCode(HttpStatus.OK)
+  async entrenarBloqueHoy(
+    @Req() req: any,
+    @Param('bloqueId') bloqueId: string,
+    @Body() body: unknown,
+    @Headers('x-idempotency-key') idempotencyHeader?: string
+  ) {
+    const dto = EntrenarBloqueHoySchema.parse(body ?? {});
+    return this.entrenamientoService.entrenarBloqueHoy(
+      req.user.sub,
+      bloqueId,
+      dto,
+      idempotencyHeader
+    );
   }
 
   /**
@@ -137,10 +164,15 @@ export class EntrenamientoController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ALUMNO)
   @HttpCode(HttpStatus.OK)
-  async iniciarSesion(@Req() req: any, @Param('id') sesionId: string, @Body() body: unknown) {
+  async iniciarSesion(
+    @Req() req: any,
+    @Param('id') sesionId: string,
+    @Body() body: unknown,
+    @Headers('x-idempotency-key') idempotencyHeader?: string
+  ) {
     const dto = IniciarSesionSchema.parse(body);
     const alumnoId = req.user.sub;
-    return this.entrenamientoService.iniciarSesion(sesionId, alumnoId, dto);
+    return this.entrenamientoService.iniciarSesion(sesionId, alumnoId, dto, idempotencyHeader);
   }
 
   /**
@@ -153,11 +185,12 @@ export class EntrenamientoController {
   async sincronizarSeries(
     @Req() req: any,
     @Param('id') sesionId: string,
-    @Body() body: unknown
+    @Body() body: unknown,
+    @Headers('x-idempotency-key') idempotencyHeader?: string
   ) {
     const dto = SincronizarSeriesBatchSchema.parse(body);
     const alumnoId = req.user.sub;
-    return this.entrenamientoService.sincronizarSeries(sesionId, alumnoId, dto);
+    return this.entrenamientoService.sincronizarSeries(sesionId, alumnoId, dto, idempotencyHeader);
   }
 
   /**
@@ -171,15 +204,17 @@ export class EntrenamientoController {
   async finalizarSesion(
     @Req() req: any,
     @Param('id') sesionId: string,
-    @Body() body: unknown
+    @Body() body: unknown,
+    @Headers('x-idempotency-key') idempotencyHeader?: string
   ) {
     const dto = FinalizarSesionSchema.parse(body);
     const alumnoId = req.user.sub;
-    return this.entrenamientoService.finalizarSesion(sesionId, alumnoId, dto);
+    return this.entrenamientoService.finalizarSesion(sesionId, alumnoId, dto, idempotencyHeader);
   }
 
   /**
    * Obtener la última sesión registrada de un alumno (auditoría coach).
+   * Solo sesiones COMPLETADA o EN_PROGRESO; excluye PLANIFICADA y OMITIDA.
    * Roles: Entrenador, SuperAdmin
    */
   @Get(['sesiones/alumno/:alumnoId/ultima', 'sesiones/:alumnoId/ultima'])
@@ -194,7 +229,8 @@ export class EntrenamientoController {
     const sesion = await this.entrenamientoService.obtenerUltimaSesionAlumno(
       entrenadorId,
       alumnoId,
-      req.user.rol
+      req.user.rol,
+      req.user.sub
     );
     if (!sesion && res) {
       res.status(HttpStatus.NO_CONTENT);
@@ -224,7 +260,8 @@ export class EntrenamientoController {
       entrenadorId,
       alumnoId,
       req.user.rol,
-      limitNum
+      limitNum,
+      req.user.sub
     );
   }
 
@@ -275,13 +312,14 @@ export class EntrenamientoController {
 
   /**
    * Monitor semanal de adherencia del coach: ordena por nivel de riesgo (RN-03).
+   * `timezone` (opcional, IANA) define el Lunes 00:00 local de la ventana; default UTC.
    * Rol: Entrenador
    */
   @Get('entrenador/monitor-adherencia')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
-  async monitorAdherencia(@Req() req: any) {
+  async monitorAdherencia(@Req() req: any, @Query('timezone') timezone?: string) {
     const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.entrenamientoService.calcularSemanaAdherencia(entrenadorId);
+    return this.entrenamientoService.calcularSemanaAdherencia(entrenadorId, timezone);
   }
 }

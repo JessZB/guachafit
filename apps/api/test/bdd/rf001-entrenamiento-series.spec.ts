@@ -9,6 +9,8 @@ import {
 import {
   WorkoutTestEngine,
   SesionEntrenamientoState,
+  actualizarRacha,
+  calcularRachaEfectiva,
 } from './helpers/workout-nutrition-test-engine';
 
 describe('RF-001: Checklist Interactivo de Entrenamiento Diario y Monitor Semanal', () => {
@@ -329,6 +331,10 @@ describe('RF-001: Checklist Interactivo de Entrenamiento Diario y Monitor Semana
       });
     });
 
+    function clonarSesionInicial(): SesionEntrenamientoState {
+      return JSON.parse(JSON.stringify(sesionInicial)) as SesionEntrenamientoState;
+    }
+
     it('Caso 4A: Cumplimiento >= 70% (4 de 5 series = 80%) -> cumpleReglaRacha = true e incrementa racha en +1', () => {
       // Given que el alumno ha completado 4 de 5 series prescritas (80% del volumen)
       engine.sincronizarSeries(sesionInicial, {
@@ -341,7 +347,7 @@ describe('RF-001: Checklist Interactivo de Entrenamiento Diario y Monitor Semana
         ],
       });
 
-      const rachaPrevia = 7;
+      const rachaPrevia = { rachaDias: 7, rachaUltimaFecha: '2026-09-05' };
       const finalizarDto = {
         notasAlumno: 'Excelente bombeo, sentadillas muy sólidas',
         fechaFinUtc: '2026-09-06T11:05:00Z',
@@ -362,9 +368,11 @@ describe('RF-001: Checklist Interactivo de Entrenamiento Diario y Monitor Semana
 
       // And cumple la regla de racha (>= 70%)
       expect(resultado.cumpleReglaRacha).toBe(true);
+      expect(resultado.cumpleRacha).toBe(true);
 
-      // And la racha de días consecutivos se incrementa en +1
+      // And la racha de días consecutivos se incrementa en +1 (última fecha = ayer)
       expect(resultado.nuevaRacha).toBe(8);
+      expect(resultado.rachaUltimaFecha).toBe('2026-09-06');
 
       // And registra el timestamp de fin en UTC con sufijo 'Z'
       expect(resultado.sesion.fechaFinUtc).toBe('2026-09-06T11:05:00Z');
@@ -386,7 +394,7 @@ describe('RF-001: Checklist Interactivo de Entrenamiento Diario y Monitor Semana
         ],
       });
 
-      const rachaPrevia = 7;
+      const rachaPrevia = { rachaDias: 7, rachaUltimaFecha: '2026-09-05' };
       const finalizarDto = {
         notasAlumno: 'Tuve que cortar el entrenamiento por falta de tiempo',
         fechaFinUtc: '2026-09-06T10:30:00Z',
@@ -401,30 +409,204 @@ describe('RF-001: Checklist Interactivo de Entrenamiento Diario y Monitor Semana
       expect(resultado.cumpleReglaRacha).toBe(false);
 
       // And la racha de cumplimiento positivo NO se incrementa
-      expect(resultado.nuevaRacha).toBe(rachaPrevia);
+      expect(resultado.nuevaRacha).toBe(rachaPrevia.rachaDias);
+      expect(resultado.rachaUltimaFecha).toBe(rachaPrevia.rachaUltimaFecha);
       expect(resultado.duracionMinutos).toBe(30);
     });
 
-    it('Caso 4C: Intento de cierre de sesión vacía (0 series completadas = 0.00%)', () => {
+    it('Caso 4C: Cierre vacío sin tipoCierre -> exige decisión explícita (400)', () => {
       // Given que el alumno comenzó pero no completó ninguna serie
-      const rachaPrevia = 3;
-      const finalizarDto = {
-        fechaFinUtc: '2026-09-06T10:05:00Z',
-      };
-
-      // When finaliza la sesión vacía
-      const resultado = engine.finalizarSesion(sesionInicial, finalizarDto, rachaPrevia);
-
-      // Then el cumplimiento es 0.00% y racha no se incrementa
-      expect(resultado.sesion.porcentajeCumplimiento).toBe('0.00');
-      expect(resultado.cumpleReglaRacha).toBe(false);
-      expect(resultado.nuevaRacha).toBe(rachaPrevia);
+      expect(() => engine.finalizarSesion(sesionInicial, { fechaFinUtc: '2026-09-06T10:05:00Z' })).toThrow(
+        /no registra series completadas/
+      );
     });
 
-    it('Caso 4D: Debe rechazar finalizar una sesión que no esté en progreso', () => {
+    it('Caso 4D: Cierre vacío con tipoCierre DESCANSADA -> OMITIDA, motivo DESCANSO y racha intacta', () => {
+      const rachaPrevia = { rachaDias: 3, rachaUltimaFecha: '2026-09-05' };
+
+      const resultado = engine.finalizarSesion(
+        sesionInicial,
+        { fechaFinUtc: '2026-09-06T10:05:00Z', tipoCierre: 'DESCANSADA' },
+        rachaPrevia
+      );
+
+      expect(resultado.sesion.estado).toBe(EstadoSesion.OMITIDA);
+      expect(resultado.motivoOmision).toBe('DESCANSO');
+      expect(resultado.cumpleReglaRacha).toBe(false);
+      expect(resultado.nuevaRacha).toBe(3);
+      expect(resultado.sesion.fechaInicioUtc).toBe('2026-09-06T10:00:00Z'); // conserva timestamps
+    });
+
+    it('Caso 4E: Cierre vacío con tipoCierre INCOMPLETA -> OMITIDA, motivo INCOMPLETO y racha intacta', () => {
+      const resultado = engine.finalizarSesion(
+        sesionInicial,
+        { fechaFinUtc: '2026-09-06T10:05:00Z', tipoCierre: 'INCOMPLETA' },
+        { rachaDias: 2, rachaUltimaFecha: '2026-09-05' }
+      );
+
+      expect(resultado.sesion.estado).toBe(EstadoSesion.OMITIDA);
+      expect(resultado.motivoOmision).toBe('INCOMPLETO');
+      expect(resultado.nuevaRacha).toBe(2);
+    });
+
+    it('Caso 4F: COMPLETADA con 0 series sigue prohibido aunque venga tipoCierre', () => {
+      expect(() =>
+        engine.finalizarSesion(sesionInicial, { tipoCierre: 'COMPLETADA' })
+      ).toThrow(/sin series completadas/);
+    });
+
+    it('Caso 4G: Cumplimiento por VOLUMEN >= 70% (75 kg reales de 100 kg prescritos) incrementa la racha', () => {
+      const sesion = clonarSesionInicial();
+      // Una sola serie prescrita a 100 kg x 10 reps; el alumno realizó 75 kg x 10 reps = 75% del volumen
+      sesion.ejercicios = [
+        {
+          id: 'ej-sesion-vol',
+          sesionId,
+          ejercicioId: ejercicioId1,
+          orden: 1,
+          series: [
+            {
+              id: serie1Id,
+              ejercicioSesionId: 'ej-sesion-vol',
+              numeroSerie: 1,
+              repsObjetivo: 10,
+              repsLogradas: 10,
+              pesoKg: '75.00',
+              pesoPrescritoKg: '100.00',
+              rpe: null,
+              completada: true,
+              timestampCompletadaUtc: '2026-09-06T10:10:00Z',
+            },
+          ],
+        },
+      ];
+
+      const resultado = engine.finalizarSesion(
+        sesion,
+        { fechaFinUtc: '2026-09-06T11:00:00Z' },
+        { rachaDias: 7, rachaUltimaFecha: '2026-09-05' }
+      );
+
+      expect(resultado.cumpleReglaRacha).toBe(true);
+      expect(resultado.nuevaRacha).toBe(8);
+    });
+
+    it('Caso 4H: Cumplimiento por VOLUMEN < 70% (50 kg reales de 100 kg prescritos) NO incrementa la racha', () => {
+      const sesion = clonarSesionInicial();
+      sesion.ejercicios = [
+        {
+          id: 'ej-sesion-vol',
+          sesionId,
+          ejercicioId: ejercicioId1,
+          orden: 1,
+          series: [
+            {
+              id: serie1Id,
+              ejercicioSesionId: 'ej-sesion-vol',
+              numeroSerie: 1,
+              repsObjetivo: 10,
+              repsLogradas: 10,
+              pesoKg: '50.00',
+              pesoPrescritoKg: '100.00',
+              rpe: null,
+              completada: true,
+              timestampCompletadaUtc: '2026-09-06T10:10:00Z',
+            },
+          ],
+        },
+      ];
+
+      const resultado = engine.finalizarSesion(
+        sesion,
+        { fechaFinUtc: '2026-09-06T11:00:00Z' },
+        { rachaDias: 7, rachaUltimaFecha: '2026-09-05' }
+      );
+
+      expect(resultado.cumpleReglaRacha).toBe(false);
+      expect(resultado.nuevaRacha).toBe(7);
+    });
+
+    it('Caso 4I: Regla combinada: volumen 100% pero parte cualitativa al 0% -> NO cumple', () => {
+      const sesion = clonarSesionInicial();
+      sesion.ejercicios = [
+        {
+          id: 'ej-sesion-mixto',
+          sesionId,
+          ejercicioId: ejercicioId1,
+          orden: 1,
+          series: [
+            {
+              id: serie1Id,
+              ejercicioSesionId: 'ej-sesion-mixto',
+              numeroSerie: 1,
+              repsObjetivo: 10,
+              repsLogradas: 10,
+              pesoKg: '100.00',
+              pesoPrescritoKg: '100.00',
+              rpe: null,
+              completada: true,
+              timestampCompletadaUtc: '2026-09-06T10:10:00Z',
+            },
+            {
+              id: serie2Id,
+              ejercicioSesionId: 'ej-sesion-mixto',
+              numeroSerie: 2,
+              repsObjetivo: 10,
+              repsLogradas: null,
+              pesoKg: null,
+              pesoPrescritoKg: null,
+              rpe: null,
+              completada: false,
+              timestampCompletadaUtc: null,
+            },
+          ],
+        },
+      ];
+
+      const resultado = engine.finalizarSesion(
+        sesion,
+        { fechaFinUtc: '2026-09-06T11:00:00Z' },
+        { rachaDias: 7, rachaUltimaFecha: '2026-09-05' }
+      );
+
+      expect(resultado.cumpleReglaRacha).toBe(false);
+      expect(resultado.nuevaRacha).toBe(7);
+    });
+
+    it('Caso 4J: Mismo día no duplica la racha', () => {
+      const resultado = actualizarRacha(
+        { rachaDias: 5, rachaUltimaFecha: '2026-09-06' },
+        '2026-09-06',
+        true
+      );
+
+      expect(resultado.incrementada).toBe(false);
+      expect(resultado.rachaDias).toBe(5);
+      expect(resultado.rachaUltimaFecha).toBe('2026-09-06');
+    });
+
+    it('Caso 4K: Gap de días reinicia la racha a 1', () => {
+      const resultado = actualizarRacha(
+        { rachaDias: 9, rachaUltimaFecha: '2026-08-30' },
+        '2026-09-06',
+        true
+      );
+
+      expect(resultado.incrementada).toBe(true);
+      expect(resultado.rachaDias).toBe(1);
+      expect(resultado.rachaUltimaFecha).toBe('2026-09-06');
+    });
+
+    it('Caso 4L: Racha efectiva es 0 cuando la última fecha es anterior a ayer', () => {
+      expect(calcularRachaEfectiva(9, '2026-08-30', '2026-09-06')).toBe(0);
+      expect(calcularRachaEfectiva(9, '2026-09-05', '2026-09-06')).toBe(9);
+      expect(calcularRachaEfectiva(9, null, '2026-09-06')).toBe(0);
+    });
+
+    it('Caso 4M: Debe rechazar finalizar una sesión que no esté en progreso', () => {
       sesionInicial.estado = EstadoSesion.PLANIFICADA;
       expect(() =>
-        engine.finalizarSesion(sesionInicial, {}, 0)
+        engine.finalizarSesion(sesionInicial, {}, { rachaDias: 0, rachaUltimaFecha: null })
       ).toThrow(/No se puede finalizar una sesión que no esté 'en_progreso'/);
     });
   });

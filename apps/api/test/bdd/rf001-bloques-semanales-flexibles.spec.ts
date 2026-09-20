@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import {
   Rol,
   EstadoSesion,
@@ -275,7 +276,9 @@ describe('BDD: RF-001 - Planificación Semanal Flexible por Bloques, Selección 
     ];
 
     const db = createMockDb();
-    entrenamientoService = new EntrenamientoService(db);
+    // RNF-003/ADR-009: passthrough del envoltorio RLS para el mock in-memory.
+    const withTenantMock = vi.fn(async (_ctx: any, fn: any) => fn(db));
+    entrenamientoService = new EntrenamientoService(db, withTenantMock);
     entrenamientoController = new EntrenamientoController(entrenamientoService);
   });
 
@@ -321,12 +324,21 @@ describe('BDD: RF-001 - Planificación Semanal Flexible por Bloques, Selección 
       expect(progreso.siguienteBloqueSugeridoId).toBe('d1');
       expect(progreso.esDiaDescansoHoy).toBe(false); // Martes está prescrito en la rutina
 
-      // Consulta pasiva de hoy sin bloqueId: el alumno recibe el Bloque 1 pendiente
-      const sesion = await entrenamientoController.obtenerSesionHoy(req, 'America/Caracas');
+      // RN-04: la consulta pasiva de hoy es READ-ONLY: no instancia ni muta nada
+      const sesionPasiva = await entrenamientoController.obtenerSesionHoy(req, 'America/Caracas');
+      expect(sesionPasiva).toBeNull();
+      expect(mockSesionesEntrenamiento.length).toBe(0);
+
+      // Acción explícita: instanciar el Bloque 1 sugerido para hoy
+      const sesion = await entrenamientoController.entrenarBloqueHoy(req, 'd1', {
+        timezoneCliente: 'America/Caracas',
+      });
       expect(sesion).not.toBeNull();
-      expect(sesion!.bloqueId).toBe('d1');
-      expect(sesion!.esDiaDescansoOriginal).toBe(false);
-      expect(sesion!.ejercicios[0].ejercicio?.nombre).toBe('Press de Banca Plano');
+      expect(sesion.bloqueId).toBe('d1');
+      expect(sesion.estado).toBe(EstadoSesion.PLANIFICADA);
+      expect(sesion.esDiaDescansoOriginal).toBe(false);
+      expect(sesion.ejercicios[0].ejercicio?.nombre).toBe('Press de Banca Plano');
+      expect(mockSesionesEntrenamiento.length).toBe(1);
     });
   });
 
@@ -337,21 +349,28 @@ describe('BDD: RF-001 - Planificación Semanal Flexible por Bloques, Selección 
 
       const req = { user: { sub: ALUMNO_USER_ID, rol: Rol.ALUMNO } };
 
-      // Alumno solicita explícitamente el Bloque 2 ('d2')
-      const sesionBloque2 = await entrenamientoController.obtenerSesionHoy(req, 'America/Caracas', 'd2');
-      expect(sesionBloque2).not.toBeNull();
-      expect(sesionBloque2!.bloqueId).toBe('d2');
-      expect(sesionBloque2!.ejercicios[0].ejercicio?.nombre).toBe('Remo con Barra');
+      // Consulta pasiva del Bloque 2: no existe sesión y NO se crea nada
+      const consultaPasiva = await entrenamientoController.obtenerSesionHoy(req, 'America/Caracas', 'd2');
+      expect(consultaPasiva).toBeNull();
+      expect(mockSesionesEntrenamiento.length).toBe(0);
 
-      // Finalizar la sesión del Bloque 2
-      await entrenamientoController.iniciarSesion(req, sesionBloque2!.id, {
+      // Acción explícita: el alumno decide entrenar el Bloque 2 ('d2') hoy
+      const sesionBloque2 = await entrenamientoController.entrenarBloqueHoy(req, 'd2', {
         timezoneCliente: 'America/Caracas',
       });
-      await entrenamientoController.sincronizarSeries(req, sesionBloque2!.id, {
+      expect(sesionBloque2).not.toBeNull();
+      expect(sesionBloque2.bloqueId).toBe('d2');
+      expect(sesionBloque2.ejercicios[0].ejercicio?.nombre).toBe('Remo con Barra');
+
+      // Finalizar la sesión del Bloque 2
+      await entrenamientoController.iniciarSesion(req, sesionBloque2.id, {
+        timezoneCliente: 'America/Caracas',
+      });
+      await entrenamientoController.sincronizarSeries(req, sesionBloque2.id, {
         series: [
           {
-            serieId: sesionBloque2!.ejercicios[0].series[0].id,
-            ejercicioSesionId: sesionBloque2!.ejercicios[0].id,
+            serieId: sesionBloque2.ejercicios[0].series[0].id,
+            ejercicioSesionId: sesionBloque2.ejercicios[0].id,
             numeroSerie: 1,
             repsLogradas: 10,
             pesoKg: '50.00',
@@ -359,7 +378,7 @@ describe('BDD: RF-001 - Planificación Semanal Flexible por Bloques, Selección 
           },
         ],
       });
-      await entrenamientoController.finalizarSesion(req, sesionBloque2!.id, {
+      await entrenamientoController.finalizarSesion(req, sesionBloque2.id, {
         notasAlumno: 'Excelente bombeo de espalda',
       });
 
@@ -393,21 +412,28 @@ describe('BDD: RF-001 - Planificación Semanal Flexible por Bloques, Selección 
       const sesionPasiva = await entrenamientoController.obtenerSesionHoy(req, 'America/Caracas');
       expect(sesionPasiva).toBeNull();
 
-      // Alumno pulsa "Recuperar Bloque 1 hoy"
-      const sesionRecuperada = await entrenamientoController.obtenerSesionHoy(req, 'America/Caracas', 'd1');
-      expect(sesionRecuperada).not.toBeNull();
-      expect(sesionRecuperada!.bloqueId).toBe('d1');
-      expect(sesionRecuperada!.esDiaDescansoOriginal).toBe(true);
+      // Consulta pasiva del Bloque 1: también read-only, no instancia nada
+      const bloque1Pasivo = await entrenamientoController.obtenerSesionHoy(req, 'America/Caracas', 'd1');
+      expect(bloque1Pasivo).toBeNull();
+      expect(mockSesionesEntrenamiento.length).toBe(0);
 
-      // El alumno completa el entrenamiento del sábado
-      await entrenamientoController.iniciarSesion(req, sesionRecuperada!.id, {
+      // Alumno pulsa "Entrenar este bloque hoy" (acción explícita)
+      const sesionRecuperada = await entrenamientoController.entrenarBloqueHoy(req, 'd1', {
         timezoneCliente: 'America/Caracas',
       });
-      await entrenamientoController.sincronizarSeries(req, sesionRecuperada!.id, {
+      expect(sesionRecuperada).not.toBeNull();
+      expect(sesionRecuperada.bloqueId).toBe('d1');
+      expect(sesionRecuperada.esDiaDescansoOriginal).toBe(true);
+
+      // El alumno completa el entrenamiento del sábado
+      await entrenamientoController.iniciarSesion(req, sesionRecuperada.id, {
+        timezoneCliente: 'America/Caracas',
+      });
+      await entrenamientoController.sincronizarSeries(req, sesionRecuperada.id, {
         series: [
           {
-            serieId: sesionRecuperada!.ejercicios[0].series[0].id,
-            ejercicioSesionId: sesionRecuperada!.ejercicios[0].id,
+            serieId: sesionRecuperada.ejercicios[0].series[0].id,
+            ejercicioSesionId: sesionRecuperada.ejercicios[0].id,
             numeroSerie: 1,
             repsLogradas: 10,
             pesoKg: '60.00',
@@ -415,7 +441,7 @@ describe('BDD: RF-001 - Planificación Semanal Flexible por Bloques, Selección 
           },
         ],
       });
-      await entrenamientoController.finalizarSesion(req, sesionRecuperada!.id, {
+      await entrenamientoController.finalizarSesion(req, sesionRecuperada.id, {
         notasAlumno: 'Recuperando el bloque del lunes en mi día libre',
       });
 
@@ -478,6 +504,274 @@ describe('BDD: RF-001 - Planificación Semanal Flexible por Bloques, Selección 
       expect(progreso.porcentajeCumplimiento).toBe('75.00');
       expect(parseFloat(progreso.porcentajeCumplimiento)).toBeGreaterThanOrEqual(70.0);
       expect(progreso.siguienteBloqueSugeridoId).toBe('d4'); // Bloque 4 pendiente
+    });
+  });
+
+  describe('Escenario 5: Navegación Read-Only y Acción Explícita (RN-04)', () => {
+    it('consultar el Bloque B existiendo una sesión planificada del Bloque A NO elimina ni recrea la de A', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-15T10:00:00.000Z')); // Martes
+
+      const req = { user: { sub: ALUMNO_USER_ID, rol: Rol.ALUMNO } };
+
+      // Acción explícita: el alumno instancia el Bloque A ('d1') para hoy
+      const sesionA = await entrenamientoController.entrenarBloqueHoy(req, 'd1', {
+        timezoneCliente: 'America/Caracas',
+      });
+      const idOriginalA = sesionA.id;
+      expect(mockSesionesEntrenamiento.length).toBe(1);
+      expect(mockSesionesEntrenamiento[0].bloqueId).toBe('d1');
+
+      // Navegar/consultar el Bloque B ('d2') es read-only: no borra la sesión de A ni crea otra
+      const consultaB = await entrenamientoController.obtenerSesionHoy(req, 'America/Caracas', 'd2');
+      expect(consultaB).toBeNull();
+      expect(mockSesionesEntrenamiento.length).toBe(1);
+      expect(mockSesionesEntrenamiento[0].id).toBe(idOriginalA);
+      expect(mockSesionesEntrenamiento[0].bloqueId).toBe('d1');
+      expect(mockSesionesEntrenamiento[0].estado).toBe(EstadoSesion.PLANIFICADA);
+
+      // La acción explícita del Bloque B agrega una sesión nueva SIN destruir la de A
+      const sesionB = await entrenamientoController.entrenarBloqueHoy(req, 'd2', {
+        timezoneCliente: 'America/Caracas',
+      });
+      expect(sesionB.bloqueId).toBe('d2');
+      expect(mockSesionesEntrenamiento.length).toBe(2);
+      const sesionAPersistida = mockSesionesEntrenamiento.find((s) => s.id === idOriginalA);
+      expect(sesionAPersistida).toBeDefined();
+      expect(sesionAPersistida!.bloqueId).toBe('d1');
+      expect(sesionAPersistida!.estado).toBe(EstadoSesion.PLANIFICADA);
+      // Las referencias estables de IDs se preservan (la cola offline apunta a ellas)
+      expect(sesionAPersistida!.id).toBe(idOriginalA);
+    });
+
+    it('es idempotente: repetir la acción del mismo bloque devuelve la sesión viva sin duplicarla', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-15T10:00:00.000Z'));
+
+      const req = { user: { sub: ALUMNO_USER_ID, rol: Rol.ALUMNO } };
+      const primera = await entrenamientoController.entrenarBloqueHoy(req, 'd2', {
+        timezoneCliente: 'America/Caracas',
+      });
+      const segunda = await entrenamientoController.entrenarBloqueHoy(req, 'd2', {
+        timezoneCliente: 'America/Caracas',
+      });
+      expect(segunda.id).toBe(primera.id);
+      expect(mockSesionesEntrenamiento.length).toBe(1);
+    });
+
+    it('con la misma X-Idempotency-Key no re-instancia aunque la sesión original ya esté finalizada (D3)', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-15T10:00:00.000Z'));
+
+      const req = { user: { sub: ALUMNO_USER_ID, rol: Rol.ALUMNO } };
+      const primera = await entrenamientoController.entrenarBloqueHoy(
+        req,
+        'd1',
+        { timezoneCliente: 'America/Caracas' },
+        'idem-bloque-1'
+      );
+      await entrenamientoController.iniciarSesion(req, primera.id, {
+        timezoneCliente: 'America/Caracas',
+      });
+      await entrenamientoController.sincronizarSeries(req, primera.id, {
+        series: [
+          {
+            serieId: primera.ejercicios[0].series[0].id,
+            repsLogradas: 10,
+            pesoKg: '60.00',
+            completada: true,
+          },
+        ],
+      });
+      await entrenamientoController.finalizarSesion(req, primera.id, {
+        fechaFinUtc: '2026-09-15T11:00:00Z',
+      });
+      expect(mockSesionesEntrenamiento.length).toBe(1);
+
+      // Reintento con la MISMA key (la respuesta se perdió): devuelve la original sin crear otra.
+      const reintento = await entrenamientoController.entrenarBloqueHoy(
+        req,
+        'd1',
+        { timezoneCliente: 'America/Caracas' },
+        'idem-bloque-1'
+      );
+      expect(reintento.id).toBe(primera.id);
+      expect(mockSesionesEntrenamiento.length).toBe(1);
+
+      // Sin key, el comportamiento sigue igual que siempre: repetir el bloque instancia otra sesión.
+      const sinKey = await entrenamientoController.entrenarBloqueHoy(req, 'd1', {
+        timezoneCliente: 'America/Caracas',
+      });
+      expect(sinKey.id).not.toBe(primera.id);
+      expect(mockSesionesEntrenamiento.length).toBe(2);
+    });
+
+    it('rechaza entrenar un bloque cuando hay otro entrenamiento en progreso hoy (409)', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-15T10:00:00.000Z'));
+
+      const req = { user: { sub: ALUMNO_USER_ID, rol: Rol.ALUMNO } };
+      const sesionD1 = await entrenamientoController.entrenarBloqueHoy(req, 'd1', {
+        timezoneCliente: 'America/Caracas',
+      });
+      await entrenamientoController.iniciarSesion(req, sesionD1.id, {
+        timezoneCliente: 'America/Caracas',
+      });
+
+      await expect(
+        entrenamientoController.entrenarBloqueHoy(req, 'd2', { timezoneCliente: 'America/Caracas' })
+      ).rejects.toThrow(ConflictException);
+
+      // La sesión en progreso permanece intacta
+      expect(mockSesionesEntrenamiento.length).toBe(1);
+      expect(mockSesionesEntrenamiento[0].estado).toBe(EstadoSesion.EN_PROGRESO);
+    });
+
+    it('valida tenancy: sin rutina activa propia no se puede instanciar bloques (404)', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-15T10:00:00.000Z'));
+
+      // Alumno sin rutina en el mock (no pertenece a la rutina del alumno A)
+      const reqOtroAlumno = {
+        user: { sub: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', rol: Rol.ALUMNO },
+      };
+      await expect(
+        entrenamientoController.entrenarBloqueHoy(reqOtroAlumno, 'd1', {
+          timezoneCliente: 'America/Caracas',
+        })
+      ).rejects.toThrow(NotFoundException);
+
+      // Bloque inexistente en la rutina propia
+      const req = { user: { sub: ALUMNO_USER_ID, rol: Rol.ALUMNO } };
+      await expect(
+        entrenamientoController.entrenarBloqueHoy(req, 'd9', { timezoneCliente: 'America/Caracas' })
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('Escenario 6: Repetición de Bloque Completado sin Romper el Historial', () => {
+    it('crea una NUEVA sesión en progreso al repetir un bloque ya completado y conserva la anterior', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-15T10:00:00.000Z'));
+
+      const req = { user: { sub: ALUMNO_USER_ID, rol: Rol.ALUMNO } };
+
+      // 1. Completar el Bloque 2 ('d2')
+      const primera = await entrenamientoController.entrenarBloqueHoy(req, 'd2', {
+        timezoneCliente: 'America/Caracas',
+      });
+      await entrenamientoController.iniciarSesion(req, primera.id, {
+        timezoneCliente: 'America/Caracas',
+      });
+      await entrenamientoController.sincronizarSeries(req, primera.id, {
+        series: [
+          {
+            serieId: primera.ejercicios[0].series[0].id,
+            ejercicioSesionId: primera.ejercicios[0].id,
+            numeroSerie: 1,
+            repsLogradas: 10,
+            pesoKg: '50.00',
+            completada: true,
+          },
+        ],
+      });
+      const cierre = await entrenamientoController.finalizarSesion(req, primera.id, {});
+      expect(cierre.sesion.estado).toBe(EstadoSesion.COMPLETADA);
+
+      // 2. Repetir el bloque: nueva sesión en progreso (iniciarInmediato)
+      const repetida = await entrenamientoController.entrenarBloqueHoy(req, 'd2', {
+        timezoneCliente: 'America/Caracas',
+        iniciarInmediato: true,
+      });
+
+      expect(repetida.id).not.toBe(primera.id);
+      expect(repetida.bloqueId).toBe('d2');
+      expect(repetida.estado).toBe(EstadoSesion.EN_PROGRESO);
+      expect(repetida.fechaInicioUtc).toBeTruthy();
+
+      // 3. El historial previo se conserva y ahora hay dos sesiones del bloque
+      expect(mockSesionesEntrenamiento.length).toBe(2);
+      const anterior = mockSesionesEntrenamiento.find((s) => s.id === primera.id);
+      expect(anterior).toBeDefined();
+      expect(anterior!.estado).toBe(EstadoSesion.COMPLETADA);
+    });
+  });
+
+  describe('Escenario 7: Racha Visible y Sesiones OMITIDA en el Progreso Semanal', () => {
+    it('expone rachaDias efectiva (5 con último día ayer, 0 con cadena rota o sin registro)', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-15T10:00:00.000Z')); // Martes; local Caracas = 2026-09-15
+
+      const req = { user: { sub: ALUMNO_USER_ID, rol: Rol.ALUMNO } };
+
+      // Racha viva: último entrenamiento ayer
+      mockPerfilesAlumno[0].rachaDias = 5;
+      mockPerfilesAlumno[0].rachaUltimaFecha = '2026-09-14';
+      const conRacha = await entrenamientoController.obtenerSemanaActualProgreso(req, 'America/Caracas');
+      expect(conRacha.rachaDias).toBe(5);
+
+      // Cadena rota (gap > 1 día): racha efectiva 0
+      mockPerfilesAlumno[0].rachaUltimaFecha = '2026-08-30';
+      const rota = await entrenamientoController.obtenerSemanaActualProgreso(req, 'America/Caracas');
+      expect(rota.rachaDias).toBe(0);
+
+      // Sin registro previo: 0
+      mockPerfilesAlumno[0].rachaUltimaFecha = null;
+      mockPerfilesAlumno[0].rachaDias = 0;
+      const vacia = await entrenamientoController.obtenerSemanaActualProgreso(req, 'America/Caracas');
+      expect(vacia.rachaDias).toBe(0);
+    });
+
+    it('expone estadoSesion y motivoOmision para renderizar OMITIDA como Descansado/Incompleto', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-15T10:00:00.000Z'));
+
+      const hoyStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas' }).format(
+        new Date()
+      );
+
+      mockSesionesEntrenamiento.push(
+        {
+          id: 'sesion-descanso',
+          alumnoId: ALUMNO_USER_ID,
+          rutinaId: 'rutina-flexible-01',
+          bloqueId: 'd2',
+          fechaProgramada: hoyStr,
+          estado: EstadoSesion.OMITIDA,
+          motivoOmision: 'DESCANSO',
+          porcentajeCumplimiento: '0.00',
+          createdAtUtc: new Date(),
+          updatedAtUtc: new Date(),
+        },
+        {
+          id: 'sesion-incompleta',
+          alumnoId: ALUMNO_USER_ID,
+          rutinaId: 'rutina-flexible-01',
+          bloqueId: 'd3',
+          fechaProgramada: hoyStr,
+          estado: EstadoSesion.OMITIDA,
+          motivoOmision: 'INCOMPLETO',
+          porcentajeCumplimiento: '0.00',
+          createdAtUtc: new Date(),
+          updatedAtUtc: new Date(),
+        }
+      );
+
+      const req = { user: { sub: ALUMNO_USER_ID, rol: Rol.ALUMNO } };
+      const progreso = await entrenamientoController.obtenerSemanaActualProgreso(req, 'America/Caracas');
+
+      const b2 = progreso.bloques.find((b) => b.bloqueId === 'd2');
+      expect(b2?.completado).toBe(false);
+      expect(b2?.estadoSesion).toBe(EstadoSesion.OMITIDA);
+      expect(b2?.motivoOmision).toBe('DESCANSO');
+
+      const b3 = progreso.bloques.find((b) => b.bloqueId === 'd3');
+      expect(b3?.estadoSesion).toBe(EstadoSesion.OMITIDA);
+      expect(b3?.motivoOmision).toBe('INCOMPLETO');
+
+      // Una sesión OMITIDA no cuenta como bloque completado ni infla el porcentaje
+      expect(progreso.bloquesCompletados).toBe(0);
+      expect(progreso.porcentajeCumplimiento).toBe('0.00');
     });
   });
 });
