@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { EjercicioCatalogoDetalleDTO } from '@guachafit/shared';
 import {
+  DESCANSO_OPCIONES,
   NOMBRES_DIAS_SEMANA,
   OPCIONES_DIAS_SEMANA,
   actualizarConfiguracionBloque,
@@ -9,6 +10,8 @@ import {
   type BloqueEdicion,
 } from '../../lib/rutina-bloques';
 import { triggerHaptic } from '../../lib/haptics';
+import { formatearSegundos } from '../../lib/sesion-tiempos';
+import { pluralizar } from '../../lib/pluralizar';
 import { CampoPesoPrescrito } from './CampoPesoPrescrito';
 import {
   AlertCircle,
@@ -43,8 +46,6 @@ interface BloquesRutinaEditorProps {
 }
 
 const GRUPOS_MUSCULARES = ['Todos', 'Pecho', 'Espalda', 'Piernas', 'Hombros', 'Brazos', 'Core'];
-
-const DESCANSO_OPCIONES = [30, 45, 60, 90, 120, 150, 180, 240, 300];
 
 /**
  * Editor controlado de bloques de días con selectores estructurados (número de bloque,
@@ -516,7 +517,7 @@ export function BloquesRutinaEditor({
                           >
                             {DESCANSO_OPCIONES.map((segundos) => (
                               <option key={segundos} value={segundos}>
-                                {segundos}s
+                                {formatearSegundos(segundos)}
                               </option>
                             ))}
                           </select>
@@ -729,7 +730,7 @@ export function BloquesRutinaEditor({
           {totales.totalDias} día{totales.totalDias === 1 ? '' : 's'} · {totales.totalEjercicios}{' '}
           ejercicio{totales.totalEjercicios === 1 ? '' : 's'}
         </span>
-        <span>{totales.totalSeries} series prescritas</span>
+        <span>{pluralizar(totales.totalSeries, 'serie prescrita', 'series prescritas')}</span>
       </div>
     </div>
   );

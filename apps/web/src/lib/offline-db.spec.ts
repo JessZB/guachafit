@@ -1,6 +1,8 @@
 import 'fake-indexeddb/auto';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { EjercicioCatalogoDetalleDTO } from '@guachafit/shared';
 import {
+  clearOfflineData,
   discardMutation,
   getDueMutations,
   getFailedMutations,
@@ -17,6 +19,7 @@ import {
   queueOfflineMutation,
   recoverStuckMutations,
   retryMutation,
+  type CachedNutricion,
   type CachedRutina,
 } from './offline-db';
 
@@ -184,5 +187,64 @@ describe('offline-db: selección de la rutina cacheada más reciente', () => {
 
   it('devuelve null cuando no hay caché', async () => {
     expect(await getLatestCachedRutina('alumno-1')).toBeNull();
+  });
+});
+
+describe('offline-db: clearOfflineData (higiene de logout)', () => {
+  async function seedTodasLasTablas(): Promise<void> {
+    await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Sync serie');
+    await putCachedRutina('sesion-1', '2026-09-20', 1);
+    await offlineDb.checkinsNutricion.add({
+      alumnoId: 'alumno-1',
+      fecha: '2026-09-20',
+      checkin: {} as CachedNutricion['checkin'],
+      updatedAt: Date.now(),
+    });
+    await offlineDb.catalogoEjercicios.put({
+      id: 'ej-1',
+      nombre: 'Sentadilla',
+      grupoMuscular: 'Piernas',
+    } as unknown as EjercicioCatalogoDetalleDTO);
+  }
+
+  it('vacía TODAS las tablas del esquema', async () => {
+    await seedTodasLasTablas();
+
+    await clearOfflineData();
+
+    expect(await offlineDb.outboxMutations.count()).toBe(0);
+    expect(await offlineDb.rutinaHoy.count()).toBe(0);
+    expect(await offlineDb.checkinsNutricion.count()).toBe(0);
+    expect(await offlineDb.catalogoEjercicios.count()).toBe(0);
+  });
+
+  it('advierte con el conteo cuando descarta mutaciones sin sincronizar', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await queueOfflineMutation('/a', 'POST', {}, 'M1');
+    await queueOfflineMutation('/b', 'POST', {}, 'M2');
+    const sincronizada = await queueOfflineMutation('/c', 'POST', {}, 'M3');
+    await markMutationSynced(sincronizada);
+
+    await clearOfflineData();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('2');
+    warn.mockRestore();
+  });
+
+  it('no advierte si lo pendiente ya estaba sincronizado', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const sincronizada = await queueOfflineMutation('/a', 'POST', {}, 'M1');
+    await markMutationSynced(sincronizada);
+
+    await clearOfflineData();
+
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('es idempotente y no falla con la base vacía', async () => {
+    await expect(clearOfflineData()).resolves.toBeUndefined();
+    await expect(clearOfflineData()).resolves.toBeUndefined();
   });
 });

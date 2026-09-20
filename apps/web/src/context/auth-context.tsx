@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Rol, AuthUserDTO, AuthTokensResponseDTO, LoginUsuarioDTO } from '@guachafit/shared';
 import { apiClient, setAuthToken, getAuthToken } from '../lib/api-client';
 import { queryClient } from '../lib/query-client';
+import { clearOfflineData } from '../lib/offline-db';
+import { limpiarCachesRuntime } from '../lib/cache-runtime';
 
 interface AuthContextType {
   user: AuthUserDTO | null;
@@ -94,6 +96,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsDemoMode(true);
   };
 
+  /**
+   * WU22 — higiene de logout en dispositivo compartido.
+   * Limpia la caché offline (Dexie) y las cachés runtime del Service Worker
+   * (respuestas de API). Best-effort: un fallo NUNCA debe romper el logout.
+   */
+  const limpiarDatosLocalesDeSesion = async () => {
+    try {
+      await clearOfflineData();
+    } catch (error) {
+      console.warn('No se pudo limpiar la base de datos offline al cerrar sesión:', error);
+    }
+    try {
+      await limpiarCachesRuntime();
+    } catch (error) {
+      console.warn('No se pudieron limpiar las cachés de API al cerrar sesión:', error);
+    }
+  };
+
   const logout = () => {
     setAuthToken(null);
     setToken(null);
@@ -101,6 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem(DEMO_STORAGE_KEY);
     setIsDemoMode(false);
     queryClient.clear();
+    void limpiarDatosLocalesDeSesion();
   };
 
   return (

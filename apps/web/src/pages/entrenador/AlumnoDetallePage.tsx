@@ -14,6 +14,8 @@ import {
   type TonoSemaforo,
 } from '../../lib/adherencia';
 import { normalizarPesoPrescritoTexto } from '../../lib/weight-unit';
+import { formatearSegundos } from '../../lib/sesion-tiempos';
+import { pluralizar } from '../../lib/pluralizar';
 import { sesionesDemoAlumno } from '../../lib/demo-sesiones';
 import {
   aplicarTabEnQuery,
@@ -22,6 +24,7 @@ import {
 } from '../../lib/alumno-detalle-tab';
 import { construirPayloadCheckinAntropometrico } from '../../lib/antropometria-checkin';
 import {
+  DESCANSO_OPCIONES,
   NOMBRES_DIAS_SEMANA,
   OPCIONES_DIAS_SEMANA,
   actualizarConfiguracionBloque,
@@ -1137,9 +1140,11 @@ export function AlumnoDetallePage() {
           <ArrowLeft className="h-4 w-4" />
           <span>Volver a Mis Alumnos</span>
         </Link>
-        <span className="text-[11px] font-mono text-muted-foreground">
-          ID: {alumno.id.slice(0, 12)}...
-        </span>
+        {alumno.tipoDocumento && alumno.numeroDocumento ? (
+          <span className="text-[11px] font-mono text-muted-foreground">
+            Documento: {alumno.tipoDocumento} {alumno.numeroDocumento}
+          </span>
+        ) : null}
       </div>
 
       {/* CABECERA FIJA: IDENTIDAD 360 DEL ALUMNO */}
@@ -2176,7 +2181,7 @@ export function AlumnoDetallePage() {
                     Historial de Sesiones ({historialSesiones.length})
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    Abre «Ver Series» para revisar cargas, notas del coach y los tiempos Δ entre
+                    Abre «Ver Series» para revisar cargas, notas del coach y los tiempos entre
                     marcas de cada serie.
                   </p>
                 </div>
@@ -2341,7 +2346,7 @@ export function AlumnoDetallePage() {
                       <p className="text-[11px] text-muted-foreground">{bloque.enfoque}</p>
                     </div>
                     <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-secondary text-foreground border border-border">
-                      {bloque.ejercicios.length} ejercicios
+                      {pluralizar(bloque.ejercicios.length, 'ejercicio', 'ejercicios')}
                     </span>
                   </div>
 
@@ -2360,14 +2365,14 @@ export function AlumnoDetallePage() {
 
                         <div className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground self-end sm:self-center">
                           <span className="px-2 py-0.5 rounded-md bg-secondary border border-border/60 font-bold text-foreground">
-                            {ej.series} series × {ej.reps}
+                            {pluralizar(ej.series, 'serie', 'series')} × {ej.reps}
                           </span>
                           <span className="px-2 py-0.5 rounded-md bg-primary/10 border border-primary/20 font-bold text-primary">
                             {ej.peso}
                           </span>
                           <span className="text-[10px]">RPE {ej.rpe}</span>
                           <span className="px-2 py-0.5 rounded-md bg-secondary text-muted-foreground font-mono font-bold text-[10px] border border-border/60 flex items-center gap-1">
-                            ⏱️ {ej.descansoSegundos || 90}s
+                            ⏱️ {formatearSegundos(ej.descansoSegundos || 90)}
                           </span>
                         </div>
                       </div>
@@ -3008,15 +3013,11 @@ export function AlumnoDetallePage() {
                                   onChange={(e) => actualizarCampoEjercicio(ejIdx, 'descansoSegundos', parseInt(e.target.value, 10))}
                                   className="h-8 px-2 rounded-lg bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors cursor-pointer"
                                 >
-                                  <option value={30}>30s</option>
-                                  <option value={45}>45s</option>
-                                  <option value={60}>60s (1m)</option>
-                                  <option value={90}>90s (1.5m)</option>
-                                  <option value={120}>120s (2m)</option>
-                                  <option value={150}>150s (2.5m)</option>
-                                  <option value={180}>180s (3m)</option>
-                                  <option value={240}>240s (4m)</option>
-                                  <option value={300}>300s (5m)</option>
+                                  {DESCANSO_OPCIONES.map((segundos) => (
+                                    <option key={segundos} value={segundos}>
+                                      {formatearSegundos(segundos)}
+                                    </option>
+                                  ))}
                                 </select>
                               </div>
                             </div>
@@ -3208,7 +3209,7 @@ export function AlumnoDetallePage() {
             {/* Footer de Acciones del Modal */}
             <div className="pt-3 border-t border-border/80 flex items-center justify-between">
               <span className="text-xs text-muted-foreground">
-                {bloquesRutinaEdit.length} días configurados
+                {pluralizar(bloquesRutinaEdit.length, 'día configurado', 'días configurados')}
               </span>
 
               <div className="flex gap-2">

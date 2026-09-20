@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 import { buildApiCachePattern } from './src/lib/api-cache-pattern';
+import { API_RUNTIME_CACHE_NAME } from './src/lib/cache-runtime';
 
 export default defineConfig(({ mode }) => {
   // WU4: el patrón de cache se deriva de la API realmente configurada (local o producción).
@@ -46,7 +47,7 @@ export default defineConfig(({ mode }) => {
               method: 'GET',
               handler: 'NetworkFirst',
               options: {
-                cacheName: 'api-cache',
+                cacheName: API_RUNTIME_CACHE_NAME,
                 expiration: {
                   maxEntries: 100,
                   maxAgeSeconds: 60 * 60 * 24, // 24 hours

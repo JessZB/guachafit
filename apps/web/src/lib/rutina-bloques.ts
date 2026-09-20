@@ -41,6 +41,14 @@ export const OPCIONES_DIAS_SEMANA = [
   { valor: 7, label: 'Domingo' },
 ];
 
+/**
+ * WU23: opciones de descanso (en segundos) del pod de prescripción, compartidas por el editor
+ * del expediente (AlumnoDetallePage) y el banco de plantillas (BloquesRutinaEditor). El valor
+ * enviado al API es siempre el número de segundos; la etiqueta visible se formatea con
+ * `formatearSegundos` ('45 s', '1 min 30 s') para no mostrar segundos crudos.
+ */
+export const DESCANSO_OPCIONES = [30, 45, 60, 90, 120, 150, 180, 240, 300];
+
 /** Ejercicio en estado de edición (contrato `BloqueDiaRutinaDTO.ejercicios` + campos de UI). */
 export interface EjercicioEdicion {
   id: string;

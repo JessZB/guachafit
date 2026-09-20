@@ -14,6 +14,8 @@ import {
   detallePlantillaDemo,
   plantillasDemoActivas,
 } from '../../lib/demo-plantillas';
+import { formatearSegundos } from '../../lib/sesion-tiempos';
+import { pluralizar } from '../../lib/pluralizar';
 import {
   ETIQUETAS_NIVEL_PLANTILLA,
   aplicarOverridesPreview,
@@ -404,7 +406,8 @@ export function SelectorPlantillaAsignacion({
                           {ETIQUETAS_NIVEL_PLANTILLA[plantilla.nivelObjetivo]}
                         </span>
                         <span className="text-[10px] font-mono text-muted-foreground">
-                          {plantilla.totalDias} días · {plantilla.totalEjercicios} ejercicios
+                          {pluralizar(plantilla.totalDias, 'día', 'días')} ·{' '}
+                          {pluralizar(plantilla.totalEjercicios, 'ejercicio', 'ejercicios')}
                         </span>
                       </div>
                     </button>
@@ -441,8 +444,12 @@ export function SelectorPlantillaAsignacion({
                     </span>
                   </div>
                   <p className="text-[11px] text-muted-foreground font-mono">
-                    {detalle.bloques.length} bloques de día ·{' '}
-                    {detalle.bloques.reduce((t, b) => t + b.ejercicios.length, 0)} ejercicios
+                    {pluralizar(detalle.bloques.length, 'bloque de día', 'bloques de día')} ·{' '}
+                    {pluralizar(
+                      detalle.bloques.reduce((t, b) => t + b.ejercicios.length, 0),
+                      'ejercicio',
+                      'ejercicios'
+                    )}
                     {ajustesPendientes > 0 && (
                       <span className="text-primary font-bold">
                         {' '}
@@ -529,7 +536,7 @@ export function SelectorPlantillaAsignacion({
                             {bloque.titulo}
                           </span>
                           <span className="text-[10px] font-mono text-muted-foreground">
-                            {bloque.ejercicios.length} ejercicios
+                            {pluralizar(bloque.ejercicios.length, 'ejercicio', 'ejercicios')}
                           </span>
                         </div>
 
@@ -585,13 +592,13 @@ export function SelectorPlantillaAsignacion({
 
                                 <div className="flex items-center gap-x-3 gap-y-1 flex-wrap font-mono text-[10px] text-muted-foreground">
                                   <span className="px-1.5 py-0.5 rounded-md bg-secondary border border-border/60 font-bold text-foreground">
-                                    {ej.series} series × {ej.reps}
+                                    {pluralizar(ej.series, 'serie', 'series')} × {ej.reps}
                                   </span>
                                   <span className="px-1.5 py-0.5 rounded-md bg-primary/10 border border-primary/20 font-bold text-primary">
                                     {ej.peso || 'sin carga'}
                                   </span>
                                   {ej.rpe && <span>RPE {ej.rpe}</span>}
-                                  <span>{ej.descansoSegundos || 90}s descanso</span>
+                                  <span>Descanso: {formatearSegundos(ej.descansoSegundos || 90)}</span>
                                 </div>
 
                                 {/* Overrides de peso / series / reps */}
@@ -705,7 +712,7 @@ export function SelectorPlantillaAsignacion({
                           ? ` · «${resultado.resultados[0].rutinaNombre}»`
                           : ''}
                         {resultado.resultados[0]?.bloquesTotal
-                          ? ` · ${resultado.resultados[0].bloquesTotal} bloques`
+                          ? ` · ${pluralizar(resultado.resultados[0].bloquesTotal, 'bloque', 'bloques')}`
                           : ''}
                         . El expediente ya refleja la rutina vigente.
                       </span>

@@ -6,6 +6,7 @@ import { subscribeToSyncStatus, type SyncStatusState } from '../../lib/offline-s
 import { SyncQueuePanel } from '../../components/common/SyncQueuePanel';
 import { RestTimer } from '../../components/common/RestTimer';
 import { triggerHaptic } from '../../lib/haptics';
+import { pluralizar } from '../../lib/pluralizar';
 import {
   SesionEntrenamientoDetalleDTO,
   EjercicioSesionDetalleDTO,
@@ -1961,7 +1962,7 @@ export function EntrenamientoPage() {
                     ? 'Sesión guardada localmente. Se sincronizará con tu coach al recuperar conexión.'
                     : finishFeedback
                     ? finishFeedback.cumpleRacha
-                      ? `Sumaste un día a tu racha. Racha: ${finishFeedback.nuevaRacha} días.`
+                      ? `Sumaste un día a tu racha. Racha: ${pluralizar(finishFeedback.nuevaRacha, 'día', 'días')}.`
                       : 'Sesión guardada. Completa al menos el 70% del plan para sumar racha.'
                     : 'Sesión guardada en tu historial.'}
                 </p>

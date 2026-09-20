@@ -279,3 +279,44 @@ export async function getLatestCachedRutina(alumnoId?: string): Promise<CachedRu
     return (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
   })[0];
 }
+
+// ---------------------------------------------------------------------------
+// Higiene de sesión (WU22)
+// ---------------------------------------------------------------------------
+
+/**
+ * WU22 — privacidad en dispositivo compartido: borra TODAS las tablas del
+ * esquema (outbox, rutina cacheada, check-ins de nutrición y catálogo) para que
+ * el siguiente usuario del dispositivo no vea datos del anterior.
+ *
+ * DECISIÓN: las mutaciones sin sincronizar se descartan a propósito.
+ * Privacidad > datos: preferimos perder una mutación local antes que exponerla
+ * al siguiente usuario. Si existen, se registra un `console.warn` con el conteo
+ * para que quede rastro al diagnosticar una pérdida de datos reportada.
+ */
+export async function clearOfflineData(): Promise<void> {
+  const sinSincronizar = await offlineDb.outboxMutations.where('status').notEqual('synced').count();
+  if (sinSincronizar > 0) {
+    console.warn(
+      `[offline-db] Se descartan ${sinSincronizar} mutación(es) sin sincronizar al cerrar ` +
+        'sesión (privacidad en dispositivo compartido).'
+    );
+  }
+
+  await offlineDb.transaction(
+    'rw',
+    offlineDb.outboxMutations,
+    offlineDb.rutinaHoy,
+    offlineDb.checkinsNutricion,
+    offlineDb.catalogoEjercicios,
+    async () => {
+      await Promise.all([
+        offlineDb.outboxMutations.clear(),
+        offlineDb.rutinaHoy.clear(),
+        offlineDb.checkinsNutricion.clear(),
+        offlineDb.catalogoEjercicios.clear(),
+      ]);
+    }
+  );
+  notifyOutboxChanged();
+}
