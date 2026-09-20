@@ -54,12 +54,19 @@ async function apiClientBase<T>(endpoint: string, options: RequestOptions = {}):
     }
   }
 
-  // Inject idempotency key for financial or declared mutations
+  // WU4: idempotencia en mutaciones financieras, de sesiones (RF-001 offline) y declaradas.
+  // La cola offline pasa la key persistida para reutilizarla en cada reintento.
   const isFinancialMutation =
     (options.method === 'POST' || options.method === 'PATCH') &&
     (endpoint.includes('/finanzas/') || idempotent);
+  const isSessionMutation =
+    (options.method === 'POST' ||
+      options.method === 'PUT' ||
+      options.method === 'PATCH' ||
+      options.method === 'DELETE') &&
+    endpoint.includes('/sesiones/');
 
-  if (isFinancialMutation) {
+  if (isFinancialMutation || isSessionMutation) {
     requestHeaders['X-Idempotency-Key'] = idempotencyKey || generateIdempotencyKey();
   }
 

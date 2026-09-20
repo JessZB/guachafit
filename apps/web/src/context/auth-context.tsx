@@ -8,6 +8,11 @@ interface AuthContextType {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  /**
+   * true cuando la sesión actual proviene de un acceso explícito de demostración
+   * ("Modo Alumno"/"Modo Coach"). Los datos demo SOLO pueden mostrarse con esta bandera activa.
+   */
+  isDemoMode: boolean;
   login: (credentials: LoginUsuarioDTO) => Promise<void>;
   demoLogin: (rol: Rol) => void;
   logout: () => void;
@@ -16,6 +21,18 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const USER_STORAGE_KEY = 'guachafit_user';
+const DEMO_STORAGE_KEY = 'guachafit_demo_mode';
+const DEMO_TOKEN_PREFIX = 'mock_jwt_token_';
+
+function detectDemoMode(): boolean {
+  try {
+    if (localStorage.getItem(DEMO_STORAGE_KEY) === 'true') return true;
+    const token = getAuthToken();
+    return !!token && token.startsWith(DEMO_TOKEN_PREFIX);
+  } catch {
+    return false;
+  }
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUserDTO | null>(() => {
@@ -24,6 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
   const [token, setToken] = useState<string | null>(getAuthToken);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(detectDemoMode);
 
   useEffect(() => {
     if (user) {
@@ -45,6 +63,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAuthToken(response.accessToken);
       setToken(response.accessToken);
       setUser(response.usuario);
+      localStorage.removeItem(DEMO_STORAGE_KEY);
+      setIsDemoMode(false);
     } finally {
       setIsLoading(false);
     }
@@ -70,12 +90,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuthToken(mockToken);
     setToken(mockToken);
     setUser(demoUser);
+    localStorage.setItem(DEMO_STORAGE_KEY, 'true');
+    setIsDemoMode(true);
   };
 
   const logout = () => {
     setAuthToken(null);
     setToken(null);
     setUser(null);
+    localStorage.removeItem(DEMO_STORAGE_KEY);
+    setIsDemoMode(false);
     queryClient.clear();
   };
 
@@ -86,6 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         token,
         isAuthenticated: !!user,
         isLoading,
+        isDemoMode,
         login,
         demoLogin,
         logout,
