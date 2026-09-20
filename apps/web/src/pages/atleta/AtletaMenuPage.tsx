@@ -2,7 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/auth-context';
 import { apiClient } from '../../lib/api-client';
-import { SemanaEntrenamientoProgresoDTO } from '@guachafit/shared';
+import { badgeEstadoCuota, type ResumenParaBadge, type TonoCuota } from '../../lib/estado-cuota';
+import {
+  EstadoCuota,
+  ResumenFinancieroAlumnoDTO,
+  SemanaEntrenamientoProgresoDTO,
+} from '@guachafit/shared';
 import { buildDemoSemanaProgreso } from './EntrenamientoPage';
 import {
   Dumbbell,
@@ -16,20 +21,62 @@ import {
   CheckCircle2,
   Calendar,
   Zap,
+  AlertTriangle,
+  Clock,
+  type LucideIcon,
 } from 'lucide-react';
+
+/**
+ * WU12b: clases del badge de cuota por tono, alineadas a los "Badges de Estado" de DESIGN.md.
+ */
+const CLASES_TONO_CUOTA: Record<TonoCuota, string> = {
+  success: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
+  warning: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
+  danger: 'bg-destructive/15 text-destructive border-destructive/25',
+  info: 'bg-primary/15 text-primary border-primary/25',
+  neutral: 'bg-secondary text-muted-foreground border-border',
+};
+
+/** Icono del badge por tono; neutral no lleva icono (no hay nada que celebrar ni alertar). */
+const ICONO_TONO_CUOTA: Record<TonoCuota, LucideIcon | null> = {
+  success: CheckCircle2,
+  warning: Clock,
+  danger: AlertTriangle,
+  info: Clock,
+  neutral: null,
+};
 
 export function AtletaMenuPage() {
   const { user, isDemoMode } = useAuth();
   const [semanaProgreso, setSemanaProgreso] = useState<SemanaEntrenamientoProgresoDTO | null>(null);
   const [rachaNoDisponible, setRachaNoDisponible] = useState(false);
+  // WU12b: resumen financiero que alimenta el badge de "Pagos y cuotas".
+  // `null` = sin dato (cargando o error de red) → el badge se omite, nunca un verde falso.
+  const [resumenFinanciero, setResumenFinanciero] = useState<ResumenParaBadge | null>(null);
 
   useEffect(() => {
     // MODO DEMO EXPLÍCITO: datos de ejemplo, jamás como si fueran reales.
     if (isDemoMode) {
       setSemanaProgreso(buildDemoSemanaProgreso());
       setRachaNoDisponible(false);
+      // Badge demo coherente con la cuota demo de PagosPage (abono parcial, saldo $30).
+      setResumenFinanciero({
+        cuotaMesActual: {
+          id: 'cuota-demo-001',
+          periodo: '2026-09',
+          montoTotalUsd: '50.00',
+          montoPagadoUsd: '20.00',
+          saldoPendienteUsd: '30.00',
+          estado: EstadoCuota.ABONADA_PARCIAL,
+          fechaVencimiento: new Date(Date.now() + 86400000 * 5).toISOString(),
+        },
+        saldoPendienteTotalUsd: '30.00',
+      });
       return;
     }
+
+    // Sesión real: sin dato financiero aún (cargando o error) ⇒ sin badge.
+    setResumenFinanciero(null);
 
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas';
     apiClient<SemanaEntrenamientoProgresoDTO>(
@@ -44,7 +91,14 @@ export function AtletaMenuPage() {
         setSemanaProgreso(null);
         setRachaNoDisponible(true);
       });
-  }, [isDemoMode]);
+
+    // WU12b: cuota real del alumno en paralelo; si finanzas falla, el menú sigue vivo (catch tolerante).
+    if (user?.id) {
+      apiClient<ResumenFinancieroAlumnoDTO>(`/finanzas/clientes/${user.id}/historial`)
+        .then((resumen) => setResumenFinanciero(resumen ?? null))
+        .catch(() => setResumenFinanciero(null));
+    }
+  }, [isDemoMode, user?.id]);
 
   const emailName = user?.email ? user.email.split('@')[0] : 'Alumno';
   const primerNombre = emailName.charAt(0).toUpperCase() + emailName.slice(1);
@@ -61,6 +115,10 @@ export function AtletaMenuPage() {
     ? 'Racha activa'
     : 'Sin racha · completa tu plan';
 
+  // WU12b: badge honesto del estado real de la cuota del mes (null ⇒ sin badge).
+  const badgeCuota = badgeEstadoCuota(resumenFinanciero);
+  const IconoBadgeCuota = badgeCuota ? ICONO_TONO_CUOTA[badgeCuota.tono] : null;
+
   return (
     <div className="space-y-6 max-w-2xl mx-auto pb-24 lg:pb-12 animate-in fade-in duration-200">
       {/* Saludo y Cabecera de bienvenida */}
@@ -69,7 +127,7 @@ export function AtletaMenuPage() {
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-primary flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5" />
-              Menú de Acciones
+              Accesos Rápidos
             </span>
           </div>
           <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground mt-1">
@@ -177,7 +235,7 @@ export function AtletaMenuPage() {
                 <Utensils className="h-6 w-6" />
               </div>
               <span className="text-[11px] font-medium text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md">
-                1-Tap Rápido
+                Registro rápido
               </span>
             </div>
             <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">
@@ -237,10 +295,14 @@ export function AtletaMenuPage() {
                   <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">
                     Pagos y cuotas
                   </h3>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 flex items-center gap-1">
-                    <CheckCircle2 className="h-2.5 w-2.5" />
-                    Al día
-                  </span>
+                  {badgeCuota && (
+                    <span
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${CLASES_TONO_CUOTA[badgeCuota.tono]}`}
+                    >
+                      {IconoBadgeCuota && <IconoBadgeCuota className="h-2.5 w-2.5" />}
+                      {badgeCuota.texto}
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Reporta un nuevo abono (Pago Móvil / Zelle) o consulta tus recibos y fechas de corte.
