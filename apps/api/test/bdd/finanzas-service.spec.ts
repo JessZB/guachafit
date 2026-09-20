@@ -524,6 +524,34 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
       expect(segundoIntento.transaccion.id).toBe(primerIntento.transaccion.id);
     });
 
+    it('no expone la respuesta cacheada a otro solicitante que reutilice la misma idempotencyKey', async () => {
+      const payload = {
+        montoOriginal: '1500.00',
+        monedaOriginal: Moneda.VES,
+        metodoPago: MetodoPago.PAGO_MOVIL,
+        referenciaBancaria: 'ref-idem-tenant',
+        fechaOperacion: '2026-09-06',
+      };
+
+      await finanzasService.reportarPago(
+        'cuota-test-1',
+        'alumno-uuid-1',
+        payload,
+        'unique-key-tenant'
+      );
+
+      // La key es la misma, pero el solicitante no es el titular: la caché por solicitante
+      // debe fallar y ganar el control de titularidad (403), nunca devolver la transacción ajena.
+      await expect(
+        finanzasService.reportarPago(
+          'cuota-test-1',
+          'otro-alumno-hacker',
+          payload,
+          'unique-key-tenant'
+        )
+      ).rejects.toThrow(ForbiddenException);
+    });
+
     it('debe rechazar reporte si otro alumno intenta reportar sobre la cuota ajena (Aislamiento Tenancy)', async () => {
       await expect(
         finanzasService.reportarPago(

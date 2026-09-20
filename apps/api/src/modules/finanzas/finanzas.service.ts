@@ -808,10 +808,14 @@ export class FinanzasService {
     mensaje: string;
   }> {
     const idempotencyKey = idempotencyHeader || dto.idempotencyKey;
+    // RNF-002 §4 + aislamiento de tenant: la caché se indexa por solicitante para que una key
+    // repetida jamás devuelva la respuesta de otro alumno, aunque la consulta de caché ocurra
+    // antes del control de titularidad.
+    const cacheKey = idempotencyKey ? `${alumnoUserId}:${idempotencyKey}` : undefined;
 
     // 1. Verificar cache en memoria para idempotencia rápida (lag de red / reintento exacto)
-    if (idempotencyKey && this.idempotencyCache.has(idempotencyKey)) {
-      const cached = this.idempotencyCache.get(idempotencyKey)!;
+    if (cacheKey && this.idempotencyCache.has(cacheKey)) {
+      const cached = this.idempotencyCache.get(cacheKey)!;
       return {
         transaccion: cached.transaccion,
         cuota: cached.cuota,
@@ -938,8 +942,8 @@ export class FinanzasService {
       updatedAtUtc: nuevaTx.updatedAtUtc.toISOString(),
     };
 
-    if (idempotencyKey) {
-      this.idempotencyCache.set(idempotencyKey, {
+    if (cacheKey) {
+      this.idempotencyCache.set(cacheKey, {
         transaccion: txDto,
         cuota: cuotaDto,
       });
