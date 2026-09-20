@@ -14,16 +14,26 @@ import { pluralizar } from '../../lib/pluralizar';
 import {
   etiquetaEstadoSesion,
   etiquetaMonitorAdherencia,
-  pesoOrdenRiesgoMonitor,
   rutaExpedienteMonitor,
   type TonoSemaforo,
 } from '../../lib/adherencia';
 import {
+  aParametroSemaforoMonitor,
+  calcularResumenMonitorAdherencia,
   filtrarMonitorAlumnos,
   hayFiltroMonitorActivo,
   type FiltroSemaforoMonitor,
 } from '../../lib/monitor-filtros';
-import { MonitorAdherenciaSemanalDTO, SesionEntrenamientoDetalleDTO } from '@guachafit/shared';
+import { usePaginacionServidor } from '../../lib/use-paginacion-servidor';
+import { useValorDebounced } from '../../lib/use-valor-debounced';
+import { rebanarPagina } from '../../lib/paginacion';
+import { Paginacion } from '../../components/common/Paginacion';
+import {
+  MonitorAdherenciaDTO,
+  MonitorAdherenciaSemanalDTO,
+  HistorialSesionesAlumnoDTO,
+  SesionEntrenamientoDetalleDTO,
+} from '@guachafit/shared';
 import { DetalleSesionEntrenamiento } from '../../components/entrenador/DetalleSesionEntrenamiento';
 import {
   Activity,
@@ -42,14 +52,11 @@ import {
   X,
 } from 'lucide-react';
 
-type OrdenMonitor = 'riesgo' | 'nombre';
-
 /**
- * WU19: escalones del modal de actividad. El endpoint `historial` acepta `limit` hasta 100
- * (mismo techo en real y demo), así que el botón solo sube hasta el tope.
+ * WU25a: tamaño de página del historial del modal de actividad. El endpoint acepta `limit` hasta
+ * 100 y ahora también `offset` + `total`, así que "Ver más" avanza por offset sin escalones.
  */
-const LIMITES_HISTORIAL = [10, 30, 100] as const;
-const LIMITE_HISTORIAL_INICIAL = LIMITES_HISTORIAL[0];
+const TAMANO_HISTORIAL_ACTIVIDAD = 10;
 
 const CLASES_TONO: Record<
   TonoSemaforo,
@@ -119,24 +126,45 @@ function ModalActividadAlumno({
 }) {
   const { isDemoMode } = useAuth();
   const [sesiones, setSesiones] = useState<SesionEntrenamientoDetalleDTO[]>([]);
+  const [totalHistorial, setTotalHistorial] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMas, setIsLoadingMas] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [limite, setLimite] = useState<number>(LIMITE_HISTORIAL_INICIAL);
   const [sesionExpandidaId, setSesionExpandidaId] = useState<string | null>(null);
   const botonCerrarRef = useRef<HTMLButtonElement | null>(null);
 
+  /**
+   * WU25a: el endpoint `historial` devuelve `{ items, total, limit, offset }`. `offset` avanza
+   * por bloques de `TAMANO_HISTORIAL_ACTIVIDAD` y "Ver más" ACUMULA en pantalla hasta `total`;
+   * en demo se corta el fixture local con la misma aritmética.
+   */
   const cargarHistorial = useCallback(
-    async (limiteSolicitado: number) => {
-      setIsLoadingMas(true);
+    async (offset: number, acumular: boolean) => {
+      if (acumular) {
+        setIsLoadingMas(true);
+      } else {
+        setIsLoading(true);
+      }
       setError(null);
       try {
+        const pagina = Math.floor(offset / TAMANO_HISTORIAL_ACTIVIDAD) + 1;
+
+        if (isDemoMode) {
+          const fixture = sesionesDemoAlumno(alumno.alumnoId);
+          const items = rebanarPagina(fixture, pagina, TAMANO_HISTORIAL_ACTIVIDAD);
+          setSesiones((prev) => (acumular ? [...prev, ...items] : items));
+          setTotalHistorial(fixture.length);
+          return;
+        }
+
         // El endpoint resuelve el perfil por `perfiles_alumno.id` o por `usuarioId`; se usa
         // `alumnoId` (usuarioId, siempre presente en el DTO) para no depender del opcional.
-        const data = await apiClient<SesionEntrenamientoDetalleDTO[]>(
-          `/sesiones/alumno/${encodeURIComponent(alumno.alumnoId)}/historial?limit=${limiteSolicitado}`
+        const data = await apiClient<HistorialSesionesAlumnoDTO>(
+          `/sesiones/alumno/${encodeURIComponent(alumno.alumnoId)}/historial?limit=${TAMANO_HISTORIAL_ACTIVIDAD}&offset=${offset}`
         );
-        setSesiones(Array.isArray(data) ? data : []);
+        const items = Array.isArray(data?.items) ? data.items : [];
+        setSesiones((prev) => (acumular ? [...prev, ...items] : items));
+        setTotalHistorial(Number(data?.total ?? items.length));
       } catch (err) {
         const detalle =
           err instanceof ApiError
@@ -148,25 +176,15 @@ function ModalActividadAlumno({
         setIsLoadingMas(false);
       }
     },
-    [alumno.alumnoId]
+    [alumno.alumnoId, isDemoMode]
   );
 
   useEffect(() => {
-    // MODO DEMO EXPLÍCITO (isDemoMode): fixture local relativo a hoy y cero llamadas API.
-    // WU19: el fixture respeta el mismo techo de `limit` que el endpoint real.
-    if (isDemoMode) {
-      setSesiones(sesionesDemoAlumno(alumno.alumnoId).slice(0, limite));
-      setError(null);
-      setIsLoading(false);
-      setIsLoadingMas(false);
-      return;
-    }
-    void cargarHistorial(limite);
-  }, [isDemoMode, alumno.alumnoId, limite, cargarHistorial]);
+    void cargarHistorial(0, false);
+  }, [cargarHistorial]);
 
-  /** WU19: siguiente escalón del historial (10 → 30 → 100) o null si ya está en el tope. */
-  const siguienteLimite = LIMITES_HISTORIAL.find((valor) => valor > limite) ?? null;
-  const puedeVerMas = siguienteLimite !== null && sesiones.length >= limite;
+  /** WU25a: hay más historial mientras la lista en pantalla no alcance el total real. */
+  const puedeVerMas = sesiones.length < totalHistorial;
 
   // La sesión más reciente arranca expandida; después el acordeón queda libre.
   useEffect(() => {
@@ -296,7 +314,7 @@ function ModalActividadAlumno({
               <p className="text-[11px] text-muted-foreground">{error}</p>
               <button
                 type="button"
-                onClick={() => cargarHistorial(limite)}
+                onClick={() => void cargarHistorial(0, false)}
                 className="inline-flex items-center gap-2 py-2 px-3 rounded-xl bg-primary text-primary-foreground font-bold text-[11px] shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
@@ -318,7 +336,7 @@ function ModalActividadAlumno({
           {!isLoading && !error && sesiones.length > 0 && (
             <div className="space-y-2.5">
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                Últimas {sesiones.length} {sesiones.length === 1 ? 'sesión' : 'sesiones'}
+                Mostrando {sesiones.length} de {pluralizar(totalHistorial, 'sesión', 'sesiones')}
               </p>
               {sesiones.map((sesion) => {
                 const expandida = sesionExpandidaId === sesion.id;
@@ -384,20 +402,20 @@ function ModalActividadAlumno({
                 );
               })}
 
-              {/* WU19: sube el límite 10 → 30 → 100 (re-fetch real; el demo recorta el fixture) */}
+              {/* WU25a: "Ver más" avanza por offset y acumula hasta el `total` real del historial */}
               {puedeVerMas && (
                 <button
                   type="button"
                   onClick={() => {
                     triggerHaptic('selection');
-                    setLimite(siguienteLimite);
+                    void cargarHistorial(sesiones.length, true);
                   }}
                   disabled={isLoadingMas}
                   className="w-full py-2.5 px-4 rounded-2xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs border border-border transition-all active:scale-[0.99] disabled:opacity-50 cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
                 >
                   {isLoadingMas
                     ? 'Cargando más sesiones…'
-                    : `Ver más sesiones (hasta ${siguienteLimite})`}
+                    : `Ver más sesiones (${sesiones.length} de ${totalHistorial})`}
                 </button>
               )}
             </div>
@@ -410,82 +428,94 @@ function ModalActividadAlumno({
 
 export function MonitorAdherenciaPage() {
   const { isDemoMode } = useAuth();
-  const [alumnos, setAlumnos] = useState<MonitorAdherenciaSemanalDTO[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [orden, setOrden] = useState<OrdenMonitor>('riesgo');
-  const [alumnoActivo, setAlumnoActivo] = useState<MonitorAdherenciaSemanalDTO | null>(null);
-  // WU19: filtros del monitor (chips del semáforo + búsqueda por nombre).
+  // WU25a: paginación numerada + filtros server-side (chips del semáforo + búsqueda con debounce).
+  const [pagina, setPagina] = useState(1);
+  const [tamano, setTamano] = useState(25);
   const [filtroSemaforo, setFiltroSemaforo] = useState<FiltroSemaforoMonitor>('todos');
   const [busqueda, setBusqueda] = useState('');
+  const busquedaDebounced = useValorDebounced(busqueda);
+  const [alumnoActivo, setAlumnoActivo] = useState<MonitorAdherenciaSemanalDTO | null>(null);
 
   const timezone = useMemo(() => obtenerTimezoneDispositivo(), []);
 
-  const cargarMonitor = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  /**
+   * WU25a: carga de UNA página del monitor. `q` y `semaforo` viajan al servidor ANTES del slice
+   * (el `resumen` de la respuesta sigue describiendo la cartera completa). En modo demo se filtra
+   * el fixture local con los mismos helpers puros y se corta con `rebanarPagina`.
+   */
+  const cargarPagina = useCallback(
+    async ({
+      pagina: paginaSolicitada,
+      tamano: tamanoSolicitado,
+      signal,
+    }: {
+      pagina: number;
+      tamano: number;
+      signal: AbortSignal;
+    }): Promise<MonitorAdherenciaDTO> => {
+      const offset = (paginaSolicitada - 1) * tamanoSolicitado;
+      const termino = busquedaDebounced.trim();
+      const semaforoApi = aParametroSemaforoMonitor(filtroSemaforo);
 
-    // MODO DEMO EXPLÍCITO (isDemoMode): fixture local relativo a hoy y cero llamadas API.
-    // En sesión real, un fallo se muestra con su error honesto y reintento.
-    if (isDemoMode) {
-      setAlumnos(crearMonitorAdherenciaDemo());
-      setIsLoading(false);
-      return;
-    }
+      if (isDemoMode) {
+        const cartera = crearMonitorAdherenciaDemo();
+        const filtrados = filtrarMonitorAlumnos(cartera, {
+          busqueda: termino,
+          filtroSemaforo,
+        });
+        return {
+          items: rebanarPagina(filtrados, paginaSolicitada, tamanoSolicitado),
+          total: filtrados.length,
+          limit: tamanoSolicitado,
+          offset,
+          // Los chips demo siempre describen la cartera completa, como el servidor.
+          resumen: calcularResumenMonitorAdherencia(cartera),
+        };
+      }
 
-    try {
-      const data = await apiClient<MonitorAdherenciaSemanalDTO[]>(
-        `/entrenador/monitor-adherencia?timezone=${encodeURIComponent(timezone)}`
+      const parametros = new URLSearchParams({
+        timezone,
+        limit: String(tamanoSolicitado),
+        offset: String(offset),
+      });
+      if (termino.length > 0) parametros.set('q', termino);
+      if (semaforoApi) parametros.set('semaforo', semaforoApi);
+
+      return apiClient<MonitorAdherenciaDTO>(
+        `/entrenador/monitor-adherencia?${parametros.toString()}`,
+        { signal }
       );
-      setAlumnos(Array.isArray(data) ? data : []);
-    } catch (err) {
-      const detalle =
-        err instanceof ApiError
-          ? err.problem?.detail || err.message
-          : 'No pudimos cargar el monitor de adherencia.';
-      setError(detalle);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [timezone, isDemoMode]);
-
-  useEffect(() => {
-    cargarMonitor();
-  }, [cargarMonitor]);
-
-  const resumen = useMemo(() => {
-    const conPlan = alumnos.filter((a) => a.tienePlanActivo);
-    return {
-      // D6: los 0/0 sin bloques vencidos no cuentan como "en riesgo".
-      rojo: conPlan.filter(
-        (a) => !a.sinPendientesSemana && a.semaforoAdherencia === 'rojo'
-      ).length,
-      amarillo: conPlan.filter((a) => a.semaforoAdherencia === 'amarillo').length,
-      verde: conPlan.filter((a) => a.semaforoAdherencia === 'verde').length,
-      sinPlan: alumnos.length - conPlan.length,
-      total: alumnos.length,
-    };
-  }, [alumnos]);
-
-  const ordenados = useMemo(() => {
-    const copia = [...alumnos];
-    if (orden === 'nombre') {
-      return copia.sort((a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto, 'es'));
-    }
-    // Riesgo: ROJO → AMARILLO → VERDE → Sin plan (el backend ya llega ordenado; se reafirma
-    // el orden y se evita que un 0/0 "sin plan" aparezca como ROJO al tope).
-    return copia.sort(
-      (a, b) =>
-        pesoOrdenRiesgoMonitor(b) - pesoOrdenRiesgoMonitor(a) ||
-        a.nombreCompleto.localeCompare(b.nombreCompleto, 'es')
-    );
-  }, [alumnos, orden]);
-
-  // WU19: el filtro se aplica sobre la lista YA ordenada (respeta el orden activo).
-  const filtrados = useMemo(
-    () => filtrarMonitorAlumnos(ordenados, { busqueda, filtroSemaforo }),
-    [ordenados, busqueda, filtroSemaforo]
+    },
+    [isDemoMode, timezone, busquedaDebounced, filtroSemaforo]
   );
+
+  const paginacion = usePaginacionServidor<MonitorAdherenciaSemanalDTO, MonitorAdherenciaDTO>({
+    clave: ['monitor-adherencia', isDemoMode ? 'demo' : 'real', timezone, busquedaDebounced.trim(), filtroSemaforo],
+    pagina,
+    tamano,
+    cargar: cargarPagina,
+    onAjustarPagina: setPagina,
+  });
+
+  const {
+    items: alumnos,
+    total,
+    cargando,
+    error: errorCarga,
+    recargar,
+    respuesta,
+  } = paginacion;
+  const resumen = respuesta?.resumen ?? null;
+  const totalCartera = resumen?.total ?? 0;
+  // Solo la PRIMERA carga muestra esqueletos; el cambio de página conserva la lista anterior.
+  const isLoading = cargando && !respuesta;
+  const error = errorCarga?.message ?? null;
+
+  // WU25a: búsqueda/filtro/tamaño nuevos vuelven a la página 1 (y el demo reinicia su página).
+  useEffect(() => {
+    setPagina(1);
+  }, [busquedaDebounced, filtroSemaforo, tamano, isDemoMode]);
+
   const filtroActivo = hayFiltroMonitorActivo({ busqueda, filtroSemaforo });
   const limpiarFiltros = () => {
     setBusqueda('');
@@ -515,18 +545,18 @@ export function MonitorAdherenciaPage() {
             type="button"
             onClick={() => {
               triggerHaptic('light');
-              cargarMonitor();
+              recargar();
             }}
             disabled={isLoading}
             className="self-start inline-flex items-center gap-2 py-2.5 px-4 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs border border-border transition-all active:scale-95 disabled:opacity-50 cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
           >
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${cargando ? 'animate-spin' : ''}`} />
             <span>Actualizar</span>
           </button>
         </div>
 
-        {/* Resumen del semáforo: chips clicables que filtran la lista (WU19) + búsqueda */}
-        {!isLoading && !error && alumnos.length > 0 && (
+        {/* WU25a: chips con el `resumen` GLOBAL del servidor (cartera completa) + búsqueda */}
+        {!isLoading && !error && totalCartera > 0 && (
           <div className="space-y-3">
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               <button
@@ -547,7 +577,7 @@ export function MonitorAdherenciaPage() {
                   Todos
                 </span>
                 <span className="text-2xl font-black font-mono text-foreground">
-                  {resumen.total}
+                  {resumen?.total ?? 0}
                 </span>
               </button>
 
@@ -555,28 +585,28 @@ export function MonitorAdherenciaPage() {
                 {
                   clave: 'rojo' as const,
                   etiqueta: 'En riesgo (Rojo)',
-                  valor: resumen.rojo,
+                  valor: resumen?.rojo ?? 0,
                   clase: CLASES_TONO.danger.texto,
                   anillo: 'border-rose-500/50 ring-rose-500/30',
                 },
                 {
                   clave: 'amarillo' as const,
                   etiqueta: 'En observación (Amarillo)',
-                  valor: resumen.amarillo,
+                  valor: resumen?.amarillo ?? 0,
                   clase: CLASES_TONO.warning.texto,
                   anillo: 'border-amber-500/50 ring-amber-500/30',
                 },
                 {
                   clave: 'verde' as const,
                   etiqueta: 'Al día (Verde)',
-                  valor: resumen.verde,
+                  valor: resumen?.verde ?? 0,
                   clase: CLASES_TONO.success.texto,
                   anillo: 'border-emerald-500/50 ring-emerald-500/30',
                 },
                 {
                   clave: 'sin_plan' as const,
                   etiqueta: 'Sin plan activo',
-                  valor: resumen.sinPlan,
+                  valor: resumen?.sinPlan ?? 0,
                   clase: CLASES_TONO.neutral.texto,
                   anillo: 'border-border ring-border',
                 },
@@ -629,7 +659,7 @@ export function MonitorAdherenciaPage() {
               </div>
               {filtroActivo && (
                 <span className="text-xs font-bold text-muted-foreground" role="status" aria-live="polite">
-                  {filtrados.length} {filtrados.length === 1 ? 'resultado' : 'resultados'}
+                  {total} {total === 1 ? 'resultado' : 'resultados'}
                 </span>
               )}
             </div>
@@ -657,7 +687,7 @@ export function MonitorAdherenciaPage() {
           <p className="text-xs text-muted-foreground">{error}</p>
           <button
             type="button"
-            onClick={() => cargarMonitor()}
+            onClick={() => recargar()}
             className="inline-flex items-center gap-2 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
           >
             <RefreshCw className="h-4 w-4" />
@@ -666,7 +696,7 @@ export function MonitorAdherenciaPage() {
         </div>
       )}
 
-      {!isLoading && !error && alumnos.length === 0 && (
+      {!isLoading && !error && totalCartera === 0 && (
         <div className="p-10 rounded-3xl bg-card border border-dashed border-border/70 text-center space-y-3">
           <Users className="h-10 w-10 text-muted-foreground mx-auto opacity-40" />
           <h2 className="text-base font-bold text-foreground">Todavía no tienes alumnos activos</h2>
@@ -684,8 +714,8 @@ export function MonitorAdherenciaPage() {
         </div>
       )}
 
-      {/* WU19: estado vacío honesto de filtros (cartera con alumnos, filtro sin coincidencias) */}
-      {!isLoading && !error && alumnos.length > 0 && filtrados.length === 0 && (
+      {/* WU25a: estado vacío honesto de filtros (cartera con alumnos, filtro sin coincidencias) */}
+      {!isLoading && !error && totalCartera > 0 && total === 0 && (
         <div className="p-10 rounded-3xl bg-card border border-dashed border-border/70 text-center space-y-3">
           <Search className="h-10 w-10 text-muted-foreground mx-auto opacity-40" />
           <h2 className="text-base font-bold text-foreground">Sin resultados</h2>
@@ -705,36 +735,22 @@ export function MonitorAdherenciaPage() {
         </div>
       )}
 
-      {/* Controles + listado */}
-      {!isLoading && !error && alumnos.length > 0 && filtrados.length > 0 && (
+      {/* WU25a: paginación numerada server-side + listado del orden de riesgo del endpoint */}
+      {!isLoading && !error && total > 0 && (
         <div className="space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <span className="text-xs font-bold text-muted-foreground">
-              {filtroActivo
-                ? `${filtrados.length} ${filtrados.length === 1 ? 'resultado' : 'resultados'}`
-                : `${alumnos.length} ${alumnos.length === 1 ? 'alumno' : 'alumnos'} en seguimiento`}
-            </span>
-            <div className="flex items-center gap-2">
-              <label htmlFor="orden-monitor" className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                Ordenar por
-              </label>
-              <select
-                id="orden-monitor"
-                value={orden}
-                onChange={(e) => {
-                  triggerHaptic('selection');
-                  setOrden(e.target.value as OrdenMonitor);
-                }}
-                className="px-3 py-2 rounded-xl bg-card border border-border text-xs font-bold text-foreground focus:outline-hidden focus:border-primary cursor-pointer"
-              >
-                <option value="riesgo">Riesgo (mayor primero)</option>
-                <option value="nombre">Nombre (A–Z)</option>
-              </select>
-            </div>
+          <div className="px-1">
+            <Paginacion
+              pagina={pagina}
+              tamano={tamano}
+              total={total}
+              onCambiarPagina={setPagina}
+              onCambiarTamano={setTamano}
+              cargando={cargando}
+            />
           </div>
 
           <div className="space-y-3">
-            {filtrados.map((alumno) => {
+            {alumnos.map((alumno) => {
               const conPlan = alumno.tienePlanActivo;
               const etiqueta = etiquetaMonitorAdherencia(alumno);
               const tono = CLASES_TONO[etiqueta.tono];

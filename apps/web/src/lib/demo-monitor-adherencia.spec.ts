@@ -8,7 +8,8 @@ const AHORA = new Date('2026-09-20T12:00:00.000Z');
 describe('crearMonitorAdherenciaDemo (WU14: fixture demo del monitor de adherencia)', () => {
   it('devuelve un roster con ids únicos de usuario y perfil (enlace al expediente)', () => {
     const alumnos = crearMonitorAdherenciaDemo(AHORA);
-    expect(alumnos.length).toBe(8);
+    // WU26: 15 alumnos, más de una página de 10, para VER la paginación en modo demo.
+    expect(alumnos.length).toBe(15);
     expect(new Set(alumnos.map((a) => a.alumnoId)).size).toBe(alumnos.length);
     expect(new Set(alumnos.map((a) => a.alumnoPerfilId)).size).toBe(alumnos.length);
     for (const alumno of alumnos) {

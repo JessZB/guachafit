@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../lib/api-client';
 import { useAuth } from '../../context/auth-context';
@@ -6,13 +6,19 @@ import { triggerHaptic } from '../../lib/haptics';
 import {
   PerfilAlumnoDetalleDTO,
   DirectorioAlumnosDTO,
-  ResumenDirectorioAlumnosDTO,
-  LIMITE_DIRECTORIO_ALUMNOS_POR_DEFECTO,
   Modalidad,
   TipoDocumento,
   EstadoAlumno,
 } from '@guachafit/shared';
-import { calcularResumenDirectorio } from '../../lib/directorio-alumnos';
+import {
+  calcularResumenDirectorio,
+  filtrarDirectorioDemo,
+  ROSTER_DEMO_DIRECTORIO,
+} from '../../lib/directorio-alumnos';
+import { usePaginacionServidor } from '../../lib/use-paginacion-servidor';
+import { useValorDebounced } from '../../lib/use-valor-debounced';
+import { rebanarPagina } from '../../lib/paginacion';
+import { Paginacion } from '../../components/common/Paginacion';
 import {
   Users,
   UserPlus,
@@ -45,57 +51,22 @@ type FilterEstado = 'todos' | 'activo' | 'pausado' | 'mora' | 'archivados';
 type FilterModalidad = 'todas' | 'presencial' | 'remoto';
 type ViewMode = 'cards' | 'table';
 
-/**
- * WU19: mantiene los KPIs reales tras mutaciones locales (alta/restauración) sin recargar el
- * directorio. Un alta nace ACTIVO y vigente; una restauración pasa de archivado a ACTIVO.
- */
-function ajustarResumenAlta(
-  resumen: ResumenDirectorioAlumnosDTO | null,
-  modalidad: Modalidad
-): ResumenDirectorioAlumnosDTO | null {
-  if (!resumen) return resumen;
-  return {
-    ...resumen,
-    total: resumen.total + 1,
-    activos: resumen.activos + 1,
-    presenciales:
-      modalidad === Modalidad.PRESENCIAL ? resumen.presenciales + 1 : resumen.presenciales,
-    remotos: modalidad === Modalidad.REMOTO ? resumen.remotos + 1 : resumen.remotos,
-  };
-}
-
-function ajustarResumenRestauracion(
-  resumen: ResumenDirectorioAlumnosDTO | null,
-  modalidad: Modalidad
-): ResumenDirectorioAlumnosDTO | null {
-  if (!resumen) return resumen;
-  return {
-    ...resumen,
-    activos: resumen.activos + 1,
-    archivados: Math.max(0, resumen.archivados - 1),
-    presenciales:
-      modalidad === Modalidad.PRESENCIAL ? resumen.presenciales + 1 : resumen.presenciales,
-    remotos: modalidad === Modalidad.REMOTO ? resumen.remotos + 1 : resumen.remotos,
-  };
-}
+/** WU25a: página por defecto del directorio (el endpoint acepta hasta 100). */
+const TAMANO_PAGINA_POR_DEFECTO = 25;
 
 export function AlumnosPage() {
   const navigate = useNavigate();
   const { isDemoMode } = useAuth();
 
-  const [alumnos, setAlumnos] = useState<PerfilAlumnoDetalleDTO[]>([]);
-  // WU19: contadores reales de la cartera (servidor) y paginación acumulativa.
-  const [total, setTotal] = useState(0);
-  const [resumen, setResumen] = useState<ResumenDirectorioAlumnosDTO | null>(null);
+  // WU25a: estado de la paginación numerada + filtros server-side.
+  const [pagina, setPagina] = useState(1);
+  const [tamano, setTamano] = useState(TAMANO_PAGINA_POR_DEFECTO);
   const [search, setSearch] = useState('');
+  const qDebounced = useValorDebounced(search);
   const [filterEstado, setFilterEstado] = useState<FilterEstado>('todos');
   const [filterModalidad, setFilterModalidad] = useState<FilterModalidad>('todas');
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingMas, setIsLoadingMas] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
-  // D2: fallo de carga honesto (sin roster demo fuera del modo demo).
-  const [error, setError] = useState<string | null>(null);
   // D5: fallo de mutación visible; nunca éxito falso ni alumno fantasma.
   const [actionError, setActionError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -130,151 +101,94 @@ export function AlumnosPage() {
     return Math.max(0, edad);
   };
 
-  const loadAlumnos = async () => {
-    setIsLoading(true);
-    setError(null);
-    setActionError(null);
-
-    // MODO DEMO EXPLÍCITO (isDemoMode): roster de ejemplo solo con la bandera activa.
-    if (isDemoMode) {
-      const demoRoster: PerfilAlumnoDetalleDTO[] = [
-        {
-          id: 'al-001',
-          usuarioId: 'u-001',
-          entrenadorId: 'coach-01',
-          nombres: 'Carlos Alberto',
-          apellidos: 'Mendoza Silva',
-          email: 'carlos.mendoza@email.com',
-          tipoDocumento: TipoDocumento.V,
-          numeroDocumento: '24123456',
-          fechaNacimiento: '1998-05-14',
-          edadCalculada: 28,
-          telefonoWhatsapp: '+584121234567',
-          modalidad: Modalidad.PRESENCIAL,
-          estadoActivacion: EstadoAlumno.ACTIVO,
-          planActivoNombre: 'Presencial Completo',
-          semaforoPago: 'al_dia',
-          fichaSaludPrivada: 'Cirugía de rodilla en 2022. Evitar sentadilla pesada.',
-          createdAtUtc: new Date().toISOString(),
-        },
-        {
-          id: 'al-002',
-          usuarioId: 'u-002',
-          entrenadorId: 'coach-01',
-          nombres: 'Mariana',
-          apellidos: 'Pérez Gómez',
-          email: 'mariana.perez@email.com',
-          tipoDocumento: TipoDocumento.V,
-          numeroDocumento: '26987654',
-          fechaNacimiento: '2001-11-20',
-          edadCalculada: 24,
-          telefonoWhatsapp: '+584149876543',
-          modalidad: Modalidad.REMOTO,
-          estadoActivacion: EstadoAlumno.ACTIVO,
-          planActivoNombre: 'Asesoría Online',
-          semaforoPago: 'por_vencer',
-          createdAtUtc: new Date().toISOString(),
-        },
-        {
-          id: 'al-003',
-          usuarioId: 'u-003',
-          entrenadorId: 'coach-01',
-          nombres: 'Roberto',
-          apellidos: 'Díaz Navarro',
-          email: 'roberto.diaz@email.com',
-          tipoDocumento: TipoDocumento.V,
-          numeroDocumento: '20112233',
-          fechaNacimiento: '1992-03-15',
-          edadCalculada: 34,
-          telefonoWhatsapp: '+584241122334',
-          modalidad: Modalidad.PRESENCIAL,
-          estadoActivacion: EstadoAlumno.INACTIVO_PAUSADO,
-          planActivoNombre: 'Presencial 3 Días',
-          semaforoPago: 'moroso',
-          fichaSaludPrivada: 'Esguince tobillo derecho en pausa',
-          createdAtUtc: new Date().toISOString(),
-        },
-        {
-          id: 'al-004',
-          usuarioId: 'u-004',
-          entrenadorId: 'coach-01',
-          nombres: 'Valeria',
-          apellidos: 'Silva Castillo',
-          email: 'valeria.silva@email.com',
-          tipoDocumento: TipoDocumento.E,
-          numeroDocumento: '84992211',
-          fechaNacimiento: '1999-08-10',
-          edadCalculada: 27,
-          telefonoWhatsapp: '+584165544332',
-          modalidad: Modalidad.REMOTO,
-          estadoActivacion: EstadoAlumno.INACTIVO_PAUSADO,
-          planActivoNombre: 'Online Nutrición',
-          semaforoPago: 'sin_cuota',
-          deletedAtUtc: '2026-06-01T00:00:00.000Z',
-          createdAtUtc: new Date().toISOString(),
-        },
-      ];
-      setAlumnos(demoRoster);
-      setTotal(demoRoster.length);
-      setResumen(calcularResumenDirectorio(demoRoster));
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const data = await apiClient<DirectorioAlumnosDTO>(
-        `/alumnos?incluirArchivados=true&limit=${LIMITE_DIRECTORIO_ALUMNOS_POR_DEFECTO}&offset=0`
-      );
-      const items = Array.isArray(data?.items) ? data.items : [];
-      setAlumnos(items);
-      setTotal(Number(data?.total ?? items.length));
-      setResumen(data?.resumen ?? calcularResumenDirectorio(items));
-    } catch (err: any) {
-      // D2: sin roster demo en sesión real; error visible con reintento.
-      setAlumnos([]);
-      setTotal(0);
-      setResumen(null);
-      setError(
-        err?.message || 'No se pudo cargar el directorio de alumnos. Revisa tu conexión e inténtalo de nuevo.'
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   /**
-   * WU19: "Cargar más" acumulativo (offset = alumnos ya cargados). El servidor devuelve el
-   * resumen completo en cada página; se conserva el de la última respuesta y se deduplica por id
-   * para que un alta simultánea no duplique tarjetas.
+   * WU25a: carga de UNA página del directorio. Los filtros viajan al servidor (`q`, `estado`,
+   * `modalidad`, `soloArchivados`/`incluirArchivados`, `semaforoPago`) y el `resumen` sigue
+   * llegando completo en cada respuesta para los KPIs. En modo demo se filtra y se corta el
+   * roster local con la MISMA semántica, sin llamadas API.
    */
-  const cargarMas = async () => {
-    if (isLoadingMas || isLoading || alumnos.length >= total) return;
-    setIsLoadingMas(true);
-    setActionError(null);
+  const cargarPagina = useCallback(
+    async ({
+      pagina: paginaSolicitada,
+      tamano: tamanoSolicitado,
+      signal,
+    }: {
+      pagina: number;
+      tamano: number;
+      signal: AbortSignal;
+    }): Promise<DirectorioAlumnosDTO> => {
+      const offset = (paginaSolicitada - 1) * tamanoSolicitado;
 
-    try {
-      const data = await apiClient<DirectorioAlumnosDTO>(
-        `/alumnos?incluirArchivados=true&limit=${LIMITE_DIRECTORIO_ALUMNOS_POR_DEFECTO}&offset=${alumnos.length}`
-      );
-      const nuevos = Array.isArray(data?.items) ? data.items : [];
-      setAlumnos((prev) => {
-        const idsCargados = new Set(prev.map((a) => a.id));
-        return [...prev, ...nuevos.filter((a) => !idsCargados.has(a.id))];
+      if (isDemoMode) {
+        const filtrados = filtrarDirectorioDemo(ROSTER_DEMO_DIRECTORIO, {
+          q: qDebounced,
+          estado: filterEstado,
+          modalidad: filterModalidad,
+        });
+        return {
+          items: rebanarPagina(filtrados, paginaSolicitada, tamanoSolicitado),
+          total: filtrados.length,
+          limit: tamanoSolicitado,
+          offset,
+          // Los KPIs demo siempre describen la cartera completa, como el servidor.
+          resumen: calcularResumenDirectorio(ROSTER_DEMO_DIRECTORIO),
+        };
+      }
+
+      const parametros = new URLSearchParams({
+        limit: String(tamanoSolicitado),
+        offset: String(offset),
       });
-      if (typeof data?.total === 'number') setTotal(data.total);
-      if (data?.resumen) setResumen(data.resumen);
-    } catch (err: any) {
-      setActionError(
-        err?.message || 'No se pudieron cargar más alumnos. Revisa tu conexión e inténtalo de nuevo.'
-      );
-    } finally {
-      setIsLoadingMas(false);
-    }
-  };
+      if (qDebounced.trim().length > 0) parametros.set('q', qDebounced.trim());
+      if (filterEstado === 'activo') parametros.set('estado', EstadoAlumno.ACTIVO);
+      if (filterEstado === 'pausado') parametros.set('estado', EstadoAlumno.INACTIVO_PAUSADO);
+      if (filterEstado === 'mora') parametros.set('semaforoPago', 'moroso');
+      if (filterEstado === 'archivados') parametros.set('soloArchivados', 'true');
+      // "Todos" = cartera completa (vigentes + archivados), coherente con el KPI "Total Cartera".
+      if (filterEstado === 'todos') parametros.set('incluirArchivados', 'true');
+      if (filterModalidad === 'presencial') parametros.set('modalidad', Modalidad.PRESENCIAL);
+      if (filterModalidad === 'remoto') parametros.set('modalidad', Modalidad.REMOTO);
 
+      return apiClient<DirectorioAlumnosDTO>(`/alumnos?${parametros.toString()}`, { signal });
+    },
+    [isDemoMode, qDebounced, filterEstado, filterModalidad]
+  );
+
+  const paginacion = usePaginacionServidor<PerfilAlumnoDetalleDTO, DirectorioAlumnosDTO>({
+    // La clave incluye los filtros activos: cada combinación tiene su propia caché y su página.
+    clave: [
+      'directorio-alumnos',
+      isDemoMode ? 'demo' : 'real',
+      qDebounced.trim(),
+      filterEstado,
+      filterModalidad,
+    ],
+    pagina,
+    tamano,
+    cargar: cargarPagina,
+    onAjustarPagina: setPagina,
+  });
+
+  const {
+    items: alumnos,
+    total,
+    cargando,
+    error: errorCarga,
+    recargar,
+    respuesta,
+  } = paginacion;
+  const resumen = respuesta?.resumen ?? null;
+  // Solo la PRIMERA carga (sin datos en pantalla) muestra esqueletos; los cambios de página
+  // conservan la lista anterior gracias a `keepPreviousData`.
+  const isLoading = cargando && !respuesta;
+  const error = errorCarga?.message ?? null;
+
+  // WU25a: cualquier cambio de búsqueda/filtro/tamaño vuelve a la página 1 (el offset anterior
+  // ya no aplica). El modo demo también reinicia para no arrastrar páginas del roster real.
   useEffect(() => {
-    loadAlumnos();
-  }, [isDemoMode]);
+    setPagina(1);
+    setActionError(null);
+  }, [qDebounced, filterEstado, filterModalidad, tamano, isDemoMode]);
 
   // Accesibilidad: Cierre de modal con tecla Escape
   useEffect(() => {
@@ -299,7 +213,7 @@ export function AlumnosPage() {
     setFormError(null);
 
     try {
-      const nuevo = await apiClient<PerfilAlumnoDetalleDTO>('/alumnos/manual', {
+      await apiClient<PerfilAlumnoDetalleDTO>('/alumnos/manual', {
         method: 'POST',
         body: JSON.stringify({
           nombres,
@@ -314,10 +228,11 @@ export function AlumnosPage() {
         }),
       });
 
-      setAlumnos((prev) => [nuevo, ...prev]);
-      setTotal((prev) => prev + 1);
-      setResumen((prev) => ajustarResumenAlta(prev, nuevo.modalidad));
       setSuccessMessage('Alumno registrado exitosamente en la cartera.');
+      // WU25a: el alta vive en el servidor; se vuelve a la página 1 y se recarga la fuente de
+      // verdad (nunca se inventa un alumno local ni se ajusta el resumen a mano).
+      setPagina(1);
+      recargar();
       setTimeout(() => {
         setIsModalOpen(false);
         setSuccessMessage(null);
@@ -335,61 +250,25 @@ export function AlumnosPage() {
   const handleRestaurarAlumno = async (alumnoId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setActionError(null);
-    const alumnoRestaurado = alumnos.find((a) => a.id === alumnoId);
     try {
       await apiClient.patch(`/alumnos/${alumnoId}/restaurar`, {});
-      setAlumnos((prev) =>
-        prev.map((a) => (a.id === alumnoId ? { ...a, deletedAtUtc: null, estadoActivacion: EstadoAlumno.ACTIVO } : a))
-      );
-      if (alumnoRestaurado) {
-        setResumen((prev) => ajustarResumenRestauracion(prev, alumnoRestaurado.modalidad));
-      }
+      // WU25a: la restauración mueve al alumno de pestaña; se recarga la página actual desde el
+      // servidor en lugar de mutar la fila en memoria.
+      recargar();
     } catch (err: any) {
       setActionError(err?.message || 'No se pudo restaurar al alumno. Inténtalo de nuevo.');
     }
   };
 
-  // WU19: KPIs reales de la cartera. Vienen del resumen del servidor (COUNT real, cartera
-  // completa); en demo se derivan del roster local y sirven de respaldo si falta el resumen.
+  // WU25a: KPIs reales de la cartera. Vienen del `resumen` del servidor (COUNT real, cartera
+  // completa, independiente de la página y de los filtros); en demo se derivan del roster local
+  // y sirven de respaldo si una respuesta no trae resumen.
   const kpis = useMemo(
     () => resumen ?? calcularResumenDirectorio(alumnos),
     [resumen, alumnos]
   );
 
-  // Filtrado de Alumnos
-  const filteredAlumnos = useMemo(() => {
-    return alumnos.filter((a) => {
-      // Búsqueda por texto
-      const q = search.toLowerCase().trim();
-      const matchSearch =
-        !q ||
-        a.nombres.toLowerCase().includes(q) ||
-        a.apellidos.toLowerCase().includes(q) ||
-        (a.email || '').toLowerCase().includes(q) ||
-        a.numeroDocumento.includes(q);
-
-      if (!matchSearch) return false;
-
-      // Filtro de Estado / Archivados
-      if (filterEstado === 'archivados') {
-        if (!a.deletedAtUtc) return false;
-      } else {
-        // En cualquier otra pestaña, excluimos a los archivados
-        if (a.deletedAtUtc) return false;
-
-        if (filterEstado === 'activo' && a.estadoActivacion !== EstadoAlumno.ACTIVO) return false;
-        if (filterEstado === 'pausado' && a.estadoActivacion !== EstadoAlumno.INACTIVO_PAUSADO) return false;
-        if (filterEstado === 'mora' && a.semaforoPago !== 'moroso') return false;
-      }
-
-      // Filtro de Modalidad
-      if (filterModalidad === 'presencial' && a.modalidad !== Modalidad.PRESENCIAL) return false;
-      if (filterModalidad === 'remoto' && a.modalidad !== Modalidad.REMOTO) return false;
-
-      return true;
-    });
-  }, [alumnos, search, filterEstado, filterModalidad]);
-
+  // WU25a: con paginación server-side la lista ya llega filtrada y recortada a la página actual.
   const hayFiltrosActivos =
     search.trim().length > 0 || filterEstado !== 'todos' || filterModalidad !== 'todas';
 
@@ -630,7 +509,7 @@ export function AlumnosPage() {
                   : 'bg-secondary/70 hover:bg-secondary text-muted-foreground hover:text-foreground'
               }`}
             >
-              Todos ({kpis.activos + kpis.pausados})
+              Todos ({kpis.total})
             </button>
             <button
               onClick={() => setFilterEstado('activo')}
@@ -722,42 +601,19 @@ export function AlumnosPage() {
         </div>
       </div>
 
-      {/* WU19: paginación acumulativa — "Mostrando X de N" + "Cargar más" (offset) */}
+      {/* WU25a: paginación numerada server-side (contador + filas por página 10/25/50/100).
+          WU26: con total=0 no se pinta ("Página 1 de 1 · 0 registros" sobra junto al estado
+          vacío, tenga o no filtros activos). */}
       {!isLoading && !error && total > 0 && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
-          <p className="text-xs text-muted-foreground">
-            Mostrando{' '}
-            <span className="font-mono font-bold text-foreground">{alumnos.length}</span> de{' '}
-            <span className="font-mono font-bold text-foreground">{total}</span>{' '}
-            {total === 1 ? 'alumno' : 'alumnos'}
-            {hayFiltrosActivos && (
-              <>
-                {' '}
-                ·{' '}
-                <span className="font-mono font-bold text-foreground">
-                  {filteredAlumnos.length}
-                </span>{' '}
-                visibles con los filtros
-              </>
-            )}
-          </p>
-          {alumnos.length < total && (
-            <button
-              type="button"
-              onClick={cargarMas}
-              disabled={isLoadingMas}
-              className="self-start sm:self-auto inline-flex items-center gap-2 py-2 px-3.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs border border-border transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-            >
-              {isLoadingMas ? (
-                <>
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                  <span>Cargando…</span>
-                </>
-              ) : (
-                <span>Cargar más alumnos</span>
-              )}
-            </button>
-          )}
+        <div className="px-1">
+          <Paginacion
+            pagina={pagina}
+            tamano={tamano}
+            total={total}
+            onCambiarPagina={setPagina}
+            onCambiarTamano={setTamano}
+            cargando={cargando}
+          />
         </div>
       )}
 
@@ -768,7 +624,7 @@ export function AlumnosPage() {
           <p className="text-xs text-muted-foreground">{error}</p>
           <button
             type="button"
-            onClick={() => loadAlumnos()}
+            onClick={() => recargar()}
             className="py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
           >
             Reintentar
@@ -787,22 +643,45 @@ export function AlumnosPage() {
         </div>
       )}
 
-      {/* D2: estado vacío honesto (cartera sin alumnos o filtros sin coincidencias) */}
-      {!isLoading && !error && filteredAlumnos.length === 0 && (
-        <div className="p-8 rounded-3xl bg-card border border-dashed border-border text-center space-y-2">
-          <Users className="h-8 w-8 text-muted-foreground mx-auto opacity-40" />
-          <p className="text-xs text-muted-foreground">
-            {alumnos.length === 0
-              ? 'Todavía no hay alumnos en tu cartera. Inscribe al primero o comparte tu enlace de registro.'
-              : 'Ningún alumno coincide con los filtros aplicados.'}
-          </p>
+      {/* WU25a: estado vacío honesto — cartera sin alumnos o búsqueda/filtros sin coincidencias */}
+      {!isLoading && !error && total === 0 && (
+        <div className="p-8 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
+          {hayFiltrosActivos ? (
+            <>
+              <Search className="h-8 w-8 text-muted-foreground mx-auto opacity-40" />
+              <p className="text-xs font-bold text-foreground">Sin resultados</p>
+              <p className="text-xs text-muted-foreground">
+                Ningún alumno coincide con la búsqueda o los filtros aplicados.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('light');
+                  setSearch('');
+                  setFilterEstado('todos');
+                  setFilterModalidad('todas');
+                }}
+                className="py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+              >
+                Limpiar filtros
+              </button>
+            </>
+          ) : (
+            <>
+              <Users className="h-8 w-8 text-muted-foreground mx-auto opacity-40" />
+              <p className="text-xs text-muted-foreground">
+                Todavía no hay alumnos en tu cartera. Inscribe al primero o comparte tu enlace de
+                registro.
+              </p>
+            </>
+          )}
         </div>
       )}
 
       {/* VISTA 1: CARDS COMPACTAS DENSAS (~120px) */}
       {viewMode === 'cards' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
-          {filteredAlumnos.map((a) => {
+          {alumnos.map((a) => {
             const semaforo = a.semaforoPago || 'al_dia';
             const isArchived = Boolean(a.deletedAtUtc);
 
@@ -942,7 +821,7 @@ export function AlumnosPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
-              {filteredAlumnos.map((a) => {
+              {alumnos.map((a) => {
                 const semaforo = a.semaforoPago || 'al_dia';
                 const isArchived = Boolean(a.deletedAtUtc);
 

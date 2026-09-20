@@ -3,8 +3,16 @@
  *
  * Lógica pura y testeable: el componente solo mantiene el estado y aplica estas funciones sobre
  * la lista YA ordenada, de modo que el filtro respeta el orden activo (riesgo o nombre A–Z).
+ *
+ * WU25a: el filtrado real pasa a ser server-side (`?q=` + `?semaforo=`); estos helpers quedan
+ * como la referencia semántica compartida (y como filtro del modo demo, que trabaja local).
  */
-import { SemaforoAdherencia, type MonitorAdherenciaSemanalDTO } from '@guachafit/shared';
+import {
+  SemaforoAdherencia,
+  type MonitorAdherenciaSemanalDTO,
+  type ResumenMonitorAdherenciaDTO,
+  type SemaforoFiltroMonitorDTO,
+} from '@guachafit/shared';
 import { normalizarTextoBusqueda } from './texto-busqueda';
 
 // WU20: la normalización vive en `./texto-busqueda` (compartida con el resto de filtros);
@@ -12,6 +20,17 @@ import { normalizarTextoBusqueda } from './texto-busqueda';
 export { normalizarTextoBusqueda };
 
 export type FiltroSemaforoMonitor = 'todos' | 'rojo' | 'amarillo' | 'verde' | 'sin_plan';
+
+/**
+ * WU25a: traduce el chip de la UI al valor que acepta `GET /entrenador/monitor-adherencia`
+ * (`sin_plan` de la UI => `sinPlan` del API). `todos` no viaja al servidor.
+ */
+export function aParametroSemaforoMonitor(
+  filtro: FiltroSemaforoMonitor
+): SemaforoFiltroMonitorDTO | null {
+  if (filtro === 'todos') return null;
+  return filtro === 'sin_plan' ? 'sinPlan' : filtro;
+}
 
 type AlumnoFiltrable = Pick<
   MonitorAdherenciaSemanalDTO,
@@ -68,4 +87,28 @@ export function hayFiltroMonitorActivo(opciones: OpcionesFiltroMonitor = {}): bo
     normalizarTextoBusqueda(opciones.busqueda).length > 0 ||
     (opciones.filtroSemaforo ?? 'todos') !== 'todos'
   );
+}
+
+/**
+ * WU25a: resumen de la cartera COMPLETA del monitor en modo demo, con paridad EXACTA con el
+ * `resumen` que calcula el servidor (`calcularSemanaAdherencia`): `rojo` excluye a los alumnos
+ * con plan pero sin bloques vencidos (0/0 neutral de D6) y `sinPendientes` los cuenta aparte.
+ */
+export function calcularResumenMonitorAdherencia(
+  alumnos: readonly MonitorAdherenciaSemanalDTO[]
+): ResumenMonitorAdherenciaDTO {
+  const conPlan = alumnos.filter((alumno) => alumno.tienePlanActivo);
+  return {
+    rojo: conPlan.filter(
+      (alumno) =>
+        !alumno.sinPendientesSemana && alumno.semaforoAdherencia === SemaforoAdherencia.ROJO
+    ).length,
+    amarillo: conPlan.filter((alumno) => alumno.semaforoAdherencia === SemaforoAdherencia.AMARILLO)
+      .length,
+    verde: conPlan.filter((alumno) => alumno.semaforoAdherencia === SemaforoAdherencia.VERDE)
+      .length,
+    sinPlan: alumnos.length - conPlan.length,
+    sinPendientes: conPlan.filter((alumno) => alumno.sinPendientesSemana).length,
+    total: alumnos.length,
+  };
 }

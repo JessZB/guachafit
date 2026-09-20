@@ -6,7 +6,23 @@ import { sesionesDemoAlumno } from './demo-sesiones';
 import { deltasEntreEjercicios, deltasEntreSeries, descansosRealesEntreEjercicios, descansosRealesEntreSeries, duracionesEjecucionSeries } from './sesion-tiempos';
 
 const AHORA = new Date('2026-09-20T12:00:00.000Z');
-const ALUMNOS_DEMO = ['al-001', 'al-002', 'al-003', 'al-004', 'al-005', 'al-006', 'al-007', 'al-008'];
+const ALUMNOS_DEMO = [
+  'al-001',
+  'al-002',
+  'al-003',
+  'al-004',
+  'al-005',
+  'al-006',
+  'al-007',
+  'al-008',
+  'al-009',
+  'al-010',
+  'al-011',
+  'al-012',
+  'al-013',
+  'al-014',
+  'al-015',
+];
 
 function todosLosHistoriales(ahora: Date = AHORA) {
   return ALUMNOS_DEMO.flatMap((id) => sesionesDemoAlumno(id, ahora));
@@ -57,7 +73,7 @@ describe('sesionesDemoAlumno: contrato del DTO', () => {
   it('cada sesión respeta los campos y tipos de SesionEntrenamientoDetalleDTO', () => {
     for (const sesion of todosLosHistoriales()) {
       expect(sesion.id).toBeTruthy();
-      expect(sesion.alumnoId).toMatch(/^demo-u-00[1-8]$/);
+      expect(sesion.alumnoId).toMatch(/^demo-u-0(0[1-9]|1[0-5])$/);
       expect(sesion.fechaProgramada).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(sesion.timezoneCliente).toBe('America/Caracas');
       expect(Object.values(EstadoSesion)).toContain(sesion.estado);

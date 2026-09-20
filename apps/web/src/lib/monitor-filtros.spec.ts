@@ -5,6 +5,8 @@ import {
   coincideFiltroSemaforo,
   filtrarMonitorAlumnos,
   hayFiltroMonitorActivo,
+  aParametroSemaforoMonitor,
+  calcularResumenMonitorAdherencia,
   type FiltroSemaforoMonitor,
 } from './monitor-filtros';
 
@@ -140,5 +142,54 @@ describe('hayFiltroMonitorActivo (WU19)', () => {
     expect(hayFiltroMonitorActivo({ filtroSemaforo: 'verde' })).toBe(true);
     const chip: FiltroSemaforoMonitor = 'sin_plan';
     expect(hayFiltroMonitorActivo({ filtroSemaforo: chip })).toBe(true);
+  });
+});
+
+describe('aParametroSemaforoMonitor (WU25a: chip de UI => parámetro del API)', () => {
+  it('traduce sin_plan a sinPlan y deja los semáforos iguales', () => {
+    expect(aParametroSemaforoMonitor('sin_plan')).toBe('sinPlan');
+    expect(aParametroSemaforoMonitor('rojo')).toBe('rojo');
+    expect(aParametroSemaforoMonitor('amarillo')).toBe('amarillo');
+    expect(aParametroSemaforoMonitor('verde')).toBe('verde');
+  });
+
+  it('todos no viaja al servidor (null)', () => {
+    expect(aParametroSemaforoMonitor('todos')).toBeNull();
+  });
+});
+
+describe('calcularResumenMonitorAdherencia (WU25a: paridad con el resumen del servidor)', () => {
+  it('cuenta la cartera completa con la regla D6 (rojo excluye sin pendientes)', () => {
+    const resumen = calcularResumenMonitorAdherencia([
+      alumno({ nombreCompleto: 'Roberto', semaforoAdherencia: SemaforoAdherencia.ROJO }),
+      alumno({ nombreCompleto: 'Mariana', semaforoAdherencia: SemaforoAdherencia.AMARILLO }),
+      alumno({ nombreCompleto: 'Carlos', semaforoAdherencia: SemaforoAdherencia.VERDE }),
+      alumno({
+        nombreCompleto: 'Elena',
+        semaforoAdherencia: SemaforoAdherencia.ROJO,
+        sinPendientesSemana: true,
+      }),
+      alumno({ nombreCompleto: 'Andrés', tienePlanActivo: false }),
+    ]);
+
+    expect(resumen).toEqual({
+      rojo: 1,
+      amarillo: 1,
+      verde: 1,
+      sinPlan: 1,
+      sinPendientes: 1,
+      total: 5,
+    });
+  });
+
+  it('una cartera vacía produce contadores en cero', () => {
+    expect(calcularResumenMonitorAdherencia([])).toEqual({
+      rojo: 0,
+      amarillo: 0,
+      verde: 0,
+      sinPlan: 0,
+      sinPendientes: 0,
+      total: 0,
+    });
   });
 });

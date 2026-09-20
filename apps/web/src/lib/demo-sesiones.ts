@@ -515,6 +515,178 @@ const ROSTER_SESIONES_DEMO: Record<string, SesionDemoSpec[]> = {
       ejercicios: BLOQUE_EMPUJE,
     },
   ],
+  // WU26: sesiones de los ids nuevos del monitor (el roster crece a 15 para ver la paginación).
+  // La primera sesión de cada alumno fija su `ultimaSesionUtc` en el fixture del monitor.
+  // ROJO 0/4: última sesión completa hace 6 días; venía de un parón.
+  'al-009': [
+    {
+      id: 'sesion-demo-al-009-01',
+      alumnoId: 'demo-u-009',
+      bloqueId: 'd1',
+      diasAtras: 6,
+      horasAtras: 4,
+      estado: EstadoSesion.COMPLETADA,
+      porcentajeCumplimiento: '100.00',
+      notasAlumno: '[RPE: 8.0/10] • [Molestia: Ninguna] • Retomé después de la pausa.',
+      ejercicios: BLOQUE_EMPUJE,
+    },
+    {
+      id: 'sesion-demo-al-009-02',
+      alumnoId: 'demo-u-009',
+      bloqueId: 'd2',
+      diasAtras: 9,
+      estado: EstadoSesion.COMPLETADA,
+      porcentajeCumplimiento: '100.00',
+      notasAlumno: null,
+      ejercicios: BLOQUE_TRACCION,
+    },
+  ],
+  // ROJO 2/5: completó ayer y hace cuatro días, pero el porcentaje sigue por debajo del 50%.
+  'al-010': [
+    {
+      id: 'sesion-demo-al-010-01',
+      alumnoId: 'demo-u-010',
+      bloqueId: 'd1',
+      diasAtras: 1,
+      horasAtras: 3,
+      estado: EstadoSesion.COMPLETADA,
+      porcentajeCumplimiento: '100.00',
+      notasAlumno: '[RPE: 8.5/10] • [Molestia: Ninguna] • Subí carga en press inclinado.',
+      ejercicios: BLOQUE_EMPUJE,
+    },
+    {
+      id: 'sesion-demo-al-010-02',
+      alumnoId: 'demo-u-010',
+      bloqueId: 'd3',
+      diasAtras: 4,
+      horasAtras: 2,
+      estado: EstadoSesion.COMPLETADA,
+      porcentajeCumplimiento: '100.00',
+      notasAlumno: null,
+      ejercicios: BLOQUE_PIERNA,
+    },
+  ],
+  // AMARILLO 4/6: dos sesiones completas esta semana.
+  'al-011': [
+    {
+      id: 'sesion-demo-al-011-01',
+      alumnoId: 'demo-u-011',
+      bloqueId: 'd3',
+      diasAtras: 3,
+      estado: EstadoSesion.COMPLETADA,
+      porcentajeCumplimiento: '100.00',
+      notasAlumno: '[RPE: 7.5/10] • [Molestia: Ninguna] • Buen ritmo en prensa.',
+      ejercicios: BLOQUE_PIERNA,
+    },
+    {
+      id: 'sesion-demo-al-011-02',
+      alumnoId: 'demo-u-011',
+      bloqueId: 'd1',
+      diasAtras: 6,
+      horasAtras: 5,
+      estado: EstadoSesion.COMPLETADA,
+      porcentajeCumplimiento: '100.00',
+      notasAlumno: null,
+      ejercicios: BLOQUE_EMPUJE,
+    },
+  ],
+  // AMARILLO 5/8: sesiones recientes de tracción y full body.
+  'al-012': [
+    {
+      id: 'sesion-demo-al-012-01',
+      alumnoId: 'demo-u-012',
+      bloqueId: 'd2',
+      diasAtras: 2,
+      horasAtras: 6,
+      estado: EstadoSesion.COMPLETADA,
+      porcentajeCumplimiento: '100.00',
+      notasAlumno: '[RPE: 8.0/10] • [Molestia: Molestia leve en codo] • Bajé carga en curl.',
+      ejercicios: BLOQUE_TRACCION,
+    },
+    {
+      id: 'sesion-demo-al-012-02',
+      alumnoId: 'demo-u-012',
+      bloqueId: 'd4',
+      diasAtras: 5,
+      estado: EstadoSesion.COMPLETADA,
+      porcentajeCumplimiento: '100.00',
+      notasAlumno: null,
+      ejercicios: BLOQUE_FULLBODY,
+    },
+  ],
+  // VERDE 5/5: sesión de madrugada y otra de hace tres días.
+  'al-013': [
+    {
+      id: 'sesion-demo-al-013-01',
+      alumnoId: 'demo-u-013',
+      bloqueId: 'd3',
+      diasAtras: 0,
+      horasAtras: 7,
+      estado: EstadoSesion.COMPLETADA,
+      porcentajeCumplimiento: '100.00',
+      notasAlumno: '[RPE: 7.5/10] • [Molestia: Ninguna] • Entrené temprano antes del trabajo.',
+      ejercicios: BLOQUE_PIERNA,
+    },
+    {
+      id: 'sesion-demo-al-013-02',
+      alumnoId: 'demo-u-013',
+      bloqueId: 'd1',
+      diasAtras: 3,
+      horasAtras: 4,
+      estado: EstadoSesion.COMPLETADA,
+      porcentajeCumplimiento: '100.00',
+      notasAlumno: null,
+      ejercicios: BLOQUE_EMPUJE,
+    },
+  ],
+  // VERDE 4/4: semana perfecta con actividad de hace dos días.
+  'al-014': [
+    {
+      id: 'sesion-demo-al-014-01',
+      alumnoId: 'demo-u-014',
+      bloqueId: 'd4',
+      diasAtras: 2,
+      estado: EstadoSesion.COMPLETADA,
+      porcentajeCumplimiento: '100.00',
+      notasAlumno: '[RPE: 7.0/10] • [Molestia: Ninguna] • Full body cómodo.',
+      ejercicios: BLOQUE_FULLBODY,
+    },
+    {
+      id: 'sesion-demo-al-014-02',
+      alumnoId: 'demo-u-014',
+      bloqueId: 'd2',
+      diasAtras: 5,
+      horasAtras: 6,
+      estado: EstadoSesion.COMPLETADA,
+      porcentajeCumplimiento: '100.00',
+      notasAlumno: null,
+      ejercicios: BLOQUE_TRACCION,
+    },
+  ],
+  // VERDE 3/3: dos sesiones completas hace cuatro y siete días.
+  'al-015': [
+    {
+      id: 'sesion-demo-al-015-01',
+      alumnoId: 'demo-u-015',
+      bloqueId: 'd1',
+      diasAtras: 4,
+      estado: EstadoSesion.COMPLETADA,
+      porcentajeCumplimiento: '100.00',
+      notasAlumno: '[RPE: 8.0/10] • [Molestia: Ninguna] • Sostuve las cargas.',
+      ejercicios: BLOQUE_EMPUJE,
+    },
+    {
+      id: 'sesion-demo-al-015-02',
+      alumnoId: 'demo-u-015',
+      bloqueId: 'd3',
+      diasAtras: 7,
+      horasAtras: 3,
+      estado: EstadoSesion.COMPLETADA,
+      porcentajeCumplimiento: '100.00',
+      notasAlumno: null,
+      ejercicios: BLOQUE_PIERNA,
+    },
+  ],
 };
 
 // ---------------------------------------------------------------------------
@@ -547,9 +719,10 @@ function calcularVolumenKg(ejercicios: readonly EjercicioSesionDetalleDTO[]): st
 /** Normaliza `al-00X` (perfiles_alumno.id) o `demo-u-00X` (usuarios.id) a la clave canónica. */
 function clavePerfilDemo(alumnoId: string): string | null {
   const limpio = alumnoId.trim();
-  if (/^al-00[1-8]$/.test(limpio)) return limpio;
-  const coincidencia = /^demo-u-00([1-8])$/.exec(limpio);
-  return coincidencia ? `al-00${coincidencia[1]}` : null;
+  const perfil = /^al-0(0[1-9]|1[0-5])$/.exec(limpio);
+  if (perfil) return limpio;
+  const usuario = /^demo-u-0(0[1-9]|1[0-5])$/.exec(limpio);
+  return usuario ? `al-0${usuario[1]}` : null;
 }
 
 function construirSesionDemo(spec: SesionDemoSpec, ahora: Date): SesionEntrenamientoDetalleDTO {
