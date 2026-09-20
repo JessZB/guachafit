@@ -8,6 +8,7 @@ import {
   CuotaDetalleDTO,
   TasaCambioVigenteDTO,
   PresignedUploadUrlResponseDTO,
+  ResumenFinancieroAlumnoDTO,
 } from '@guachafit/shared';
 import {
   CreditCard,
@@ -27,11 +28,51 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 
+/**
+ * N2: imagen de demostración del visor de comprobante. SOLO se renderiza con `isDemoMode`
+ * activo; en sesión real, un comprobante sin URL o con carga fallida muestra un placeholder
+ * honesto (el server devuelve `comprobanteUrl = null` de forma legítima, ej. sin R2 configurado).
+ */
+const COMPROBANTE_DEMO_URL =
+  'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=600&q=80';
+
+/**
+ * Adapta el resumen financiero real (`GET /finanzas/clientes/:id/historial`) a la vista de cuota.
+ * Solo transporta datos reales: los campos no mostrados se rellenan con valores neutros y los
+ * campos visibles (saldos, estado, vencimiento, transacciones) provienen del servidor.
+ */
+function adaptarCuotaDesdeResumen(
+  resumen: ResumenFinancieroAlumnoDTO,
+  entrenadorId: string
+): CuotaDetalleDTO | null {
+  const c = resumen.cuotaMesActual;
+  if (!c) return null;
+  return {
+    id: c.id,
+    clienteId: resumen.alumnoId,
+    entrenadorId,
+    planId: '',
+    planNombre: `Cuota del periodo ${c.periodo}`,
+    periodo: c.periodo,
+    montoTotalUsd: c.montoTotalUsd,
+    montoAbonadoUsd: c.montoPagadoUsd,
+    saldoPendienteUsd: c.saldoPendienteUsd,
+    fechaEmisionUtc: c.fechaVencimiento,
+    fechaCorteUtc: c.fechaVencimiento,
+    estado: c.estado as EstadoCuota,
+    transacciones: resumen.transacciones as unknown as CuotaDetalleDTO['transacciones'],
+    createdAtUtc: new Date().toISOString(),
+    updatedAtUtc: new Date().toISOString(),
+  };
+}
+
 export function PagosPage() {
-  const { user } = useAuth();
+  const { user, isDemoMode } = useAuth();
   const [cuota, setCuota] = useState<CuotaDetalleDTO | null>(null);
   const [tasa, setTasa] = useState<TasaCambioVigenteDTO | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // D2: fallo de carga honesto (sin cuota demo fuera del modo demo).
+  const [error, setError] = useState<string | null>(null);
 
   // Progressive Disclosure: 'hub' (selector) | 'nuevo-pago' | 'historial'
   const [vistaActiva, setVistaActiva] = useState<'hub' | 'nuevo-pago' | 'historial'>('hub');
@@ -50,26 +91,26 @@ export function PagosPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [modalComprobanteUrl, setModalComprobanteUrl] = useState<string | null>(null);
+  // N2: visor de comprobante. `url` puede ser null (el server no generó presigned URL): en
+  // sesión real se muestra un placeholder honesto; jamás una imagen stock como si fuera propia.
+  const [modalComprobante, setModalComprobante] = useState<{ url: string | null } | null>(null);
+  const [comprobanteImgError, setComprobanteImgError] = useState(false);
 
-  useEffect(() => {
-    async function loadData() {
-      setIsLoading(true);
-      try {
-        const tasaData = await apiClient<TasaCambioVigenteDTO>('/finanzas/tasas/vigente');
-        setTasa(tasaData);
-      } catch {
-        setTasa({
-          entrenadorId: user?.entrenadorId || 'demo-coach',
-          tasaOficialBcv: '65.0000',
-          tasaActivaEntrenador: '65.0000',
-          tasaEfectiva: '65.0000',
-          fuente: 'oficial_bcv',
-          fechaActualizacionUtc: new Date().toISOString(),
-        });
-      }
+  const cargarDatos = async () => {
+    setIsLoading(true);
+    setError(null);
 
-      const demoCuota: CuotaDetalleDTO = {
+    // MODO DEMO EXPLÍCITO (isDemoMode): tasa y cuota de ejemplo solo con la bandera activa.
+    if (isDemoMode) {
+      setTasa({
+        entrenadorId: user?.entrenadorId || 'demo-coach',
+        tasaOficialBcv: '65.0000',
+        tasaActivaEntrenador: '65.0000',
+        tasaEfectiva: '65.0000',
+        fuente: 'oficial_bcv',
+        fechaActualizacionUtc: new Date().toISOString(),
+      });
+      setCuota({
         id: 'cuota-demo-001',
         clienteId: user?.id || 'demo-alumno',
         entrenadorId: user?.entrenadorId || 'demo-coach',
@@ -104,22 +145,57 @@ export function PagosPage() {
         ],
         createdAtUtc: new Date().toISOString(),
         updatedAtUtc: new Date().toISOString(),
-      };
-      setCuota(demoCuota);
+      });
       setIsLoading(false);
+      return;
     }
 
-    loadData();
-  }, [user]);
+    // Sesión real: tasa vigente y cuota/transacciones reales del alumno titular.
+    try {
+      const tasaData = await apiClient<TasaCambioVigenteDTO>('/finanzas/tasas/vigente').catch(
+        () => null
+      );
+      setTasa(tasaData ?? null);
 
-  const tasaEfectivaNum = Number(tasa?.tasaEfectiva || '65.0000');
+      if (!user?.id) {
+        setCuota(null);
+        setIsLoading(false);
+        return;
+      }
+
+      const resumen = await apiClient<ResumenFinancieroAlumnoDTO>(
+        `/finanzas/clientes/${user.id}/historial`
+      );
+      setCuota(adaptarCuotaDesdeResumen(resumen, user.entrenadorId || user.id));
+    } catch (err: any) {
+      // D2: sin cuota demo en sesión real; error visible con reintento.
+      setCuota(null);
+      setError(
+        err?.message || 'No se pudo cargar tu estado de cuenta. Revisa tu conexión e inténtalo de nuevo.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarDatos();
+  }, [user, isDemoMode]);
+
+  // D2: sin tasa real no se inventa una conversión: se muestra "—" hasta que exista dato.
+  const tasaEfectivaNum = Number(tasa?.tasaEfectiva || '0') || 0;
   const montoNum = Number(montoOriginal) || 0;
   const contravalorUsd =
     moneda === Moneda.VES
-      ? (montoNum / (tasaEfectivaNum || 1)).toFixed(2)
+      ? tasaEfectivaNum > 0
+        ? (montoNum / tasaEfectivaNum).toFixed(2)
+        : '—'
       : montoNum.toFixed(2);
 
-  const saldoVesProyectado = (Number(cuota?.saldoPendienteUsd || 0) * tasaEfectivaNum).toFixed(2);
+  const saldoVesProyectado =
+    tasaEfectivaNum > 0
+      ? (Number(cuota?.saldoPendienteUsd || 0) * tasaEfectivaNum).toFixed(2)
+      : '—';
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -183,26 +259,35 @@ export function PagosPage() {
           });
           finalStorageKey = presignedData.storageKey;
         }
-      } catch {
-        const anio = new Date().getUTCFullYear();
-        finalStorageKey = `comprobantes/${user?.id || 'demo'}/${anio}/${Date.now()}.webp`;
+      } catch (err: any) {
+        // D2: sin storageKey fabricado; si el comprobante no se pudo subir, el reporte no se envía.
+        setFormError(
+          err?.message ||
+            'No se pudo subir el comprobante. Revisa tu conexión e inténtalo de nuevo.'
+        );
+        setIsSubmitting(false);
+        return;
       }
     }
 
+    if (!cuota) {
+      setFormError('No tienes una cuota vigente para reportar el pago. Contacta a tu coach.');
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
-      if (cuota) {
-        await apiClient(`/finanzas/cuotas/${cuota.id}/reportar-pago`, {
-          method: 'POST',
-          body: JSON.stringify({
-            montoOriginal,
-            monedaOriginal: moneda,
-            metodoPago,
-            referenciaBancaria: referenciaBancaria || undefined,
-            fechaOperacion,
-            comprobanteStorageKey: finalStorageKey,
-          }),
-        });
-      }
+      await apiClient(`/finanzas/cuotas/${cuota.id}/reportar-pago`, {
+        method: 'POST',
+        body: JSON.stringify({
+          montoOriginal,
+          monedaOriginal: moneda,
+          metodoPago,
+          referenciaBancaria: referenciaBancaria || undefined,
+          fechaOperacion,
+          comprobanteStorageKey: finalStorageKey,
+        }),
+      });
 
       setFormSuccess('¡Pago reportado con éxito! Tu coach lo validará en la bandeja.');
       handleRemoveFile();
@@ -210,13 +295,11 @@ export function PagosPage() {
         setFormSuccess(null);
         setVistaActiva('historial');
       }, 1800);
-    } catch {
-      setFormSuccess('Pago guardado y registrado para conciliación.');
-      handleRemoveFile();
-      setTimeout(() => {
-        setFormSuccess(null);
-        setVistaActiva('historial');
-      }, 1500);
+    } catch (err: any) {
+      // D5: sin éxito falso; el pago solo queda reportado si el servidor lo aceptó.
+      setFormError(
+        err?.message || 'No se pudo reportar el pago. Revisa los datos e inténtalo de nuevo.'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -252,11 +335,38 @@ export function PagosPage() {
               Tasa del Día
             </span>
             <span className="text-xs font-bold font-mono text-foreground">
-              1 USD = {tasa?.tasaEfectiva || '65.0000'} VES
+              {tasa?.tasaEfectiva ? `1 USD = ${tasa.tasaEfectiva} VES` : 'Tasa no disponible'}
             </span>
           </div>
         </div>
       </div>
+
+      {/* D2: error de carga honesto con reintento (sin cuota demo fuera del modo demo) */}
+      {error && (
+        <div className="p-5 rounded-3xl bg-card border border-destructive/30 text-center space-y-3">
+          <AlertTriangle className="h-7 w-7 text-destructive mx-auto" />
+          <p className="text-xs text-muted-foreground">{error}</p>
+          <button
+            type="button"
+            onClick={() => cargarDatos()}
+            className="py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+
+      {/* D2: sin cuota emitida no se simula saldo; estado vacío honesto */}
+      {!isLoading && !error && !cuota && vistaActiva === 'hub' && (
+        <div className="p-8 rounded-3xl bg-card border border-dashed border-border text-center space-y-2">
+          <Receipt className="h-8 w-8 text-muted-foreground mx-auto opacity-40" />
+          <h3 className="font-bold text-sm text-foreground">Sin cuota vigente</h3>
+          <p className="text-xs text-muted-foreground">
+            Tu coach aún no ha emitido una cuota para este periodo. Si crees que es un error,
+            contáctalo.
+          </p>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* VISTA 1: HUB PRINCIPAL (Divulgación Progresiva - Nivel 1)                  */}
@@ -304,7 +414,9 @@ export function PagosPage() {
                     <span className="text-sm font-semibold text-primary">USD</span>
                   </div>
                   <div className="text-xs font-mono text-muted-foreground mt-0.5">
-                    ≈ {saldoVesProyectado} Bolívares
+                    {tasaEfectivaNum > 0
+                      ? `≈ ${saldoVesProyectado} Bolívares`
+                      : 'Saldo en Bs. no disponible sin tasa vigente'}
                   </div>
                 </div>
 
@@ -686,12 +798,10 @@ export function PagosPage() {
                       <div className="pt-2 border-t border-border/50 flex justify-end">
                         <button
                           type="button"
-                          onClick={() =>
-                            setModalComprobanteUrl(
-                              tx.comprobanteUrl ||
-                                'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=600&q=80'
-                            )
-                          }
+                          onClick={() => {
+                            setComprobanteImgError(false);
+                            setModalComprobante({ url: tx.comprobanteUrl ?? null });
+                          }}
                           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-colors cursor-pointer"
                         >
                           <Eye className="h-3.5 w-3.5" />
@@ -712,7 +822,7 @@ export function PagosPage() {
       )}
 
       {/* Modal de Comprobante SigV4 */}
-      {modalComprobanteUrl && (
+      {modalComprobante && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/85 backdrop-blur-md">
           <div className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-lg space-y-4 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
@@ -721,7 +831,7 @@ export function PagosPage() {
                 <h3 className="font-bold text-base text-foreground">Comprobante de Pago</h3>
               </div>
               <button
-                onClick={() => setModalComprobanteUrl(null)}
+                onClick={() => setModalComprobante(null)}
                 className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
               >
                 <X className="h-4 w-4" />
@@ -729,24 +839,51 @@ export function PagosPage() {
             </div>
 
             <div className="flex-1 overflow-auto rounded-2xl border border-border bg-black/40 flex items-center justify-center min-h-[260px] p-2">
-              <img
-                src={modalComprobanteUrl}
-                alt="Comprobante bancario"
-                className="max-h-[60vh] max-w-full rounded-xl object-contain shadow-md"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src =
-                    'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=600&q=80';
-                }}
-              />
+              {modalComprobante.url && !comprobanteImgError ? (
+                <img
+                  src={modalComprobante.url}
+                  alt="Comprobante bancario"
+                  className="max-h-[60vh] max-w-full rounded-xl object-contain shadow-md"
+                  onError={() => setComprobanteImgError(true)}
+                />
+              ) : isDemoMode && !modalComprobante.url ? (
+                // N2: la foto stock SOLO vive en modo demo explícito.
+                <img
+                  src={COMPROBANTE_DEMO_URL}
+                  alt="Comprobante bancario (demostración)"
+                  className="max-h-[60vh] max-w-full rounded-xl object-contain shadow-md opacity-80"
+                />
+              ) : (
+                // N2: en sesión real nunca se muestra una imagen ajena como comprobante propio.
+                <div className="text-center space-y-2 px-6">
+                  <ImageIcon className="h-10 w-10 mx-auto text-muted-foreground/60" />
+                  <p className="text-sm font-bold text-foreground">
+                    {modalComprobante.url
+                      ? 'No se pudo cargar la imagen del comprobante'
+                      : 'Sin comprobante disponible'}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground max-w-xs">
+                    {modalComprobante.url
+                      ? 'El enlace temporal de lectura falló o expiró. Cierra el visor e inténtalo de nuevo.'
+                      : 'El servidor no generó una URL de lectura para este pago (por ejemplo, almacenamiento R2 no configurado).'}
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between pt-1">
               <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-                Almacenamiento seguro en Cloudflare R2
+                {modalComprobante.url ? (
+                  <>
+                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                    Almacenamiento seguro en Cloudflare R2
+                  </>
+                ) : (
+                  'Sin captura digital verificable'
+                )}
               </span>
               <button
-                onClick={() => setModalComprobanteUrl(null)}
+                onClick={() => setModalComprobante(null)}
                 className="py-2 px-4 rounded-xl bg-secondary text-foreground text-xs font-bold hover:bg-secondary/80 transition-colors cursor-pointer"
               >
                 Cerrar

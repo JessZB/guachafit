@@ -1,15 +1,36 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '../../context/auth-context';
-import { apiClient } from '../../lib/api-client';
-import { queueOfflineMutation, offlineDb } from '../../lib/offline-db';
+import { apiClient, ApiError, generateIdempotencyKey } from '../../lib/api-client';
+import { queueOfflineMutation, offlineDb, getLatestCachedRutina } from '../../lib/offline-db';
+import { subscribeToSyncStatus, type SyncStatusState } from '../../lib/offline-sync';
+import { SyncQueuePanel } from '../../components/common/SyncQueuePanel';
 import { RestTimer } from '../../components/common/RestTimer';
 import { triggerHaptic } from '../../lib/haptics';
 import {
   SesionEntrenamientoDetalleDTO,
+  EjercicioSesionDetalleDTO,
+  SerieRegistroDetalleDTO,
   EstadoSesion,
+  MotivoOmision,
+  TipoCierreSesion,
+  FinalizarSesionResponseDTO,
   SemanaEntrenamientoProgresoDTO,
-  BloqueSemanaProgresoDTO,
 } from '@guachafit/shared';
+import {
+  convertirEntradaPesoAKg,
+  formatearPesoConUnidad,
+  formatearPesoDesdeKg,
+  guardarUnidadPesoPreferida,
+  leerUnidadPesoPreferida,
+  normalizarEntradaDecimal,
+  normalizarKgParaContrato,
+  pasoPesoEnKg,
+  pasoPesoEnUnidad,
+  redondearDecimal,
+  validarReps,
+  validarRpe,
+  type UnidadPeso,
+} from '../../lib/weight-unit';
 import {
   Dumbbell,
   Play,
@@ -29,7 +50,20 @@ import {
   Sparkles,
   Coffee,
   ArrowRight,
+  WifiOff,
+  RefreshCw,
+  Video,
+  ExternalLink,
+  ClipboardList,
 } from 'lucide-react';
+import {
+  formatDuracionMinutos,
+  formatFechaCalendario,
+  formatFechaHoraLocal,
+  formatFechaLocal,
+  formatRangoHorasLocal,
+} from '../../lib/date-format';
+import { estimarCumpleRachaPorVolumen } from '../../lib/racha';
 
 const DEMO_BLOQUES_CATALOGO = [
   {
@@ -216,6 +250,7 @@ export function buildDemoSemanaProgreso(selectedBloqueId?: string): SemanaEntren
     porcentajeCumplimiento: '25.00',
     siguienteBloqueSugeridoId: 'd2',
     esDiaDescansoHoy: false,
+    rachaDias: 3,
     bloques: DEMO_BLOQUES_CATALOGO.map((b) => ({
       bloqueId: b.bloqueId,
       titulo: b.titulo,
@@ -224,6 +259,8 @@ export function buildDemoSemanaProgreso(selectedBloqueId?: string): SemanaEntren
       totalEjercicios: b.ejercicios.length,
       completado: b.bloqueId === 'd1',
       esSugeridoHoy: b.bloqueId === activoId,
+      estadoSesion: b.bloqueId === 'd1' ? EstadoSesion.COMPLETADA : null,
+      motivoOmision: null,
     })),
   };
 }
@@ -261,8 +298,10 @@ function buildDemoSesion(bloqueId: string = 'd2', alumnoId: string = 'demo-alumn
         ejercicioSesionId: `es-demo-${b.bloqueId}-${ejIdx}`,
         numeroSerie: sIdx + 1,
         repsObjetivo: parseInt(ej.reps.split('-')[0], 10) || 10,
-        repsLogradas: b.completado ? parseInt(ej.reps.split('-')[0], 10) || 10 : 0,
-        pesoKg: ej.peso,
+        repsLogradas: b.completado ? parseInt(ej.reps.split('-')[0], 10) || 10 : null,
+        // WU3b: la prescripción vive aparte del peso real (el backend nunca pre-rellena `pesoKg`).
+        pesoKg: b.completado ? ej.peso : null,
+        pesoPrescritoKg: ej.peso,
         rpe: ej.rpe,
         completada: b.completado,
         descansoSegundos: ej.descansoSegundos,
@@ -273,15 +312,181 @@ function buildDemoSesion(bloqueId: string = 'd2', alumnoId: string = 'demo-alumn
   };
 }
 
+// =============================================================================
+// WU3b: PRESCRITO vs REAL, UNIDADES kg/lb, VALIDACIÓN INLINE Y VIDEO (RF-001 RN-01)
+// =============================================================================
+
+/**
+ * Una serie "intacta" conserva los valores prefijados por la API al crear la sesión:
+ * el RPE que trae es la referencia prescrita (el backend no persiste `rpeObjetivo` aparte).
+ * En cuanto el alumno registra datos reales deja de contar como referencia.
+ */
+function serieSinDatosReales(serie: SerieRegistroDetalleDTO): boolean {
+  return (
+    !serie.completada &&
+    !serie.timestampCompletadaUtc &&
+    (serie.pesoKg === null || serie.pesoKg === undefined || serie.pesoKg === '') &&
+    (serie.repsLogradas === null || serie.repsLogradas === undefined)
+  );
+}
+
+/**
+ * Captura el RPE sugerido de la sesión recién cargada (solo series intactas y uniformes).
+ * Se congela al cargar para que editar el RPE real durante el checklist no borre la
+ * referencia prescrita: el badge "Prescrito" permanece visible.
+ */
+function capturarRpeSugerido(ejercicios: EjercicioSesionDetalleDTO[]): Record<string, string> {
+  const snapshot: Record<string, string> = {};
+  for (const ejercicioSesion of ejercicios) {
+    const intactas = ejercicioSesion.series.filter(serieSinDatosReales);
+    const primero = intactas[0]?.rpe;
+    if (primero && intactas.every((s) => s.rpe === primero)) {
+      snapshot[ejercicioSesion.id] = primero;
+    }
+  }
+  return snapshot;
+}
+
+interface ResumenPrescripcion {
+  totalSeries: number;
+  repsTexto: string | null;
+  pesosKg: number[];
+}
+
+/** n series × reps objetivo × peso prescrito (cuando exista) para el badge de prescripción. */
+function calcularResumenPrescripcion(ejercicioSesion: EjercicioSesionDetalleDTO): ResumenPrescripcion {
+  const series = ejercicioSesion.series;
+  const repsUnicas = Array.from(new Set(series.map((s) => s.repsObjetivo))).sort((a, b) => a - b);
+  const pesosKg = Array.from(
+    new Set(
+      series
+        .map((s) => {
+          const valor =
+            s.pesoPrescritoKg === null || s.pesoPrescritoKg === undefined
+              ? NaN
+              : Number(s.pesoPrescritoKg);
+          return Number.isFinite(valor) && valor > 0 ? valor : NaN;
+        })
+        .filter((v) => Number.isFinite(v))
+    )
+  ).sort((a, b) => a - b);
+
+  return {
+    totalSeries: series.length,
+    repsTexto:
+      repsUnicas.length === 0
+        ? null
+        : repsUnicas.length === 1
+        ? `${repsUnicas[0]}`
+        : `${repsUnicas[0]}–${repsUnicas[repsUnicas.length - 1]}`,
+    pesosKg,
+  };
+}
+
+/** Traduce el resumen prescrito a la unidad visible: '4 series × 8–10 reps · 28 kg'. */
+function formatearPrescripcion(resumen: ResumenPrescripcion, unidad: UnidadPeso): string {
+  const partes: string[] = [
+    `${resumen.totalSeries} ${resumen.totalSeries === 1 ? 'serie' : 'series'}`,
+  ];
+  if (resumen.repsTexto) partes.push(`× ${resumen.repsTexto} reps`);
+  if (resumen.pesosKg.length === 1) {
+    partes.push(`· ${formatearPesoConUnidad(resumen.pesosKg[0], unidad)}`);
+  } else if (resumen.pesosKg.length > 1) {
+    const minimo = formatearPesoDesdeKg(resumen.pesosKg[0], unidad);
+    const maximo = formatearPesoConUnidad(resumen.pesosKg[resumen.pesosKg.length - 1], unidad);
+    if (minimo && maximo) partes.push(`· ${minimo}–${maximo}`);
+  }
+  return partes.join(' ');
+}
+
+/** Peso prescrito con carga para una serie (null cuando la prescripción es cualitativa). */
+function pesoPrescritoConCarga(serie: SerieRegistroDetalleDTO): string | null {
+  const valor = serie.pesoPrescritoKg;
+  if (valor === null || valor === undefined) return null;
+  const numerico = Number(valor);
+  return Number.isFinite(numerico) && numerico > 0 ? valor : null;
+}
+
+/** Valida una serie completa antes de enviarla/encolarla (contrato RegistrarSerieSchema). */
+function validarSerieParaEnviar(
+  serie: SerieRegistroDetalleDTO
+): { campo: 'pesoKg' | 'rpe' | 'repsLogradas'; mensaje: string } | null {
+  const pesoNormalizado = normalizarKgParaContrato(serie.pesoKg);
+  if (pesoNormalizado === null) {
+    return { campo: 'pesoKg', mensaje: 'Peso inválido: corrige el valor (ej. 28.5)' };
+  }
+  const errorReps = validarReps(serie.repsLogradas ?? serie.repsObjetivo);
+  if (errorReps) return { campo: 'repsLogradas', mensaje: errorReps };
+  if (serie.rpe) {
+    const resultado = validarRpe(serie.rpe);
+    if (!resultado.ok) {
+      return { campo: 'rpe', mensaje: resultado.error ?? 'RPE inválido' };
+    }
+  }
+  return null;
+}
+
+/**
+ * Detecta si una URL de video es embebible (YouTube/Vimeo) y devuelve su URL de embed.
+ * Cualquier otro formato se ofrece como enlace externo en el modal.
+ */
+function obtenerUrlVideoEmbebible(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+
+    if (host === 'youtu.be') {
+      const id = parsed.pathname.split('/').filter(Boolean)[0];
+      return id ? `https://www.youtube-nocookie.com/embed/${id}` : null;
+    }
+    if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtube-nocookie.com') {
+      if (parsed.pathname === '/watch') {
+        const id = parsed.searchParams.get('v');
+        return id ? `https://www.youtube-nocookie.com/embed/${id}` : null;
+      }
+      const partes = parsed.pathname.split('/').filter(Boolean);
+      if (partes[0] === 'embed' && partes[1]) {
+        return `https://www.youtube-nocookie.com/embed/${partes[1]}`;
+      }
+      if (partes[0] === 'shorts' && partes[1]) {
+        return `https://www.youtube-nocookie.com/embed/${partes[1]}`;
+      }
+      return null;
+    }
+    if (host === 'vimeo.com') {
+      const id = parsed.pathname.split('/').filter(Boolean)[0];
+      return id && /^\d+$/.test(id) ? `https://player.vimeo.com/video/${id}` : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function EntrenamientoPage() {
-  const { user } = useAuth();
+  const { user, isDemoMode } = useAuth();
   const [sesion, setSesion] = useState<SesionEntrenamientoDetalleDTO | null>(null);
   const [semanaProgreso, setSemanaProgreso] = useState<SemanaEntrenamientoProgresoDTO | null>(null);
+  const [selectedBloqueId, setSelectedBloqueId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSwitchingBloque, setIsSwitchingBloque] = useState(false);
   const [isRestTimerOpen, setIsRestTimerOpen] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(90);
   const [activeSerieKey, setActiveSerieKey] = useState<{ ejercicioIndex: number; serieIndex: number } | null>(null);
+
+  // WU3b (RN-01): unidad de peso preferida, borradores de texto en edición y errores inline por campo
+  const [unidadPeso, setUnidadPeso] = useState<UnidadPeso>(() => leerUnidadPesoPreferida());
+  const [inputDrafts, setInputDrafts] = useState<Record<string, string>>({});
+  const [inputErrors, setInputErrors] = useState<Record<string, string>>({});
+
+  // WU3b (Escenario 1): modal de video demostrativo del catálogo
+  const [videoModal, setVideoModal] = useState<{ url: string; nombre: string } | null>(null);
+  const videoCloseRef = useRef<HTMLButtonElement | null>(null);
+
+  // Estados honestos de carga: error de red, offline sin cache y errores de acción explícita
+  const [loadError, setLoadError] = useState(false);
+  const [isOffline, setIsOffline] = useState(() => !navigator.onLine);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Modal de Finalización y Feedback al Coach
   const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
@@ -289,6 +494,63 @@ export function EntrenamientoPage() {
   const [molestia, setMolestia] = useState('Ninguna 👍');
   const [notasCoachInput, setNotasCoachInput] = useState('');
   const [isFinishing, setIsFinishing] = useState(false);
+
+  // RF-001 Escenario 5: cierre de sesión vacía (descansado / incompleto)
+  const [isEmptyCloseModalOpen, setIsEmptyCloseModalOpen] = useState(false);
+
+  // RN-02: feedback real de la finalización (nunca afirmar racha sin respaldo de la API)
+  const [finishFeedback, setFinishFeedback] = useState<{
+    cumpleRacha: boolean;
+    nuevaRacha: number;
+    duracionMinutos: number | null;
+  } | null>(null);
+  const [pendienteSync, setPendienteSync] = useState(false);
+
+  // WU4: visibilidad de la cola offline (pendientes/fallidas/rechazadas) con acceso al panel
+  const [syncState, setSyncState] = useState<SyncStatusState>({
+    isSyncing: false,
+    summary: { pending: 0, failed: 0, rejected: 0 },
+  });
+  const [isSyncPanelOpen, setIsSyncPanelOpen] = useState(false);
+
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas';
+
+  // WU3b: la prescripción (RPE sugerido) se captura al cargar la sesión; editar el RPE real
+  // durante el checklist no debe borrar la referencia prescrita en pantalla.
+  const rpeSugeridoPorEjercicio = useMemo(
+    () => capturarRpeSugerido(sesion?.ejercicios ?? []),
+    [sesion?.id]
+  );
+
+  const cacheSesion = useCallback(
+    async (data: SesionEntrenamientoDetalleDTO) => {
+      if (isDemoMode || !data?.id) return;
+      try {
+        await offlineDb.rutinaHoy.put({
+          id: data.id,
+          alumnoId: user?.id || '',
+          fechaProgramada: data.fechaProgramada,
+          sesion: data,
+          updatedAt: Date.now(),
+        });
+      } catch {
+        // La caché local nunca debe romper la experiencia
+      }
+    },
+    [isDemoMode, user]
+  );
+
+  const refreshSemana = useCallback(async () => {
+    if (isDemoMode) return;
+    try {
+      const progreso = await apiClient<SemanaEntrenamientoProgresoDTO>(
+        `/alumnos/me/rutina/semana-actual?timezone=${encodeURIComponent(tz)}`
+      );
+      if (progreso) setSemanaProgreso(progreso);
+    } catch {
+      // Refresco best-effort: no rompe la vista actual
+    }
+  }, [isDemoMode, tz]);
 
   const getRpeDescription = (val: number): string => {
     if (val <= 3) return 'Descarga / Muy ligero';
@@ -300,108 +562,174 @@ export function EntrenamientoPage() {
     return 'Fallo muscular (10/10)';
   };
 
-  // Accesibilidad: Cierre de modal con Escape
+  // Accesibilidad: cierre de modales con Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isFinishModalOpen) {
-        setIsFinishModalOpen(false);
-      }
+      if (e.key !== 'Escape') return;
+      if (isFinishModalOpen) setIsFinishModalOpen(false);
+      if (isEmptyCloseModalOpen) setIsEmptyCloseModalOpen(false);
+      if (videoModal) setVideoModal(null);
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFinishModalOpen]);
+  }, [isFinishModalOpen, isEmptyCloseModalOpen, videoModal]);
 
-  // Cargar sesión de hoy y progreso semanal de bloques (con soporte de bloque específico)
+  // Accesibilidad: al abrir el video demostrativo el foco pasa al botón de cierre del modal.
+  useEffect(() => {
+    if (videoModal) videoCloseRef.current?.focus();
+  }, [videoModal]);
+
+  // Cargar sesión de hoy y progreso semanal.
+  // - Sin argumento: trae la sesión de hoy más reciente del alumno (cualquier bloque).
+  // - Con bloqueId: consulta READ-ONLY la sesión de hoy de ese bloque (no instancia nada).
+  // Los datos demo SOLO se usan con la bandera explícita isDemoMode.
   const loadSessionAndProgress = useCallback(
-    async (selectedBloqueId?: string) => {
+    async (bloqueId?: string) => {
       setIsLoading(true);
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas';
-      try {
-        if (navigator.onLine) {
-          // 1. Cargar progreso de la semana actual
-          const progresoRes = await apiClient<SemanaEntrenamientoProgresoDTO>(
-            `/alumnos/me/rutina/semana-actual?timezone=${encodeURIComponent(tz)}`
-          ).catch(() => null);
+      setLoadError(false);
+      setActionError(null);
+      // El feedback de finalización pertenece a la sesión finalizada, no a la recién cargada
+      setFinishFeedback(null);
+      setPendienteSync(false);
+      // Los borradores de edición pertenecen a la sesión anterior
+      setInputDrafts({});
+      setInputErrors({});
 
-          let activeBloqueId = selectedBloqueId;
+      // MODO DEMO EXPLÍCITO: datos de ejemplo y cero llamadas/mutaciones contra la API real.
+      if (isDemoMode) {
+        const demoProgreso = buildDemoSemanaProgreso(bloqueId);
+        const demoBloqueId = bloqueId || demoProgreso.siguienteBloqueSugeridoId || 'd2';
+        setSemanaProgreso(demoProgreso);
+        setSelectedBloqueId(demoBloqueId);
+        setSesion(buildDemoSesion(demoBloqueId, user?.id));
+        setIsOffline(false);
+        setIsLoading(false);
+        setIsSwitchingBloque(false);
+        return;
+      }
 
-          if (progresoRes && progresoRes.totalBloques > 0) {
-            setSemanaProgreso(progresoRes);
-            if (!activeBloqueId) {
-              activeBloqueId = progresoRes.siguienteBloqueSugeridoId || undefined;
-            }
-          } else {
-            // Si no hay rutina asignada en la BD o estamos en modo demo, proveer bloques demo
-            const demoProgreso = buildDemoSemanaProgreso(selectedBloqueId);
-            setSemanaProgreso(demoProgreso);
-            if (!activeBloqueId) {
-              activeBloqueId = demoProgreso.siguienteBloqueSugeridoId || 'd2';
-            }
-          }
-
-          // 2. Cargar sesión de hoy (o del bloque seleccionado)
-          const url = activeBloqueId
-            ? `/alumnos/me/sesiones/hoy?timezone=${encodeURIComponent(tz)}&bloqueId=${encodeURIComponent(activeBloqueId)}`
-            : `/alumnos/me/sesiones/hoy?timezone=${encodeURIComponent(tz)}`;
-
-          const data = await apiClient<SesionEntrenamientoDetalleDTO | null>(url).catch(() => null);
-          if (data) {
-            setSesion(data);
-            // Cache en IndexedDB
-            if (data.id) {
-              await offlineDb.rutinaHoy.put({
-                id: data.id,
-                alumnoId: user?.id || '',
-                fechaProgramada: data.fechaProgramada,
-                sesion: data,
-                updatedAt: Date.now(),
-              });
-            }
-          } else {
-            // Fallback a sesión demo del bloque seleccionado
-            const demoSes = buildDemoSesion(activeBloqueId || 'd2', user?.id);
-            setSesion(demoSes);
-          }
-        } else {
-          // Offline fallback
-          const cached = await offlineDb.rutinaHoy.toCollection().last();
-          if (cached) {
-            setSesion(cached.sesion);
-          } else {
-            setSesion(buildDemoSesion(selectedBloqueId || 'd2', user?.id));
-          }
-          setSemanaProgreso((prev) => prev || buildDemoSemanaProgreso(selectedBloqueId));
+      // OFFLINE: solo cache local; sin cache => estado offline vacío (nunca demo).
+      if (!navigator.onLine) {
+        try {
+          // WU4: la sesión más reciente por fechaProgramada/updatedAt (no el orden de UUID).
+          const cached = await getLatestCachedRutina(user?.id);
+          setSesion(cached?.sesion ?? null);
+        } catch {
+          setSesion(null);
         }
+        setIsOffline(true);
+        setIsLoading(false);
+        setIsSwitchingBloque(false);
+        return;
+      }
+
+      try {
+        // 1. Progreso semanal (incluye racha efectiva y estados de omisión)
+        const progresoRes = await apiClient<SemanaEntrenamientoProgresoDTO>(
+          `/alumnos/me/rutina/semana-actual?timezone=${encodeURIComponent(tz)}`
+        );
+        setSemanaProgreso(progresoRes);
+
+        // 2. Sesión de hoy: del bloque consultado o la más reciente del alumno
+        const url = bloqueId
+          ? `/alumnos/me/sesiones/hoy?timezone=${encodeURIComponent(tz)}&bloqueId=${encodeURIComponent(bloqueId)}`
+          : `/alumnos/me/sesiones/hoy?timezone=${encodeURIComponent(tz)}`;
+
+        const data = await apiClient<SesionEntrenamientoDetalleDTO | null>(url);
+        setSesion(data ?? null);
+        if (data?.bloqueId) setSelectedBloqueId(data.bloqueId);
+        else if (bloqueId) setSelectedBloqueId(bloqueId);
+        else setSelectedBloqueId(progresoRes.siguienteBloqueSugeridoId ?? null);
+
+        if (data?.id) await cacheSesion(data);
+        setIsOffline(false);
       } catch (err) {
-        console.warn('Fallback a datos locales o simulación de sesión:', err);
-        setSemanaProgreso(buildDemoSemanaProgreso(selectedBloqueId));
-        setSesion(buildDemoSesion(selectedBloqueId || 'd2', user?.id));
+        // Error real de red/servidor: estado de error con retry (jamás datos demo)
+        console.warn('No se pudo cargar la sesión del alumno:', err);
+        setLoadError(true);
       } finally {
         setIsLoading(false);
         setIsSwitchingBloque(false);
       }
     },
-    [user]
+    [cacheSesion, isDemoMode, tz, user]
   );
 
   useEffect(() => {
     loadSessionAndProgress();
   }, [loadSessionAndProgress]);
 
+  // WU4: contadores de la cola offline para el indicador de esta pantalla
+  useEffect(() => subscribeToSyncStatus(setSyncState), []);
+
+  // Consulta READ-ONLY de un bloque (chip de la semana): NO instancia ni elimina nada.
   const handleSelectBloque = async (bloqueId: string) => {
+    if (!bloqueId) return;
     triggerHaptic('selection');
     setIsSwitchingBloque(true);
-    setSemanaProgreso((prev) => {
-      if (!prev) return buildDemoSemanaProgreso(bloqueId);
-      return {
-        ...prev,
-        bloques: prev.bloques.map((b) => ({
-          ...b,
-          esSugeridoHoy: b.bloqueId === bloqueId,
-        })),
-      };
-    });
+    setSelectedBloqueId(bloqueId);
     await loadSessionAndProgress(bloqueId);
+  };
+
+  // Acción EXPLÍCITA: "Entrenar este bloque hoy" (RN-04). Única vía para instanciar/cambiar sesión.
+  const handleEntrenarBloqueHoy = async (bloqueId: string, iniciarInmediato = false) => {
+    if (!bloqueId) return;
+    setActionError(null);
+    setIsSwitchingBloque(true);
+    triggerHaptic('selection');
+    // Los borradores de edición pertenecen a la sesión anterior
+    setInputDrafts({});
+    setInputErrors({});
+
+    // Modo demo: cambio local, sin API ni cola offline.
+    if (isDemoMode) {
+      const demo = buildDemoSesion(bloqueId, user?.id);
+      setSesion(
+        iniciarInmediato
+          ? {
+              ...demo,
+              id: `sesion-demo-${bloqueId}-${Date.now()}`,
+              estado: EstadoSesion.EN_PROGRESO,
+              fechaInicioUtc: new Date().toISOString(),
+            }
+          : demo
+      );
+      setSelectedBloqueId(bloqueId);
+      setFinishFeedback(null);
+      setPendienteSync(false);
+      setIsSwitchingBloque(false);
+      return;
+    }
+
+    try {
+      const nueva = await apiClient<SesionEntrenamientoDetalleDTO>(
+        `/alumnos/me/sesiones/bloques/${encodeURIComponent(bloqueId)}/entrenar-hoy`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ timezoneCliente: tz, iniciarInmediato }),
+        }
+      );
+      setSesion(nueva);
+      setSelectedBloqueId(nueva.bloqueId || bloqueId);
+      setFinishFeedback(null);
+      setPendienteSync(false);
+      await cacheSesion(nueva);
+      await refreshSemana();
+    } catch (err) {
+      setActionError(
+        err instanceof ApiError
+          ? err.message
+          : 'No pudimos iniciar el bloque. Revisa tu conexión e inténtalo de nuevo.'
+      );
+    } finally {
+      setIsSwitchingBloque(false);
+    }
+  };
+
+  // "Repetir entrenamiento": nueva sesión en progreso del bloque ya completado (historial intacto)
+  const handleRepetirBloque = async () => {
+    if (!sesion?.bloqueId) return;
+    await handleEntrenarBloqueHoy(sesion.bloqueId, true);
   };
 
   // Start workout session
@@ -415,21 +743,92 @@ export function EntrenamientoPage() {
     };
     setSesion(updated);
 
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas';
+    // Modo demo: transición local sin llamadas reales ni cola offline.
+    if (isDemoMode) return;
+
     const initPayload = { timezoneCliente: tz, fechaInicioUtc: nowUtc };
+    // WU4: una sola key por mutación lógica; se reutiliza si el intento directo cae y se encola.
+    const idempotencyKey = generateIdempotencyKey();
 
     if (navigator.onLine) {
       try {
         await apiClient(`/sesiones/${sesion.id}/iniciar`, {
           method: 'POST',
           body: JSON.stringify(initPayload),
+          idempotencyKey,
         });
       } catch (err) {
-        await queueOfflineMutation(`/sesiones/${sesion.id}/iniciar`, 'POST', initPayload, 'Iniciar sesión');
+        await queueOfflineMutation(
+          `/sesiones/${sesion.id}/iniciar`,
+          'POST',
+          initPayload,
+          'Iniciar sesión',
+          idempotencyKey
+        );
       }
     } else {
-      await queueOfflineMutation(`/sesiones/${sesion.id}/iniciar`, 'POST', initPayload, 'Iniciar sesión');
+      await queueOfflineMutation(
+        `/sesiones/${sesion.id}/iniciar`,
+        'POST',
+        initPayload,
+        'Iniciar sesión',
+        idempotencyKey
+      );
     }
+  };
+
+  // WU3b: helpers de errores inline, unidad de peso y video demostrativo
+  const marcarErrorInline = useCallback((clave: string, mensaje: string) => {
+    setInputErrors((prev) => ({ ...prev, [clave]: mensaje }));
+  }, []);
+
+  const limpiarErrorInline = useCallback((clave: string) => {
+    setInputErrors((prev) => {
+      if (!prev[clave]) return prev;
+      const next = { ...prev };
+      delete next[clave];
+      return next;
+    });
+  }, []);
+
+  const limpiarBorrador = useCallback((clave: string) => {
+    setInputDrafts((prev) => {
+      if (!(clave in prev)) return prev;
+      const next = { ...prev };
+      delete next[clave];
+      return next;
+    });
+  }, []);
+
+  /** RN-01: alterna kg/lb y persiste la preferencia; los textos se reformatean desde kg. */
+  const handleCambiarUnidad = (unidad: UnidadPeso) => {
+    if (unidad === unidadPeso) return;
+    triggerHaptic('selection');
+    setUnidadPeso(unidad);
+    guardarUnidadPesoPreferida(unidad);
+    setInputDrafts({});
+    setInputErrors({});
+  };
+
+  /** Escenario 1: abre el video demostrativo del catálogo para este ejercicio. */
+  const handleAbrirVideo = (ejercicioSesion: EjercicioSesionDetalleDTO) => {
+    const url = ejercicioSesion.ejercicio?.videoUrl;
+    if (!url) return;
+    triggerHaptic('selection');
+    setVideoModal({ url, nombre: ejercicioSesion.ejercicio?.nombre || 'Ejercicio' });
+  };
+
+  /** Al salir del campo, el borrador válido se descarta y la UI muestra el valor canónico. */
+  const handleBlurPeso = (serieId: string) => {
+    const clave = `${serieId}:pesoKg`;
+    if (inputErrors[clave]) return; // conserva el texto inválido visible para corregirlo
+    limpiarBorrador(clave);
+  };
+
+  const handleBlurRpe = (serieId: string) => {
+    const clave = `${serieId}:rpe`;
+    if (inputErrors[clave]) return;
+    limpiarBorrador(clave);
   };
 
   // Notificación de cambio de duración en el temporizador (Alumno ajusta descanso)
@@ -449,6 +848,9 @@ export function EntrenamientoPage() {
       updated.ejercicios[ejercicioIndex].series[serieIndex].descansoSegundos = newSeconds;
       setSesion(updated);
 
+      // Modo demo: interacción local sin cache ni mutaciones reales.
+      if (isDemoMode) return;
+
       offlineDb.rutinaHoy.put({
         id: updated.id,
         alumnoId: user?.id || '',
@@ -456,6 +858,13 @@ export function EntrenamientoPage() {
         sesion: updated,
         updatedAt: Date.now(),
       }).catch(() => {});
+
+      // WU3b: un valor inválido jamás se envía a la API (validación contra el contrato).
+      const errorSerie = validarSerieParaEnviar(serie);
+      if (errorSerie) {
+        marcarErrorInline(`${serie.id}:${errorSerie.campo}`, errorSerie.mensaje);
+        return;
+      }
 
       if (navigator.onLine) {
         try {
@@ -466,7 +875,7 @@ export function EntrenamientoPage() {
                 {
                   serieId: serie.id,
                   repsLogradas: serie.repsLogradas ?? serie.repsObjetivo,
-                  pesoKg: serie.pesoKg,
+                  pesoKg: normalizarKgParaContrato(serie.pesoKg),
                   rpe: serie.rpe,
                   descansoSegundos: newSeconds,
                   completada: serie.completada,
@@ -478,7 +887,7 @@ export function EntrenamientoPage() {
         } catch {}
       }
     },
-    [activeSerieKey, sesion, user]
+    [activeSerieKey, sesion, user, isDemoMode]
   );
 
   // Toggle set completion and trigger rest timer
@@ -487,6 +896,15 @@ export function EntrenamientoPage() {
     const updated = { ...sesion };
     const serie = updated.ejercicios[ejercicioIndex].series[serieIndex];
     const willBeCompleted = !serie.completada;
+
+    // WU3b: sin valores válidos no se marca ni se envía/encola nada (error inline visible).
+    const errorSerie = validarSerieParaEnviar(serie);
+    if (errorSerie) {
+      marcarErrorInline(`${serie.id}:${errorSerie.campo}`, errorSerie.mensaje);
+      triggerHaptic('warning');
+      return;
+    }
+    const pesoNormalizado = normalizarKgParaContrato(serie.pesoKg);
 
     serie.completada = willBeCompleted;
     if (willBeCompleted) {
@@ -533,9 +951,20 @@ export function EntrenamientoPage() {
     });
     const pct = totalSeries > 0 ? ((completedSeries / totalSeries) * 100).toFixed(2) : '0.00';
     updated.porcentajeCumplimiento = pct;
-    updated.cumpleReglaRacha = Number(pct) >= 70;
+    // D8 (RN-02): la estimación local usa la MISMA regla que el servidor (volumen ponderado
+    // con fallback a series), no un simple % de series; el servidor sigue siendo la autoridad.
+    updated.cumpleReglaRacha = estimarCumpleRachaPorVolumen(
+      updated.ejercicios.flatMap((e) => e.series)
+    );
 
     setSesion(updated);
+
+    // WU3b: al marcar la serie, el texto en edición se reemplaza por el valor canónico persistido.
+    limpiarBorrador(`${serie.id}:pesoKg`);
+    limpiarBorrador(`${serie.id}:rpe`);
+
+    // Modo demo: interacción local sin cache ni mutaciones reales.
+    if (isDemoMode) return;
 
     // Save to IndexedDB
     await offlineDb.rutinaHoy.put({
@@ -552,7 +981,7 @@ export function EntrenamientoPage() {
         {
           serieId: serie.id,
           repsLogradas: serie.repsLogradas ?? serie.repsObjetivo,
-          pesoKg: serie.pesoKg,
+          pesoKg: pesoNormalizado,
           rpe: serie.rpe,
           descansoSegundos: serie.descansoSegundos ?? null,
           completada: willBeCompleted,
@@ -561,18 +990,23 @@ export function EntrenamientoPage() {
       ],
     };
 
+    // WU4: misma key para el intento directo y un eventual encolado (defensa de idempotencia).
+    const idempotencyKey = generateIdempotencyKey();
+
     if (navigator.onLine) {
       try {
         await apiClient(`/sesiones/${sesion.id}/series`, {
           method: 'PUT',
           body: JSON.stringify(payload),
+          idempotencyKey,
         });
       } catch {
         await queueOfflineMutation(
           `/sesiones/${sesion.id}/series`,
           'PUT',
           payload,
-          `Sync serie ${serie.numeroSerie}`
+          `Sync serie ${serie.numeroSerie}`,
+          idempotencyKey
         );
       }
     } else {
@@ -580,7 +1014,8 @@ export function EntrenamientoPage() {
         `/sesiones/${sesion.id}/series`,
         'PUT',
         payload,
-        `Sync serie ${serie.numeroSerie}`
+        `Sync serie ${serie.numeroSerie}`,
+        idempotencyKey
       );
     }
   };
@@ -595,10 +1030,44 @@ export function EntrenamientoPage() {
     if (!sesion) return;
     const updated = { ...sesion };
     const serie = updated.ejercicios[ejercicioIndex].series[serieIndex];
-    if (field === 'pesoKg') serie.pesoKg = value;
-    if (field === 'rpe') serie.rpe = value;
-    if (field === 'repsLogradas') serie.repsLogradas = Number(value) || 0;
+
+    if (field === 'pesoKg') {
+      // RN-01: el alumno escribe en su unidad; se valida y se persiste SIEMPRE en kg.
+      const clave = `${serie.id}:pesoKg`;
+      setInputDrafts((prev) => ({ ...prev, [clave]: value }));
+      const resultado = convertirEntradaPesoAKg(value, unidadPeso);
+      if (!resultado.ok) {
+        marcarErrorInline(clave, resultado.error ?? 'Peso inválido');
+        return; // nunca persistir ni encolar un peso inválido
+      }
+      limpiarErrorInline(clave);
+      serie.pesoKg = resultado.kg; // '' = sin peso (válido: el peso es opcional, RN-01)
+    } else if (field === 'rpe') {
+      const clave = `${serie.id}:rpe`;
+      setInputDrafts((prev) => ({ ...prev, [clave]: value }));
+      const resultado = validarRpe(value);
+      if (!resultado.ok) {
+        marcarErrorInline(clave, resultado.error ?? 'RPE inválido');
+        return;
+      }
+      limpiarErrorInline(clave);
+      serie.rpe = resultado.rpe;
+    } else {
+      const clave = `${serie.id}:repsLogradas`;
+      const numerico = Number(value);
+      const errorReps = validarReps(numerico);
+      if (errorReps) {
+        marcarErrorInline(clave, errorReps);
+        return;
+      }
+      limpiarErrorInline(clave);
+      serie.repsLogradas = numerico;
+    }
+
     setSesion(updated);
+
+    // Modo demo: edición local sin cache ni mutaciones reales.
+    if (isDemoMode) return;
 
     // Auto-guardado inmediato en IndexedDB
     offlineDb.rutinaHoy.put({
@@ -622,15 +1091,27 @@ export function EntrenamientoPage() {
     const updated = { ...sesion };
     const serie = updated.ejercicios[ejercicioIndex].series[serieIndex];
     if (field === 'pesoKg') {
-      const current = parseFloat(serie.pesoKg || '0') || 0;
-      const next = Math.max(0, Math.round((current + delta) * 100) / 100);
-      serie.pesoKg = next > 0 ? String(next) : '';
+      // RN-01: el stepper avanza en la unidad visible (±2.5 kg / ±5 lb) sin deriva decimal.
+      const clave = `${serie.id}:pesoKg`;
+      const pasoKg = pasoPesoEnKg(unidadPeso) * (delta < 0 ? -1 : 1);
+      const baseNumerica = serie.pesoKg
+        ? Number(normalizarEntradaDecimal(String(serie.pesoKg)))
+        : 0;
+      const actualKg = Number.isFinite(baseNumerica) ? baseNumerica : 0;
+      const siguienteKg = Math.max(0, actualKg + pasoKg);
+      serie.pesoKg = siguienteKg > 0 ? redondearDecimal(siguienteKg, 2).toFixed(2) : '';
+      limpiarBorrador(clave); // el valor canónico reemplaza cualquier texto en edición
+      limpiarErrorInline(clave);
     } else if (field === 'repsLogradas') {
       const current = serie.repsLogradas ?? serie.repsObjetivo ?? 0;
-      const next = Math.max(0, current + delta);
+      const next = Math.max(0, Math.min(200, current + delta));
       serie.repsLogradas = next;
+      limpiarErrorInline(`${serie.id}:repsLogradas`);
     }
     setSesion(updated);
+
+    // Modo demo: edición local sin cache ni mutaciones reales.
+    if (isDemoMode) return;
 
     // Auto-guardado inmediato en IndexedDB
     offlineDb.rutinaHoy.put({
@@ -644,6 +1125,17 @@ export function EntrenamientoPage() {
 
   // Finish session handlers (Modal de Feedback)
   const handleOpenFinishModal = () => {
+    if (!sesion) return;
+    // RF-001 Escenario 5: sin ninguna serie completada se pide decisión explícita primero
+    const seriesCompletadas = sesion.ejercicios.reduce(
+      (acc, ej) => acc + ej.series.filter((s) => s.completada).length,
+      0
+    );
+    if (seriesCompletadas === 0) {
+      setActionError(null);
+      setIsEmptyCloseModalOpen(true);
+      return;
+    }
     setIsFinishModalOpen(true);
   };
 
@@ -698,44 +1190,148 @@ export function EntrenamientoPage() {
       fechaFinUtc: new Date().toISOString(),
     };
 
+    // Modo demo: cierre local sin llamadas reales ni cola offline.
+    if (isDemoMode) {
+      setFinishFeedback({
+        cumpleRacha: estimarCumpleRachaPorVolumen(updated.ejercicios.flatMap((e) => e.series)),
+        nuevaRacha: (semanaProgreso?.rachaDias ?? 0) + 1,
+        duracionMinutos: null,
+      });
+      setPendienteSync(false);
+      setIsFinishing(false);
+      setIsFinishModalOpen(false);
+      triggerHaptic('success');
+      return;
+    }
+
     let finalUpdated = updated;
+    // WU4: idempotencia persistente también en la finalización (misma key en reintentos).
+    const idempotencyKey = generateIdempotencyKey();
     if (navigator.onLine) {
       try {
-        const res: any = await apiClient(`/sesiones/${sesion.id}/finalizar`, {
+        const res = await apiClient<FinalizarSesionResponseDTO>(`/sesiones/${sesion.id}/finalizar`, {
           method: 'POST',
           body: JSON.stringify(payload),
+          idempotencyKey,
         });
         if (res?.sesion) {
           finalUpdated = res.sesion;
           setSesion(res.sesion);
         }
-      } catch {
-        await queueOfflineMutation(`/sesiones/${sesion.id}/finalizar`, 'POST', payload, 'Finalizar sesión con feedback');
+        if (res) {
+          setFinishFeedback({
+            cumpleRacha: res.cumpleRacha,
+            nuevaRacha: res.nuevaRacha,
+            duracionMinutos: res.duracionMinutos ?? res.sesion?.duracionMinutos ?? null,
+          });
+          setPendienteSync(false);
+        }
+      } catch (err) {
+        // Defensa (RF-001 Escenario 5): SOLO el 400 con código máquina estable `SESION_VACIA`
+        // abre el modal de cierre vacío; cualquier otro 400 es un error normal visible.
+        if (err instanceof ApiError && err.status === 400) {
+          setSesion(sesion); // revertir el estado optimista
+          setIsFinishing(false);
+          if (err.problem?.code === 'SESION_VACIA') {
+            setIsFinishModalOpen(false);
+            setIsEmptyCloseModalOpen(true);
+            return;
+          }
+          setActionError(
+            err.problem?.message || err.message || 'No se pudo finalizar la sesión.'
+          );
+          return;
+        }
+        await queueOfflineMutation(`/sesiones/${sesion.id}/finalizar`, 'POST', payload, 'Finalizar sesión con feedback', idempotencyKey);
+        setPendienteSync(true);
+        setFinishFeedback(null);
       }
     } else {
-      await queueOfflineMutation(`/sesiones/${sesion.id}/finalizar`, 'POST', payload, 'Finalizar sesión con feedback');
+      await queueOfflineMutation(`/sesiones/${sesion.id}/finalizar`, 'POST', payload, 'Finalizar sesión con feedback', idempotencyKey);
+      setPendienteSync(true);
+      setFinishFeedback(null);
     }
 
     if (sesion.id) {
-      await offlineDb.rutinaHoy.put({
-        id: sesion.id,
-        alumnoId: user?.id || '',
-        fechaProgramada: sesion.fechaProgramada,
-        sesion: finalUpdated,
-        updatedAt: Date.now(),
-      });
+      await cacheSesion(finalUpdated);
     }
 
-    // Actualizar progreso semanal reactivo
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas';
-    apiClient<SemanaEntrenamientoProgresoDTO>(
-      `/alumnos/me/rutina/semana-actual?timezone=${encodeURIComponent(tz)}`
-    ).then((p) => {
-      if (p) setSemanaProgreso(p);
-    }).catch(() => {});
+    // Actualizar progreso semanal reactivo (incluye racha efectiva)
+    await refreshSemana();
 
     setIsFinishing(false);
     setIsFinishModalOpen(false);
+    triggerHaptic('success');
+  };
+
+  /**
+   * RF-001 Escenario 5: cierre explícito de una sesión sin series completadas.
+   * DESCANSADA/INCOMPLETA marcan la sesión como OMITIDA (sin racha) y conservan el historial.
+   */
+  const confirmEmptyClose = async (tipoCierre: TipoCierreSesion) => {
+    if (!sesion) return;
+    setIsFinishing(true);
+
+    const fechaFinUtc = new Date().toISOString();
+    const motivoOmision =
+      tipoCierre === TipoCierreSesion.DESCANSADA ? MotivoOmision.DESCANSO : MotivoOmision.INCOMPLETO;
+    const updated: SesionEntrenamientoDetalleDTO = {
+      ...sesion,
+      estado: EstadoSesion.OMITIDA,
+      motivoOmision,
+      fechaFinUtc,
+      porcentajeCumplimiento: '0.00',
+    };
+    setSesion(updated);
+    setFinishFeedback(null);
+    setPendienteSync(false);
+
+    // Modo demo: cierre local sin llamadas reales.
+    if (isDemoMode) {
+      setIsFinishing(false);
+      setIsEmptyCloseModalOpen(false);
+      triggerHaptic('success');
+      return;
+    }
+
+    const payload = { tipoCierre, fechaFinUtc };
+    const descripcion =
+      tipoCierre === TipoCierreSesion.DESCANSADA ? 'Registrar día descansado' : 'Registrar día incompleto';
+    let finalUpdated = updated;
+    // WU4: idempotencia persistente también en el cierre vacío (descansado/incompleto).
+    const idempotencyKey = generateIdempotencyKey();
+
+    if (navigator.onLine) {
+      try {
+        const res = await apiClient<FinalizarSesionResponseDTO>(`/sesiones/${sesion.id}/finalizar`, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+          idempotencyKey,
+        });
+        if (res?.sesion) {
+          finalUpdated = res.sesion;
+          setSesion(res.sesion);
+        }
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 400) {
+          setActionError(err.problem?.message || err.message);
+          setSesion(sesion); // revertir
+          setIsFinishing(false);
+          return;
+        }
+        await queueOfflineMutation(`/sesiones/${sesion.id}/finalizar`, 'POST', payload, descripcion, idempotencyKey);
+        setPendienteSync(true);
+      }
+    } else {
+      await queueOfflineMutation(`/sesiones/${sesion.id}/finalizar`, 'POST', payload, descripcion, idempotencyKey);
+      setPendienteSync(true);
+    }
+
+    await cacheSesion(finalUpdated);
+    await refreshSemana();
+
+    setIsFinishing(false);
+    setIsEmptyCloseModalOpen(false);
     triggerHaptic('success');
   };
 
@@ -750,9 +1346,60 @@ export function EntrenamientoPage() {
   const isCompleted = sesion?.estado === EstadoSesion.COMPLETADA;
   const isInProgress = sesion?.estado === EstadoSesion.EN_PROGRESO;
   const isPlanned = sesion?.estado === EstadoSesion.PLANIFICADA;
+  const isOmitted = sesion?.estado === EstadoSesion.OMITIDA;
+  const isReadOnly = isCompleted || isPlanned || isOmitted;
+  const selectedBloque = semanaProgreso?.bloques.find((b) => b.bloqueId === selectedBloqueId) ?? null;
+
+  // WU4: resumen de la cola offline para el indicador (nada visible si todo está sincronizado)
+  const syncRejected = syncState.summary.rejected;
+  const syncUnsynced = syncState.summary.pending + syncState.summary.failed;
+  const syncLabelParts: string[] = [];
+  if (syncRejected > 0) {
+    syncLabelParts.push(
+      `${syncRejected} cambio${syncRejected > 1 ? 's' : ''} rechazado${syncRejected > 1 ? 's' : ''}`
+    );
+  }
+  if (syncUnsynced > 0) {
+    syncLabelParts.push(
+      `${syncUnsynced} cambio${syncUnsynced > 1 ? 's' : ''} sin sincronizar`
+    );
+  }
+  const syncSummaryLabel = syncLabelParts.join(' · ');
 
   return (
     <div className="space-y-6">
+      {/* Errores de acciones explícitas (conflictos, red): visibles y accionables */}
+      {actionError && (
+        <div className="p-3.5 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-semibold flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>{actionError}</span>
+        </div>
+      )}
+
+      {/* WU4: indicador discreto de la cola offline; ausente cuando todo está sincronizado */}
+      {syncSummaryLabel && (
+        <button
+          type="button"
+          onClick={() => setIsSyncPanelOpen(true)}
+          title={`${syncSummaryLabel}. Clic para revisar la sincronización.`}
+          className={`w-full p-3 rounded-2xl border text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer active:scale-[0.99] ${
+            syncRejected > 0
+              ? 'bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/15'
+              : 'bg-amber-500/10 border-amber-500/30 text-amber-500 hover:bg-amber-500/15'
+          }`}
+        >
+          {syncRejected > 0 ? (
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+          ) : (
+            <RefreshCw className={`h-4 w-4 shrink-0 ${syncState.isSyncing ? 'animate-spin' : ''}`} />
+          )}
+          <span>{syncSummaryLabel}</span>
+          <span className="ml-auto text-[10px] uppercase tracking-wider font-bold opacity-80">
+            Ver detalles
+          </span>
+        </button>
+      )}
+
       {/* Barra de Progreso Semanal Interactiva */}
       {semanaProgreso && semanaProgreso.totalBloques > 0 && (
         <div className="p-4 sm:p-5 rounded-3xl bg-card border border-border/80 shadow-md space-y-3.5">
@@ -796,7 +1443,19 @@ export function EntrenamientoPage() {
             {semanaProgreso.bloques.map((b) => {
               const esActivo = sesion?.bloqueId === b.bloqueId;
               const esCompletado = b.completado;
+              const esOmitido = !esCompletado && b.estadoSesion === EstadoSesion.OMITIDA;
               const esSugerido = b.esSugeridoHoy;
+              const etiquetaOmision =
+                b.motivoOmision === MotivoOmision.DESCANSO ? 'Descansado' : 'Incompleto';
+              const detalleFecha = b.fechaCompletadaUtc
+                ? `Completado: ${formatFechaHoraLocal(b.fechaCompletadaUtc) ?? ''}`
+                : b.fechaProgramada
+                ? `Programado: ${formatFechaCalendario(b.fechaProgramada) ?? ''}`
+                : null;
+              // RN-05: fecha local visible en la tarjeta del bloque (UTC -> Intl del dispositivo)
+              const fechaVisible = b.fechaCompletadaUtc
+                ? formatFechaLocal(b.fechaCompletadaUtc)
+                : formatFechaCalendario(b.fechaProgramada);
 
               let badgeStyle =
                 'bg-secondary/60 text-muted-foreground border-border hover:bg-secondary hover:text-foreground';
@@ -804,6 +1463,9 @@ export function EntrenamientoPage() {
                 badgeStyle = esActivo
                   ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 ring-2 ring-emerald-500/30 font-extrabold'
                   : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 font-bold';
+              } else if (esOmitido) {
+                badgeStyle =
+                  'bg-amber-500/10 text-amber-500 border-amber-500/30 hover:bg-amber-500/20 font-bold';
               } else if (esActivo) {
                 badgeStyle =
                   'bg-primary text-primary-foreground border-primary font-black shadow-md shadow-primary/25 ring-2 ring-primary/30';
@@ -819,10 +1481,18 @@ export function EntrenamientoPage() {
                   disabled={isSwitchingBloque}
                   onClick={() => handleSelectBloque(b.bloqueId)}
                   className={`py-2 px-3.5 rounded-2xl border text-xs whitespace-nowrap transition-all duration-200 flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50 ${badgeStyle}`}
-                  title={`Seleccionar ${b.titulo}`}
+                  title={
+                    detalleFecha ? `Consultar ${b.titulo} · ${detalleFecha}` : `Consultar ${b.titulo}`
+                  }
                 >
                   {esCompletado ? (
                     <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                  ) : esOmitido ? (
+                    b.motivoOmision === MotivoOmision.DESCANSO ? (
+                      <Coffee className="h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    )
                   ) : esActivo ? (
                     <Zap className="h-3.5 w-3.5 shrink-0 fill-current" />
                   ) : esSugerido ? (
@@ -832,8 +1502,14 @@ export function EntrenamientoPage() {
                   )}
                   <span className="font-semibold">{b.titulo.split(':')[0]}</span>
                   {esCompletado && <span className="text-[10px] font-bold opacity-80">✓</span>}
+                  {esOmitido && (
+                    <span className="text-[10px] font-bold opacity-90">{etiquetaOmision}</span>
+                  )}
+                  {fechaVisible && (esCompletado || esOmitido) && (
+                    <span className="text-[10px] font-medium opacity-70">{fechaVisible}</span>
+                  )}
                   {esActivo && <span className="text-[10px] font-mono uppercase tracking-wider ml-0.5">Hoy</span>}
-                  {!esCompletado && !esActivo && esSugerido && (
+                  {!esCompletado && !esOmitido && !esActivo && esSugerido && (
                     <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">
                       Sugerido
                     </span>
@@ -845,8 +1521,55 @@ export function EntrenamientoPage() {
         </div>
       )}
 
-      {/* Si NO hay sesión activa seleccionada (Día de descanso o semana completada) */}
-      {!sesion && (
+      {/* Error real de red/servidor: estado explícito con retry (nunca datos demo) */}
+      {!sesion && loadError && (
+        <div className="p-6 sm:p-8 rounded-3xl bg-card border border-border/80 shadow-md text-center space-y-4">
+          <div className="h-16 w-16 rounded-3xl bg-destructive/10 text-destructive flex items-center justify-center mx-auto">
+            <AlertTriangle className="h-8 w-8" />
+          </div>
+          <div className="max-w-md mx-auto space-y-1.5">
+            <h3 className="text-xl font-black text-foreground">No pudimos cargar tu entrenamiento</h3>
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+              Revisa tu conexión e inténtalo de nuevo. Tu historial no se ha perdido.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadSessionAndProgress(selectedBloqueId ?? undefined)}
+            className="mx-auto py-2.5 px-5 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/25 hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <RefreshCw className="h-4 w-4" />
+            <span>Reintentar</span>
+          </button>
+        </div>
+      )}
+
+      {/* Offline sin cache: estado vacío honesto (nunca datos demo) */}
+      {!sesion && !loadError && isOffline && (
+        <div className="p-6 sm:p-8 rounded-3xl bg-card border border-border/80 shadow-md text-center space-y-4">
+          <div className="h-16 w-16 rounded-3xl bg-secondary text-muted-foreground flex items-center justify-center mx-auto">
+            <WifiOff className="h-8 w-8" />
+          </div>
+          <div className="max-w-md mx-auto space-y-1.5">
+            <h3 className="text-xl font-black text-foreground">Sin conexión</h3>
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+              No hay datos de entrenamiento guardados en este dispositivo. Cuando recuperes conexión
+              podrás cargar tu rutina.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadSessionAndProgress(selectedBloqueId ?? undefined)}
+            className="mx-auto py-2.5 px-5 rounded-xl bg-secondary text-foreground border border-border font-bold text-xs hover:bg-secondary/80 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <RefreshCw className="h-4 w-4" />
+            <span>Reintentar</span>
+          </button>
+        </div>
+      )}
+
+      {/* Sin sesión activa: sin rutina, día de descanso o bloque pendiente de instanciar */}
+      {!sesion && !loadError && !isOffline && (
         <div className="p-6 sm:p-8 rounded-3xl bg-card border border-border/80 shadow-md text-center space-y-5">
           <div className="h-16 w-16 rounded-3xl bg-primary/10 text-primary flex items-center justify-center mx-auto shadow-inner">
             {semanaProgreso?.esDiaDescansoHoy ? (
@@ -858,34 +1581,69 @@ export function EntrenamientoPage() {
 
           <div className="max-w-md mx-auto space-y-1.5">
             <h3 className="text-xl font-black text-foreground">
-              {semanaProgreso?.esDiaDescansoHoy
+              {!semanaProgreso || semanaProgreso.totalBloques === 0
+                ? 'Aún no tienes rutina asignada para hoy'
+                : semanaProgreso.bloquesCompletados === semanaProgreso.totalBloques
+                ? '¡Semana completada!'
+                : semanaProgreso.esDiaDescansoHoy
                 ? 'Día de descanso según tu plan'
+                : selectedBloque
+                ? selectedBloque.titulo
                 : 'No hay sesión activa seleccionada'}
             </h3>
             <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-              {semanaProgreso?.bloquesCompletados === semanaProgreso?.totalBloques &&
-              (semanaProgreso?.totalBloques ?? 0) > 0
-                ? '¡Excelente trabajo! Has completado el 100% de tus bloques semanales. Disfruta tu recuperación.'
-                : 'Puedes descansar hoy o aprovechar el día para recuperar cualquiera de tus bloques semanales pendientes:'}
+              {!semanaProgreso || semanaProgreso.totalBloques === 0
+                ? 'Tu entrenador aún no ha prescrito tu rutina semanal. Cuando la asignes, aparecerá aquí.'
+                : semanaProgreso.bloquesCompletados === semanaProgreso.totalBloques
+                ? '¡Excelente trabajo! Has completado el 100% de tus bloques semanales. Disfruta tu recuperación o repite un bloque si te queda energía.'
+                : semanaProgreso.esDiaDescansoHoy
+                ? 'Hoy toca recuperación. Si quieres adelantar o recuperar trabajo, elige un bloque pendiente e inícialo de forma explícita.'
+                : 'Elige un bloque pendiente y pulsa "Entrenar este bloque hoy". Consultar la rutina no altera tus sesiones.'}
             </p>
           </div>
 
-          {/* Bloques Pendientes para Recuperación con 1-Toque */}
+          {/* CTA informativo cuando aún no hay rutina publicada */}
+          {(!semanaProgreso || semanaProgreso.totalBloques === 0) && (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-full bg-secondary border border-border text-muted-foreground">
+              <Info className="h-3.5 w-3.5" />
+              Tu entrenador aún no ha publicado tu plan semanal
+            </span>
+          )}
+
+          {/* CTA explícita del bloque seleccionado (acción, no consulta) */}
+          {selectedBloque && !selectedBloque.completado && (
+            <div className="max-w-lg mx-auto pt-1">
+              <button
+                type="button"
+                disabled={isSwitchingBloque}
+                onClick={() => handleEntrenarBloqueHoy(selectedBloque.bloqueId)}
+                className="w-full py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-lg shadow-primary/25 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                <Play className="h-5 w-5 fill-primary-foreground" />
+                <span>Entrenar este bloque hoy</span>
+              </button>
+              {selectedBloque.enfoque && (
+                <p className="text-[11px] text-muted-foreground mt-2">{selectedBloque.enfoque}</p>
+              )}
+            </div>
+          )}
+
+          {/* Bloques Pendientes con acción explícita (excluye el ya seleccionado) */}
           {semanaProgreso && semanaProgreso.bloques.filter((b) => !b.completado).length > 0 && (
             <div className="pt-3 border-t border-border/60 max-w-lg mx-auto space-y-2.5">
               <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">
-                Bloques pendientes de esta semana
+                Otros bloques pendientes de esta semana
               </span>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {semanaProgreso.bloques
-                  .filter((b) => !b.completado)
+                  .filter((b) => !b.completado && b.bloqueId !== selectedBloque?.bloqueId)
                   .map((b) => (
                     <button
                       key={b.bloqueId}
                       type="button"
                       disabled={isSwitchingBloque}
-                      onClick={() => handleSelectBloque(b.bloqueId)}
+                      onClick={() => handleEntrenarBloqueHoy(b.bloqueId)}
                       className="p-3.5 rounded-2xl bg-secondary/50 hover:bg-secondary border border-border hover:border-primary/50 text-left transition-all duration-200 active:scale-98 cursor-pointer flex flex-col justify-between group disabled:opacity-50"
                     >
                       <div className="flex items-center justify-between gap-1 mb-1">
@@ -901,6 +1659,11 @@ export function EntrenamientoPage() {
                       {b.enfoque && (
                         <span className="text-[11px] text-muted-foreground line-clamp-1">
                           {b.enfoque}
+                        </span>
+                      )}
+                      {b.fechaProgramada && (
+                        <span className="text-[10px] text-muted-foreground font-medium">
+                          Programado: {formatFechaCalendario(b.fechaProgramada)}
                         </span>
                       )}
                       <div className="mt-2.5 flex items-center justify-between text-[11px] font-bold text-primary">
@@ -929,12 +1692,29 @@ export function EntrenamientoPage() {
                         ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
                         : isInProgress
                         ? 'bg-primary/15 text-primary border border-primary/20'
+                        : isOmitted
+                        ? 'bg-amber-500/15 text-amber-500 border border-amber-500/25'
                         : 'bg-secondary text-muted-foreground border border-border'
                     }`}
                   >
-                    {isCompleted ? 'Completada' : isInProgress ? 'En Progreso' : 'Planificada'}
+                    {isCompleted
+                      ? 'Completada'
+                      : isInProgress
+                      ? 'En Progreso'
+                      : isOmitted
+                      ? sesion.motivoOmision === MotivoOmision.DESCANSO
+                        ? 'Descansado'
+                        : 'Incompleto'
+                      : 'Planificada'}
                   </span>
-                  <span className="text-xs text-muted-foreground font-mono">{sesion.fechaProgramada}</span>
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {formatFechaCalendario(sesion.fechaProgramada) ?? sesion.fechaProgramada}
+                  </span>
+                  {formatRangoHorasLocal(sesion.fechaInicioUtc, sesion.fechaFinUtc) && (
+                    <span className="text-xs text-muted-foreground">
+                      · {formatRangoHorasLocal(sesion.fechaInicioUtc, sesion.fechaFinUtc)} h local
+                    </span>
+                  )}
                   {sesion.esDiaDescansoOriginal && (
                     <span className="text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/25 flex items-center gap-1">
                       ⏱️ Recuperada en Descanso
@@ -947,7 +1727,7 @@ export function EntrenamientoPage() {
               </div>
 
           {/* Compliance & Streak Badge */}
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-secondary/60 border border-border">
               <Flame
                 className={`h-6 w-6 ${
@@ -959,7 +1739,7 @@ export function EntrenamientoPage() {
                   Progreso
                 </span>
                 <span className="text-base sm:text-lg font-black font-mono">
-                  {sesion.porcentajeCumplimiento}%
+                  {isOmitted ? '—' : `${sesion.porcentajeCumplimiento}%`}
                 </span>
               </div>
             </div>
@@ -972,7 +1752,23 @@ export function EntrenamientoPage() {
                     Volumen
                   </span>
                   <span className="text-base sm:text-lg font-black font-mono text-foreground">
-                    {sesion.volumenTotalKg} kg
+                    {formatearPesoConUnidad(sesion.volumenTotalKg, unidadPeso) ??
+                      `${sesion.volumenTotalKg} ${unidadPeso}`}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* RN-05: duración real de la sesión (UTC -> formato humano local) */}
+            {formatDuracionMinutos(sesion.duracionMinutos) && (
+              <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-secondary/60 border border-border">
+                <Clock className="h-6 w-6 text-primary" />
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground font-bold uppercase tracking-wider">
+                    Duración
+                  </span>
+                  <span className="text-base sm:text-lg font-black font-mono text-foreground">
+                    {formatDuracionMinutos(sesion.duracionMinutos)}
                   </span>
                 </div>
               </div>
@@ -987,6 +1783,30 @@ export function EntrenamientoPage() {
               <Timer className="h-6 w-6 text-primary" />
               <span className="text-xs font-bold hidden sm:inline">Descanso</span>
             </button>
+
+            {/* RN-01: preferencia de unidad de peso (kg/lb) persistida en el dispositivo */}
+            <div
+              role="group"
+              aria-label="Unidad de peso del checklist"
+              className="p-1 rounded-2xl bg-secondary/60 border border-border flex items-center gap-1"
+            >
+              {(['kg', 'lb'] as UnidadPeso[]).map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  aria-pressed={unidadPeso === u}
+                  onClick={() => handleCambiarUnidad(u)}
+                  title={`Mostrar y registrar pesos en ${u === 'kg' ? 'kilogramos' : 'libras'}`}
+                  className={`py-2 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer active:scale-95 ${
+                    unidadPeso === u
+                      ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/25'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -1019,17 +1839,58 @@ export function EntrenamientoPage() {
           </div>
         )}
 
-        {isCompleted && (
+        {(isCompleted || isOmitted) && (
           <div className="space-y-3">
-            <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center gap-3">
-              <Award className="h-6 w-6 shrink-0" />
+            <div
+              className={`p-3.5 rounded-2xl border flex items-start gap-3 ${
+                isOmitted
+                  ? 'bg-amber-500/10 border-amber-500/25 text-amber-500'
+                  : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+              }`}
+            >
+              {isOmitted ? (
+                <AlertTriangle className="h-6 w-6 shrink-0" />
+              ) : (
+                <Award className="h-6 w-6 shrink-0" />
+              )}
               <div>
-                <p className="text-xs font-bold">¡Sesión de entrenamiento finalizada con éxito!</p>
-                <p className="text-[11px] text-emerald-400/80">
-                  {Number(sesion.porcentajeCumplimiento) >= 70
-                    ? 'Cumpliste la regla del 70% de volumen. Tu racha se ha incrementado.'
-                    : 'Buen esfuerzo. No superó el 70% prescrito para racha, pero cada repetición cuenta.'}
+                <p className="text-xs font-bold">
+                  {isOmitted
+                    ? sesion.motivoOmision === MotivoOmision.DESCANSO
+                      ? 'Día registrado como descansado'
+                      : 'Día registrado como incompleto'
+                    : '¡Sesión de entrenamiento finalizada con éxito!'}
                 </p>
+                <p className={`text-[11px] ${isOmitted ? 'text-amber-500/90' : 'text-emerald-400/80'}`}>
+                  {isOmitted
+                    ? 'No suma racha. Puedes repetir el entrenamiento cuando quieras: el historial de este día se conserva.'
+                    : pendienteSync
+                    ? 'Sesión guardada localmente. Se sincronizará con tu coach al recuperar conexión.'
+                    : finishFeedback
+                    ? finishFeedback.cumpleRacha
+                      ? `Sumaste un día a tu racha. Racha: ${finishFeedback.nuevaRacha} días.`
+                      : 'Sesión guardada. Completa al menos el 70% del plan para sumar racha.'
+                    : 'Sesión guardada en tu historial.'}
+                </p>
+                {(formatDuracionMinutos(sesion.duracionMinutos) ||
+                  formatRangoHorasLocal(sesion.fechaInicioUtc, sesion.fechaFinUtc)) && (
+                  <p
+                    className={`text-[11px] mt-0.5 font-medium ${
+                      isOmitted ? 'text-amber-500/80' : 'text-emerald-400/70'
+                    }`}
+                  >
+                    {formatDuracionMinutos(sesion.duracionMinutos)
+                      ? `Duración: ${formatDuracionMinutos(sesion.duracionMinutos)}`
+                      : ''}
+                    {formatDuracionMinutos(sesion.duracionMinutos) &&
+                    formatRangoHorasLocal(sesion.fechaInicioUtc, sesion.fechaFinUtc)
+                      ? ' · '
+                      : ''}
+                    {formatRangoHorasLocal(sesion.fechaInicioUtc, sesion.fechaFinUtc)
+                      ? `Horario local: ${formatRangoHorasLocal(sesion.fechaInicioUtc, sesion.fechaFinUtc)}`
+                      : ''}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -1046,12 +1907,12 @@ export function EntrenamientoPage() {
             <div className="pt-2 flex items-center justify-end">
               <button
                 type="button"
-                disabled={isSwitchingBloque}
-                onClick={() => handleSelectBloque(sesion.bloqueId || '')}
+                disabled={isSwitchingBloque || !sesion.bloqueId}
+                onClick={handleRepetirBloque}
                 className="text-xs font-bold text-muted-foreground hover:text-foreground flex items-center gap-1.5 py-1.5 px-3.5 rounded-xl bg-secondary/80 hover:bg-secondary border border-border/60 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
               >
                 <RotateCcw className="h-3.5 w-3.5 text-primary" />
-                <span>Volver a entrenar este bloque</span>
+                <span>Repetir entrenamiento</span>
               </button>
             </div>
           </div>
@@ -1060,7 +1921,23 @@ export function EntrenamientoPage() {
 
       {/* Exercises List */}
       <div className="space-y-4">
-        {sesion.ejercicios.map((ejercicioSesion, ejIdx) => (
+        {sesion.ejercicios.map((ejercicioSesion, ejIdx) => {
+          const prescripcion = calcularResumenPrescripcion(ejercicioSesion);
+          const rpeSugerido = rpeSugeridoPorEjercicio[ejercicioSesion.id] ?? null;
+          const pesoPrescritoTexto =
+            prescripcion.pesosKg.length === 0
+              ? null
+              : prescripcion.pesosKg.length === 1
+              ? formatearPesoConUnidad(prescripcion.pesosKg[0], unidadPeso)
+              : `${formatearPesoDesdeKg(prescripcion.pesosKg[0], unidadPeso)}–${formatearPesoConUnidad(
+                  prescripcion.pesosKg[prescripcion.pesosKg.length - 1],
+                  unidadPeso
+                )}`;
+          const pasoVisible = pasoPesoEnUnidad(unidadPeso);
+          const nombreEjercicio = ejercicioSesion.ejercicio?.nombre || `Ejercicio #${ejIdx + 1}`;
+          const videoUrl = ejercicioSesion.ejercicio?.videoUrl || null;
+
+          return (
           <div
             key={ejercicioSesion.id}
             className="p-4 sm:p-5 rounded-3xl bg-card border border-border/80 shadow-xs space-y-3"
@@ -1072,7 +1949,7 @@ export function EntrenamientoPage() {
                   Ejercicio {ejIdx + 1}
                 </span>
                 <h3 className="font-black text-lg sm:text-xl text-foreground tracking-tight mt-0.5">
-                  {ejercicioSesion.ejercicio?.nombre || `Ejercicio #${ejIdx + 1}`}
+                  {nombreEjercicio}
                 </h3>
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   <span className="text-xs sm:text-sm text-muted-foreground font-semibold">
@@ -1082,6 +1959,18 @@ export function EntrenamientoPage() {
                     <Timer className="h-3 w-3 text-primary" />
                     <span>Descanso: {ejercicioSesion.descansoPrescritoSegundos || 90}s</span>
                   </span>
+                  {/* Escenario 1: video demostrativo del catálogo (si existe) */}
+                  {videoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => handleAbrirVideo(ejercicioSesion)}
+                      aria-label={`Ver video demostrativo de ${nombreEjercicio}`}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/25 hover:bg-primary/20 transition-colors cursor-pointer active:scale-95"
+                    >
+                      <Video className="h-3 w-3" />
+                      <span>Ver técnica</span>
+                    </button>
+                  )}
                 </div>
               </div>
               {ejercicioSesion.notasCoach && (
@@ -1092,38 +1981,85 @@ export function EntrenamientoPage() {
               )}
             </div>
 
+            {/* WU3b: Referencia PRESCRITA (solo lectura) — nunca se edita desde el checklist */}
+            <div className="flex items-start gap-2 p-2.5 rounded-2xl bg-primary/5 border border-primary/15">
+              <ClipboardList className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] font-black uppercase tracking-wider text-primary block leading-none mb-1">
+                  Prescrito por tu coach
+                </span>
+                <p className="text-[11px] sm:text-xs font-bold text-foreground leading-snug">
+                  {formatearPrescripcion(prescripcion, unidadPeso)}
+                  {rpeSugerido && (
+                    <span className="text-muted-foreground font-semibold">
+                      {` · RPE sugerido ${rpeSugerido}/10`}
+                    </span>
+                  )}
+                  {!pesoPrescritoTexto && !rpeSugerido && (
+                    <span className="text-muted-foreground font-semibold">
+                      {` · ${ejercicioSesion.notasCoach ? 'referencia en las notas del coach' : 'sin carga prescrita'}`}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
             {/* Sets Grid */}
             <div className="space-y-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                  Registrado (real)
+                </span>
+                <span className="h-px flex-1 bg-border/60" aria-hidden="true" />
+              </div>
               <div className="grid grid-cols-12 gap-1.5 sm:gap-2.5 text-xs font-black text-muted-foreground uppercase tracking-wider px-2">
                 <span className="col-span-1 text-center">#</span>
-                <span className="col-span-4 text-center">Peso (kg)</span>
+                <span className="col-span-4 text-center">Peso ({unidadPeso})</span>
                 <span className="col-span-3 text-center">Reps</span>
-                <span className="col-span-2 text-center" title="Nivel de esfuerzo percibido (1 a 10)">RPE</span>
+                <span className="col-span-2 text-center" title="Nivel de esfuerzo percibido (0 a 10)">RPE</span>
                 <span className="col-span-2 text-center">Listo</span>
               </div>
 
-              {ejercicioSesion.series.map((serie, sIdx) => (
+              {ejercicioSesion.series.map((serie, sIdx) => {
+                const clavePeso = `${serie.id}:pesoKg`;
+                const claveRpe = `${serie.id}:rpe`;
+                const claveReps = `${serie.id}:repsLogradas`;
+                const borradorPeso = inputDrafts[clavePeso];
+                const borradorRpe = inputDrafts[claveRpe];
+                const errorPeso = inputErrors[clavePeso];
+                const errorRpe = inputErrors[claveRpe];
+                const errorReps = inputErrors[claveReps];
+                const errorSerie = errorPeso ?? errorRpe ?? errorReps ?? null;
+                const pesoMostrado =
+                  borradorPeso !== undefined
+                    ? borradorPeso
+                    : formatearPesoDesdeKg(serie.pesoKg, unidadPeso) ?? '';
+                const rpeMostrado = borradorRpe !== undefined ? borradorRpe : serie.rpe || '';
+                const prescritoSerie = pesoPrescritoConCarga(serie);
+
+                return (
                 <div
                   key={serie.id}
-                  className={`grid grid-cols-12 gap-1.5 sm:gap-2.5 items-center p-2 sm:p-2.5 rounded-2xl border transition-all ${
+                  className={`p-2 sm:p-2.5 rounded-2xl border transition-all ${
                     serie.completada
                       ? 'bg-emerald-500/10 border-emerald-500/30'
                       : 'bg-secondary/30 border-border hover:border-primary/40'
                   }`}
                 >
-                  <span className="col-span-1 text-center font-mono font-black text-sm sm:text-base text-foreground">
+                  <div className="grid grid-cols-12 gap-1.5 sm:gap-2.5 items-start">
+                  <span className="col-span-1 self-center text-center font-mono font-black text-sm sm:text-base text-foreground">
                     #{serie.numeroSerie}
                   </span>
 
-                  {/* Weight Input with Steppers (- / + 2.5kg) */}
+                  {/* Weight Input with Steppers (unidad visible: kg/lb, contrato siempre kg) */}
                   <div className="col-span-4">
                     <div className="flex items-center rounded-xl bg-background border border-border focus-within:border-primary overflow-hidden transition-colors h-10 sm:h-11 shadow-2xs">
                       <button
                         type="button"
                         tabIndex={-1}
-                        disabled={isCompleted || isPlanned}
-                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'pesoKg', -2.5)}
-                        aria-label="Restar 2.5 kg"
+                        disabled={isReadOnly}
+                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'pesoKg', -1)}
+                        aria-label={`Restar ${pasoVisible} ${unidadPeso}`}
                         className="h-full w-8 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-sm sm:text-base font-black shrink-0 select-none disabled:opacity-30"
                       >
                         -
@@ -1131,25 +2067,39 @@ export function EntrenamientoPage() {
                       <input
                         type="text"
                         inputMode="decimal"
-                        disabled={isCompleted || isPlanned}
-                        value={serie.pesoKg || ''}
+                        disabled={isReadOnly}
+                        value={pesoMostrado}
                         onChange={(e) =>
                           handleUpdateSerieValue(ejIdx, sIdx, 'pesoKg', e.target.value)
                         }
-                        placeholder="kg"
-                        className="w-full min-w-0 text-center py-2 px-0.5 bg-transparent text-sm sm:text-base font-mono font-black text-foreground focus:outline-hidden"
+                        onBlur={() => handleBlurPeso(serie.id)}
+                        placeholder={unidadPeso}
+                        aria-label={`Peso real en ${unidadPeso}, serie ${serie.numeroSerie}`}
+                        aria-invalid={Boolean(errorPeso)}
+                        className={`w-full min-w-0 text-center py-2 px-0.5 bg-transparent text-sm sm:text-base font-mono font-black text-foreground focus:outline-hidden ${
+                          errorPeso ? 'text-destructive' : ''
+                        }`}
                       />
                       <button
                         type="button"
                         tabIndex={-1}
-                        disabled={isCompleted || isPlanned}
-                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'pesoKg', 2.5)}
-                        aria-label="Sumar 2.5 kg"
+                        disabled={isReadOnly}
+                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'pesoKg', 1)}
+                        aria-label={`Sumar ${pasoVisible} ${unidadPeso}`}
                         className="h-full w-8 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-sm sm:text-base font-black shrink-0 select-none disabled:opacity-30"
                       >
                         +
                       </button>
                     </div>
+                    {/* Referencia prescrita por serie: permanece visible mientras el alumno edita */}
+                    {prescritoSerie && (
+                      <span
+                        className="block text-center text-[9px] font-bold text-muted-foreground leading-tight mt-0.5 truncate"
+                        title={`Prescrito: ${formatearPesoConUnidad(prescritoSerie, unidadPeso)}`}
+                      >
+                        Presc. {formatearPesoConUnidad(prescritoSerie, unidadPeso)}
+                      </span>
+                    )}
                   </div>
 
                   {/* Reps Input with Steppers (- / + 1 rep) */}
@@ -1158,7 +2108,7 @@ export function EntrenamientoPage() {
                       <button
                         type="button"
                         tabIndex={-1}
-                        disabled={isCompleted || isPlanned}
+                        disabled={isReadOnly}
                         onClick={() => handleStepSerieValue(ejIdx, sIdx, 'repsLogradas', -1)}
                         aria-label="Restar 1 repetición"
                         className="h-full w-7 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-sm sm:text-base font-black shrink-0 select-none disabled:opacity-30"
@@ -1168,17 +2118,21 @@ export function EntrenamientoPage() {
                       <input
                         type="number"
                         inputMode="numeric"
-                        disabled={isCompleted || isPlanned}
+                        disabled={isReadOnly}
                         value={serie.repsLogradas ?? serie.repsObjetivo}
                         onChange={(e) =>
                           handleUpdateSerieValue(ejIdx, sIdx, 'repsLogradas', e.target.value)
                         }
-                        className="w-full min-w-0 text-center py-2 px-0.5 bg-transparent text-sm sm:text-base font-mono font-black text-foreground focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        aria-label={`Reps logradas, serie ${serie.numeroSerie}`}
+                        aria-invalid={Boolean(errorReps)}
+                        className={`w-full min-w-0 text-center py-2 px-0.5 bg-transparent text-sm sm:text-base font-mono font-black text-foreground focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                          errorReps ? 'text-destructive' : ''
+                        }`}
                       />
                       <button
                         type="button"
                         tabIndex={-1}
-                        disabled={isCompleted || isPlanned}
+                        disabled={isReadOnly}
                         onClick={() => handleStepSerieValue(ejIdx, sIdx, 'repsLogradas', 1)}
                         aria-label="Sumar 1 repetición"
                         className="h-full w-7 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-sm sm:text-base font-black shrink-0 select-none disabled:opacity-30"
@@ -1186,20 +2140,28 @@ export function EntrenamientoPage() {
                         +
                       </button>
                     </div>
+                    <span className="block text-center text-[9px] font-bold text-muted-foreground leading-tight mt-0.5">
+                      Obj. {serie.repsObjetivo}
+                    </span>
                   </div>
 
-                  {/* RPE Input */}
+                  {/* RPE Input (0-10 validado contra el contrato) */}
                   <div className="col-span-2">
                     <input
                       type="text"
                       inputMode="decimal"
-                      disabled={isCompleted || isPlanned}
-                      value={serie.rpe || ''}
+                      disabled={isReadOnly}
+                      value={rpeMostrado}
                       onChange={(e) =>
                         handleUpdateSerieValue(ejIdx, sIdx, 'rpe', e.target.value)
                       }
+                      onBlur={() => handleBlurRpe(serie.id)}
                       placeholder="8.5"
-                      className="w-full text-center py-2 px-1 rounded-xl bg-background border border-border text-xs sm:text-sm font-mono font-bold text-foreground focus:outline-hidden focus:border-primary h-10 sm:h-11 shadow-2xs"
+                      aria-label={`RPE real, serie ${serie.numeroSerie}`}
+                      aria-invalid={Boolean(errorRpe)}
+                      className={`w-full text-center py-2 px-1 rounded-xl bg-background border text-xs sm:text-sm font-mono font-bold text-foreground focus:outline-hidden focus:border-primary h-10 sm:h-11 shadow-2xs ${
+                        errorRpe ? 'border-destructive text-destructive' : 'border-border'
+                      }`}
                     />
                   </div>
 
@@ -1207,7 +2169,7 @@ export function EntrenamientoPage() {
                   <div className="col-span-2 flex justify-center">
                     <button
                       type="button"
-                      disabled={isPlanned || isCompleted}
+                      disabled={isReadOnly}
                       onClick={() => handleToggleSet(ejIdx, sIdx)}
                       aria-label={`Marcar serie ${serie.numeroSerie} como ${serie.completada ? 'pendiente' : 'completada'}`}
                       className={`h-10 w-10 sm:h-11 sm:w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${
@@ -1219,11 +2181,25 @@ export function EntrenamientoPage() {
                       {serie.completada && <Check className="h-5 w-5 sm:h-6 sm:w-6 stroke-[3.5]" />}
                     </button>
                   </div>
+                  </div>
+
+                  {/* WU3b: error inline, nunca silencioso */}
+                  {errorSerie && (
+                    <p
+                      role="alert"
+                      className="mt-1.5 px-1 text-[10px] font-bold text-destructive flex items-center gap-1"
+                    >
+                      <AlertTriangle className="h-3 w-3 shrink-0" />
+                      <span>{errorSerie}</span>
+                    </p>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Modal de Finalización y Feedback al Coach */}
@@ -1401,6 +2377,159 @@ export function EntrenamientoPage() {
       )}
       </>
       )}
+
+      {/* Modal RF-001 Escenario 5: cierre de sesión sin series completadas */}
+      {isEmptyCloseModalOpen && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsEmptyCloseModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-empty-close-title"
+            className="p-6 rounded-3xl bg-card border border-border/80 shadow-2xl w-full max-w-md space-y-4"
+          >
+            <div className="flex items-center justify-between border-b border-border/80 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-500/15 text-amber-500">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3
+                    id="modal-empty-close-title"
+                    className="font-bold text-base text-foreground leading-tight"
+                  >
+                    No has marcado ninguna serie
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    ¿Deseas registrar este día como descansado o incompleto?
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsEmptyCloseModalOpen(false)}
+                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Ninguna opción suma racha. Si registras el día como descansado o incompleto, la sesión
+              queda en tu historial y puedes repetir el entrenamiento más tarde.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={isFinishing}
+                onClick={() => confirmEmptyClose(TipoCierreSesion.DESCANSADA)}
+                className="py-3 px-4 rounded-2xl bg-secondary hover:bg-secondary/80 border border-border font-bold text-xs text-foreground transition-all active:scale-98 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <Coffee className="h-4 w-4 text-amber-500" />
+                <span>Registrar como descansado</span>
+              </button>
+              <button
+                type="button"
+                disabled={isFinishing}
+                onClick={() => confirmEmptyClose(TipoCierreSesion.INCOMPLETA)}
+                className="py-3 px-4 rounded-2xl bg-secondary hover:bg-secondary/80 border border-border font-bold text-xs text-foreground transition-all active:scale-98 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                <span>Registrar como incompleto</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsEmptyCloseModalOpen(false)}
+              className="w-full py-2.5 rounded-2xl bg-transparent text-muted-foreground hover:text-foreground text-xs font-bold transition-colors cursor-pointer"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* WU3b (Escenario 1): modal de video demostrativo con cierre por Escape y foco accesible */}
+      {videoModal &&
+        (() => {
+          const embedUrl = obtenerUrlVideoEmbebible(videoModal.url);
+          return (
+            <div
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setVideoModal(null);
+              }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+            >
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label={`Video demostrativo: ${videoModal.nombre}`}
+                className="p-5 rounded-3xl bg-card border border-border/80 shadow-2xl w-full max-w-2xl space-y-4"
+              >
+                <div className="flex items-center justify-between gap-2 border-b border-border/80 pb-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="p-2 rounded-xl bg-primary/15 text-primary">
+                      <Video className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-base text-foreground leading-tight">
+                        Técnica del ejercicio
+                      </h3>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {videoModal.nombre}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    ref={videoCloseRef}
+                    type="button"
+                    onClick={() => setVideoModal(null)}
+                    aria-label="Cerrar video demostrativo"
+                    className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground transition-colors cursor-pointer"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {embedUrl ? (
+                  <div className="aspect-video w-full overflow-hidden rounded-2xl border border-border bg-black">
+                    <iframe
+                      src={embedUrl}
+                      title={`Video demostrativo: ${videoModal.nombre}`}
+                      className="h-full w-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                    />
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-2xl bg-secondary/50 border border-border space-y-3">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Este video no se puede reproducir embebido. Ábrelo en una pestaña nueva para
+                      revisar la técnica completa.
+                    </p>
+                    <a
+                      href={videoModal.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/25 hover:brightness-110 active:scale-95 transition-all"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      <span>Abrir video</span>
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+      {/* WU4: panel compartido de la cola offline (reintentar / descartar rechazadas) */}
+      <SyncQueuePanel open={isSyncPanelOpen} onClose={() => setIsSyncPanelOpen(false)} />
 
       {/* Floating Rest Timer */}
       <RestTimer

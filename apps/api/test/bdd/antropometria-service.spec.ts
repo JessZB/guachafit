@@ -9,6 +9,7 @@ import {
   EstadoMedicion,
   AnguloFoto,
   EstadoAlumno,
+  CheckinAntropometricoSchema,
 } from '@guachafit/shared';
 import {
   ForbiddenException,
@@ -396,6 +397,43 @@ describe('Módulo 4: Control Antropométrico & Bóveda R2 (AntropometriaService 
       };
 
       await expect(antropometriaService.registrarCheckin(caller, dto)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('acepta por el endpoint real (POST /antropometria/checkin, rol ALUMNO) el payload del formulario web sin fotos', async () => {
+      // Payload del builder web (`construirPayloadCheckinAntropometrico`): alumnoId = usuarioId,
+      // fechaEvaluacion local YYYY-MM-DD, medidas básicas y SIN fotos (la UX de subida no existe
+      // todavía). Debe superar el contrato Zod y persistir como remoto pendiente de aprobación.
+      const reqAlumno = { user: { sub: alumnoRemotoId, rol: Rol.ALUMNO } };
+      const body = {
+        alumnoId: alumnoRemotoId,
+        fechaEvaluacion: '2026-09-20',
+        pesoKg: '74.50',
+        porcentajeGrasa: '14.80',
+        perimetros: { cinturaCm: '81.00', brazoCm: '37.50' },
+      };
+
+      const registro = await antropometriaController.registrarCheckin(reqAlumno, body);
+
+      expect(registro.alumnoId).toBe(alumnoRemotoId);
+      expect(registro.fechaEvaluacion).toBe('2026-09-20');
+      expect(registro.origen).toBe(OrigenAntropometria.REMOTO_AUTOREPORTE);
+      expect(registro.estado).toBe(EstadoMedicion.PENDIENTE_APROBACION);
+      expect(registro.registradoPor).toBe(alumnoRemotoId);
+      expect(registro.fechaAprobacionUtc).toBeNull();
+      expect(registro.perimetros?.cinturaCm).toBe('81.00');
+      expect(registro.perimetros?.brazoCm).toBe('37.50');
+      expect(registro.fotos.length).toBe(0);
+    });
+
+    it('rechaza el body legacy del check-in remoto sin alumnoId ni fechaEvaluacion (regresión del 400)', () => {
+      const bodyLegacy = {
+        pesoKg: '74.50',
+        porcentajeGrasa: '14.80',
+        perimetros: { cinturaCm: '81.00', brazoCm: '37.50' },
+        fotos: [],
+      };
+
+      expect(CheckinAntropometricoSchema.safeParse(bodyLegacy).success).toBe(false);
     });
   });
 

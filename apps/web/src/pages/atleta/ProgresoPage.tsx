@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/auth-context';
 import { apiClient } from '../../lib/api-client';
+import { construirPayloadCheckinAntropometrico } from '../../lib/antropometria-checkin';
 import {
   EvolucionCorporalDTO,
   ControlAntropometricoDetalleDTO,
@@ -24,9 +25,13 @@ import {
 } from 'lucide-react';
 
 export function ProgresoPage() {
-  const { user } = useAuth();
+  const { user, isDemoMode } = useAuth();
   const [evolucion, setEvolucion] = useState<EvolucionCorporalDTO | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // D2: fallo de carga honesto (sin evolución demo fuera del modo demo).
+  const [error, setError] = useState<string | null>(null);
+  // D5: fallo de envío visible; el check-in no se declara exitoso si el server no lo aceptó.
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Progressive Disclosure: 'hub' (selector) | 'nuevo' | 'evolucion'
   const [vistaActiva, setVistaActiva] = useState<'hub' | 'nuevo' | 'evolucion'>('hub');
@@ -39,125 +44,154 @@ export function ProgresoPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
-  useEffect(() => {
-    async function loadEvolucion() {
-      setIsLoading(true);
-      try {
-        if (user?.id) {
-          const data = await apiClient<EvolucionCorporalDTO>(`/antropometria/evolucion/${user.id}`);
-          setEvolucion(data);
-        }
-      } catch {
-        const demoEvolucion: EvolucionCorporalDTO = {
-          alumnoId: user?.id || 'demo-alumno',
-          totalEvaluaciones: 3,
-          cambioNetoPesoKg: '-3.20',
-          cambioNetoGrasaPorcentaje: '-2.40',
-          rangoSeleccionado: '3M',
-          evaluaciones: [
-            {
-              id: 'eval-1',
-              alumnoId: user?.id || 'demo-alumno',
-              fechaEvaluacion: '2026-07-01',
-              pesoKg: '77.70',
-              alturaCm: '178.00',
-              porcentajeGrasa: '17.20',
-              perimetros: { cinturaCm: '85.00', brazoCm: '36.00', pechoCm: '100.00' },
-              modalidad: 'remoto' as any,
-              origen: 'remoto_autoreporte' as any,
-              registradoPor: user?.id || 'demo-alumno',
-              estado: 'aprobado' as any,
-              fotos: [
-                {
-                  id: 'f-1',
-                  controlId: 'eval-1',
-                  angulo: AnguloFoto.FRONTAL,
-                  storageKey: 'antropometria/demo/2026/f1.webp',
-                  createdAtUtc: new Date().toISOString(),
-                },
-              ],
-              createdAtUtc: new Date().toISOString(),
-              updatedAtUtc: new Date().toISOString(),
-            },
-            {
-              id: 'eval-2',
-              alumnoId: user?.id || 'demo-alumno',
-              fechaEvaluacion: '2026-08-01',
-              pesoKg: '75.80',
-              alturaCm: '178.00',
-              porcentajeGrasa: '15.90',
-              perimetros: { cinturaCm: '83.00', brazoCm: '36.80', pechoCm: '101.00' },
-              modalidad: 'remoto' as any,
-              origen: 'remoto_autoreporte' as any,
-              registradoPor: user?.id || 'demo-alumno',
-              estado: 'aprobado' as any,
-              fotos: [],
-              createdAtUtc: new Date().toISOString(),
-              updatedAtUtc: new Date().toISOString(),
-            },
-            {
-              id: 'eval-3',
-              alumnoId: user?.id || 'demo-alumno',
-              fechaEvaluacion: '2026-09-01',
-              pesoKg: '74.50',
-              alturaCm: '178.00',
-              porcentajeGrasa: '14.80',
-              perimetros: { cinturaCm: '81.00', brazoCm: '37.50', pechoCm: '102.00' },
-              modalidad: 'remoto' as any,
-              origen: 'remoto_autoreporte' as any,
-              registradoPor: user?.id || 'demo-alumno',
-              estado: 'aprobado' as any,
-              fotos: [
-                {
-                  id: 'f-2',
-                  controlId: 'eval-3',
-                  angulo: AnguloFoto.FRONTAL,
-                  storageKey: 'antropometria/demo/2026/f2.webp',
-                  createdAtUtc: new Date().toISOString(),
-                },
-              ],
-              createdAtUtc: new Date().toISOString(),
-              updatedAtUtc: new Date().toISOString(),
-            },
-          ],
-        };
-        setEvolucion(demoEvolucion);
-      } finally {
-        setIsLoading(false);
-      }
+  const cargarEvolucion = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    // MODO DEMO EXPLÍCITO (isDemoMode): evolución de ejemplo solo con la bandera activa.
+    if (isDemoMode) {
+      const demoEvolucion: EvolucionCorporalDTO = {
+        alumnoId: user?.id || 'demo-alumno',
+        totalEvaluaciones: 3,
+        cambioNetoPesoKg: '-3.20',
+        cambioNetoGrasaPorcentaje: '-2.40',
+        rangoSeleccionado: '3M',
+        evaluaciones: [
+          {
+            id: 'eval-1',
+            alumnoId: user?.id || 'demo-alumno',
+            fechaEvaluacion: '2026-07-01',
+            pesoKg: '77.70',
+            alturaCm: '178.00',
+            porcentajeGrasa: '17.20',
+            perimetros: { cinturaCm: '85.00', brazoCm: '36.00', pechoCm: '100.00' },
+            modalidad: 'remoto' as any,
+            origen: 'remoto_autoreporte' as any,
+            registradoPor: user?.id || 'demo-alumno',
+            estado: 'aprobado' as any,
+            fotos: [
+              {
+                id: 'f-1',
+                controlId: 'eval-1',
+                angulo: AnguloFoto.FRONTAL,
+                storageKey: 'antropometria/demo/2026/f1.webp',
+                createdAtUtc: new Date().toISOString(),
+              },
+            ],
+            createdAtUtc: new Date().toISOString(),
+            updatedAtUtc: new Date().toISOString(),
+          },
+          {
+            id: 'eval-2',
+            alumnoId: user?.id || 'demo-alumno',
+            fechaEvaluacion: '2026-08-01',
+            pesoKg: '75.80',
+            alturaCm: '178.00',
+            porcentajeGrasa: '15.90',
+            perimetros: { cinturaCm: '83.00', brazoCm: '36.80', pechoCm: '101.00' },
+            modalidad: 'remoto' as any,
+            origen: 'remoto_autoreporte' as any,
+            registradoPor: user?.id || 'demo-alumno',
+            estado: 'aprobado' as any,
+            fotos: [],
+            createdAtUtc: new Date().toISOString(),
+            updatedAtUtc: new Date().toISOString(),
+          },
+          {
+            id: 'eval-3',
+            alumnoId: user?.id || 'demo-alumno',
+            fechaEvaluacion: '2026-09-01',
+            pesoKg: '74.50',
+            alturaCm: '178.00',
+            porcentajeGrasa: '14.80',
+            perimetros: { cinturaCm: '81.00', brazoCm: '37.50', pechoCm: '102.00' },
+            modalidad: 'remoto' as any,
+            origen: 'remoto_autoreporte' as any,
+            registradoPor: user?.id || 'demo-alumno',
+            estado: 'aprobado' as any,
+            fotos: [
+              {
+                id: 'f-2',
+                controlId: 'eval-3',
+                angulo: AnguloFoto.FRONTAL,
+                storageKey: 'antropometria/demo/2026/f2.webp',
+                createdAtUtc: new Date().toISOString(),
+              },
+            ],
+            createdAtUtc: new Date().toISOString(),
+            updatedAtUtc: new Date().toISOString(),
+          },
+        ],
+      };
+      setEvolucion(demoEvolucion);
+      setIsLoading(false);
+      return;
     }
 
-    loadEvolucion();
-  }, [user]);
+    try {
+      if (!user?.id) {
+        setEvolucion(null);
+        return;
+      }
+      const data = await apiClient<EvolucionCorporalDTO>(`/antropometria/evolucion/${user.id}`);
+      setEvolucion(data);
+    } catch (err: any) {
+      // D2: sin evolución demo en sesión real; error visible con reintento.
+      setEvolucion(null);
+      setError(
+        err?.message || 'No se pudo cargar tu evolución corporal. Revisa tu conexión e inténtalo de nuevo.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarEvolucion();
+  }, [user, isDemoMode]);
 
   const handleSubmitCheckin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user?.id) {
+      setSubmitError('No se pudo identificar tu sesión. Vuelve a iniciar sesión e inténtalo de nuevo.');
+      return;
+    }
     setIsSubmitting(true);
+    setSubmitError(null);
 
     try {
-      await apiClient('/antropometria/checkins/remoto', {
-        method: 'POST',
-        body: JSON.stringify({
-          pesoKg,
-          porcentajeGrasa: porcentajeGrasa || undefined,
-          perimetros: {
-            cinturaCm: cinturaCm || undefined,
-            brazoCm: brazoCm || undefined,
-          },
-          fotos: [],
-        }),
+      // Endpoint real (POST /antropometria/checkin, rol ALUMNO): exige `alumnoId` (usuarioId)
+      // y `fechaEvaluacion` (YYYY-MM-DD local). El helper valida contra el contrato compartido
+      // para que un valor fuera de rango nunca se traduzca en un 400 opaco del servidor.
+      const payload = construirPayloadCheckinAntropometrico(user.id, {
+        pesoKg,
+        porcentajeGrasa,
+        cinturaCm,
+        brazoCm,
       });
+      await apiClient<ControlAntropometricoDetalleDTO>('/antropometria/checkin', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      // Refresco real (sin tirar el estado de éxito): el check-in remoto queda PENDIENTE de
+      // aprobación, así que la curva de evolución puede no cambiar todavía; se re-consulta
+      // igualmente para no mostrar datos obsoletos si el coach ya aprobó otros controles.
+      const evolucionActualizada = await apiClient<EvolucionCorporalDTO>(
+        `/antropometria/evolucion/${user.id}`
+      ).catch(() => null);
+      if (evolucionActualizada) setEvolucion(evolucionActualizada);
+
       setSubmitSuccess(true);
       setTimeout(() => {
         setSubmitSuccess(false);
         setVistaActiva('evolucion');
       }, 1800);
-    } catch {
-      setSubmitSuccess(true);
-      setTimeout(() => {
-        setSubmitSuccess(false);
-        setVistaActiva('evolucion');
-      }, 1500);
+    } catch (err: any) {
+      // D5: sin éxito falso; el check-in solo queda enviado si el servidor lo aceptó (2xx).
+      setSubmitError(
+        err?.message || 'No se pudo enviar tu check-in. Revisa los datos e inténtalo de nuevo.'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -188,6 +222,21 @@ export function ProgresoPage() {
           </p>
         </div>
       </div>
+
+      {/* D2: error de carga honesto con reintento (sin evolución demo fuera del modo demo) */}
+      {error && (
+        <div className="p-5 rounded-3xl bg-card border border-destructive/30 text-center space-y-3">
+          <AlertTriangle className="h-7 w-7 text-destructive mx-auto" />
+          <p className="text-xs text-muted-foreground">{error}</p>
+          <button
+            type="button"
+            onClick={() => cargarEvolucion()}
+            className="py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* VISTA 1: HUB PRINCIPAL (Selector de 2 Caminos)                             */}
@@ -388,6 +437,16 @@ export function ProgresoPage() {
                     Si eres alumno online, tu reporte queda registrado como remoto y tu coach lo revisa en su bandeja. Si eres presencial, se consolida en sala.
                   </p>
                 </div>
+
+                {submitError && (
+                  <div
+                    role="alert"
+                    className="p-3.5 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-bold flex items-center gap-2"
+                  >
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>{submitError}</span>
+                  </div>
+                )}
 
                 <button
                   type="submit"

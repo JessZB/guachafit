@@ -19,28 +19,47 @@ import {
 } from 'lucide-react';
 
 export function AtletaMenuPage() {
-  const { user } = useAuth();
+  const { user, isDemoMode } = useAuth();
   const [semanaProgreso, setSemanaProgreso] = useState<SemanaEntrenamientoProgresoDTO | null>(null);
+  const [rachaNoDisponible, setRachaNoDisponible] = useState(false);
 
   useEffect(() => {
+    // MODO DEMO EXPLÍCITO: datos de ejemplo, jamás como si fueran reales.
+    if (isDemoMode) {
+      setSemanaProgreso(buildDemoSemanaProgreso());
+      setRachaNoDisponible(false);
+      return;
+    }
+
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas';
     apiClient<SemanaEntrenamientoProgresoDTO>(
       `/alumnos/me/rutina/semana-actual?timezone=${encodeURIComponent(tz)}`
     )
       .then((data) => {
-        if (data && data.totalBloques > 0) {
-          setSemanaProgreso(data);
-        } else {
-          setSemanaProgreso(buildDemoSemanaProgreso());
-        }
+        setSemanaProgreso(data ?? null);
+        setRachaNoDisponible(false);
       })
       .catch(() => {
-        setSemanaProgreso(buildDemoSemanaProgreso());
+        // Sin datos inventados: estado honesto de "no disponible".
+        setSemanaProgreso(null);
+        setRachaNoDisponible(true);
       });
-  }, []);
+  }, [isDemoMode]);
 
   const emailName = user?.email ? user.email.split('@')[0] : 'Alumno';
   const primerNombre = emailName.charAt(0).toUpperCase() + emailName.slice(1);
+
+  // RN-02: racha efectiva real del alumno (0 = sin fuego grande, sin textos de ánimo falsos)
+  const rachaDias = semanaProgreso?.rachaDias ?? 0;
+  const tieneRacha = !rachaNoDisponible && rachaDias > 0;
+  const rachaLabel = rachaNoDisponible
+    ? '—'
+    : `${rachaDias} ${rachaDias === 1 ? 'día' : 'días'}`;
+  const rachaSublabel = rachaNoDisponible
+    ? 'Racha no disponible'
+    : tieneRacha
+    ? 'Racha activa'
+    : 'Sin racha · completa tu plan';
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto pb-24 lg:pb-12 animate-in fade-in duration-200">
@@ -63,12 +82,16 @@ export function AtletaMenuPage() {
 
         {/* Chip de Racha / Estado */}
         <div className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-secondary/60 border border-border/80">
-          <div className="p-1.5 rounded-xl bg-amber-500/15 text-amber-400">
-            <Flame className="h-4 w-4 fill-amber-400/20" />
+          <div
+            className={`p-1.5 rounded-xl ${
+              tieneRacha ? 'bg-amber-500/15 text-amber-400' : 'bg-secondary text-muted-foreground'
+            }`}
+          >
+            <Flame className={`h-4 w-4 ${tieneRacha ? 'fill-amber-400/30' : ''}`} />
           </div>
           <div className="text-right">
-            <div className="text-xs font-bold font-mono text-foreground">Racha Activa</div>
-            <div className="text-[10px] text-muted-foreground">¡Sigue así!</div>
+            <div className="text-xs font-bold font-mono text-foreground">{rachaLabel}</div>
+            <div className="text-[10px] text-muted-foreground">{rachaSublabel}</div>
           </div>
         </div>
       </div>
