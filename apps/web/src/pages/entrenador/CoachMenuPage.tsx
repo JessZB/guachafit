@@ -29,14 +29,14 @@ export function CoachMenuPage() {
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-primary flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5" />
-              Centro Operativo
+              Menú del Entrenador
             </span>
           </div>
           <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground mt-1">
-            Panel de Acciones, Coach {primerNombre}
+            Hola, Coach {primerNombre}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Selecciona una tarea operativa para resolverla de inmediato sin rodeos.
+            Elige una tarea para resolverla de inmediato.
           </p>
         </div>
 
@@ -61,7 +61,7 @@ export function CoachMenuPage() {
               <DollarSign className="h-7 w-7" />
             </div>
             <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-              Bandeja FIFO
+              Por orden de llegada
             </span>
           </div>
 
@@ -71,16 +71,16 @@ export function CoachMenuPage() {
               <ArrowUpRight className="h-5 w-5 text-emerald-400 opacity-80 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
             </h2>
             <p className="text-sm text-muted-foreground mt-1 max-w-lg">
-              Revisa comprobantes de Pago Móvil, Zelle y transferencias en cola. Concilia en 1 clic y descuenta de la deuda maestra en USD.
+              Revisa los comprobantes de Pago Móvil, Zelle y transferencias. Confirma el pago y descuéntalo del saldo en USD.
             </p>
           </div>
 
           <div className="mt-5 flex items-center justify-between pt-4 border-t border-border/60">
             <span className="text-xs font-medium text-muted-foreground">
-              Comprobantes digitales con zoom SigV4
+              Comprobantes con foto ampliable
             </span>
             <span className="text-xs font-bold text-emerald-400 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-              Abrir bandeja <ChevronRight className="h-4 w-4" />
+              Revisar pagos <ChevronRight className="h-4 w-4" />
             </span>
           </div>
         </Link>
@@ -96,19 +96,19 @@ export function CoachMenuPage() {
                 <Camera className="h-6 w-6" />
               </div>
               <span className="text-[11px] font-medium text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md">
-                Auditoría RBAC
+                Revisión del coach
               </span>
             </div>
             <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">
               Revisar Evaluaciones
             </h3>
             <p className="text-xs text-muted-foreground mt-1">
-              Audita medidas y fotos de progreso de alumnos remotos con el comparador angular antes/después.
+              Revisa las medidas y fotos de progreso de tus alumnos, con comparación antes/después.
             </p>
           </div>
 
           <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs font-semibold text-primary">
-            <span>Auditar fotos</span>
+            <span>Ver evaluaciones</span>
             <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
           </div>
         </Link>
@@ -124,25 +124,24 @@ export function CoachMenuPage() {
                 <AlertTriangle className="h-6 w-6" />
               </div>
               <span className="text-[11px] font-medium text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md">
-                Retención
+                Riesgo
               </span>
             </div>
             <h3 className="text-base font-bold text-foreground group-hover:text-amber-400 transition-colors">
               Alumnos en Alerta
             </h3>
             <p className="text-xs text-muted-foreground mt-1">
-              Mira el semáforo semanal de adherencia, prioriza por nivel de riesgo y detecta a
-              quién le toca una rutina nueva.
+              Mira quién está en riesgo esta semana y a quién le toca una rutina nueva.
             </p>
           </div>
 
           <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs font-semibold text-amber-400">
-            <span>Ver semáforo</span>
+            <span>Ver alumnos</span>
             <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
           </div>
         </Link>
 
-        {/* TARJETA 4: Directorio de Alumnos */}
+        {/* TARJETA 4: Mis Alumnos */}
         <Link
           to="/coach/alumnos"
           className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
@@ -153,24 +152,24 @@ export function CoachMenuPage() {
                 <Users className="h-6 w-6" />
               </div>
               <span className="text-[11px] font-medium text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md">
-                Expedientes
+                Fichas
               </span>
             </div>
             <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">
-              Directorio de Alumnos
+              Mis Alumnos
             </h3>
             <p className="text-xs text-muted-foreground mt-1">
-              Gestiona a tus alumnos, planes asignados, precios personalizados y altas manuales.
+              Planes, precios y datos de cada alumno, con altas manuales.
             </p>
           </div>
 
           <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs font-semibold text-primary">
-            <span>Ver listado</span>
+            <span>Ver alumnos</span>
             <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
           </div>
         </Link>
 
-        {/* TARJETA 5: Comando Central / KPIs */}
+        {/* TARJETA 5: Panel administrativo (resumen y métricas) */}
         <Link
           to="/coach/dashboard"
           className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
@@ -181,24 +180,24 @@ export function CoachMenuPage() {
                 <LayoutDashboard className="h-6 w-6" />
               </div>
               <span className="text-[11px] font-medium text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md">
-                Métricas
+                Resumen
               </span>
             </div>
             <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">
-              Comando de Cartera
+              Panel administrativo
             </h3>
             <p className="text-xs text-muted-foreground mt-1">
-              Visualiza ingresos consolidados en USD/VES, tasa BCV activa y métricas de morosidad global.
+              Ingresos en bolívares y dólares, tasa del día y alumnos con pagos atrasados.
             </p>
           </div>
 
           <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs font-semibold text-primary">
-            <span>Ir al dashboard</span>
+            <span>Ver resumen</span>
             <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
           </div>
         </Link>
 
-        {/* TARJETA 6: Ajustes Operativos (Planes & Tasa) */}
+        {/* TARJETA 6: Planes y Tasa de Cambio */}
         <Link
           to="/coach/ajustes"
           className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
@@ -213,15 +212,15 @@ export function CoachMenuPage() {
               </span>
             </div>
             <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">
-              Planes & Tasa Global
+              Planes y Tasa de Cambio
             </h3>
             <p className="text-xs text-muted-foreground mt-1">
-              Administra el catálogo comercial de membresías y define las tasas de cambio de referencia en Bs/USD.
+              Crea los planes de membresía y define la tasa de cambio Bs/USD.
             </p>
           </div>
 
           <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs font-semibold text-primary">
-            <span>Gestionar catálogo</span>
+            <span>Gestionar planes</span>
             <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
           </div>
         </Link>
@@ -237,11 +236,11 @@ export function CoachMenuPage() {
                 <ClipboardList className="h-6 w-6" />
               </div>
               <span className="text-[11px] font-medium text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md">
-                Prescripción
+                Rutinas
               </span>
             </div>
             <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">
-              Banco de Plantillas
+              Plantillas de ejercicios
             </h3>
             <p className="text-xs text-muted-foreground mt-1">
               Diseña rutinas reutilizables por nivel objetivo y asígnalas a cualquier alumno con ajuste de cargas en segundos.

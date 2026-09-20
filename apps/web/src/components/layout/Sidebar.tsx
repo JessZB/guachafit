@@ -21,22 +21,22 @@ export function Sidebar() {
   const isCoach = user?.rol === 'entrenador';
 
   const athleteLinks = [
+    { to: '/app/menu', label: 'Menú de Acciones', icon: LayoutGrid, description: 'Todos tus accesos' },
     { to: '/app/hoy', label: '¡A entrenar!', icon: Dumbbell, description: 'Sesión activa del día' },
-    { to: '/app/menu', label: 'Menú de Acciones', icon: LayoutGrid, description: 'Hub central de accesos' },
-    { to: '/app/nutricion', label: 'Mi Comida', icon: Utensils, description: 'Semáforo y macros' },
+    { to: '/app/nutricion', label: 'Mi Comida', icon: Utensils, description: 'Cómo vas hoy' },
     { to: '/app/progreso', label: 'Mi Progreso', icon: TrendingUp, description: 'Fotos y medidas' },
     { to: '/app/pagos', label: 'Pagos y Cuotas', icon: CreditCard, description: 'Saldo y comprobantes' },
   ];
 
   const coachLinks = [
-    { to: '/coach/dashboard', label: 'Comando Central', icon: LayoutDashboard, description: 'KPIs y finanzas' },
-    { to: '/coach/monitor-adherencia', label: 'Monitor de Alumnos', icon: Activity, description: 'Semáforo semanal RN-03' },
-    { to: '/coach/menu', label: 'Menú de Acciones', icon: LayoutGrid, description: 'Hub operativo rápido' },
-    { to: '/coach/conciliacion', label: 'Validar Pagos', icon: DollarSign, description: 'Bandeja de verificación' },
-    { to: '/coach/alumnos', label: 'Directorio de Alumnos', icon: Users, description: 'Gestión y expedientes' },
-    { to: '/coach/plantillas', label: 'Banco de Plantillas', icon: ClipboardList, description: 'Rutinas reutilizables' },
-    { to: '/coach/antropometria', label: 'Revisar Evaluaciones', icon: Camera, description: 'Auditoría de fotos' },
-    { to: '/coach/ajustes', label: 'Ajustes Operativos', icon: SlidersHorizontal, description: 'Planes y tasas' },
+    { to: '/coach/menu', label: 'Menú de Acciones', icon: LayoutGrid, description: 'Todas tus tareas' },
+    { to: '/coach/dashboard', label: 'Panel administrativo', icon: LayoutDashboard, description: 'Resumen y cobros' },
+    { to: '/coach/monitor-adherencia', label: 'Seguimiento de Alumnos', icon: Activity, description: 'Riesgo semanal de tus alumnos' },
+    { to: '/coach/conciliacion', label: 'Validar Pagos', icon: DollarSign, description: 'Pagos por confirmar' },
+    { to: '/coach/alumnos', label: 'Mis Alumnos', icon: Users, description: 'Datos, planes y pagos' },
+    { to: '/coach/plantillas', label: 'Plantillas de ejercicios', icon: ClipboardList, description: 'Rutinas reutilizables' },
+    { to: '/coach/antropometria', label: 'Revisar Evaluaciones', icon: Camera, description: 'Medidas y fotos de progreso' },
+    { to: '/coach/ajustes', label: 'Configuración', icon: SlidersHorizontal, description: 'Planes y tasas' },
   ];
 
   const links = isCoach ? coachLinks : athleteLinks;
@@ -46,7 +46,7 @@ export function Sidebar() {
       <div className="mb-6 px-3">
         <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           <Activity className="h-3.5 w-3.5 text-primary" />
-          <span>{isCoach ? 'Panel Operativo' : 'Rendimiento Personal'}</span>
+          <span>{isCoach ? 'Gestión Diaria' : 'Rendimiento Personal'}</span>
         </div>
       </div>
 

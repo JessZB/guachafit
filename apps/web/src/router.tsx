@@ -82,10 +82,11 @@ function RootRedirect() {
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;
   }
+  // WU12: primer aterrizaje tras login = menú de cada rol (el dashboard y el "hoy" se abren desde ahí).
   return user.rol === Rol.ENTRENADOR ? (
-    <Navigate to="/coach/dashboard" replace />
+    <Navigate to="/coach/menu" replace />
   ) : (
-    <Navigate to="/app/hoy" replace />
+    <Navigate to="/app/menu" replace />
   );
 }
 

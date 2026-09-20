@@ -98,10 +98,10 @@ export function NutricionPage() {
           <span>Reporte Diario Ágil</span>
         </div>
         <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
-          Check-in Nutricional 1-Tap
+          Mi Comida de Hoy
         </h1>
         <p className="text-xs text-muted-foreground">
-          Registra tu adherencia en menos de 10 segundos antes de dormir.
+          Marca cómo te fue hoy en menos de 10 segundos.
         </p>
       </div>
 

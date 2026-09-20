@@ -14,14 +14,14 @@ export function BottomNav() {
   const isCoach = user?.rol === 'entrenador';
 
   const athleteLinks = [
-    { to: '/app/hoy', label: 'Hoy', icon: Dumbbell },
-    { to: '/app/menu', label: 'Menú', icon: LayoutGrid, isCenter: true },
+    { to: '/app/menu', label: 'Menú', icon: LayoutGrid },
+    { to: '/app/hoy', label: 'Ir a entrenar', icon: Dumbbell, isCenter: true },
     { to: '/app/pagos', label: 'Pagos', icon: CreditCard },
   ];
 
   const coachLinks = [
-    { to: '/coach/dashboard', label: 'Comando', icon: LayoutDashboard },
-    { to: '/coach/menu', label: 'Menú', icon: LayoutGrid, isCenter: true },
+    { to: '/coach/menu', label: 'Menú', icon: LayoutGrid },
+    { to: '/coach/dashboard', label: 'Panel', icon: LayoutDashboard, isCenter: true },
     { to: '/coach/alumnos', label: 'Alumnos', icon: Users },
   ];
 
@@ -57,7 +57,7 @@ export function BottomNav() {
                 >
                   <Icon className="h-5 w-5" />
                 </div>
-                <span className={`text-[11px] mt-1 tracking-tight ${isCenter && isActive ? 'text-primary font-bold' : ''}`}>
+                <span className={`text-[11px] mt-1 tracking-tight text-center ${isCenter && isActive ? 'text-primary font-bold' : ''}`}>
                   {label}
                 </span>
               </>

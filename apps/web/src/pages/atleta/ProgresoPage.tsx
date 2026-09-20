@@ -431,7 +431,7 @@ export function ProgresoPage() {
                 <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border/80 text-xs text-muted-foreground space-y-1">
                   <div className="flex items-center gap-1.5 font-bold text-foreground">
                     <Lock className="h-3.5 w-3.5 text-primary" />
-                    <span>Auditoría de Confianza (RBAC Híbrido)</span>
+                    <span>Revisión de tu coach</span>
                   </div>
                   <p className="text-[11px]">
                     Si eres alumno online, tu reporte queda registrado como remoto y tu coach lo revisa en su bandeja. Si eres presencial, se consolida en sala.

@@ -119,15 +119,15 @@ export function DashboardPage() {
       <div className="p-6 rounded-3xl bg-card border border-border shadow-md space-y-2">
         <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
           <LayoutDashboard className="h-4 w-4" />
-          <span>Comando Central del Negocio</span>
+          <span>Panel administrativo</span>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
-              Dashboard de Operaciones
+              Resumen del Negocio
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Control de capacidad, cobranza bimonetaria y adherencia deportiva en tiempo real.
+              Cupos, cobros y entrenamiento de tus alumnos, en tiempo real.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -155,11 +155,11 @@ export function DashboardPage() {
 
       {/* Macro KPIs Grid */}
       {dashboard && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <MetricCard
-            title="Ocupación de Alumnos"
+            title="Alumnos Activos"
             value={`${dashboard.kpisMacro.alumnosActivos}/${dashboard.kpisMacro.capacidadMaxima}`}
-            subtitle={`${dashboard.kpisMacro.porcentajeOcupacion}% de capacidad asignada`}
+            subtitle={`${dashboard.kpisMacro.porcentajeOcupacion}% de cupos ocupados`}
             icon={Users}
             badge={{
               text: `${Math.max(
@@ -171,18 +171,18 @@ export function DashboardPage() {
           />
 
           <MetricCard
-            title="Cobranza Mensual"
+            title="Cobros del Mes"
             value={`$${dashboard.kpisMacro.cobranzaMesUsd}`}
             subtitle={`Meta: $${dashboard.kpisMacro.metaCobranzaMesUsd} USD (${dashboard.kpisMacro.porcentajeCobranza}%)`}
             icon={DollarSign}
             badge={{
-              text: 'Deuda Maestra USD',
+              text: 'Montos en USD',
               variant: 'success',
             }}
           />
 
           <MetricCard
-            title="Adherencia Semanal"
+            title="Cumplimiento Semanal"
             value={
               dashboard.kpisMacro.tasaAdherenciaSemanal !== null
                 ? `${dashboard.kpisMacro.tasaAdherenciaSemanal}%`
@@ -190,8 +190,8 @@ export function DashboardPage() {
             }
             subtitle={
               sinDatoAdherencia
-                ? 'Sin sesiones prescritas esta semana'
-                : 'Sesiones completadas vs prescritas'
+                ? 'Sin rutinas asignadas esta semana'
+                : 'Entrenamientos completados vs. planificados'
             }
             icon={Activity}
             badge={{
@@ -201,18 +201,18 @@ export function DashboardPage() {
           />
 
           <MetricCard
-            title="Riesgo Deportivo"
+            title="Alumnos en Riesgo"
             value={dashboard.kpisMacro.alumnosEnRiesgoDeportivo}
-            subtitle="Semáforo ROJO o inactividad ≥ 4 días"
+            subtitle="Sin entrenar hace 4 días o más"
             icon={UserX}
             badge={{
-              text: dashboard.kpisMacro.alumnosEnRiesgoDeportivo > 0 ? 'Revisar adherencia' : 'Sin alertas',
+              text: dashboard.kpisMacro.alumnosEnRiesgoDeportivo > 0 ? 'Requiere atención' : 'Sin alertas',
               variant: dashboard.kpisMacro.alumnosEnRiesgoDeportivo > 0 ? 'danger' : 'success',
             }}
           />
 
           <MetricCard
-            title="Mora Financiera"
+            title="Pagos Vencidos"
             value={dashboard.kpisMacro.alumnosEnMoraFinanciera}
             subtitle="Cuotas vencidas o saldo pendiente"
             icon={AlertTriangle}
@@ -228,50 +228,50 @@ export function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Payments Inbox Card */}
         <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-border/60 pb-3">
-            <div className="flex items-center gap-2">
-              <Receipt className="h-5 w-5 text-primary" />
-              <h2 className="font-bold text-base text-foreground">Bandeja de Pagos por Conciliar</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Receipt className="h-5 w-5 text-primary shrink-0" />
+              <h2 className="font-bold text-base text-foreground">Pagos por Revisar</h2>
             </div>
-            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">
+            <span className="shrink-0 text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">
               {dashboard?.bandejasRapidas.pagosPorConciliar || 0} pendientes
             </span>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Abonos en Bolívares y Dólares reportados por alumnos que requieren verificación bancaria.
+            Pagos en bolívares o dólares que tus alumnos reportaron y esperan tu confirmación.
           </p>
 
           <Link
             to="/coach/conciliacion"
             className="w-full py-2.5 px-4 rounded-xl bg-secondary text-foreground hover:bg-secondary/80 font-bold text-xs flex items-center justify-between transition-colors"
           >
-            <span>Abrir bandeja de pagos</span>
+            <span>Revisar pagos</span>
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
 
         {/* Anthropometry Inbox Card */}
         <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-border/60 pb-3">
-            <div className="flex items-center gap-2">
-              <Camera className="h-5 w-5 text-primary" />
-              <h2 className="font-bold text-base text-foreground">Auditoría Antropométrica</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Camera className="h-5 w-5 text-primary shrink-0" />
+              <h2 className="font-bold text-base text-foreground">Evaluaciones por Revisar</h2>
             </div>
-            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/20">
+            <span className="shrink-0 text-xs font-bold px-2.5 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/20">
               {dashboard?.bandejasRapidas.checkinsAntropometricosPendientes || 0} por validar
             </span>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Autoreportes de alumnos online con fotos de progreso privadas.
+            Medidas y fotos de progreso que subieron tus alumnos.
           </p>
 
           <Link
             to="/coach/antropometria"
             className="w-full py-2.5 px-4 rounded-xl bg-secondary text-foreground hover:bg-secondary/80 font-bold text-xs flex items-center justify-between transition-colors"
           >
-            <span>Revisar evaluaciones y comparador</span>
+            <span>Revisar evaluaciones</span>
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
@@ -282,23 +282,23 @@ export function DashboardPage() {
         {/* Mora List */}
         <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-xs space-y-3">
           <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
-            <span>Alumnos en Mora Financiera</span>
+            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+            <span>Alumnos con Pagos Vencidos</span>
           </h3>
 
           <div className="space-y-2">
             {dashboard?.bandejasRapidas.alumnosEnMora.map((mora) => (
               <div
                 key={mora.alumnoId}
-                className="p-3 rounded-2xl bg-secondary/40 border border-border flex items-center justify-between"
+                className="p-3 rounded-2xl bg-secondary/40 border border-border flex items-center justify-between gap-3"
               >
-                <div>
-                  <p className="font-bold text-xs text-foreground">{mora.nombre}</p>
+                <div className="min-w-0">
+                  <p className="font-bold text-xs text-foreground truncate">{mora.nombre}</p>
                   <p className="text-[10px] text-destructive font-semibold">
-                    {mora.diasVencido} días vencido
+                    {mora.diasVencido} días de atraso
                   </p>
                 </div>
-                <div className="text-right">
+                <div className="text-right shrink-0">
                   <span className="font-mono font-black text-sm text-foreground">
                     ${mora.saldoPendienteUsd} USD
                   </span>
@@ -311,23 +311,23 @@ export function DashboardPage() {
         {/* Inactivity List */}
         <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-xs space-y-3">
           <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
-            <UserX className="h-4 w-4 text-destructive" />
-            <span>Alumnos Inactivos en Gimnasio</span>
+            <UserX className="h-4 w-4 text-destructive shrink-0" />
+            <span>Alumnos sin Entrenar</span>
           </h3>
 
           <div className="space-y-2">
             {dashboard?.bandejasRapidas.alumnosInactivosEntrenamiento.map((inac) => (
               <div
                 key={inac.alumnoId}
-                className="p-3 rounded-2xl bg-secondary/40 border border-border flex items-center justify-between"
+                className="p-3 rounded-2xl bg-secondary/40 border border-border flex items-center justify-between gap-3"
               >
-                <div>
-                  <p className="font-bold text-xs text-foreground">{inac.nombre}</p>
+                <div className="min-w-0">
+                  <p className="font-bold text-xs text-foreground truncate">{inac.nombre}</p>
                   <p className="text-[10px] text-muted-foreground">Sin registrar series</p>
                 </div>
-                <div className="text-right">
+                <div className="text-right shrink-0">
                   <span className="font-mono font-bold text-xs text-destructive">
-                    {inac.diasSinEntrenar} días inactivo
+                    {inac.diasSinEntrenar} días sin entrenar
                   </span>
                 </div>
               </div>

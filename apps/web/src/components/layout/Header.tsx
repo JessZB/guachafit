@@ -73,7 +73,7 @@ export function Header() {
               GUACHAFIT
             </span>
             <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mt-0.5">
-              {user?.rol === 'entrenador' ? 'Coach Panel' : 'Athlete App'}
+              {user?.rol === 'entrenador' ? 'Panel del entrenador' : 'App del alumno'}
             </span>
           </div>
         </div>

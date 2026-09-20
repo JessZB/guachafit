@@ -317,13 +317,13 @@ export function AlumnosPage() {
           <div>
             <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
               <Users className="h-4 w-4" />
-              <span>Directorio de Alumnos</span>
+              <span>Alumnos</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground mt-1">
               Gestión de Alumnos
             </h1>
             <p className="text-xs text-muted-foreground">
-              Expedientes 360°, control de ciclo de vida y vinculación de pagos.
+              Datos, planes y pagos de cada alumno.
             </p>
           </div>
 

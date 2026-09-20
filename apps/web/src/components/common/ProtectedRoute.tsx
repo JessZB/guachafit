@@ -17,7 +17,7 @@ export function ProtectedRoute({ allowedRoles, redirectTo = '/login' }: Protecte
 
   if (allowedRoles && !allowedRoles.includes(user.rol)) {
     // Redirect to their respective default home
-    const defaultRoute = user.rol === Rol.ENTRENADOR ? '/coach/dashboard' : '/app/hoy';
+    const defaultRoute = user.rol === Rol.ENTRENADOR ? '/coach/menu' : '/app/menu';
     return <Navigate to={defaultRoute} replace />;
   }
 

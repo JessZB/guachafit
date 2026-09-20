@@ -127,13 +127,13 @@ export function AntropometriaPage() {
           <div>
             <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
               <Camera className="h-4 w-4" />
-              <span>Auditoría y Comparador Fotográfico</span>
+              <span>Medidas y Fotos</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground mt-1">
-              Bóveda Antropométrica
+              Evaluaciones Físicas
             </h1>
             <p className="text-xs text-muted-foreground">
-              Validación de autoreportes remotos y comparador visual interactivo de evolución física.
+              Revisa las medidas y fotos de progreso que subieron tus alumnos.
             </p>
           </div>
 
@@ -146,7 +146,7 @@ export function AntropometriaPage() {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              Auditoría ({pendientes.length})
+              Por revisar ({pendientes.length})
             </button>
             <button
               onClick={() => setActiveTab('comparador')}
@@ -258,7 +258,7 @@ export function AntropometriaPage() {
                 <div className="flex items-center justify-between gap-3 pt-2">
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <ShieldCheck className="h-4 w-4 text-primary" />
-                    <span>URLs de fotos protegidas con firma temporal SigV4 (TTL 15 min).</span>
+                    <span>Fotos protegidas: se muestran con un enlace temporal seguro.</span>
                   </div>
 
                   <div className="flex items-center gap-2">

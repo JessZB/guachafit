@@ -325,14 +325,14 @@ export function AjustesPage() {
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-primary flex items-center gap-1.5">
               <SlidersHorizontal className="h-3.5 w-3.5" />
-              Centro Operativo
+              Configuración
             </span>
           </div>
           <h1 className="text-2xl lg:text-3xl font-black tracking-tight text-foreground mt-1">
-            Configuración Operativa
+            Planes y Tasas
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Administra tu catálogo comercial de membresías y define las tasas de cambio de tu cartera.
+            Administra tus planes de membresía y las tasas de cambio.
           </p>
         </div>
 

@@ -16,7 +16,8 @@ export function LoginPage() {
     setError(null);
     try {
       await login({ email, password });
-      navigate('/app/hoy');
+      // El aterrizaje por rol vive en un solo lugar: RootRedirect ("/").
+      navigate('/');
     } catch (err: any) {
       setError(err.message || 'Credenciales inválidas. Por favor intente de nuevo.');
     }
@@ -24,11 +25,8 @@ export function LoginPage() {
 
   const handleDemo = (rol: Rol) => {
     demoLogin(rol);
-    if (rol === Rol.ENTRENADOR) {
-      navigate('/coach/dashboard');
-    } else {
-      navigate('/app/hoy');
-    }
+    // El aterrizaje por rol vive en un solo lugar: RootRedirect ("/").
+    navigate('/');
   };
 
   return (
@@ -41,7 +39,7 @@ export function LoginPage() {
           </div>
           <h1 className="font-black text-3xl tracking-tight">GUACHAFIT</h1>
           <p className="text-sm text-muted-foreground max-w-xs">
-            Plataforma deportiva de alto rendimiento, finanzas bimonetarias y PWA offline-first.
+            Entrena, sigue a tus alumnos y controla tus cobros en un solo lugar.
           </p>
         </div>
 
@@ -52,7 +50,7 @@ export function LoginPage() {
             <span>Acceso Inmediato de Demostración</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            Explora las funcionalidades completas de la PWA sin necesidad de ingresar credenciales:
+            Explora la app completa sin necesidad de ingresar credenciales:
           </p>
           <div className="grid grid-cols-2 gap-2 pt-1">
             <button

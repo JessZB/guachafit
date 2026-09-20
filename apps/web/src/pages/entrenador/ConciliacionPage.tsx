@@ -167,7 +167,7 @@ export function ConciliacionPage() {
       <div className="p-6 rounded-3xl bg-card border border-border shadow-md space-y-2">
         <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
           <DollarSign className="h-4 w-4" />
-          <span>Auditoría de Pagos y Conciliación</span>
+          <span>Pagos y Cobros</span>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
@@ -175,7 +175,7 @@ export function ConciliacionPage() {
               Bandeja de Pagos por Validar
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Revisión estricta de transferencias, comprobantes y acreditación en dólares.
+              Aprueba o rechaza los pagos que reportan tus alumnos.
             </p>
           </div>
           <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">
