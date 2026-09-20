@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../../lib/api-client';
+import { useAuth } from '../../context/auth-context';
 import { MetricCard } from '../../components/common/MetricCard';
+import { clasificarTasaAdherencia, etiquetaSemaforo } from '../../lib/adherencia';
 import { DashboardComandoDTO } from '@guachafit/shared';
 import {
   LayoutDashboard,
@@ -17,69 +19,99 @@ import {
 } from 'lucide-react';
 
 export function DashboardPage() {
+  const { isDemoMode } = useAuth();
   const [dashboard, setDashboard] = useState<DashboardComandoDTO | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const cargarDashboard = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await apiClient<DashboardComandoDTO>('/entrenador/dashboard-comando');
+      setDashboard(data);
+    } catch (err: any) {
+      // D2: sin datos demo fuera del modo demo; estado de error honesto con reintento.
+      setDashboard(null);
+      setError(
+        err?.message || 'No se pudo cargar el dashboard del negocio. Inténtalo de nuevo.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    async function loadDashboard() {
-      setIsLoading(true);
-      try {
-        const data = await apiClient<DashboardComandoDTO>('/entrenador/dashboard-comando');
-        setDashboard(data);
-      } catch {
-        // Fallback demo data
-        const demoData: DashboardComandoDTO = {
-          kpisMacro: {
-            alumnosActivos: 38,
-            capacidadMaxima: 50,
-            porcentajeOcupacion: '76.00',
-            cobranzaMesUsd: '1900.00',
-            metaCobranzaMesUsd: '2500.00',
-            porcentajeCobranza: '76.00',
-            tasaAdherenciaSemanal: '84.50',
-            alumnosEnRiesgo: 4,
-          },
-          bandejasRapidas: {
-            pagosPorConciliar: 3,
-            checkinsAntropometricosPendientes: 2,
-            alumnosEnMora: [
-              {
-                alumnoId: 'a1',
-                nombre: 'Carlos Mendoza',
-                cuotaId: 'c1',
-                saldoPendienteUsd: '30.00',
-                diasVencido: 5,
-              },
-              {
-                alumnoId: 'a2',
-                nombre: 'Mariana Pérez',
-                cuotaId: 'c2',
-                saldoPendienteUsd: '50.00',
-                diasVencido: 2,
-              },
-            ],
-            alumnosInactivosEntrenamiento: [
-              {
-                alumnoId: 'a3',
-                nombre: 'Andrés Silva',
-                diasSinEntrenar: 6,
-              },
-              {
-                alumnoId: 'a4',
-                nombre: 'Elena Gómez',
-                diasSinEntrenar: 5,
-              },
-            ],
-          },
-        };
-        setDashboard(demoData);
-      } finally {
-        setIsLoading(false);
-      }
+    // MODO DEMO EXPLÍCITO (isDemoMode): KPIs de ejemplo solo con la bandera activa y
+    // sin llamadas contra la API real. En sesión real, un fallo es un error visible.
+    if (isDemoMode) {
+      setDashboard({
+        kpisMacro: {
+          alumnosActivos: 38,
+          capacidadMaxima: 50,
+          porcentajeOcupacion: '76.00',
+          cobranzaMesUsd: '1900.00',
+          metaCobranzaMesUsd: '2500.00',
+          porcentajeCobranza: '76.00',
+          tasaAdherenciaSemanal: '84.50',
+          alumnosEnRiesgoDeportivo: 4,
+          alumnosEnMoraFinanciera: 2,
+          alumnosEnRiesgo: 4,
+        },
+        bandejasRapidas: {
+          pagosPorConciliar: 3,
+          checkinsAntropometricosPendientes: 2,
+          alumnosEnMora: [
+            {
+              alumnoId: 'a1',
+              nombre: 'Carlos Mendoza',
+              cuotaId: 'c1',
+              saldoPendienteUsd: '30.00',
+              diasVencido: 5,
+            },
+            {
+              alumnoId: 'a2',
+              nombre: 'Mariana Pérez',
+              cuotaId: 'c2',
+              saldoPendienteUsd: '50.00',
+              diasVencido: 2,
+            },
+          ],
+          alumnosInactivosEntrenamiento: [
+            {
+              alumnoId: 'a3',
+              nombre: 'Andrés Silva',
+              diasSinEntrenar: 6,
+            },
+            {
+              alumnoId: 'a4',
+              nombre: 'Elena Gómez',
+              diasSinEntrenar: 5,
+            },
+          ],
+        },
+      });
+      setIsLoading(false);
+      return;
     }
 
-    loadDashboard();
-  }, []);
+    cargarDashboard();
+  }, [isDemoMode]);
+
+  // RF-013: el badge de adherencia se deriva del dato real, nunca de un texto fijo.
+  const semaforoAdherencia = dashboard
+    ? clasificarTasaAdherencia(dashboard.kpisMacro.tasaAdherenciaSemanal)
+    : null;
+  const etiquetaAdherencia = etiquetaSemaforo(semaforoAdherencia);
+  const sinDatoAdherencia = dashboard?.kpisMacro.tasaAdherenciaSemanal === null;
+  const varianteBadgeAdherencia =
+    etiquetaAdherencia.tono === 'success'
+      ? 'success'
+      : etiquetaAdherencia.tono === 'warning'
+      ? 'warning'
+      : etiquetaAdherencia.tono === 'danger'
+      ? 'danger'
+      : 'info';
 
   return (
     <div className="space-y-6">
@@ -106,16 +138,34 @@ export function DashboardPage() {
         </div>
       </div>
 
+      {/* D2: error honesto con reintento (sin KPIs demo fuera del modo demo) */}
+      {!isLoading && error && (
+        <div className="p-6 rounded-3xl bg-card border border-destructive/30 text-center space-y-3">
+          <AlertTriangle className="h-8 w-8 text-destructive mx-auto" />
+          <p className="text-xs text-muted-foreground">{error}</p>
+          <button
+            type="button"
+            onClick={() => cargarDashboard()}
+            className="py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+
       {/* Macro KPIs Grid */}
       {dashboard && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <MetricCard
             title="Ocupación de Alumnos"
             value={`${dashboard.kpisMacro.alumnosActivos}/${dashboard.kpisMacro.capacidadMaxima}`}
             subtitle={`${dashboard.kpisMacro.porcentajeOcupacion}% de capacidad asignada`}
             icon={Users}
             badge={{
-              text: `${50 - dashboard.kpisMacro.alumnosActivos} cupos`,
+              text: `${Math.max(
+                0,
+                dashboard.kpisMacro.capacidadMaxima - dashboard.kpisMacro.alumnosActivos
+              )} cupos`,
               variant: 'info',
             }}
           />
@@ -133,23 +183,42 @@ export function DashboardPage() {
 
           <MetricCard
             title="Adherencia Semanal"
-            value={`${dashboard.kpisMacro.tasaAdherenciaSemanal}%`}
-            subtitle="Sesiones completadas vs prescritas"
+            value={
+              dashboard.kpisMacro.tasaAdherenciaSemanal !== null
+                ? `${dashboard.kpisMacro.tasaAdherenciaSemanal}%`
+                : '—'
+            }
+            subtitle={
+              sinDatoAdherencia
+                ? 'Sin sesiones prescritas esta semana'
+                : 'Sesiones completadas vs prescritas'
+            }
             icon={Activity}
             badge={{
-              text: 'Semáforo Verde',
-              variant: 'success',
+              text: sinDatoAdherencia ? 'Sin dato' : `Semáforo ${etiquetaAdherencia.texto}`,
+              variant: varianteBadgeAdherencia,
             }}
           />
 
           <MetricCard
-            title="Alumnos en Riesgo"
-            value={dashboard.kpisMacro.alumnosEnRiesgo}
-            subtitle="Inactividad >4 días o mora activa"
+            title="Riesgo Deportivo"
+            value={dashboard.kpisMacro.alumnosEnRiesgoDeportivo}
+            subtitle="Semáforo ROJO o inactividad ≥ 4 días"
+            icon={UserX}
+            badge={{
+              text: dashboard.kpisMacro.alumnosEnRiesgoDeportivo > 0 ? 'Revisar adherencia' : 'Sin alertas',
+              variant: dashboard.kpisMacro.alumnosEnRiesgoDeportivo > 0 ? 'danger' : 'success',
+            }}
+          />
+
+          <MetricCard
+            title="Mora Financiera"
+            value={dashboard.kpisMacro.alumnosEnMoraFinanciera}
+            subtitle="Cuotas vencidas o saldo pendiente"
             icon={AlertTriangle}
             badge={{
-              text: 'Atención requerida',
-              variant: 'warning',
+              text: dashboard.kpisMacro.alumnosEnMoraFinanciera > 0 ? 'Cobrar' : 'Al día',
+              variant: dashboard.kpisMacro.alumnosEnMoraFinanciera > 0 ? 'warning' : 'success',
             }}
           />
         </div>

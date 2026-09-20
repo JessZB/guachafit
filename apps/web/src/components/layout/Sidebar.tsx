@@ -13,6 +13,7 @@ import {
   Camera,
   SlidersHorizontal,
   Activity,
+  ClipboardList,
 } from 'lucide-react';
 
 export function Sidebar() {
@@ -29,9 +30,11 @@ export function Sidebar() {
 
   const coachLinks = [
     { to: '/coach/dashboard', label: 'Comando Central', icon: LayoutDashboard, description: 'KPIs y finanzas' },
+    { to: '/coach/monitor-adherencia', label: 'Monitor de Alumnos', icon: Activity, description: 'Semáforo semanal RN-03' },
     { to: '/coach/menu', label: 'Menú de Acciones', icon: LayoutGrid, description: 'Hub operativo rápido' },
     { to: '/coach/conciliacion', label: 'Validar Pagos', icon: DollarSign, description: 'Bandeja de verificación' },
     { to: '/coach/alumnos', label: 'Directorio de Alumnos', icon: Users, description: 'Gestión y expedientes' },
+    { to: '/coach/plantillas', label: 'Banco de Plantillas', icon: ClipboardList, description: 'Rutinas reutilizables' },
     { to: '/coach/antropometria', label: 'Revisar Evaluaciones', icon: Camera, description: 'Auditoría de fotos' },
     { to: '/coach/ajustes', label: 'Ajustes Operativos', icon: SlidersHorizontal, description: 'Planes y tasas' },
   ];

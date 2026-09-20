@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../lib/api-client';
+import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
 import {
   PerfilAlumnoDetalleDTO,
@@ -42,6 +43,7 @@ type ViewMode = 'cards' | 'table';
 
 export function AlumnosPage() {
   const navigate = useNavigate();
+  const { isDemoMode } = useAuth();
 
   const [alumnos, setAlumnos] = useState<PerfilAlumnoDetalleDTO[]>([]);
   const [search, setSearch] = useState('');
@@ -50,6 +52,11 @@ export function AlumnosPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [isLoading, setIsLoading] = useState(true);
   const [isCopied, setIsCopied] = useState(false);
+  // D2: fallo de carga honesto (sin roster demo fuera del modo demo).
+  const [error, setError] = useState<string | null>(null);
+  // D5: fallo de mutación visible; nunca éxito falso ni alumno fantasma.
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // New Athlete Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -83,11 +90,11 @@ export function AlumnosPage() {
 
   const loadAlumnos = async () => {
     setIsLoading(true);
-    try {
-      const data = await apiClient<PerfilAlumnoDetalleDTO[]>('/alumnos?incluirArchivados=true');
-      setAlumnos(data);
-    } catch {
-      // Fallback roster demo
+    setError(null);
+    setActionError(null);
+
+    // MODO DEMO EXPLÍCITO (isDemoMode): roster de ejemplo solo con la bandera activa.
+    if (isDemoMode) {
       const demoRoster: PerfilAlumnoDetalleDTO[] = [
         {
           id: 'al-001',
@@ -166,6 +173,19 @@ export function AlumnosPage() {
         },
       ];
       setAlumnos(demoRoster);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const data = await apiClient<PerfilAlumnoDetalleDTO[]>('/alumnos?incluirArchivados=true');
+      setAlumnos(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      // D2: sin roster demo en sesión real; error visible con reintento.
+      setAlumnos([]);
+      setError(
+        err?.message || 'No se pudo cargar el directorio de alumnos. Revisa tu conexión e inténtalo de nuevo.'
+      );
     } finally {
       setIsLoading(false);
     }
@@ -173,7 +193,7 @@ export function AlumnosPage() {
 
   useEffect(() => {
     loadAlumnos();
-  }, []);
+  }, [isDemoMode]);
 
   // Accesibilidad: Cierre de modal con tecla Escape
   useEffect(() => {
@@ -195,6 +215,7 @@ export function AlumnosPage() {
   const handleCrearAlumnoManual = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setFormError(null);
 
     try {
       const nuevo = await apiClient<PerfilAlumnoDetalleDTO>('/alumnos/manual', {
@@ -218,32 +239,11 @@ export function AlumnosPage() {
         setIsModalOpen(false);
         setSuccessMessage(null);
       }, 1500);
-    } catch {
-      // Local optimistic fallback
-      const localDemo: PerfilAlumnoDetalleDTO = {
-        id: 'al-local-' + Date.now(),
-        usuarioId: 'u-local-' + Date.now(),
-        entrenadorId: 'coach-01',
-        nombres,
-        apellidos,
-        email,
-        tipoDocumento,
-        numeroDocumento,
-        fechaNacimiento,
-        edadCalculada: calculateAge(fechaNacimiento),
-        telefonoWhatsapp,
-        modalidad,
-        estadoActivacion: EstadoAlumno.ACTIVO,
-        semaforoPago: 'sin_cuota',
-        fichaSaludPrivada,
-        createdAtUtc: new Date().toISOString(),
-      };
-      setAlumnos((prev) => [localDemo, ...prev]);
-      setSuccessMessage('Alumno registrado en la cartera.');
-      setTimeout(() => {
-        setIsModalOpen(false);
-        setSuccessMessage(null);
-      }, 1200);
+    } catch (err: any) {
+      // D5: sin alumno fantasma; el alta solo existe si el servidor la aceptó.
+      setFormError(
+        err?.message || 'No se pudo registrar al alumno. Revisa los datos e inténtalo de nuevo.'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -251,15 +251,14 @@ export function AlumnosPage() {
 
   const handleRestaurarAlumno = async (alumnoId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    setActionError(null);
     try {
       await apiClient.patch(`/alumnos/${alumnoId}/restaurar`, {});
       setAlumnos((prev) =>
         prev.map((a) => (a.id === alumnoId ? { ...a, deletedAtUtc: null, estadoActivacion: EstadoAlumno.ACTIVO } : a))
       );
-    } catch {
-      setAlumnos((prev) =>
-        prev.map((a) => (a.id === alumnoId ? { ...a, deletedAtUtc: null, estadoActivacion: EstadoAlumno.ACTIVO } : a))
-      );
+    } catch (err: any) {
+      setActionError(err?.message || 'No se pudo restaurar al alumno. Inténtalo de nuevo.');
     }
   };
 
@@ -639,6 +638,44 @@ export function AlumnosPage() {
         </div>
       </div>
 
+      {/* D2: error de carga honesto con reintento (sin roster demo fuera del modo demo) */}
+      {!isLoading && error && (
+        <div className="p-6 rounded-3xl bg-card border border-destructive/30 text-center space-y-3">
+          <AlertTriangle className="h-8 w-8 text-destructive mx-auto" />
+          <p className="text-xs text-muted-foreground">{error}</p>
+          <button
+            type="button"
+            onClick={() => loadAlumnos()}
+            className="py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+
+      {/* D5: fallo visible de acciones (restaurar) sin mutación local silenciosa */}
+      {!isLoading && !error && actionError && (
+        <div
+          role="alert"
+          className="p-3 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-center gap-2"
+        >
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>{actionError}</span>
+        </div>
+      )}
+
+      {/* D2: estado vacío honesto (cartera sin alumnos o filtros sin coincidencias) */}
+      {!isLoading && !error && filteredAlumnos.length === 0 && (
+        <div className="p-8 rounded-3xl bg-card border border-dashed border-border text-center space-y-2">
+          <Users className="h-8 w-8 text-muted-foreground mx-auto opacity-40" />
+          <p className="text-xs text-muted-foreground">
+            {alumnos.length === 0
+              ? 'Todavía no hay alumnos en tu cartera. Inscribe al primero o comparte tu enlace de registro.'
+              : 'Ningún alumno coincide con los filtros aplicados.'}
+          </p>
+        </div>
+      )}
+
       {/* VISTA 1: CARDS COMPACTAS DENSAS (~120px) */}
       {viewMode === 'cards' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
@@ -930,6 +967,15 @@ export function AlumnosPage() {
               </div>
             ) : (
               <form onSubmit={handleCrearAlumnoManual} className="space-y-3">
+                {formError && (
+                  <div
+                    role="alert"
+                    className="p-3 rounded-xl bg-destructive/15 border border-destructive/30 text-destructive text-xs flex items-center gap-2"
+                  >
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>{formError}</span>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-xs font-semibold text-muted-foreground">Nombres</label>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiClient } from '../../lib/api-client';
+import { useAuth } from '../../context/auth-context';
 import {
   ControlAntropometricoDetalleDTO,
   AnguloFoto,
@@ -19,59 +20,79 @@ import {
 } from 'lucide-react';
 
 export function AntropometriaPage() {
+  const { isDemoMode } = useAuth();
   const [pendientes, setPendientes] = useState<ControlAntropometricoDetalleDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'pendientes' | 'comparador'>('pendientes');
+  // D2: fallo de carga honesto (sin cola demo fuera del modo demo).
+  const [error, setError] = useState<string | null>(null);
+  // D5: fallo de conciliación visible; la tarjeta no desaparece si el server no confirmó.
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Comparator State
   const [angulo, setAngulo] = useState<AnguloFoto>(AnguloFoto.FRONTAL);
   const [sliderPosition, setSliderPosition] = useState(50);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadPendientes() {
-      setIsLoading(true);
-      try {
-        const data = await apiClient<ControlAntropometricoDetalleDTO[]>('/antropometria/pendientes');
-        setPendientes(data);
-      } catch {
-        // Fallback demo queue
-        const demoPendientes: ControlAntropometricoDetalleDTO[] = [
-          {
-            id: 'ctrl-p1',
-            alumnoId: 'al-002',
-            fechaEvaluacion: '2026-09-06',
-            pesoKg: '68.20',
-            alturaCm: '165.00',
-            porcentajeGrasa: '21.50',
-            perimetros: { cinturaCm: '72.00', caderaCm: '98.00', musloCm: '55.00' },
-            modalidad: 'remoto' as any,
-            origen: 'remoto_autoreporte' as any,
-            registradoPor: 'al-002',
-            estado: 'pendiente_aprobacion' as any,
-            fotos: [
-              {
-                id: 'fp-1',
-                controlId: 'ctrl-p1',
-                angulo: AnguloFoto.FRONTAL,
-                storageKey: 'antropometria/demo/2026/frontal.webp',
-                createdAtUtc: new Date().toISOString(),
-              },
-            ],
-            createdAtUtc: new Date().toISOString(),
-            updatedAtUtc: new Date().toISOString(),
-          },
-        ];
-        setPendientes(demoPendientes);
-      } finally {
-        setIsLoading(false);
-      }
+  const cargarPendientes = async () => {
+    setIsLoading(true);
+    setError(null);
+    setActionError(null);
+
+    // MODO DEMO EXPLÍCITO (isDemoMode): cola de ejemplo solo con la bandera activa.
+    if (isDemoMode) {
+      const demoPendientes: ControlAntropometricoDetalleDTO[] = [
+        {
+          id: 'ctrl-p1',
+          alumnoId: 'al-002',
+          fechaEvaluacion: '2026-09-06',
+          pesoKg: '68.20',
+          alturaCm: '165.00',
+          porcentajeGrasa: '21.50',
+          perimetros: { cinturaCm: '72.00', caderaCm: '98.00', musloCm: '55.00' },
+          modalidad: 'remoto' as any,
+          origen: 'remoto_autoreporte' as any,
+          registradoPor: 'al-002',
+          estado: 'pendiente_aprobacion' as any,
+          fotos: [
+            {
+              id: 'fp-1',
+              controlId: 'ctrl-p1',
+              angulo: AnguloFoto.FRONTAL,
+              storageKey: 'antropometria/demo/2026/frontal.webp',
+              createdAtUtc: new Date().toISOString(),
+            },
+          ],
+          createdAtUtc: new Date().toISOString(),
+          updatedAtUtc: new Date().toISOString(),
+        },
+      ];
+      setPendientes(demoPendientes);
+      setIsLoading(false);
+      return;
     }
 
-    loadPendientes();
-  }, []);
+    try {
+      const data = await apiClient<ControlAntropometricoDetalleDTO[]>('/antropometria/pendientes');
+      setPendientes(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      // D2: sin cola demo en sesión real; error visible con reintento.
+      setPendientes([]);
+      setError(
+        err?.message || 'No se pudieron cargar las evaluaciones pendientes. Inténtalo de nuevo.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarPendientes();
+  }, [isDemoMode]);
 
   const handleConciliar = async (id: string, accion: 'aprobar' | 'rechazar') => {
+    setActionError(null);
+
     try {
       await apiClient(`/antropometria/${id}/conciliar`, {
         method: 'PATCH',
@@ -81,8 +102,12 @@ export function AntropometriaPage() {
           motivoRechazo: accion === 'rechazar' ? 'Por favor repetir fotos con mejor luz' : undefined,
         }),
       });
-    } catch {
-      // Local optimistic update
+    } catch (err: any) {
+      // D5: sin éxito falso ni desaparición optimista; la evaluación sigue pendiente.
+      setActionError(
+        err?.message || 'No se pudo conciliar la evaluación. Revisa tu conexión e inténtalo de nuevo.'
+      );
+      return;
     }
 
     setPendientes((prev) => prev.filter((p) => p.id !== id));
@@ -144,7 +169,29 @@ export function AntropometriaPage() {
         </div>
       )}
 
-      {activeTab === 'pendientes' ? (
+      {actionError && (
+        <div
+          role="alert"
+          className="p-4 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-bold flex items-center gap-2"
+        >
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>{actionError}</span>
+        </div>
+      )}
+
+      {!isLoading && error ? (
+        <div className="p-8 rounded-3xl bg-card border border-destructive/30 text-center space-y-3">
+          <AlertCircle className="h-8 w-8 text-destructive mx-auto" />
+          <p className="text-xs text-muted-foreground">{error}</p>
+          <button
+            type="button"
+            onClick={() => cargarPendientes()}
+            className="py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+          >
+            Reintentar
+          </button>
+        </div>
+      ) : activeTab === 'pendientes' ? (
         /* Review Queue */
         <div className="space-y-4">
           {pendientes.length === 0 ? (
@@ -233,8 +280,8 @@ export function AntropometriaPage() {
             ))
           )}
         </div>
-      ) : (
-        /* Photo Comparator */
+      ) : isDemoMode ? (
+        /* Photo Comparator (solo demo: las cifras de ejemplo viven tras isDemoMode) */
         <div className="p-6 rounded-3xl bg-card border border-border shadow-md space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-4">
             <div>
@@ -314,6 +361,16 @@ export function AntropometriaPage() {
               <span className="text-emerald-400">Δ Grasa: -2.40%</span>
             </div>
           </div>
+        </div>
+      ) : (
+        /* D2: en sesión real no se muestran cifras de comparación inventadas */
+        <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
+          <Camera className="h-10 w-10 text-muted-foreground mx-auto opacity-40" />
+          <h3 className="font-bold text-base text-foreground">Sin evaluaciones comparables</h3>
+          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+            Cuando existan al menos dos evaluaciones aprobadas podrás comparar la evolución
+            fotográfica lado a lado.
+          </p>
         </div>
       )}
     </div>

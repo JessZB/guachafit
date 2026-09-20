@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiClient } from '../../lib/api-client';
+import { useAuth } from '../../context/auth-context';
 import { TransaccionPagoDetalleDTO, Moneda, MetodoPago } from '@guachafit/shared';
 import {
   DollarSign,
@@ -15,83 +16,118 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 
+/**
+ * N2: imagen de demostración del visor de comprobantes. SOLO se renderiza con `isDemoMode`
+ * activo; en sesión real, un comprobante sin URL o con carga fallida muestra un placeholder
+ * honesto (el server devuelve `comprobanteUrl = null` de forma legítima, ej. sin R2 configurado).
+ */
+const COMPROBANTE_DEMO_URL =
+  'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80';
+
 export function ConciliacionPage() {
+  const { isDemoMode } = useAuth();
   const [transacciones, setTransacciones] = useState<TransaccionPagoDetalleDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [rejectingTx, setRejectingTx] = useState<TransaccionPagoDetalleDTO | null>(null);
   const [viewingComprobanteTx, setViewingComprobanteTx] = useState<TransaccionPagoDetalleDTO | null>(null);
+  // N2: la URL real puede fallar (expiración TTL); nunca se sustituye por una imagen ajena.
+  const [comprobanteImgError, setComprobanteImgError] = useState(false);
   const [motivoRechazo, setMotivoRechazo] = useState('');
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  // D2: fallo de carga honesto (sin cola demo fuera del modo demo).
+  const [error, setError] = useState<string | null>(null);
+  // D5: fallo de conciliación visible; la transacción no desaparece si el server no confirmó.
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadPendientes() {
-      setIsLoading(true);
-      try {
-        const data = await apiClient<TransaccionPagoDetalleDTO[]>('/finanzas/conciliacion/bandeja');
-        setTransacciones(data);
-      } catch {
-        // Fallback demo queue con soporte de comprobantes digitales (RF-007, ADR-007)
-        const demoQueue: TransaccionPagoDetalleDTO[] = [
-          {
-            id: 'tx-pending-1',
-            cuotaId: 'cuota-101',
-            clienteId: 'cli-01',
-            entrenadorId: 'coach-01',
-            clienteNombre: 'Carlos Mendoza',
-            registradoPor: 'cli-01',
-            montoOriginal: '1950.00',
-            monedaOriginal: Moneda.VES,
-            tasaCambioFijada: '65.0000',
-            montoEquivalenteUsd: '30.00',
-            metodoPago: MetodoPago.PAGO_MOVIL,
-            referenciaBancaria: '445566',
-            fechaOperacion: '2026-09-06',
-            comprobanteStorageKey: 'comprobantes/cli-01/2026/demo-recibo-1.webp',
-            comprobanteUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80',
-            estadoConciliacion: 'pendiente' as any,
-            fechaReporteUtc: new Date().toISOString(),
-            createdAtUtc: new Date().toISOString(),
-            updatedAtUtc: new Date().toISOString(),
-          },
-          {
-            id: 'tx-pending-2',
-            cuotaId: 'cuota-102',
-            clienteId: 'cli-02',
-            entrenadorId: 'coach-01',
-            clienteNombre: 'Mariana Pérez',
-            registradoPor: 'cli-02',
-            montoOriginal: '50.00',
-            monedaOriginal: Moneda.USD,
-            tasaCambioFijada: '65.0000',
-            montoEquivalenteUsd: '50.00',
-            metodoPago: MetodoPago.ZELLE,
-            referenciaBancaria: 'ZEL-998811',
-            fechaOperacion: '2026-09-05',
-            comprobanteStorageKey: 'comprobantes/cli-02/2026/demo-recibo-2.webp',
-            comprobanteUrl: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=800&q=80',
-            estadoConciliacion: 'pendiente' as any,
-            fechaReporteUtc: new Date().toISOString(),
-            createdAtUtc: new Date().toISOString(),
-            updatedAtUtc: new Date().toISOString(),
-          },
-        ];
-        setTransacciones(demoQueue);
-      } finally {
-        setIsLoading(false);
-      }
+  const cargarPendientes = async () => {
+    setIsLoading(true);
+    setError(null);
+    setActionError(null);
+
+    // MODO DEMO EXPLÍCITO (isDemoMode): cola de ejemplo solo con la bandera activa.
+    if (isDemoMode) {
+      const demoQueue: TransaccionPagoDetalleDTO[] = [
+        {
+          id: 'tx-pending-1',
+          cuotaId: 'cuota-101',
+          clienteId: 'cli-01',
+          entrenadorId: 'coach-01',
+          clienteNombre: 'Carlos Mendoza',
+          registradoPor: 'cli-01',
+          montoOriginal: '1950.00',
+          monedaOriginal: Moneda.VES,
+          tasaCambioFijada: '65.0000',
+          montoEquivalenteUsd: '30.00',
+          metodoPago: MetodoPago.PAGO_MOVIL,
+          referenciaBancaria: '445566',
+          fechaOperacion: '2026-09-06',
+          comprobanteStorageKey: 'comprobantes/cli-01/2026/demo-recibo-1.webp',
+          comprobanteUrl:
+            'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80',
+          estadoConciliacion: 'pendiente' as any,
+          fechaReporteUtc: new Date().toISOString(),
+          createdAtUtc: new Date().toISOString(),
+          updatedAtUtc: new Date().toISOString(),
+        },
+        {
+          id: 'tx-pending-2',
+          cuotaId: 'cuota-102',
+          clienteId: 'cli-02',
+          entrenadorId: 'coach-01',
+          clienteNombre: 'Mariana Pérez',
+          registradoPor: 'cli-02',
+          montoOriginal: '50.00',
+          monedaOriginal: Moneda.USD,
+          tasaCambioFijada: '65.0000',
+          montoEquivalenteUsd: '50.00',
+          metodoPago: MetodoPago.ZELLE,
+          referenciaBancaria: 'ZEL-998811',
+          fechaOperacion: '2026-09-05',
+          comprobanteStorageKey: 'comprobantes/cli-02/2026/demo-recibo-2.webp',
+          comprobanteUrl:
+            'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=800&q=80',
+          estadoConciliacion: 'pendiente' as any,
+          fechaReporteUtc: new Date().toISOString(),
+          createdAtUtc: new Date().toISOString(),
+          updatedAtUtc: new Date().toISOString(),
+        },
+      ];
+      setTransacciones(demoQueue);
+      setIsLoading(false);
+      return;
     }
 
-    loadPendientes();
-  }, []);
+    try {
+      const data = await apiClient<TransaccionPagoDetalleDTO[]>('/finanzas/conciliacion/bandeja');
+      setTransacciones(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      // D2: sin cola demo en sesión real; error visible con reintento.
+      setTransacciones([]);
+      setError(
+        err?.message || 'No se pudo cargar la bandeja de conciliación. Inténtalo de nuevo.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarPendientes();
+  }, [isDemoMode]);
 
   const handleAprobar = async (txId: string) => {
+    setActionError(null);
     try {
       await apiClient(`/finanzas/transacciones/${txId}/conciliar`, {
         method: 'PATCH',
         body: JSON.stringify({ accion: 'aprobar' }),
       });
-    } catch {
-      // Local optimistic update
+    } catch (err: any) {
+      // D5: sin éxito falso ni desaparición optimista; la transacción sigue en la bandeja.
+      setActionError(
+        err?.message || 'No se pudo aprobar la transacción. Revisa tu conexión e inténtalo de nuevo.'
+      );
+      return;
     }
 
     setTransacciones((prev) => prev.filter((t) => t.id !== txId));
@@ -101,6 +137,7 @@ export function ConciliacionPage() {
 
   const handleConfirmarRechazo = async () => {
     if (!rejectingTx || !motivoRechazo.trim()) return;
+    setActionError(null);
 
     try {
       await apiClient(`/finanzas/transacciones/${rejectingTx.id}/conciliar`, {
@@ -110,8 +147,11 @@ export function ConciliacionPage() {
           motivoRechazo,
         }),
       });
-    } catch {
-      // Local optimistic update
+    } catch (err: any) {
+      setActionError(
+        err?.message || 'No se pudo rechazar la transacción. Revisa tu conexión e inténtalo de nuevo.'
+      );
+      return;
     }
 
     setTransacciones((prev) => prev.filter((t) => t.id !== rejectingTx.id));
@@ -151,8 +191,30 @@ export function ConciliacionPage() {
         </div>
       )}
 
-      {/* Queue */}
-      {transacciones.length === 0 ? (
+      {actionError && (
+        <div
+          role="alert"
+          className="p-4 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-bold flex items-center gap-2"
+        >
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>{actionError}</span>
+        </div>
+      )}
+
+      {/* D2: error honesto con reintento (sin cola demo fuera del modo demo) */}
+      {!isLoading && error ? (
+        <div className="p-8 rounded-3xl bg-card border border-destructive/30 text-center space-y-3">
+          <AlertCircle className="h-8 w-8 text-destructive mx-auto" />
+          <p className="text-xs text-muted-foreground">{error}</p>
+          <button
+            type="button"
+            onClick={() => cargarPendientes()}
+            className="py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+          >
+            Reintentar
+          </button>
+        </div>
+      ) : transacciones.length === 0 ? (
         <div className="p-12 text-center space-y-3 bg-card rounded-3xl border border-border">
           <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto" />
           <h3 className="font-bold text-base text-foreground">Bandeja al Día</h3>
@@ -185,7 +247,10 @@ export function ConciliacionPage() {
                     {tx.comprobanteUrl || tx.comprobanteStorageKey ? (
                       <button
                         type="button"
-                        onClick={() => setViewingComprobanteTx(tx)}
+                        onClick={() => {
+                          setComprobanteImgError(false);
+                          setViewingComprobanteTx(tx);
+                        }}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-bold transition-all cursor-pointer"
                       >
                         <Eye className="h-3.5 w-3.5" />
@@ -349,24 +414,42 @@ export function ConciliacionPage() {
 
             {/* High-Resolution Receipt Image Frame */}
             <div className="flex-1 overflow-auto rounded-2xl border border-border bg-black/50 flex flex-col items-center justify-center p-3 relative min-h-[280px]">
-              <img
-                src={
-                  viewingComprobanteTx.comprobanteUrl ||
-                  'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80'
-                }
-                alt="Comprobante Bancario"
-                className="max-h-[48vh] max-w-full rounded-xl object-contain shadow-lg"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src =
-                    'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80';
-                }}
-              />
+              {viewingComprobanteTx.comprobanteUrl && !comprobanteImgError ? (
+                <img
+                  src={viewingComprobanteTx.comprobanteUrl}
+                  alt="Comprobante Bancario"
+                  className="max-h-[48vh] max-w-full rounded-xl object-contain shadow-lg"
+                  onError={() => setComprobanteImgError(true)}
+                />
+              ) : isDemoMode && !viewingComprobanteTx.comprobanteUrl ? (
+                // N2: la foto stock SOLO vive en modo demo explícito.
+                <img
+                  src={COMPROBANTE_DEMO_URL}
+                  alt="Comprobante Bancario (demostración)"
+                  className="max-h-[48vh] max-w-full rounded-xl object-contain shadow-lg opacity-80"
+                />
+              ) : (
+                // N2: en sesión real nunca se muestra una imagen ajena como si fuera el comprobante.
+                <div className="text-center space-y-2 px-6">
+                  <ImageIcon className="h-10 w-10 mx-auto text-muted-foreground/60" />
+                  <p className="text-sm font-bold text-foreground">
+                    {viewingComprobanteTx.comprobanteUrl
+                      ? 'No se pudo cargar la imagen del comprobante'
+                      : 'Sin comprobante disponible'}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground max-w-sm">
+                    {viewingComprobanteTx.comprobanteUrl
+                      ? 'El enlace temporal de lectura falló o expiró. Cierra el visor e inténtalo de nuevo.'
+                      : 'El servidor no generó una URL de lectura para este pago (por ejemplo, almacenamiento R2 no configurado).'}
+                  </p>
+                </div>
+              )}
               {viewingComprobanteTx.comprobanteUrl && (
                 <a
                   href={viewingComprobanteTx.comprobanteUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="absolute top-4 right-4 p-2 rounded-xl bg-background/80 hover:bg-background text-foreground text-xs font-bold backdrop-blur-md shadow-md flex items-center gap-1.5 transition-all"
+                  className="absolute top-4 right-2 p-2 rounded-xl bg-background/80 hover:bg-background text-foreground text-xs font-bold backdrop-blur-md shadow-md flex items-center gap-1.5 transition-all"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                   <span>Abrir original</span>
@@ -377,7 +460,9 @@ export function ConciliacionPage() {
             {/* Direct Action Footer */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-border/80">
               <span className="text-[11px] text-muted-foreground">
-                Presigned URL segura temporal de lectura (TTL 15 min, ADR-007)
+                {viewingComprobanteTx.comprobanteUrl
+                  ? 'Presigned URL segura temporal de lectura (TTL 15 min, ADR-007)'
+                  : 'Sin captura digital verificable para este pago'}
               </span>
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <button

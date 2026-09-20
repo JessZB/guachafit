@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiClient } from '../../lib/api-client';
+import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
 import {
   PlanMembresiaDetalleDTO,
@@ -26,6 +27,7 @@ import {
 type TabType = 'planes' | 'tasas';
 
 export function AjustesPage() {
+  const { isDemoMode } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('planes');
 
   // Planes state
@@ -48,6 +50,8 @@ export function AjustesPage() {
   // Tasas state
   const [tasaVigente, setTasaVigente] = useState<TasaCambioVigenteDTO | null>(null);
   const [isLoadingTasas, setIsLoadingTasas] = useState(true);
+  // D2: error honesto de tasas (sin tasa demo fuera del modo demo).
+  const [tasasError, setTasasError] = useState<string | null>(null);
   const [tasaOficialBcvInput, setTasaOficialBcvInput] = useState('66.5000');
   const [tasaParaleloInput, setTasaParaleloInput] = useState('74.2000');
   const [tasaActivaInput, setTasaActivaInput] = useState('66.5000');
@@ -67,11 +71,9 @@ export function AjustesPage() {
   async function cargarPlanes() {
     setIsLoadingPlanes(true);
     setPlanesError(null);
-    try {
-      const data = await apiClient<PlanMembresiaDetalleDTO[]>('/finanzas/planes');
-      setPlanes(data);
-    } catch {
-      // Fallback si no hay planes creados aún
+
+    // MODO DEMO EXPLÍCITO (isDemoMode): catálogo de ejemplo solo con la bandera activa.
+    if (isDemoMode) {
       setPlanes([
         {
           id: 'plan-1',
@@ -98,6 +100,19 @@ export function AjustesPage() {
           updatedAtUtc: new Date().toISOString(),
         },
       ]);
+      setIsLoadingPlanes(false);
+      return;
+    }
+
+    try {
+      const data = await apiClient<PlanMembresiaDetalleDTO[]>('/finanzas/planes');
+      setPlanes(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      // D2: sin planes demo en sesión real; vacío real + error visible con reintento.
+      setPlanes([]);
+      setPlanesError(
+        err?.message || 'No se pudo cargar el catálogo de planes. Revisa tu conexión e inténtalo de nuevo.'
+      );
     } finally {
       setIsLoadingPlanes(false);
     }
@@ -105,15 +120,11 @@ export function AjustesPage() {
 
   async function cargarTasas() {
     setIsLoadingTasas(true);
-    try {
-      const data = await apiClient<TasaCambioVigenteDTO>('/finanzas/tasas/vigente');
-      setTasaVigente(data);
-      if (data.tasaOficialBcv) setTasaOficialBcvInput(data.tasaOficialBcv);
-      if (data.tasaParalelo) setTasaParaleloInput(data.tasaParalelo);
-      if (data.tasaActivaEntrenador) setTasaActivaInput(data.tasaActivaEntrenador);
-      actualizarCalculosVes(data.tasaActivaEntrenador || '66.5000', calculadoraUsd);
-    } catch {
-      const fallback: TasaCambioVigenteDTO = {
+    setTasasError(null);
+
+    // MODO DEMO EXPLÍCITO (isDemoMode): tasa de ejemplo solo con la bandera activa.
+    if (isDemoMode) {
+      const demoTasa: TasaCambioVigenteDTO = {
         id: 'tasa-default',
         entrenadorId: 'coach-1',
         tasaOficialBcv: '66.5000',
@@ -124,8 +135,28 @@ export function AjustesPage() {
         fuente: 'oficial_bcv',
         fechaActualizacionUtc: new Date().toISOString(),
       };
-      setTasaVigente(fallback);
+      setTasaVigente(demoTasa);
+      setTasaOficialBcvInput('66.5000');
+      setTasaParaleloInput('74.2000');
+      setTasaActivaInput('66.5000');
       actualizarCalculosVes('66.5000', calculadoraUsd);
+      setIsLoadingTasas(false);
+      return;
+    }
+
+    try {
+      const data = await apiClient<TasaCambioVigenteDTO>('/finanzas/tasas/vigente');
+      setTasaVigente(data);
+      if (data.tasaOficialBcv) setTasaOficialBcvInput(data.tasaOficialBcv);
+      if (data.tasaParalelo) setTasaParaleloInput(data.tasaParalelo);
+      if (data.tasaActivaEntrenador) setTasaActivaInput(data.tasaActivaEntrenador);
+      actualizarCalculosVes(data.tasaActivaEntrenador || '0', calculadoraUsd);
+    } catch (err: any) {
+      // D2: sin tasa demo en sesión real; error visible con reintento.
+      setTasaVigente(null);
+      setTasasError(
+        err?.message || 'No se pudo cargar la tasa vigente. Revisa tu conexión e inténtalo de nuevo.'
+      );
     } finally {
       setIsLoadingTasas(false);
     }
@@ -245,11 +276,9 @@ export function AjustesPage() {
       });
       setPlanes((prev) => prev.map((p) => (p.id === plan.id ? res : p)));
       triggerHaptic('success');
-    } catch {
-      // Optimistic fallback
-      setPlanes((prev) =>
-        prev.map((p) => (p.id === plan.id ? { ...p, activo: nuevoEstado } : p))
-      );
+    } catch (err: any) {
+      // D5: sin cambio optimista silencioso: el switch refleja solo estados confirmados.
+      setPlanesError(err?.message || 'No se pudo actualizar el plan. Inténtalo de nuevo.');
     }
   }
 
@@ -442,7 +471,24 @@ export function AjustesPage() {
             ))}
           </div>
 
-          {planes.length === 0 && !isLoadingPlanes && (
+          {planesError && (
+            <div
+              role="alert"
+              className="p-4 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-bold flex items-center gap-2"
+            >
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{planesError}</span>
+              <button
+                type="button"
+                onClick={() => cargarPlanes()}
+                className="ml-auto underline hover:no-underline cursor-pointer"
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
+
+          {planes.length === 0 && !isLoadingPlanes && !planesError && (
             <div className="p-12 text-center rounded-3xl bg-card border border-dashed border-border/80">
               <CreditCard className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-40" />
               <h3 className="font-bold text-foreground">No tienes planes comerciales creados</h3>
@@ -485,6 +531,23 @@ export function AjustesPage() {
                 <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 shrink-0" />
                   <span>{tasaSuccessMsg}</span>
+                </div>
+              )}
+
+              {tasasError && (
+                <div
+                  role="alert"
+                  className="p-3 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-center gap-2"
+                >
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{tasasError}</span>
+                  <button
+                    type="button"
+                    onClick={() => cargarTasas()}
+                    className="ml-auto underline hover:no-underline cursor-pointer"
+                  >
+                    Reintentar
+                  </button>
                 </div>
               )}
 

@@ -1,13 +1,39 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiClient } from '../../lib/api-client';
+import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
+import {
+  formatDuracionMinutos,
+  formatFechaCalendario,
+  formatRangoHorasLocal,
+} from '../../lib/date-format';
+import {
+  etiquetaEstadoSesion,
+  parsearNotasAlumno,
+  type TonoSemaforo,
+} from '../../lib/adherencia';
+import { normalizarPesoPrescritoTexto } from '../../lib/weight-unit';
+import { construirPayloadCheckinAntropometrico } from '../../lib/antropometria-checkin';
+import {
+  NOMBRES_DIAS_SEMANA,
+  OPCIONES_DIAS_SEMANA,
+  actualizarConfiguracionBloque,
+  crearBloqueEdicion,
+  crearEjercicioEdicion,
+  generarTituloBloque,
+  parsearBloqueParaEdicion,
+  type BloqueEdicion,
+} from '../../lib/rutina-bloques';
+import { CampoPesoPrescrito } from '../../components/entrenador/CampoPesoPrescrito';
+import { SelectorPlantillaAsignacion } from '../../components/entrenador/SelectorPlantillaAsignacion';
 import {
   PerfilAlumnoDetalleDTO,
   ResumenFinancieroAlumnoDTO,
   Modalidad,
   TipoDocumento,
   EstadoAlumno,
+  EstadoSesion,
   MetodoPago,
   Moneda,
   PlanMembresiaDetalleDTO,
@@ -16,6 +42,9 @@ import {
   GuardarRutinaSemanalDTO,
   RutinaSemanalDetalleDTO,
   BloqueDiaRutinaDTO,
+  ControlAntropometricoDetalleDTO,
+  EvolucionCorporalDTO,
+  UUID_REGEX,
 } from '@guachafit/shared';
 import {
   ArrowLeft,
@@ -50,96 +79,68 @@ import {
   Search,
   FolderPlus,
   History,
+  ClipboardList,
 } from 'lucide-react';
 
 type TabType = 'resumen' | 'finanzas' | 'antropometria' | 'entrenamiento';
 
-const DIAS_SEMANA_MAP: Record<string, number> = {
-  lunes: 1,
-  martes: 2,
-  miercoles: 3,
-  miércoles: 3,
-  jueves: 4,
-  viernes: 5,
-  sabado: 6,
-  sábado: 6,
-  domingo: 7,
+
+/** Clases de chip por tono del estado de sesión (comparten paleta con el resto del panel). */
+const CLASES_TONO_SESION: Record<TonoSemaforo, string> = {
+  success: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  warning: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+  danger: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+  info: 'bg-primary/15 text-primary border-primary/30',
+  neutral: 'bg-secondary text-muted-foreground border-border',
 };
 
-const NOMBRES_DIAS_SEMANA: Record<number, string> = {
-  1: 'Lunes',
-  2: 'Martes',
-  3: 'Miércoles',
-  4: 'Jueves',
-  5: 'Viernes',
-  6: 'Sábado',
-  7: 'Domingo',
-};
-
-const OPCIONES_DIAS_SEMANA = [
-  { valor: 0, label: 'Flexible (Sin día fijo)' },
-  { valor: 1, label: 'Lunes' },
-  { valor: 2, label: 'Martes' },
-  { valor: 3, label: 'Miércoles' },
-  { valor: 4, label: 'Jueves' },
-  { valor: 5, label: 'Viernes' },
-  { valor: 6, label: 'Sábado' },
-  { valor: 7, label: 'Domingo' },
-];
-
-function generarTituloBloque(diaNumero: number, diaSugerido?: number, anotacion?: string): string {
-  const diaPrefijo = `Día ${diaNumero}`;
-  const nombreDia = diaSugerido && NOMBRES_DIAS_SEMANA[diaSugerido] ? NOMBRES_DIAS_SEMANA[diaSugerido] : undefined;
-  const diaSugeridoStr = nombreDia ? ` (${nombreDia})` : '';
-  const anotacionLimpia = (anotacion || '').trim();
-  return anotacionLimpia ? `${diaPrefijo}${diaSugeridoStr}: ${anotacionLimpia}` : `${diaPrefijo}${diaSugeridoStr}`;
+/** Sesiones que cuentan como entrenamiento realizado (nunca una 'planificada'). */
+function esSesionRealizada(sesion?: SesionEntrenamientoDetalleDTO | null): boolean {
+  return (
+    sesion?.estado === EstadoSesion.COMPLETADA || sesion?.estado === EstadoSesion.EN_PROGRESO
+  );
 }
 
-function parsearBloqueParaEdicion(bloque: any, idx: number) {
-  const diaId = bloque.diaId || `d${idx + 1}`;
-  let diaNumero = idx + 1;
-  let diaSugerido =
-    typeof bloque.diaSugerido === 'number' && bloque.diaSugerido >= 1 && bloque.diaSugerido <= 7
-      ? bloque.diaSugerido
-      : undefined;
-  let anotacion = '';
+/**
+ * Feedback del alumno (WU5): RPE y notas con jerarquía — las etiquetas `[Título: valor]` del
+ * cierre (RPE, molestias, descanso) se muestran como chips y el comentario libre como cuerpo.
+ */
+function FeedbackAlumno({ notas }: { notas?: string | null }) {
+  const { etiquetas, textoLibre } = parsearNotasAlumno(notas);
+  if (etiquetas.length === 0 && !textoLibre) return null;
 
-  const rawTitulo = (bloque.titulo || '').trim();
-
-  // Regex para detectar "Día 1 (Lunes): Anotación" o "Día 1: Anotación" o "Día 1 (Lunes)" o "Día 1"
-  const match = rawTitulo.match(/^(?:D[ií]a|Bloque)\s*(\d+)(?:\s*\(([^)]+)\))?(?:\s*:\s*(.*))?$/i);
-
-  if (match) {
-    diaNumero = parseInt(match[1], 10) || idx + 1;
-    const diaTexto = (match[2] || '').toLowerCase().trim();
-    if (diaTexto && DIAS_SEMANA_MAP[diaTexto] && !diaSugerido) {
-      diaSugerido = DIAS_SEMANA_MAP[diaTexto];
-    }
-    anotacion = (match[3] || '').trim();
-  } else {
-    const colonIdx = rawTitulo.indexOf(':');
-    if (colonIdx !== -1) {
-      anotacion = rawTitulo.slice(colonIdx + 1).trim();
-    } else {
-      anotacion = rawTitulo;
-    }
-  }
-
-  const tituloFinal = generarTituloBloque(diaNumero, diaSugerido, anotacion);
-
-  return {
-    ...bloque,
-    diaId,
-    diaNumero,
-    diaSugerido,
-    anotacion,
-    titulo: tituloFinal,
-  };
+  return (
+    <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 space-y-2">
+      <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+        <MessageSquare className="h-3.5 w-3.5" />
+        Feedback del Alumno
+      </span>
+      {etiquetas.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {etiquetas.map((etiqueta, idx) => (
+            <span
+              key={`${etiqueta.titulo}-${idx}`}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-background/70 border border-amber-500/25 text-[11px]"
+            >
+              <span className="font-bold text-amber-400 uppercase tracking-wide text-[10px]">
+                {etiqueta.titulo}
+              </span>
+              {etiqueta.valor && (
+                <span className="font-mono font-black text-foreground">{etiqueta.valor}</span>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+      {textoLibre && <p className="text-xs text-foreground leading-relaxed">{textoLibre}</p>}
+    </div>
+  );
 }
 
 export function AlumnoDetallePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { isDemoMode } = useAuth();
 
   const [activeTab, setActiveTab] = useState<TabType>('resumen');
   const [alumno, setAlumno] = useState<PerfilAlumnoDetalleDTO | null>(null);
@@ -163,6 +164,9 @@ export function AlumnoDetallePage() {
   const [precioOverride, setPrecioOverride] = useState('');
   const [isSavingPerfil, setIsSavingPerfil] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  // D5: el éxito solo se declara con respuesta 2xx; el fallo se muestra y no muta estado local.
+  const [saveErrorMsg, setSaveErrorMsg] = useState<string | null>(null);
+  const [headerActionError, setHeaderActionError] = useState<string | null>(null);
 
   // Cobro Directo Modal State
   const [isCobroModalOpen, setIsCobroModalOpen] = useState(false);
@@ -173,6 +177,7 @@ export function AlumnoDetallePage() {
   const [cobroNotas, setCobroNotas] = useState('');
   const [isSubmittingCobro, setIsSubmittingCobro] = useState(false);
   const [cobroSuccessMsg, setCobroSuccessMsg] = useState<string | null>(null);
+  const [cobroErrorMsg, setCobroErrorMsg] = useState<string | null>(null);
 
   // Nuevo Control Antropométrico Modal State
   const [isAntroModalOpen, setIsAntroModalOpen] = useState(false);
@@ -184,82 +189,35 @@ export function AlumnoDetallePage() {
   const [antroMuslo, setAntroMuslo] = useState('58.0');
   const [antroNotas, setAntroNotas] = useState('');
   const [isSavingAntro, setIsSavingAntro] = useState(false);
+  // N3: el control antropométrico solo se declara guardado con 2xx del endpoint real.
+  const [antroErrorMsg, setAntroErrorMsg] = useState<string | null>(null);
+  // N3: error honesto al re-consultar los controles reales del alumno (nunca lista "vaciada" en silencio).
+  const [controlesErrorMsg, setControlesErrorMsg] = useState<string | null>(null);
 
-  // Mock de controles antropométricos anteriores para evolución
+  // Controles antropométricos reales del alumno. En modo demo se cargan fixtures locales;
+  // en sesión real, sin dato => lista vacía (nunca mediciones inventadas). Los campos
+  // opcionales pueden venir nulos de la API y la UI los muestra como "N/D".
   const [controlesAntro, setControlesAntro] = useState<Array<{
     id: string;
     fecha: string;
     pesoKg: string;
-    grasaPorcentaje: string;
-    cinturaCm: string;
-    brazoCm: string;
-    pechoCm: string;
-    musloCm: string;
-  }>>([
-    {
-      id: 'antro-1',
-      fecha: '2026-09-01',
-      pesoKg: '78.50',
-      grasaPorcentaje: '16.2',
-      cinturaCm: '82.0',
-      brazoCm: '37.5',
-      pechoCm: '102.0',
-      musloCm: '58.0',
-    },
-    {
-      id: 'antro-0',
-      fecha: '2026-08-01',
-      pesoKg: '80.80',
-      grasaPorcentaje: '17.8',
-      cinturaCm: '84.5',
-      brazoCm: '37.0',
-      pechoCm: '101.0',
-      musloCm: '57.5',
-    },
-  ]);
+    grasaPorcentaje: string | null;
+    cinturaCm: string | null;
+    brazoCm: string | null;
+    pechoCm: string | null;
+    musloCm: string | null;
+  }>>([]);
 
-  // Planificación semanal de entrenamiento por bloques de días
-  const [rutinaSemanal, setRutinaSemanal] = useState<BloqueDiaRutinaDTO[]>([
-    {
-      diaId: 'd1',
-      diaSugerido: 1,
-      titulo: 'Día 1 (Lunes): Empuje & Pectoral / Tríceps',
-      enfoque: 'Hipertrofia e Intensidad RPE 8',
-      ejercicios: [
-        { id: 'e1', nombre: 'Press Plano con Mancuernas', series: 4, reps: '8-10', peso: '28kg', rpe: '8.0', descansoSegundos: 90 },
-        { id: 'e2', nombre: 'Press Inclinado en Multipower', series: 3, reps: '10-12', peso: '60kg', rpe: '8.5', descansoSegundos: 90 },
-        { id: 'e3', nombre: 'Fondos en Paralelas Asistidos', series: 3, reps: '12', peso: 'Corporal', rpe: '8.0', descansoSegundos: 90 },
-        { id: 'e4', nombre: 'Extensiones de Tríceps en Polea', series: 4, reps: '12-15', peso: '25kg', rpe: '9.0', descansoSegundos: 60 },
-      ],
-    },
-    {
-      diaId: 'd2',
-      diaSugerido: 3,
-      titulo: 'Día 2 (Miércoles): Tracción & Espalda / Bíceps',
-      enfoque: 'Volumen y Control Escapular',
-      ejercicios: [
-        { id: 'e5', nombre: 'Jalón al Pecho Agarre Neutro', series: 4, reps: '10-12', peso: '65kg', rpe: '8.0', descansoSegundos: 90 },
-        { id: 'e6', nombre: 'Remo con Barra T apoyado', series: 4, reps: '8-10', peso: '50kg', rpe: '8.5', descansoSegundos: 90 },
-        { id: 'e7', nombre: 'Face Pulls en Polea Alta', series: 3, reps: '15', peso: '20kg', rpe: '7.5', descansoSegundos: 60 },
-        { id: 'e8', nombre: 'Curl con Barra Z de Pie', series: 3, reps: '10-12', peso: '30kg', rpe: '8.5', descansoSegundos: 60 },
-      ],
-    },
-    {
-      diaId: 'd3',
-      diaSugerido: 5,
-      titulo: 'Día 3 (Viernes): Pierna & Enfoque Cuádriceps / Isquios',
-      enfoque: 'Fuerza Controlada (Cuidar Rodilla)',
-      ejercicios: [
-        { id: 'e9', nombre: 'Prensa Inclinada 45°', series: 4, reps: '10-12', peso: '140kg', rpe: '8.0', descansoSegundos: 120 },
-        { id: 'e10', nombre: 'Curl Femoral Tumbado', series: 4, reps: '12', peso: '45kg', rpe: '8.5', descansoSegundos: 90 },
-        { id: 'e11', nombre: 'Extensión de Cuádriceps en Máquina', series: 3, reps: '15', peso: '50kg', rpe: '9.0', descansoSegundos: 60 },
-        { id: 'e12', nombre: 'Elevación de Gemelos en Máquina', series: 4, reps: '15', peso: '60kg', rpe: '8.0', descansoSegundos: 60 },
-      ],
-    },
-  ]);
+  // Planificación semanal de entrenamiento por bloques de días (vacía hasta cargar la real;
+  // en modo demo se hidrata con fixtures locales).
+  const [rutinaSemanal, setRutinaSemanal] = useState<BloqueDiaRutinaDTO[]>([]);
 
   // Workout & Routine Management State
   const [historialSesiones, setHistorialSesiones] = useState<SesionEntrenamientoDetalleDTO[]>([]);
+  const [historialLimit, setHistorialLimit] = useState(30);
+  const [isCargandoHistorial, setIsCargandoHistorial] = useState(false);
+  // N4: "cargar más" del historial con manejo de error visible (sin tragarse el fallo).
+  const [historialError, setHistorialError] = useState<string | null>(null);
   const [ejerciciosCatalogo, setEjerciciosCatalogo] = useState<EjercicioCatalogoDetalleDTO[]>([]);
   const [expandedSesionId, setExpandedSesionId] = useState<string | null>(null);
 
@@ -279,6 +237,9 @@ export function AlumnoDetallePage() {
   const [isSavingRutina, setIsSavingRutina] = useState(false);
   const [rutinaErrorMsg, setRutinaErrorMsg] = useState<string | null>(null);
 
+  // WU6b (RF-017): modal "Cargar desde Plantilla" del banco del coach
+  const [isPlantillaModalOpen, setIsPlantillaModalOpen] = useState(false);
+
   const calculateAge = (fechaStr: string): number => {
     if (!fechaStr) return 0;
     const nacimiento = new Date(fechaStr);
@@ -297,215 +258,306 @@ export function AlumnoDetallePage() {
     setIsLoading(true);
     setError(null);
 
+    // MODO DEMO EXPLÍCITO (isDemoMode): fixtures locales y cero llamadas contra la API real.
+    // Los datos de ejemplo SOLO pueden mostrarse con la bandera activa (banner global visible).
+    if (isDemoMode) {
+      const demoPerfil: PerfilAlumnoDetalleDTO = {
+        id,
+        usuarioId: 'user-demo-' + id,
+        entrenadorId: 'coach-01',
+        tipoDocumento: TipoDocumento.V,
+        numeroDocumento: '24123456',
+        nombres: 'Carlos Alberto',
+        apellidos: 'Mendoza Silva',
+        email: 'carlos.mendoza@email.com',
+        fechaNacimiento: '1998-05-14',
+        edadCalculada: 28,
+        telefonoWhatsapp: '+584121234567',
+        modalidad: Modalidad.PRESENCIAL,
+        estadoActivacion: EstadoAlumno.ACTIVO,
+        tasaFijadaOverride: null,
+        fichaSaludPrivada:
+          'Cirugía de rodilla en 2022. Rango controlado en prensa, evitar sentadilla libre pesada.',
+        planActivoId: 'plan-presencial',
+        planActivoNombre: 'Presencial Completo Sala',
+        precioAcordadoOverride: '40.00',
+        semaforoPago: 'al_dia',
+        createdAtUtc: new Date().toISOString(),
+      };
+      setAlumno(demoPerfil);
+      setNombres(demoPerfil.nombres);
+      setApellidos(demoPerfil.apellidos);
+      setTipoDocumento(demoPerfil.tipoDocumento);
+      setNumeroDocumento(demoPerfil.numeroDocumento);
+      setFechaNacimiento(demoPerfil.fechaNacimiento);
+      setTelefonoWhatsapp(demoPerfil.telefonoWhatsapp);
+      setModalidad(demoPerfil.modalidad);
+      setFichaSaludPrivada(demoPerfil.fichaSaludPrivada || '');
+      setSelectedPlanId(demoPerfil.planActivoId || '');
+      setPrecioOverride('40.00');
+
+      setFinanzas({
+        alumnoId: id,
+        usuarioId: 'user-demo-' + id,
+        saldoPendienteTotalUsd: '0.00',
+        totalPagadoHistoricoUsd: '320.00',
+        totalPagadoMesActualUsd: '40.00',
+        cuotaMesActual: {
+          id: 'cuota-actual-' + id,
+          periodo: '2026-09',
+          montoTotalUsd: '40.00',
+          montoPagadoUsd: '40.00',
+          saldoPendienteUsd: '0.00',
+          estado: 'al_dia',
+          fechaVencimiento: '2026-09-30T23:59:59.000Z',
+        },
+        transacciones: [
+          {
+            id: 'tx-001',
+            cuotaId: 'cuota-actual-' + id,
+            montoUsd: '40.00',
+            montoBs: '2600.00',
+            metodoPago: 'pago_movil',
+            referencia: 'REF-789456',
+            estado: 'aprobado',
+            createdAtUtc: '2026-09-02T14:30:00.000Z',
+          },
+          {
+            id: 'tx-000',
+            cuotaId: 'cuota-anterior-' + id,
+            montoUsd: '40.00',
+            montoBs: undefined,
+            metodoPago: 'efectivo_usd',
+            referencia: 'Cobro en Sala',
+            estado: 'aprobado',
+            createdAtUtc: '2026-08-01T10:15:00.000Z',
+          },
+        ],
+      });
+
+      setPlanesCatalogo([
+        {
+          id: 'plan-presencial',
+          entrenadorId: 'coach-01',
+          nombre: 'Presencial Completo Sala',
+          descripcion: 'Acceso a sala de pesas, plan personalizado y asesoría en directo',
+          precioBaseUsd: '40.00',
+          duracionMeses: 1,
+          beneficios: [
+            'Rutina interactiva',
+            'Monitoreo diario',
+            '1 Check-in antropométrico quincenal',
+          ],
+          activo: true,
+          createdAtUtc: new Date().toISOString(),
+          updatedAtUtc: new Date().toISOString(),
+        },
+        {
+          id: 'plan-online',
+          entrenadorId: 'coach-01',
+          nombre: 'Asesoría Online & Nutrición',
+          descripcion: 'Plan a distancia con seguimiento por video y ajustes semanales',
+          precioBaseUsd: '30.00',
+          duracionMeses: 1,
+          beneficios: ['Rutina en App', 'Macro-tracking', 'Check-in fotográfico quincenal'],
+          activo: true,
+          createdAtUtc: new Date().toISOString(),
+          updatedAtUtc: new Date().toISOString(),
+        },
+      ]);
+
+      const demoUltimaSesion: SesionEntrenamientoDetalleDTO = {
+        id: 'sesion-last-' + id,
+        alumnoId: id,
+        fechaProgramada: '2026-09-12',
+        estado: 'completada' as any,
+        porcentajeCumplimiento: '100.00',
+        timezoneCliente: 'America/Caracas',
+        notasAlumno:
+          '[RPE: 8.0/10] • [Molestia: Ninguna 👍] • Buen bombeo en cuadriceps, cuidando rango en rodilla.',
+        createdAtUtc: new Date().toISOString(),
+        updatedAtUtc: new Date().toISOString(),
+        ejercicios: [
+          {
+            id: 'ej-1',
+            sesionId: 'sesion-last-' + id,
+            ejercicioId: 'ej-prensa',
+            orden: 1,
+            notasCoach: 'Rango controlado',
+            ejercicio: {
+              id: 'ej-prensa',
+              nombre: 'Prensa Inclinada 45°',
+              grupoMuscular: 'Cuádriceps',
+              activo: true,
+              createdAtUtc: new Date().toISOString(),
+            },
+            series: [
+              { id: 's-1', ejercicioSesionId: 'ej-1', numeroSerie: 1, repsObjetivo: 12, repsLogradas: 12, pesoKg: '120.00', rpe: '7.5', completada: true },
+              { id: 's-2', ejercicioSesionId: 'ej-1', numeroSerie: 2, repsObjetivo: 10, repsLogradas: 10, pesoKg: '140.00', rpe: '8.0', completada: true },
+            ],
+          },
+        ],
+      };
+      setUltimaSesion(demoUltimaSesion);
+      setHistorialSesiones([demoUltimaSesion]);
+
+      setEjerciciosCatalogo([
+        { id: '11111111-1111-4111-8111-111111111c01', nombre: 'Press Plano con Mancuernas', grupoMuscular: 'Pecho', activo: true, createdAtUtc: new Date().toISOString() },
+        { id: '11111111-1111-4111-8111-111111111c02', nombre: 'Press Inclinado en Multipower', grupoMuscular: 'Pecho', activo: true, createdAtUtc: new Date().toISOString() },
+        { id: '11111111-1111-4111-8111-111111111c03', nombre: 'Fondos en Paralelas Asistidos', grupoMuscular: 'Pecho', activo: true, createdAtUtc: new Date().toISOString() },
+        { id: '11111111-1111-4111-8111-111111111c04', nombre: 'Extensiones de Tríceps en Polea', grupoMuscular: 'Brazos', activo: true, createdAtUtc: new Date().toISOString() },
+        { id: '11111111-1111-4111-8111-111111111c05', nombre: 'Jalón al Pecho Agarre Neutro', grupoMuscular: 'Espalda', activo: true, createdAtUtc: new Date().toISOString() },
+        { id: '11111111-1111-4111-8111-111111111c06', nombre: 'Remo con Barra T apoyado', grupoMuscular: 'Espalda', activo: true, createdAtUtc: new Date().toISOString() },
+        { id: '11111111-1111-4111-8111-111111111c07', nombre: 'Prensa Inclinada 45°', grupoMuscular: 'Piernas', activo: true, createdAtUtc: new Date().toISOString() },
+        { id: '11111111-1111-4111-8111-111111111c08', nombre: 'Curl Femoral Tumbado', grupoMuscular: 'Piernas', activo: true, createdAtUtc: new Date().toISOString() },
+        { id: '11111111-1111-4111-8111-111111111c09', nombre: 'Elevaciones Laterales con Mancuerna', grupoMuscular: 'Hombros', activo: true, createdAtUtc: new Date().toISOString() },
+        { id: '11111111-1111-4111-8111-111111111c10', nombre: 'Plancha Abdominal Isométrica', grupoMuscular: 'Core', activo: true, createdAtUtc: new Date().toISOString() },
+      ]);
+
+      setRutinaSemanal([
+        {
+          diaId: 'd1',
+          diaSugerido: 1,
+          titulo: 'Día 1 (Lunes): Empuje & Pectoral / Tríceps',
+          enfoque: 'Hipertrofia e Intensidad RPE 8',
+          ejercicios: [
+            { id: 'e1', nombre: 'Press Plano con Mancuernas', series: 4, reps: '8-10', peso: '28kg', rpe: '8.0', descansoSegundos: 90 },
+            { id: 'e2', nombre: 'Press Inclinado en Multipower', series: 3, reps: '10-12', peso: '60kg', rpe: '8.5', descansoSegundos: 90 },
+            { id: 'e3', nombre: 'Fondos en Paralelas Asistidos', series: 3, reps: '12', peso: 'Corporal', rpe: '8.0', descansoSegundos: 90 },
+            { id: 'e4', nombre: 'Extensiones de Tríceps en Polea', series: 4, reps: '12-15', peso: '25kg', rpe: '9.0', descansoSegundos: 60 },
+          ],
+        },
+        {
+          diaId: 'd2',
+          diaSugerido: 3,
+          titulo: 'Día 2 (Miércoles): Tracción & Espalda / Bíceps',
+          enfoque: 'Volumen y Control Escapular',
+          ejercicios: [
+            { id: 'e5', nombre: 'Jalón al Pecho Agarre Neutro', series: 4, reps: '10-12', peso: '65kg', rpe: '8.0', descansoSegundos: 90 },
+            { id: 'e6', nombre: 'Remo con Barra T apoyado', series: 4, reps: '8-10', peso: '50kg', rpe: '8.5', descansoSegundos: 90 },
+            { id: 'e7', nombre: 'Face Pulls en Polea Alta', series: 3, reps: '15', peso: '20kg', rpe: '7.5', descansoSegundos: 60 },
+            { id: 'e8', nombre: 'Curl con Barra Z de Pie', series: 3, reps: '10-12', peso: '30kg', rpe: '8.5', descansoSegundos: 60 },
+          ],
+        },
+        {
+          diaId: 'd3',
+          diaSugerido: 5,
+          titulo: 'Día 3 (Viernes): Pierna & Enfoque Cuádriceps / Isquios',
+          enfoque: 'Fuerza Controlada (Cuidar Rodilla)',
+          ejercicios: [
+            { id: 'e9', nombre: 'Prensa Inclinada 45°', series: 4, reps: '10-12', peso: '140kg', rpe: '8.0', descansoSegundos: 120 },
+            { id: 'e10', nombre: 'Curl Femoral Tumbado', series: 4, reps: '12', peso: '45kg', rpe: '8.5', descansoSegundos: 90 },
+            { id: 'e11', nombre: 'Extensión de Cuádriceps en Máquina', series: 3, reps: '15', peso: '50kg', rpe: '9.0', descansoSegundos: 60 },
+            { id: 'e12', nombre: 'Elevación de Gemelos en Máquina', series: 4, reps: '15', peso: '60kg', rpe: '8.0', descansoSegundos: 60 },
+          ],
+        },
+      ]);
+
+      setControlesAntro([
+        {
+          id: 'antro-1',
+          fecha: '2026-09-01',
+          pesoKg: '78.50',
+          grasaPorcentaje: '16.2',
+          cinturaCm: '82.0',
+          brazoCm: '37.5',
+          pechoCm: '102.0',
+          musloCm: '58.0',
+        },
+        {
+          id: 'antro-0',
+          fecha: '2026-08-01',
+          pesoKg: '80.80',
+          grasaPorcentaje: '17.8',
+          cinturaCm: '84.5',
+          brazoCm: '37.0',
+          pechoCm: '101.0',
+          musloCm: '57.5',
+        },
+      ]);
+
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      // 1. Perfil del Alumno
+      // 1. Perfil del Alumno — sin perfil real no hay expediente: error honesto con reintento.
       const perfilRes = await apiClient<PerfilAlumnoDetalleDTO>(`/alumnos/${id}`).catch(() => null);
 
-      if (perfilRes) {
-        setAlumno(perfilRes);
-        setNombres(perfilRes.nombres);
-        setApellidos(perfilRes.apellidos);
-        setTipoDocumento(perfilRes.tipoDocumento);
-        setNumeroDocumento(perfilRes.numeroDocumento);
-        setFechaNacimiento(perfilRes.fechaNacimiento);
-        setTelefonoWhatsapp(perfilRes.telefonoWhatsapp);
-        setModalidad(perfilRes.modalidad);
-        setTasaFijadaOverride(perfilRes.tasaFijadaOverride || '');
-        setFichaSaludPrivada(perfilRes.fichaSaludPrivada || '');
-        setSelectedPlanId(perfilRes.planActivoId || '');
-        setPrecioOverride(perfilRes.precioAcordadoOverride || '');
-      } else {
-        // Fallback demo local para cuando se navega con datos de prueba
-        const demoPerfil: PerfilAlumnoDetalleDTO = {
-          id: id,
-          usuarioId: 'user-demo-' + id,
-          entrenadorId: 'coach-01',
-          tipoDocumento: TipoDocumento.V,
-          numeroDocumento: '24123456',
-          nombres: 'Carlos Alberto',
-          apellidos: 'Mendoza Silva',
-          email: 'carlos.mendoza@email.com',
-          fechaNacimiento: '1998-05-14',
-          edadCalculada: 28,
-          telefonoWhatsapp: '+584121234567',
-          modalidad: Modalidad.PRESENCIAL,
-          estadoActivacion: EstadoAlumno.ACTIVO,
-          tasaFijadaOverride: null,
-          fichaSaludPrivada: 'Cirugía de rodilla en 2022. Rango controlado en prensa, evitar sentadilla libre pesada.',
-          planActivoId: 'plan-presencial',
-          planActivoNombre: 'Presencial Completo Sala',
-          precioAcordadoOverride: '40.00',
-          semaforoPago: 'al_dia',
-          createdAtUtc: new Date().toISOString(),
-        };
-        setAlumno(demoPerfil);
-        setNombres(demoPerfil.nombres);
-        setApellidos(demoPerfil.apellidos);
-        setTipoDocumento(demoPerfil.tipoDocumento);
-        setNumeroDocumento(demoPerfil.numeroDocumento);
-        setFechaNacimiento(demoPerfil.fechaNacimiento);
-        setTelefonoWhatsapp(demoPerfil.telefonoWhatsapp);
-        setModalidad(demoPerfil.modalidad);
-        setFichaSaludPrivada(demoPerfil.fichaSaludPrivada || '');
-        setSelectedPlanId(demoPerfil.planActivoId || '');
-        setPrecioOverride('40.00');
+      if (!perfilRes) {
+        setError(
+          'No se pudo cargar el expediente del alumno. Revisa tu conexión e inténtalo de nuevo.'
+        );
+        return;
       }
 
-      // 2. Historial Financiero
+      setAlumno(perfilRes);
+      setNombres(perfilRes.nombres);
+      setApellidos(perfilRes.apellidos);
+      setTipoDocumento(perfilRes.tipoDocumento);
+      setNumeroDocumento(perfilRes.numeroDocumento);
+      setFechaNacimiento(perfilRes.fechaNacimiento);
+      setTelefonoWhatsapp(perfilRes.telefonoWhatsapp);
+      setModalidad(perfilRes.modalidad);
+      setTasaFijadaOverride(perfilRes.tasaFijadaOverride || '');
+      setFichaSaludPrivada(perfilRes.fichaSaludPrivada || '');
+      setSelectedPlanId(perfilRes.planActivoId || '');
+      setPrecioOverride(perfilRes.precioAcordadoOverride || '');
+
+      // 2. Historial financiero (null = fallo: la pestaña lo advierte, no inventa cifras)
       const finanzasRes = await apiClient<ResumenFinancieroAlumnoDTO>(
         `/finanzas/clientes/${id}/historial`
       ).catch(() => null);
+      setFinanzas(finanzasRes ?? null);
 
-      if (finanzasRes) {
-        setFinanzas(finanzasRes);
-      } else {
-        // Mock financiero realista
-        setFinanzas({
-          alumnoId: id,
-          usuarioId: 'user-demo-' + id,
-          saldoPendienteTotalUsd: '0.00',
-          totalPagadoHistoricoUsd: '320.00',
-          totalPagadoMesActualUsd: '40.00',
-          cuotaMesActual: {
-            id: 'cuota-actual-' + id,
-            periodo: '2026-09',
-            montoTotalUsd: '40.00',
-            montoPagadoUsd: '40.00',
-            saldoPendienteUsd: '0.00',
-            estado: 'al_dia',
-            fechaVencimiento: '2026-09-30T23:59:59.000Z',
-          },
-          transacciones: [
-            {
-              id: 'tx-001',
-              cuotaId: 'cuota-actual-' + id,
-              montoUsd: '40.00',
-              montoBs: '2600.00',
-              metodoPago: 'pago_movil',
-              referencia: 'REF-789456',
-              estado: 'aprobado',
-              createdAtUtc: '2026-09-02T14:30:00.000Z',
-            },
-            {
-              id: 'tx-000',
-              cuotaId: 'cuota-anterior-' + id,
-              montoUsd: '40.00',
-              montoBs: undefined,
-              metodoPago: 'efectivo_usd',
-              referencia: 'Cobro en Sala',
-              estado: 'aprobado',
-              createdAtUtc: '2026-08-01T10:15:00.000Z',
-            },
-          ],
-        });
-      }
+      // 3. Catálogo de planes (vacío real = sin planes, nunca planes inventados)
+      const planesRes = await apiClient<PlanMembresiaDetalleDTO[]>('/finanzas/planes').catch(
+        () => []
+      );
+      setPlanesCatalogo(Array.isArray(planesRes) ? planesRes : []);
 
-      // 3. Catálogo de Planes
-      const planesRes = await apiClient<PlanMembresiaDetalleDTO[]>('/finanzas/planes').catch(() => []);
-      if (planesRes && planesRes.length > 0) {
-        setPlanesCatalogo(planesRes);
-      } else {
-        setPlanesCatalogo([
-          {
-            id: 'plan-presencial',
-            entrenadorId: 'coach-01',
-            nombre: 'Presencial Completo Sala',
-            descripcion: 'Acceso a sala de pesas, plan personalizado y asesoría en directo',
-            precioBaseUsd: '40.00',
-            duracionMeses: 1,
-            beneficios: ['Rutina interactiva', 'Monitoreo diario', '1 Check-in antropométrico quincenal'],
-            activo: true,
-            createdAtUtc: new Date().toISOString(),
-            updatedAtUtc: new Date().toISOString(),
-          },
-          {
-            id: 'plan-online',
-            entrenadorId: 'coach-01',
-            nombre: 'Asesoría Online & Nutrición',
-            descripcion: 'Plan a distancia con seguimiento por video y ajustes semanales',
-            precioBaseUsd: '30.00',
-            duracionMeses: 1,
-            beneficios: ['Rutina en App', 'Macro-tracking', 'Check-in fotográfico quincenal'],
-            activo: true,
-            createdAtUtc: new Date().toISOString(),
-            updatedAtUtc: new Date().toISOString(),
-          },
-        ]);
-      }
-
-      // 4. Última sesión
+      // 4. Última sesión: sin dato => sin tarjeta de "último entrenamiento" (nunca fabricada).
       const sesionRes = await apiClient<SesionEntrenamientoDetalleDTO>(
         `/sesiones/alumno/${id}/ultima`
       ).catch(() => null);
+      setUltimaSesion(sesionRes ?? null);
 
-      if (sesionRes) {
-        setUltimaSesion(sesionRes);
-      } else {
-        setUltimaSesion({
-          id: 'sesion-last-' + id,
-          alumnoId: id,
-          fechaProgramada: '2026-09-12',
-          estado: 'completada' as any,
-          porcentajeCumplimiento: '100.00',
-          timezoneCliente: 'America/Caracas',
-          notasAlumno: '[RPE: 8.0/10] • [Molestia: Ninguna 👍] • Buen bombeo en cuadriceps, cuidando rango en rodilla.',
-          createdAtUtc: new Date().toISOString(),
-          updatedAtUtc: new Date().toISOString(),
-          ejercicios: [
-            {
-              id: 'ej-1',
-              sesionId: 'sesion-last-' + id,
-              ejercicioId: 'ej-prensa',
-              orden: 1,
-              notasCoach: 'Rango controlado',
-              ejercicio: { id: 'ej-prensa', nombre: 'Prensa Inclinada 45°', grupoMuscular: 'Cuádriceps', activo: true, createdAtUtc: new Date().toISOString() },
-              series: [
-                { id: 's-1', ejercicioSesionId: 'ej-1', numeroSerie: 1, repsObjetivo: 12, repsLogradas: 12, pesoKg: '120.00', rpe: '7.5', completada: true },
-                { id: 's-2', ejercicioSesionId: 'ej-1', numeroSerie: 2, repsObjetivo: 10, repsLogradas: 10, pesoKg: '140.00', rpe: '8.0', completada: true },
-              ],
-            },
-          ],
-        });
-      }
-
-      // 5. Historial completo de sesiones
+      // 5. Historial completo de sesiones (la API acepta limit 1..100; default 30)
       const historialRes = await apiClient<SesionEntrenamientoDetalleDTO[]>(
-        `/sesiones/alumno/${id}/historial`
+        `/sesiones/alumno/${id}/historial?limit=${historialLimit}`
       ).catch(() => []);
-      if (historialRes && historialRes.length > 0) {
+      if (Array.isArray(historialRes) && historialRes.length > 0) {
         setHistorialSesiones(historialRes);
       } else if (sesionRes) {
         setHistorialSesiones([sesionRes]);
+      } else {
+        setHistorialSesiones([]);
       }
 
-      // 6. Catálogo de ejercicios
+      // 6. Catálogo de ejercicios (vacío real => estado vacío explícito en el modal)
       const catalogoRes = await apiClient<EjercicioCatalogoDetalleDTO[]>(
         '/ejercicios/catalogo'
       ).catch(() => []);
-      if (catalogoRes && catalogoRes.length > 0) {
-        setEjerciciosCatalogo(catalogoRes);
-      } else {
-        setEjerciciosCatalogo([
-          { id: 'ej-c1', nombre: 'Press Plano con Mancuernas', grupoMuscular: 'Pecho', activo: true, createdAtUtc: new Date().toISOString() },
-          { id: 'ej-c2', nombre: 'Press Inclinado en Multipower', grupoMuscular: 'Pecho', activo: true, createdAtUtc: new Date().toISOString() },
-          { id: 'ej-c3', nombre: 'Fondos en Paralelas Asistidos', grupoMuscular: 'Pecho', activo: true, createdAtUtc: new Date().toISOString() },
-          { id: 'ej-c4', nombre: 'Extensiones de Tríceps en Polea', grupoMuscular: 'Brazos', activo: true, createdAtUtc: new Date().toISOString() },
-          { id: 'ej-c5', nombre: 'Jalón al Pecho Agarre Neutro', grupoMuscular: 'Espalda', activo: true, createdAtUtc: new Date().toISOString() },
-          { id: 'ej-c6', nombre: 'Remo con Barra T apoyado', grupoMuscular: 'Espalda', activo: true, createdAtUtc: new Date().toISOString() },
-          { id: 'ej-c7', nombre: 'Prensa Inclinada 45°', grupoMuscular: 'Piernas', activo: true, createdAtUtc: new Date().toISOString() },
-          { id: 'ej-c8', nombre: 'Curl Femoral Tumbado', grupoMuscular: 'Piernas', activo: true, createdAtUtc: new Date().toISOString() },
-          { id: 'ej-c9', nombre: 'Elevaciones Laterales con Mancuerna', grupoMuscular: 'Hombros', activo: true, createdAtUtc: new Date().toISOString() },
-          { id: 'ej-c10', nombre: 'Plancha Abdominal Isométrica', grupoMuscular: 'Core', activo: true, createdAtUtc: new Date().toISOString() },
-        ]);
-      }
+      setEjerciciosCatalogo(Array.isArray(catalogoRes) ? catalogoRes : []);
 
-      // 7. Rutina semanal activa persistida
+      // 7. Rutina semanal activa persistida (sin rutina => estado vacío honesto)
       const rutinaActivaRes = await apiClient<RutinaSemanalDetalleDTO>(
         `/rutinas/alumno/${id}/activa`
       ).catch(() => null);
-      if (rutinaActivaRes && Array.isArray(rutinaActivaRes.bloques) && rutinaActivaRes.bloques.length > 0) {
-        setRutinaSemanal(rutinaActivaRes.bloques);
-      }
+      setRutinaSemanal(
+        rutinaActivaRes &&
+          Array.isArray(rutinaActivaRes.bloques) &&
+          rutinaActivaRes.bloques.length > 0
+          ? rutinaActivaRes.bloques
+          : []
+      );
+
+      // 8. N3: controles antropométricos reales del alumno (vacío real => estado vacío explícito;
+      // fallo de carga => aviso visible, nunca una tabla vacía pasando por "sin registros").
+      const controlesOk = await refrescarControlesAntro(perfilRes.usuarioId);
+      setControlesErrorMsg(
+        controlesOk ? null : 'No se pudieron cargar los controles antropométricos.'
+      );
     } catch {
       setError('Error al cargar la información del alumno.');
     } finally {
@@ -515,7 +567,33 @@ export function AlumnoDetallePage() {
 
   useEffect(() => {
     loadData();
-  }, [id]);
+  }, [id, isDemoMode]);
+
+  /**
+   * WU5: "cargar más" del historial. La API acepta `limit` (máx. 100) y re-consulta la página
+   * completa con un techo mayor; no hay offset, así que se reemplaza la lista.
+   * N4: el fallo de red se muestra en la sección (el historial previo permanece intacto).
+   */
+  const verMasHistorial = async () => {
+    if (!id || isCargandoHistorial || historialLimit >= 100) return;
+    const nuevoLimite = Math.min(historialLimit + 30, 100);
+    setIsCargandoHistorial(true);
+    setHistorialError(null);
+    try {
+      const res = await apiClient<SesionEntrenamientoDetalleDTO[]>(
+        `/sesiones/alumno/${id}/historial?limit=${nuevoLimite}`
+      );
+      setHistorialSesiones(Array.isArray(res) ? res : []);
+      setHistorialLimit(nuevoLimite);
+    } catch (err: any) {
+      // N4: sin inventar datos ni vaciar lo ya cargado; el error queda visible con reintento manual.
+      setHistorialError(
+        err?.message || 'No se pudo cargar más historial. Revisa tu conexión e inténtalo de nuevo.'
+      );
+    } finally {
+      setIsCargandoHistorial(false);
+    }
+  };
 
   // Accesibilidad: Cierre de modales con Escape
   useEffect(() => {
@@ -524,11 +602,55 @@ export function AlumnoDetallePage() {
         if (isCobroModalOpen) setIsCobroModalOpen(false);
         if (isAntroModalOpen) setIsAntroModalOpen(false);
         if (isRutinaModalOpen) setIsRutinaModalOpen(false);
+        if (isPlantillaModalOpen) setIsPlantillaModalOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isCobroModalOpen, isAntroModalOpen, isRutinaModalOpen]);
+  }, [isCobroModalOpen, isAntroModalOpen, isRutinaModalOpen, isPlantillaModalOpen]);
+
+  /**
+   * WU6b: refresca solo la rutina activa tras asignar una plantilla, sin disparar el
+   * estado de carga global (que desmontaría el modal de asignación antes de ver el resultado).
+   */
+  const refrescarRutinaActiva = async () => {
+    if (!id) return;
+    const res = await apiClient<RutinaSemanalDetalleDTO>(`/rutinas/alumno/${id}/activa`).catch(
+      () => null
+    );
+    if (res && Array.isArray(res.bloques) && res.bloques.length > 0) {
+      setRutinaSemanal(res.bloques);
+    }
+  };
+
+  /**
+   * N3: normaliza un control antropométrico real de la API a la fila de la tabla del expediente.
+   * Los perímetros opcionales sin dato quedan en null y la tabla los muestra como "N/D".
+   */
+  const mapearControlAntro = (control: ControlAntropometricoDetalleDTO) => ({
+    id: control.id,
+    fecha: control.fechaEvaluacion,
+    pesoKg: control.pesoKg,
+    grasaPorcentaje: control.porcentajeGrasa ?? null,
+    cinturaCm: control.perimetros?.cinturaCm ?? null,
+    brazoCm: control.perimetros?.brazoCm ?? null,
+    pechoCm: control.perimetros?.pechoCm ?? null,
+    musloCm: control.perimetros?.musloCm ?? null,
+  });
+
+  /**
+   * N3: re-consulta los controles reales del alumno (solo aprobados; el registro presencial del
+   * coach se aprueba de inmediato) y reemplaza la tabla, más reciente primero. Devuelve false si
+   * la llamada falla: el llamador decide si conservar lo que ya tenía; nunca se inventan medidas.
+   */
+  const refrescarControlesAntro = async (alumnoUsuarioId: string): Promise<boolean> => {
+    const res = await apiClient<EvolucionCorporalDTO>(
+      `/antropometria/evolucion/${alumnoUsuarioId}`
+    ).catch(() => null);
+    if (!res || !Array.isArray(res.evaluaciones)) return false;
+    setControlesAntro(res.evaluaciones.map(mapearControlAntro).reverse());
+    return true;
+  };
 
   // Guardar Cambios de Perfil & Ficha Médica
   const handleGuardarPerfil = async (e: React.FormEvent) => {
@@ -536,6 +658,7 @@ export function AlumnoDetallePage() {
     if (!id) return;
     setIsSavingPerfil(true);
     setSaveSuccessMsg(null);
+    setSaveErrorMsg(null);
 
     const payload = {
       nombres: nombres.trim(),
@@ -554,19 +677,11 @@ export function AlumnoDetallePage() {
       setAlumno((prev) => (prev ? { ...prev, ...res } : res));
       setSaveSuccessMsg('Expediente y ficha médica actualizados con éxito.');
       setTimeout(() => setSaveSuccessMsg(null), 2500);
-    } catch {
-      // Local optimistic update
-      setAlumno((prev) =>
-        prev
-          ? {
-              ...prev,
-              ...payload,
-              edadCalculada: calculateAge(payload.fechaNacimiento),
-            }
-          : null
+    } catch (err: any) {
+      // D5: el expediente solo cambia con respuesta OK; nunca éxito falso ni mutación local.
+      setSaveErrorMsg(
+        err?.message || 'No se pudo guardar el expediente. Revisa los datos e inténtalo de nuevo.'
       );
-      setSaveSuccessMsg('Expediente actualizado.');
-      setTimeout(() => setSaveSuccessMsg(null), 2500);
     } finally {
       setIsSavingPerfil(false);
     }
@@ -575,12 +690,15 @@ export function AlumnoDetallePage() {
   // Cambio de Estado de Activación (Pausar / Reactivar / Suspender)
   const handleCambiarEstado = async (nuevoEstado: EstadoAlumno) => {
     if (!id || !alumno) return;
+    setHeaderActionError(null);
 
     try {
       await apiClient.patch(`/alumnos/${id}/estado`, { nuevoEstado });
       setAlumno((prev) => (prev ? { ...prev, estadoActivacion: nuevoEstado } : null));
-    } catch {
-      setAlumno((prev) => (prev ? { ...prev, estadoActivacion: nuevoEstado } : null));
+    } catch (err: any) {
+      setHeaderActionError(
+        err?.message || 'No se pudo cambiar el estado del alumno. Inténtalo de nuevo.'
+      );
     }
   };
 
@@ -591,32 +709,30 @@ export function AlumnoDetallePage() {
       `¿Estás seguro de dar de baja a ${alumno.nombres} ${alumno.apellidos}?\n\nEsta acción archivará al alumno. Su historial deportivo, antropométrico y financiero permanecerá 100% protegido y podrás restaurarlo cuando regrese.`
     );
     if (!confirm) return;
+    setHeaderActionError(null);
 
     try {
       await apiClient.delete(`/alumnos/${id}`);
       setAlumno((prev) =>
         prev ? { ...prev, deletedAtUtc: new Date().toISOString(), estadoActivacion: EstadoAlumno.INACTIVO_PAUSADO } : null
       );
-    } catch {
-      setAlumno((prev) =>
-        prev ? { ...prev, deletedAtUtc: new Date().toISOString(), estadoActivacion: EstadoAlumno.INACTIVO_PAUSADO } : null
-      );
+    } catch (err: any) {
+      setHeaderActionError(err?.message || 'No se pudo archivar al alumno. Inténtalo de nuevo.');
     }
   };
 
   // Restaurar Alumno Archivado
   const handleRestaurar = async () => {
     if (!id || !alumno) return;
+    setHeaderActionError(null);
 
     try {
       await apiClient.patch(`/alumnos/${id}/restaurar`, {});
       setAlumno((prev) =>
         prev ? { ...prev, deletedAtUtc: null, estadoActivacion: EstadoAlumno.ACTIVO } : null
       );
-    } catch {
-      setAlumno((prev) =>
-        prev ? { ...prev, deletedAtUtc: null, estadoActivacion: EstadoAlumno.ACTIVO } : null
-      );
+    } catch (err: any) {
+      setHeaderActionError(err?.message || 'No se pudo restaurar al alumno. Inténtalo de nuevo.');
     }
   };
 
@@ -626,6 +742,7 @@ export function AlumnoDetallePage() {
     if (!id) return;
     setIsSubmittingCobro(true);
     setCobroSuccessMsg(null);
+    setCobroErrorMsg(null);
 
     const payload = {
       montoOriginal: cobroMonto,
@@ -644,65 +761,83 @@ export function AlumnoDetallePage() {
         setCobroSuccessMsg(null);
         loadData();
       }, 1500);
-    } catch {
-      // Optimistic update
-      const nuevoTotalMes = (Number(finanzas?.totalPagadoMesActualUsd || 0) + Number(cobroMonto)).toFixed(2);
-      const nuevoTotalHist = (Number(finanzas?.totalPagadoHistoricoUsd || 0) + Number(cobroMonto)).toFixed(2);
-
-      setFinanzas((prev) =>
-        prev
-          ? {
-              ...prev,
-              saldoPendienteTotalUsd: '0.00',
-              totalPagadoMesActualUsd: nuevoTotalMes,
-              totalPagadoHistoricoUsd: nuevoTotalHist,
-              cuotaMesActual: prev.cuotaMesActual
-                ? { ...prev.cuotaMesActual, estado: 'al_dia', saldoPendienteUsd: '0.00', montoPagadoUsd: cobroMonto }
-                : null,
-              transacciones: [
-                {
-                  id: 'tx-local-' + Date.now(),
-                  cuotaId: prev.cuotaMesActual?.id || 'cuota-directa',
-                  montoUsd: cobroMonto,
-                  metodoPago: cobroMetodo,
-                  referencia: cobroReferencia || 'Cobro en Sala',
-                  estado: 'aprobado',
-                  createdAtUtc: new Date().toISOString(),
-                },
-                ...prev.transacciones,
-              ],
-            }
-          : null
+    } catch (err: any) {
+      // D5: sin éxito falso ni transacción optimista; el cobro solo existe si el server lo aceptó.
+      setCobroErrorMsg(
+        err?.message || 'No se pudo registrar el cobro. Verifica los datos e inténtalo de nuevo.'
       );
-      setCobroSuccessMsg('Cobro directo registrado en sala.');
-      setTimeout(() => {
-        setIsCobroModalOpen(false);
-        setCobroSuccessMsg(null);
-      }, 1200);
     } finally {
       setIsSubmittingCobro(false);
     }
   };
 
-  // Registrar Nuevo Control Antropométrico
-  const handleGuardarAntro = (e: React.FormEvent) => {
+  // N3: "Registrar Control en Sala" persiste en la API real (POST /antropometria/checkin,
+  // rol ENTRENADOR => presencial_verificado aprobado de inmediato). En modo demo se conserva
+  // el comportamiento local con gate explícito; nunca un éxito falso.
+  const handleGuardarAntro = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAntroErrorMsg(null);
+
+    // MODO DEMO EXPLÍCITO: alta local simulada, solo con la bandera activa.
+    if (isDemoMode) {
+      const nuevo = {
+        id: 'antro-' + Date.now(),
+        fecha: new Date().toISOString().split('T')[0],
+        pesoKg: antroPeso,
+        grasaPorcentaje: antroGrasa,
+        cinturaCm: antroCintura,
+        brazoCm: antroBrazo,
+        pechoCm: antroPecho,
+        musloCm: antroMuslo,
+      };
+      setControlesAntro([nuevo, ...controlesAntro]);
+      setIsAntroModalOpen(false);
+      return;
+    }
+
+    // El service resuelve el alumno por `perfiles_alumno.usuario_id`: se envía el usuarioId real.
+    if (!alumno?.usuarioId) {
+      setAntroErrorMsg(
+        'No se pudo identificar al alumno del expediente. Recarga la página e inténtalo de nuevo.'
+      );
+      return;
+    }
+
     setIsSavingAntro(true);
+    try {
+      const payload = construirPayloadCheckinAntropometrico(alumno.usuarioId, {
+        pesoKg: antroPeso,
+        porcentajeGrasa: antroGrasa,
+        cinturaCm: antroCintura,
+        brazoCm: antroBrazo,
+        pechoCm: antroPecho,
+        musloCm: antroMuslo,
+      });
+      const creado = await apiClient<ControlAntropometricoDetalleDTO>('/antropometria/checkin', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
 
-    const nuevo = {
-      id: 'antro-' + Date.now(),
-      fecha: new Date().toISOString().split('T')[0],
-      pesoKg: antroPeso,
-      grasaPorcentaje: antroGrasa,
-      cinturaCm: antroCintura,
-      brazoCm: antroBrazo,
-      pechoCm: antroPecho,
-      musloCm: antroMuslo,
-    };
-
-    setControlesAntro([nuevo, ...controlesAntro]);
-    setIsSavingAntro(false);
-    setIsAntroModalOpen(false);
+      // Refresco real de la lista; si falla, se conserva el control confirmado por el server.
+      const refrescado = await refrescarControlesAntro(alumno.usuarioId);
+      if (!refrescado) {
+        setControlesAntro((prev) => [
+          mapearControlAntro(creado),
+          ...prev.filter((c) => c.id !== creado.id),
+        ]);
+      }
+      setControlesErrorMsg(null);
+      setIsAntroModalOpen(false);
+      triggerHaptic('success');
+    } catch (err: any) {
+      // Sin éxito falso: el modal queda abierto y el error del contrato/API se muestra inline.
+      setAntroErrorMsg(
+        err?.message ||
+          'No se pudo registrar el control antropométrico. Revisa los datos e inténtalo de nuevo.'
+      );
+    } finally {
+      setIsSavingAntro(false);
+    }
   };
 
   // Rutina & Prescripción Handlers
@@ -737,20 +872,13 @@ export function AlumnoDetallePage() {
       setNuevoEjNombre('');
       setIsCrearEjRapidoOpen(false);
       triggerHaptic('success');
-    } catch {
-      const nuevoLocal: EjercicioCatalogoDetalleDTO = {
-        id: 'ej-custom-' + Date.now(),
-        nombre: nuevoEjNombre.trim(),
-        grupoMuscular: nuevoEjGrupo,
-        patronMovimiento: nuevoEjPatron,
-        activo: true,
-        createdAtUtc: new Date().toISOString(),
-      };
-      setEjerciciosCatalogo((prev) => [nuevoLocal, ...prev]);
-      agregarEjercicioADia(nuevoLocal.nombre, nuevoLocal.id);
-      setNuevoEjNombre('');
-      setIsCrearEjRapidoOpen(false);
-      triggerHaptic('success');
+    } catch (err: any) {
+      // D4: sin ejercicios fantasma con IDs no-UUID; el fallo se muestra y el formulario queda abierto.
+      triggerHaptic('warning');
+      setRutinaErrorMsg(
+        err?.message ||
+          'No se pudo crear el ejercicio en el catálogo. Revisa tu conexión e inténtalo de nuevo.'
+      );
     } finally {
       setIsSubmittingEj(false);
     }
@@ -763,19 +891,8 @@ export function AlumnoDetallePage() {
       if (!updated[activeDiaIdx]) return prev;
       updated[activeDiaIdx] = {
         ...updated[activeDiaIdx],
-        ejercicios: [
-          ...updated[activeDiaIdx].ejercicios,
-          {
-            id: 'e-' + Date.now(),
-            ejercicioId,
-            nombre: nombreEj,
-            series: 3,
-            reps: '10-12',
-            peso: 'Moderado',
-            rpe: '8.0',
-            descansoSegundos: 90,
-          },
-        ],
+        // WU5: carga vacía = prescripción cualitativa; nunca '0.00' por defecto.
+        ejercicios: [...updated[activeDiaIdx].ejercicios, crearEjercicioEdicion(nombreEj, ejercicioId)],
       };
       return updated;
     });
@@ -840,53 +957,16 @@ export function AlumnoDetallePage() {
     anotacion?: string;
     enfoque?: string;
   }) => {
-    setBloquesRutinaEdit((prev) => {
-      const updated = [...prev];
-      const actual = updated[activeDiaIdx];
-      if (!actual) return prev;
-
-      const diaNumero =
-        cambios.diaNumero !== undefined ? cambios.diaNumero : actual.diaNumero || activeDiaIdx + 1;
-      const diaSugerido =
-        cambios.diaSugerido !== undefined
-          ? cambios.diaSugerido === null || cambios.diaSugerido === 0
-            ? undefined
-            : cambios.diaSugerido
-          : actual.diaSugerido;
-      const anotacion =
-        cambios.anotacion !== undefined ? cambios.anotacion : actual.anotacion || '';
-      const enfoque =
-        cambios.enfoque !== undefined ? cambios.enfoque : actual.enfoque;
-
-      const titulo = generarTituloBloque(diaNumero, diaSugerido, anotacion);
-
-      updated[activeDiaIdx] = {
-        ...actual,
-        diaNumero,
-        diaSugerido,
-        anotacion,
-        titulo,
-        enfoque,
-      };
-      return updated;
-    });
+    // WU6b: lógica compartida con el editor de plantillas (lib/rutina-bloques).
+    setBloquesRutinaEdit((prev) =>
+      actualizarConfiguracionBloque(prev as BloqueEdicion[], activeDiaIdx, cambios)
+    );
   };
 
   const agregarNuevoDiaRutina = () => {
     if (bloquesRutinaEdit.length >= 7) return;
     triggerHaptic('light');
-    const nuevoDiaNum = bloquesRutinaEdit.length + 1;
-    const diaSugerido = nuevoDiaNum <= 7 ? nuevoDiaNum : undefined;
-    const nuevoBloque = {
-      diaId: 'd' + nuevoDiaNum,
-      diaNumero: nuevoDiaNum,
-      diaSugerido,
-      anotacion: '',
-      titulo: generarTituloBloque(nuevoDiaNum, diaSugerido, ''),
-      enfoque: 'General',
-      ejercicios: [],
-    };
-    setBloquesRutinaEdit([...bloquesRutinaEdit, nuevoBloque]);
+    setBloquesRutinaEdit([...bloquesRutinaEdit, crearBloqueEdicion(bloquesRutinaEdit.length + 1)]);
     setActiveDiaIdx(bloquesRutinaEdit.length);
   };
 
@@ -900,21 +980,53 @@ export function AlumnoDetallePage() {
 
   const guardarRutinaPrescrita = async () => {
     if (!alumno) return;
+
+    // WU5: normaliza la carga prescrita (coma → punto, vacío cualitativo) y valida inline
+    // antes de que el payload viaje a la API; nunca se materializa '0.00' por defecto.
+    const erroresPeso: string[] = [];
+    // D4: los ejercicios vinculados al catálogo deben llevar un UUID real; un ID inválido se
+    // reporta con nombre y causa en vez de reventar en una validación Zod opaca del servidor.
+    const erroresCatalogo: string[] = [];
+    const bloquesNormalizados: BloqueDiaRutinaDTO[] = bloquesRutinaEdit.map((b, idx) => {
+      const diaNumero = b.diaNumero || idx + 1;
+      const diaSugerido = b.diaSugerido;
+      const titulo = b.titulo || generarTituloBloque(diaNumero, diaSugerido, b.anotacion);
+      const ejerciciosNormalizados = (b.ejercicios || []).map((ej: any) => {
+        if (ej.ejercicioId && !UUID_REGEX.test(String(ej.ejercicioId))) {
+          erroresCatalogo.push(
+            `"${ej.nombre || `Ejercicio ${idx + 1}`}" no está vinculado al catálogo (ID inválido). Elimínalo y agrégalo de nuevo desde el catálogo.`
+          );
+        }
+        const resultadoPeso = normalizarPesoPrescritoTexto(ej.peso);
+        if (resultadoPeso.error) {
+          erroresPeso.push(`${ej.nombre || `Ejercicio ${idx + 1}`}: ${resultadoPeso.error}`);
+        }
+        return { ...ej, peso: resultadoPeso.valor };
+      });
+      return {
+        diaId: b.diaId || `d${idx + 1}`,
+        diaSugerido,
+        titulo,
+        enfoque: b.enfoque,
+        ejercicios: ejerciciosNormalizados,
+      };
+    });
+
+    if (erroresCatalogo.length > 0) {
+      triggerHaptic('warning');
+      setRutinaErrorMsg(`Revisa los ejercicios — ${erroresCatalogo[0]}`);
+      return;
+    }
+
+    if (erroresPeso.length > 0) {
+      triggerHaptic('warning');
+      setRutinaErrorMsg(`Revisa la carga prescrita — ${erroresPeso[0]}`);
+      return;
+    }
+
     try {
       setIsSavingRutina(true);
       setRutinaErrorMsg(null);
-      const bloquesNormalizados: BloqueDiaRutinaDTO[] = bloquesRutinaEdit.map((b, idx) => {
-        const diaNumero = b.diaNumero || idx + 1;
-        const diaSugerido = b.diaSugerido;
-        const titulo = b.titulo || generarTituloBloque(diaNumero, diaSugerido, b.anotacion);
-        return {
-          diaId: b.diaId || `d${idx + 1}`,
-          diaSugerido,
-          titulo,
-          enfoque: b.enfoque,
-          ejercicios: b.ejercicios,
-        };
-      });
 
       const payload: GuardarRutinaSemanalDTO = {
         alumnoId: alumno.id,
@@ -927,11 +1039,8 @@ export function AlumnoDetallePage() {
       });
       triggerHaptic('success');
       setRutinaSemanal(bloquesNormalizados);
-      setRutinaSuccessMsg('Planificación semanal guardada y activada en el sistema.');
-      setTimeout(() => {
-        setIsRutinaModalOpen(false);
-        setRutinaSuccessMsg(null);
-      }, 800);
+      // WU5: el mensaje de éxito persiste inline hasta que el coach cierre el modal.
+      setRutinaSuccessMsg('Planificación semanal guardada y activada. El monitor ya calcula con ella.');
     } catch (err: any) {
       triggerHaptic('warning');
       setRutinaErrorMsg(err?.message || 'Error al guardar la planificación en el servidor.');
@@ -959,18 +1068,54 @@ export function AlumnoDetallePage() {
         <p className="text-xs text-muted-foreground">
           {error || 'El alumno no existe o no tienes autorización para acceder a sus datos.'}
         </p>
-        <button
-          onClick={() => navigate('/coach/alumnos')}
-          className="py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs"
-        >
-          Volver al Directorio
-        </button>
+        <div className="flex items-center justify-center gap-2">
+          <button
+            onClick={() => loadData()}
+            className="py-2.5 px-4 rounded-xl bg-secondary text-foreground font-bold text-xs border border-border hover:bg-secondary/80 transition-colors cursor-pointer"
+          >
+            Reintentar
+          </button>
+          <button
+            onClick={() => navigate('/coach/alumnos')}
+            className="py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs cursor-pointer"
+          >
+            Volver al Directorio
+          </button>
+        </div>
       </div>
     );
   }
 
   const isArchived = Boolean(alumno.deletedAtUtc);
-  const semaforo = alumno.semaforoPago || (finanzas?.saldoPendienteTotalUsd === '0.00' ? 'al_dia' : 'moroso');
+  // D2: sin resumen financiero real no se inventa un semáforo (nada de "moroso" por fallo de red).
+  const semaforo: 'al_dia' | 'por_vencer' | 'moroso' | null = alumno.semaforoPago
+    ? (alumno.semaforoPago as 'al_dia' | 'por_vencer' | 'moroso')
+    : finanzas
+    ? Number(finanzas.saldoPendienteTotalUsd) > 0
+      ? 'moroso'
+      : 'al_dia'
+    : null;
+
+  // WU5: "Último Entrenamiento Realizado" solo considera sesiones completadas o en progreso.
+  const ultimoEntrenamiento =
+    historialSesiones.find((ses) => esSesionRealizada(ses)) ??
+    (esSesionRealizada(ultimaSesion) ? ultimaSesion : null);
+  const etiquetaUltimoEntrenamiento = ultimoEntrenamiento
+    ? etiquetaEstadoSesion(ultimoEntrenamiento.estado, ultimoEntrenamiento.motivoOmision)
+    : null;
+
+  // WU5: filtro del catálogo del modal de prescripción (con estado vacío explícito).
+  const catalogoFiltrado = ejerciciosCatalogo.filter((ej) => {
+    const matchGrupo =
+      selectedGrupoMuscular === 'Todos' ||
+      ej.grupoMuscular.toLowerCase().includes(selectedGrupoMuscular.toLowerCase());
+    const matchText =
+      !filtroBusquedaEj.trim() ||
+      ej.nombre.toLowerCase().includes(filtroBusquedaEj.toLowerCase());
+    return matchGrupo && matchText;
+  });
+  const hayFiltroCatalogo =
+    selectedGrupoMuscular !== 'Todos' || filtroBusquedaEj.trim() !== '';
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-12">
@@ -1009,7 +1154,9 @@ export function AlumnoDetallePage() {
                       ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                       : semaforo === 'por_vencer'
                       ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                      : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                      : semaforo === 'moroso'
+                      ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                      : 'bg-secondary text-muted-foreground border-border'
                   }`}
                 >
                   <span
@@ -1018,10 +1165,18 @@ export function AlumnoDetallePage() {
                         ? 'bg-emerald-400'
                         : semaforo === 'por_vencer'
                         ? 'bg-amber-400'
-                        : 'bg-rose-400 animate-pulse'
+                        : semaforo === 'moroso'
+                        ? 'bg-rose-400 animate-pulse'
+                        : 'bg-muted-foreground'
                     }`}
                   />
-                  {semaforo === 'al_dia' ? 'Al Día' : semaforo === 'por_vencer' ? 'Por Vencer' : 'Cuota Pendiente'}
+                  {semaforo === 'al_dia'
+                    ? 'Al Día'
+                    : semaforo === 'por_vencer'
+                    ? 'Por Vencer'
+                    : semaforo === 'moroso'
+                    ? 'Cuota Pendiente'
+                    : 'Sin dato'}
                 </span>
 
                 {/* Badge Estado de Activación */}
@@ -1132,6 +1287,17 @@ export function AlumnoDetallePage() {
             )}
           </div>
         </div>
+
+        {/* D5: errores de acciones del ciclo de vida (pausar/reactivar/archivar/restaurar) */}
+        {headerActionError && (
+          <div
+            role="alert"
+            className="p-3 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-center gap-2"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{headerActionError}</span>
+          </div>
+        )}
 
         {/* ALERTA: Ficha médica confidencial resumen en cabecera si existe */}
         {alumno.fichaSaludPrivada && (
@@ -1452,6 +1618,15 @@ export function AlumnoDetallePage() {
                 {saveSuccessMsg}
               </span>
             )}
+            {saveErrorMsg && (
+              <span
+                role="alert"
+                className="text-xs font-bold text-destructive flex items-center gap-1.5 animate-in fade-in max-w-md text-right"
+              >
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                {saveErrorMsg}
+              </span>
+            )}
             <button
               type="submit"
               disabled={isSavingPerfil}
@@ -1474,6 +1649,20 @@ export function AlumnoDetallePage() {
           aria-labelledby="tab-finanzas"
           className="space-y-6 animate-in fade-in-50 duration-200 slide-in-from-bottom-1"
         >
+          {/* D2: sin resumen financiero real no se muestran cifras inventadas */}
+          {!finanzas && (
+            <div
+              role="status"
+              className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs flex items-center gap-2"
+            >
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>
+                No se pudo cargar el historial financiero del alumno. Las cifras no están
+                disponibles; reintenta recargando el expediente.
+              </span>
+            </div>
+          )}
+
           {/* Métricas Financieras del Alumno */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1.5">
@@ -1483,20 +1672,39 @@ export function AlumnoDetallePage() {
                 </span>
                 <span
                   className={`h-2 w-2 rounded-full ${
-                    Number(finanzas?.saldoPendienteTotalUsd || 0) > 0 ? 'bg-rose-400 animate-pulse' : 'bg-emerald-400'
+                    !finanzas
+                      ? 'bg-muted-foreground'
+                      : Number(finanzas.saldoPendienteTotalUsd || 0) > 0
+                      ? 'bg-rose-400 animate-pulse'
+                      : 'bg-emerald-400'
                   }`}
-                  title={Number(finanzas?.saldoPendienteTotalUsd || 0) > 0 ? 'Cuota en mora/pendiente' : 'Solvente'}
+                  title={
+                    !finanzas
+                      ? 'Dato no disponible'
+                      : Number(finanzas.saldoPendienteTotalUsd || 0) > 0
+                      ? 'Cuota en mora/pendiente'
+                      : 'Solvente'
+                  }
                 />
               </div>
               <p
                 className={`text-2xl font-black font-mono tracking-tight ${
-                  Number(finanzas?.saldoPendienteTotalUsd || 0) > 0 ? 'text-rose-400' : 'text-emerald-400'
+                  !finanzas
+                    ? 'text-muted-foreground'
+                    : Number(finanzas.saldoPendienteTotalUsd || 0) > 0
+                    ? 'text-rose-400'
+                    : 'text-emerald-400'
                 }`}
               >
-                ${finanzas?.saldoPendienteTotalUsd || '0.00'} <span className="text-xs font-bold text-muted-foreground">USD</span>
+                ${finanzas ? finanzas.saldoPendienteTotalUsd || '0.00' : '—'}{' '}
+                <span className="text-xs font-bold text-muted-foreground">USD</span>
               </p>
               <span className="text-[11px] text-muted-foreground block">
-                {Number(finanzas?.saldoPendienteTotalUsd || 0) > 0 ? 'Cuota pendiente de liquidar' : 'Sin deudas activas'}
+                {!finanzas
+                  ? 'Dato no disponible'
+                  : Number(finanzas.saldoPendienteTotalUsd || 0) > 0
+                  ? 'Cuota pendiente de liquidar'
+                  : 'Sin deudas activas'}
               </span>
             </div>
 
@@ -1505,7 +1713,8 @@ export function AlumnoDetallePage() {
                 Pagado en Mes en Curso
               </span>
               <p className="text-2xl font-black font-mono tracking-tight text-foreground">
-                ${finanzas?.totalPagadoMesActualUsd || '0.00'} <span className="text-xs font-bold text-muted-foreground">USD</span>
+                ${finanzas ? finanzas.totalPagadoMesActualUsd || '0.00' : '—'}{' '}
+                <span className="text-xs font-bold text-muted-foreground">USD</span>
               </p>
               <span className="text-[11px] text-muted-foreground block">Abonos recibidos este periodo</span>
             </div>
@@ -1515,7 +1724,8 @@ export function AlumnoDetallePage() {
                 Histórico Total Acumulado
               </span>
               <p className="text-2xl font-black font-mono tracking-tight text-primary">
-                ${finanzas?.totalPagadoHistoricoUsd || '0.00'} <span className="text-xs font-bold text-muted-foreground">USD</span>
+                ${finanzas ? finanzas.totalPagadoHistoricoUsd || '0.00' : '—'}{' '}
+                <span className="text-xs font-bold text-muted-foreground">USD</span>
               </p>
               <span className="text-[11px] text-muted-foreground block">Total abonado por este alumno</span>
             </div>
@@ -1531,7 +1741,8 @@ export function AlumnoDetallePage() {
                 </div>
                 <div className="flex items-center gap-2.5 mt-0.5">
                   <h3 className="text-lg font-black text-foreground">
-                    Periodo: {finanzas?.cuotaMesActual?.periodo || 'Mes Actual'}
+                    Periodo:{' '}
+                    {finanzas?.cuotaMesActual?.periodo || (finanzas ? 'Sin cuota emitida' : '—')}
                   </h3>
                   {finanzas?.cuotaMesActual && (
                     <span
@@ -1594,6 +1805,11 @@ export function AlumnoDetallePage() {
                   </p>
                 </div>
               </div>
+            ) : !finanzas ? (
+              <p className="text-xs text-muted-foreground py-2">
+                El estado de la cuota no está disponible porque no se pudo cargar el historial
+                financiero.
+              </p>
             ) : (
               <p className="text-xs text-muted-foreground py-2">
                 No hay cuota emitida para este periodo. Al pulsar <strong>"Registrar Cobro Directo en Sala"</strong>, el sistema emitirá la cuota y liquidará el pago en 1 solo paso.
@@ -1606,7 +1822,7 @@ export function AlumnoDetallePage() {
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
               <h4 className="font-bold text-sm text-foreground">Historial de Transacciones & Abonos</h4>
               <span className="text-xs text-muted-foreground font-mono">
-                {finanzas?.transacciones.length || 0} operaciones
+                {finanzas ? `${finanzas.transacciones.length} operaciones` : '—'}
               </span>
             </div>
 
@@ -1677,6 +1893,7 @@ export function AlumnoDetallePage() {
               type="button"
               onClick={() => {
                 triggerHaptic('medium');
+                setAntroErrorMsg(null);
                 setIsAntroModalOpen(true);
               }}
               className="py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 active:scale-95 hover:brightness-110 transition-all flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
@@ -1692,8 +1909,16 @@ export function AlumnoDetallePage() {
             const anterior = controlesAntro[1];
 
             const deltaPeso = anterior ? (Number(actual.pesoKg) - Number(anterior.pesoKg)).toFixed(1) : null;
-            const deltaGrasa = anterior ? (Number(actual.grasaPorcentaje) - Number(anterior.grasaPorcentaje)).toFixed(1) : null;
-            const deltaCintura = anterior ? (Number(actual.cinturaCm) - Number(anterior.cinturaCm)).toFixed(1) : null;
+            // N3: con datos reales los perímetros/% grasa pueden faltar en cualquiera de los dos
+            // controles; sin ambos valores no hay delta (nunca NaN).
+            const deltaGrasa =
+              anterior && actual.grasaPorcentaje && anterior.grasaPorcentaje
+                ? (Number(actual.grasaPorcentaje) - Number(anterior.grasaPorcentaje)).toFixed(1)
+                : null;
+            const deltaCintura =
+              anterior && actual.cinturaCm && anterior.cinturaCm
+                ? (Number(actual.cinturaCm) - Number(anterior.cinturaCm)).toFixed(1)
+                : null;
 
             return (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -1718,7 +1943,9 @@ export function AlumnoDetallePage() {
                 <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1">
                   <span className="text-[10px] uppercase font-bold text-muted-foreground block">% Grasa Estimada</span>
                   <div className="flex items-baseline gap-2">
-                    <p className="text-2xl font-black font-mono text-foreground">{actual.grasaPorcentaje}%</p>
+                    <p className="text-2xl font-black font-mono text-foreground">
+                      {actual.grasaPorcentaje ? `${actual.grasaPorcentaje}%` : 'N/D'}
+                    </p>
                     {deltaGrasa && (
                       <span
                         className={`text-[11px] font-bold font-mono px-2 py-0.5 rounded-full border ${
@@ -1736,7 +1963,9 @@ export function AlumnoDetallePage() {
                 <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1">
                   <span className="text-[10px] uppercase font-bold text-muted-foreground block">Cintura</span>
                   <div className="flex items-baseline gap-2">
-                    <p className="text-2xl font-black font-mono text-foreground">{actual.cinturaCm} cm</p>
+                    <p className="text-2xl font-black font-mono text-foreground">
+                      {actual.cinturaCm ? `${actual.cinturaCm} cm` : 'N/D'}
+                    </p>
                     {deltaCintura && (
                       <span
                         className={`text-[11px] font-bold font-mono px-2 py-0.5 rounded-full border ${
@@ -1754,7 +1983,7 @@ export function AlumnoDetallePage() {
                 <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1">
                   <span className="text-[10px] uppercase font-bold text-muted-foreground block">Brazo / Pecho</span>
                   <p className="text-2xl font-black font-mono text-primary">
-                    {actual.brazoCm} / {actual.pechoCm} cm
+                    {actual.brazoCm ?? 'N/D'} / {actual.pechoCm ?? 'N/D'} cm
                   </p>
                 </div>
               </div>
@@ -1764,6 +1993,16 @@ export function AlumnoDetallePage() {
           {/* Historial Tabular */}
           <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4">
             <h4 className="font-bold text-sm text-foreground">Historial Cronológico de Controles</h4>
+            {/* N3: fallo de carga honesto; la tabla nunca finge "sin registros" si la consulta falló. */}
+            {controlesErrorMsg && (
+              <div
+                role="alert"
+                className="p-3 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-bold flex items-center gap-2"
+              >
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{controlesErrorMsg}</span>
+              </div>
+            )}
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
                 <thead className="border-b border-border/80 text-muted-foreground uppercase text-[10px]">
@@ -1778,15 +2017,27 @@ export function AlumnoDetallePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50 font-mono">
+                  {controlesAntro.length === 0 && !controlesErrorMsg && (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="py-6 px-3 text-center text-muted-foreground font-sans"
+                      >
+                        Sin controles antropométricos registrados para este alumno.
+                      </td>
+                    </tr>
+                  )}
                   {controlesAntro.map((c) => (
                     <tr key={c.id} className="hover:bg-secondary/30 transition-colors">
                       <td className="py-3 px-3 font-sans font-bold text-foreground">{c.fecha}</td>
                       <td className="py-3 px-3 font-bold">{c.pesoKg} kg</td>
-                      <td className="py-3 px-3">{c.grasaPorcentaje}%</td>
-                      <td className="py-3 px-3">{c.cinturaCm} cm</td>
-                      <td className="py-3 px-3">{c.brazoCm} cm</td>
-                      <td className="py-3 px-3">{c.pechoCm} cm</td>
-                      <td className="py-3 px-3">{c.musloCm} cm</td>
+                      <td className="py-3 px-3">
+                        {c.grasaPorcentaje ? `${c.grasaPorcentaje}%` : 'N/D'}
+                      </td>
+                      <td className="py-3 px-3">{c.cinturaCm ? `${c.cinturaCm} cm` : 'N/D'}</td>
+                      <td className="py-3 px-3">{c.brazoCm ? `${c.brazoCm} cm` : 'N/D'}</td>
+                      <td className="py-3 px-3">{c.pechoCm ? `${c.pechoCm} cm` : 'N/D'}</td>
+                      <td className="py-3 px-3">{c.musloCm ? `${c.musloCm} cm` : 'N/D'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1806,29 +2057,66 @@ export function AlumnoDetallePage() {
           aria-labelledby="tab-entrenamiento"
           className="space-y-6 animate-in fade-in-50 duration-200 slide-in-from-bottom-1"
         >
-          {/* Auditoría del Último Entrenamiento del Alumno */}
-          {ultimaSesion && (
+          {/* Auditoría del Último Entrenamiento del Alumno (solo sesiones realizadas) */}
+          {ultimoEntrenamiento && etiquetaUltimoEntrenamiento && (
             <div className="p-6 rounded-3xl bg-card border border-border shadow-md space-y-4">
-              <div className="flex items-center justify-between border-b border-border/80 pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/80 pb-3">
                 <div className="flex items-center gap-2">
                   <Dumbbell className="h-4 w-4 text-primary" />
                   <h3 className="font-extrabold text-sm text-foreground">
-                    Último Entrenamiento Realizado ({ultimaSesion.fechaProgramada})
+                    {ultimoEntrenamiento.estado === EstadoSesion.EN_PROGRESO
+                      ? 'Entrenamiento en Progreso'
+                      : 'Último Entrenamiento Realizado'}{' '}
+                    (
+                    {formatFechaCalendario(ultimoEntrenamiento.fechaProgramada) ||
+                      ultimoEntrenamiento.fechaProgramada}
+                    )
                   </h3>
                 </div>
-                <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                  {ultimaSesion.porcentajeCumplimiento}% Cumplido
-                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span
+                    className={`text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full border ${
+                      CLASES_TONO_SESION[etiquetaUltimoEntrenamiento.tono]
+                    }`}
+                  >
+                    {etiquetaUltimoEntrenamiento.texto}
+                  </span>
+                  {ultimoEntrenamiento.estado === EstadoSesion.COMPLETADA && (
+                    <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                      {ultimoEntrenamiento.porcentajeCumplimiento}% cumplido
+                    </span>
+                  )}
+                </div>
               </div>
 
-              {ultimaSesion.notasAlumno && (
-                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-1">
-                  <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
-                    Comentarios del Alumno:
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground font-mono">
+                {formatRangoHorasLocal(
+                  ultimoEntrenamiento.fechaInicioUtc,
+                  ultimoEntrenamiento.fechaFinUtc
+                ) ? (
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-primary" />
+                    {formatRangoHorasLocal(
+                      ultimoEntrenamiento.fechaInicioUtc,
+                      ultimoEntrenamiento.fechaFinUtc
+                    )}{' '}
+                    (hora local)
                   </span>
-                  <p className="text-foreground leading-relaxed">{ultimaSesion.notasAlumno}</p>
-                </div>
-              )}
+                ) : (
+                  ultimoEntrenamiento.estado === EstadoSesion.COMPLETADA && (
+                    <span>Sin horas de inicio/fin registradas</span>
+                  )
+                )}
+                {formatDuracionMinutos(ultimoEntrenamiento.duracionMinutos) && (
+                  <span>Duración: {formatDuracionMinutos(ultimoEntrenamiento.duracionMinutos)}</span>
+                )}
+                {ultimoEntrenamiento.volumenTotalKg &&
+                  ultimoEntrenamiento.volumenTotalKg !== '0.00' && (
+                    <span>Volumen: {ultimoEntrenamiento.volumenTotalKg} kg</span>
+                  )}
+              </div>
+
+              <FeedbackAlumno notas={ultimoEntrenamiento.notasAlumno} />
             </div>
           )}
 
@@ -1841,17 +2129,47 @@ export function AlumnoDetallePage() {
                   Estructura de días, ejercicios, series, repeticiones y cargas asignadas al alumno.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={abrirModalPrescribirRutina}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer self-start sm:self-auto"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                <span>Editar / Asignar Rutina</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                {/* WU6b: RF-017 Escenario 2 — clonar una plantilla del banco con ajuste de cargas */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic('light');
+                    setIsPlantillaModalOpen(true);
+                  }}
+                  disabled={isArchived}
+                  title={
+                    isArchived
+                      ? 'Restaura al alumno para asignarle una plantilla'
+                      : 'Selecciona una plantilla del banco y ajusta cargas antes de confirmar'
+                  }
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground font-bold text-xs border border-border transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ClipboardList className="h-3.5 w-3.5 text-primary" />
+                  <span>Cargar desde Plantilla</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={abrirModalPrescribirRutina}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  <span>Editar / Asignar Rutina</span>
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
+            {rutinaSemanal.length === 0 ? (
+              <div className="p-8 rounded-2xl bg-card border border-dashed border-border/70 text-center">
+                <ClipboardList className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-40" />
+                <p className="text-xs text-muted-foreground">
+                  Este alumno aún no tiene una rutina semanal activa. Usa «Editar / Asignar
+                  Rutina» para crear su planificación.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4">
               {rutinaSemanal.map((bloque) => (
                 <div
                   key={bloque.diaId}
@@ -1897,7 +2215,8 @@ export function AlumnoDetallePage() {
                   </div>
                 </div>
               ))}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* 2. Subsección: Historial Cronológico de Entrenamientos Realizados */}
@@ -1906,7 +2225,7 @@ export function AlumnoDetallePage() {
               <div className="flex items-center gap-2">
                 <History className="h-5 w-5 text-primary" />
                 <h3 className="text-base font-black text-foreground">
-                  Historial de Entrenamientos ({historialSesiones.length})
+                  Historial de Sesiones ({historialSesiones.length})
                 </h3>
               </div>
             </div>
@@ -1935,6 +2254,10 @@ export function AlumnoDetallePage() {
                   const diaSemanaCapitalizado = diaSemanaNombre
                     ? diaSemanaNombre.charAt(0).toUpperCase() + diaSemanaNombre.slice(1)
                     : '';
+                  const etiquetaEstado = etiquetaEstadoSesion(ses.estado, ses.motivoOmision);
+                  const rangoHorasLocal = formatRangoHorasLocal(ses.fechaInicioUtc, ses.fechaFinUtc);
+                  const duracionSesion = formatDuracionMinutos(ses.duracionMinutos);
+                  const fechaLocal = formatFechaCalendario(ses.fechaProgramada);
 
                   return (
                     <div key={ses.id} className="p-4 rounded-2xl bg-card border border-border shadow-xs space-y-3">
@@ -1955,7 +2278,9 @@ export function AlumnoDetallePage() {
                               )}
                             </div>
                             <p className="text-[11px] text-muted-foreground">
-                              {ses.fechaProgramada} · {ses.duracionMinutos ? `${ses.duracionMinutos} minutos de duración` : 'Entrenamiento completado'}
+                              {fechaLocal || ses.fechaProgramada}
+                              {rangoHorasLocal ? ` · ${rangoHorasLocal} (hora local)` : ''}
+                              {duracionSesion ? ` · ${duracionSesion} de duración` : ''}
                             </p>
                           </div>
                         </div>
@@ -1967,9 +2292,18 @@ export function AlumnoDetallePage() {
                             <span>{ses.volumenTotalKg} kg</span>
                           </span>
                         )}
-                        <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                          {ses.porcentajeCumplimiento}% Cumplido
+                        <span
+                          className={`text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full border ${
+                            CLASES_TONO_SESION[etiquetaEstado.tono]
+                          }`}
+                        >
+                          {etiquetaEstado.texto}
                         </span>
+                        {ses.estado === EstadoSesion.COMPLETADA && (
+                          <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                            {ses.porcentajeCumplimiento}% cumplido
+                          </span>
+                        )}
                         <button
                           type="button"
                           onClick={() => {
@@ -1990,14 +2324,7 @@ export function AlumnoDetallePage() {
                       </div>
                     </div>
 
-                    {ses.notasAlumno && (
-                      <div className="p-3 rounded-xl bg-secondary/30 text-xs text-muted-foreground border border-border/50">
-                        <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block mb-0.5">
-                          Comentarios del Alumno:
-                        </span>
-                        <p className="text-foreground leading-relaxed">{ses.notasAlumno}</p>
-                      </div>
-                    )}
+                    <FeedbackAlumno notas={ses.notasAlumno} />
 
                     {expandedSesionId === ses.id && (
                       <div
@@ -2037,41 +2364,98 @@ export function AlumnoDetallePage() {
                                     const delta = descansoReal != null ? descansoReal - prescrito : 0;
                                     const isExcessive = delta > 15;
                                     const isRushed = delta < -15;
+                                    const pesoPrescrito =
+                                      s.pesoPrescritoKg && Number(s.pesoPrescritoKg) > 0
+                                        ? s.pesoPrescritoKg
+                                        : null;
 
                                     return (
                                       <div
                                         key={s.id}
-                                        className={`p-2.5 rounded-xl border flex items-center justify-between transition-colors ${
+                                        className={`p-2.5 rounded-xl border space-y-1.5 transition-colors ${
                                           s.completada
                                             ? 'bg-emerald-500/10 border-emerald-500/30 text-foreground'
                                             : 'bg-card border-border/60 text-foreground'
                                         }`}
                                       >
-                                        <span className="text-muted-foreground font-bold">S{s.numeroSerie}:</span>
-                                        <span className="font-bold text-foreground">
-                                          {s.repsLogradas ?? s.repsObjetivo} reps
-                                        </span>
-                                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                                          <span className="text-primary font-black">
-                                            {s.pesoKg ? `${s.pesoKg}kg` : '-'}
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="text-muted-foreground font-bold">
+                                            S{s.numeroSerie}
                                           </span>
-                                          {s.rpe && (
-                                            <span className="text-[10px] text-amber-400 font-bold">
-                                              @{s.rpe}
-                                            </span>
-                                          )}
-                                          {descansoReal != null && (
-                                            <span
-                                              title={`Descanso tomado: ${descansoReal}s (prescrito: ${prescrito}s, desviación: ${delta > 0 ? `+${delta}s` : `${delta}s`})`}
-                                              className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md border whitespace-nowrap ${
-                                                isExcessive
-                                                  ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                            {s.rpe && (
+                                              <span
+                                                className="text-[10px] text-amber-400 font-bold"
+                                                title="RPE real registrado por el alumno"
+                                              >
+                                                @{s.rpe}
+                                              </span>
+                                            )}
+                                            {descansoReal != null && (
+                                              <span
+                                                title={`Descanso tomado: ${descansoReal}s (prescrito: ${prescrito}s, desviación: ${delta > 0 ? `+${delta}s` : `${delta}s`})`}
+                                                className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md border whitespace-nowrap ${
+                                                  isExcessive
+                                                    ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                                    : isRushed
+                                                    ? 'bg-sky-500/15 text-sky-400 border-sky-500/30'
+                                                    : 'bg-secondary text-muted-foreground border-border/60'
+                                                }`}
+                                              >
+                                                ⏱️ {descansoReal}s{' '}
+                                                {isExcessive
+                                                  ? `(+${delta}s)`
                                                   : isRushed
-                                                  ? 'bg-sky-500/15 text-sky-400 border-sky-500/30'
-                                                  : 'bg-secondary text-muted-foreground border-border/60'
-                                              }`}
-                                            >
-                                              ⏱️ {descansoReal}s {isExcessive ? `(+${delta}s)` : isRushed ? `(${delta}s)` : '(en meta)'}
+                                                  ? `(${delta}s)`
+                                                  : '(en meta)'}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {/* Real registrado por el alumno (sin fallback que oculte la falta de dato) */}
+                                        <div className="flex items-baseline justify-between gap-2">
+                                          <span
+                                            className={`font-bold ${
+                                              s.repsLogradas == null
+                                                ? 'text-muted-foreground italic'
+                                                : 'text-foreground'
+                                            }`}
+                                            title={
+                                              s.repsLogradas == null
+                                                ? 'Sin repeticiones reales registradas'
+                                                : 'Repeticiones logradas'
+                                            }
+                                          >
+                                            {s.repsLogradas == null
+                                              ? 'Sin reps'
+                                              : `${s.repsLogradas} reps`}
+                                          </span>
+                                          <span
+                                            className={`font-black ${
+                                              s.pesoKg
+                                                ? 'text-primary'
+                                                : 'text-muted-foreground italic'
+                                            }`}
+                                            title={
+                                              s.pesoKg
+                                                ? 'Peso real levantado'
+                                                : 'Sin peso real registrado'
+                                            }
+                                          >
+                                            {s.pesoKg ? `${s.pesoKg} kg` : 'Sin peso'}
+                                          </span>
+                                        </div>
+
+                                        {/* Prescrito por el coach */}
+                                        <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground border-t border-border/40 pt-1.5">
+                                          <span className="font-mono">
+                                            Presc: {s.repsObjetivo} reps ·{' '}
+                                            {pesoPrescrito ? `${pesoPrescrito} kg` : 'sin carga'}
+                                          </span>
+                                          {!s.completada && (
+                                            <span className="font-bold text-amber-400 whitespace-nowrap">
+                                              No completada
                                             </span>
                                           )}
                                         </div>
@@ -2092,6 +2476,31 @@ export function AlumnoDetallePage() {
                   </div>
                 );
               })}
+                {historialError && (
+                  <div
+                    role="alert"
+                    className="p-3 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-bold flex items-center gap-2"
+                  >
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>{historialError}</span>
+                  </div>
+                )}
+                {historialSesiones.length >= historialLimit && historialLimit < 100 && (
+                  <div className="flex flex-col items-center gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={verMasHistorial}
+                      disabled={isCargandoHistorial}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs border border-border transition-all active:scale-95 disabled:opacity-50 cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${isCargandoHistorial ? 'animate-spin' : ''}`} />
+                      <span>{isCargandoHistorial ? 'Cargando historial…' : 'Cargar más sesiones'}</span>
+                    </button>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      Mostrando {historialSesiones.length} · máximo 100
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -2135,7 +2544,17 @@ export function AlumnoDetallePage() {
                 <p className="text-xs font-bold text-foreground">{cobroSuccessMsg}</p>
               </div>
             ) : (
-              <form onSubmit={handleRegistrarCobro} className="space-y-3">
+              <>
+                {cobroErrorMsg && (
+                  <div
+                    role="alert"
+                    className="p-3 rounded-xl bg-destructive/15 border border-destructive/30 text-destructive text-xs flex items-center gap-2"
+                  >
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>{cobroErrorMsg}</span>
+                  </div>
+                )}
+                <form onSubmit={handleRegistrarCobro} className="space-y-3">
                 <p className="text-xs text-muted-foreground">
                   Registra un cobro de cuota recibido en sala. El pago se marcará como <strong>auto-aprobado</strong> y se liquidará inmediatamente.
                 </p>
@@ -2212,6 +2631,7 @@ export function AlumnoDetallePage() {
                   {isSubmittingCobro ? 'Procesando cobro en BD...' : 'Registrar y Liquidar Cobro'}
                 </button>
               </form>
+              </>
             )}
           </div>
         </div>
@@ -2247,6 +2667,17 @@ export function AlumnoDetallePage() {
                 <X className="h-4 w-4" />
               </button>
             </div>
+
+            {/* N3: error visible del contrato/API; el modal queda abierto y nada se declara guardado. */}
+            {antroErrorMsg && (
+              <div
+                role="alert"
+                className="p-3 rounded-xl bg-destructive/15 border border-destructive/30 text-destructive text-xs flex items-center gap-2"
+              >
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{antroErrorMsg}</span>
+              </div>
+            )}
 
             <form onSubmit={handleGuardarAntro} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -2365,9 +2796,18 @@ export function AlumnoDetallePage() {
             </div>
 
             {rutinaSuccessMsg && (
-              <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 shrink-0" />
-                <span>{rutinaSuccessMsg}</span>
+              <div
+                role="status"
+                aria-live="polite"
+                className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-start gap-2"
+              >
+                <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <span className="block font-bold">{rutinaSuccessMsg}</span>
+                  <span className="block text-[11px] text-emerald-400/80">
+                    Puedes seguir ajustando el plan o cerrar este panel cuando quieras.
+                  </span>
+                </div>
               </div>
             )}
 
@@ -2660,18 +3100,12 @@ export function AlumnoDetallePage() {
                               </div>
 
                               {/* Peso */}
-                              <div className="flex flex-col items-center">
-                                <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
-                                  Peso
-                                </label>
-                                <input
-                                  type="text"
-                                  value={ej.peso}
-                                  onChange={(e) => actualizarCampoEjercicio(ejIdx, 'peso', e.target.value)}
-                                  placeholder="60 kg"
-                                  className="h-8 w-18 sm:w-22 px-2 rounded-lg bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
-                                />
-                              </div>
+                              <CampoPesoPrescrito
+                                valor={ej.peso ?? ''}
+                                onChange={(nuevoValor) =>
+                                  actualizarCampoEjercicio(ejIdx, 'peso', nuevoValor)
+                                }
+                              />
                             </div>
 
                             {/* Bloque B: Intensidad & Descanso */}
@@ -2838,17 +3272,32 @@ export function AlumnoDetallePage() {
 
                   {/* Lista de Coincidencias del Catálogo */}
                   <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
-                    {ejerciciosCatalogo
-                      .filter((ej) => {
-                        const matchGrupo =
-                          selectedGrupoMuscular === 'Todos' ||
-                          ej.grupoMuscular.toLowerCase().includes(selectedGrupoMuscular.toLowerCase());
-                        const matchText =
-                          !filtroBusquedaEj.trim() ||
-                          ej.nombre.toLowerCase().includes(filtroBusquedaEj.toLowerCase());
-                        return matchGrupo && matchText;
-                      })
-                      .map((ej) => (
+                    {catalogoFiltrado.length === 0 ? (
+                      <div className="p-5 rounded-2xl bg-card border border-dashed border-border text-center space-y-2">
+                        <Search className="h-5 w-5 text-muted-foreground mx-auto opacity-50" />
+                        <p className="text-xs font-bold text-foreground">
+                          Sin resultados en el catálogo
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {hayFiltroCatalogo
+                            ? 'Ajusta el grupo muscular o el término de búsqueda, o crea el ejercicio que falta.'
+                            : 'Tu catálogo está vacío: crea tu primer ejercicio para asignarlo.'}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setIsCrearEjRapidoOpen(true)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-bold text-[11px] transition-all cursor-pointer"
+                        >
+                          <Plus className="h-3 w-3" />
+                          <span>
+                            {filtroBusquedaEj.trim()
+                              ? `Crear «${filtroBusquedaEj.trim()}»`
+                              : 'Crear Ejercicio Nuevo'}
+                          </span>
+                        </button>
+                      </div>
+                    ) : (
+                      catalogoFiltrado.map((ej) => (
                         <div
                           key={ej.id}
                           className="flex items-center justify-between p-2.5 rounded-xl bg-card border border-border/60 hover:border-primary/40 transition-colors text-xs gap-2"
@@ -2868,7 +3317,8 @@ export function AlumnoDetallePage() {
                             <span>Añadir</span>
                           </button>
                         </div>
-                      ))}
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
@@ -2891,10 +3341,13 @@ export function AlumnoDetallePage() {
                 <button
                   type="button"
                   disabled={isSavingRutina}
-                  onClick={() => setIsRutinaModalOpen(false)}
+                  onClick={() => {
+                    setIsRutinaModalOpen(false);
+                    setRutinaSuccessMsg(null);
+                  }}
                   className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs cursor-pointer disabled:opacity-50"
                 >
-                  Cancelar
+                  Cerrar
                 </button>
                 <button
                   type="button"
@@ -2915,6 +3368,20 @@ export function AlumnoDetallePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* MODAL: CARGAR DESDE PLANTILLA (RF-017 Escenario 2 / RN-03)            */}
+      {/* ===================================================================== */}
+      {isPlantillaModalOpen && alumno && (
+        <SelectorPlantillaAsignacion
+          alumnoId={alumno.id}
+          alumnoNombre={`${alumno.nombres} ${alumno.apellidos}`}
+          onCerrar={() => setIsPlantillaModalOpen(false)}
+          onAsignada={() => {
+            refrescarRutinaActiva();
+          }}
+        />
       )}
     </div>
   );

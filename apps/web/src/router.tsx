@@ -59,11 +59,19 @@ const ConciliacionPage = lazy(() =>
 const AlumnosPage = lazy(() =>
   import('./pages/entrenador/AlumnosPage').then((m) => ({ default: m.AlumnosPage }))
 );
+const MonitorAdherenciaPage = lazy(() =>
+  import('./pages/entrenador/MonitorAdherenciaPage').then((m) => ({
+    default: m.MonitorAdherenciaPage,
+  }))
+);
 const AlumnoDetallePage = lazy(() =>
   import('./pages/entrenador/AlumnoDetallePage').then((m) => ({ default: m.AlumnoDetallePage }))
 );
 const AntropometriaPage = lazy(() =>
   import('./pages/entrenador/AntropometriaPage').then((m) => ({ default: m.AntropometriaPage }))
+);
+const PlantillasPage = lazy(() =>
+  import('./pages/entrenador/PlantillasPage').then((m) => ({ default: m.PlantillasPage }))
 );
 const AjustesPage = lazy(() =>
   import('./pages/entrenador/AjustesPage').then((m) => ({ default: m.AjustesPage }))
@@ -160,8 +168,16 @@ export const router = createBrowserRouter([
             element: <AlumnosPage />,
           },
           {
+            path: '/coach/monitor-adherencia',
+            element: <MonitorAdherenciaPage />,
+          },
+          {
             path: '/coach/alumnos/:id',
             element: <AlumnoDetallePage />,
+          },
+          {
+            path: '/coach/plantillas',
+            element: <PlantillasPage />,
           },
           {
             path: '/coach/antropometria',
