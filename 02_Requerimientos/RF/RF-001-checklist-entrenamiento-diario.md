@@ -3,8 +3,8 @@ id: RF-001
 modulo: Entrenamiento
 prioridad: alta
 estado: implementado
-version_implementada: v1.0.0
-fecha_verificacion: 2026-09-06
+version_implementada: v1.1.0
+fecha_verificacion: 2026-09-20
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0
@@ -110,3 +110,38 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
 ## 6. Casos Borde y Excepciones
 - **Uso sin conexión (Offline-first):** Si el alumno entrena en un sótano o gimnasio sin señal de datos, el cliente móvil/PWA debe cachear localmente las series y sincronizarlas al detectar conexión.
 - **Entrenamientos fuera de día planificado:** Permitir al alumno ejecutar una sesión aplazada o adelantar un día sin romper la integridad del historial.
+
+---
+
+## 7. Notas de Implementación (v1.1.0)
+
+> Registro de decisiones de implementación y límites conocidos de la entrega verificada el 2026-09-20. Los criterios de aceptación Gherkin de la sección 5 permanecen sin cambios.
+
+### 7.1. Racha por volumen prescrito (RN-02)
+- **Fórmula:** `ratioVolumenPct = (Σ peso_kg × reps_logradas) / (Σ peso_prescrito_kg × reps_objetivo) × 100`. La sesión acredita racha con `ratioVolumenPct >= 70%`.
+- **Fallback cualitativo documentado:** cuando no existe carga prescrita (peso corporal, "Moderado", etc.), se evalúa el ratio de series cualitativas completadas (`>= 70%`). Si coexisten series ponderadas y cualitativas, ambas partes deben cumplir.
+- **Prescrito vs. real:** `series_registro.peso_kg` guarda el peso real levantado (se sobrescribe al sincronizar) y `peso_prescrito_kg` el prescrito (`null` si es cualitativo, sin materializar `0.00`). La captura admite kg/lb; la persistencia canónica es kg.
+- **Persistencia de la racha:** `perfiles_alumno.racha_dias` + `racha_ultima_fecha` (fecha local `YYYY-MM-DD`). Día consecutivo → `+1`; hueco o primer registro → `1`; omisión o incumplimiento → no incrementa. La racha mostrada se anula si la última fecha es anterior a ayer (`calcularRachaEfectiva`).
+
+### 7.2. Estados de sesión y cierre sin series (Escenario 5)
+- `Planificada → EnProgreso` ocurre únicamente con la acción explícita del alumno (RN-04); la consulta pasiva no genera timestamps.
+- Cierre sin series completadas: la API responde `400` con `code: 'SESION_VACIA'`; la UI abre el modal "¿Descansado o incompleto?".
+- Con decisión explícita: `tipoCierre: DESCANSADA | INCOMPLETA` → estado `OMITIDA` con `motivo_omision: DESCANSO | INCOMPLETO`, sin incremento de racha ni notificación al coach. `tipoCierre: COMPLETADA` con 0 series se rechaza.
+
+### 7.3. Idempotencia de mutaciones de sesión
+- `X-Idempotency-Key` (opcional, generada por el cliente) en `entrenar-hoy`, `iniciar`, `sincronizar-series` y `finalizar`; el servidor deduplica por `operacion:alumnoId:key` y devuelve la respuesta original sin reprocesar.
+- **Limitación conocida:** la caché server-side es un `Map` en memoria, sin TTL ni garantía multi-instancia. Un reinicio del proceso o una segunda réplica pueden reprocesar la mutación; la protección de negocio definitiva es la máquina de estados de la sesión.
+
+### 7.4. Cola offline (PWA)
+- Las mutaciones encoladas de forma durable se reintentan con backoff; los errores `4xx` se muestran como rechazadas (requieren acción del alumno) y los `5xx`/fallos de red se reintentan.
+- Cada ítem de la cola viaja con su propia `X-Idempotency-Key`, complementada por el dedupe server-side.
+
+### 7.5. Monitor semanal del coach (RN-03)
+- `GET /entrenador/monitor-adherencia?timezone=` evalúa la ventana Lunes 00:00 local → ahora.
+- `tienePlanActivo = false` → "sin plan" (nunca rojo); `sinPendientesSemana = true` → "Al día — sin pendientes" (nunca rojo).
+- Orden por riesgo (rojo primero) y enlace al expediente del alumno vía `alumnoPerfilId`.
+
+### 7.6. Límites conocidos de la entrega
+- Caché de idempotencia en memoria (§7.3).
+- RLS multi-tenant por etapas: ver [[RNF-003-aislamiento-multitenant-seguridad-datos-salud]].
+- Verificación visual manual pendiente en algunas pantallas móviles (layout/accesibilidad del modal de video y hints); no afecta la funcionalidad.

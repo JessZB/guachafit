@@ -42,6 +42,9 @@ tags:
 | `ficha_salud_privada`| `string` | No | Notas médicas confidenciales del coach | Texto encriptado en reposo |
 | `estado_activacion`| `EnumEstadoAlumno`| Sí | `Activo`, `InactivoPausado`, `SuspendidoPago` | Máquina de estados |
 | `modalidad` | `EnumModalidad` | Sí | `Presencial` u `Online` | Modelo híbrido |
+| `tasa_fijada_override`| `Decimal` | No | Tasa de cambio preferencial (Bs/USD) negociada con el alumno (RF-005, RF-006 RN-02, ADR-003) | `NUMERIC(12,4)`; si es null aplica la tasa global vigente |
+| `racha_dias` | `integer` | Sí | Días consecutivos con cumplimiento de sesión (RF-001 RN-02) | `>= 0`, default `0` |
+| `racha_ultima_fecha` | `Date` | No | Última fecha local (`YYYY-MM-DD`) que incrementó la racha | Null si nunca acreditó racha |
 | `deleted_at_utc` | `DateTime` | No | Timestamp de borrado lógico (Soft Delete)| Null si está vigente |
 
 ---
@@ -50,6 +53,7 @@ tags:
 - **INV-01 (Aislamiento de Tenancy por Alumno):** Un alumno siempre está asociado a exactamente un `entrenador_id`. Toda operación sobre el alumno requiere que el usuario autenticado sea su propio entrenador o el propio alumno.
 - **INV-02 (Privacidad Médica Absoluta):** El campo `ficha_salud_privada` nunca debe ser retornado en llamadas API autenticadas por el alumno (`rol == ALUMNO`).
 - **INV-03 (Preservación Soft Delete):** La entidad nunca se destruye físicamente de la base de datos; cualquier baja sella `deleted_at_utc`.
+- **INV-04 (Racha por Volumen):** `racha_dias` solo se actualiza al cerrar una sesión con cumplimiento $\ge 70\%$ del volumen prescrito (con fallback cualitativo): si `racha_ultima_fecha` es el día local anterior suma $+1$; si hay un hueco (o no existe registro previo) reinicia a $1$; si la sesión se omite o no cumple el umbral, la racha almacenada no varía.
 
 ---
 
@@ -62,6 +66,7 @@ tags:
 ## 5. Operaciones de Negocio (Comportamientos / Métodos)
 - `calcularEdad(fechaActual)`: Función pura que calcula la edad cronológica en años cumplidos:
   $$\text{Edad} = \text{años transcurridos entre } \text{fecha\_nacimiento} \text{ y } \text{fechaActual}$$
+- `actualizarRacha(fechaLocal, cumple)`: incrementa, reinicia o conserva `racha_dias` y sella `racha_ultima_fecha` con la fecha local del alumno, según la regla de volumen de INV-04.
 - `actualizarFichaSalud(entrenadorId, notas)`: Permite al coach documentar nuevas lesiones o ajustes clínicos.
 - `pausar(motivo)`: Cambia el estado a `InactivoPausado` y emite `AlumnoPausadoEvent`.
 - `suspenderPorMora()`: Cambia el estado a `SuspendidoPago` y bloquea nuevas rutinas.

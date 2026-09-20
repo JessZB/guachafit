@@ -37,10 +37,11 @@ tags:
   - Montos monetarios transmitidos como cadenas con 2 decimales (ej. `"50.00"` o `"1250.50"`).
   - Tasas de cambio como cadenas con 4 decimales (ej. `"65.4321"`).
 - **Encabezado de Idempotencia (`RNF-002`, `RNF-004`):**
-  - Requerido para mutaciones financieras y despachos de notificaciones:
+  - Requerido para mutaciones financieras; aplicado también a las mutaciones de sesiones de entrenamiento (`entrenar-hoy`, `iniciar`, `sincronizar-series`, `finalizar`) y a los despachos de notificaciones:
     ```http
     X-Idempotency-Key: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
     ```
+  - El servidor deduplica por operación + usuario y devuelve la respuesta original ante reintentos. **Limitación conocida:** la caché de sesiones es un `Map` en memoria sin TTL ni garantía multi-instancia (ver [[RF-001-checklist-entrenamiento-diario]] §7.3).
 - **Esquema Estándar de Error (RFC 7807 Problem Details):**
   ```json
   {
@@ -316,12 +317,86 @@ Permite almacenar la preferencia de visualización en la cuenta del usuario para
 
 ---
 
-## 🏋️ 4. Módulo de Entrenamiento y Nutrición
+## 🏋️ 4. Módulo de Entrenamiento, Plantillas y Nutrición
 
-- `GET /alumnos/me/sesiones/hoy`: Consulta la sesión programada de hoy en zona horaria local.
-- `POST /sesiones/{id}/iniciar`: Acción explícita `comenzarEntrenamiento()`.
-- `PUT /sesiones/{id}/series`: Checklist de series (compatible con sincronización offline en batch).
-- `POST /sesiones/{id}/finalizar`: Finaliza, evalúa regla de racha ($\ge 70\%$) y emite `SesionEntrenamientoCompletadaEvent`.
+### 4.1. Checklist Interactivo de Entrenamiento Diario (`RF-001`)
+
+- **Consulta pasiva de la sesión de hoy:** `GET /alumnos/me/sesiones/hoy?timezone={IANA}&bloqueId={diaId}` (Rol `alumno`). Devuelve la sesión del día en fecha local; `204 No Content` si no existe. Navegar o consultar no altera el estado (RN-04).
+- **Acción explícita para entrenar un bloque hoy:** `POST /alumnos/me/sesiones/bloques/{bloqueId}/entrenar-hoy` (Rol `alumno`, `X-Idempotency-Key`).
+  - **Cuerpo:**
+    ```json
+    { "timezoneCliente": "America/Caracas", "iniciarInmediato": false }
+    ```
+  - Reutiliza una sesión viva (`planificada` / `en_progreso`) del mismo bloque; si el bloque ya fue `completada`/`omitida`, crea una nueva sesión (repetición) conservando el historial.
+  - `409 Conflict` si existe un entrenamiento `en_progreso` de otro bloque (no se permiten dos sesiones activas).
+  - `iniciarInmediato: true` (repetir un bloque ya completado) crea/arranca la sesión directamente en `en_progreso`.
+- **Inicio explícito:** `POST /sesiones/{id}/iniciar` (Rol `alumno`, `X-Idempotency-Key`). Cuerpo `{ "timezoneCliente": "America/Caracas", "fechaInicioUtc?": "..." }`. Transiciona `planificada → en_progreso` y captura `fecha_inicio_utc` en UTC (RN-05).
+- **Sincronización batch de series:** `PUT /sesiones/{id}/series` (Rol `alumno`, `X-Idempotency-Key`). Cuerpo `{ "series": [{ "serieId", "repsLogradas", "pesoKg"?, "rpe"?, "descansoSegundos"?, "completada", "timestampCompletadaUtc"? }] }`; compatible con la cola offline.
+- **Finalización:** `POST /sesiones/{id}/finalizar` (Rol `alumno`, `X-Idempotency-Key`).
+  - **Cuerpo:** `{ "notasAlumno"?, "fechaFinUtc"? ("...Z"), "tipoCierre"? }` con `tipoCierre ∈ COMPLETADA | DESCANSADA | INCOMPLETA`.
+  - Evalúa la racha por volumen prescrito (`ratioVolumenPct >= 70%`, con fallback cualitativo) y responde `{ sesion, cumpleReglaRacha, nuevaRacha, duracionMinutos, volumenTotalKg }`.
+  - **Cierre sin series (`RF-001` Escenario 5):** si `seriesCompletadas = 0` y falta `tipoCierre`, responde `400 Bad Request` con código máquina estable:
+    ```json
+    {
+      "statusCode": 400,
+      "error": "Bad Request",
+      "code": "SESION_VACIA",
+      "message": "La sesión no registra series completadas. Indica si el día fue descansado o incompleto."
+    }
+    ```
+    Con decisión explícita `DESCANSADA`/`INCOMPLETA` la sesión queda `omitida` con `motivoOmision: DESCANSO | INCOMPLETO` y no incrementa la racha; `COMPLETADA` con 0 series se rechaza.
+- **Progreso semanal del alumno:** `GET /alumnos/me/rutina/semana-actual?timezone={IANA}` (Rol `alumno`). Expone `bloques[]` (con `estadoSesion`/`motivoOmision` cuando aplica), `porcentajeCumplimiento`, `siguienteBloqueSugeridoId`, `esDiaDescansoHoy` y `rachaDias` (racha efectiva; 0 si la cadena está rota).
+- **Monitor semanal del coach (RN-03):** `GET /entrenador/monitor-adherencia?timezone={IANA}` (Rol `entrenador`). Evalúa la ventana Lunes 00:00 local → ahora y ordena por riesgo (rojo primero).
+  ```json
+  {
+    "alumnoId": "4a5b6c7d-8e9f-0a1b-2c3d-4e5f6a7b8c9d",
+    "alumnoPerfilId": "9f8e7d6c-5b4a-3c2d-1e0f-1a2b3c4d5e6f",
+    "nombreCompleto": "Carlos Mendoza",
+    "sesionesPrescritas": 3,
+    "sesionesCompletadas": 2,
+    "porcentajeCumplimientoSemanal": "66.67",
+    "semaforoAdherencia": "amarillo",
+    "tienePlanActivo": true,
+    "sinPendientesSemana": false,
+    "rachaDiasConsecutivos": 4,
+    "diasInactivo": 1,
+    "ultimaSesionUtc": "2026-09-19T22:40:00.000Z"
+  }
+  ```
+  `tienePlanActivo = false` → la UI muestra "sin plan" (nunca rojo); `sinPendientesSemana = true` → "Al día — sin pendientes" (nunca rojo). `alumnoPerfilId` habilita el enlace directo al expediente del alumno.
+
+### 4.2. Banco de Plantillas del Entrenador (`RF-017`)
+
+- `GET /plantillas?activa={true|false}`: listado resumido del tenant (`PlantillaRutinaResumenDTO`: nombre, nivel, totalDias, totalEjercicios, activa).
+- `POST /plantillas`: crea la plantilla asociada al tenant.
+  ```json
+  {
+    "nombre": "Pierna Énfasis Isquios",
+    "nivelObjetivo": "intermedio",
+    "bloques": [ { "diaId": "dia-1", "titulo": "Pierna A", "ejercicios": [ "..." ] } ]
+  }
+  ```
+- `GET /plantillas/{id}` / `PATCH /plantillas/{id}` / `DELETE /plantillas/{id}`: detalle, edición y desactivación (soft delete vía `activa`). `404 Not Found` si la plantilla pertenece a otro tenant.
+- `POST /plantillas/{id}/asignar`: asignación individual o masiva con copia profunda (deep clone).
+  - **Cuerpo:** `{ "alumnoIds": ["<uuid>", "..."], "modo": "REEMPLAZAR | FUSIONAR", "ajustes?": [{ "diaId", "ejercicioId? | nombre?", "pesoPrescritoKg?", "series?", "reps?", "rpe?" }] }` (máx. 50 alumnos y 100 ajustes por solicitud).
+  - **Respuesta (`200 OK`):** reporte parcial por alumno; el fallo de un alumno no aborta el resto.
+    ```json
+    {
+      "plantillaId": "b7c8d9e0-1f2a-3b4c-5d6e-7f8a9b0c1d2e",
+      "modo": "FUSIONAR",
+      "totalSolicitados": 3,
+      "exitosos": 2,
+      "fallidos": 1,
+      "resultados": [
+        { "alumnoId": "4a5b6c7d-...", "exito": true, "rutinaId": "c9d8...", "bloquesTotal": 4 },
+        { "alumnoId": "9f8e7d6c-...", "exito": false, "error": "El alumno no pertenece a su cartera." }
+      ]
+    }
+    ```
+  - `REEMPLAZAR` sustituye la rutina activa del alumno; `FUSIONAR` anexa los días de la plantilla a los bloques existentes. Los ajustes se aplican antes de confirmar la prescripción (Escenario 2).
+
+### 4.3. Nutrición (`RF-002`)
+
 - `POST /nutricion/checkin-diario`: Semáforo 1-Tap con fotos de comida y agua.
 
 ---
@@ -355,9 +430,14 @@ Permite almacenar la preferencia de visualización en la cuenta del usuario para
 | `PATCH /alumnos/{id}/estado` | ❌ | ✅ | ❌ | Solo sobre alumnos de su propio tenant. |
 | `DELETE /alumnos/{id}` | ❌ | ✅ | ❌ | Aplica Soft Delete (`deleted_at_utc`). |
 | `GET /entrenador/dashboard-comando` | ❌ | ✅ | ❌ | Agrega métricas exclusivas de su cartera. |
+| `GET /entrenador/monitor-adherencia` | ❌ | ✅ | ❌ | Semáforo RN-03 de su cartera; ordenado por riesgo. |
+| `GET/POST/PATCH/DELETE /plantillas` y `POST /plantillas/{id}/asignar` | ❌ | ✅ | ❌ | Banco de plantillas tenant-scoped; asignación con reporte parcial por alumno. |
 | `GET /alumnos/me/sesiones/hoy` | ❌ | ❌ | ✅ | Acceso exclusivo a sus propios datos. |
 | `POST /sesiones/{id}/iniciar` | ❌ | ❌ | ✅ | Titular de la sesión. |
 | `PUT /sesiones/{id}/series` | ❌ | ❌ | ✅ | Solo en sesiones `en_progreso`. |
+| `POST /alumnos/me/sesiones/bloques/{bloqueId}/entrenar-hoy` | ❌ | ❌ | ✅ | Acción explícita RN-04; idempotente; `409` si hay otro bloque en progreso. |
+| `GET /alumnos/me/rutina/semana-actual` | ❌ | ❌ | ✅ | Progreso y racha del propio alumno. |
+| `POST /sesiones/{id}/finalizar` | ❌ | ❌ | ✅ | Exige `tipoCierre` si no hay series completadas (`SESION_VACIA`). |
 | `POST /antropometria/checkin` | ❌ | ✅ (Presencial) | ✅ (Remoto) | RBAC híbrido (`ADR-001`). |
 | `PATCH /antropometria/{id}/conciliar` | ❌ | ✅ | ❌ | Requiere motivo descriptivo si se rechaza. |
 | `POST /finanzas/cuotas/{id}/reportar-pago` | ❌ | ❌ | ✅ | Exige `X-Idempotency-Key` y comprobante. |
@@ -370,7 +450,7 @@ Permite almacenar la preferencia de visualización en la cuenta del usuario para
 
 ## 🔗 8. Trazabilidad y Referencias
 - **Problemas resueltos:** [[PROB-001-adherencia-trazabilidad]] al [[PROB-004-orquestacion-preferencias-notificaciones]].
-- **Requerimientos funcionales:** [[RF-001-checklist-entrenamiento-diario]] al [[RF-016-gestion-dispositivos-tokens-push-ciclo-vida]].
+- **Requerimientos funcionales:** [[RF-001-checklist-entrenamiento-diario]] al [[RF-017-banco-plantillas-rutinas-entrenamiento]].
 - **Requerimientos no funcionales:** [[RNF-001-almacenamiento-seguridad-fotos-progreso]] al [[RNF-004-resiliencia-notificaciones-idempotencia-fallbacks]].
-- **Decisiones arquitecturales:** [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-010-arquitectura-event-driven-notificaciones-multicanal]].
+- **Decisiones arquitecturales:** [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-010-arquitectura-event-driven-notificaciones-multicanal]]; borradores [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]] y [[ADR-012-modo-demo-explicito-datos-sinteticos]].
 - **Documentos de diseño:** [[01_Evaluacion_Stack_Tecnologico]], [[02_Esquema_Base_de_Datos_PostgreSQL]].

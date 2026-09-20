@@ -2,7 +2,9 @@
 id: RF-017
 modulo: Entrenamiento
 prioridad: media
-estado: propuesto
+estado: implementado
+version_implementada: v1.0.0
+fecha_verificacion: 2026-09-20
 problema_origen: "[[PROB-003-acceso-onboarding-dashboard-central]]"
 fecha_creacion: 2026-09-13
 version: 1.0
@@ -65,3 +67,17 @@ When pulsa "Cargar desde Plantilla" y selecciona "Pierna Énfasis Isquios"
 Then el sistema debe clonar los 4 ejercicios a la rutina de Carlos
   And permitirle ajustar cargas particulares antes de confirmar la prescripción
 ```
+
+---
+
+## 6. Notas de Implementación (v1.0.0)
+
+> Entrega verificada el 2026-09-20. Los criterios de aceptación Gherkin de la sección 5 permanecen sin cambios.
+
+- **Modelo (migración `0003_noisy_young_avengers.sql`):** tabla `plantillas_rutina` con `bloques JSONB` tipado `BloqueDiaRutinaDTO[]` — el mismo contrato que `rutinas`, lo que garantiza que la asignación sea una copia profunda fiel (deep clone probado en ambos sentidos). Enum `enum_nivel_objetivo_plantilla` (`principiante`, `intermedio`, `avanzado`), soft delete vía `activa` e índice `idx_plantillas_entrenador_activa (entrenador_id, activa)`.
+- **API tenant-scoped:** CRUD `GET/POST/GET :id/PATCH :id/DELETE :id` sobre `/plantillas` + `POST /plantillas/:id/asignar`; toda operación valida la pertenencia al tenant del coach (404 si es de otro entrenador).
+- **Asignación múltiple con reporte parcial:** `POST /plantillas/:id/asignar` acepta hasta 50 `alumnoIds` y responde `exitosos / fallidos` con `resultados[]` por alumno (`ResultadoAsignacionAlumnoDTO`); el fallo de un alumno no aborta la operación del resto.
+- **Modos de sobrescritura (RN-03):** `REEMPLAZAR` sustituye la rutina activa del alumno; `FUSIONAR` anexa los días de la plantilla a los bloques existentes.
+- **Ajustes antes de confirmar:** `ajustes[]` (`AjusteEjercicioPlantillaSchema`) permite override de `pesoPrescritoKg`, `series`, `reps` y `rpe`, localizado por `diaId` + (`ejercicioId` o `nombre` del ejercicio).
+- **UI:** página "Banco de Plantillas" (`/coach/plantillas`) y acción "Cargar desde Plantilla" en el Expediente 360°.
+- **Tests:** 19 pruebas dedicadas (`rf017-plantillas.spec.ts` y suites asociadas).

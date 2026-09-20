@@ -41,12 +41,14 @@ tags:
 | `timezone_cliente`| `String` | Sí | Zona horaria del dispositivo del alumno | Formato IANA (ej. `America/Caracas`) |
 | `ejercicios` | `List<EjercicioEjecutado>` | Sí | Colección de ejercicios y series | Al menos 1 ejercicio |
 | `estado` | `EnumEstadoSesion` | Sí | `Planificada`, `EnProgreso`, `Completada`, `Omitida` | Máquina de estados |
+| `motivo_omision` | `EnumMotivoOmision` | No | Motivo del cierre como `Omitida` (RF-001 Escenario 5) | `DESCANSO` \| `INCOMPLETO`; null si no aplica |
 | `porcentaje_cumplimiento` | `Decimal` | Sí | Cálculo automático de volumen cumplido | $0.0\%$ a $100.0\%$ |
+| `volumen_total_kg` | `Decimal` | Sí | Volumen real acumulado de la sesión (`Σ peso_kg × reps_logradas`) | `NUMERIC(8,2)`, default `0.00` |
 
 ---
 
 ## 3. Invariantes de Negocio (Business Invariants)
-- **INV-01 (Umbral de Completitud para Racha):** Una sesión solo transiciona a `Completada` y genera crédito de racha si el `porcentaje_cumplimiento` es igual o superior al $70\%$.
+- **INV-01 (Umbral de Completitud para Racha):** Una sesión solo acredita racha si el volumen realizado alcanza $\ge 70\%$ del volumen prescrito (fallback: ratio de series completadas cuando la carga prescrita es cualitativa). El cierre sin series completadas exige una decisión explícita del alumno (`DESCANSADA`/`INCOMPLETA` → estado `Omitida` con `motivo_omision`) y jamás incrementa la racha.
 - **INV-02 (Inmutabilidad Post-Cierre):** Una vez que la sesión alcanza el estado `Completada`, los datos de cargas y repeticiones no pueden ser alterados por el alumno sin autorización del entrenador (para preservar la auditoría de sobrecarga progresiva).
 - **INV-03 (Cargas no Negativas):** Ninguna repetición o peso registrado puede ser inferior a 0.
 - **INV-04 (Persistencia Estricta en UTC y Contexto Local):** Todos los timestamps (`fecha_inicio_utc`, `fecha_fin_utc`) deben almacenarse exclusivamente en formato UTC (ISO 8601 con sufijo `Z`). El frontend del dispositivo cliente es el único responsable de renderizar dichos valores convertidos a la hora local del navegador/dispositivo. La pertenencia de la sesión a un día calendario se evalúa respecto a la fecha local del alumno (`fecha_programada` + `timezone_cliente`).
@@ -57,14 +59,14 @@ tags:
 - **Raíz del Agregado:** `SesionEntrenamiento`.
 - **Entidades Contenidas:**
   - `EjercicioEjecutado` (Entidad interna identificada por `ejercicio_id`).
-  - `SerieRegistro` (Value Object con: `numero_serie`, `reps_objetivo`, `reps_logradas`, `peso_kg`, `completada: boolean`).
+  - `SerieRegistro` (Value Object con: `numero_serie`, `reps_objetivo`, `reps_logradas`, `peso_kg` (real, se sobrescribe al sincronizar), `peso_prescrito_kg` (null si la prescripción es cualitativa), `rpe`, `descanso_segundos` (real), `completada: boolean`).
 
 ---
 
 ## 5. Operaciones de Negocio (Comportamientos / Métodos)
 - `comenzarEntrenamiento(timezoneCliente)`: Acción intencional disparada cuando el usuario pulsa *"Comenzar a entrenar"*. Valida que la sesión esté en estado `Planificada`, transiciona a `EnProgreso`, registra `fecha_inicio_utc = DateTime.now_utc()` y almacena `timezone_cliente`. *(Nota: Acceder a la app o visualizar la rutina NO invoca este método).*
 - `marcarSerie(ejercicioId, numeroSerie, reps, peso)`: Registra el checklist en tiempo real para una serie ejecutada.
-- `finalizarEntrenamiento()`: Disparada cuando el usuario pulsa *"Finalizar Entrenamiento"*. Registra `fecha_fin_utc = DateTime.now_utc()`, calcula el porcentaje de completitud, evalúa si cumple la regla de racha (INV-01), transiciona a `Completada` y emite `SesionEntrenamientoCompletadaEvent`.
+- `finalizarEntrenamiento(tipoCierre?)`: Disparada cuando el usuario pulsa *"Finalizar Entrenamiento"*. Registra `fecha_fin_utc = DateTime.now_utc()`, calcula el volumen real y el porcentaje de completitud, evalúa la regla de racha por volumen (INV-01) y transiciona a `Completada` emitiendo `SesionEntrenamientoCompletadaEvent`. Si no hay series completadas exige `tipoCierre` (`SESION_VACIA` sin él): `DESCANSADA`/`INCOMPLETA` cierran como `Omitida` con `motivo_omision` y sin incremento de racha.
 - `pausarOReanudar()`: Permite manejar pausas operativas dentro de la sesión activa sin reiniciar el timestamp de inicio.
 
 ---

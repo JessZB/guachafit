@@ -39,6 +39,7 @@ erDiagram
     PERFIL_ENTRENADOR ||--o{ PERFIL_ALUMNO : "administra_cartera"
     PERFIL_ENTRENADOR ||--o{ PLAN_MEMBRESIA : "ofrece_planes"
     PERFIL_ENTRENADOR ||--o{ TASA_CAMBIO_REFERENCIA : "configura_tasas"
+    PERFIL_ENTRENADOR ||--o{ PLANTILLA_RUTINA : "biblioteca_plantillas"
 
     %% Agregado Entrenamiento
     PERFIL_ALUMNO ||--o{ SESION_ENTRENAMIENTO : "ejecuta_rutinas"
@@ -108,6 +109,8 @@ erDiagram
         enum_estado_alumno estado_activacion "activo, inactivo_pausado, suspendido_pago"
         enum_modalidad modalidad "presencial, remoto"
         numeric tasa_fijada_override "NUMERIC(12,4) NULL"
+        int racha_dias "Default 0 (RF-001 RN-02)"
+        date racha_ultima_fecha "Última fecha local que incrementó la racha"
         timestamptz deleted_at_utc "Soft delete (RF-012)"
         timestamptz created_at_utc
         timestamptz updated_at_utc
@@ -156,6 +159,17 @@ erDiagram
         boolean activo
     }
 
+    PLANTILLA_RUTINA {
+        uuid id PK
+        uuid entrenador_id FK "Tenant"
+        string nombre "3 a 120 chars"
+        enum_nivel_objetivo_plantilla nivel_objetivo "principiante, intermedio, avanzado"
+        jsonb bloques "BloqueDiaRutinaDTO[] (1 a 7 días)"
+        boolean activa "Soft delete (RF-017)"
+        timestamptz created_at_utc
+        timestamptz updated_at_utc
+    }
+
     SESION_ENTRENAMIENTO {
         uuid id PK
         uuid alumno_id FK
@@ -165,7 +179,11 @@ erDiagram
         timestamptz fecha_fin_utc
         string timezone_cliente
         enum_estado_sesion estado "planificada, en_progreso, completada, omitida"
+        enum_motivo_omision motivo_omision "DESCANSO, INCOMPLETO (Esc. 5)"
         numeric porcentaje_cumplimiento "0.00 a 100.00"
+        numeric volumen_total_kg "NUMERIC(8,2)"
+        string bloque_id "diaId del bloque origen (RF-001)"
+        boolean es_dia_descanso_original "Bloque fuera del día sugerido"
         text notas_alumno
         timestamptz created_at_utc
         timestamptz updated_at_utc
@@ -177,6 +195,7 @@ erDiagram
         uuid ejercicio_id FK
         int orden
         text notas_coach
+        int descanso_prescrito_segundos "Default 90"
     }
 
     SERIE_REGISTRO {
@@ -185,8 +204,10 @@ erDiagram
         int numero_serie
         int reps_objetivo
         int reps_logradas
-        numeric peso_kg "NUMERIC(6,2)"
+        numeric peso_kg "NUMERIC(6,2) real"
+        numeric peso_prescrito_kg "NULL si cualitativo"
         numeric rpe "NUMERIC(3,1)"
+        int descanso_segundos "Real"
         boolean completada
         timestamptz timestamp_completada_utc
     }
@@ -382,6 +403,11 @@ CREATE TYPE enum_estado_sesion AS ENUM (
     'omitida'
 );
 
+CREATE TYPE enum_motivo_omision AS ENUM (
+    'DESCANSO',
+    'INCOMPLETO'
+);
+
 CREATE TYPE enum_semaforo_nutricional AS ENUM (
     'cumplido', 
     'parcial', 
@@ -440,6 +466,12 @@ CREATE TYPE enum_estado_conciliacion AS ENUM (
     'pendiente', 
     'aprobado', 
     'rechazado'
+);
+
+CREATE TYPE enum_nivel_objetivo_plantilla AS ENUM (
+    'principiante',
+    'intermedio',
+    'avanzado'
 );
 
 -- =============================================================================
@@ -524,6 +556,8 @@ CREATE TABLE perfiles_alumno (
     estado_activacion enum_estado_alumno NOT NULL DEFAULT 'activo', -- Máquina de estados (RF-012)
     modalidad enum_modalidad NOT NULL DEFAULT 'presencial', -- ADR-001
     tasa_fijada_override NUMERIC(12, 4), -- ADR-003 Override individual
+    racha_dias INT NOT NULL DEFAULT 0, -- RF-001 RN-02: días consecutivos con >= 70% del volumen prescrito
+    racha_ultima_fecha DATE, -- Última fecha local (YYYY-MM-DD) que incrementó la racha
     deleted_at_utc TIMESTAMP WITH TIME ZONE, -- Soft Delete (RF-012)
     created_at_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
     updated_at_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
@@ -617,6 +651,27 @@ CREATE TABLE ejercicios_catalogo (
 );
 
 -- =============================================================================
+-- TABLA: plantillas_rutina (Banco de Plantillas del Coach - RF-017, migración 0003)
+-- =============================================================================
+CREATE TABLE plantillas_rutina (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    entrenador_id UUID NOT NULL, -- Tenant Owner
+    nombre VARCHAR(120) NOT NULL,
+    nivel_objetivo enum_nivel_objetivo_plantilla NOT NULL,
+    bloques JSONB NOT NULL, -- BloqueDiaRutinaDTO[]: copia profunda al asignar (RN-02)
+    activa BOOLEAN NOT NULL DEFAULT TRUE, -- Soft delete / visibilidad en biblioteca
+    created_at_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
+    updated_at_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
+    CONSTRAINT fk_plantilla_entrenador FOREIGN KEY (entrenador_id) REFERENCES usuarios(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_plantillas_entrenador_activa ON plantillas_rutina (entrenador_id, activa);
+
+CREATE TRIGGER trg_plantillas_rutina_updated_at
+BEFORE UPDATE ON plantillas_rutina
+FOR EACH ROW EXECUTE FUNCTION set_updated_at_utc();
+
+-- =============================================================================
 -- TABLA: sesiones_entrenamiento (Agregado SesionEntrenamiento - RF-001)
 -- =============================================================================
 CREATE TABLE sesiones_entrenamiento (
@@ -628,7 +683,11 @@ CREATE TABLE sesiones_entrenamiento (
     fecha_fin_utc TIMESTAMP WITH TIME ZONE,
     timezone_cliente VARCHAR(64) NOT NULL DEFAULT 'America/Caracas',
     estado enum_estado_sesion NOT NULL DEFAULT 'planificada',
+    motivo_omision enum_motivo_omision, -- RF-001 Esc. 5: DESCANSO | INCOMPLETO
     porcentaje_cumplimiento NUMERIC(5, 2) NOT NULL DEFAULT 0.00,
+    volumen_total_kg NUMERIC(8, 2) NOT NULL DEFAULT 0.00, -- Volumen real de la sesión
+    bloque_id VARCHAR(64), -- diaId del bloque de rutina origen (RF-001 bloques flexibles)
+    es_dia_descanso_original BOOLEAN NOT NULL DEFAULT FALSE, -- true si el bloque no era el sugerido para hoy
     notas_alumno TEXT,
     created_at_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
     updated_at_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
@@ -651,6 +710,7 @@ CREATE TABLE ejercicios_sesion (
     ejercicio_id UUID NOT NULL,
     orden INT NOT NULL DEFAULT 1,
     notas_coach TEXT,
+    descanso_prescrito_segundos INT NOT NULL DEFAULT 90, -- Descanso prescrito entre series
     CONSTRAINT fk_ejercicio_sesion_sesion FOREIGN KEY (sesion_id) REFERENCES sesiones_entrenamiento(id) ON DELETE CASCADE,
     CONSTRAINT fk_ejercicio_sesion_ejercicio FOREIGN KEY (ejercicio_id) REFERENCES ejercicios_catalogo(id) ON DELETE RESTRICT
 );
@@ -661,8 +721,10 @@ CREATE TABLE series_registro (
     numero_serie INT NOT NULL,
     reps_objetivo INT NOT NULL,
     reps_logradas INT,
-    peso_kg NUMERIC(6, 2),
+    peso_kg NUMERIC(6, 2), -- Peso real levantado (se sobrescribe al sincronizar)
+    peso_prescrito_kg NUMERIC(6, 2), -- NULL si la prescripción es cualitativa (sin materializar 0.00)
     rpe NUMERIC(3, 1),
+    descanso_segundos INT, -- Descanso real registrado por el alumno
     completada BOOLEAN NOT NULL DEFAULT FALSE,
     timestamp_completada_utc TIMESTAMP WITH TIME ZONE,
     CONSTRAINT fk_serie_ejercicio_sesion FOREIGN KEY (ejercicio_sesion_id) REFERENCES ejercicios_sesion(id) ON DELETE CASCADE,
@@ -876,63 +938,89 @@ CREATE TABLE tasas_cambio_referencia (
 -- 3. POLÍTICAS DE ROW-LEVEL SECURITY (RLS) MULTI-TENANT (RNF-003, ADR-009)
 -- =============================================================================
 
--- Habilitar RLS en tablas aisladas por Tenant
-ALTER TABLE perfiles_alumno ENABLE ROW LEVEL SECURITY;
-ALTER TABLE planes_membresia ENABLE ROW LEVEL SECURITY;
-ALTER TABLE cuotas_membresia ENABLE ROW LEVEL SECURITY;
-ALTER TABLE transacciones_pago ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tasas_cambio_referencia ENABLE ROW LEVEL SECURITY;
+-- -----------------------------------------------------------------------------
+-- ENTREGA POR ETAPAS (migración 0004_rls_multitenant.sql):
+--   * Políticas creadas para las 5 tablas de RNF-003.
+--   * ENABLE ROW LEVEL SECURITY aplicado SOLO en `rutinas` (etapa 1).
+--   * Las 4 tablas restantes quedan PREPARADAS (políticas creadas, ENABLE
+--     comentado) hasta que el 100% de sus caminos corran dentro de withTenant().
+-- -----------------------------------------------------------------------------
 
--- Función de ayuda: Comprueba si la sesión activa es SuperAdmin
+-- Funciones de sesión (STABLE, sin SECURITY DEFINER: current_setting no requiere privilegios)
 CREATE OR REPLACE FUNCTION is_superadmin()
-RETURNS BOOLEAN AS $$
-BEGIN
-    RETURN current_setting('app.is_superadmin', true) = 'true';
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT COALESCE(current_setting('app.is_superadmin', true), 'false') = 'true';
+$$;
 
--- Función de ayuda: Obtiene el UUID del entrenador activo de la sesión
 CREATE OR REPLACE FUNCTION current_entrenador_id()
-RETURNS UUID AS $$
-BEGIN
-    RETURN NULLIF(current_setting('app.current_entrenador_id', true), '')::UUID;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+RETURNS uuid LANGUAGE sql STABLE AS $$
+  SELECT NULLIF(current_setting('app.current_entrenador_id', true), '')::uuid;
+$$;
 
--- Políticas de aislamiento para perfiles_alumno
+CREATE OR REPLACE FUNCTION current_usuario_id()
+RETURNS uuid LANGUAGE sql STABLE AS $$
+  SELECT NULLIF(current_setting('app.current_usuario_id', true), '')::uuid;
+$$;
+
+-- rutinas (ETAPA 1: RLS habilitado)
+CREATE POLICY rls_rutinas ON rutinas
+  FOR ALL
+  USING (is_superadmin() OR entrenador_id = current_entrenador_id())
+  WITH CHECK (is_superadmin() OR entrenador_id = current_entrenador_id());
+
+CREATE POLICY rls_rutinas_self_select ON rutinas
+  FOR SELECT
+  USING (alumno_id = current_usuario_id());
+
+ALTER TABLE rutinas ENABLE ROW LEVEL SECURITY;
+
+-- perfiles_alumno — PREPARADA (ENABLE pendiente)
 CREATE POLICY rls_perfiles_alumno ON perfiles_alumno
-    FOR ALL
-    USING (
-        is_superadmin() OR 
-        entrenador_id = current_entrenador_id() OR
-        usuario_id = NULLIF(current_setting('app.current_usuario_id', true), '')::UUID
-    );
+  FOR ALL
+  USING (is_superadmin() OR entrenador_id = current_entrenador_id())
+  WITH CHECK (is_superadmin() OR entrenador_id = current_entrenador_id());
 
--- Políticas de aislamiento para planes_membresia
+CREATE POLICY rls_perfiles_alumno_self_select ON perfiles_alumno
+  FOR SELECT
+  USING (usuario_id = current_usuario_id());
+
+-- planes_membresia — PREPARADA (ENABLE pendiente)
 CREATE POLICY rls_planes_membresia ON planes_membresia
-    FOR ALL
-    USING (
-        is_superadmin() OR 
-        entrenador_id = current_entrenador_id()
-    );
+  FOR ALL
+  USING (is_superadmin() OR entrenador_id = current_entrenador_id())
+  WITH CHECK (is_superadmin() OR entrenador_id = current_entrenador_id());
 
--- Políticas de aislamiento para cuotas_membresia
+-- cuotas_membresia — PREPARADA (ENABLE pendiente)
 CREATE POLICY rls_cuotas_membresia ON cuotas_membresia
-    FOR ALL
-    USING (
-        is_superadmin() OR 
-        entrenador_id = current_entrenador_id() OR
-        cliente_id = NULLIF(current_setting('app.current_usuario_id', true), '')::UUID
-    );
+  FOR ALL
+  USING (is_superadmin() OR entrenador_id = current_entrenador_id())
+  WITH CHECK (is_superadmin() OR entrenador_id = current_entrenador_id());
 
--- Políticas de aislamiento para transacciones_pago
+CREATE POLICY rls_cuotas_membresia_self_select ON cuotas_membresia
+  FOR SELECT
+  USING (cliente_id = current_usuario_id());
+
+-- transacciones_pago — PREPARADA (ENABLE pendiente)
 CREATE POLICY rls_transacciones_pago ON transacciones_pago
-    FOR ALL
-    USING (
-        is_superadmin() OR 
-        entrenador_id = current_entrenador_id() OR
-        cliente_id = NULLIF(current_setting('app.current_usuario_id', true), '')::UUID
-    );
+  FOR ALL
+  USING (is_superadmin() OR entrenador_id = current_entrenador_id())
+  WITH CHECK (is_superadmin() OR entrenador_id = current_entrenador_id());
+
+CREATE POLICY rls_transacciones_pago_self_select ON transacciones_pago
+  FOR SELECT
+  USING (cliente_id = current_usuario_id());
+
+-- ETAPA 2 (PENDIENTE): descomentar por tabla únicamente cuando TODAS sus consultas
+-- de tenant corran dentro de withTenant() y la suite lo verifique.
+-- ALTER TABLE perfiles_alumno ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE planes_membresia ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE cuotas_membresia ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE transacciones_pago ENABLE ROW LEVEL SECURITY;
+
+-- REQUISITO DE EFECTIVIDAD: sin FORCE ROW LEVEL SECURITY, el rol dueño de las
+-- tablas (y los superusers) ignora RLS. La API debe conectarse con un rol NO
+-- dueño (p. ej. `guachafit_app` con GRANT sobre las tablas) o aplicarse
+-- FORCE ROW LEVEL SECURITY por tabla.
 ```
 
 ---
@@ -941,7 +1029,7 @@ CREATE POLICY rls_transacciones_pago ON transacciones_pago
 
 | Requerimiento / ADR | Invariante de Negocio | Implementación en PostgreSQL |
 | :--- | :--- | :--- |
-| **RNF-003 / ADR-009** | Aislamiento 100% multi-tenant entre carteras de entrenadores. | Row-Level Security (`ENABLE ROW LEVEL SECURITY`) con funciones `current_entrenador_id()` y `is_superadmin()`. |
+| **RNF-003 / ADR-009 / [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]]** | Aislamiento multi-tenant entre carteras de entrenadores (entrega por etapas). | Row-Level Security con funciones `current_entrenador_id()` / `current_usuario_id()` / `is_superadmin()`: `ENABLE` operativo en `rutinas` (etapa 1); las otras 4 tablas tienen políticas creadas y `ENABLE` pendiente. Efectividad condicionada a rol de conexión no-dueño y/o `FORCE ROW LEVEL SECURITY`. |
 | **RF-011 / RNF-003** | Ficha de salud privada confidencial (exclusiva del coach). | Columna `ficha_salud_privada TEXT` cifrada con `AES-256-GCM` y excluida de los DTOs de alumnos. |
 | **RF-012 (Soft Delete)** | Preservación del histórico deportivo y contable al dar de baja un cliente. | Columna `deleted_at_utc` con índice parcial `WHERE deleted_at_utc IS NULL`. |
 | **RNF-002 (Precisión Decimal)** | Cero error binario de redondeo (prohibido IEEE 754 `float`/`double`). | Columnas `NUMERIC(14,2)` para dinero y `NUMERIC(12,4)` para tasas cambiarias. |
@@ -951,12 +1039,24 @@ CREATE POLICY rls_transacciones_pago ON transacciones_pago
 | **ADR-003 (Deuda Maestra USD)** | Unidad de cuenta en USD y tasa de abonos congelada en el snapshot. | `transacciones_pago.tasa_cambio_fijada` y `transacciones_pago.monto_equivalente_usd` inmutables post-creación. |
 | **RF-015 / RF-016** | Unicidad de tokens de dispositivos y matriz 1 a 1 de preferencias. | `UNIQUE (device_token)` en `dispositivos_usuario` y `UNIQUE (usuario_id)` en `preferencias_notificacion`. |
 
+### 3.1. Estado de Implementación RLS (2026-09-20)
+
+| Tabla | Políticas creadas | `ENABLE RLS` | Caminos de tenant envueltos en `withTenant` |
+| :--- | :---: | :---: | :--- |
+| `rutinas` | ✅ | ✅ (etapa 1) | 100% |
+| `perfiles_alumno` | ✅ | ⏳ pendiente | parcial |
+| `planes_membresia` | ✅ | ⏳ pendiente | parcial |
+| `cuotas_membresia` | ✅ | ⏳ pendiente | parcial |
+| `transacciones_pago` | ✅ | ⏳ pendiente | parcial |
+
+> **Verificación real pendiente:** la suite `rnf003-rls-multitenant.spec.ts` valida el mecanismo/contrato con mocks. El aislamiento efectivo (rol de conexión no-dueño y/o `FORCE ROW LEVEL SECURITY`) y su verificación contra PostgreSQL real quedan fuera de la etapa 1. Ver [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]].
+
 ---
 
 ## 🔗 4. Trazabilidad y Referencias
-- Entidades vinculadas: [[Entidad-Usuario]], [[Entidad-PerfilEntrenador]], [[Entidad-PerfilAlumno]], [[Entidad-PreferenciaNotificacion]], [[Entidad-DispositivoUsuario]], [[Entidad-NotificacionInApp]], [[Entidad-SesionEntrenamiento]], [[Entidad-CheckinNutricional]], [[Entidad-ControlAntropometrico]], [[Entidad-PlanMembresia]], [[Entidad-CuotaMembresia]], [[Entidad-TransaccionPago]].
-- Requerimientos asociados: [[RF-001-checklist-entrenamiento-diario]] al [[RF-016-gestion-dispositivos-tokens-push-ciclo-vida]], [[RNF-001-almacenamiento-seguridad-fotos-progreso]] al [[RNF-004-resiliencia-notificaciones-idempotencia-fallbacks]].
-- Decisiones arquitecturales: [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-010-arquitectura-event-driven-notificaciones-multicanal]].
+- Entidades vinculadas: [[Entidad-Usuario]], [[Entidad-PerfilEntrenador]], [[Entidad-PerfilAlumno]], [[Entidad-PreferenciaNotificacion]], [[Entidad-DispositivoUsuario]], [[Entidad-NotificacionInApp]], [[Entidad-SesionEntrenamiento]], [[Entidad-PlantillaRutina]], [[Entidad-CheckinNutricional]], [[Entidad-ControlAntropometrico]], [[Entidad-PlanMembresia]], [[Entidad-CuotaMembresia]], [[Entidad-TransaccionPago]].
+- Requerimientos asociados: [[RF-001-checklist-entrenamiento-diario]] al [[RF-017-banco-plantillas-rutinas-entrenamiento]], [[RNF-001-almacenamiento-seguridad-fotos-progreso]] al [[RNF-004-resiliencia-notificaciones-idempotencia-fallbacks]].
+- Decisiones arquitecturales: [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-010-arquitectura-event-driven-notificaciones-multicanal]]; aislamiento por etapas en [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]].
 
 ---
 

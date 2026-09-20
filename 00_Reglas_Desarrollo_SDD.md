@@ -123,10 +123,10 @@ GUACHAFIT/
 ├── 00_Reglas_Desarrollo_SDD.md   # Este documento de gobernanza
 ├── 01_Problemas/                 # Problemáticas de negocio (PROB-001..004)
 ├── 02_Requerimientos/            # Requerimientos funcionales y no funcionales
-│   ├── RF/                       # RF-001 al RF-016 (Gherkin)
+│   ├── RF/                       # RF-001 al RF-017 (Gherkin)
 │   └── RNF/                      # RNF-001 al RNF-004 (Métricas y SLOs)
 ├── 03_Dominio/                   # Entidades y Agregados DDD
-├── 04_Decisiones/                # ADR-001 al ADR-010
+├── 04_Decisiones/                # ADR-001 al ADR-012
 ├── 05_Arquitectura/              # Especificación técnica, DDL y contratos API
 ├── apps/                         # Aplicaciones ejecutables
 │   ├── api/                      # Backend NestJS + Drizzle + BullMQ
@@ -144,6 +144,6 @@ GUACHAFIT/
 ---
 
 ## 🔗 5. Trazabilidad
-- Ecosistema de Requerimientos: [[RF-001-checklist-entrenamiento-diario]] al [[RF-016-gestion-dispositivos-tokens-push-ciclo-vida]].
+- Ecosistema de Requerimientos: [[RF-001-checklist-entrenamiento-diario]] al [[RF-017-banco-plantillas-rutinas-entrenamiento]].
 - Atributos de Calidad: [[RNF-001-almacenamiento-seguridad-fotos-progreso]] al [[RNF-004-resiliencia-notificaciones-idempotencia-fallbacks]].
-- Decisiones Arquitecturales: [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-010-arquitectura-event-driven-notificaciones-multicanal]].
+- Decisiones Arquitecturales: [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-012-modo-demo-explicito-datos-sinteticos]] (incluye [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]]).
