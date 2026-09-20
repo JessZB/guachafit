@@ -420,7 +420,8 @@ describe('RNF-003: consultas a `rutinas` siempre dentro de withTenant (cableado 
 
     const monitor = await servicio.calcularSemanaAdherencia(COACH_ID, 'UTC');
 
-    expect(monitor).toHaveLength(1);
+    expect(monitor.items).toHaveLength(1);
+    expect(monitor.total).toBe(1);
     expect(superficie.withTenant).toHaveBeenCalledWith(
       { entrenadorId: COACH_ID },
       expect.any(Function)

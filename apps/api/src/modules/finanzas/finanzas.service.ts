@@ -19,6 +19,10 @@ import {
   asc,
   ne,
   sql,
+  count,
+  sum,
+  gte,
+  lt,
   planesMembresia,
   overridesClientePlan,
   cuotasMembresia,
@@ -48,9 +52,11 @@ import {
   OverridePlanDetalleDTO,
   CuotaDetalleDTO,
   TransaccionPagoDetalleDTO,
+  BandejaConciliacionDTO,
   CalculoConversionDTO,
   TasaCambioVigenteDTO,
   ResumenFinancieroAlumnoDTO,
+  LIMITE_BANDEJA_CONCILIACION_POR_DEFECTO,
 } from '@guachafit/shared';
 
 // =============================================================================
@@ -1335,7 +1341,27 @@ export class FinanzasService {
   // 8. BANDEJA DE CONCILIACIÓN DEL ENTRENADOR (FIFO) (RF-007)
   // ===========================================================================
 
-  async listarBandejaConciliacion(entrenadorId: string): Promise<TransaccionPagoDetalleDTO[]> {
+  /**
+   * WU24b: bandeja FIFO paginada en SQL. `total` es el COUNT real de transacciones PENDIENTES
+   * del entrenador (no el tamaño de la página) y el desempate estable por `id` garantiza que
+   * `offset` avance sin repetir ni saltar filas entre páginas.
+   */
+  async listarBandejaConciliacion(
+    entrenadorId: string,
+    limit = LIMITE_BANDEJA_CONCILIACION_POR_DEFECTO,
+    offset = 0
+  ): Promise<BandejaConciliacionDTO> {
+    const whereBandeja = and(
+      eq(transaccionesPago.entrenadorId, entrenadorId),
+      eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.PENDIENTE)
+    );
+
+    // WU24b: COUNT real en SQL para el `total` del envelope.
+    const [filaTotal] = await this.db
+      .select({ total: count() })
+      .from(transaccionesPago)
+      .where(whereBandeja);
+
     const records = await this.db
       .select({
         tx: transaccionesPago,
@@ -1343,15 +1369,13 @@ export class FinanzasService {
       })
       .from(transaccionesPago)
       .leftJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, transaccionesPago.clienteId))
-      .where(
-        and(
-          eq(transaccionesPago.entrenadorId, entrenadorId),
-          eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.PENDIENTE)
-        )
-      )
-      .orderBy(asc(transaccionesPago.fechaReporteUtc)); // FIFO
+      .where(whereBandeja)
+      // FIFO por fecha de reporte; desempate estable para paginar sin repetidos.
+      .orderBy(asc(transaccionesPago.fechaReporteUtc), asc(transaccionesPago.id))
+      .limit(limit)
+      .offset(offset);
 
-    return Promise.all(
+    const items = await Promise.all(
       records.map(async ({ tx, alumno }) => ({
         id: tx.id,
         cuotaId: tx.cuotaId,
@@ -1376,6 +1400,13 @@ export class FinanzasService {
         updatedAtUtc: tx.updatedAtUtc.toISOString(),
       }))
     );
+
+    return {
+      items,
+      total: Number(filaTotal?.total ?? 0),
+      limit,
+      offset,
+    };
   }
 
   // ===========================================================================
@@ -1446,13 +1477,20 @@ export class FinanzasService {
   }
 
   /**
-   * Obtener historial financiero completo y resumen 360 del alumno
+   * Obtener historial financiero completo y resumen 360 del alumno.
+   *
+   * WU24b: `transaccionesTotal` es el COUNT real SIEMPRE presente. `txLimit`/`txOffset` son
+   * OPT-IN: sin ellos `transacciones` trae todas (comportamiento histórico) y con ellos el
+   * slice se resuelve con LIMIT/OFFSET en SQL. Los agregados del resumen (`saldoPendienteTotalUsd`,
+   * `totalPagadoHistoricoUsd`, `totalPagadoMesActualUsd`) se calculan sobre el TOTAL, no la página.
    */
   async obtenerHistorialCliente(
     entrenadorId: string,
     clienteId: string,
     actorUserId: string,
-    actorRole: Rol
+    actorRole: Rol,
+    txLimit?: number,
+    txOffset = 0
   ): Promise<ResumenFinancieroAlumnoDTO> {
     // 1. Validar existencia del alumno y aislamiento de tenant
     let [perfil] = await this.db
@@ -1496,16 +1534,28 @@ export class FinanzasService {
       )
       .orderBy(desc(cuotasMembresia.createdAtUtc));
 
-    const txs = await this.db
+    const whereTransacciones = and(
+      eq(transaccionesPago.clienteId, clienteUsuarioId),
+      eq(transaccionesPago.entrenadorId, entrenadorId)
+    );
+
+    // WU24b: COUNT real del total (independiente de la página solicitada).
+    const [filaTotalTx] = await this.db
+      .select({ total: count() })
+      .from(transaccionesPago)
+      .where(whereTransacciones);
+
+    const txQuery = this.db
       .select()
       .from(transaccionesPago)
-      .where(
-        and(
-          eq(transaccionesPago.clienteId, clienteUsuarioId),
-          eq(transaccionesPago.entrenadorId, entrenadorId)
-        )
-      )
-      .orderBy(desc(transaccionesPago.createdAtUtc));
+      .where(whereTransacciones)
+      // Desempate estable por `id` para que `txOffset` no repita ni salte filas.
+      .orderBy(desc(transaccionesPago.createdAtUtc), desc(transaccionesPago.id));
+
+    // WU24b: LIMIT/OFFSET en SQL solo cuando el consumidor pide explícitamente una página.
+    const txs = await (txLimit !== undefined
+      ? txQuery.limit(txLimit).offset(txOffset)
+      : txQuery);
 
     let saldoTotalCents = 0;
     for (const c of cuotas) {
@@ -1514,27 +1564,35 @@ export class FinanzasService {
       }
     }
 
-    let totalPagadoHistCents = 0;
-    let totalPagadoMesCents = 0;
     const hoy = new Date();
     const currentYear = hoy.getFullYear();
     const currentMonth = hoy.getMonth();
+    const inicioMesActual = new Date(currentYear, currentMonth, 1);
+    const inicioMesSiguiente = new Date(currentYear, currentMonth + 1, 1);
 
-    for (const t of txs) {
-      if (t.estadoConciliacion === EstadoConciliacion.APROBADO) {
-        const txCents = toCents(t.montoEquivalenteUsd);
-        totalPagadoHistCents += txCents;
+    // WU24b: agregados del resumen en SQL sobre TODAS las transacciones aprobadas del alumno
+    // (no solo la página), preservando la semántica de `totalPagadoHistoricoUsd`/`totalPagadoMesActualUsd`.
+    const [filaTotalesHistoricos] = await this.db
+      .select({ totalUsd: sum(transaccionesPago.montoEquivalenteUsd) })
+      .from(transaccionesPago)
+      .where(
+        and(whereTransacciones, eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.APROBADO))
+      );
 
-        const txDate = t.createdAtUtc ? new Date(t.createdAtUtc) : null;
-        if (
-          txDate &&
-          txDate.getFullYear() === currentYear &&
-          txDate.getMonth() === currentMonth
-        ) {
-          totalPagadoMesCents += txCents;
-        }
-      }
-    }
+    const [filaTotalesMes] = await this.db
+      .select({ totalUsd: sum(transaccionesPago.montoEquivalenteUsd) })
+      .from(transaccionesPago)
+      .where(
+        and(
+          whereTransacciones,
+          eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.APROBADO),
+          gte(transaccionesPago.createdAtUtc, inicioMesActual),
+          lt(transaccionesPago.createdAtUtc, inicioMesSiguiente)
+        )
+      );
+
+    const totalPagadoHistCents = toCents(filaTotalesHistoricos?.totalUsd ?? '0');
+    const totalPagadoMesCents = toCents(filaTotalesMes?.totalUsd ?? '0');
 
     const currentPeriod = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
     const cuotaMes = cuotas.find((c) => c.periodo === currentPeriod) || cuotas[0] || null;
@@ -1556,6 +1614,7 @@ export class FinanzasService {
             fechaVencimiento: toIsoSafe(cuotaMes.fechaCorteUtc),
           }
         : null,
+      transaccionesTotal: Number(filaTotalTx?.total ?? 0),
       transacciones: txs.map((t) => ({
         id: t.id,
         cuotaId: t.cuotaId,

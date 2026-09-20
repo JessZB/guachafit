@@ -94,6 +94,25 @@ describe('BDD: RF-005, RF-006 & RF-001 - Ajustes Operativos e Historial de Entre
   }
 
   function createMockDb() {
+    // WU24: la selección puede ser un COUNT real (`{ total: count() }`) del historial paginado.
+    const esSeleccionCount = (seleccion: any): boolean =>
+      Boolean(
+        seleccion &&
+          typeof seleccion === 'object' &&
+          Object.values(seleccion).some(
+            (expr: any) =>
+              expr &&
+              Array.isArray(expr.queryChunks) &&
+              expr.queryChunks.some(
+                (c: any) =>
+                  Array.isArray(c?.value) &&
+                  c.value.some(
+                    (v: any) => typeof v === 'string' && v.toLowerCase().includes('count(')
+                  )
+              )
+          )
+      );
+
     const db: any = {
       select: vi.fn((fieldsSelection?: any) => ({
         from: vi.fn((table: any) => {
@@ -107,10 +126,29 @@ describe('BDD: RF-005, RF-006 & RF-001 - Ajustes Operativos e Historial de Entre
                 conditions.length === 0 || conditions.every((cond) => matchesField(item, cond))
               );
 
+              // WU24: LIMIT/OFFSET se aplican al resolver (offset primero), como en SQL.
+              let limite: number | null = null;
+              let desplazamiento = 0;
               const innerChain: any = {
                 orderBy: vi.fn(() => innerChain),
-                limit: vi.fn((n: number) => filtered.slice(0, n)),
-                then: (resolve: any) => resolve(filtered),
+                limit: vi.fn((n: number) => {
+                  limite = n;
+                  return innerChain;
+                }),
+                offset: vi.fn((n: number) => {
+                  desplazamiento = n;
+                  return innerChain;
+                }),
+                then: (resolve: any) => {
+                  if (esSeleccionCount(fieldsSelection)) {
+                    return resolve([{ total: filtered.length }]);
+                  }
+                  const pagina =
+                    limite === null
+                      ? filtered.slice(desplazamiento)
+                      : filtered.slice(desplazamiento, desplazamiento + limite);
+                  return resolve(pagina);
+                },
               };
               return innerChain;
             }),
@@ -389,10 +427,14 @@ describe('BDD: RF-005, RF-006 & RF-001 - Ajustes Operativos e Historial de Entre
       );
 
       expect(res).toBeDefined();
-      expect(Array.isArray(res)).toBe(true);
-      expect(res.length).toBeGreaterThan(0);
-      expect(res[0].id).toBeDefined();
-      expect(res[0].ejercicios).toBeDefined();
+      // WU24: envelope paginado con COUNT real; el historial viaja en `items`.
+      expect(Array.isArray(res.items)).toBe(true);
+      expect(res.items.length).toBeGreaterThan(0);
+      expect(res.total).toBeGreaterThanOrEqual(res.items.length);
+      expect(res.limit).toBe(30);
+      expect(res.offset).toBe(0);
+      expect(res.items[0].id).toBeDefined();
+      expect(res.items[0].ejercicios).toBeDefined();
     });
 
     it('debe rechazar con 400 Bad Request si el ID de alumno no es un UUID válido', async () => {

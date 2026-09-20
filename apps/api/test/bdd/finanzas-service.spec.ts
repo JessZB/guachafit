@@ -41,8 +41,10 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
   let mockTransaccionesPago: any[];
   let mockTasasCambioReferencia: any[];
 
-  function extractConditions(sqlObj: any): Array<{ column: string; value: any }> {
-    const conditions: Array<{ column: string; value: any }> = [];
+  type OpCondicion = 'eq' | 'ne' | 'isNull' | 'isNotNull' | 'gt' | 'gte' | 'lt' | 'lte';
+
+  function extractConditions(sqlObj: any): Array<{ column: string; value: any; op: OpCondicion }> {
+    const conditions: Array<{ column: string; value: any; op: OpCondicion }> = [];
     if (!sqlObj) return conditions;
 
     function traverse(chunks: any[]) {
@@ -52,9 +54,27 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
         if (chunk && chunk.queryChunks) {
           traverse(chunk.queryChunks);
         } else if (chunk && typeof chunk.name === 'string') {
-          const nextParam = chunks.slice(i + 1).find((c: any) => c && 'value' in c && !Array.isArray(c.value));
+          const subsequent = chunks.slice(i + 1);
+          // Operador: texto SQL entre la columna y el primer parámetro.
+          let opText = '';
+          for (const c of subsequent) {
+            if (c && 'value' in c && !Array.isArray(c.value)) break;
+            if (Array.isArray(c?.value)) opText += ` ${c.value.join(' ')}`;
+          }
+          const texto = opText.toLowerCase();
+          const comparador = texto.match(/>=|<=|>|</)?.[0];
+          let op: OpCondicion = 'eq';
+          if (comparador === '>=') op = 'gte';
+          else if (comparador === '<=') op = 'lte';
+          else if (comparador === '>') op = 'gt';
+          else if (comparador === '<') op = 'lt';
+          else if (texto.includes('<>') || texto.includes('!=')) op = 'ne';
+
+          const nextParam = subsequent.find(
+            (c: any) => c && 'value' in c && !Array.isArray(c.value)
+          );
           if (nextParam) {
-            conditions.push({ column: chunk.name, value: nextParam.value });
+            conditions.push({ column: chunk.name, value: nextParam.value, op });
           }
         }
       }
@@ -66,11 +86,97 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
     return conditions;
   }
 
-  function matchesField(record: any, column: string, value: any): boolean {
-    if (record[column] !== undefined) return record[column] === value;
-    const camel = column.replace(/_([a-z])/g, (_, l) => l.toUpperCase());
-    if (record[camel] !== undefined) return record[camel] === value;
-    return false;
+  function valorDeColumna(record: any, columna: string): any {
+    if (record[columna] !== undefined) return record[columna];
+    return record[columna.replace(/_([a-z])/g, (_: string, l: string) => l.toUpperCase())];
+  }
+
+  function compararValores(a: any, b: any): number {
+    const normalizar = (v: any): any => {
+      if (v instanceof Date) return v.getTime();
+      if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) return new Date(v).getTime();
+      const numero = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(numero) && String(v).trim() !== '' ? numero : v;
+    };
+    const va = normalizar(a);
+    const vb = normalizar(b);
+    if (typeof va === 'number' && typeof vb === 'number') return va - vb;
+    return va < vb ? -1 : va > vb ? 1 : 0;
+  }
+
+  function matchesField(record: any, cond: { column: string; value: any; op: OpCondicion }): boolean {
+    const colVal = valorDeColumna(record, cond.column);
+
+    switch (cond.op) {
+      case 'ne':
+        return colVal !== cond.value;
+      case 'gt':
+        return compararValores(colVal, cond.value) > 0;
+      case 'gte':
+        return compararValores(colVal, cond.value) >= 0;
+      case 'lt':
+        return compararValores(colVal, cond.value) < 0;
+      case 'lte':
+        return compararValores(colVal, cond.value) <= 0;
+      default:
+        return colVal === cond.value;
+    }
+  }
+
+  /** WU24b: extrae columna y dirección de una expresión `asc(col)`/`desc(col)` de Drizzle. */
+  function extraerOrden(expr: any): { columna: string | null; direccion: 'asc' | 'desc' } {
+    let columna: string | null = null;
+    let direccion: 'asc' | 'desc' = 'asc';
+    const visitar = (chunks: any[]) => {
+      for (const c of chunks) {
+        if (c && typeof c.name === 'string' && !columna) columna = c.name;
+        if (c && Array.isArray(c.value)) {
+          const texto = c.value.join(' ').toLowerCase();
+          if (texto.includes('desc')) direccion = 'desc';
+        }
+        if (c && Array.isArray(c.queryChunks)) visitar(c.queryChunks);
+      }
+    };
+    if (expr && Array.isArray(expr.queryChunks)) visitar(expr.queryChunks);
+    return { columna, direccion };
+  }
+
+  function textoDeExpresion(expr: any): string {
+    if (!expr || typeof expr !== 'object' || !Array.isArray(expr.queryChunks)) return '';
+    const partes: string[] = [];
+    const visitar = (chunks: any[]) => {
+      for (const c of chunks) {
+        if (Array.isArray(c?.value)) partes.push(c.value.join(' '));
+        if (Array.isArray(c?.queryChunks)) visitar(c.queryChunks);
+      }
+    };
+    visitar(expr.queryChunks);
+    return partes.join(' ').toLowerCase();
+  }
+
+  function buscarNombreColumna(expr: any): string | null {
+    const visitar = (chunks: any[]): string | null => {
+      for (const c of chunks) {
+        if (c && typeof c.name === 'string') return c.name;
+        if (c && Array.isArray(c.queryChunks)) {
+          const encontrado = visitar(c.queryChunks);
+          if (encontrado) return encontrado;
+        }
+      }
+      return null;
+    };
+    return expr && Array.isArray(expr.queryChunks) ? visitar(expr.queryChunks) : null;
+  }
+
+  function esSeleccionAgregada(seleccion: any): boolean {
+    return Boolean(
+      seleccion &&
+        typeof seleccion === 'object' &&
+        Object.values(seleccion).some((valor) => {
+          const texto = textoDeExpresion(valor);
+          return texto.includes('count(') || texto.includes('sum(');
+        })
+    );
   }
 
   function normalizeRecord(item: any): any {
@@ -106,32 +212,81 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
             isJoinedSelection = true;
           }
 
+          let limiteAplicado: number | null = null;
+          let desplazamientoAplicado = 0;
+
           const queryObj: any = {
             leftJoin: vi.fn(() => queryObj),
             where: vi.fn((predicate: any) => {
               const conditions = extractConditions(predicate);
               if (conditions.length > 0) {
                 filtered = filtered.filter((item) =>
-                  conditions.every((cond) => matchesField(item, cond.column, cond.value))
+                  conditions.every((cond) => matchesField(item, cond))
                 );
               }
               return queryObj;
             }),
-            orderBy: vi.fn(() => queryObj),
+            orderBy: vi.fn((...exprs: any[]) => {
+              const criterios = exprs.map(extraerOrden).filter((c) => c.columna);
+              if (criterios.length > 0) {
+                filtered = [...filtered].sort((a, b) => {
+                  for (const { columna, direccion } of criterios) {
+                    const va = valorDeColumna(a, columna!);
+                    const vb = valorDeColumna(b, columna!);
+                    if (va === vb) continue;
+                    const cmp = va > vb ? 1 : -1;
+                    return direccion === 'desc' ? -cmp : cmp;
+                  }
+                  return 0;
+                });
+              }
+              return queryObj;
+            }),
             limit: vi.fn((count: number) => {
-              filtered = filtered.slice(0, count);
+              limiteAplicado = count;
+              return queryObj;
+            }),
+            offset: vi.fn((count: number) => {
+              desplazamientoAplicado = count;
               return queryObj;
             }),
             for: vi.fn(() => queryObj),
             then: (resolve: any) => {
+              // WU24b: selecciones agregadas (COUNT/SUM) se resuelven sobre el filtro completo,
+              // ignorando LIMIT/OFFSET, como en SQL.
+              if (esSeleccionAgregada(fieldsSelection)) {
+                const resultado: any = {};
+                for (const [campo, expr] of Object.entries(fieldsSelection as Record<string, any>)) {
+                  const texto = textoDeExpresion(expr);
+                  if (texto.includes('count(')) {
+                    resultado[campo] = filtered.length;
+                  } else if (texto.includes('sum(')) {
+                    const columna = buscarNombreColumna(expr);
+                    const suma = filtered.reduce(
+                      (acc, fila) => acc + Number(valorDeColumna(fila, columna!) ?? 0),
+                      0
+                    );
+                    // postgres devuelve numeric como string; el servicio lo parsea con toCents.
+                    resultado[campo] = suma.toFixed(2);
+                  }
+                }
+                return resolve([resultado]);
+              }
+
+              // OFFSET/LIMIT se aplican al resolver (offset primero), como en SQL.
+              const pagina =
+                limiteAplicado === null
+                  ? filtered.slice(desplazamientoAplicado)
+                  : filtered.slice(desplazamientoAplicado, desplazamientoAplicado + limiteAplicado);
+
               if (isJoinedSelection) {
-                const joined = filtered.map((tx) => {
+                const joined = pagina.map((tx) => {
                   const alumno = mockPerfilesAlumno.find((a) => a.usuarioId === tx.clienteId);
                   return { tx, alumno };
                 });
                 return resolve(joined);
               }
-              return resolve([...filtered]);
+              return resolve([...pagina]);
             },
           };
 
@@ -169,7 +324,7 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
             targetArray.forEach((item) => {
               const matches =
                 conditions.length === 0 ||
-                conditions.every((cond) => matchesField(item, cond.column, cond.value));
+                conditions.every((cond) => matchesField(item, cond));
 
               if (matches) {
                 Object.assign(item, setVals);
@@ -823,10 +978,196 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
       ];
 
       const bandeja = await finanzasService.listarBandejaConciliacion('coach-uuid-1');
-      expect(bandeja.length).toBe(1);
-      expect(bandeja[0].estadoConciliacion).toBe(EstadoConciliacion.PENDIENTE);
-      expect(bandeja[0].referenciaBancaria).toBe('ref-1');
-      expect(bandeja[0].clienteNombre).toBe('Pedro Pérez');
+      expect(bandeja.items).toHaveLength(1);
+      expect(bandeja.total).toBe(1);
+      expect(bandeja.limit).toBe(25);
+      expect(bandeja.offset).toBe(0);
+      expect(bandeja.items[0].estadoConciliacion).toBe(EstadoConciliacion.PENDIENTE);
+      expect(bandeja.items[0].referenciaBancaria).toBe('ref-1');
+      expect(bandeja.items[0].clienteNombre).toBe('Pedro Pérez');
+    });
+  });
+
+  // ===========================================================================
+  // I.2 WU24b: PAGINACIÓN SERVER-SIDE (BANDEJA FIFO + HISTORIAL DEL ALUMNO)
+  // ===========================================================================
+  describe('9b. WU24b: Paginación server-side de finanzas', () => {
+    function crearTx(
+      id: string,
+      fechaReporteUtc: Date,
+      montoUsd: string,
+      estado: EstadoConciliacion = EstadoConciliacion.PENDIENTE
+    ) {
+      return {
+        id,
+        cuotaId: 'cuota-1',
+        clienteId: 'alumno-uuid-1',
+        entrenadorId: 'coach-uuid-1',
+        registradoPor: 'alumno-uuid-1',
+        montoOriginal: montoUsd,
+        monedaOriginal: Moneda.USD,
+        tasaCambioFijada: '1.0000',
+        montoEquivalenteUsd: montoUsd,
+        metodoPago: MetodoPago.EFECTIVO_USD,
+        referenciaBancaria: `ref-${id}`,
+        fechaOperacion: '2026-09-01',
+        estadoConciliacion: estado,
+        fechaReporteUtc,
+        createdAtUtc: fechaReporteUtc,
+        updatedAtUtc: fechaReporteUtc,
+      };
+    }
+
+    it('bandeja: envelope con total real (solo PENDIENTES) y orden FIFO estable', async () => {
+      mockTransaccionesPago = [
+        crearTx('tx-b', new Date('2026-09-02T10:00:00Z'), '20.00'),
+        crearTx('tx-a', new Date('2026-09-01T10:00:00Z'), '10.00'),
+        crearTx('tx-c', new Date('2026-09-03T10:00:00Z'), '30.00'),
+        crearTx('tx-aprobada', new Date('2026-08-01T10:00:00Z'), '99.00', EstadoConciliacion.APROBADO),
+      ];
+
+      const bandeja = await finanzasService.listarBandejaConciliacion('coach-uuid-1', 2, 0);
+
+      expect(bandeja.total).toBe(3);
+      expect(bandeja.limit).toBe(2);
+      expect(bandeja.offset).toBe(0);
+      expect(bandeja.items.map((t) => t.id)).toEqual(['tx-a', 'tx-b']);
+    });
+
+    it('bandeja: paginar con offset no repite ni salta filas y conserva la cola FIFO', async () => {
+      mockTransaccionesPago = [
+        crearTx('tx-5', new Date('2026-09-05T10:00:00Z'), '50.00'),
+        crearTx('tx-1', new Date('2026-09-01T10:00:00Z'), '10.00'),
+        crearTx('tx-3', new Date('2026-09-03T10:00:00Z'), '30.00'),
+        crearTx('tx-2', new Date('2026-09-02T10:00:00Z'), '20.00'),
+        crearTx('tx-4', new Date('2026-09-04T10:00:00Z'), '40.00'),
+      ];
+
+      const pagina1 = await finanzasService.listarBandejaConciliacion('coach-uuid-1', 2, 0);
+      const pagina2 = await finanzasService.listarBandejaConciliacion('coach-uuid-1', 2, 2);
+      const pagina3 = await finanzasService.listarBandejaConciliacion('coach-uuid-1', 2, 4);
+
+      const ids = [...pagina1.items, ...pagina2.items, ...pagina3.items].map((t) => t.id);
+      expect(ids).toEqual(['tx-1', 'tx-2', 'tx-3', 'tx-4', 'tx-5']);
+      expect(new Set(ids).size).toBe(5);
+      expect(pagina3.items).toHaveLength(1);
+      expect(pagina1.total).toBe(5);
+      expect(pagina2.total).toBe(5);
+      expect(pagina3.total).toBe(5);
+    });
+
+    it('historial: sin txLimit/txOffset devuelve TODAS las transacciones y transaccionesTotal', async () => {
+      const ahora = new Date();
+      const mesAnterior = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 15);
+      mockTransaccionesPago = [
+        crearTx('tx-mes', ahora, '10.00', EstadoConciliacion.APROBADO),
+        crearTx('tx-mes-anterior', mesAnterior, '20.00', EstadoConciliacion.APROBADO),
+        crearTx('tx-vieja', new Date(2026, 0, 15), '30.00', EstadoConciliacion.APROBADO),
+        crearTx('tx-pendiente', new Date(2026, 0, 16), '99.00'),
+      ];
+
+      const resumen = await finanzasService.obtenerHistorialCliente(
+        'coach-uuid-1',
+        'perfil-alumno-1',
+        'coach-uuid-1',
+        Rol.ENTRENADOR
+      );
+
+      expect(resumen.transaccionesTotal).toBe(4);
+      expect(resumen.transacciones).toHaveLength(4);
+      expect(resumen.totalPagadoHistoricoUsd).toBe('60.00');
+      expect(resumen.totalPagadoMesActualUsd).toBe('10.00');
+    });
+
+    it('historial: txLimit/txOffset devuelven el slice y el resumen sigue siendo del total', async () => {
+      const base = new Date('2026-06-10T10:00:00Z').getTime();
+      mockTransaccionesPago = [
+        crearTx('tx-1', new Date(base + 5 * 86400000), '10.00', EstadoConciliacion.APROBADO),
+        crearTx('tx-2', new Date(base + 4 * 86400000), '20.00', EstadoConciliacion.APROBADO),
+        crearTx('tx-3', new Date(base + 3 * 86400000), '30.00', EstadoConciliacion.APROBADO),
+        crearTx('tx-4', new Date(base + 2 * 86400000), '40.00', EstadoConciliacion.APROBADO),
+        crearTx('tx-5', new Date(base + 1 * 86400000), '50.00', EstadoConciliacion.APROBADO),
+      ];
+
+      const resumen = await finanzasService.obtenerHistorialCliente(
+        'coach-uuid-1',
+        'perfil-alumno-1',
+        'coach-uuid-1',
+        Rol.ENTRENADOR,
+        2,
+        1
+      );
+
+      expect(resumen.transaccionesTotal).toBe(5);
+      expect(resumen.transacciones.map((t) => t.id)).toEqual(['tx-2', 'tx-3']);
+      // El resumen no se recorta con la página: suma las 5 aprobadas.
+      expect(resumen.totalPagadoHistoricoUsd).toBe('150.00');
+    });
+
+    it('historial: mantiene el aislamiento de tenant para entrenador y alumno', async () => {
+      mockTransaccionesPago = [];
+
+      await expect(
+        finanzasService.obtenerHistorialCliente(
+          'coach-ajeno',
+          'perfil-alumno-1',
+          'coach-ajeno',
+          Rol.ENTRENADOR
+        )
+      ).rejects.toThrow(ForbiddenException);
+
+      await expect(
+        finanzasService.obtenerHistorialCliente(
+          'coach-uuid-1',
+          'perfil-alumno-1',
+          'alumno-ajeno',
+          Rol.ALUMNO
+        )
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('controller: la bandeja aplica el techo de limit (100) y normaliza offset inválido a 0', async () => {
+      mockTransaccionesPago = [];
+      const req = {
+        user: { sub: 'coach-uuid-1', rol: Rol.ENTRENADOR, entrenadorId: 'coach-uuid-1' },
+      };
+
+      const bandeja = await finanzasController.listarBandejaConciliacion(req, '500', '-7');
+
+      expect(bandeja.total).toBe(0);
+      expect(bandeja.limit).toBe(100);
+      expect(bandeja.offset).toBe(0);
+    });
+
+    it('controller: el historial aplica el techo de txLimit y conserva "todas" con valor no numérico', async () => {
+      const perfilUuid = 'a1111111-1111-4111-8111-111111111111';
+      mockPerfilesAlumno[0].id = perfilUuid;
+      const ahora = new Date();
+      mockTransaccionesPago = [
+        crearTx('tx-1', ahora, '10.00', EstadoConciliacion.APROBADO),
+        crearTx('tx-2', ahora, '20.00', EstadoConciliacion.APROBADO),
+      ];
+      const req = {
+        user: { sub: 'coach-uuid-1', rol: Rol.ENTRENADOR, entrenadorId: 'coach-uuid-1' },
+      };
+
+      const conTecho = await finanzasController.obtenerHistorialCliente(
+        req,
+        perfilUuid,
+        '500',
+        undefined
+      );
+      expect(conTecho.transaccionesTotal).toBe(2);
+      expect(conTecho.transacciones).toHaveLength(2);
+
+      const noNumerico = await finanzasController.obtenerHistorialCliente(
+        req,
+        perfilUuid,
+        'no-es-numero',
+        undefined
+      );
+      expect(noNumerico.transaccionesTotal).toBe(2);
+      expect(noNumerico.transacciones).toHaveLength(2);
     });
   });
 

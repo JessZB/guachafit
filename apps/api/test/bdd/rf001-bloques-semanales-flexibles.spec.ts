@@ -109,8 +109,27 @@ describe('BDD: RF-001 - Planificación Semanal Flexible por Bloques, Selección 
   }
 
   function createMockDb() {
+    // WU24: la selección puede ser un COUNT real (`{ total: count() }`) del historial paginado.
+    const esSeleccionCount = (seleccion: any): boolean =>
+      Boolean(
+        seleccion &&
+          typeof seleccion === 'object' &&
+          Object.values(seleccion).some(
+            (expr: any) =>
+              expr &&
+              Array.isArray(expr.queryChunks) &&
+              expr.queryChunks.some(
+                (c: any) =>
+                  Array.isArray(c?.value) &&
+                  c.value.some(
+                    (v: any) => typeof v === 'string' && v.toLowerCase().includes('count(')
+                  )
+              )
+          )
+      );
+
     const db: any = {
-      select: vi.fn(() => ({
+      select: vi.fn((fieldsSelection?: any) => ({
         from: vi.fn((table: any) => {
           const tableName = table ? getTableName(table) : '';
           const targetArray = getTableArray(tableName);
@@ -122,10 +141,29 @@ describe('BDD: RF-001 - Planificación Semanal Flexible por Bloques, Selección 
                 conditions.length === 0 || conditions.every((cond) => matchesField(item, cond))
               );
 
+              // WU24: LIMIT/OFFSET se aplican al resolver (offset primero), como en SQL.
+              let limite: number | null = null;
+              let desplazamiento = 0;
               const innerChain: any = {
                 orderBy: vi.fn(() => innerChain),
-                limit: vi.fn((n: number) => filtered.slice(0, n)),
-                then: (resolve: any) => resolve(filtered),
+                limit: vi.fn((n: number) => {
+                  limite = n;
+                  return innerChain;
+                }),
+                offset: vi.fn((n: number) => {
+                  desplazamiento = n;
+                  return innerChain;
+                }),
+                then: (resolve: any) => {
+                  if (esSeleccionCount(fieldsSelection)) {
+                    return resolve([{ total: filtered.length }]);
+                  }
+                  const pagina =
+                    limite === null
+                      ? filtered.slice(desplazamiento)
+                      : filtered.slice(desplazamiento, desplazamiento + limite);
+                  return resolve(pagina);
+                },
               };
               return innerChain;
             }),
@@ -452,7 +490,7 @@ describe('BDD: RF-001 - Planificación Semanal Flexible por Bloques, Selección 
         ALUMNO_PERFIL_ID
       );
 
-      const sesionSabado = historial.find((s) => s.fechaProgramada === '2026-09-19');
+      const sesionSabado = historial.items.find((s) => s.fechaProgramada === '2026-09-19');
       expect(sesionSabado).toBeDefined();
       expect(sesionSabado!.bloqueId).toBe('d1');
       expect(sesionSabado!.esDiaDescansoOriginal).toBe(true);

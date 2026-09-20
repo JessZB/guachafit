@@ -87,6 +87,25 @@ describe('BDD: RF-001 & RF-017 - Cierre End-to-End del Flujo de Entrenamiento (C
   }
 
   function createMockDb() {
+    // WU24: la selección puede ser un COUNT real (`{ total: count() }`) del historial paginado.
+    const esSeleccionCount = (seleccion: any): boolean =>
+      Boolean(
+        seleccion &&
+          typeof seleccion === 'object' &&
+          Object.values(seleccion).some(
+            (expr: any) =>
+              expr &&
+              Array.isArray(expr.queryChunks) &&
+              expr.queryChunks.some(
+                (c: any) =>
+                  Array.isArray(c?.value) &&
+                  c.value.some(
+                    (v: any) => typeof v === 'string' && v.toLowerCase().includes('count(')
+                  )
+              )
+          )
+      );
+
     const db: any = {
       select: vi.fn((fieldsSelection?: any) => ({
         from: vi.fn((table: any) => {
@@ -100,10 +119,29 @@ describe('BDD: RF-001 & RF-017 - Cierre End-to-End del Flujo de Entrenamiento (C
                 conditions.length === 0 || conditions.every((cond) => matchesField(item, cond))
               );
 
+              // WU24: LIMIT/OFFSET se aplican al resolver (offset primero), como en SQL.
+              let limite: number | null = null;
+              let desplazamiento = 0;
               const innerChain: any = {
                 orderBy: vi.fn(() => innerChain),
-                limit: vi.fn((n: number) => filtered.slice(0, n)),
-                then: (resolve: any) => resolve(filtered),
+                limit: vi.fn((n: number) => {
+                  limite = n;
+                  return innerChain;
+                }),
+                offset: vi.fn((n: number) => {
+                  desplazamiento = n;
+                  return innerChain;
+                }),
+                then: (resolve: any) => {
+                  if (esSeleccionCount(fieldsSelection)) {
+                    return resolve([{ total: filtered.length }]);
+                  }
+                  const pagina =
+                    limite === null
+                      ? filtered.slice(desplazamiento)
+                      : filtered.slice(desplazamiento, desplazamiento + limite);
+                  return resolve(pagina);
+                },
               };
               return innerChain;
             }),
@@ -639,8 +677,9 @@ describe('BDD: RF-001 & RF-017 - Cierre End-to-End del Flujo de Entrenamiento (C
         ALUMNO_A_PERFIL_ID
       );
 
-      expect(historial.length).toBe(1);
-      expect(historial[0].alumnoId).toBe(ALUMNO_A_USER_ID);
+      expect(historial.items.length).toBe(1);
+      expect(historial.items[0].alumnoId).toBe(ALUMNO_A_USER_ID);
+      expect(historial.total).toBe(1);
     });
 
     it('debe rechazar con 403 cuando un alumno intenta leer el historial de otro alumno', async () => {
@@ -698,12 +737,12 @@ describe('BDD: RF-001 & RF-017 - Cierre End-to-End del Flujo de Entrenamiento (C
         ALUMNO_A_PERFIL_ID
       );
 
-      expect(historial.length).toBe(1);
-      expect(historial[0].volumenTotalKg).toBe('1250.50');
-      expect(historial[0].porcentajeCumplimiento).toBe('100.00');
-      expect(historial[0].ejercicios[0].descansoPrescritoSegundos).toBe(120);
-      expect(historial[0].ejercicios[0].series[0].descansoSegundos).toBe(150);
-      expect(historial[0].ejercicios[0].series[0].rpe).toBe('8.5');
+      expect(historial.items.length).toBe(1);
+      expect(historial.items[0].volumenTotalKg).toBe('1250.50');
+      expect(historial.items[0].porcentajeCumplimiento).toBe('100.00');
+      expect(historial.items[0].ejercicios[0].descansoPrescritoSegundos).toBe(120);
+      expect(historial.items[0].ejercicios[0].series[0].descansoSegundos).toBe(150);
+      expect(historial.items[0].ejercicios[0].series[0].rpe).toBe('8.5');
     });
   });
 });

@@ -28,6 +28,11 @@ import {
   SincronizarSeriesBatchSchema,
   FinalizarSesionSchema,
   EntrenarBloqueHoySchema,
+  LIMITE_HISTORIAL_SESIONES_POR_DEFECTO,
+  LIMITE_HISTORIAL_SESIONES_MAXIMO,
+  LIMITE_MONITOR_ADHERENCIA_POR_DEFECTO,
+  LIMITE_MONITOR_ADHERENCIA_MAXIMO,
+  FiltroMonitorAdherenciaSchema,
 } from '@guachafit/shared';
 
 @Controller()
@@ -241,6 +246,8 @@ export class EntrenamientoController {
 
   /**
    * Consultar historial cronológico de sesiones de un alumno (auditoría coach).
+   * WU24: envelope `{ items, total, limit, offset }`; `offset` opcional (default 0) y `limit`
+   * opcional (default 30, techo 100). El `total` es el COUNT real del historial del alumno.
    * Roles: Entrenador, Alumno titular, SuperAdmin
    */
   @Get(['sesiones/alumno/:alumnoId/historial', 'sesiones/:alumnoId/historial'])
@@ -249,18 +256,26 @@ export class EntrenamientoController {
   async obtenerHistorialSesionesAlumno(
     @Req() req: any,
     @Param('alumnoId') alumnoId: string,
-    @Query('limit') limit?: string
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string
   ) {
     if (!UUID_REGEX.test(alumnoId)) {
       throw new BadRequestException(`El ID de alumno '${alumnoId}' no es un UUID válido.`);
     }
     const entrenadorId = req.user.entrenadorId || req.user.sub;
-    const limitNum = limit ? Math.min(Math.max(parseInt(limit, 10) || 30, 1), 100) : 30;
+    const limitNum = limit
+      ? Math.min(
+          Math.max(parseInt(limit, 10) || LIMITE_HISTORIAL_SESIONES_POR_DEFECTO, 1),
+          LIMITE_HISTORIAL_SESIONES_MAXIMO
+        )
+      : LIMITE_HISTORIAL_SESIONES_POR_DEFECTO;
+    const offsetNum = offset ? Math.max(parseInt(offset, 10) || 0, 0) : 0;
     return this.entrenamientoService.obtenerHistorialSesionesAlumno(
       entrenadorId,
       alumnoId,
       req.user.rol,
       limitNum,
+      offsetNum,
       req.user.sub
     );
   }
@@ -313,13 +328,42 @@ export class EntrenamientoController {
   /**
    * Monitor semanal de adherencia del coach: ordena por nivel de riesgo (RN-03).
    * `timezone` (opcional, IANA) define el Lunes 00:00 local de la ventana; default UTC.
+   * WU24: envelope `{ items, total, limit, offset, resumen }`; `limit` default 25 (techo 100) y
+   * `offset` default 0. `resumen` cuenta la cartera completa, no la página.
+   * WU25a: `q` (nombre, literal y sin distinguir mayúsculas/acentos) y `semaforo`
+   * (rojo|amarillo|verde|sinPlan|sinPendientes) filtran ANTES del slice sin alterar `resumen`.
+   * WU26: `orden` (`riesgo` default | `nombre`) se aplica ANTES del slice; ambos órdenes son
+   * totales (desempate por `alumnoId`) y mantienen la paginación por offset coherente.
    * Rol: Entrenador
    */
   @Get('entrenador/monitor-adherencia')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
-  async monitorAdherencia(@Req() req: any, @Query('timezone') timezone?: string) {
+  async monitorAdherencia(
+    @Req() req: any,
+    @Query('timezone') timezone?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('q') q?: string,
+    @Query('semaforo') semaforo?: string,
+    @Query('orden') orden?: string
+  ) {
     const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.entrenamientoService.calcularSemanaAdherencia(entrenadorId, timezone);
+    const limitNum = limit
+      ? Math.min(
+          Math.max(parseInt(limit, 10) || LIMITE_MONITOR_ADHERENCIA_POR_DEFECTO, 1),
+          LIMITE_MONITOR_ADHERENCIA_MAXIMO
+        )
+      : LIMITE_MONITOR_ADHERENCIA_POR_DEFECTO;
+    const offsetNum = offset ? Math.max(parseInt(offset, 10) || 0, 0) : 0;
+    // WU25a/WU26: validación Zod de los filtros nuevos (400 ante valores fuera del contrato).
+    const filtro = FiltroMonitorAdherenciaSchema.parse({ q, semaforo, orden });
+    return this.entrenamientoService.calcularSemanaAdherencia(
+      entrenadorId,
+      timezone,
+      limitNum,
+      offsetNum,
+      filtro
+    );
   }
 }

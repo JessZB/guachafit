@@ -15,6 +15,7 @@ import {
   inArray,
   gte,
   lte,
+  count,
   controlesAntropometricos,
   fotosAntropometria,
   perfilesAlumno,
@@ -36,10 +37,13 @@ import {
   ConsultaComparadorFotograficoDTO,
   ConsultaComparadorFotograficoSchema,
   ControlAntropometricoDetalleDTO,
+  ColaPendientesAntropometricosDTO,
   EvolucionCorporalDTO,
   ComparativaAngularDTO,
   FotoAntropometriaDetalleDTO,
   PerimetrosCorporalesDTO,
+  LIMITE_COLA_ANTROPOMETRIA_POR_DEFECTO,
+  LIMITE_CONTROLES_EVOLUCION_POR_DEFECTO,
 } from '@guachafit/shared';
 import { R2StorageService } from './r2-storage.service';
 
@@ -274,6 +278,13 @@ export class AntropometriaService {
    * Consulta el historial de evolución corporal multieje (RF-004).
    * Invariante ADR-001: Filtra estrictamente las evaluaciones en estado Aprobado.
    * Genera URLs firmadas GET con TTL de 15 min para cada foto.
+   *
+   * WU24b: `controlesTotal` es el COUNT real SIEMPRE presente y `totalEvaluaciones` conserva
+   * ese mismo total (antes era `evaluaciones.length`; sin paginar el valor es idéntico).
+   * `controlesLimit`/`controlesOffset` son OPT-IN: sin ellos la serie viene COMPLETA (contrato
+   * de los charts del alumno) y con ellos el slice se resuelve con LIMIT/OFFSET en SQL.
+   * Orden: `fechaEvaluacion` ascendente (cronológico actual) con desempate estable por
+   * `createdAtUtc` e `id` para que `controlesOffset` no repita ni salte filas.
    */
   async obtenerEvolucion(
     alumnoId: string,
@@ -323,11 +334,36 @@ export class AntropometriaService {
       conditions.push(gte(controlesAntropometricos.fechaEvaluacion, fechaDesde));
     }
 
-    const rows = await this.db
+    const whereEvolucion = and(...conditions);
+
+    // WU24b: COUNT real en SQL para el total del envelope (independiente del slice).
+    const [filaTotal] = await this.db
+      .select({ total: count() })
+      .from(controlesAntropometricos)
+      .where(whereEvolucion);
+    const totalControles = Number(filaTotal?.total ?? 0);
+
+    // WU24b: paginación OPT-IN; sin parámetros la serie completa sigue siendo el default.
+    const paginando = filtro?.controlesLimit !== undefined || filtro?.controlesOffset !== undefined;
+    const controlesLimit = paginando
+      ? filtro?.controlesLimit ?? LIMITE_CONTROLES_EVOLUCION_POR_DEFECTO
+      : undefined;
+    const controlesOffset = paginando ? filtro?.controlesOffset ?? 0 : 0;
+
+    const queryEvolucion = this.db
       .select()
       .from(controlesAntropometricos)
-      .where(and(...conditions))
-      .orderBy(asc(controlesAntropometricos.fechaEvaluacion));
+      .where(whereEvolucion)
+      .orderBy(
+        asc(controlesAntropometricos.fechaEvaluacion),
+        // WU24b: desempate estable para que `controlesOffset` no repita ni salte filas.
+        asc(controlesAntropometricos.createdAtUtc),
+        asc(controlesAntropometricos.id)
+      );
+
+    const rows = await (controlesLimit !== undefined
+      ? queryEvolucion.limit(controlesLimit).offset(controlesOffset)
+      : queryEvolucion);
 
     const evaluaciones: ControlAntropometricoDetalleDTO[] = await Promise.all(
       rows.map((row) => this.hidratarControl(row))
@@ -336,34 +372,64 @@ export class AntropometriaService {
     let cambioNetoPesoKg: string | null = null;
     let cambioNetoGrasaPorcentaje: string | null = null;
 
-    if (evaluaciones.length >= 2) {
-      const primera = evaluaciones[0];
-      const ultima = evaluaciones[evaluaciones.length - 1];
+    // WU24b: los cambios netos se calculan sobre la SERIE COMPLETA (no la página) con dos
+    // consultas ligeras de primera/última evaluación; así el valor no depende del slice.
+    if (totalControles >= 1) {
+      const [primera] = await this.db
+        .select({
+          pesoKg: controlesAntropometricos.pesoKg,
+          porcentajeGrasa: controlesAntropometricos.porcentajeGrasa,
+        })
+        .from(controlesAntropometricos)
+        .where(whereEvolucion)
+        .orderBy(
+          asc(controlesAntropometricos.fechaEvaluacion),
+          asc(controlesAntropometricos.createdAtUtc),
+          asc(controlesAntropometricos.id)
+        )
+        .limit(1);
 
-      const pesoInicial = Number(primera.pesoKg);
-      const pesoFinal = Number(ultima.pesoKg);
-      cambioNetoPesoKg = (pesoFinal - pesoInicial).toFixed(2);
+      if (totalControles === 1) {
+        cambioNetoPesoKg = '0.00';
+        if (primera && primera.porcentajeGrasa !== null && primera.porcentajeGrasa !== undefined) {
+          cambioNetoGrasaPorcentaje = '0.00';
+        }
+      } else {
+        const [ultima] = await this.db
+          .select({
+            pesoKg: controlesAntropometricos.pesoKg,
+            porcentajeGrasa: controlesAntropometricos.porcentajeGrasa,
+          })
+          .from(controlesAntropometricos)
+          .where(whereEvolucion)
+          .orderBy(
+            desc(controlesAntropometricos.fechaEvaluacion),
+            desc(controlesAntropometricos.createdAtUtc),
+            desc(controlesAntropometricos.id)
+          )
+          .limit(1);
 
-      if (
-        primera.porcentajeGrasa !== null &&
-        primera.porcentajeGrasa !== undefined &&
-        ultima.porcentajeGrasa !== null &&
-        ultima.porcentajeGrasa !== undefined
-      ) {
-        const grasaInicial = Number(primera.porcentajeGrasa);
-        const grasaFinal = Number(ultima.porcentajeGrasa);
-        cambioNetoGrasaPorcentaje = (grasaFinal - grasaInicial).toFixed(2);
-      }
-    } else if (evaluaciones.length === 1) {
-      cambioNetoPesoKg = '0.00';
-      if (evaluaciones[0].porcentajeGrasa !== null && evaluaciones[0].porcentajeGrasa !== undefined) {
-        cambioNetoGrasaPorcentaje = '0.00';
+        if (primera && ultima) {
+          cambioNetoPesoKg = (Number(ultima.pesoKg) - Number(primera.pesoKg)).toFixed(2);
+
+          if (
+            primera.porcentajeGrasa !== null &&
+            primera.porcentajeGrasa !== undefined &&
+            ultima.porcentajeGrasa !== null &&
+            ultima.porcentajeGrasa !== undefined
+          ) {
+            cambioNetoGrasaPorcentaje = (
+              Number(ultima.porcentajeGrasa) - Number(primera.porcentajeGrasa)
+            ).toFixed(2);
+          }
+        }
       }
     }
 
     return {
       alumnoId,
-      totalEvaluaciones: evaluaciones.length,
+      totalEvaluaciones: totalControles,
+      controlesTotal: totalControles,
       evaluaciones,
       cambioNetoPesoKg,
       cambioNetoGrasaPorcentaje,
@@ -501,8 +567,16 @@ export class AntropometriaService {
 
   /**
    * Lista controles pendientes de validación para la bandeja del entrenador.
+   *
+   * WU24b: envelope `{ items, total, limit, offset }` con COUNT real en SQL. El orden actual
+   * (`fechaEvaluacion` descendente) se conserva con desempate estable por `createdAtUtc`/`id`
+   * para que `offset` avance sin repetir ni saltar filas.
    */
-  async listarPendientes(coachId: string): Promise<ControlAntropometricoDetalleDTO[]> {
+  async listarPendientes(
+    coachId: string,
+    limit = LIMITE_COLA_ANTROPOMETRIA_POR_DEFECTO,
+    offset = 0
+  ): Promise<ColaPendientesAntropometricosDTO> {
     const alumnosCoach = await this.db
       .select({
         usuarioId: perfilesAlumno.usuarioId,
@@ -514,7 +588,7 @@ export class AntropometriaService {
 
     const alumnoIds = alumnosCoach.map((a) => a.usuarioId);
     if (alumnoIds.length === 0) {
-      return [];
+      return { items: [], total: 0, limit, offset };
     }
 
     // WU20: nombre visible del alumno para la cola del coach (aditivo; el cliente tiene fallback).
@@ -522,20 +596,39 @@ export class AntropometriaService {
       alumnosCoach.map((a) => [a.usuarioId, `${a.nombres} ${a.apellidos}`])
     );
 
+    const wherePendientes = and(
+      inArray(controlesAntropometricos.alumnoId, alumnoIds),
+      eq(controlesAntropometricos.estado, EstadoMedicion.PENDIENTE_APROBACION)
+    );
+
+    // WU24b: COUNT real en SQL para el `total` del envelope.
+    const [filaTotal] = await this.db
+      .select({ total: count() })
+      .from(controlesAntropometricos)
+      .where(wherePendientes);
+
     const rows = await this.db
       .select()
       .from(controlesAntropometricos)
-      .where(
-        and(
-          inArray(controlesAntropometricos.alumnoId, alumnoIds),
-          eq(controlesAntropometricos.estado, EstadoMedicion.PENDIENTE_APROBACION)
-        )
+      .where(wherePendientes)
+      .orderBy(
+        desc(controlesAntropometricos.fechaEvaluacion),
+        desc(controlesAntropometricos.createdAtUtc),
+        desc(controlesAntropometricos.id)
       )
-      .orderBy(desc(controlesAntropometricos.fechaEvaluacion));
+      .limit(limit)
+      .offset(offset);
 
-    return Promise.all(
+    const items = await Promise.all(
       rows.map((row) => this.hidratarControl(row, true, nombrePorAlumno.get(row.alumnoId) ?? null))
     );
+
+    return {
+      items,
+      total: Number(filaTotal?.total ?? 0),
+      limit,
+      offset,
+    };
   }
 
   /**

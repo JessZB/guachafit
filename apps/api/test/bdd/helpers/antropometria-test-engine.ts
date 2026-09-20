@@ -329,6 +329,8 @@ export class AntropometriaTestEngine {
     return {
       alumnoId,
       totalEvaluaciones: evaluacionesDetalle.length,
+      // WU24b: el motor de pruebas no pagina; el total real coincide con la serie devuelta.
+      controlesTotal: evaluacionesDetalle.length,
       evaluaciones: evaluacionesDetalle,
       cambioNetoPesoKg,
       cambioNetoGrasaPorcentaje,

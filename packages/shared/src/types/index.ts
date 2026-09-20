@@ -29,6 +29,8 @@ import {
   CheckinNutricionalSchema,
   FiltroSesionesAlumnoSchema,
   FiltroCheckinsNutricionalesSchema,
+  FiltroMonitorAdherenciaSchema,
+  SemaforoFiltroMonitorSchema,
   FotoAntropometriaInputSchema,
   PerimetrosCorporalesInputSchema,
   PresignedUploadUrlSchema,
@@ -109,6 +111,9 @@ export type FotoComidaInputDTO = z.infer<typeof FotoComidaInputSchema>;
 export type CheckinNutricionalDTO = z.infer<typeof CheckinNutricionalSchema>;
 export type FiltroSesionesAlumnoDTO = z.infer<typeof FiltroSesionesAlumnoSchema>;
 export type FiltroCheckinsNutricionalesDTO = z.infer<typeof FiltroCheckinsNutricionalesSchema>;
+/** WU25a: filtros server-side del monitor de adherencia (q + semáforo + orden). */
+export type FiltroMonitorAdherenciaDTO = z.infer<typeof FiltroMonitorAdherenciaSchema>;
+export type SemaforoFiltroMonitorDTO = z.infer<typeof SemaforoFiltroMonitorSchema>;
 
 // Tipos inferidos de DTOs - Antropometría & Bóveda R2 (Módulo 4)
 export type FotoAntropometriaInputDTO = z.infer<typeof FotoAntropometriaInputSchema>;
@@ -213,6 +218,20 @@ export interface PerfilAlumnoDetalleDTO {
 }
 
 /**
+ * WU24: envelope de paginación server-side compartido por los listados del coach.
+ *
+ * `total` es el COUNT REAL de filas que cumplen el filtro (nunca el tamaño de `items`), de modo
+ * que la UI puede mostrar "Mostrando X de N" y pedir la siguiente página con `offset` sin
+ * repetir ni saltar filas. `limit`/`offset` son la página efectiva aplicada por el servidor.
+ */
+export interface PaginadoDTO<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/**
  * WU19: contadores reales de la cartera del entrenador para los KPIs del directorio.
  *
  * Se calculan con COUNT en el servidor (nunca desde la página cargada) y siempre describen la
@@ -231,13 +250,7 @@ export interface ResumenDirectorioAlumnosDTO {
 }
 
 /** WU19: respuesta paginada de `GET /alumnos` (contrato interno consumido por el directorio). */
-export interface DirectorioAlumnosDTO {
-  items: PerfilAlumnoDetalleDTO[];
-  /** Total de alumnos que cumplen los filtros de la consulta (para "Mostrando X de N"). */
-  total: number;
-  /** Página efectiva aplicada por el servidor. */
-  limit: number;
-  offset: number;
+export interface DirectorioAlumnosDTO extends PaginadoDTO<PerfilAlumnoDetalleDTO> {
   /** Contadores reales de la cartera completa para los KPIs (independientes de la página). */
   resumen: ResumenDirectorioAlumnosDTO;
 }
@@ -257,6 +270,15 @@ export interface ResumenFinancieroAlumnoDTO {
     estado: string;
     fechaVencimiento: string;
   } | null;
+  /**
+   * WU24b: COUNT real de transacciones del alumno (independiente del slice paginado).
+   * SIEMPRE presente, también cuando no se envían `txLimit`/`txOffset`.
+   */
+  transaccionesTotal: number;
+  /**
+   * WU24b: sin `txLimit`/`txOffset` devuelve TODAS las transacciones (comportamiento histórico);
+   * con ellos, el slice paginado en SQL (los agregados del resumen siguen siendo del total).
+   */
   transacciones: Array<{
     id: string;
     cuotaId: string;
@@ -367,6 +389,13 @@ export interface TransaccionPagoDetalleDTO {
   createdAtUtc: string;
   updatedAtUtc: string;
 }
+
+/**
+ * WU24b: respuesta paginada de `GET /finanzas/conciliacion/bandeja`.
+ * `total` es el COUNT real de transacciones PENDIENTES del entrenador (no el tamaño de la página)
+ * y el orden FIFO por `fechaReporteUtc` se mantiene con desempate estable por `id`.
+ */
+export type BandejaConciliacionDTO = PaginadoDTO<TransaccionPagoDetalleDTO>;
 
 export interface CuotaDetalleDTO {
   id: string;
@@ -485,6 +514,13 @@ export interface SesionEntrenamientoDetalleDTO {
   createdAtUtc: string;
   updatedAtUtc: string;
 }
+
+/**
+ * WU24: respuesta paginada de `GET /sesiones/alumno/:alumnoId/historial`.
+ * `total` es el COUNT real de sesiones del alumno (no el tamaño de la página) y el orden es
+ * cronológico descendente con desempate estable por `id` para que `offset` no repita ni salte.
+ */
+export type HistorialSesionesAlumnoDTO = PaginadoDTO<SesionEntrenamientoDetalleDTO>;
 
 /**
  * Respuesta de `POST /sesiones/:id/finalizar` (RF-001 RN-02).
@@ -669,6 +705,29 @@ export interface MonitorAdherenciaSemanalDTO {
   ultimaSesionUtc?: string | null;
 }
 
+/**
+ * WU24: contadores de la cartera COMPLETA del monitor de adherencia (independientes de la página).
+ *
+ * Paridad EXACTA con los chips/filtros de la UI (`monitor-filtros.ts`):
+ * - `rojo` excluye a los alumnos con plan pero sin pendientes aún (0/0 neutral de D6).
+ * - `amarillo`/`verde` cuentan alumnos con plan y ese semáforo.
+ * - `sinPlan` cuenta alumnos sin rutina activa; `sinPendientes` cuenta plan activo sin bloques
+ *   vencidos en la semana (estado neutral "Al día — sin pendientes").
+ */
+export interface ResumenMonitorAdherenciaDTO {
+  rojo: number;
+  amarillo: number;
+  verde: number;
+  sinPlan: number;
+  sinPendientes: number;
+  total: number;
+}
+
+/** WU24: respuesta paginada de `GET /entrenador/monitor-adherencia` (orden de riesgo estable). */
+export interface MonitorAdherenciaDTO extends PaginadoDTO<MonitorAdherenciaSemanalDTO> {
+  resumen: ResumenMonitorAdherenciaDTO;
+}
+
 // =============================================================================
 // RESPUESTAS TIPADAS - CONTROL ANTROPOMÉTRICO & BÓVEDA R2 (MÓDULO 4)
 // =============================================================================
@@ -723,9 +782,26 @@ export interface ControlAntropometricoDetalleDTO {
   updatedAtUtc: string; // ISO 8601 UTC
 }
 
+/**
+ * WU24b: respuesta paginada de `GET /antropometria/pendientes` (cola de validación del coach).
+ * `total` es el COUNT real de controles PENDIENTE_APROBACION del entrenador y el orden
+ * (fechaEvaluacion descendente) se mantiene con desempate estable por `createdAtUtc`/`id`.
+ */
+export type ColaPendientesAntropometricosDTO = PaginadoDTO<ControlAntropometricoDetalleDTO>;
+
 export interface EvolucionCorporalDTO {
   alumnoId: string;
+  /**
+   * COUNT real de controles aprobados que cumplen el filtro (independiente del slice).
+   * Sin `controlesLimit`/`controlesOffset` coincide con `evaluaciones.length` (comportamiento histórico).
+   */
   totalEvaluaciones: number;
+  /** Alias explícito WU24b del total real de la serie: SIEMPRE presente. */
+  controlesTotal: number;
+  /**
+   * Serie cronológica ascendente de controles aprobados. Sin `controlesLimit`/`controlesOffset`
+   * viene COMPLETA (contrato de los charts del alumno); con ellos, el slice paginado en SQL.
+   */
   evaluaciones: ControlAntropometricoDetalleDTO[];
   cambioNetoPesoKg?: string | null;
   cambioNetoGrasaPorcentaje?: string | null;

@@ -24,6 +24,7 @@ import {
   gte,
   lte,
   max,
+  count,
   sql,
   ejerciciosCatalogo,
   sesionesEntrenamiento,
@@ -62,7 +63,13 @@ import {
   SesionEntrenamientoDetalleDTO,
   EjercicioSesionDetalleDTO,
   SerieRegistroDetalleDTO,
+  HistorialSesionesAlumnoDTO,
   MonitorAdherenciaSemanalDTO,
+  MonitorAdherenciaDTO,
+  ResumenMonitorAdherenciaDTO,
+  FiltroMonitorAdherenciaDTO,
+  LIMITE_HISTORIAL_SESIONES_POR_DEFECTO,
+  LIMITE_MONITOR_ADHERENCIA_POR_DEFECTO,
   DECIMAL_STRING_REGEX,
 } from '@guachafit/shared';
 import {
@@ -74,6 +81,9 @@ import {
   calcularVentanaSemana,
   contarBloquesPrescritosHasta,
   diferenciaDiasCalendario,
+  filtrarMonitorAdherencia,
+  ordenarMonitorPorNombre,
+  ordenarMonitorPorRiesgo,
 } from '../../common/adherencia.util';
 
 // Re-export de helpers puros compartidos: mantiene la API pública histórica del
@@ -1034,6 +1044,9 @@ export class EntrenamientoService {
   /**
    * Obtener historial cronológico de sesiones completadas o registradas de un alumno.
    *
+   * WU24: envelope `{ items, total, limit, offset }` con COUNT real en SQL y orden cronológico
+   * descendente (fechaProgramada, createdAtUtc, id) para que `offset` avance sin repetir filas.
+   *
    * IMPORTANTE (fuga de historial entre alumnos corregida): para ALUMNO el primer argumento
    * (`entrenadorId`) transporta el claim `entrenadorId` del JWT, que es el UUID del COACH,
    * no el del alumno. Por eso la titularidad se valida contra `currentUserId` (el `sub`).
@@ -1042,9 +1055,10 @@ export class EntrenamientoService {
     entrenadorId: string,
     alumnoId: string,
     rol: Rol,
-    limit = 30,
+    limit = LIMITE_HISTORIAL_SESIONES_POR_DEFECTO,
+    offset = 0,
     currentUserId?: string
-  ): Promise<SesionEntrenamientoDetalleDTO[]> {
+  ): Promise<HistorialSesionesAlumnoDTO> {
     // 1. Validar si alumnoId es perfilesAlumno.id o perfilesAlumno.usuarioId
     let [perfil] = await this.db
       .select()
@@ -1076,23 +1090,40 @@ export class EntrenamientoService {
     }
 
     const usuarioAlumnoId = perfil.usuarioId;
+    const whereHistorial = eq(sesionesEntrenamiento.alumnoId, usuarioAlumnoId);
+
+    // WU24: COUNT real en SQL para el `total` del envelope (sin traer el historial completo a
+    // memoria solo para contarlo).
+    const [filaTotal] = await this.db
+      .select({ total: count() })
+      .from(sesionesEntrenamiento)
+      .where(whereHistorial);
 
     const sesiones = await this.db
       .select()
       .from(sesionesEntrenamiento)
-      .where(eq(sesionesEntrenamiento.alumnoId, usuarioAlumnoId))
+      .where(whereHistorial)
       .orderBy(
         desc(sesionesEntrenamiento.fechaProgramada),
-        desc(sesionesEntrenamiento.createdAtUtc)
+        desc(sesionesEntrenamiento.createdAtUtc),
+        // WU24: desempate estable para que `offset` no repita ni salte filas cuando dos sesiones
+        // comparten fechaProgramada y createdAtUtc.
+        desc(sesionesEntrenamiento.id)
       )
-      .limit(limit);
+      .limit(limit)
+      .offset(offset);
 
-    const resultado: SesionEntrenamientoDetalleDTO[] = [];
+    const items: SesionEntrenamientoDetalleDTO[] = [];
     for (const s of sesiones) {
-      resultado.push(await this.hidratarSesion(s));
+      items.push(await this.hidratarSesion(s));
     }
 
-    return resultado;
+    return {
+      items,
+      total: Number(filaTotal?.total ?? 0),
+      limit,
+      offset,
+    };
   }
 
   /**
@@ -1725,13 +1756,26 @@ export class EntrenamientoService {
    * - `diasInactivo`/`ultimaSesionUtc` salen de la ÚLTIMA sesión completada real del alumno
    *   (consulta agregada `MAX(fecha_fin_utc) GROUP BY alumno`, una fila por alumno). Un alumno
    *   sin ninguna sesión completada mantiene `null` + `7` (default RN-03), sin inventar fechas.
-   * - Rendimiento: 4 consultas en lote independientes del número de alumnos (sin N+1).
-   * - Orden por nivel de riesgo (ROJO al tope) y racha efectiva RN-02 (WU1).
+   * - Rendimiento: 4 consultas en lote independientes del número de alumnos (sin N+1). El cálculo
+   *   completo sigue siendo EN MEMORIA del coach (agregados en lote); el `limit`/`offset` son un
+   *   slice de PRESENTACIÓN que se aplica DESPUÉS de ordenar, y `resumen` describe la cartera
+   *   completa (no la página) para los chips/filtros globales de la UI.
+   * - Orden por nivel de riesgo (ROJO al tope) o por nombre (`orden=nombre`) y racha efectiva
+   *   RN-02 (WU1). WU24: envelope `{ items, total, limit, offset, resumen }`.
+   * - WU25a: `filtro.q` (nombre, case/acento-insensible y literal) y `filtro.semaforo`
+   *   (rojo|amarillo|verde|sinPlan|sinPendientes) se aplican ANTES del slice; `resumen` sigue
+   *   describiendo la cartera completa (los filtros solo recortan `items`/`total`).
+   * - WU26: `filtro.orden` (`riesgo` default | `nombre`) también se aplica ANTES del slice.
+   *   Ambos órdenes desempatan por `alumnoId`, así que la página por offset es determinista
+   *   aunque la query base no tenga ORDER BY (el sort en JS es total y estable).
    */
   async calcularSemanaAdherencia(
     entrenadorId: string,
-    timezone?: string
-  ): Promise<MonitorAdherenciaSemanalDTO[]> {
+    timezone?: string,
+    limit = LIMITE_MONITOR_ADHERENCIA_POR_DEFECTO,
+    offset = 0,
+    filtro?: FiltroMonitorAdherenciaDTO
+  ): Promise<MonitorAdherenciaDTO> {
     // 1. Obtener alumnos activos del entrenador.
     // D10: "activos" es literal: se excluyen los perfiles pausados/suspendidos, no solo los
     // soft-deleted. Un alumno pausado no debe aparecer en el monitor de adherencia.
@@ -1747,7 +1791,13 @@ export class EntrenamientoService {
       );
 
     if (alumnos.length === 0) {
-      return [];
+      return {
+        items: [],
+        total: 0,
+        limit,
+        offset,
+        resumen: { rojo: 0, amarillo: 0, verde: 0, sinPlan: 0, sinPendientes: 0, total: 0 },
+      };
     }
 
     const ventana = calcularVentanaSemana(new Date(), timezone);
@@ -1871,16 +1921,41 @@ export class EntrenamientoService {
       });
     }
 
-    // Ordenar por nivel de riesgo: ROJO (3) -> AMARILLO (2) -> VERDE (1)
-    const pesoRiesgo: Record<SemaforoAdherencia, number> = {
-      [SemaforoAdherencia.ROJO]: 3,
-      [SemaforoAdherencia.AMARILLO]: 2,
-      [SemaforoAdherencia.VERDE]: 1,
+    // WU24: contadores de TODA la cartera (no de la página ni del filtro), con la misma semántica
+    // que los filtros de la UI: un 0/0 con plan pero sin pendientes no cuenta como ROJO (D6).
+    const resumen: ResumenMonitorAdherenciaDTO = {
+      rojo: resultados.filter(
+        (a) => a.tienePlanActivo && !a.sinPendientesSemana && a.semaforoAdherencia === SemaforoAdherencia.ROJO
+      ).length,
+      amarillo: resultados.filter(
+        (a) => a.tienePlanActivo && a.semaforoAdherencia === SemaforoAdherencia.AMARILLO
+      ).length,
+      verde: resultados.filter(
+        (a) => a.tienePlanActivo && a.semaforoAdherencia === SemaforoAdherencia.VERDE
+      ).length,
+      sinPlan: resultados.filter((a) => !a.tienePlanActivo).length,
+      sinPendientes: resultados.filter((a) => a.tienePlanActivo && a.sinPendientesSemana).length,
+      total: resultados.length,
     };
 
-    return resultados.sort(
-      (a, b) => pesoRiesgo[b.semaforoAdherencia] - pesoRiesgo[a.semaforoAdherencia]
-    );
+    // WU25a/WU26: los filtros recortan la lista ANTES del slice (el resumen ya es de la cartera
+    // completa) y el orden pedido (`riesgo` default ROJO->AMARILLO->VERDE, o `nombre` A–Z)
+    // también se aplica antes del slice. Ambos comparadores son totales (desempate por
+    // `alumnoId`), así que la paginación por offset no repite ni salta filas entre páginas.
+    const filtrados = filtrarMonitorAdherencia(resultados, filtro);
+    const ordenados =
+      filtro?.orden === 'nombre'
+        ? ordenarMonitorPorNombre(filtrados)
+        : ordenarMonitorPorRiesgo(filtrados);
+
+    // Slice de PRESENTACIÓN posterior al orden: offset avanza sin repetir ni saltar filas.
+    return {
+      items: ordenados.slice(offset, offset + limit),
+      total: ordenados.length,
+      limit,
+      offset,
+      resumen,
+    };
   }
 
   // ---------------------------------------------------------------------------

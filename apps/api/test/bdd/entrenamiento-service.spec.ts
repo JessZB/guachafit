@@ -232,6 +232,16 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
     );
   }
 
+  /** WU24: detecta `count()` en la selección (COUNT real del historial). */
+  function esExpresionCount(expr: any): boolean {
+    if (!expr || typeof expr !== 'object' || !Array.isArray(expr.queryChunks)) return false;
+    return expr.queryChunks.some(
+      (c: any) =>
+        Array.isArray(c?.value) &&
+        c.value.some((v: any) => typeof v === 'string' && v.toLowerCase().includes('count('))
+    );
+  }
+
   function buscarNombreColumna(expr: any): string | null {
     const visitar = (chunks: any[]): string | null => {
       for (const c of chunks) {
@@ -247,11 +257,27 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
   }
 
   /**
-   * WU23: emula la consulta agregada `MAX(col) GROUP BY col` del monitor (una fila por grupo)
-   * sobre el almacén in-memory, para que el test no dependa de un Postgres real.
+   * WU23/WU24: emula los agregados del servicio sobre el almacén in-memory:
+   * - `MAX(col) GROUP BY col` (última sesión del monitor): una fila por grupo.
+   * - `count()` sin GROUP BY (WU24, historial paginado): una fila con el total.
+   * Sin agregados reconocidos devuelve las filas crudas (comportamiento histórico).
    */
   function agruparYAgregar(fieldsSelection: any, filas: any[], columnasGrupo: string[]): any[] {
-    if (columnasGrupo.length === 0) return [...filas];
+    const seleccion = (fieldsSelection && typeof fieldsSelection === 'object'
+      ? fieldsSelection
+      : {}) as Record<string, any>;
+    const hayCount = Object.values(seleccion).some((expr) => esExpresionCount(expr));
+    const hayMax = Object.values(seleccion).some((expr) => esExpresionMax(expr));
+    if (!hayCount && !hayMax) return [...filas];
+
+    if (columnasGrupo.length === 0) {
+      // COUNT sin GROUP BY: una sola fila agregada con el total.
+      const resultado: Record<string, any> = {};
+      for (const [campo, expr] of Object.entries(seleccion)) {
+        if (esExpresionCount(expr)) resultado[campo] = filas.length;
+      }
+      return [resultado];
+    }
 
     const grupos = new Map<string, any[]>();
     for (const fila of filas) {
@@ -267,7 +293,11 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
       for (const columna of columnasGrupo) {
         salida[camelizar(columna)] = valorDeColumna(filasGrupo[0], columna);
       }
-      for (const [campo, expr] of Object.entries(fieldsSelection as Record<string, any>)) {
+      for (const [campo, expr] of Object.entries(seleccion)) {
+        if (esExpresionCount(expr)) {
+          salida[campo] = filasGrupo.length;
+          continue;
+        }
         if (!esExpresionMax(expr)) continue;
         const columna = buscarNombreColumna(expr);
         const valores = filasGrupo
@@ -289,6 +319,9 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
           const baseData = getTableArray(tableName);
           let filtered = baseData.map(normalizeRecord);
           let columnasGrupo: string[] = [];
+          // WU24: LIMIT/OFFSET se aplican al resolver (offset primero), como en SQL.
+          let limiteAplicado: number | null = null;
+          let desplazamientoAplicado = 0;
 
           const queryObj: any = {
             where: vi.fn((predicate: any) => {
@@ -328,10 +361,20 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
               return queryObj;
             }),
             limit: vi.fn((count: number) => {
-              filtered = filtered.slice(0, count);
+              limiteAplicado = count;
               return queryObj;
             }),
-            then: (resolve: any) => resolve(agruparYAgregar(fieldsSelection, filtered, columnasGrupo)),
+            offset: vi.fn((count: number) => {
+              desplazamientoAplicado = count;
+              return queryObj;
+            }),
+            then: (resolve: any) => {
+              const pagina =
+                limiteAplicado === null
+                  ? filtered.slice(desplazamientoAplicado)
+                  : filtered.slice(desplazamientoAplicado, desplazamientoAplicado + limiteAplicado);
+              return resolve(agruparYAgregar(fieldsSelection, pagina, columnasGrupo));
+            },
           };
 
           return queryObj;
@@ -1265,9 +1308,84 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
         alumnoId1
       );
 
-      expect(historial.length).toBe(1);
-      expect(historial[0].id).toBe(sesion.id);
-      expect(historial[0].alumnoId).toBe(alumnoId1);
+      expect(historial.items.length).toBe(1);
+      expect(historial.items[0].id).toBe(sesion.id);
+      expect(historial.items[0].alumnoId).toBe(alumnoId1);
+      expect(historial.total).toBe(1);
+    });
+
+    it('WU24: devuelve envelope { items, total, limit, offset } con COUNT real en SQL', async () => {
+      await entrenamientoService.crearSesion(coachId1, {
+        alumnoId: alumnoId1,
+        fechaProgramada: '2026-09-01',
+        ejercicios: [{ ejercicioId: ejercicioGlobalId, series: [{ repsObjetivo: 10 }] }],
+      });
+      await entrenamientoService.crearSesion(coachId1, {
+        alumnoId: alumnoId1,
+        fechaProgramada: '2026-09-02',
+        ejercicios: [{ ejercicioId: ejercicioGlobalId, series: [{ repsObjetivo: 10 }] }],
+      });
+
+      const req = { user: { sub: alumnoId1, entrenadorId: coachId1, rol: Rol.ALUMNO } };
+      const historial = await entrenamientoController.obtenerHistorialSesionesAlumno(
+        req,
+        alumnoId1,
+        '1',
+        '0'
+      );
+
+      expect(historial.total).toBe(2); // COUNT real, no el tamaño de la página
+      expect(historial.limit).toBe(1);
+      expect(historial.offset).toBe(0);
+      expect(historial.items).toHaveLength(1);
+    });
+
+    it('WU24: offset avanza sin repetir ni saltar filas entre páginas', async () => {
+      for (const fecha of ['2026-09-01', '2026-09-02', '2026-09-03']) {
+        await entrenamientoService.crearSesion(coachId1, {
+          alumnoId: alumnoId1,
+          fechaProgramada: fecha,
+          ejercicios: [{ ejercicioId: ejercicioGlobalId, series: [{ repsObjetivo: 10 }] }],
+        });
+      }
+
+      const req = { user: { sub: alumnoId1, entrenadorId: coachId1, rol: Rol.ALUMNO } };
+      const pagina1 = await entrenamientoController.obtenerHistorialSesionesAlumno(
+        req,
+        alumnoId1,
+        '2',
+        '0'
+      );
+      const pagina2 = await entrenamientoController.obtenerHistorialSesionesAlumno(
+        req,
+        alumnoId1,
+        '2',
+        '2'
+      );
+
+      expect(pagina1.total).toBe(3);
+      expect(pagina2.total).toBe(3);
+      expect(pagina1.items).toHaveLength(2);
+      expect(pagina2.items).toHaveLength(1);
+      expect(pagina2.offset).toBe(2);
+
+      const idsPagina1 = pagina1.items.map((s) => s.id);
+      const idsPagina2 = pagina2.items.map((s) => s.id);
+      expect(idsPagina1.filter((id) => idsPagina2.includes(id))).toEqual([]);
+      expect(new Set([...idsPagina1, ...idsPagina2]).size).toBe(3);
+    });
+
+    it('WU24: limita el tamaño de página al techo de 100 y rechaza offsets negativos', async () => {
+      const req = { user: { sub: alumnoId1, entrenadorId: coachId1, rol: Rol.ALUMNO } };
+      const historial = await entrenamientoController.obtenerHistorialSesionesAlumno(
+        req,
+        alumnoId1,
+        '500',
+        '-10'
+      );
+
+      expect(historial.limit).toBe(100);
+      expect(historial.offset).toBe(0);
     });
 
     it('un alumno NO puede leer el historial de otro alumno (403)', async () => {
@@ -1531,7 +1649,7 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
         crearSesionCompletada(alumnoId1, fueraDeVentana)
       );
 
-      const monitor = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
+      const { items: monitor } = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
 
       expect(monitor).toHaveLength(1);
       const fila = monitor[0];
@@ -1552,7 +1670,7 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
       const ahora = new Date();
       mockSesionesEntrenamiento.push(crearSesionCompletada(alumnoId1, ahora));
 
-      const monitor = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
+      const { items: monitor } = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
 
       expect(monitor).toHaveLength(1);
       expect(monitor[0].tienePlanActivo).toBe(false);
@@ -1568,7 +1686,7 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
         vi.setSystemTime(new Date('2026-09-14T12:00:00.000Z'));
         mockRutinas.push(crearRutinaSemanal(alumnoId1, [6]));
 
-        let monitor = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
+        let monitor = (await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC')).items;
         expect(monitor[0].tienePlanActivo).toBe(true);
         expect(monitor[0].sesionesPrescritas).toBe(0);
         expect(monitor[0].sinPendientesSemana).toBe(true);
@@ -1578,7 +1696,7 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
         // Con un bloque ya debido (Lunes) y 0 completadas el 0/0 SÍ es un riesgo real.
         mockRutinas.length = 0;
         mockRutinas.push(crearRutinaSemanal(alumnoId1, [1]));
-        monitor = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
+        monitor = (await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC')).items;
         expect(monitor[0].sesionesPrescritas).toBe(1);
         expect(monitor[0].sinPendientesSemana).toBe(false);
         expect(monitor[0].semaforoAdherencia).toBe(SemaforoAdherencia.ROJO);
@@ -1595,7 +1713,7 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
       // consulta agregada MAX(fecha_fin_utc) GROUP BY alumno revela la última sesión real.
       mockSesionesEntrenamiento.push(crearSesionCompletada(alumnoId1, hace40Dias));
 
-      const monitor = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
+      const { items: monitor } = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
 
       expect(monitor).toHaveLength(1);
       expect(monitor[0].ultimaSesionUtc).toBe(hace40Dias.toISOString());
@@ -1607,7 +1725,7 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
     it('WU23: un alumno sin ninguna sesión completada mantiene ultimaSesionUtc=null y diasInactivo=7', async () => {
       mockRutinas.push(crearRutinaSemanal(alumnoId1, [1]));
 
-      const monitor = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
+      const { items: monitor } = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
 
       expect(monitor).toHaveLength(1);
       // Sin sesiones no hay fecha que mostrar: null es la verdad (jamás se inventa una fecha).
@@ -1622,7 +1740,7 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
       mockRutinas.push(crearRutinaSemanal(alumnoId1, [1]));
       mockSesionesEntrenamiento.push(crearSesionCompletada(alumnoId1, hace10Dias));
 
-      const monitor = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
+      const { items: monitor } = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
 
       expect(monitor).toHaveLength(1);
       expect(monitor[0].ultimaSesionUtc).toBe(hace10Dias.toISOString());
@@ -1640,7 +1758,7 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
         crearSesionCompletada(alumnoId1, hace5Dias)
       );
 
-      const monitor = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
+      const { items: monitor } = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
 
       expect(monitor).toHaveLength(1);
       expect(monitor[0].ultimaSesionUtc).toBe(hace5Dias.toISOString());
@@ -1655,7 +1773,7 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
         estadoActivacion: EstadoAlumno.INACTIVO_PAUSADO,
       });
 
-      const monitor = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
+      const { items: monitor } = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
 
       expect(monitor.map((m) => m.alumnoId)).toContain(alumnoId1);
       expect(monitor.map((m) => m.alumnoId)).not.toContain(pausadoId);
@@ -1692,7 +1810,7 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
       mockRutinas.push(crearRutinaSemanal(alumno4, [1, 1]));
       mockSesionesEntrenamiento.push(crearSesionCompletada(alumno4, ahora));
 
-      const monitor = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
+      const { items: monitor } = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
 
       expect(monitor.map((m) => m.alumnoId)).toEqual([alumnoId1, alumno4, alumno3]);
       expect(monitor.map((m) => m.semaforoAdherencia)).toEqual([
@@ -1735,6 +1853,349 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
 
       // alumnos + rutinas activas + completadas de la ventana + última sesión agregada (WU23)
       expect(mockDb.select).toHaveBeenCalledTimes(4);
+    });
+  });
+
+  describe('7.b.2 WU24: paginación del monitor con envelope y resumen global', () => {
+    it('devuelve { items, total, limit, offset, resumen } con limit default 25 y offset 0', async () => {
+      const ahora = new Date();
+      mockRutinas.push(crearRutinaSemanal(alumnoId1, [1]));
+      mockSesionesEntrenamiento.push(crearSesionCompletada(alumnoId1, ahora));
+
+      const monitor = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
+
+      expect(monitor.limit).toBe(25);
+      expect(monitor.offset).toBe(0);
+      expect(monitor.total).toBe(1);
+      expect(monitor.items).toHaveLength(1);
+      expect(monitor.resumen).toEqual({
+        rojo: 0,
+        amarillo: 0,
+        verde: 1,
+        sinPlan: 0,
+        sinPendientes: 0,
+        total: 1,
+      });
+    });
+
+    it('el resumen cuenta la cartera COMPLETA aunque la página traiga un slice', async () => {
+      const ahora = new Date();
+      // Rojo con plan y pendientes: 0/1.
+      const alumnoRojo = 'a5555555-5555-4555-8555-555555555555';
+      agregarAlumno('perfil-alumno-rojo', alumnoRojo);
+      mockRutinas.push(crearRutinaSemanal(alumnoRojo, [1]));
+      // Amarillo: 1/2.
+      const alumno4 = 'a4444444-4444-4444-8444-444444444444';
+      agregarAlumno('perfil-alumno-4', alumno4);
+      mockRutinas.push(crearRutinaSemanal(alumno4, [1, 1]));
+      mockSesionesEntrenamiento.push(crearSesionCompletada(alumno4, ahora));
+      // Verde: 1/1.
+      const alumno3 = 'a3333333-3333-4333-8333-333333333333';
+      agregarAlumno('perfil-alumno-3', alumno3);
+      mockRutinas.push(crearRutinaSemanal(alumno3, [1]));
+      mockSesionesEntrenamiento.push(crearSesionCompletada(alumno3, ahora));
+      // Sin plan (alumnoId1 del fixture base): cuenta en sinPlan, nunca en rojo.
+
+      const monitor = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC', 1, 0);
+
+      expect(monitor.items).toHaveLength(1); // slice de presentación
+      expect(monitor.total).toBe(4); // total real de la cartera
+      expect(monitor.resumen).toEqual({
+        rojo: 1,
+        amarillo: 1,
+        verde: 1,
+        sinPlan: 1,
+        sinPendientes: 0,
+        total: 4,
+      });
+    });
+
+    it('sinPendientes cuenta plan activo sin bloques vencidos y no suma a rojo (D6)', async () => {
+      vi.useFakeTimers();
+      try {
+        // Lunes 2026-09-14: ningún bloque del Sábado (6) ha vencido todavía.
+        vi.setSystemTime(new Date('2026-09-14T12:00:00.000Z'));
+        mockRutinas.push(crearRutinaSemanal(alumnoId1, [6]));
+
+        const monitor = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
+
+        expect(monitor.resumen.rojo).toBe(0); // neutral, no riesgo
+        expect(monitor.resumen.sinPendientes).toBe(1);
+        expect(monitor.resumen.total).toBe(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('offset avanza sin repetir ni saltar filas manteniendo el orden de riesgo', async () => {
+      const ahora = new Date();
+      const alumno3 = 'a3333333-3333-4333-8333-333333333333';
+      agregarAlumno('perfil-alumno-3', alumno3, { nombres: 'Ana', apellidos: 'López' });
+      mockRutinas.push(crearRutinaSemanal(alumno3, [1]));
+      mockSesionesEntrenamiento.push(crearSesionCompletada(alumno3, ahora));
+
+      const alumno4 = 'a4444444-4444-4444-8444-444444444444';
+      agregarAlumno('perfil-alumno-4', alumno4, { nombres: 'Luis', apellidos: 'Mora' });
+      mockRutinas.push(crearRutinaSemanal(alumno4, [1, 1]));
+      mockSesionesEntrenamiento.push(crearSesionCompletada(alumno4, ahora));
+
+      // alumnoId1 (base) queda ROJO por inactividad, sin plan.
+      const pagina1 = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC', 1, 0);
+      const pagina2 = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC', 1, 1);
+      const pagina3 = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC', 1, 2);
+
+      expect(pagina1.items.map((m) => m.alumnoId)).toEqual([alumnoId1]);
+      expect(pagina2.items.map((m) => m.alumnoId)).toEqual([alumno4]);
+      expect(pagina3.items.map((m) => m.alumnoId)).toEqual([alumno3]);
+      expect(pagina1.total).toBe(3);
+      expect(pagina3.offset).toBe(2);
+
+      const idsVistos = [...pagina1.items, ...pagina2.items, ...pagina3.items].map(
+        (m) => m.alumnoId
+      );
+      expect(new Set(idsVistos).size).toBe(3); // sin repetidos ni saltados
+    });
+
+    it('el controller aplica el techo de limit (100) y normaliza offset inválido a 0', async () => {
+      const req = { user: { sub: coachId1, rol: Rol.ENTRENADOR, entrenadorId: coachId1 } };
+
+      const monitor = await entrenamientoController.monitorAdherencia(req, 'UTC', '500', '-3');
+
+      expect(monitor.limit).toBe(100);
+      expect(monitor.offset).toBe(0);
+    });
+  });
+
+  describe('7.b.3 WU25a: búsqueda q y filtro de semáforo server-side del monitor', () => {
+    it('q filtra por nombre (case/acento-insensible y literal) antes del slice sin alterar el resumen', async () => {
+      const ahora = new Date();
+      const alumno3 = 'a3333333-3333-4333-8333-333333333333';
+      agregarAlumno('perfil-alumno-3', alumno3, { nombres: 'Ana', apellidos: 'López' });
+      mockRutinas.push(crearRutinaSemanal(alumno3, [1]));
+      mockSesionesEntrenamiento.push(crearSesionCompletada(alumno3, ahora));
+
+      const monitor = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC', 25, 0, {
+        q: '  LOPEZ ',
+      });
+
+      expect(monitor.total).toBe(1);
+      expect(monitor.items.map((m) => m.nombreCompleto)).toEqual(['Ana López']);
+      // El resumen sigue siendo de la cartera COMPLETA (sin plan incluido), no de la página.
+      expect(monitor.resumen).toEqual({
+        rojo: 0,
+        amarillo: 0,
+        verde: 1,
+        sinPlan: 1,
+        sinPendientes: 0,
+        total: 2,
+      });
+
+      // `%` y `_` se tratan como texto literal (misma semántica que el directorio).
+      const comodinLiteral = await entrenamientoService.calcularSemanaAdherencia(
+        coachId1,
+        'UTC',
+        25,
+        0,
+        { q: '%' }
+      );
+      expect(comodinLiteral.total).toBe(0);
+      expect(comodinLiteral.items).toEqual([]);
+    });
+
+    it('semaforo filtra por estado y NO cuenta el 0/0 sin pendientes como rojo (D6)', async () => {
+      vi.useFakeTimers();
+      try {
+        // Lunes 2026-09-14: el bloque del Sábado (6) todavía no venció.
+        vi.setSystemTime(new Date('2026-09-14T12:00:00.000Z'));
+        const alumno3 = 'a3333333-3333-4333-8333-333333333333';
+        agregarAlumno('perfil-alumno-3', alumno3, { nombres: 'Ana', apellidos: 'López' });
+        mockRutinas.push(crearRutinaSemanal(alumno3, [6]));
+
+        const sinPlan = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC', 25, 0, {
+          semaforo: 'sinPlan',
+        });
+        expect(sinPlan.items.map((m) => m.alumnoId)).toEqual([alumnoId1]);
+        expect(sinPlan.total).toBe(1);
+
+        const sinPendientes = await entrenamientoService.calcularSemanaAdherencia(
+          coachId1,
+          'UTC',
+          25,
+          0,
+          { semaforo: 'sinPendientes' }
+        );
+        expect(sinPendientes.items.map((m) => m.alumnoId)).toEqual([alumno3]);
+
+        // El 0/0 con plan pero sin bloques vencidos es neutral: ni rojo ni verde.
+        const rojo = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC', 25, 0, {
+          semaforo: 'rojo',
+        });
+        expect(rojo.total).toBe(0);
+        expect(rojo.items).toEqual([]);
+        expect(rojo.resumen.sinPendientes).toBe(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('q + offset paginan sobre la lista YA filtrada (coherente entre páginas)', async () => {
+      const ahora = new Date();
+      const alumnosDemo = [
+        { id: 'a3333333-3333-4333-8333-333333333333', perfil: 'perfil-demo-1', nombres: 'Demo' },
+        { id: 'a4444444-4444-4444-8444-444444444444', perfil: 'perfil-demo-2', nombres: 'Demo' },
+        { id: 'a5555555-5555-4555-8555-555555555555', perfil: 'perfil-demo-3', nombres: 'Demo' },
+      ];
+
+      for (const alumno of alumnosDemo) {
+        agregarAlumno(alumno.perfil, alumno.id, { nombres: alumno.nombres, apellidos: 'Prueba' });
+        mockRutinas.push(crearRutinaSemanal(alumno.id, [1]));
+        mockSesionesEntrenamiento.push(crearSesionCompletada(alumno.id, ahora));
+      }
+
+      const pagina1 = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC', 2, 0, {
+        q: 'demo',
+      });
+      const pagina2 = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC', 2, 2, {
+        q: 'demo',
+      });
+
+      expect(pagina1.total).toBe(3);
+      expect(pagina1.limit).toBe(2);
+      expect(pagina1.items).toHaveLength(2);
+      expect(pagina2.items).toHaveLength(1);
+      expect(pagina2.offset).toBe(2);
+
+      const ids = [...pagina1.items, ...pagina2.items].map((m) => m.alumnoId);
+      expect(new Set(ids).size).toBe(3); // sin repetidos ni saltados
+
+      // Los 3 completaron 1/1: el filtro por semáforo verde los trae a todos.
+      const verdes = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC', 25, 0, {
+        semaforo: 'verde',
+      });
+      expect(verdes.total).toBe(3);
+      expect(verdes.items.every((m) => m.semaforoAdherencia === SemaforoAdherencia.VERDE)).toBe(true);
+    });
+
+    it('el controller valida q/semaforo contra el contrato compartido (400 ante valores inválidos)', async () => {
+      const req = { user: { sub: coachId1, rol: Rol.ENTRENADOR, entrenadorId: coachId1 } };
+
+      const monitor = await entrenamientoController.monitorAdherencia(
+        req,
+        'UTC',
+        '25',
+        '0',
+        'pedro',
+        'sinPlan'
+      );
+      expect(monitor.items.map((m) => m.alumnoId)).toEqual([alumnoId1]);
+
+      await expect(
+        entrenamientoController.monitorAdherencia(req, 'UTC', '25', '0', undefined, 'hacker')
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('7.b.4 WU26: orden del monitor (riesgo con desempate por id y nombre A–Z)', () => {
+    it('dos homónimos con el mismo semáforo se desempatan por alumnoId (orden total)', async () => {
+      // Dos perfiles con el MISMO nombre completo y el MISMO semáforo: sin plan => ROJO.
+      const homonimoMenor = 'a3333333-3333-4333-8333-333333333333';
+      const homonimoMayor = 'a9999999-9999-4999-8999-999999999999';
+      agregarAlumno('perfil-homonimo-mayor', homonimoMayor, {
+        nombres: 'Alex',
+        apellidos: 'Dupont',
+      });
+      agregarAlumno('perfil-homonimo-menor', homonimoMenor, {
+        nombres: 'Alex',
+        apellidos: 'Dupont',
+      });
+
+      const primera = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
+      const segunda = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
+
+      // Los tres son ROJO (alumnoId1 base no tiene plan); los homónimos empatan en riesgo y
+      // nombre, y `alumnoId` decide: primero el id menor.
+      expect(primera.items.map((m) => m.alumnoId)).toEqual([
+        homonimoMenor,
+        homonimoMayor,
+        alumnoId1,
+      ]);
+      // Orden total: repetir la consulta devuelve exactamente el mismo orden.
+      expect(segunda.items.map((m) => m.alumnoId)).toEqual(primera.items.map((m) => m.alumnoId));
+    });
+
+    it('orden=nombre ordena A–Z antes del slice (páginas coherentes y sin repetir filas)', async () => {
+      const ahora = new Date();
+      // Ana: VERDE 1/1. Zoe: AMARILLO 1/2. alumnoId1 (base): ROJO sin plan.
+      const ana = 'a3333333-3333-4333-8333-333333333333';
+      agregarAlumno('perfil-ana', ana, { nombres: 'Ana', apellidos: 'Alba' });
+      mockRutinas.push(crearRutinaSemanal(ana, [1]));
+      mockSesionesEntrenamiento.push(crearSesionCompletada(ana, ahora));
+
+      const zoe = 'a4444444-4444-4444-8444-444444444444';
+      agregarAlumno('perfil-zoe', zoe, { nombres: 'Zoe', apellidos: 'Zapata' });
+      mockRutinas.push(crearRutinaSemanal(zoe, [1, 1]));
+      mockSesionesEntrenamiento.push(crearSesionCompletada(zoe, ahora));
+
+      // Default (riesgo): ROJO -> AMARILLO -> VERDE, sin importar el alfabeto.
+      const porRiesgo = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC', 25, 0);
+      expect(porRiesgo.items.map((m) => m.nombreCompleto)).toEqual([
+        'Pedro Pérez',
+        'Zoe Zapata',
+        'Ana Alba',
+      ]);
+
+      // `orden=nombre` aplica A–Z ANTES del slice de 2: ambas páginas son coherentes.
+      const pagina1 = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC', 2, 0, {
+        orden: 'nombre',
+      });
+      const pagina2 = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC', 2, 2, {
+        orden: 'nombre',
+      });
+
+      expect(pagina1.items.map((m) => m.nombreCompleto)).toEqual(['Ana Alba', 'Pedro Pérez']);
+      expect(pagina2.items.map((m) => m.nombreCompleto)).toEqual(['Zoe Zapata']);
+      expect(pagina1.total).toBe(3);
+      expect(pagina2.offset).toBe(2);
+
+      // `orden=riesgo` explícito se comporta igual que el default histórico.
+      const riesgoExplicito = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC', 25, 0, {
+        orden: 'riesgo',
+      });
+      expect(riesgoExplicito.items.map((m) => m.alumnoId)).toEqual(
+        porRiesgo.items.map((m) => m.alumnoId)
+      );
+    });
+
+    it('el controller acepta orden y valida el contrato compartido (400 ante valores inválidos)', async () => {
+      const ahora = new Date();
+      const ana = 'a3333333-3333-4333-8333-333333333333';
+      agregarAlumno('perfil-ana', ana, { nombres: 'Ana', apellidos: 'Alba' });
+      mockRutinas.push(crearRutinaSemanal(ana, [1]));
+      mockSesionesEntrenamiento.push(crearSesionCompletada(ana, ahora));
+
+      const req = { user: { sub: coachId1, rol: Rol.ENTRENADOR, entrenadorId: coachId1 } };
+      const monitor = await entrenamientoController.monitorAdherencia(
+        req,
+        'UTC',
+        '25',
+        '0',
+        undefined,
+        undefined,
+        'nombre'
+      );
+      expect(monitor.items.map((m) => m.nombreCompleto)).toEqual(['Ana Alba', 'Pedro Pérez']);
+
+      await expect(
+        entrenamientoController.monitorAdherencia(
+          req,
+          'UTC',
+          '25',
+          '0',
+          undefined,
+          undefined,
+          'inventado'
+        )
+      ).rejects.toThrow();
     });
   });
 
@@ -1892,7 +2353,11 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
     it('GET /entrenador/monitor-adherencia retorna bandeja de alumnos del coach', async () => {
       const req = { user: { sub: coachId1, rol: Rol.ENTRENADOR, entrenadorId: coachId1 } };
       const monitor = await entrenamientoController.monitorAdherencia(req);
-      expect(Array.isArray(monitor)).toBe(true);
+      expect(Array.isArray(monitor.items)).toBe(true);
+      expect(monitor.total).toBe(1);
+      expect(monitor.limit).toBe(25);
+      expect(monitor.offset).toBe(0);
+      expect(monitor.resumen.total).toBe(1);
     });
   });
 });

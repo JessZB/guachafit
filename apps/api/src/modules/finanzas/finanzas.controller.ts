@@ -31,6 +31,9 @@ import {
   CobroDirectoSchema,
   CobroDirectoInteligenteSchema,
   ConciliarTransaccionSchema,
+  LIMITE_BANDEJA_CONCILIACION_POR_DEFECTO,
+  LIMITE_BANDEJA_CONCILIACION_MAXIMO,
+  LIMITE_TRANSACCIONES_HISTORIAL_MAXIMO,
 } from '@guachafit/shared';
 
 @Controller('finanzas')
@@ -239,14 +242,27 @@ export class FinanzasController {
 
   /**
    * Bandeja de conciliación bancaria del entrenador (FIFO, transacciones pendientes)
+   * WU24b: envelope `{ items, total, limit, offset }`; `limit` default 25 (techo 100) y
+   * `offset` default 0. El orden FIFO por fecha de reporte se mantiene.
    * Rol: Entrenador
    */
   @Get('conciliacion/bandeja')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
-  async listarBandejaConciliacion(@Req() req: any) {
+  async listarBandejaConciliacion(
+    @Req() req: any,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string
+  ) {
     const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.finanzasService.listarBandejaConciliacion(entrenadorId);
+    const limitNum = limit
+      ? Math.min(
+          Math.max(parseInt(limit, 10) || LIMITE_BANDEJA_CONCILIACION_POR_DEFECTO, 1),
+          LIMITE_BANDEJA_CONCILIACION_MAXIMO
+        )
+      : LIMITE_BANDEJA_CONCILIACION_POR_DEFECTO;
+    const offsetNum = offset ? Math.max(parseInt(offset, 10) || 0, 0) : 0;
+    return this.finanzasService.listarBandejaConciliacion(entrenadorId, limitNum, offsetNum);
   }
 
   /**
@@ -268,6 +284,8 @@ export class FinanzasController {
 
   /**
    * Historial financiero y resumen del alumno (cuotas, transacciones, saldos)
+   * WU24b: `transaccionesTotal` es el COUNT real SIEMPRE presente. `txLimit`/`txOffset` son
+   * OPT-IN: sin ellos `transacciones` trae todas (contrato histórico del resumen).
    * Rol: Entrenador, Alumno titular, SuperAdmin
    */
   @Get('clientes/:clienteId/historial')
@@ -275,7 +293,9 @@ export class FinanzasController {
   @Roles(Rol.ENTRENADOR, Rol.ALUMNO, Rol.SUPERADMIN)
   async obtenerHistorialCliente(
     @Req() req: any,
-    @Param('clienteId') clienteId: string
+    @Param('clienteId') clienteId: string,
+    @Query('txLimit') txLimit?: string,
+    @Query('txOffset') txOffset?: string
   ) {
     if (!UUID_REGEX.test(clienteId)) {
       throw new BadRequestException('El ID del alumno debe ser un UUID válido.');
@@ -284,11 +304,21 @@ export class FinanzasController {
       req.user.rol === Rol.ALUMNO
         ? req.user.entrenadorId
         : req.user.entrenadorId || req.user.sub;
+
+    // WU24b: un valor ausente o no numérico de `txLimit` conserva el default "todas".
+    const txLimitParsed = txLimit !== undefined ? parseInt(txLimit, 10) : NaN;
+    const txLimitNum = Number.isFinite(txLimitParsed)
+      ? Math.min(Math.max(txLimitParsed, 1), LIMITE_TRANSACCIONES_HISTORIAL_MAXIMO)
+      : undefined;
+    const txOffsetNum = txOffset ? Math.max(parseInt(txOffset, 10) || 0, 0) : 0;
+
     return this.finanzasService.obtenerHistorialCliente(
       entrenadorId,
       clienteId,
       req.user.sub,
-      req.user.rol
+      req.user.rol,
+      txLimitNum,
+      txOffsetNum
     );
   }
 

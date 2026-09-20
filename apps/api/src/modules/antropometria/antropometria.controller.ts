@@ -22,6 +22,8 @@ import {
   ConciliarAntropometriaSchema,
   FiltroEvolucionAntropometricaSchema,
   ConsultaComparadorFotograficoSchema,
+  LIMITE_COLA_ANTROPOMETRIA_POR_DEFECTO,
+  LIMITE_COLA_ANTROPOMETRIA_MAXIMO,
 } from '@guachafit/shared';
 
 @Controller('antropometria')
@@ -66,15 +68,28 @@ export class AntropometriaController {
 
   /**
    * Listar controles pendientes de validación para la bandeja del coach.
+   * WU24b: envelope `{ items, total, limit, offset }`; `limit` default 25 (techo 100) y
+   * `offset` default 0. El orden por fecha de evaluación descendente se mantiene.
    * Roles: Entrenador, SuperAdmin
    */
   @Get('pendientes')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR, Rol.SUPERADMIN)
   @HttpCode(HttpStatus.OK)
-  async listarPendientes(@Req() req: any) {
+  async listarPendientes(
+    @Req() req: any,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string
+  ) {
     const coachId = req.user.entrenadorId || req.user.sub;
-    return this.antropometriaService.listarPendientes(coachId);
+    const limitNum = limit
+      ? Math.min(
+          Math.max(parseInt(limit, 10) || LIMITE_COLA_ANTROPOMETRIA_POR_DEFECTO, 1),
+          LIMITE_COLA_ANTROPOMETRIA_MAXIMO
+        )
+      : LIMITE_COLA_ANTROPOMETRIA_POR_DEFECTO;
+    const offsetNum = offset ? Math.max(parseInt(offset, 10) || 0, 0) : 0;
+    return this.antropometriaService.listarPendientes(coachId, limitNum, offsetNum);
   }
 
   /**

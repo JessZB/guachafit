@@ -107,7 +107,75 @@ export const ActualizarPerfilAlumnoSchema = z.object({
  */
 export const LIMITE_DIRECTORIO_ALUMNOS_POR_DEFECTO = 100;
 
+/** WU24: página por defecto y techo duro de `GET /sesiones/alumno/:alumnoId/historial`. */
+export const LIMITE_HISTORIAL_SESIONES_POR_DEFECTO = 30;
+export const LIMITE_HISTORIAL_SESIONES_MAXIMO = 100;
+
+/** WU24: página por defecto y techo duro de `GET /entrenador/monitor-adherencia`. */
+export const LIMITE_MONITOR_ADHERENCIA_POR_DEFECTO = 25;
+export const LIMITE_MONITOR_ADHERENCIA_MAXIMO = 100;
+
+/**
+ * WU25a: semáforo de adherencia aceptado como filtro server-side del monitor.
+ *
+ * Los valores son los de los chips de la UI (más `sinPendientes`, el 0/0 neutral de D6) y su
+ * semántica es EXACTAMENTE la de `resumen`: `rojo` excluye a los alumnos con plan pero sin
+ * bloques vencidos todavía.
+ */
+export const SemaforoFiltroMonitorSchema = z.enum([
+  'rojo',
+  'amarillo',
+  'verde',
+  'sinPlan',
+  'sinPendientes',
+]);
+
+/**
+ * WU25a: filtros server-side del monitor de adherencia, aplicados ANTES del slice de página.
+ *
+ * - `q`: búsqueda por nombre completo, case/acento-insensible y tratada como texto literal.
+ * - `semaforo`: recorta la lista al estado elegido (el `resumen` sigue siendo de la cartera
+ *   completa).
+ * - `orden`: `riesgo` (default, ROJO primero) o `nombre` A–Z. El orden se aplica antes del
+ *   slice para que la paginación sea coherente entre páginas.
+ */
+export const FiltroMonitorAdherenciaSchema = z.object({
+  q: z.string().max(200, 'El término de búsqueda no puede exceder 200 caracteres').optional(),
+  semaforo: SemaforoFiltroMonitorSchema.optional(),
+  orden: z.enum(['riesgo', 'nombre']).optional(),
+});
+
+/** WU24b: página por defecto y techo duro de `GET /finanzas/conciliacion/bandeja` (FIFO). */
+export const LIMITE_BANDEJA_CONCILIACION_POR_DEFECTO = 25;
+export const LIMITE_BANDEJA_CONCILIACION_MAXIMO = 100;
+
+/**
+ * WU24b: techo duro de `txLimit` en `GET /finanzas/clientes/:clienteId/historial`.
+ * Sin `txLimit`/`txOffset` el endpoint devuelve TODAS las transacciones (comportamiento histórico).
+ */
+export const LIMITE_TRANSACCIONES_HISTORIAL_MAXIMO = 100;
+
+/** WU24b: página por defecto y techo duro de `GET /antropometria/pendientes` (cola del coach). */
+export const LIMITE_COLA_ANTROPOMETRIA_POR_DEFECTO = 25;
+export const LIMITE_COLA_ANTROPOMETRIA_MAXIMO = 100;
+
+/**
+ * WU24b: página por defecto y techo duro del slice opt-in de `GET /antropometria/evolucion/:alumnoId`.
+ * La serie completa (sin `controlesLimit`/`controlesOffset`) sigue siendo el default para los charts.
+ */
+export const LIMITE_CONTROLES_EVOLUCION_POR_DEFECTO = 25;
+export const LIMITE_CONTROLES_EVOLUCION_MAXIMO = 100;
+
 export const FiltroDirectorioAlumnosSchema = z.object({
+  /**
+   * WU24: término de búsqueda server-side canónico. Se resuelve con ILIKE (case-insensitive)
+   * sobre nombre/apellido/correo/documento, escapando `%`, `_` y `\` para tratarlo como literal.
+   */
+  q: z.string().max(200, 'El término de búsqueda no puede exceder 200 caracteres').optional(),
+  /**
+   * Alias legado de `q` (WU19). Se mantiene aceptado para no romper consumidores previos; si
+   * llegan ambos, el servicio prioriza `q`.
+   */
   busqueda: z.string().max(200, 'El término de búsqueda no puede exceder 200 caracteres').optional(),
   estado: z.nativeEnum(EstadoAlumno, {
     errorMap: () => ({ message: 'El estado del alumno no es válido' }),
@@ -126,6 +194,23 @@ export const FiltroDirectorioAlumnosSchema = z.object({
     ])
     .optional()
     .default(false),
+  /**
+   * WU25a: `true` = SOLO alumnos dados de baja lógica (pestaña "Archivados", RF-012 RN-05).
+   * Tiene prioridad sobre `incluirArchivados`; el resumen no se altera.
+   */
+  soloArchivados: z
+    .union([
+      z.boolean(),
+      z.enum(['true', 'false', '1', '0']).transform((val) => val === 'true' || val === '1'),
+    ])
+    .optional()
+    .default(false),
+  /**
+   * WU25a: filtra por semáforo de pago calculado en el servidor con la MISMA regla de
+   * `resumen.morosos` (`condicionCuotaEnMora`). `por_vencer` no se acepta porque el servidor
+   * nunca lo produce (la hidratación por fila solo emite al_dia/moroso/sin_cuota).
+   */
+  semaforoPago: z.enum(['moroso', 'al_dia', 'sin_cuota']).optional(),
   limit: z
     .coerce
     .number()
@@ -512,6 +597,24 @@ export const FiltroEvolucionAntropometricaSchema = z.object({
   periodo: z.enum(['1M', '3M', '6M', '1A', 'todo']).optional(),
   desde: z.string().regex(FECHA_CALENDARIO_REGEX, 'El formato de fecha debe ser YYYY-MM-DD').optional(),
   hasta: z.string().regex(FECHA_CALENDARIO_REGEX, 'El formato de fecha debe ser YYYY-MM-DD').optional(),
+  /**
+   * WU24b: slice OPT-IN de la serie de controles aprobados. Sin ninguno de los dos parámetros,
+   * `evaluaciones` devuelve la serie completa (contrato que consumen los charts del alumno).
+   * Con `controlesOffset` y sin `controlesLimit`, el servidor aplica la página por defecto.
+   */
+  controlesLimit: z
+    .coerce
+    .number()
+    .int('El límite de controles debe ser un número entero')
+    .min(1, 'El límite de controles debe ser al menos 1')
+    .max(LIMITE_CONTROLES_EVOLUCION_MAXIMO, 'El límite de controles no puede exceder 100')
+    .optional(),
+  controlesOffset: z
+    .coerce
+    .number()
+    .int('El offset de controles debe ser un número entero')
+    .min(0, 'El offset de controles debe ser mayor o igual a 0')
+    .optional(),
 });
 
 export const ConsultaComparadorFotograficoSchema = z.object({

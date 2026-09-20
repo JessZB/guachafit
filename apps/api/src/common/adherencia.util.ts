@@ -1,4 +1,9 @@
 import { BloqueDiaRutinaDTO, SemaforoAdherencia } from '@guachafit/shared';
+import type {
+  FiltroMonitorAdherenciaDTO,
+  MonitorAdherenciaSemanalDTO,
+  SemaforoFiltroMonitorDTO,
+} from '@guachafit/shared';
 
 // =============================================================================
 // EVALUADOR PURO DE ADHERENCIA SEMANAL (RF-001 RN-03)
@@ -244,3 +249,104 @@ export function contarBloquesPrescritosHasta(
   return bloques.filter((bloque, idx) => obtenerDiaSugeridoBloque(bloque, idx) <= isoDayHoy)
     .length;
 }
+
+// =============================================================================
+// WU25a: FILTROS SERVER-SIDE DEL MONITOR DE ADHERENCIA (q + semáforo)
+// =============================================================================
+
+/**
+ * Normaliza texto para búsquedas en memoria: minúsculas, sin acentos y sin espacios sobrantes.
+ *
+ * El monitor resuelve `q` sobre la cartera ya cargada (el `resumen` debe seguir siendo global),
+ * así que no hay ILIKE de SQL: esta normalización replica el mismo criterio observable que la
+ * búsqueda del directorio (case-insensitive y con `%`/`_` tratados como texto literal).
+ */
+export function normalizarTextoBusqueda(texto?: string | null): string {
+  return (texto ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+type AlumnoFiltrableMonitor = Pick<
+  MonitorAdherenciaSemanalDTO,
+  'tienePlanActivo' | 'sinPendientesSemana' | 'semaforoAdherencia'
+>;
+
+/**
+ * WU25a: paridad EXACTA con la semántica de `resumen` (y con `monitor-filtros.ts` de la web):
+ * - `sinPlan`: sin rutina activa.
+ * - `sinPendientes`: plan activo sin bloques vencidos aún (0/0 neutral de D6).
+ * - `rojo`: con plan, con pendientes y semáforo ROJO (un 0/0 sin bloques vencidos NO es riesgo).
+ * - `amarillo`/`verde`: con plan y ese semáforo.
+ */
+export function coincideFiltroSemaforoMonitor(
+  alumno: AlumnoFiltrableMonitor,
+  filtro: SemaforoFiltroMonitorDTO
+): boolean {
+  if (filtro === 'sinPlan') return !alumno.tienePlanActivo;
+  if (!alumno.tienePlanActivo) return false;
+  if (filtro === 'sinPendientes') return alumno.sinPendientesSemana;
+  if (filtro === 'rojo') {
+    return !alumno.sinPendientesSemana && alumno.semaforoAdherencia === SemaforoAdherencia.ROJO;
+  }
+  return alumno.semaforoAdherencia === filtro;
+}
+
+/**
+ * WU25a: aplica `q` (nombre completo) y `semaforo` ANTES del slice de página.
+ * El `resumen` de la respuesta se calcula sobre la lista SIN filtrar (cartera completa).
+ */
+export function filtrarMonitorAdherencia<T extends MonitorAdherenciaSemanalDTO & AlumnoFiltrableMonitor>(
+  alumnos: readonly T[],
+  filtro?: FiltroMonitorAdherenciaDTO
+): T[] {
+  const termino = normalizarTextoBusqueda(filtro?.q);
+  const semaforo = filtro?.semaforo;
+
+  if (termino.length === 0 && !semaforo) return [...alumnos];
+
+  return alumnos.filter((alumno) => {
+    if (semaforo && !coincideFiltroSemaforoMonitor(alumno, semaforo)) return false;
+    if (termino.length === 0) return true;
+    return normalizarTextoBusqueda(alumno.nombreCompleto).includes(termino);
+  });
+}
+
+/**
+ * Orden por nivel de riesgo del monitor: ROJO al tope (contrato histórico del endpoint), con
+ * desempate alfabético y `alumnoId` como criterio FINAL.
+ *
+ * WU26: el comparador es total (dos filas solo empatan si comparten nombre e id), así que el
+ * orden es determinista aunque la query base del monitor no traiga ORDER BY: la paginación por
+ * offset no repite ni salta filas entre páginas, incluso con alumnos homónimos.
+ */
+export function ordenarMonitorPorRiesgo<T extends MonitorAdherenciaSemanalDTO>(alumnos: readonly T[]): T[] {
+  const pesoRiesgo: Record<SemaforoAdherencia, number> = {
+    [SemaforoAdherencia.ROJO]: 3,
+    [SemaforoAdherencia.AMARILLO]: 2,
+    [SemaforoAdherencia.VERDE]: 1,
+  };
+
+  return [...alumnos].sort(
+    (a, b) =>
+      pesoRiesgo[b.semaforoAdherencia] - pesoRiesgo[a.semaforoAdherencia] ||
+      a.nombreCompleto.localeCompare(b.nombreCompleto, 'es') ||
+      a.alumnoId.localeCompare(b.alumnoId, 'es')
+  );
+}
+
+/**
+ * WU26: orden alfabético A–Z por `nombreCompleto` con `alumnoId` como desempate final.
+ * Se aplica ANTES del slice cuando el cliente pide `orden=nombre`, igual que el orden por riesgo.
+ */
+export function ordenarMonitorPorNombre<T extends MonitorAdherenciaSemanalDTO>(alumnos: readonly T[]): T[] {
+  return [...alumnos].sort(
+    (a, b) =>
+      a.nombreCompleto.localeCompare(b.nombreCompleto, 'es') ||
+      a.alumnoId.localeCompare(b.alumnoId, 'es')
+  );
+}
+

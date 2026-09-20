@@ -56,6 +56,13 @@ function escaparPatronLike(texto: string): string {
 }
 
 /**
+ * WU25a: UUID nil (RFC 4122) para representar "sin candidatos" en un `IN`.
+ * `IN ()` no es SQL válido y un filtro sin coincidencias debe devolver 0 filas (no romper la
+ * consulta); ningún perfil real usa este UUID.
+ */
+const UUID_SIN_CANDIDATOS = '00000000-0000-4000-8000-000000000000';
+
+/**
  * WU23: regla ÚNICA de "cuota en mora" (idéntica a la bandeja "Alumnos en Mora" del dashboard,
  * `entrenador.service.ts`):
  * - la cuota está marcada como VENCIDA, o
@@ -511,6 +518,13 @@ export class AlumnosService {
    * - `resumen`: contadores de la cartera COMPLETA (COUNT en el servidor) para los KPIs del
    *   directorio; no dependen de la página, la búsqueda ni los filtros.
    *
+   * WU24: la búsqueda server-side acepta `q` (canónico) o `busqueda` (alias legado) y combina
+   * ILIKE con escape de `%`, `_` y `\` sobre nombre/apellido/correo/documento.
+   *
+   * WU25a: `soloArchivados` (pestaña dedicada de archivados) y `semaforoPago` (pestaña "En Mora")
+   * se resuelven también en SQL, ANTES del `limit`/`offset`, para que la paginación numerada sea
+   * coherente entre páginas. El `resumen` nunca se altera por los filtros.
+   *
    * `incluirArchivados: true` devuelve la cartera completa (vigentes + archivados); el default
    * `false` mantiene la semántica histórica de solo alumnos vigentes.
    */
@@ -520,11 +534,15 @@ export class AlumnosService {
   ): Promise<DirectorioAlumnosDTO> {
     const limit = filtro?.limit ?? LIMITE_DIRECTORIO_ALUMNOS_POR_DEFECTO;
     const offset = filtro?.offset ?? 0;
-    const busqueda = (filtro?.busqueda ?? '').trim();
+    // WU24: `q` es el parámetro canónico; `busqueda` (WU19) se mantiene como alias legado.
+    const busqueda = (filtro?.q ?? filtro?.busqueda ?? '').trim();
 
     const conditions = [eq(perfilesAlumno.entrenadorId, entrenadorId)];
 
-    if (!filtro?.incluirArchivados) {
+    if (filtro?.soloArchivados) {
+      // WU25a: pestaña "Archivados" (RF-012 RN-05): SOLO dados de baja lógica.
+      conditions.push(isNotNull(perfilesAlumno.deletedAtUtc));
+    } else if (!filtro?.incluirArchivados) {
       conditions.push(isNull(perfilesAlumno.deletedAtUtc));
     }
 
@@ -534,6 +552,13 @@ export class AlumnosService {
 
     if (filtro?.modalidad) {
       conditions.push(eq(perfilesAlumno.modalidad, filtro.modalidad));
+    }
+
+    if (filtro?.semaforoPago) {
+      // WU25a: filtro por semáforo de pago server-side, para que la pestaña "En Mora" pagine
+      // de verdad (antes se filtraba en memoria sobre la página cargada).
+      const condicionPago = await this.condicionSemaforoPago(entrenadorId, filtro.semaforoPago);
+      if (condicionPago) conditions.push(condicionPago);
     }
 
     if (busqueda.length > 0) {
@@ -690,14 +715,93 @@ export class AlumnosService {
   }
 
   /**
+   * WU25a: condición SQL para filtrar el directorio por semáforo de pago.
+   *
+   * Reutiliza la MISMA regla de mora del resumen (`condicionCuotaEnMora`) y la misma definición
+   * de "al día" que `hidratarSemaforoPago` (tiene al menos una cuota no anulada y ninguna en
+   * mora). El conjunto de ids se resuelve en una consulta agregada previa (sin subqueries en el
+   * WHERE, que romperían el aislamiento por tenant y la lectura del plan).
+   *
+   * `sin_cuota` es el complemento (no tiene ninguna cuota registrada): se expresa con un
+   * `NOT IN` sobre los alumnos con cuota; si nadie tiene cuota, no se agrega condición.
+   */
+  private async condicionSemaforoPago(
+    entrenadorId: string,
+    semaforo: 'moroso' | 'al_dia' | 'sin_cuota'
+  ) {
+    const { enMora, conCuota } = await this.calcularConjuntosSemaforoPago(entrenadorId);
+
+    if (semaforo === 'sin_cuota') {
+      const conCuotaLista = [...conCuota];
+      return conCuotaLista.length > 0
+        ? notInArray(perfilesAlumno.usuarioId, conCuotaLista)
+        : undefined;
+    }
+
+    const ids =
+      semaforo === 'moroso'
+        ? [...enMora]
+        : [...conCuota].filter((usuarioId) => !enMora.has(usuarioId));
+
+    return inArray(perfilesAlumno.usuarioId, ids.length > 0 ? ids : [UUID_SIN_CANDIDATOS]);
+  }
+
+  /**
+   * WU25a/WU23: conjuntos de alumnos por semáforo de pago con dos consultas en lote:
+   * 1. `enMora`: alumnos con al menos una cuota que cumple `condicionCuotaEnMora`.
+   * 2. `conCuota`: alumnos con al menos una cuota no anulada (vigente o vencida).
+   *
+   * Sin `alumnoUsuarioIds` cubre la cartera completa del coach (filtro server-side); con la
+   * lista de la página, solo esos alumnos (hidratación por fila, sin N+1).
+   */
+  private async calcularConjuntosSemaforoPago(
+    entrenadorId: string,
+    alumnoUsuarioIds?: string[]
+  ): Promise<{ enMora: Set<string>; conCuota: Set<string> }> {
+    const ahora = new Date();
+    const filtroAlumnos =
+      alumnoUsuarioIds && alumnoUsuarioIds.length > 0
+        ? inArray(cuotasMembresia.clienteId, alumnoUsuarioIds)
+        : undefined;
+
+    const [filasMorosas, filasConCuota] = await Promise.all([
+      this.db
+        .select({ clienteId: cuotasMembresia.clienteId })
+        .from(cuotasMembresia)
+        .where(
+          and(
+            eq(cuotasMembresia.entrenadorId, entrenadorId),
+            filtroAlumnos,
+            condicionCuotaEnMora(ahora)
+          )
+        ),
+      this.db
+        .select({ clienteId: cuotasMembresia.clienteId })
+        .from(cuotasMembresia)
+        .where(
+          and(
+            eq(cuotasMembresia.entrenadorId, entrenadorId),
+            filtroAlumnos,
+            ne(cuotasMembresia.estado, EstadoCuota.ANULADA)
+          )
+        ),
+    ]);
+
+    return {
+      enMora: new Set(filasMorosas.map((fila) => fila.clienteId)),
+      conCuota: new Set(filasConCuota.map((fila) => fila.clienteId)),
+    };
+  }
+
+  /**
    * WU23: hidrata `semaforoPago` de la página listada del directorio.
    *
    * Contexto: la pestaña "En Mora" y los badges de fila dependían de `semaforoPago`, un campo
    * que ninguna ruta del API completaba (siempre `undefined` => la UI asumía "Al día"). Con el
    * KPI `resumen.morosos` ya real, la pestaña decía "En Mora (N)" y la lista mostraba 0 filas.
    *
-   * Dos consultas en lote sobre las cuotas de los alumnos listados (sin N+1), coherentes con la
-   * MISMA condición de mora del resumen (`condicionCuotaEnMora`):
+   * Reutiliza `calcularConjuntosSemaforoPago` (misma condición de mora que el resumen) limitado a
+   * los `usuarioId` de la página, para no traer las cuotas de toda la cartera:
    * 1. `moroso`: tiene al menos una cuota que cumple la condición de mora.
    * 2. `al_dia`: tiene al menos una cuota no anulada que no está en mora.
    * 3. `sin_cuota`: no tiene ninguna cuota registrada (ni vigente ni vencida).
@@ -709,32 +813,10 @@ export class AlumnosService {
     const semaforos = new Map<string, 'al_dia' | 'moroso' | 'sin_cuota'>();
     if (alumnoUsuarioIds.length === 0) return semaforos;
 
-    const ahora = new Date();
-    const [filasMorosas, filasConCuota] = await Promise.all([
-      this.db
-        .select({ clienteId: cuotasMembresia.clienteId })
-        .from(cuotasMembresia)
-        .where(
-          and(
-            eq(cuotasMembresia.entrenadorId, entrenadorId),
-            inArray(cuotasMembresia.clienteId, alumnoUsuarioIds),
-            condicionCuotaEnMora(ahora)
-          )
-        ),
-      this.db
-        .select({ clienteId: cuotasMembresia.clienteId })
-        .from(cuotasMembresia)
-        .where(
-          and(
-            eq(cuotasMembresia.entrenadorId, entrenadorId),
-            inArray(cuotasMembresia.clienteId, alumnoUsuarioIds),
-            ne(cuotasMembresia.estado, EstadoCuota.ANULADA)
-          )
-        ),
-    ]);
-
-    const enMora = new Set(filasMorosas.map((fila) => fila.clienteId));
-    const conCuota = new Set(filasConCuota.map((fila) => fila.clienteId));
+    const { enMora, conCuota } = await this.calcularConjuntosSemaforoPago(
+      entrenadorId,
+      alumnoUsuarioIds
+    );
 
     for (const usuarioId of alumnoUsuarioIds) {
       semaforos.set(

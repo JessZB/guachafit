@@ -103,6 +103,20 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
               !c.queryChunks
             ) {
               params.push(c.value);
+            } else if (Array.isArray(c)) {
+              // WU25a: `inArray`/`notInArray` interpolan la lista como array de `Param`; se
+              // aplana para que el filtro IN se evalúe de verdad (antes se ignoraba).
+              for (const item of c) {
+                if (
+                  item &&
+                  typeof item === 'object' &&
+                  'value' in item &&
+                  !Array.isArray(item.value) &&
+                  !item.queryChunks
+                ) {
+                  params.push(item.value);
+                }
+              }
             }
           }
 
@@ -280,8 +294,15 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
             where: vi.fn((predicate: any) => {
               const conditions = extractConditions(predicate);
               if (conditions.length > 0) {
-                filtered = filtered.filter((item) =>
-                  conditions.every((cond) => matchesField(item, cond))
+                // WU24: las búsquedas `ilike` viajan dentro de un `or(...)` entre columnas
+                // (nombre/apellido/correo/documento): son ALTERNATIVAS, no un AND. El resto de
+                // filtros (eq/in/null/rango) se mantienen combinados con AND.
+                const ilike = conditions.filter((cond) => cond.op === 'ilike');
+                const resto = conditions.filter((cond) => cond.op !== 'ilike');
+                filtered = filtered.filter(
+                  (item) =>
+                    resto.every((cond) => matchesField(item, cond)) &&
+                    (ilike.length === 0 || ilike.some((cond) => matchesField(item, cond)))
                 );
               }
               return queryObj;
@@ -797,6 +818,196 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
       expect(res.items.filter((a) => a.semaforoPago === 'moroso')).toHaveLength(
         res.resumen.morosos
       );
+    });
+
+    it('1.12 WU24: q busca server-side por nombre/apellido con ILIKE y ajusta el total', async () => {
+      const req = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
+      const res = await alumnosController.listarAlumnos(
+        req,
+        FiltroDirectorioAlumnosSchema.parse({ q: 'alejandro' })
+      );
+
+      expect(res.total).toBe(1);
+      expect(res.items.map((a) => a.id)).toEqual([ALUMNO_A1_PERFIL_ID]);
+      // La búsqueda NO altera el resumen de la cartera completa.
+      expect(res.resumen.total).toBe(2);
+      expect(res.resumen.archivados).toBe(1);
+    });
+
+    it('1.13 WU24: q busca por número de documento y sin coincidencias devuelve total 0', async () => {
+      const req = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
+
+      const porDocumento = await alumnosController.listarAlumnos(
+        req,
+        FiltroDirectorioAlumnosSchema.parse({ q: '11111111' })
+      );
+      expect(porDocumento.total).toBe(1);
+      expect(porDocumento.items[0].id).toBe(ALUMNO_A1_PERFIL_ID);
+
+      const sinCoincidencias = await alumnosController.listarAlumnos(
+        req,
+        FiltroDirectorioAlumnosSchema.parse({ q: 'zzz-no-existe' })
+      );
+      expect(sinCoincidencias.total).toBe(0);
+      expect(sinCoincidencias.items).toEqual([]);
+    });
+
+    it('1.14 WU24: q vacío o en blanco equivale a sin filtro (mismo total que la consulta base)', async () => {
+      const req = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
+
+      const base = await alumnosController.listarAlumnos(req, {});
+      const qVacio = await alumnosController.listarAlumnos(
+        req,
+        FiltroDirectorioAlumnosSchema.parse({ q: '' })
+      );
+      const qEspacios = await alumnosController.listarAlumnos(
+        req,
+        FiltroDirectorioAlumnosSchema.parse({ q: '   ' })
+      );
+
+      expect(qVacio.total).toBe(base.total);
+      expect(qEspacios.total).toBe(base.total);
+      expect(qVacio.items.map((a) => a.id).sort()).toEqual(base.items.map((a) => a.id).sort());
+    });
+
+    it('1.15 WU24: q tiene prioridad sobre el alias legado busqueda y respeta el máximo de 200', async () => {
+      const req = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
+
+      const res = await alumnosController.listarAlumnos(
+        req,
+        FiltroDirectorioAlumnosSchema.parse({ q: 'Alejandro', busqueda: 'Beatriz' })
+      );
+      expect(res.items.map((a) => a.id)).toEqual([ALUMNO_A1_PERFIL_ID]);
+
+      expect(() => FiltroDirectorioAlumnosSchema.parse({ q: 'A'.repeat(201) })).toThrow();
+      // El escape de `%`/`_`/`\` trata el texto como literal: `%` no funciona como comodín.
+      const comodinLiteral = await alumnosController.listarAlumnos(
+        req,
+        FiltroDirectorioAlumnosSchema.parse({ q: '%' })
+      );
+      expect(comodinLiteral.total).toBe(0);
+    });
+
+    it('1.16 WU25a: soloArchivados devuelve SOLO las bajas lógicas y no altera el resumen', async () => {
+      const req = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
+
+      const res = await alumnosController.listarAlumnos(
+        req,
+        FiltroDirectorioAlumnosSchema.parse({ soloArchivados: 'true' })
+      );
+
+      expect(res.total).toBe(1);
+      expect(res.items.map((a) => a.id)).toEqual([ALUMNO_A2_PERFIL_ID]);
+      expect(res.items[0].deletedAtUtc).not.toBeNull();
+      // El resumen sigue describiendo la cartera completa.
+      expect(res.resumen.total).toBe(2);
+      expect(res.resumen.archivados).toBe(1);
+      expect(res.resumen.activos).toBe(1);
+    });
+
+    it('1.17 WU25a: semaforoPago filtra server-side con la misma regla del resumen (moroso/al_dia/sin_cuota)', async () => {
+      // Alumno A3 con cuota vigente (al día) y A4 sin ninguna cuota.
+      const ALUMNO_A3_USER_ID = 'aaaaaaaa-cccc-4aaa-8aaa-aaaaaaaaaaaa';
+      const ALUMNO_A3_PERFIL_ID = 'a3333333-3333-4333-8333-333333333333';
+      const ALUMNO_A4_USER_ID = 'aaaaaaaa-dddd-4aaa-8aaa-aaaaaaaaaaaa';
+      const ALUMNO_A4_PERFIL_ID = 'a4444444-4444-4444-8444-444444444444';
+
+      for (const [userId, perfilId, nombres] of [
+        [ALUMNO_A3_USER_ID, ALUMNO_A3_PERFIL_ID, 'Alba'],
+        [ALUMNO_A4_USER_ID, ALUMNO_A4_PERFIL_ID, 'Sina'],
+      ] as const) {
+        mockUsuarios.push({ id: userId, email: `${nombres.toLowerCase()}@guachafit.com`, rol: Rol.ALUMNO, activo: true });
+        mockPerfilesAlumno.push({
+          id: perfilId,
+          usuarioId: userId,
+          entrenadorId: COACH_A_ID,
+          tipoDocumento: TipoDocumento.V,
+          numeroDocumento: `7777777${nombres.length}`,
+          nombres,
+          apellidos: 'Prueba',
+          fechaNacimiento: '1995-01-01',
+          telefonoWhatsapp: '+584127777777',
+          modalidad: Modalidad.PRESENCIAL,
+          estadoActivacion: EstadoAlumno.ACTIVO,
+          fichaSaludPrivada: null,
+          deletedAtUtc: null,
+        });
+      }
+
+      mockCuotasMembresia.push(
+        {
+          id: 'cuota-vencida-wu25a',
+          clienteId: ALUMNO_A1_USER_ID,
+          entrenadorId: COACH_A_ID,
+          planId: PLAN_COACH_A_ID,
+          periodo: '2026-08',
+          montoTotalUsd: '45.00',
+          montoAbonadoUsd: '0.00',
+          saldoPendienteUsd: '45.00',
+          fechaEmisionUtc: new Date('2026-08-01T00:00:00Z'),
+          fechaCorteUtc: new Date('2026-08-31T00:00:00Z'),
+          estado: EstadoCuota.VENCIDA,
+        },
+        {
+          id: 'cuota-vigente-wu25a',
+          clienteId: ALUMNO_A3_USER_ID,
+          entrenadorId: COACH_A_ID,
+          planId: PLAN_COACH_A_ID,
+          periodo: '2026-10',
+          montoTotalUsd: '45.00',
+          montoAbonadoUsd: '45.00',
+          saldoPendienteUsd: '0.00',
+          fechaEmisionUtc: new Date(),
+          fechaCorteUtc: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
+          estado: EstadoCuota.PENDIENTE,
+        }
+      );
+
+      const req = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
+      const listar = (semaforoPago: 'moroso' | 'al_dia' | 'sin_cuota') =>
+        alumnosController.listarAlumnos(req, FiltroDirectorioAlumnosSchema.parse({ semaforoPago }));
+
+      const morosos = await listar('moroso');
+      expect(morosos.items.map((a) => a.id)).toEqual([ALUMNO_A1_PERFIL_ID]);
+      expect(morosos.total).toBe(morosos.resumen.morosos); // la pestaña y el KPI cuentan igual
+      expect(morosos.items[0].semaforoPago).toBe('moroso');
+
+      const alDia = await listar('al_dia');
+      expect(alDia.items.map((a) => a.id)).toEqual([ALUMNO_A3_PERFIL_ID]);
+      expect(alDia.items[0].semaforoPago).toBe('al_dia');
+
+      const sinCuota = await listar('sin_cuota');
+      expect(sinCuota.items.map((a) => a.id)).toEqual([ALUMNO_A4_PERFIL_ID]);
+      expect(sinCuota.items[0].semaforoPago).toBe('sin_cuota');
+    });
+
+    it('1.18 WU25a: el schema valida los filtros nuevos (soloArchivados coercible, semaforoPago sin por_vencer)', () => {
+      expect(FiltroDirectorioAlumnosSchema.parse({ soloArchivados: '1' }).soloArchivados).toBe(true);
+      expect(FiltroDirectorioAlumnosSchema.parse({ soloArchivados: 'false' }).soloArchivados).toBe(false);
+      expect(() =>
+        FiltroDirectorioAlumnosSchema.parse({ soloArchivados: 'quizas' })
+      ).toThrow();
+
+      // `por_vencer` no se acepta: el servidor nunca lo produce al hidratar el semáforo.
+      expect(FiltroDirectorioAlumnosSchema.parse({ semaforoPago: 'moroso' }).semaforoPago).toBe('moroso');
+      expect(() => FiltroDirectorioAlumnosSchema.parse({ semaforoPago: 'por_vencer' })).toThrow();
+    });
+
+    it('1.19 WU25a: semaforoPago sin coincidencias devuelve total 0 sin romper la consulta', async () => {
+      const req = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
+      const listar = (semaforoPago: 'moroso' | 'sin_cuota') =>
+        alumnosController.listarAlumnos(req, FiltroDirectorioAlumnosSchema.parse({ semaforoPago }));
+
+      // Nadie tiene cuotas registradas: no hay morosos (el `IN` sin candidatos no rompe el SQL).
+      const sinMorosos = await listar('moroso');
+      expect(sinMorosos.total).toBe(0);
+      expect(sinMorosos.items).toEqual([]);
+      expect(sinMorosos.resumen.total).toBe(2); // el resumen sigue siendo de la cartera completa
+
+      // Sin ninguna cuota en el tenant, todos los vigentes quedan "sin cuota".
+      const sinCuota = await listar('sin_cuota');
+      expect(sinCuota.items.map((a) => a.id)).toEqual([ALUMNO_A1_PERFIL_ID]);
+      expect(sinCuota.items[0].semaforoPago).toBe('sin_cuota');
     });
   });
 
