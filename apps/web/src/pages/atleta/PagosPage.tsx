@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../../context/auth-context';
 import { apiClient } from '../../lib/api-client';
 import { pluralizar } from '../../lib/pluralizar';
+import { calcularTotalPaginas, rebanarPagina } from '../../lib/paginacion';
+import { Paginacion } from '../../components/common/Paginacion';
 import {
   Moneda,
   MetodoPago,
@@ -12,6 +14,7 @@ import {
   PresignedUploadUrlResponseDTO,
   ResumenFinancieroAlumnoDTO,
   TransaccionPagoDetalleDTO,
+  AuthUserDTO,
 } from '@guachafit/shared';
 import {
   etiquetaEstadoTransaccion,
@@ -46,6 +49,33 @@ import {
  */
 const COMPROBANTE_DEMO_URL =
   'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=600&q=80';
+
+/**
+ * WU25b: transacción demo del historial (mismo fixture de WU20). Solo se usa con `isDemoMode`
+ * activo; el slice de página se corta localmente con la misma aritmética del `offset` del API.
+ */
+function crearTransaccionesDemoPagos(user: AuthUserDTO | null): TransaccionPagoDetalleDTO[] {
+  return [
+    {
+      id: 'tx-001',
+      cuotaId: 'cuota-demo-001',
+      clienteId: user?.id || 'demo-alumno',
+      entrenadorId: user?.entrenadorId || 'demo-coach',
+      registradoPor: user?.id || 'demo-alumno',
+      montoOriginal: '1300.00',
+      monedaOriginal: Moneda.VES,
+      tasaCambioFijada: '65.0000',
+      montoEquivalenteUsd: '20.00',
+      metodoPago: MetodoPago.PAGO_MOVIL,
+      referenciaBancaria: '987654',
+      fechaOperacion: '2026-09-02',
+      estadoConciliacion: 'aprobado' as any,
+      fechaReporteUtc: new Date().toISOString(),
+      createdAtUtc: new Date().toISOString(),
+      updatedAtUtc: new Date().toISOString(),
+    },
+  ];
+}
 
 /** WU20: chips del historial (mismos estados que ya renderiza el badge de cada fila). */
 const OPCIONES_ESTADO_HISTORIAL: Array<{
@@ -137,6 +167,15 @@ export function PagosPage() {
   const [isLoading, setIsLoading] = useState(true);
   // D2: fallo de carga honesto (sin cuota demo fuera del modo demo).
   const [error, setError] = useState<string | null>(null);
+  // WU25b: historial paginado server-side con `txLimit`/`txOffset` + `transaccionesTotal` real.
+  const [paginaHistorial, setPaginaHistorial] = useState(1);
+  const [tamanoHistorial, setTamanoHistorial] = useState(10);
+  const [transaccionesHistorial, setTransaccionesHistorial] = useState<
+    TransaccionPagoDetalleDTO[]
+  >([]);
+  const [transaccionesTotal, setTransaccionesTotal] = useState(0);
+  const [isCargandoHistorial, setIsCargandoHistorial] = useState(false);
+  const [errorHistorial, setErrorHistorial] = useState<string | null>(null);
 
   // Progressive Disclosure: 'hub' (selector) | 'nuevo-pago' | 'historial'
   const [vistaActiva, setVistaActiva] = useState<'hub' | 'nuevo-pago' | 'historial'>('hub');
@@ -190,29 +229,14 @@ export function PagosPage() {
         fechaEmisionUtc: new Date().toISOString(),
         fechaCorteUtc: new Date(Date.now() + 86400000 * 5).toISOString(),
         estado: EstadoCuota.ABONADA_PARCIAL,
-        transacciones: [
-          {
-            id: 'tx-001',
-            cuotaId: 'cuota-demo-001',
-            clienteId: user?.id || 'demo-alumno',
-            entrenadorId: user?.entrenadorId || 'demo-coach',
-            registradoPor: user?.id || 'demo-alumno',
-            montoOriginal: '1300.00',
-            monedaOriginal: Moneda.VES,
-            tasaCambioFijada: '65.0000',
-            montoEquivalenteUsd: '20.00',
-            metodoPago: MetodoPago.PAGO_MOVIL,
-            referenciaBancaria: '987654',
-            fechaOperacion: '2026-09-02',
-            estadoConciliacion: 'aprobado' as any,
-            fechaReporteUtc: new Date().toISOString(),
-            createdAtUtc: new Date().toISOString(),
-            updatedAtUtc: new Date().toISOString(),
-          },
-        ],
+        // WU25b: la página visible la resuelve `cargarPaginaHistorial` con el slice del fixture.
+        transacciones: [],
         createdAtUtc: new Date().toISOString(),
         updatedAtUtc: new Date().toISOString(),
       });
+      // WU25b: página 1 del historial demo (mismo flujo que la sesión real, cero red).
+      setPaginaHistorial(1);
+      await cargarPaginaHistorial(1, tamanoHistorial);
       setIsLoading(false);
       return;
     }
@@ -230,10 +254,14 @@ export function PagosPage() {
         return;
       }
 
-      const resumen = await apiClient<ResumenFinancieroAlumnoDTO>(
-        `/finanzas/clientes/${user.id}/historial`
-      );
-      setCuota(adaptarCuotaDesdeResumen(resumen, user.entrenadorId || user.id));
+      // WU25b: la página 1 del historial alimenta el resumen (saldos/cuota) y el total real.
+      setPaginaHistorial(1);
+      const ok = await cargarPaginaHistorial(1, tamanoHistorial);
+      if (!ok) {
+        setError(
+          'No se pudo cargar tu estado de cuenta. Revisa tu conexión e inténtalo de nuevo.'
+        );
+      }
     } catch (err: any) {
       // D2: sin cuota demo en sesión real; error visible con reintento.
       setCuota(null);
@@ -243,6 +271,69 @@ export function PagosPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  /**
+   * WU25b: carga UNA página del historial de transacciones del alumno.
+   *
+   * - Real: `GET /finanzas/clientes/:id/historial?txLimit&txOffset`; `transaccionesTotal` es el
+   *   COUNT real y los agregados del resumen siguen siendo del total, no de la página.
+   * - Demo: corta el fixture local (`crearTransaccionesDemoPagos`) sin tocar la red.
+   * Devuelve false si la consulta falla: el llamador decide el mensaje y se conserva lo cargado.
+   */
+  const cargarPaginaHistorial = async (
+    paginaSolicitada: number,
+    tamanoSolicitado: number,
+    reintento = false
+  ): Promise<boolean> => {
+    if (!user?.id) return true;
+    setIsCargandoHistorial(true);
+    setErrorHistorial(null);
+    try {
+      if (isDemoMode) {
+        const fixture = crearTransaccionesDemoPagos(user);
+        setTransaccionesHistorial(rebanarPagina(fixture, paginaSolicitada, tamanoSolicitado));
+        setTransaccionesTotal(fixture.length);
+        return true;
+      }
+      const offset = (Math.max(1, paginaSolicitada) - 1) * Math.max(1, tamanoSolicitado);
+      const resumen = await apiClient<ResumenFinancieroAlumnoDTO>(
+        `/finanzas/clientes/${user.id}/historial?txLimit=${tamanoSolicitado}&txOffset=${offset}`
+      );
+      setCuota(adaptarCuotaDesdeResumen(resumen, user.entrenadorId || user.id));
+      setTransaccionesHistorial(
+        adaptarTransaccionesHistorial(resumen.transacciones, {
+          clienteId: resumen.usuarioId,
+          entrenadorId: user.entrenadorId || user.id,
+        })
+      );
+      const total = Number(resumen.transaccionesTotal ?? resumen.transacciones?.length ?? 0);
+      setTransaccionesTotal(total);
+      const totalPaginas = calcularTotalPaginas(total, tamanoSolicitado);
+      if (paginaSolicitada > totalPaginas && !reintento) {
+        setPaginaHistorial(totalPaginas);
+        void cargarPaginaHistorial(totalPaginas, tamanoSolicitado, true);
+      }
+      return true;
+    } catch (err: any) {
+      setErrorHistorial(
+        err?.message || 'No se pudo cargar el historial de pagos. Inténtalo de nuevo.'
+      );
+      return false;
+    } finally {
+      setIsCargandoHistorial(false);
+    }
+  };
+
+  const cambiarPaginaHistorial = (nuevaPagina: number) => {
+    setPaginaHistorial(nuevaPagina);
+    void cargarPaginaHistorial(nuevaPagina, tamanoHistorial);
+  };
+
+  const cambiarTamanoHistorial = (nuevoTamano: number) => {
+    setTamanoHistorial(nuevoTamano);
+    setPaginaHistorial(1);
+    void cargarPaginaHistorial(1, nuevoTamano);
   };
 
   useEffect(() => {
@@ -265,7 +356,8 @@ export function PagosPage() {
       : '—';
 
   // WU20: historial visible según el chip de estado (mismo criterio que el badge de cada fila).
-  const transaccionesHistorial = cuota?.transacciones ?? [];
+  // WU25b: con paginación server-side el chip filtra la PÁGINA cargada (el endpoint no acepta
+  // estados); la cabecera usa `transaccionesTotal`, el COUNT real del servidor.
   const transaccionesFiltradas = useMemo(
     () => filtrarTransaccionesPorEstado(transaccionesHistorial, filtroEstadoHistorial),
     [transaccionesHistorial, filtroEstadoHistorial]
@@ -559,9 +651,9 @@ export function PagosPage() {
                       <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">
                         Ver recibos e historial
                       </h3>
-                      {cuota?.transacciones && cuota.transacciones.length > 0 && (
+                      {transaccionesTotal > 0 && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
-                          {pluralizar(cuota.transacciones.length, 'pago', 'pagos')}
+                          {pluralizar(transaccionesTotal, 'pago', 'pagos')}
                         </span>
                       )}
                     </div>
@@ -796,7 +888,7 @@ export function PagosPage() {
                 <span>Historial de Pagos y Recibos</span>
               </h2>
               <span className="text-xs text-muted-foreground font-mono">
-                {pluralizar(cuota?.transacciones?.length || 0, 'registro', 'registros')}
+                {pluralizar(transaccionesTotal, 'registro', 'registros')}
               </span>
             </div>
 
@@ -822,16 +914,18 @@ export function PagosPage() {
                   })}
                 </div>
                 <p className="text-[11px] text-muted-foreground font-mono">
-                  Mostrando {transaccionesFiltradas.length} de{' '}
-                  {pluralizar(transaccionesHistorial.length, 'registro', 'registros')}
+                  Mostrando {transaccionesFiltradas.length} de {transaccionesHistorial.length} en
+                  esta página · {pluralizar(transaccionesTotal, 'registro', 'registros')}
                 </p>
               </div>
             )}
 
             {transaccionesHistorial.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-6 text-center">
-                No hay transacciones registradas para este periodo.
-              </p>
+              errorHistorial ? null : (
+                <p className="text-xs text-muted-foreground py-6 text-center">
+                  No hay transacciones registradas para este periodo.
+                </p>
+              )
             ) : transaccionesFiltradas.length === 0 ? (
               <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
                 <SearchX className="h-9 w-9 text-muted-foreground mx-auto opacity-50" />
@@ -932,6 +1026,31 @@ export function PagosPage() {
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* WU25b: fallo de página visible sin perder lo ya cargado */}
+            {errorHistorial && (
+              <div
+                role="alert"
+                className="p-3 rounded-2xl bg-destructive/10 border border-destructive/25 text-destructive text-xs font-bold flex items-center gap-2"
+              >
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>{errorHistorial}</span>
+              </div>
+            )}
+
+            {/* WU25b: paginación numerada con txLimit/txOffset y transaccionesTotal real */}
+            {transaccionesTotal > 0 && (
+              <div className="pt-1">
+                <Paginacion
+                  pagina={paginaHistorial}
+                  tamano={tamanoHistorial}
+                  total={transaccionesTotal}
+                  onCambiarPagina={cambiarPaginaHistorial}
+                  onCambiarTamano={cambiarTamanoHistorial}
+                  cargando={isCargandoHistorial}
+                />
               </div>
             )}
           </div>

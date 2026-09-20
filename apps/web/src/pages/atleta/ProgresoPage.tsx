@@ -53,6 +53,8 @@ export function ProgresoPage() {
       const demoEvolucion: EvolucionCorporalDTO = {
         alumnoId: user?.id || 'demo-alumno',
         totalEvaluaciones: 3,
+        // WU24b: total real de la serie; en el fixture coincide con las evaluaciones listadas.
+        controlesTotal: 3,
         cambioNetoPesoKg: '-3.20',
         cambioNetoGrasaPorcentaje: '-2.40',
         rangoSeleccionado: '3M',

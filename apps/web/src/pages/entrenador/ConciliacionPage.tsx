@@ -1,7 +1,16 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { apiClient } from '../../lib/api-client';
 import { useAuth } from '../../context/auth-context';
-import { TransaccionPagoDetalleDTO, Moneda, MetodoPago } from '@guachafit/shared';
+import { pluralizar } from '../../lib/pluralizar';
+import { rebanarPagina } from '../../lib/paginacion';
+import { usePaginacionServidor } from '../../lib/use-paginacion-servidor';
+import { Paginacion } from '../../components/common/Paginacion';
+import {
+  TransaccionPagoDetalleDTO,
+  BandejaConciliacionDTO,
+  Moneda,
+  MetodoPago,
+} from '@guachafit/shared';
 import {
   etiquetaMetodoPago,
   filtrarTransaccionesConciliacion,
@@ -34,99 +43,136 @@ import {
 const COMPROBANTE_DEMO_URL =
   'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80';
 
+/**
+ * WU25b: cola demo de la bandeja (mismo fixture de WU20). Solo se usa con `isDemoMode` activo;
+ * el slice de página se corta localmente con la misma aritmética del `offset` del servidor.
+ */
+function crearColaDemo(): TransaccionPagoDetalleDTO[] {
+  return [
+    {
+      id: 'tx-pending-1',
+      cuotaId: 'cuota-101',
+      clienteId: 'cli-01',
+      entrenadorId: 'coach-01',
+      clienteNombre: 'Carlos Mendoza',
+      registradoPor: 'cli-01',
+      montoOriginal: '1950.00',
+      monedaOriginal: Moneda.VES,
+      tasaCambioFijada: '65.0000',
+      montoEquivalenteUsd: '30.00',
+      metodoPago: MetodoPago.PAGO_MOVIL,
+      referenciaBancaria: '445566',
+      fechaOperacion: '2026-09-06',
+      comprobanteStorageKey: 'comprobantes/cli-01/2026/demo-recibo-1.webp',
+      comprobanteUrl:
+        'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80',
+      estadoConciliacion: 'pendiente' as any,
+      fechaReporteUtc: new Date().toISOString(),
+      createdAtUtc: new Date().toISOString(),
+      updatedAtUtc: new Date().toISOString(),
+    },
+    {
+      id: 'tx-pending-2',
+      cuotaId: 'cuota-102',
+      clienteId: 'cli-02',
+      entrenadorId: 'coach-01',
+      clienteNombre: 'Mariana Pérez',
+      registradoPor: 'cli-02',
+      montoOriginal: '50.00',
+      monedaOriginal: Moneda.USD,
+      tasaCambioFijada: '65.0000',
+      montoEquivalenteUsd: '50.00',
+      metodoPago: MetodoPago.ZELLE,
+      referenciaBancaria: 'ZEL-998811',
+      fechaOperacion: '2026-09-05',
+      comprobanteStorageKey: 'comprobantes/cli-02/2026/demo-recibo-2.webp',
+      comprobanteUrl:
+        'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=800&q=80',
+      estadoConciliacion: 'pendiente' as any,
+      fechaReporteUtc: new Date().toISOString(),
+      createdAtUtc: new Date().toISOString(),
+      updatedAtUtc: new Date().toISOString(),
+    },
+  ];
+}
+
 export function ConciliacionPage() {
   const { isDemoMode } = useAuth();
-  const [transacciones, setTransacciones] = useState<TransaccionPagoDetalleDTO[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // WU25b: paginación numerada server-side (envelope `{ items, total, limit, offset }`).
+  const [pagina, setPagina] = useState(1);
+  const [tamano, setTamano] = useState(25);
+  // En demo la cola es local: los ids ya conciliados se excluyen del slice del fixture.
+  const [idsResueltosDemo, setIdsResueltosDemo] = useState<string[]>([]);
   const [rejectingTx, setRejectingTx] = useState<TransaccionPagoDetalleDTO | null>(null);
   const [viewingComprobanteTx, setViewingComprobanteTx] = useState<TransaccionPagoDetalleDTO | null>(null);
   // N2: la URL real puede fallar (expiración TTL); nunca se sustituye por una imagen ajena.
   const [comprobanteImgError, setComprobanteImgError] = useState(false);
   const [motivoRechazo, setMotivoRechazo] = useState('');
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
-  // D2: fallo de carga honesto (sin cola demo fuera del modo demo).
-  const [error, setError] = useState<string | null>(null);
   // D5: fallo de conciliación visible; la transacción no desaparece si el server no confirmó.
   const [actionError, setActionError] = useState<string | null>(null);
   // WU20: filtros client-side de la bandeja (búsqueda por alumno/referencia + método de pago).
+  // WU25b: con paginación server-side se aplican sobre la PÁGINA cargada (el endpoint no acepta
+  // filtros); la UI muestra el conteo "en esta página" para no confundir con el total en cola.
   const [busqueda, setBusqueda] = useState('');
   const [filtroMetodo, setFiltroMetodo] = useState<FiltroMetodoPago>('todos');
 
-  const cargarPendientes = async () => {
-    setIsLoading(true);
-    setError(null);
-    setActionError(null);
-
-    // MODO DEMO EXPLÍCITO (isDemoMode): cola de ejemplo solo con la bandera activa.
-    if (isDemoMode) {
-      const demoQueue: TransaccionPagoDetalleDTO[] = [
-        {
-          id: 'tx-pending-1',
-          cuotaId: 'cuota-101',
-          clienteId: 'cli-01',
-          entrenadorId: 'coach-01',
-          clienteNombre: 'Carlos Mendoza',
-          registradoPor: 'cli-01',
-          montoOriginal: '1950.00',
-          monedaOriginal: Moneda.VES,
-          tasaCambioFijada: '65.0000',
-          montoEquivalenteUsd: '30.00',
-          metodoPago: MetodoPago.PAGO_MOVIL,
-          referenciaBancaria: '445566',
-          fechaOperacion: '2026-09-06',
-          comprobanteStorageKey: 'comprobantes/cli-01/2026/demo-recibo-1.webp',
-          comprobanteUrl:
-            'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80',
-          estadoConciliacion: 'pendiente' as any,
-          fechaReporteUtc: new Date().toISOString(),
-          createdAtUtc: new Date().toISOString(),
-          updatedAtUtc: new Date().toISOString(),
-        },
-        {
-          id: 'tx-pending-2',
-          cuotaId: 'cuota-102',
-          clienteId: 'cli-02',
-          entrenadorId: 'coach-01',
-          clienteNombre: 'Mariana Pérez',
-          registradoPor: 'cli-02',
-          montoOriginal: '50.00',
-          monedaOriginal: Moneda.USD,
-          tasaCambioFijada: '65.0000',
-          montoEquivalenteUsd: '50.00',
-          metodoPago: MetodoPago.ZELLE,
-          referenciaBancaria: 'ZEL-998811',
-          fechaOperacion: '2026-09-05',
-          comprobanteStorageKey: 'comprobantes/cli-02/2026/demo-recibo-2.webp',
-          comprobanteUrl:
-            'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=800&q=80',
-          estadoConciliacion: 'pendiente' as any,
-          fechaReporteUtc: new Date().toISOString(),
-          createdAtUtc: new Date().toISOString(),
-          updatedAtUtc: new Date().toISOString(),
-        },
-      ];
-      setTransacciones(demoQueue);
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const data = await apiClient<TransaccionPagoDetalleDTO[]>('/finanzas/conciliacion/bandeja');
-      setTransacciones(Array.isArray(data) ? data : []);
-    } catch (err: any) {
-      // D2: sin cola demo en sesión real; error visible con reintento.
-      setTransacciones([]);
-      setError(
-        err?.message || 'No se pudo cargar la bandeja de conciliación. Inténtalo de nuevo.'
+  /**
+   * WU25b: carga de UNA página de la bandeja. En demo se filtra la cola local (ids ya
+   * conciliados) y se corta con `rebanarPagina`; en real se consulta el envelope del servidor.
+   */
+  const cargarPagina = useCallback(
+    async ({
+      pagina: paginaSolicitada,
+      tamano: tamanoSolicitado,
+      signal,
+    }: {
+      pagina: number;
+      tamano: number;
+      signal: AbortSignal;
+    }): Promise<BandejaConciliacionDTO> => {
+      const offset = (paginaSolicitada - 1) * tamanoSolicitado;
+      if (isDemoMode) {
+        const cola = crearColaDemo().filter((tx) => !idsResueltosDemo.includes(tx.id));
+        return {
+          items: rebanarPagina(cola, paginaSolicitada, tamanoSolicitado),
+          total: cola.length,
+          limit: tamanoSolicitado,
+          offset,
+        };
+      }
+      return apiClient<BandejaConciliacionDTO>(
+        `/finanzas/conciliacion/bandeja?limit=${tamanoSolicitado}&offset=${offset}`,
+        { signal }
       );
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    },
+    [isDemoMode, idsResueltosDemo]
+  );
 
+  const paginacion = usePaginacionServidor<TransaccionPagoDetalleDTO, BandejaConciliacionDTO>({
+    clave: ['conciliacion-bandeja', isDemoMode ? `demo-${idsResueltosDemo.length}` : 'real'],
+    pagina,
+    tamano,
+    cargar: cargarPagina,
+    onAjustarPagina: setPagina,
+  });
+
+  const {
+    items: transacciones,
+    total,
+    cargando,
+    error: errorConsulta,
+    recargar,
+    respuesta,
+  } = paginacion;
+  // Solo la PRIMERA carga muestra el estado de carga; el cambio de página conserva la lista.
+  const isLoading = cargando && !respuesta;
+  const error = errorConsulta?.message ?? null;
+
+  // WU25b: cambiar el tamaño de página (o entrar/salir del modo demo) vuelve a la página 1.
   useEffect(() => {
-    cargarPendientes();
-  }, [isDemoMode]);
+    setPagina(1);
+  }, [tamano, isDemoMode]);
 
   const visibles = useMemo(
     () => filtrarTransaccionesConciliacion(transacciones, { busqueda, metodoPago: filtroMetodo }),
@@ -165,7 +211,10 @@ export function ConciliacionPage() {
       return;
     }
 
-    setTransacciones((prev) => prev.filter((t) => t.id !== txId));
+    // WU25b: el servidor manda; se recarga la página actual (el hook ajusta si el total encogió).
+    // En demo se registra el id resuelto y el slice local se recalcula.
+    if (isDemoMode) setIdsResueltosDemo((prev) => [...prev, txId]);
+    else recargar();
     setActionSuccess('Transacción aprobada. Saldo deducido de la deuda maestra.');
     setTimeout(() => setActionSuccess(null), 3000);
   };
@@ -189,7 +238,9 @@ export function ConciliacionPage() {
       return;
     }
 
-    setTransacciones((prev) => prev.filter((t) => t.id !== rejectingTx.id));
+    // WU25b: mismo criterio que aprobar — recarga real o slice demo con el id resuelto.
+    if (isDemoMode) setIdsResueltosDemo((prev) => [...prev, rejectingTx.id]);
+    else recargar();
     setRejectingTx(null);
     setMotivoRechazo('');
     setActionSuccess('Transacción rechazada con observaciones notificadas al alumno.');
@@ -214,7 +265,7 @@ export function ConciliacionPage() {
             </p>
           </div>
           <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">
-            {transacciones.length} transacciones en cola
+            {pluralizar(total, 'transacción en cola', 'transacciones en cola')}
           </span>
         </div>
       </div>
@@ -243,13 +294,13 @@ export function ConciliacionPage() {
           <p className="text-xs text-muted-foreground">{error}</p>
           <button
             type="button"
-            onClick={() => cargarPendientes()}
+            onClick={() => recargar()}
             className="py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
           >
             Reintentar
           </button>
         </div>
-      ) : transacciones.length === 0 ? (
+      ) : total === 0 ? (
         <div className="p-12 text-center space-y-3 bg-card rounded-3xl border border-border">
           <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto" />
           <h3 className="font-bold text-base text-foreground">Bandeja al Día</h3>
@@ -259,6 +310,18 @@ export function ConciliacionPage() {
         </div>
       ) : (
         <div className="space-y-4">
+          {/* WU25b: paginación numerada server-side (FIFO del endpoint) */}
+          <div className="px-1">
+            <Paginacion
+              pagina={pagina}
+              tamano={tamano}
+              total={total}
+              onCambiarPagina={setPagina}
+              onCambiarTamano={setTamano}
+              cargando={cargando}
+            />
+          </div>
+
           {/* WU20: filtros de la bandeja (búsqueda por alumno/referencia + método real de la tarjeta) */}
           <div className="p-4 rounded-3xl bg-card border border-border/80 space-y-3">
             <div className="flex flex-col lg:flex-row lg:items-center gap-3">
@@ -308,7 +371,8 @@ export function ConciliacionPage() {
 
             <div className="flex items-center justify-between gap-2">
               <p className="text-[11px] text-muted-foreground font-mono">
-                Mostrando {visibles.length} de {transacciones.length} transacciones
+                Mostrando {visibles.length} de {transacciones.length} en esta página ·{' '}
+                {pluralizar(total, 'transacción en cola', 'transacciones en cola')}
               </p>
               {hayFiltroActivo && (
                 <button

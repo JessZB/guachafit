@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { apiClient } from '../../lib/api-client';
 import { useAuth } from '../../context/auth-context';
@@ -16,6 +16,12 @@ import {
 import { normalizarPesoPrescritoTexto } from '../../lib/weight-unit';
 import { formatearSegundos } from '../../lib/sesion-tiempos';
 import { pluralizar } from '../../lib/pluralizar';
+import {
+  calcularTotalPaginas,
+  limitePaginaDescendente,
+  offsetPaginaDescendente,
+  rebanarPagina,
+} from '../../lib/paginacion';
 import { sesionesDemoAlumno } from '../../lib/demo-sesiones';
 import {
   aplicarTabEnQuery,
@@ -37,9 +43,11 @@ import {
 import { CampoPesoPrescrito } from '../../components/entrenador/CampoPesoPrescrito';
 import { SelectorPlantillaAsignacion } from '../../components/entrenador/SelectorPlantillaAsignacion';
 import { DetalleSesionEntrenamiento } from '../../components/entrenador/DetalleSesionEntrenamiento';
+import { Paginacion } from '../../components/common/Paginacion';
 import {
   PerfilAlumnoDetalleDTO,
   ResumenFinancieroAlumnoDTO,
+  HistorialSesionesAlumnoDTO,
   Modalidad,
   TipoDocumento,
   EstadoAlumno,
@@ -117,6 +125,79 @@ function esSesionRealizada(sesion?: SesionEntrenamientoDetalleDTO | null): boole
 }
 
 /**
+ * WU25b: tamaño de página por defecto de los listados paginados de la ficha (historial de
+ * sesiones, transacciones y controles antropométricos). La API acota los límites a 1..100; 10
+ * mantiene la ficha escaneable sin obligar a saltar páginas.
+ */
+const TAMANO_PAGINA_FICHA = 10;
+
+/** Fila de la tabla de controles de la ficha (normalizada desde el DTO real o el fixture demo). */
+type ControlAntroFila = {
+  id: string;
+  fecha: string;
+  pesoKg: string;
+  grasaPorcentaje: string | null;
+  cinturaCm: string | null;
+  brazoCm: string | null;
+  pechoCm: string | null;
+  musloCm: string | null;
+};
+
+/** Fixture demo de controles antropométricos de la ficha (más reciente primero). */
+function controlesDemoAlumno(): ControlAntroFila[] {
+  return [
+    {
+      id: 'antro-1',
+      fecha: '2026-09-01',
+      pesoKg: '78.50',
+      grasaPorcentaje: '16.2',
+      cinturaCm: '82.0',
+      brazoCm: '37.5',
+      pechoCm: '102.0',
+      musloCm: '58.0',
+    },
+    {
+      id: 'antro-0',
+      fecha: '2026-08-01',
+      pesoKg: '80.80',
+      grasaPorcentaje: '17.8',
+      cinturaCm: '84.5',
+      brazoCm: '37.0',
+      pechoCm: '101.0',
+      musloCm: '57.5',
+    },
+  ];
+}
+
+/** Fixture demo del historial de transacciones de la ficha (más reciente primero). */
+function transaccionesDemoAlumno(
+  alumnoId: string
+): ResumenFinancieroAlumnoDTO['transacciones'] {
+  return [
+    {
+      id: 'tx-001',
+      cuotaId: 'cuota-actual-' + alumnoId,
+      montoUsd: '40.00',
+      montoBs: '2600.00',
+      metodoPago: 'pago_movil',
+      referencia: 'REF-789456',
+      estado: 'aprobado',
+      createdAtUtc: '2026-09-02T14:30:00.000Z',
+    },
+    {
+      id: 'tx-000',
+      cuotaId: 'cuota-anterior-' + alumnoId,
+      montoUsd: '40.00',
+      montoBs: undefined,
+      metodoPago: 'efectivo_usd',
+      referencia: 'Cobro en Sala',
+      estado: 'aprobado',
+      createdAtUtc: '2026-08-01T10:15:00.000Z',
+    },
+  ];
+}
+
+/**
  * Feedback del alumno (WU5): RPE y notas con jerarquía — las etiquetas `[Título: valor]` del
  * cierre (RPE, molestias, descanso) se muestran como chips y el comentario libre como cuerpo.
  */
@@ -170,6 +251,11 @@ export function AlumnoDetallePage() {
 
   const [alumno, setAlumno] = useState<PerfilAlumnoDetalleDTO | null>(null);
   const [finanzas, setFinanzas] = useState<ResumenFinancieroAlumnoDTO | null>(null);
+  // WU25b: paginación server-side del historial de transacciones (`txLimit`/`txOffset` + total).
+  const [paginaTx, setPaginaTx] = useState(1);
+  const [tamanoTx, setTamanoTx] = useState(TAMANO_PAGINA_FICHA);
+  const [isCargandoTx, setIsCargandoTx] = useState(false);
+  const [transaccionesError, setTransaccionesError] = useState<string | null>(null);
   const [planesCatalogo, setPlanesCatalogo] = useState<PlanMembresiaDetalleDTO[]>([]);
   const [ultimaSesion, setUltimaSesion] = useState<SesionEntrenamientoDetalleDTO | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -222,26 +308,35 @@ export function AlumnoDetallePage() {
   // Controles antropométricos reales del alumno. En modo demo se cargan fixtures locales;
   // en sesión real, sin dato => lista vacía (nunca mediciones inventadas). Los campos
   // opcionales pueden venir nulos de la API y la UI los muestra como "N/D".
-  const [controlesAntro, setControlesAntro] = useState<Array<{
-    id: string;
-    fecha: string;
-    pesoKg: string;
-    grasaPorcentaje: string | null;
-    cinturaCm: string | null;
-    brazoCm: string | null;
-    pechoCm: string | null;
-    musloCm: string | null;
-  }>>([]);
+  const [controlesAntro, setControlesAntro] = useState<ControlAntroFila[]>([]);
+  // WU25b: paginación server-side de la tabla (`controlesLimit`/`controlesOffset` + total).
+  // `controlesDemo` conserva los controles creados en modo demo para que sigan visibles al paginar.
+  const [controlesDemo, setControlesDemo] = useState<ControlAntroFila[]>(() =>
+    controlesDemoAlumno()
+  );
+  const [controlesTotal, setControlesTotal] = useState(0);
+  const [paginaControles, setPaginaControles] = useState(1);
+  const [tamanoControles, setTamanoControles] = useState(TAMANO_PAGINA_FICHA);
+  const [isCargandoControles, setIsCargandoControles] = useState(false);
+  /**
+   * Total cacheado de controles: permite pedir la página correcta de la serie ascendente en los
+   * cambios de página sin una consulta sonda extra. Se invalida al crear un control.
+   */
+  const totalControlesRef = useRef<number | null>(null);
 
   // Planificación semanal de entrenamiento por bloques de días (vacía hasta cargar la real;
   // en modo demo se hidrata con fixtures locales).
   const [rutinaSemanal, setRutinaSemanal] = useState<BloqueDiaRutinaDTO[]>([]);
 
   // Workout & Routine Management State
+  // WU25b: historial paginado server-side (envelope `{ items, total, limit, offset }`); la
+  // página se resuelve con limit/offset y el total real del alumno viene del servidor.
   const [historialSesiones, setHistorialSesiones] = useState<SesionEntrenamientoDetalleDTO[]>([]);
-  const [historialLimit, setHistorialLimit] = useState(30);
+  const [historialTotal, setHistorialTotal] = useState(0);
+  const [paginaHistorial, setPaginaHistorial] = useState(1);
+  const [tamanoHistorial, setTamanoHistorial] = useState(TAMANO_PAGINA_FICHA);
   const [isCargandoHistorial, setIsCargandoHistorial] = useState(false);
-  // N4: "cargar más" del historial con manejo de error visible (sin tragarse el fallo).
+  // N4: fallo de carga visible (sin tragarse el fallo ni vaciar lo ya cargado).
   const [historialError, setHistorialError] = useState<string | null>(null);
   const [ejerciciosCatalogo, setEjerciciosCatalogo] = useState<EjercicioCatalogoDetalleDTO[]>([]);
   const [expandedSesionId, setExpandedSesionId] = useState<string | null>(null);
@@ -327,6 +422,8 @@ export function AlumnoDetallePage() {
         saldoPendienteTotalUsd: '0.00',
         totalPagadoHistoricoUsd: '320.00',
         totalPagadoMesActualUsd: '40.00',
+        // WU24b: total real de transacciones; en el fixture coincide con las listadas abajo.
+        transaccionesTotal: 2,
         cuotaMesActual: {
           id: 'cuota-actual-' + id,
           periodo: '2026-09',
@@ -336,29 +433,10 @@ export function AlumnoDetallePage() {
           estado: 'al_dia',
           fechaVencimiento: '2026-09-30T23:59:59.000Z',
         },
-        transacciones: [
-          {
-            id: 'tx-001',
-            cuotaId: 'cuota-actual-' + id,
-            montoUsd: '40.00',
-            montoBs: '2600.00',
-            metodoPago: 'pago_movil',
-            referencia: 'REF-789456',
-            estado: 'aprobado',
-            createdAtUtc: '2026-09-02T14:30:00.000Z',
-          },
-          {
-            id: 'tx-000',
-            cuotaId: 'cuota-anterior-' + id,
-            montoUsd: '40.00',
-            montoBs: undefined,
-            metodoPago: 'efectivo_usd',
-            referencia: 'Cobro en Sala',
-            estado: 'aprobado',
-            createdAtUtc: '2026-08-01T10:15:00.000Z',
-          },
-        ],
+        // WU25b: la página visible la resuelve `cargarTransacciones` con el slice del fixture.
+        transacciones: [],
       });
+      void cargarTransacciones(1, tamanoTx);
 
       setPlanesCatalogo([
         {
@@ -395,7 +473,12 @@ export function AlumnoDetallePage() {
       // monitor, en `lib/demo-sesiones.ts`), para que la ficha muestre series, cargas y tiempos.
       const demoHistorial = sesionesDemoAlumno(id);
       setUltimaSesion(demoHistorial.find((sesion) => esSesionRealizada(sesion)) ?? null);
-      setHistorialSesiones(demoHistorial);
+      // WU25b: cada listado paginado arranca en la página 1 con el slice del fixture.
+      setPaginaHistorial(1);
+      setPaginaTx(1);
+      setPaginaControles(1);
+      totalControlesRef.current = null;
+      void cargarHistorial(1, tamanoHistorial);
 
       setEjerciciosCatalogo([
         { id: '11111111-1111-4111-8111-111111111c01', nombre: 'Press Plano con Mancuernas', grupoMuscular: 'Pecho', activo: true, createdAtUtc: new Date().toISOString() },
@@ -449,28 +532,11 @@ export function AlumnoDetallePage() {
         },
       ]);
 
-      setControlesAntro([
-        {
-          id: 'antro-1',
-          fecha: '2026-09-01',
-          pesoKg: '78.50',
-          grasaPorcentaje: '16.2',
-          cinturaCm: '82.0',
-          brazoCm: '37.5',
-          pechoCm: '102.0',
-          musloCm: '58.0',
-        },
-        {
-          id: 'antro-0',
-          fecha: '2026-08-01',
-          pesoKg: '80.80',
-          grasaPorcentaje: '17.8',
-          cinturaCm: '84.5',
-          brazoCm: '37.0',
-          pechoCm: '101.0',
-          musloCm: '57.5',
-        },
-      ]);
+      const demoControles = controlesDemoAlumno();
+      setControlesDemo(demoControles);
+      setControlesTotal(demoControles.length);
+      setControlesAntro(rebanarPagina(demoControles, 1, tamanoControles));
+      setControlesErrorMsg(null);
 
       setIsLoading(false);
       return;
@@ -500,11 +566,17 @@ export function AlumnoDetallePage() {
       setSelectedPlanId(perfilRes.planActivoId || '');
       setPrecioOverride(perfilRes.precioAcordadoOverride || '');
 
-      // 2. Historial financiero (null = fallo: la pestaña lo advierte, no inventa cifras)
-      const finanzasRes = await apiClient<ResumenFinancieroAlumnoDTO>(
-        `/finanzas/clientes/${id}/historial`
-      ).catch(() => null);
-      setFinanzas(finanzasRes ?? null);
+      // WU25b: cada listado paginado arranca en la página 1 y el total cacheado de controles se
+      // invalida (el expediente puede haber cambiado entre cargas).
+      setPaginaHistorial(1);
+      setPaginaTx(1);
+      setPaginaControles(1);
+      totalControlesRef.current = null;
+
+      // 2. WU25b: historial financiero paginado con `txLimit`/`txOffset`; la respuesta trae el
+      // resumen completo y la página 1 de transacciones (un fallo deja el aviso de la pestaña,
+      // nunca cifras inventadas).
+      await cargarTransacciones(1, tamanoTx);
 
       // 3. Catálogo de planes (vacío real = sin planes, nunca planes inventados)
       const planesRes = await apiClient<PlanMembresiaDetalleDTO[]>('/finanzas/planes').catch(
@@ -518,17 +590,9 @@ export function AlumnoDetallePage() {
       ).catch(() => null);
       setUltimaSesion(sesionRes ?? null);
 
-      // 5. Historial completo de sesiones (la API acepta limit 1..100; default 30)
-      const historialRes = await apiClient<SesionEntrenamientoDetalleDTO[]>(
-        `/sesiones/alumno/${id}/historial?limit=${historialLimit}`
-      ).catch(() => []);
-      if (Array.isArray(historialRes) && historialRes.length > 0) {
-        setHistorialSesiones(historialRes);
-      } else if (sesionRes) {
-        setHistorialSesiones([sesionRes]);
-      } else {
-        setHistorialSesiones([]);
-      }
+      // 5. WU25b: historial de sesiones paginado (envelope `{ items, total, limit, offset }`);
+      // la página 1 son las sesiones más recientes y el total es el COUNT real del alumno.
+      await cargarHistorial(1, tamanoHistorial);
 
       // 6. Catálogo de ejercicios (vacío real => estado vacío explícito en el modal)
       const catalogoRes = await apiClient<EjercicioCatalogoDetalleDTO[]>(
@@ -548,12 +612,10 @@ export function AlumnoDetallePage() {
           : []
       );
 
-      // 8. N3: controles antropométricos reales del alumno (vacío real => estado vacío explícito;
-      // fallo de carga => aviso visible, nunca una tabla vacía pasando por "sin registros").
-      const controlesOk = await refrescarControlesAntro(perfilRes.usuarioId);
-      setControlesErrorMsg(
-        controlesOk ? null : 'No se pudieron cargar los controles antropométricos.'
-      );
+      // 8. N3/WU25b: controles antropométricos reales paginados (la página 1 son los más
+      // recientes); un fallo muestra aviso visible, nunca una tabla vacía pasando por
+      // "sin registros".
+      await cargarControles(1, tamanoControles, perfilRes.usuarioId);
     } catch {
       setError('Error al cargar la información del alumno.');
     } finally {
@@ -566,29 +628,121 @@ export function AlumnoDetallePage() {
   }, [id, isDemoMode]);
 
   /**
-   * WU5: "cargar más" del historial. La API acepta `limit` (máx. 100) y re-consulta la página
-   * completa con un techo mayor; no hay offset, así que se reemplaza la lista.
-   * N4: el fallo de red se muestra en la sección (el historial previo permanece intacto).
+   * WU25b: carga UNA página del historial de sesiones.
+   *
+   * - Real: `GET /sesiones/alumno/:id/historial?limit&offset` (envelope `{ items, total, … }`).
+   * - Demo: corta el fixture local (`sesionesDemoAlumno`) con la misma aritmética.
+   * N4: si la consulta falla se conserva lo ya cargado y el error queda visible; cuando el total
+   * real encoge por debajo de la página activa, se ajusta a la última página válida.
    */
-  const verMasHistorial = async () => {
-    if (!id || isCargandoHistorial || historialLimit >= 100) return;
-    const nuevoLimite = Math.min(historialLimit + 30, 100);
+  const cargarHistorial = async (
+    paginaSolicitada: number,
+    tamanoSolicitado: number,
+    reintento = false
+  ) => {
+    if (!id) return;
     setIsCargandoHistorial(true);
     setHistorialError(null);
     try {
-      const res = await apiClient<SesionEntrenamientoDetalleDTO[]>(
-        `/sesiones/alumno/${id}/historial?limit=${nuevoLimite}`
+      if (isDemoMode) {
+        const fixture = sesionesDemoAlumno(id);
+        setHistorialSesiones(rebanarPagina(fixture, paginaSolicitada, tamanoSolicitado));
+        setHistorialTotal(fixture.length);
+        return;
+      }
+      const offset = (Math.max(1, paginaSolicitada) - 1) * Math.max(1, tamanoSolicitado);
+      const res = await apiClient<HistorialSesionesAlumnoDTO>(
+        `/sesiones/alumno/${id}/historial?limit=${tamanoSolicitado}&offset=${offset}`
       );
-      setHistorialSesiones(Array.isArray(res) ? res : []);
-      setHistorialLimit(nuevoLimite);
+      const items = Array.isArray(res?.items) ? res.items : [];
+      const total = Number(res?.total ?? items.length);
+      setHistorialSesiones(items);
+      setHistorialTotal(total);
+      const totalPaginas = calcularTotalPaginas(total, tamanoSolicitado);
+      if (paginaSolicitada > totalPaginas && !reintento) {
+        setPaginaHistorial(totalPaginas);
+        void cargarHistorial(totalPaginas, tamanoSolicitado, true);
+      }
     } catch (err: any) {
-      // N4: sin inventar datos ni vaciar lo ya cargado; el error queda visible con reintento manual.
       setHistorialError(
-        err?.message || 'No se pudo cargar más historial. Revisa tu conexión e inténtalo de nuevo.'
+        err?.message || 'No se pudo cargar el historial. Revisa tu conexión e inténtalo de nuevo.'
       );
     } finally {
       setIsCargandoHistorial(false);
     }
+  };
+
+  const cambiarPaginaHistorial = (nuevaPagina: number) => {
+    setPaginaHistorial(nuevaPagina);
+    void cargarHistorial(nuevaPagina, tamanoHistorial);
+  };
+
+  const cambiarTamanoHistorial = (nuevoTamano: number) => {
+    setTamanoHistorial(nuevoTamano);
+    setPaginaHistorial(1);
+    void cargarHistorial(1, nuevoTamano);
+  };
+
+  /**
+   * WU25b: carga UNA página del historial de transacciones.
+   *
+   * - Real: `GET /finanzas/clientes/:id/historial?txLimit&txOffset`; la respuesta mantiene el
+   *   resumen completo (saldos y cuota del periodo) y `transaccionesTotal` es el COUNT real.
+   * - Demo: corta el fixture local (`transaccionesDemoAlumno`) sin tocar la red.
+   * Nota de contrato: el endpoint no acepta filtro por estado; la ficha muestra la página tal
+   * cual (el filtro por estado vive en PagosPage y también es client-side sobre la página).
+   */
+  const cargarTransacciones = async (
+    paginaSolicitada: number,
+    tamanoSolicitado: number,
+    reintento = false
+  ) => {
+    if (!id) return;
+    setIsCargandoTx(true);
+    setTransaccionesError(null);
+    try {
+      if (isDemoMode) {
+        const fixture = transaccionesDemoAlumno(id);
+        setFinanzas((prev) =>
+          prev
+            ? {
+                ...prev,
+                transacciones: rebanarPagina(fixture, paginaSolicitada, tamanoSolicitado),
+                transaccionesTotal: fixture.length,
+              }
+            : prev
+        );
+        return;
+      }
+      const offset = (Math.max(1, paginaSolicitada) - 1) * Math.max(1, tamanoSolicitado);
+      const res = await apiClient<ResumenFinancieroAlumnoDTO>(
+        `/finanzas/clientes/${id}/historial?txLimit=${tamanoSolicitado}&txOffset=${offset}`
+      );
+      setFinanzas(res);
+      const total = Number(res?.transaccionesTotal ?? res?.transacciones?.length ?? 0);
+      const totalPaginas = calcularTotalPaginas(total, tamanoSolicitado);
+      if (paginaSolicitada > totalPaginas && !reintento) {
+        setPaginaTx(totalPaginas);
+        void cargarTransacciones(totalPaginas, tamanoSolicitado, true);
+      }
+    } catch (err: any) {
+      setTransaccionesError(
+        err?.message || 'No se pudieron cargar las transacciones. Inténtalo de nuevo.'
+      );
+    } finally {
+      setIsCargandoTx(false);
+    }
+  };
+
+  const cambiarPaginaTx = (nuevaPagina: number) => {
+    setPaginaTx(nuevaPagina);
+    void cargarTransacciones(nuevaPagina, tamanoTx);
+  };
+
+  const cambiarTamanoTx = (nuevoTamano: number) => {
+    setTamanoTx(nuevoTamano);
+    setPaginaTx(1);
+    void cargarTransacciones(1, nuevoTamano);
   };
 
   // Accesibilidad: Cierre de modales con Escape
@@ -623,7 +777,7 @@ export function AlumnoDetallePage() {
    * N3: normaliza un control antropométrico real de la API a la fila de la tabla del expediente.
    * Los perímetros opcionales sin dato quedan en null y la tabla los muestra como "N/D".
    */
-  const mapearControlAntro = (control: ControlAntropometricoDetalleDTO) => ({
+  const mapearControlAntro = (control: ControlAntropometricoDetalleDTO): ControlAntroFila => ({
     id: control.id,
     fecha: control.fechaEvaluacion,
     pesoKg: control.pesoKg,
@@ -635,17 +789,86 @@ export function AlumnoDetallePage() {
   });
 
   /**
-   * N3: re-consulta los controles reales del alumno (solo aprobados; el registro presencial del
-   * coach se aprueba de inmediato) y reemplaza la tabla, más reciente primero. Devuelve false si
-   * la llamada falla: el llamador decide si conservar lo que ya tenía; nunca se inventan medidas.
+   * WU25b: carga UNA página de controles antropométricos aprobados.
+   *
+   * La API devuelve la serie en orden cronológico ASCENDENTE y la tabla la muestra "más
+   * reciente primero", así que el offset se calcula desde el final (`offsetPaginaDescendente`)
+   * y la página se invierte al pintar. WU26: la ventana también recorta su límite
+   * (`limitePaginaDescendente`): con el offset medido desde el final, la página parcial es la
+   * ÚLTIMA y pedir siempre `tamano` filas repetiría las de la página anterior. La primera
+   * consulta sin total cacheado trae la página más antigua y sirve de sonda del `controlesTotal`;
+   * se repite cuando el total supera el tamaño de página y la ventana pedida no coincide con la
+   * del sondeo (offset 0 + tamaño completo). En demo se corta `controlesDemo`. Devuelve false si
+   * la llamada falla: el llamador conserva lo que ya tenía; nunca se inventan medidas.
    */
-  const refrescarControlesAntro = async (alumnoUsuarioId: string): Promise<boolean> => {
-    const res = await apiClient<EvolucionCorporalDTO>(
-      `/antropometria/evolucion/${alumnoUsuarioId}`
-    ).catch(() => null);
-    if (!res || !Array.isArray(res.evaluaciones)) return false;
-    setControlesAntro(res.evaluaciones.map(mapearControlAntro).reverse());
-    return true;
+  const cargarControles = async (
+    paginaSolicitada: number,
+    tamanoSolicitado: number,
+    alumnoUsuarioId: string,
+    reintento = false
+  ): Promise<boolean> => {
+    setIsCargandoControles(true);
+    try {
+      if (isDemoMode) {
+        setControlesAntro(rebanarPagina(controlesDemo, paginaSolicitada, tamanoSolicitado));
+        setControlesTotal(controlesDemo.length);
+        setControlesErrorMsg(null);
+        return true;
+      }
+      // WU26: la ventana descendente limita también la CANTIDAD de filas. La página parcial es
+      // la ÚLTIMA (`min(tamano, total - filasPrevias)`); sin ese límite, el offset medido desde
+      // el final traería filas ya mostradas en la página anterior.
+      const consultar = (offset: number, limite: number) =>
+        apiClient<EvolucionCorporalDTO>(
+          `/antropometria/evolucion/${alumnoUsuarioId}?controlesLimit=${limite}&controlesOffset=${offset}`
+        );
+      const totalCacheado = totalControlesRef.current;
+      let res = await consultar(
+        totalCacheado !== null
+          ? offsetPaginaDescendente(paginaSolicitada, tamanoSolicitado, totalCacheado)
+          : 0,
+        totalCacheado !== null
+          ? limitePaginaDescendente(paginaSolicitada, tamanoSolicitado, totalCacheado)
+          : tamanoSolicitado
+      );
+      const total = Number(res.controlesTotal ?? res.evaluaciones.length);
+      if (totalCacheado === null && total > tamanoSolicitado) {
+        const offsetReal = offsetPaginaDescendente(paginaSolicitada, tamanoSolicitado, total);
+        const limiteReal = limitePaginaDescendente(paginaSolicitada, tamanoSolicitado, total);
+        if (offsetReal !== 0 || limiteReal !== tamanoSolicitado) {
+          res = await consultar(offsetReal, limiteReal);
+        }
+      }
+      totalControlesRef.current = total;
+      setControlesTotal(total);
+      setControlesAntro(res.evaluaciones.map(mapearControlAntro).reverse());
+      setControlesErrorMsg(null);
+      const totalPaginas = calcularTotalPaginas(total, tamanoSolicitado);
+      if (paginaSolicitada > totalPaginas && !reintento) {
+        setPaginaControles(totalPaginas);
+        void cargarControles(totalPaginas, tamanoSolicitado, alumnoUsuarioId, true);
+      }
+      return true;
+    } catch {
+      // N3: fallo honesto; se conserva lo ya cargado y la tabla lo advierte (nunca "sin registros").
+      setControlesErrorMsg('No se pudieron cargar los controles antropométricos.');
+      return false;
+    } finally {
+      setIsCargandoControles(false);
+    }
+  };
+
+  const cambiarPaginaControles = (nuevaPagina: number) => {
+    if (!alumno) return;
+    setPaginaControles(nuevaPagina);
+    void cargarControles(nuevaPagina, tamanoControles, alumno.usuarioId);
+  };
+
+  const cambiarTamanoControles = (nuevoTamano: number) => {
+    if (!alumno) return;
+    setTamanoControles(nuevoTamano);
+    setPaginaControles(1);
+    void cargarControles(1, nuevoTamano, alumno.usuarioId);
   };
 
   // Guardar Cambios de Perfil & Ficha Médica
@@ -776,7 +999,7 @@ export function AlumnoDetallePage() {
 
     // MODO DEMO EXPLÍCITO: alta local simulada, solo con la bandera activa.
     if (isDemoMode) {
-      const nuevo = {
+      const nuevo: ControlAntroFila = {
         id: 'antro-' + Date.now(),
         fecha: new Date().toISOString().split('T')[0],
         pesoKg: antroPeso,
@@ -786,7 +1009,12 @@ export function AlumnoDetallePage() {
         pechoCm: antroPecho,
         musloCm: antroMuslo,
       };
-      setControlesAntro([nuevo, ...controlesAntro]);
+      // WU25b: el fixture demo local conserva el alta para que siga visible al paginar.
+      const actualizados = [nuevo, ...controlesDemo];
+      setControlesDemo(actualizados);
+      setControlesTotal(actualizados.length);
+      setPaginaControles(1);
+      setControlesAntro(rebanarPagina(actualizados, 1, tamanoControles));
       setIsAntroModalOpen(false);
       return;
     }
@@ -814,8 +1042,12 @@ export function AlumnoDetallePage() {
         body: JSON.stringify(payload),
       });
 
-      // Refresco real de la lista; si falla, se conserva el control confirmado por el server.
-      const refrescado = await refrescarControlesAntro(alumno.usuarioId);
+      // WU25b: refresco real de la página 1 (el control nuevo es el más reciente). El total
+      // cacheado se invalida porque el COUNT cambió; si el refresco falla, se conserva el
+      // control confirmado por el server.
+      totalControlesRef.current = null;
+      setPaginaControles(1);
+      const refrescado = await cargarControles(1, tamanoControles, alumno.usuarioId);
       if (!refrescado) {
         setControlesAntro((prev) => [
           mapearControlAntro(creado),
@@ -1093,9 +1325,13 @@ export function AlumnoDetallePage() {
     : null;
 
   // WU5: "Último Entrenamiento Realizado" solo considera sesiones completadas o en progreso.
+  // WU25b: con el historial paginado la página 2+ puede contener sesiones realizadas más
+  // antiguas; la fuente canónica del "último" es el endpoint `/ultima` y el historial solo es
+  // respaldo (página 1 ya es lo más reciente).
   const ultimoEntrenamiento =
+    (esSesionRealizada(ultimaSesion) ? ultimaSesion : null) ??
     historialSesiones.find((ses) => esSesionRealizada(ses)) ??
-    (esSesionRealizada(ultimaSesion) ? ultimaSesion : null);
+    null;
   const etiquetaUltimoEntrenamiento = ultimoEntrenamiento
     ? etiquetaEstadoSesion(ultimoEntrenamiento.estado, ultimoEntrenamiento.motivoOmision)
     : null;
@@ -1824,9 +2060,21 @@ export function AlumnoDetallePage() {
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
               <h4 className="font-bold text-sm text-foreground">Historial de Transacciones & Abonos</h4>
               <span className="text-xs text-muted-foreground font-mono">
-                {finanzas ? `${finanzas.transacciones.length} operaciones` : '—'}
+                {finanzas
+                  ? pluralizar(finanzas.transaccionesTotal, 'operación', 'operaciones')
+                  : '—'}
               </span>
             </div>
+
+            {transaccionesError && (
+              <div
+                role="alert"
+                className="p-3 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-bold flex items-center gap-2"
+              >
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{transaccionesError}</span>
+              </div>
+            )}
 
             {finanzas && finanzas.transacciones.length > 0 ? (
               <div className="space-y-2.5">
@@ -1864,10 +2112,24 @@ export function AlumnoDetallePage() {
                   </div>
                 ))}
               </div>
-            ) : (
+            ) : transaccionesError ? null : (
               <p className="text-xs text-muted-foreground py-6 text-center">
                 No se han registrado pagos o abonos para este alumno.
               </p>
+            )}
+
+            {/* WU25b: paginación numerada con txLimit/txOffset y transaccionesTotal real */}
+            {finanzas && finanzas.transaccionesTotal > 0 && (
+              <div className="pt-1">
+                <Paginacion
+                  pagina={paginaTx}
+                  tamano={tamanoTx}
+                  total={finanzas.transaccionesTotal}
+                  onCambiarPagina={cambiarPaginaTx}
+                  onCambiarTamano={cambiarTamanoTx}
+                  cargando={isCargandoTx}
+                />
+              </div>
             )}
           </div>
         </div>
@@ -2045,6 +2307,19 @@ export function AlumnoDetallePage() {
                 </tbody>
               </table>
             </div>
+            {/* WU25b: paginación numerada con controlesLimit/controlesOffset y controlesTotal real */}
+            {controlesTotal > 0 && (
+              <div className="pt-1">
+                <Paginacion
+                  pagina={paginaControles}
+                  tamano={tamanoControles}
+                  total={controlesTotal}
+                  onCambiarPagina={cambiarPaginaControles}
+                  onCambiarTamano={cambiarTamanoControles}
+                  cargando={isCargandoControles}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2080,7 +2355,7 @@ export function AlumnoDetallePage() {
               className={CLASES_PILL_ANCLA_ENTRENAMIENTO}
             >
               <History className="h-3.5 w-3.5 text-primary" />
-              Historial ({historialSesiones.length})
+              Historial ({historialTotal})
             </button>
             <button
               type="button"
@@ -2178,7 +2453,7 @@ export function AlumnoDetallePage() {
                 <History className="h-5 w-5 text-primary" />
                 <div>
                   <h3 className="text-base font-black text-foreground">
-                    Historial de Sesiones ({historialSesiones.length})
+                    Historial de Sesiones ({historialTotal})
                   </h3>
                   <p className="text-xs text-muted-foreground">
                     Abre «Ver Series» para revisar cargas, notas del coach y los tiempos entre
@@ -2188,7 +2463,18 @@ export function AlumnoDetallePage() {
               </div>
             </div>
 
-            {historialSesiones.length === 0 ? (
+            {/* N4: fallo de carga visible aunque la página quede vacía (nunca pasa por "sin registros") */}
+            {historialError && (
+              <div
+                role="alert"
+                className="p-3 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-bold flex items-center gap-2"
+              >
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{historialError}</span>
+              </div>
+            )}
+
+            {historialSesiones.length === 0 && !historialError ? (
               <div className="p-8 rounded-2xl bg-card border border-dashed border-border/70 text-center">
                 <Dumbbell className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-40" />
                 <p className="text-xs text-muted-foreground">
@@ -2253,29 +2539,17 @@ export function AlumnoDetallePage() {
                     />
                   );
                 })}
-                {historialError && (
-                  <div
-                    role="alert"
-                    className="p-3 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-bold flex items-center gap-2"
-                  >
-                    <AlertCircle className="h-4 w-4 shrink-0" />
-                    <span>{historialError}</span>
-                  </div>
-                )}
-                {historialSesiones.length >= historialLimit && historialLimit < 100 && (
-                  <div className="flex flex-col items-center gap-1.5 pt-1">
-                    <button
-                      type="button"
-                      onClick={verMasHistorial}
-                      disabled={isCargandoHistorial}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs border border-border transition-all active:scale-95 disabled:opacity-50 cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
-                    >
-                      <RefreshCw className={`h-3.5 w-3.5 ${isCargandoHistorial ? 'animate-spin' : ''}`} />
-                      <span>{isCargandoHistorial ? 'Cargando historial…' : 'Cargar más sesiones'}</span>
-                    </button>
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      Mostrando {historialSesiones.length} · máximo 100
-                    </span>
+                {/* WU25b: paginación numerada server-side (limit/offset + total del envelope) */}
+                {historialTotal > 0 && (
+                  <div className="pt-1">
+                    <Paginacion
+                      pagina={paginaHistorial}
+                      tamano={tamanoHistorial}
+                      total={historialTotal}
+                      onCambiarPagina={cambiarPaginaHistorial}
+                      onCambiarTamano={cambiarTamanoHistorial}
+                      cargando={isCargandoHistorial}
+                    />
                   </div>
                 )}
               </div>

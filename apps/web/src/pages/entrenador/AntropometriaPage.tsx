@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { apiClient } from '../../lib/api-client';
 import { useAuth } from '../../context/auth-context';
 import {
   ControlAntropometricoDetalleDTO,
+  ColaPendientesAntropometricosDTO,
   AnguloFoto,
   ComparativaAngularDTO,
 } from '@guachafit/shared';
@@ -11,6 +12,10 @@ import {
   filtrarPendientesAntropometria,
   hayBusquedaAntropometriaActiva,
 } from '../../lib/antropometria-filtros';
+import { pluralizar } from '../../lib/pluralizar';
+import { rebanarPagina } from '../../lib/paginacion';
+import { usePaginacionServidor } from '../../lib/use-paginacion-servidor';
+import { Paginacion } from '../../components/common/Paginacion';
 import {
   Camera,
   CheckCircle2,
@@ -27,16 +32,52 @@ import {
   SearchX,
 } from 'lucide-react';
 
+/**
+ * WU25b: cola demo de evaluaciones pendientes (mismo fixture de WU20). Solo se usa con
+ * `isDemoMode` activo; el slice de página se corta localmente con la misma aritmética del API.
+ */
+function crearPendientesDemo(): ControlAntropometricoDetalleDTO[] {
+  return [
+    {
+      id: 'ctrl-p1',
+      alumnoId: 'al-002',
+      alumnoNombre: 'Mariana Pérez Gómez',
+      fechaEvaluacion: '2026-09-06',
+      pesoKg: '68.20',
+      alturaCm: '165.00',
+      porcentajeGrasa: '21.50',
+      perimetros: { cinturaCm: '72.00', caderaCm: '98.00', musloCm: '55.00' },
+      modalidad: 'remoto' as any,
+      origen: 'remoto_autoreporte' as any,
+      registradoPor: 'al-002',
+      estado: 'pendiente_aprobacion' as any,
+      fotos: [
+        {
+          id: 'fp-1',
+          controlId: 'ctrl-p1',
+          angulo: AnguloFoto.FRONTAL,
+          storageKey: 'antropometria/demo/2026/frontal.webp',
+          createdAtUtc: new Date().toISOString(),
+        },
+      ],
+      createdAtUtc: new Date().toISOString(),
+      updatedAtUtc: new Date().toISOString(),
+    },
+  ];
+}
+
 export function AntropometriaPage() {
   const { isDemoMode } = useAuth();
-  const [pendientes, setPendientes] = useState<ControlAntropometricoDetalleDTO[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // WU25b: paginación numerada server-side (envelope `{ items, total, limit, offset }`).
+  const [pagina, setPagina] = useState(1);
+  const [tamano, setTamano] = useState(25);
+  // En demo la cola es local: los ids ya conciliados se excluyen del slice del fixture.
+  const [idsResueltosDemo, setIdsResueltosDemo] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'pendientes' | 'comparador'>('pendientes');
-  // D2: fallo de carga honesto (sin cola demo fuera del modo demo).
-  const [error, setError] = useState<string | null>(null);
   // D5: fallo de conciliación visible; la tarjeta no desaparece si el server no confirmó.
   const [actionError, setActionError] = useState<string | null>(null);
-  // WU20: búsqueda client-side por nombre en la cola de pendientes.
+  // WU20: búsqueda client-side por nombre. WU25b: con paginación server-side se aplica sobre la
+  // PÁGINA cargada (el endpoint no acepta búsqueda); la UI muestra el conteo "en esta página".
   const [busqueda, setBusqueda] = useState('');
 
   // Comparator State
@@ -44,62 +85,65 @@ export function AntropometriaPage() {
   const [sliderPosition, setSliderPosition] = useState(50);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
-  const cargarPendientes = async () => {
-    setIsLoading(true);
-    setError(null);
-    setActionError(null);
-
-    // MODO DEMO EXPLÍCITO (isDemoMode): cola de ejemplo solo con la bandera activa.
-    if (isDemoMode) {
-      const demoPendientes: ControlAntropometricoDetalleDTO[] = [
-        {
-          id: 'ctrl-p1',
-          alumnoId: 'al-002',
-          alumnoNombre: 'Mariana Pérez Gómez',
-          fechaEvaluacion: '2026-09-06',
-          pesoKg: '68.20',
-          alturaCm: '165.00',
-          porcentajeGrasa: '21.50',
-          perimetros: { cinturaCm: '72.00', caderaCm: '98.00', musloCm: '55.00' },
-          modalidad: 'remoto' as any,
-          origen: 'remoto_autoreporte' as any,
-          registradoPor: 'al-002',
-          estado: 'pendiente_aprobacion' as any,
-          fotos: [
-            {
-              id: 'fp-1',
-              controlId: 'ctrl-p1',
-              angulo: AnguloFoto.FRONTAL,
-              storageKey: 'antropometria/demo/2026/frontal.webp',
-              createdAtUtc: new Date().toISOString(),
-            },
-          ],
-          createdAtUtc: new Date().toISOString(),
-          updatedAtUtc: new Date().toISOString(),
-        },
-      ];
-      setPendientes(demoPendientes);
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const data = await apiClient<ControlAntropometricoDetalleDTO[]>('/antropometria/pendientes');
-      setPendientes(Array.isArray(data) ? data : []);
-    } catch (err: any) {
-      // D2: sin cola demo en sesión real; error visible con reintento.
-      setPendientes([]);
-      setError(
-        err?.message || 'No se pudieron cargar las evaluaciones pendientes. Inténtalo de nuevo.'
+  /**
+   * WU25b: carga de UNA página de la cola de pendientes. En demo se filtra la cola local (ids
+   * ya conciliados) y se corta con `rebanarPagina`; en real se consulta el envelope del servidor.
+   */
+  const cargarPagina = useCallback(
+    async ({
+      pagina: paginaSolicitada,
+      tamano: tamanoSolicitado,
+      signal,
+    }: {
+      pagina: number;
+      tamano: number;
+      signal: AbortSignal;
+    }): Promise<ColaPendientesAntropometricosDTO> => {
+      const offset = (paginaSolicitada - 1) * tamanoSolicitado;
+      if (isDemoMode) {
+        const cola = crearPendientesDemo().filter((ctrl) => !idsResueltosDemo.includes(ctrl.id));
+        return {
+          items: rebanarPagina(cola, paginaSolicitada, tamanoSolicitado),
+          total: cola.length,
+          limit: tamanoSolicitado,
+          offset,
+        };
+      }
+      return apiClient<ColaPendientesAntropometricosDTO>(
+        `/antropometria/pendientes?limit=${tamanoSolicitado}&offset=${offset}`,
+        { signal }
       );
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    },
+    [isDemoMode, idsResueltosDemo]
+  );
 
+  const paginacion = usePaginacionServidor<
+    ControlAntropometricoDetalleDTO,
+    ColaPendientesAntropometricosDTO
+  >({
+    clave: ['antropometria-pendientes', isDemoMode ? `demo-${idsResueltosDemo.length}` : 'real'],
+    pagina,
+    tamano,
+    cargar: cargarPagina,
+    onAjustarPagina: setPagina,
+  });
+
+  const {
+    items: pendientes,
+    total,
+    cargando,
+    error: errorConsulta,
+    recargar,
+    respuesta,
+  } = paginacion;
+  // Solo la PRIMERA carga muestra el estado de carga; el cambio de página conserva la lista.
+  const isLoading = cargando && !respuesta;
+  const error = errorConsulta?.message ?? null;
+
+  // WU25b: cambiar el tamaño de página (o entrar/salir del modo demo) vuelve a la página 1.
   useEffect(() => {
-    cargarPendientes();
-  }, [isDemoMode]);
+    setPagina(1);
+  }, [tamano, isDemoMode]);
 
   const visibles = useMemo(
     () => filtrarPendientesAntropometria(pendientes, busqueda),
@@ -130,7 +174,10 @@ export function AntropometriaPage() {
       return;
     }
 
-    setPendientes((prev) => prev.filter((p) => p.id !== id));
+    // WU25b: el servidor manda; se recarga la página actual (el hook ajusta si el total encogió).
+    // En demo se registra el id resuelto y el slice local se recalcula.
+    if (isDemoMode) setIdsResueltosDemo((prev) => [...prev, id]);
+    else recargar();
     setActionSuccess(
       accion === 'aprobar'
         ? 'Evaluación aprobada y consolidada en las curvas del alumno.'
@@ -166,7 +213,7 @@ export function AntropometriaPage() {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              Por revisar ({pendientes.length})
+              Por revisar ({total})
             </button>
             <button
               onClick={() => setActiveTab('comparador')}
@@ -205,7 +252,7 @@ export function AntropometriaPage() {
           <p className="text-xs text-muted-foreground">{error}</p>
           <button
             type="button"
-            onClick={() => cargarPendientes()}
+            onClick={() => recargar()}
             className="py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
           >
             Reintentar
@@ -214,7 +261,21 @@ export function AntropometriaPage() {
       ) : activeTab === 'pendientes' ? (
         /* Review Queue */
         <div className="space-y-4">
-          {pendientes.length > 0 && (
+          {/* WU25b: paginación numerada server-side (cola FIFO del endpoint) */}
+          {total > 0 && (
+            <div className="px-1">
+              <Paginacion
+                pagina={pagina}
+                tamano={tamano}
+                total={total}
+                onCambiarPagina={setPagina}
+                onCambiarTamano={setTamano}
+                cargando={cargando}
+              />
+            </div>
+          )}
+
+          {total > 0 && (
             <div className="p-4 rounded-3xl bg-card border border-border/80 space-y-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
@@ -228,12 +289,13 @@ export function AntropometriaPage() {
                 />
               </div>
               <p className="text-[11px] text-muted-foreground font-mono">
-                Mostrando {visibles.length} de {pendientes.length} evaluaciones
+                Mostrando {visibles.length} de {pendientes.length} en esta página ·{' '}
+                {pluralizar(total, 'evaluación pendiente', 'evaluaciones pendientes')}
               </p>
             </div>
           )}
 
-          {pendientes.length === 0 ? (
+          {total === 0 ? (
             <div className="p-12 text-center space-y-3 bg-card rounded-3xl border border-border">
               <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto" />
               <h3 className="font-bold text-base text-foreground">Sin Evaluaciones Pendientes</h3>
