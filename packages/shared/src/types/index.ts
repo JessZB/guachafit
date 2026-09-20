@@ -17,6 +17,10 @@ import {
   CrearSesionEntrenamientoSchema,
   BloqueDiaRutinaSchema,
   GuardarRutinaSemanalSchema,
+  CrearPlantillaRutinaSchema,
+  ActualizarPlantillaRutinaSchema,
+  AjusteEjercicioPlantillaSchema,
+  AsignarPlantillaSchema,
   IniciarSesionSchema,
   RegistrarSerieSchema,
   SincronizarSeriesBatchSchema,
@@ -68,6 +72,9 @@ import {
   PeriodoEvolucion,
   ModuloUpload,
   PlataformaDispositivo,
+  MotivoOmision,
+  NivelObjetivoPlantilla,
+  ModoAsignacionPlantilla,
 } from '../enums';
 
 // Tipos inferidos de DTOs - IAM & Onboarding
@@ -90,6 +97,10 @@ export type EjercicioPrescritoInputDTO = z.infer<typeof EjercicioPrescritoInputS
 export type CrearSesionEntrenamientoDTO = z.infer<typeof CrearSesionEntrenamientoSchema>;
 export type BloqueDiaRutinaDTO = z.infer<typeof BloqueDiaRutinaSchema>;
 export type GuardarRutinaSemanalDTO = z.infer<typeof GuardarRutinaSemanalSchema>;
+export type CrearPlantillaRutinaDTO = z.infer<typeof CrearPlantillaRutinaSchema>;
+export type ActualizarPlantillaRutinaDTO = z.infer<typeof ActualizarPlantillaRutinaSchema>;
+export type AjusteEjercicioPlantillaDTO = z.infer<typeof AjusteEjercicioPlantillaSchema>;
+export type AsignarPlantillaDTO = z.infer<typeof AsignarPlantillaSchema>;
 export type IniciarSesionDTO = z.infer<typeof IniciarSesionSchema>;
 export type RegistrarSerieDTO = z.infer<typeof RegistrarSerieSchema>;
 export type SincronizarSeriesBatchDTO = z.infer<typeof SincronizarSeriesBatchSchema>;
@@ -135,7 +146,14 @@ export interface ProblemDetails {
   status: number;
   detail: string;
   instance?: string;
+  /**
+   * D7: código máquina estable y canónico para errores de negocio que la UI debe distinguir
+   * (p. ej. `SESION_VACIA` en el cierre de sesión sin series completadas).
+   * Campo único alineado al esquema estándar RFC 7807 §1 del doc de contratos.
+   */
   code?: string;
+  /** Mensaje humano del error tal como lo emite la API (NestJS lo incluye en el cuerpo). */
+  message?: string;
   invalidParams?: Array<{ field: string; reason: string }>;
   timestampUtc: string;
 }
@@ -186,6 +204,10 @@ export interface PerfilAlumnoDetalleDTO {
   precioAcordadoOverride?: string | null;
   semaforoPago?: 'al_dia' | 'por_vencer' | 'moroso' | 'sin_cuota';
   ultimaSesionFecha?: string | null;
+  /** RF-001 RN-02: racha de días consecutivos con cumplimiento >= 70%. */
+  rachaDias?: number;
+  /** Última fecha local (YYYY-MM-DD) en la que se incrementó la racha. */
+  rachaUltimaFecha?: string | null;
   deletedAtUtc?: string | null;
   createdAtUtc: string;
 }
@@ -225,7 +247,24 @@ export interface DashboardComandoDTO {
     cobranzaMesUsd: string;
     metaCobranzaMesUsd: string;
     porcentajeCobranza: string;
-    tasaAdherenciaSemanal: string;
+    /**
+     * Adherencia agregada de la semana en curso (RN-03), calculada como
+     * sesiones completadas / sesiones prescritas de los alumnos con plan activo.
+     * `null` cuando no existen datos evaluables (ningún alumno con plan prescrito en la ventana).
+     * El cliente debe renderizar un estado "sin datos" y NO un porcentaje artificial.
+     */
+    tasaAdherenciaSemanal: string | null;
+    /**
+     * Riesgo deportivo: alumnos con semáforo ROJO de adherencia o inactividad >= 4 días.
+     * Métrica separada de la mora financiera (no deben fundirse en un mismo contador).
+     */
+    alumnosEnRiesgoDeportivo: number;
+    /** Alumnos con cuotas vencidas o saldo pendiente (riesgo financiero). */
+    alumnosEnMoraFinanciera: number;
+    /**
+     * @deprecated Contador legacy que unía riesgo deportivo + mora financiera.
+     * Se mantiene por compatibilidad; usar `alumnosEnRiesgoDeportivo` y `alumnosEnMoraFinanciera`.
+     */
     alumnosEnRiesgo: number;
   };
   bandejasRapidas: {
@@ -365,7 +404,10 @@ export interface SerieRegistroDetalleDTO {
   numeroSerie: number;
   repsObjetivo: number;
   repsLogradas?: number | null;
+  /** Peso real levantado por el alumno (se sobrescribe en cada sincronización). */
   pesoKg?: string | null;
+  /** Peso prescrito por el coach (null cuando la prescripción es cualitativa o sin peso). */
+  pesoPrescritoKg?: string | null;
   rpe?: string | null;
   descansoSegundos?: number | null;
   completada: boolean;
@@ -394,6 +436,8 @@ export interface SesionEntrenamientoDetalleDTO {
   fechaFinUtc?: string | null; // ISO 8601 UTC
   timezoneCliente: string;
   estado: EstadoSesion;
+  /** Motivo persistido cuando `estado === OMITIDA` (RF-001 Escenario 5). */
+  motivoOmision?: MotivoOmision | null;
   porcentajeCumplimiento: string; // Decimal string con hasta 2 decimales (ej. "85.00")
   volumenTotalKg?: string | null; // Tonelaje total acumulado (kg * reps)
   notasAlumno?: string | null;
@@ -403,6 +447,19 @@ export interface SesionEntrenamientoDetalleDTO {
   cumpleReglaRacha?: boolean; // RN-02: True si completó >= 70% del volumen prescrito
   createdAtUtc: string;
   updatedAtUtc: string;
+}
+
+/**
+ * Respuesta de `POST /sesiones/:id/finalizar` (RF-001 RN-02).
+ * `cumpleRacha` es el alias explícito aditivo de `cumpleReglaRacha` para el cliente.
+ */
+export interface FinalizarSesionResponseDTO {
+  sesion: SesionEntrenamientoDetalleDTO;
+  cumpleReglaRacha: boolean;
+  cumpleRacha: boolean;
+  nuevaRacha: number;
+  duracionMinutos: number | null;
+  volumenTotalKg?: string;
 }
 
 export interface BloqueSemanaProgresoDTO {
@@ -416,6 +473,13 @@ export interface BloqueSemanaProgresoDTO {
   fechaProgramada?: string | null;
   sesionId?: string | null;
   esSugeridoHoy?: boolean;
+  /**
+   * Estado de la sesión de referencia del bloque en la semana (COMPLETADA, OMITIDA, EN_PROGRESO...).
+   * Permite renderizar una OMITIDA como "Descansado"/"Incompleto" en lugar de un 0% pendiente.
+   */
+  estadoSesion?: EstadoSesion | null;
+  /** Motivo persistido cuando `estadoSesion === OMITIDA` (DESCANSO | INCOMPLETO). */
+  motivoOmision?: MotivoOmision | null;
 }
 
 export interface SemanaEntrenamientoProgresoDTO {
@@ -428,6 +492,21 @@ export interface SemanaEntrenamientoProgresoDTO {
   bloques: BloqueSemanaProgresoDTO[];
   siguienteBloqueSugeridoId?: string | null;
   esDiaDescansoHoy: boolean;
+  /** Racha efectiva del alumno (RN-02): 0 cuando la cadena está rota o no existe. */
+  rachaDias: number;
+}
+
+/**
+ * Cuerpo de la acción explícita del alumno para entrenar un bloque hoy (RF-001 RN-04).
+ * El `bloqueId` viaja como parámetro de ruta; este DTO controla timezone y arranque inmediato.
+ */
+export interface EntrenarBloqueHoyDTO {
+  timezoneCliente?: string;
+  /**
+   * true al repetir un bloque ya completado: la nueva sesión se crea directamente 'en_progreso'.
+   * false/omitido: la sesión se crea 'planificada' para previsualizar antes de comenzar.
+   */
+  iniciarInmediato?: boolean;
 }
 
 export interface RutinaSemanalDetalleDTO {
@@ -439,6 +518,60 @@ export interface RutinaSemanalDetalleDTO {
   bloques: BloqueDiaRutinaDTO[];
   createdAtUtc: string;
   updatedAtUtc: string;
+}
+
+// =============================================================================
+// RESPUESTAS TIPADAS - BANCO DE PLANTILLAS DE RUTINA (RF-017)
+// =============================================================================
+
+/** Plantilla completa (detalle) del banco del entrenador. */
+export interface PlantillaRutinaDTO {
+  id: string;
+  entrenadorId: string;
+  nombre: string;
+  nivelObjetivo: NivelObjetivoPlantilla;
+  bloques: BloqueDiaRutinaDTO[];
+  activa: boolean;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+}
+
+/** Resumen de plantilla para el listado de la biblioteca (sin bloques embebidos). */
+export interface PlantillaRutinaResumenDTO {
+  id: string;
+  entrenadorId: string;
+  nombre: string;
+  nivelObjetivo: NivelObjetivoPlantilla;
+  totalDias: number;
+  totalEjercicios: number;
+  activa: boolean;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+}
+
+/**
+ * Resultado por alumno de una asignación de plantilla (RF-017 RN-03).
+ * `exito=false` no aborta la operación de los demás alumnos; `error` explica el fallo.
+ */
+export interface ResultadoAsignacionAlumnoDTO {
+  alumnoId: string;
+  /** `usuarios.id` resuelto cuando el alumno se identificó por `perfiles_alumno.id`. */
+  usuarioId?: string | null;
+  exito: boolean;
+  rutinaId?: string | null;
+  rutinaNombre?: string | null;
+  bloquesTotal?: number | null;
+  error?: string | null;
+}
+
+/** Respuesta de `POST /plantillas/:id/asignar` con reporte de éxito/fallo por alumno. */
+export interface AsignacionPlantillaResponseDTO {
+  plantillaId: string;
+  modo: ModoAsignacionPlantilla;
+  totalSolicitados: number;
+  exitosos: number;
+  fallidos: number;
+  resultados: ResultadoAsignacionAlumnoDTO[];
 }
 
 export interface FotoComidaDetalleDTO {
@@ -466,12 +599,34 @@ export interface CheckinNutricionalDetalleDTO {
 }
 
 export interface MonitorAdherenciaSemanalDTO {
+  /** `usuarios.id` del alumno (clave de sesiones y rutinas). */
   alumnoId: string;
+  /**
+   * `perfiles_alumno.id` del alumno: es el ID que espera `GET /alumnos/:id`, por lo que
+   * habilita el enlace directo de la UI al expediente del alumno.
+   */
+  alumnoPerfilId: string;
   nombreCompleto: string;
+  /**
+   * Sesiones prescritas de la rutina activa que ya debieron ejecutarse en la semana
+   * en curso (bloques con día sugerido <= día ISO de hoy). 0 si no hay plan activo.
+   */
   sesionesPrescritas: number;
+  /** Sesiones materializadas y completadas dentro de la semana en curso (Lunes 00:00 -> ahora). */
   sesionesCompletadas: number;
   porcentajeCumplimientoSemanal: string; // Decimal string con hasta 2 decimales (ej. "80.00")
   semaforoAdherencia: SemaforoAdherencia;
+  /**
+   * `false` cuando el alumno no tiene una rutina activa con bloques: la UI debe mostrar
+   * "sin plan" en lugar de un semáforo ROJO 0/0 potencialmente engañoso.
+   */
+  tienePlanActivo: boolean;
+  /**
+   * D6 (aditivo): `true` cuando el alumno tiene plan activo pero NINGÚN bloque vence todavía
+   * en la semana en curso (bloques debidos = 0). La UI debe mostrarlo como estado neutral
+   * ("Al día — sin pendientes"), nunca como ROJO: aún no existe nada que cumplir.
+   */
+  sinPendientesSemana: boolean;
   rachaDiasConsecutivos: number;
   diasInactivo: number;
   ultimaSesionUtc?: string | null;

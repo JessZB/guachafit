@@ -15,6 +15,9 @@ import {
   PlataformaDispositivo,
   TemaUi,
   SemaforoAdherencia,
+  TipoCierreSesion,
+  NivelObjetivoPlantilla,
+  ModoAsignacionPlantilla,
 } from '../enums';
 
 // Regex para formatos universales
@@ -155,6 +158,11 @@ export const ActualizarEjercicioCatalogoSchema = z.object({
 export const SeriePrescritaInputSchema = z.object({
   numeroSerie: z.number().int().min(1).optional(),
   repsObjetivo: z.number().int().min(1, 'Las repeticiones objetivo deben ser al menos 1').max(200),
+  /**
+   * Peso prescrito por el coach (se persiste en `peso_prescrito_kg`).
+   * `pesoSugeridoKg` se mantiene como alias legacy retrocompatible.
+   */
+  pesoPrescritoKg: z.string().regex(DECIMAL_STRING_REGEX, 'El peso prescrito debe tener formato decimal (ej. 50.00)').optional(),
   pesoSugeridoKg: z.string().regex(DECIMAL_STRING_REGEX, 'El peso sugerido debe tener formato decimal (ej. 50.00)').optional(),
   rpeObjetivo: z.string().regex(/^\d+(\.\d)?$/, 'El RPE objetivo debe tener formato decimal (ej. 8 o 8.5)').optional(),
 });
@@ -188,9 +196,16 @@ export const BloqueDiaRutinaSchema = z.object({
         nombre: z.string().min(2, 'El nombre debe tener al menos 2 caracteres').max(120),
         series: z.number().int().min(1).max(50),
         reps: z.string().min(1).max(30),
-        peso: z.string().min(1).max(30),
+        /**
+         * Carga prescrita como texto libre (ej. '60 kg', '60.5', 'Corporal').
+         * Vacío es válido (prescripción cualitativa): la API persiste `peso_prescrito_kg = null`
+         * y conserva el texto en notas, sin materializar '0.00'.
+         */
+        peso: z.string().max(30, 'La carga prescrita no puede exceder 30 caracteres').optional().default(''),
         rpe: z.string().max(10).optional(),
         descansoSegundos: z.number().int().min(5).max(1800).optional(),
+        /** RF-017 RN-01: notas técnicas del coach para el ejercicio (aditivo, opcional). */
+        notas: z.string().max(500, 'Las notas técnicas no pueden exceder 500 caracteres').optional(),
       })
     )
     .min(1, 'Cada día debe tener al menos un ejercicio'),
@@ -203,6 +218,99 @@ export const GuardarRutinaSemanalSchema = z.object({
     .array(BloqueDiaRutinaSchema)
     .min(1, 'Debe definir al menos un bloque de día de entrenamiento')
     .max(7, 'Una planificación semanal no puede exceder 7 bloques de entrenamiento'),
+});
+
+// =============================================================================
+// RF-017: BANCO DE PLANTILLAS DE RUTINA Y PRESCRIPCIÓN REUTILIZABLE
+// =============================================================================
+
+/**
+ * RF-017 RN-01: plantilla reutilizable del coach. Reutiliza BloqueDiaRutinaSchema
+ * para la estructura de días/ejercicios (series, reps, peso prescrito, RPE, notas).
+ */
+export const CrearPlantillaRutinaSchema = z.object({
+  nombre: z
+    .string()
+    .min(3, 'El nombre de la plantilla debe tener al menos 3 caracteres')
+    .max(120, 'El nombre de la plantilla no puede exceder 120 caracteres'),
+  nivelObjetivo: z.nativeEnum(NivelObjetivoPlantilla, {
+    errorMap: () => ({
+      message: 'El nivel objetivo no es válido (principiante, intermedio, avanzado)',
+    }),
+  }),
+  bloques: z
+    .array(BloqueDiaRutinaSchema)
+    .min(1, 'La plantilla debe definir al menos un bloque de día de entrenamiento')
+    .max(7, 'Una plantilla no puede exceder 7 bloques de entrenamiento'),
+  activa: z.boolean().optional(),
+});
+
+export const ActualizarPlantillaRutinaSchema = z.object({
+  nombre: z.string().min(3, 'El nombre de la plantilla debe tener al menos 3 caracteres').max(120).optional(),
+  nivelObjetivo: z.nativeEnum(NivelObjetivoPlantilla).optional(),
+  bloques: z
+    .array(BloqueDiaRutinaSchema)
+    .min(1, 'La plantilla debe definir al menos un bloque de día de entrenamiento')
+    .max(7, 'Una plantilla no puede exceder 7 bloques de entrenamiento')
+    .optional(),
+  activa: z.boolean().optional(),
+});
+
+/**
+ * RF-017 Escenario 2: ajuste puntual de cargas/series/reps antes de confirmar la
+ * asignación. Se localiza por `diaId` + (`ejercicioId` o `nombre` del ejercicio).
+ */
+export const AjusteEjercicioPlantillaSchema = z
+  .object({
+    diaId: z.string().min(1, 'El día del ajuste es obligatorio'),
+    ejercicioId: z.string().uuid('El ID del ejercicio debe ser un UUID válido').optional(),
+    nombre: z.string().min(2).max(120, 'El nombre del ejercicio no puede exceder 120 caracteres').optional(),
+    pesoPrescritoKg: z
+      .string()
+      .regex(DECIMAL_STRING_REGEX, 'El peso prescrito debe tener formato decimal (ej. 60.00)')
+      .optional(),
+    series: z.number().int().min(1).max(50).optional(),
+    reps: z.string().min(1).max(30).optional(),
+    rpe: z.string().regex(/^\d+(\.\d)?$/, 'El RPE debe tener formato decimal (ej. 8 o 8.5)').optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.ejercicioId && !data.nombre) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['ejercicioId'],
+        message: 'El ajuste debe indicar ejercicioId o el nombre del ejercicio',
+      });
+    }
+    const sinCambios =
+      data.pesoPrescritoKg === undefined &&
+      data.series === undefined &&
+      data.reps === undefined &&
+      data.rpe === undefined;
+    if (sinCambios) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['series'],
+        message: 'El ajuste debe modificar al menos pesoPrescritoKg, series, reps o rpe',
+      });
+    }
+  });
+
+/**
+ * RF-017 RN-03: asignación (individual o masiva) de una plantilla a uno o más alumnos.
+ * `ajustes` aplica overrides de carga/series/reps antes de confirmar la prescripción.
+ */
+export const AsignarPlantillaSchema = z.object({
+  alumnoIds: z
+    .array(z.string().uuid('Cada ID de alumno debe ser un UUID válido'))
+    .min(1, 'Debe indicar al menos un alumno')
+    .max(50, 'No se pueden asignar más de 50 alumnos en una sola solicitud'),
+  modo: z.nativeEnum(ModoAsignacionPlantilla, {
+    errorMap: () => ({ message: 'El modo de asignación debe ser REEMPLAZAR o FUSIONAR' }),
+  }),
+  ajustes: z
+    .array(AjusteEjercicioPlantillaSchema)
+    .max(100, 'No se pueden aplicar más de 100 ajustes por asignación')
+    .optional(),
 });
 
 export const IniciarSesionSchema = z.object({
@@ -234,9 +342,24 @@ export const SincronizarSeriesBatchSchema = z.object({
   series: z.array(RegistrarSerieSchema).min(1, 'Debe incluir al menos una serie para sincronizar'),
 });
 
+/**
+ * Acción explícita del alumno para instanciar/cambiar la sesión de hoy de un bloque (RF-001 RN-04).
+ * El `bloqueId` viaja como parámetro de ruta; solo una acción explícita puede crear/alterar sesiones.
+ * `iniciarInmediato` se usa al repetir un bloque ya completado (nueva sesión 'en_progreso').
+ */
+export const EntrenarBloqueHoySchema = z.object({
+  timezoneCliente: z.string().min(2).max(64).optional(),
+  iniciarInmediato: z.boolean().optional(),
+});
+
 export const FinalizarSesionSchema = z.object({
   notasAlumno: z.string().max(1000, 'Las notas no pueden exceder 1000 caracteres').optional(),
   fechaFinUtc: z.string().datetime({ message: 'La fecha de fin debe ser un timestamp ISO 8601 UTC válido' }).optional(),
+  /**
+   * RF-001 Escenario 5: decisión explícita al cerrar una sesión sin series completadas.
+   * COMPLETADA con 0 series se rechaza; DESCANSADA/INCOMPLETA marcan la sesión como OMITIDA.
+   */
+  tipoCierre: z.nativeEnum(TipoCierreSesion).optional(),
 });
 
 export const FotoComidaInputSchema = z.object({

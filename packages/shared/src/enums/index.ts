@@ -44,6 +44,24 @@ export enum EstadoSesion {
   OMITIDA = 'omitida',
 }
 
+/**
+ * RF-001 Escenario 5: decisión explícita del alumno al cerrar una sesión sin series completadas.
+ * COMPLETADA se rechaza si no hay series; DESCANSADA/INCOMPLETA marcan la sesión como OMITIDA.
+ */
+export enum TipoCierreSesion {
+  COMPLETADA = 'COMPLETADA',
+  DESCANSADA = 'DESCANSADA',
+  INCOMPLETA = 'INCOMPLETA',
+}
+
+/**
+ * Motivo persistido cuando una sesión se cierra como OMITIDA (RF-001 Escenario 5).
+ */
+export enum MotivoOmision {
+  DESCANSO = 'DESCANSO',
+  INCOMPLETO = 'INCOMPLETO',
+}
+
 export enum SemaforoNutricional {
   CUMPLIDO = 'cumplido',
   PARCIAL = 'parcial',
@@ -136,4 +154,23 @@ export enum SemaforoAdherencia {
   VERDE = 'verde',
   AMARILLO = 'amarillo',
   ROJO = 'rojo',
+}
+
+/**
+ * RF-017 RN-01: nivel objetivo de una plantilla de rutina reutilizable
+ * del banco del entrenador.
+ */
+export enum NivelObjetivoPlantilla {
+  PRINCIPIANTE = 'principiante',
+  INTERMEDIO = 'intermedio',
+  AVANZADO = 'avanzado',
+}
+
+/**
+ * RF-017 RN-03: sobrescritura guiada al asignar una plantilla a la rutina de un alumno.
+ * REEMPLAZAR sustituye la rutina activa; FUSIONAR anexa los días a los bloques existentes.
+ */
+export enum ModoAsignacionPlantilla {
+  REEMPLAZAR = 'REEMPLAZAR',
+  FUSIONAR = 'FUSIONAR',
 }
