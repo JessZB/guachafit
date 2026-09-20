@@ -53,3 +53,6 @@ desktop.ini
 # Logs y pruebas
 logs/
 *.log
+
+# CodeGraph: índice local del codebase (generado por herramienta, no versionar)
+.codegraph/
