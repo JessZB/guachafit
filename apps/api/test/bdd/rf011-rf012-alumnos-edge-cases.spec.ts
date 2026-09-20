@@ -64,8 +64,10 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
     hashPassword: vi.fn(async (p: string) => `hash-${p}`),
   } as any;
 
-  function extractConditions(sqlObj: any): Array<{ column: string; value: any; op?: string }> {
-    const conditions: Array<{ column: string; value: any; op?: string }> = [];
+  type OpCondicion = 'eq' | 'ne' | 'isNull' | 'isNotNull' | 'ilike' | 'in' | 'notIn' | 'gt' | 'gte' | 'lt' | 'lte';
+
+  function extractConditions(sqlObj: any): Array<{ column: string; value: any; op?: OpCondicion }> {
+    const conditions: Array<{ column: string; value: any; op?: OpCondicion }> = [];
     if (!sqlObj) return conditions;
 
     function traverse(chunks: any[]) {
@@ -87,15 +89,53 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
                 : ''
             )
             .join(' ');
-          const isNe =
-            opText.includes('<>') ||
-            opText.includes('!=') ||
-            opText.includes('distinct');
-          const nextParam = subsequent.find(
-            (c: any) => c && 'value' in c && !Array.isArray(c.value)
-          );
-          if (nextParam) {
-            conditions.push({ column: chunk.name, value: nextParam.value, op: isNe ? 'ne' : 'eq' });
+          const texto = opText.toLowerCase();
+          const params: any[] = [];
+          for (const c of subsequent) {
+            // Los parámetros string se incrustan como strings crudos; el resto como { value }.
+            if (typeof c === 'string') {
+              params.push(c);
+            } else if (
+              c &&
+              typeof c === 'object' &&
+              'value' in c &&
+              !Array.isArray(c.value) &&
+              !c.queryChunks
+            ) {
+              params.push(c.value);
+            }
+          }
+
+          if (texto.includes('is not null')) {
+            conditions.push({ column: chunk.name, value: null, op: 'isNotNull' });
+            continue;
+          }
+          if (texto.includes('is null')) {
+            conditions.push({ column: chunk.name, value: null, op: 'isNull' });
+            continue;
+          }
+
+          const esNotIn = /\snot\s+in\s/.test(texto);
+          const esIn = !esNotIn && /\sin\s/.test(texto);
+          const isIlike = texto.includes('ilike');
+          const isNe = opText.includes('<>') || opText.includes('!=') || opText.includes('distinct');
+          const operadorComparacion = opText.match(/>=|<=|>|</)?.[0];
+          let op: OpCondicion = 'eq';
+          if (isNe) op = 'ne';
+          else if (esNotIn) op = 'notIn';
+          else if (esIn) op = 'in';
+          else if (isIlike) op = 'ilike';
+          else if (operadorComparacion === '>=') op = 'gte';
+          else if (operadorComparacion === '<=') op = 'lte';
+          else if (operadorComparacion === '>') op = 'gt';
+          else if (operadorComparacion === '<') op = 'lt';
+
+          if (params.length > 0) {
+            conditions.push({
+              column: chunk.name,
+              value: esIn || esNotIn ? params : params[0],
+              op,
+            });
           }
         }
       }
@@ -107,20 +147,108 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
     return conditions;
   }
 
+  function valorDeColumna(record: any, columna: string): any {
+    return record[columna] !== undefined
+      ? record[columna]
+      : record[columna.replace(/_([a-z])/g, (_: string, l: string) => l.toUpperCase())];
+  }
+
+  function compararValores(a: any, b: any): number {
+    const normalizar = (v: any): any => {
+      if (v instanceof Date) return v.getTime();
+      if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) return new Date(v).getTime();
+      const numero = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(numero) && String(v).trim() !== '' ? numero : v;
+    };
+    const va = normalizar(a);
+    const vb = normalizar(b);
+    if (typeof va === 'number' && typeof vb === 'number') return va - vb;
+    return va < vb ? -1 : va > vb ? 1 : 0;
+  }
+
   function matchesField(record: any, condOrCol: any, valueParam?: any, opParam?: string): boolean {
     const col = typeof condOrCol === 'string' ? condOrCol : condOrCol?.column;
     const val = typeof condOrCol === 'string' ? valueParam : condOrCol?.value;
     const op = typeof condOrCol === 'string' ? opParam : condOrCol?.op;
 
     if (!col) return true;
+    const recordVal = valorDeColumna(record, col);
 
-    const key = record[col] !== undefined ? col : col.replace(/_([a-z])/g, (_: string, l: string) => l.toUpperCase());
-    const recordVal = record[key];
-
-    if (op === 'ne') {
-      return recordVal !== val;
+    switch (op) {
+      case 'isNull':
+        return recordVal === null || recordVal === undefined;
+      case 'isNotNull':
+        return recordVal !== null && recordVal !== undefined;
+      case 'ne':
+        return recordVal !== val;
+      case 'in':
+        return Array.isArray(val) && val.includes(recordVal);
+      case 'notIn':
+        return Array.isArray(val) && !val.includes(recordVal);
+      case 'gt':
+        return compararValores(recordVal, val) > 0;
+      case 'gte':
+        return compararValores(recordVal, val) >= 0;
+      case 'lt':
+        return compararValores(recordVal, val) < 0;
+      case 'lte':
+        return compararValores(recordVal, val) <= 0;
+      case 'ilike': {
+        const patron = String(val ?? '')
+          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          .replace(/%/g, '.*')
+          .replace(/_/g, '.');
+        return new RegExp(`^${patron}$`, 'i').test(String(recordVal ?? ''));
+      }
+      default:
+        return recordVal === val;
     }
-    return recordVal === val;
+  }
+
+  function camelizar(columna: string): string {
+    return columna.replace(/_([a-z])/g, (_: string, l: string) => l.toUpperCase());
+  }
+
+  function esExpresionCount(expr: any): boolean {
+    if (!expr || typeof expr !== 'object' || !Array.isArray(expr.queryChunks)) return false;
+    return expr.queryChunks.some(
+      (c: any) =>
+        Array.isArray(c?.value) &&
+        c.value.some((v: any) => typeof v === 'string' && v.toLowerCase().includes('count('))
+    );
+  }
+
+  function esExpresionCountDistinct(expr: any): boolean {
+    if (!expr || typeof expr !== 'object' || !Array.isArray(expr.queryChunks)) return false;
+    return expr.queryChunks.some(
+      (c: any) =>
+        Array.isArray(c?.value) &&
+        c.value.some((v: any) =>
+          typeof v === 'string' && v.toLowerCase().includes('count(distinct')
+        )
+    );
+  }
+
+  function buscarNombreColumna(expr: any): string | null {
+    const visitar = (chunks: any[]): string | null => {
+      for (const c of chunks) {
+        if (c && typeof c.name === 'string') return c.name;
+        if (c && Array.isArray(c.queryChunks)) {
+          const encontrado = visitar(c.queryChunks);
+          if (encontrado) return encontrado;
+        }
+      }
+      return null;
+    };
+    return expr && Array.isArray(expr.queryChunks) ? visitar(expr.queryChunks) : null;
+  }
+
+  function esSeleccionAgregada(seleccion: any): boolean {
+    return Boolean(
+      seleccion &&
+        typeof seleccion === 'object' &&
+        Object.values(seleccion).some((valor) => esExpresionCount(valor))
+    );
   }
 
   function getTableArray(tableName: string): any[] {
@@ -142,6 +270,9 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
           const tableName = table ? getTableName(table) : '';
           const baseData = getTableArray(tableName);
           let filtered = [...baseData];
+          let limiteAplicado: number | null = null;
+          let desplazamientoAplicado = 0;
+          let columnasGrupo: string[] = [];
 
           const queryObj: any = {
             innerJoin: vi.fn((joinTable: any) => queryObj),
@@ -156,14 +287,67 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
               return queryObj;
             }),
             orderBy: vi.fn(() => queryObj),
+            groupBy: vi.fn((...cols: any[]) => {
+              columnasGrupo = cols
+                .map((col) => (col && typeof col.name === 'string' ? col.name : null))
+                .filter((name): name is string => Boolean(name));
+              return queryObj;
+            }),
             limit: vi.fn((count: number) => {
-              filtered = filtered.slice(0, count);
+              limiteAplicado = count;
+              return queryObj;
+            }),
+            offset: vi.fn((count: number) => {
+              desplazamientoAplicado = count;
               return queryObj;
             }),
             for: vi.fn(() => queryObj),
             then: (resolve: any) => {
+              // OFFSET/LIMIT se aplican al resolver, como en SQL (offset primero).
+              const pagina =
+                limiteAplicado === null
+                  ? filtered.slice(desplazamientoAplicado)
+                  : filtered.slice(desplazamientoAplicado, desplazamientoAplicado + limiteAplicado);
+
+              // Selecciones agregadas (count/countDistinct): una fila por grupo (o una sola).
+              if (esSeleccionAgregada(fieldsSelection)) {
+                const grupos: Array<{ claves: Record<string, any>; filas: any[] }> = [];
+                if (columnasGrupo.length > 0) {
+                  const mapa = new Map<string, { claves: Record<string, any>; filas: any[] }>();
+                  for (const fila of pagina) {
+                    const claves: Record<string, any> = {};
+                    for (const columna of columnasGrupo) {
+                      claves[camelizar(columna)] = valorDeColumna(fila, columna);
+                    }
+                    const clave = JSON.stringify(claves);
+                    if (!mapa.has(clave)) mapa.set(clave, { claves, filas: [] });
+                    mapa.get(clave)!.filas.push(fila);
+                  }
+                  grupos.push(...mapa.values());
+                } else {
+                  grupos.push({ claves: {}, filas: pagina });
+                }
+
+                return resolve(
+                  grupos.map(({ claves, filas }) => {
+                    const resultado: Record<string, any> = { ...claves };
+                    for (const [campo, expr] of Object.entries(
+                      fieldsSelection as Record<string, any>
+                    )) {
+                      if (!esExpresionCount(expr)) continue;
+                      const columna = buscarNombreColumna(expr);
+                      resultado[campo] =
+                        esExpresionCountDistinct(expr) && columna
+                          ? new Set(filas.map((fila) => valorDeColumna(fila, columna))).size
+                          : filas.length;
+                    }
+                    return resultado;
+                  })
+                );
+              }
+
               if (tableName === 'perfiles_alumno' && fieldsSelection && typeof fieldsSelection === 'object') {
-                const joined = filtered.map((p) => {
+                const joined = pagina.map((p) => {
                   const u = mockUsuarios.find((user) => user.id === p.usuarioId);
                   return {
                     ...p,
@@ -172,7 +356,7 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
                 });
                 return resolve(joined);
               }
-              return resolve([...filtered]);
+              return resolve([...pagina]);
             },
           };
 
@@ -338,8 +522,8 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
       // Ejecutar en el servicio: debe filtrar sin excepción 500 y retornar 0 resultados
       const req = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
       const resultados = await alumnosController.listarAlumnos(req, parsed);
-      expect(Array.isArray(resultados)).toBe(true);
-      expect(resultados.length).toBe(0);
+      expect(Array.isArray(resultados.items)).toBe(true);
+      expect(resultados.items.length).toBe(0);
     });
 
     it('1.3 debe rechazar filtros de estado inválidos (ej. estado=HACKER) con error de validación', () => {
@@ -392,12 +576,227 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
       const alumnosCoachB = await alumnosController.listarAlumnos(reqCoachB, {});
 
       // Coach A ve únicamente a Alejandro (y no a Andrea que está archivada por defecto)
-      expect(alumnosCoachA.every((a) => a.entrenadorId === COACH_A_ID)).toBe(true);
-      expect(alumnosCoachA.some((a) => a.id === ALUMNO_B1_PERFIL_ID)).toBe(false);
+      expect(alumnosCoachA.items.every((a) => a.entrenadorId === COACH_A_ID)).toBe(true);
+      expect(alumnosCoachA.items.some((a) => a.id === ALUMNO_B1_PERFIL_ID)).toBe(false);
 
       // Coach B ve únicamente a Beatriz
-      expect(alumnosCoachB.every((a) => a.entrenadorId === COACH_B_ID)).toBe(true);
-      expect(alumnosCoachB.some((a) => a.id === ALUMNO_A1_PERFIL_ID)).toBe(false);
+      expect(alumnosCoachB.items.every((a) => a.entrenadorId === COACH_B_ID)).toBe(true);
+      expect(alumnosCoachB.items.some((a) => a.id === ALUMNO_A1_PERFIL_ID)).toBe(false);
+    });
+
+    it('1.8 WU19: devuelve { items, total, limit, offset, resumen } con la cartera completa', async () => {
+      const req = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
+      const filtro = FiltroDirectorioAlumnosSchema.parse({
+        incluirArchivados: 'true',
+        limit: '100',
+        offset: '0',
+      });
+
+      const res = await alumnosController.listarAlumnos(req, filtro);
+
+      expect(res.limit).toBe(100);
+      expect(res.offset).toBe(0);
+      // Cartera completa: Alejandro (vigente, presencial) + Andrea (archivada, pausada, remota).
+      expect(res.total).toBe(2);
+      expect(res.items.map((a) => a.id).sort()).toEqual(
+        [ALUMNO_A1_PERFIL_ID, ALUMNO_A2_PERFIL_ID].sort()
+      );
+      expect(res.resumen).toEqual({
+        total: 2,
+        activos: 1,
+        // Andrea está archivada: no suma a pausados/remotos (igual que los KPIs de la UI).
+        pausados: 0,
+        morosos: 0,
+        presenciales: 1,
+        remotos: 0,
+        archivados: 1,
+      });
+    });
+
+    it('1.9 WU19: pagina con offset/limit y el total refleja la consulta completa', async () => {
+      for (let i = 0; i < 3; i++) {
+        mockPerfilesAlumno.push({
+          id: `perfil-extra-${i}`,
+          usuarioId: `usuario-extra-${i}`,
+          entrenadorId: COACH_A_ID,
+          tipoDocumento: TipoDocumento.V,
+          numeroDocumento: `9000000${i}`,
+          nombres: `Extra${i}`,
+          apellidos: 'Paginado',
+          fechaNacimiento: '1990-01-01',
+          telefonoWhatsapp: `+58412000000${i}`,
+          modalidad: Modalidad.PRESENCIAL,
+          estadoActivacion: EstadoAlumno.ACTIVO,
+          fichaSaludPrivada: null,
+          deletedAtUtc: null,
+        });
+      }
+
+      const req = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
+      const pagina1 = await alumnosController.listarAlumnos(
+        req,
+        FiltroDirectorioAlumnosSchema.parse({ limit: '2', offset: '1' })
+      );
+      const pagina2 = await alumnosController.listarAlumnos(
+        req,
+        FiltroDirectorioAlumnosSchema.parse({ limit: '2', offset: '3' })
+      );
+
+      // 4 vigentes (Alejandro + 3 extra); Andrea queda fuera por archivada.
+      expect(pagina1.total).toBe(4);
+      expect(pagina1.limit).toBe(2);
+      expect(pagina1.offset).toBe(1);
+      expect(pagina1.items).toHaveLength(2);
+
+      expect(pagina2.total).toBe(4);
+      expect(pagina2.offset).toBe(3);
+      expect(pagina2.items).toHaveLength(1);
+
+      // Sin solapes entre páginas y sin perder filas.
+      const idsPagina1 = pagina1.items.map((a) => a.id);
+      const idsPagina2 = pagina2.items.map((a) => a.id);
+      expect(idsPagina1.filter((id) => idsPagina2.includes(id))).toEqual([]);
+      expect(new Set([...idsPagina1, ...idsPagina2]).size).toBe(3);
+    });
+
+    it('1.10 WU19: resumen cuenta morosos con cuota vencida (misma regla del dashboard)', async () => {
+      mockCuotasMembresia.push(
+        {
+          id: 'cuota-vencida-a1',
+          clienteId: ALUMNO_A1_USER_ID,
+          entrenadorId: COACH_A_ID,
+          planId: PLAN_COACH_A_ID,
+          periodo: '2026-08',
+          montoTotalUsd: '45.00',
+          montoAbonadoUsd: '0.00',
+          saldoPendienteUsd: '45.00',
+          fechaEmisionUtc: new Date('2026-08-01T00:00:00Z'),
+          fechaCorteUtc: new Date('2026-08-31T00:00:00Z'),
+          estado: EstadoCuota.VENCIDA,
+        },
+        {
+          id: 'cuota-al-dia-b1',
+          clienteId: ALUMNO_B1_USER_ID,
+          entrenadorId: COACH_B_ID,
+          planId: PLAN_COACH_A_ID,
+          periodo: '2026-09',
+          montoTotalUsd: '45.00',
+          montoAbonadoUsd: '45.00',
+          saldoPendienteUsd: '0.00',
+          fechaEmisionUtc: new Date(),
+          fechaCorteUtc: new Date(),
+          estado: EstadoCuota.AL_DIA,
+        }
+      );
+
+      const req = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
+      const res = await alumnosController.listarAlumnos(
+        req,
+        FiltroDirectorioAlumnosSchema.parse({ incluirArchivados: 'true' })
+      );
+
+      // Solo la cuota vencida del alumno de Coach A cuenta; la de otro coach y la AL_DIA no.
+      expect(res.resumen.morosos).toBe(1);
+    });
+
+    it('1.11 WU23: hidrata semaforoPago por fila (moroso / al día / sin cuota) y coincide con el KPI', async () => {
+      // Alumno extra al día: cuota vigente, corte futuro y sin saldo pendiente.
+      const ALUMNO_A3_USER_ID = 'aaaaaaaa-cccc-4aaa-8aaa-aaaaaaaaaaaa';
+      const ALUMNO_A3_PERFIL_ID = 'a3333333-3333-4333-8333-333333333333';
+      mockUsuarios.push({
+        id: ALUMNO_A3_USER_ID,
+        email: 'alumno.a3@guachafit.com',
+        rol: Rol.ALUMNO,
+        activo: true,
+      });
+      mockPerfilesAlumno.push({
+        id: ALUMNO_A3_PERFIL_ID,
+        usuarioId: ALUMNO_A3_USER_ID,
+        entrenadorId: COACH_A_ID,
+        tipoDocumento: TipoDocumento.V,
+        numeroDocumento: '44444444',
+        nombres: 'Alba',
+        apellidos: 'AlDía',
+        fechaNacimiento: '1996-03-03',
+        telefonoWhatsapp: '+584124444444',
+        modalidad: Modalidad.PRESENCIAL,
+        estadoActivacion: EstadoAlumno.ACTIVO,
+        fichaSaludPrivada: null,
+        deletedAtUtc: null,
+      });
+
+      // Alumno extra sin cuota: no tiene ningún registro en cuotas_membresia.
+      const ALUMNO_A4_USER_ID = 'aaaaaaaa-dddd-4aaa-8aaa-aaaaaaaaaaaa';
+      const ALUMNO_A4_PERFIL_ID = 'a4444444-4444-4444-8444-444444444444';
+      mockUsuarios.push({
+        id: ALUMNO_A4_USER_ID,
+        email: 'alumno.a4@guachafit.com',
+        rol: Rol.ALUMNO,
+        activo: true,
+      });
+      mockPerfilesAlumno.push({
+        id: ALUMNO_A4_PERFIL_ID,
+        usuarioId: ALUMNO_A4_USER_ID,
+        entrenadorId: COACH_A_ID,
+        tipoDocumento: TipoDocumento.V,
+        numeroDocumento: '55555555',
+        nombres: 'Sina',
+        apellidos: 'SinCuota',
+        fechaNacimiento: '1997-07-07',
+        telefonoWhatsapp: '+584125555555',
+        modalidad: Modalidad.REMOTO,
+        estadoActivacion: EstadoAlumno.ACTIVO,
+        fichaSaludPrivada: null,
+        deletedAtUtc: null,
+      });
+
+      mockCuotasMembresia.push(
+        {
+          id: 'cuota-vencida-a1-wu23',
+          clienteId: ALUMNO_A1_USER_ID,
+          entrenadorId: COACH_A_ID,
+          planId: PLAN_COACH_A_ID,
+          periodo: '2026-08',
+          montoTotalUsd: '45.00',
+          montoAbonadoUsd: '0.00',
+          saldoPendienteUsd: '45.00',
+          fechaEmisionUtc: new Date('2026-08-01T00:00:00Z'),
+          fechaCorteUtc: new Date('2026-08-31T00:00:00Z'),
+          estado: EstadoCuota.VENCIDA,
+        },
+        {
+          id: 'cuota-vigente-a3-wu23',
+          clienteId: ALUMNO_A3_USER_ID,
+          entrenadorId: COACH_A_ID,
+          planId: PLAN_COACH_A_ID,
+          periodo: '2026-10',
+          montoTotalUsd: '45.00',
+          montoAbonadoUsd: '45.00',
+          saldoPendienteUsd: '0.00',
+          fechaEmisionUtc: new Date(),
+          fechaCorteUtc: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
+          estado: EstadoCuota.PENDIENTE,
+        }
+      );
+
+      const req = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
+      const res = await alumnosController.listarAlumnos(
+        req,
+        FiltroDirectorioAlumnosSchema.parse({ limit: '100' })
+      );
+
+      const semaforoPorPerfil = new Map(res.items.map((a) => [a.id, a.semaforoPago]));
+      expect(semaforoPorPerfil.get(ALUMNO_A1_PERFIL_ID)).toBe('moroso');
+      expect(semaforoPorPerfil.get(ALUMNO_A3_PERFIL_ID)).toBe('al_dia');
+      expect(semaforoPorPerfil.get(ALUMNO_A4_PERFIL_ID)).toBe('sin_cuota');
+      // Andrea (archivada) queda fuera por el filtro por defecto, pero su perfil no aporta mora.
+      expect(semaforoPorPerfil.has(ALUMNO_A2_PERFIL_ID)).toBe(false);
+
+      // La pestaña "En Mora" (filtro cliente por semáforo) y el KPI del servidor cuentan lo mismo.
+      expect(res.resumen.morosos).toBe(1);
+      expect(res.items.filter((a) => a.semaforoPago === 'moroso')).toHaveLength(
+        res.resumen.morosos
+      );
     });
   });
 

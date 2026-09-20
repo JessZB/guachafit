@@ -213,13 +213,82 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
     return [];
   }
 
+  function camelizar(columna: string): string {
+    return columna.replace(/_([a-z])/g, (_, l: string) => l.toUpperCase());
+  }
+
+  function valorDeColumna(record: any, columna: string): any {
+    return record[columna] !== undefined
+      ? record[columna]
+      : record[columna.replace(/_([a-z])/g, (_, l: string) => l.toUpperCase())];
+  }
+
+  function esExpresionMax(expr: any): boolean {
+    if (!expr || typeof expr !== 'object' || !Array.isArray(expr.queryChunks)) return false;
+    return expr.queryChunks.some(
+      (c: any) =>
+        Array.isArray(c?.value) &&
+        c.value.some((v: any) => typeof v === 'string' && v.toLowerCase().includes('max('))
+    );
+  }
+
+  function buscarNombreColumna(expr: any): string | null {
+    const visitar = (chunks: any[]): string | null => {
+      for (const c of chunks) {
+        if (c && typeof c.name === 'string') return c.name;
+        if (c && Array.isArray(c.queryChunks)) {
+          const encontrado = visitar(c.queryChunks);
+          if (encontrado) return encontrado;
+        }
+      }
+      return null;
+    };
+    return expr && Array.isArray(expr.queryChunks) ? visitar(expr.queryChunks) : null;
+  }
+
+  /**
+   * WU23: emula la consulta agregada `MAX(col) GROUP BY col` del monitor (una fila por grupo)
+   * sobre el almacén in-memory, para que el test no dependa de un Postgres real.
+   */
+  function agruparYAgregar(fieldsSelection: any, filas: any[], columnasGrupo: string[]): any[] {
+    if (columnasGrupo.length === 0) return [...filas];
+
+    const grupos = new Map<string, any[]>();
+    for (const fila of filas) {
+      const clave = columnasGrupo
+        .map((columna) => String(valorDeColumna(fila, columna)))
+        .join('|');
+      if (!grupos.has(clave)) grupos.set(clave, []);
+      grupos.get(clave)!.push(fila);
+    }
+
+    return [...grupos.values()].map((filasGrupo) => {
+      const salida: Record<string, any> = {};
+      for (const columna of columnasGrupo) {
+        salida[camelizar(columna)] = valorDeColumna(filasGrupo[0], columna);
+      }
+      for (const [campo, expr] of Object.entries(fieldsSelection as Record<string, any>)) {
+        if (!esExpresionMax(expr)) continue;
+        const columna = buscarNombreColumna(expr);
+        const valores = filasGrupo
+          .map((fila) => valorDeColumna(fila, columna ?? ''))
+          .filter((valor) => valor !== null && valor !== undefined)
+          .map((valor) => (valor instanceof Date ? valor.getTime() : new Date(valor).getTime()))
+          .filter((ms) => Number.isFinite(ms));
+        salida[campo] = valores.length > 0 ? new Date(Math.max(...valores)) : null;
+      }
+      return salida;
+    });
+  }
+
   function createMockDb() {
     const db: any = {
-      select: vi.fn(() => ({
+      select: vi.fn((fieldsSelection?: any) => ({
         from: vi.fn((table: any) => {
           const tableName = table ? getTableName(table) : '';
           const baseData = getTableArray(tableName);
           let filtered = baseData.map(normalizeRecord);
+          let columnasGrupo: string[] = [];
 
           const queryObj: any = {
             where: vi.fn((predicate: any) => {
@@ -252,11 +321,17 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
               return queryObj;
             }),
             orderBy: vi.fn(() => queryObj),
+            groupBy: vi.fn((...cols: any[]) => {
+              columnasGrupo = cols
+                .map((col) => (col && typeof col.name === 'string' ? col.name : null))
+                .filter((name): name is string => Boolean(name));
+              return queryObj;
+            }),
             limit: vi.fn((count: number) => {
               filtered = filtered.slice(0, count);
               return queryObj;
             }),
-            then: (resolve: any) => resolve([...filtered]),
+            then: (resolve: any) => resolve(agruparYAgregar(fieldsSelection, filtered, columnasGrupo)),
           };
 
           return queryObj;
@@ -1512,6 +1587,66 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
       }
     });
 
+    it('WU23: resuelve la última sesión REAL aunque esté fuera de la ventana reciente de 30 días', async () => {
+      const ahora = new Date();
+      const hace40Dias = new Date(ahora.getTime() - 40 * 24 * 60 * 60 * 1000);
+      mockRutinas.push(crearRutinaSemanal(alumnoId1, [1]));
+      // Única sesión completada: hace 40 días. Antes (WU19) se degradaba a null + 7; ahora la
+      // consulta agregada MAX(fecha_fin_utc) GROUP BY alumno revela la última sesión real.
+      mockSesionesEntrenamiento.push(crearSesionCompletada(alumnoId1, hace40Dias));
+
+      const monitor = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
+
+      expect(monitor).toHaveLength(1);
+      expect(monitor[0].ultimaSesionUtc).toBe(hace40Dias.toISOString());
+      expect(monitor[0].diasInactivo).toBe(40);
+      // El semáforo no cambia: 40 días (> 4) sigue siendo ROJO por RN-03.
+      expect(monitor[0].semaforoAdherencia).toBe(SemaforoAdherencia.ROJO);
+    });
+
+    it('WU23: un alumno sin ninguna sesión completada mantiene ultimaSesionUtc=null y diasInactivo=7', async () => {
+      mockRutinas.push(crearRutinaSemanal(alumnoId1, [1]));
+
+      const monitor = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
+
+      expect(monitor).toHaveLength(1);
+      // Sin sesiones no hay fecha que mostrar: null es la verdad (jamás se inventa una fecha).
+      expect(monitor[0].ultimaSesionUtc).toBeNull();
+      expect(monitor[0].diasInactivo).toBe(7);
+      expect(monitor[0].semaforoAdherencia).toBe(SemaforoAdherencia.ROJO);
+    });
+
+    it('WU23: una sesión reciente fija la última sesión y su inactividad', async () => {
+      const ahora = new Date();
+      const hace10Dias = new Date(ahora.getTime() - 10 * 24 * 60 * 60 * 1000);
+      mockRutinas.push(crearRutinaSemanal(alumnoId1, [1]));
+      mockSesionesEntrenamiento.push(crearSesionCompletada(alumnoId1, hace10Dias));
+
+      const monitor = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
+
+      expect(monitor).toHaveLength(1);
+      expect(monitor[0].ultimaSesionUtc).toBe(hace10Dias.toISOString());
+      expect(monitor[0].diasInactivo).toBe(10);
+    });
+
+    it('WU23: con varias sesiones por alumno, diasInactivo sale de la MÁS RECIENTE (MAX en lote)', async () => {
+      const ahora = new Date();
+      const hace5Dias = new Date(ahora.getTime() - 5 * 24 * 60 * 60 * 1000);
+      const hace20Dias = new Date(ahora.getTime() - 20 * 24 * 60 * 60 * 1000);
+      mockRutinas.push(crearRutinaSemanal(alumnoId1, [1]));
+      // Orden no cronológico a propósito: el agregado debe elegir el máximo, no el último insertado.
+      mockSesionesEntrenamiento.push(
+        crearSesionCompletada(alumnoId1, hace20Dias),
+        crearSesionCompletada(alumnoId1, hace5Dias)
+      );
+
+      const monitor = await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
+
+      expect(monitor).toHaveLength(1);
+      expect(monitor[0].ultimaSesionUtc).toBe(hace5Dias.toISOString());
+      expect(monitor[0].diasInactivo).toBe(5);
+    });
+
     it('D10: excluye alumnos pausados/suspendidos (solo activos y no archivados) del monitor', async () => {
       const pausadoId = 'a5555555-5555-4555-8555-555555555555';
       agregarAlumno('perfil-alumno-pausado', pausadoId, {
@@ -1598,7 +1733,7 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
 
       await entrenamientoService.calcularSemanaAdherencia(coachId1, 'UTC');
 
-      // alumnos + rutinas activas + completadas de la ventana + historial de completadas
+      // alumnos + rutinas activas + completadas de la ventana + última sesión agregada (WU23)
       expect(mockDb.select).toHaveBeenCalledTimes(4);
     });
   });

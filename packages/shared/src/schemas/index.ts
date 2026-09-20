@@ -99,6 +99,14 @@ export const ActualizarPerfilAlumnoSchema = z.object({
   fichaSaludPrivada: z.string().max(2000).optional().nullable(),
 });
 
+/**
+ * WU19: página por defecto del directorio de alumnos.
+ *
+ * El endpoint `GET /alumnos` entrega el directorio paginado; 100 es además el techo duro
+ * aceptado por `limit` (el máximo que la UI puede pedir en un solo salto).
+ */
+export const LIMITE_DIRECTORIO_ALUMNOS_POR_DEFECTO = 100;
+
 export const FiltroDirectorioAlumnosSchema = z.object({
   busqueda: z.string().max(200, 'El término de búsqueda no puede exceder 200 caracteres').optional(),
   estado: z.nativeEnum(EstadoAlumno, {
@@ -107,6 +115,10 @@ export const FiltroDirectorioAlumnosSchema = z.object({
   modalidad: z.nativeEnum(Modalidad, {
     errorMap: () => ({ message: 'La modalidad especificada no es válida' }),
   }).optional(),
+  /**
+   * `true` = devuelve la cartera completa (activos + archivados); `false` (default) = solo
+   * alumnos vigentes. El resumen del directorio siempre cuenta la cartera completa.
+   */
   incluirArchivados: z
     .union([
       z.boolean(),
@@ -119,9 +131,9 @@ export const FiltroDirectorioAlumnosSchema = z.object({
     .number()
     .int('El límite debe ser un número entero')
     .min(1, 'El límite debe ser al menos 1')
-    .max(100, 'El límite no puede exceder 100')
+    .max(LIMITE_DIRECTORIO_ALUMNOS_POR_DEFECTO, 'El límite no puede exceder 100')
     .optional()
-    .default(50),
+    .default(LIMITE_DIRECTORIO_ALUMNOS_POR_DEFECTO),
   offset: z
     .coerce
     .number()

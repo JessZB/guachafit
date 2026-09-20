@@ -47,9 +47,13 @@ describe('Módulo 4: Control Antropométrico & Bóveda R2 (AntropometriaService 
   }
 
   function getParamsFrom(item: any): any[] {
-    if (!item) return [];
+    if (item === null || item === undefined) return [];
+    if (typeof item === 'string') return item.length > 0 ? [item] : [];
+    if (typeof item === 'number' || typeof item === 'boolean') return [item];
+    if (Array.isArray(item)) return item.flatMap(getParamsFrom);
     if ('value' in item && !isSqlSyntaxChunk(item)) {
-      return Array.isArray(item.value) ? item.value : [item.value];
+      const values = Array.isArray(item.value) ? item.value.flatMap(getParamsFrom) : [item.value];
+      return values.filter((v) => v !== '');
     }
     if (item.queryChunks && Array.isArray(item.queryChunks)) {
       return item.queryChunks.flatMap(getParamsFrom);
@@ -481,6 +485,38 @@ describe('Módulo 4: Control Antropométrico & Bóveda R2 (AntropometriaService 
           accion: 'aprobar',
         })
       ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('listarPendientes (WU20: nombre del alumno en la cola)', () => {
+    it('expone alumnoNombre con nombres + apellidos del perfil', async () => {
+      const control = await antropometriaService.registrarCheckin(
+        { id: alumnoRemotoId, rol: Rol.ALUMNO },
+        {
+          alumnoId: alumnoRemotoId,
+          fechaEvaluacion: '2026-09-18',
+          pesoKg: '64.00',
+        }
+      );
+
+      const pendientes = await antropometriaService.listarPendientes(coachId);
+
+      expect(pendientes).toHaveLength(1);
+      expect(pendientes[0].id).toBe(control.id);
+      expect(pendientes[0].alumnoNombre).toBe('Laura Remota');
+    });
+
+    it('mantiene el aislamiento de tenant: un coach ajeno no ve la cola', async () => {
+      await antropometriaService.registrarCheckin(
+        { id: alumnoRemotoId, rol: Rol.ALUMNO },
+        {
+          alumnoId: alumnoRemotoId,
+          fechaEvaluacion: '2026-09-18',
+          pesoKg: '64.00',
+        }
+      );
+
+      await expect(antropometriaService.listarPendientes(otherCoachId)).resolves.toEqual([]);
     });
   });
 

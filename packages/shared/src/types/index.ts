@@ -212,6 +212,36 @@ export interface PerfilAlumnoDetalleDTO {
   createdAtUtc: string;
 }
 
+/**
+ * WU19: contadores reales de la cartera del entrenador para los KPIs del directorio.
+ *
+ * Se calculan con COUNT en el servidor (nunca desde la página cargada) y siempre describen la
+ * cartera COMPLETA del coach, sin importar filtros, búsqueda o paginación de la lista.
+ * - `activos`/`pausados`/`presenciales`/`remotos` excluyen archivados (igual que la UI).
+ * - `morosos` cuenta alumnos con deuda vencida (misma regla que la bandeja del dashboard).
+ */
+export interface ResumenDirectorioAlumnosDTO {
+  total: number;
+  activos: number;
+  pausados: number;
+  morosos: number;
+  presenciales: number;
+  remotos: number;
+  archivados: number;
+}
+
+/** WU19: respuesta paginada de `GET /alumnos` (contrato interno consumido por el directorio). */
+export interface DirectorioAlumnosDTO {
+  items: PerfilAlumnoDetalleDTO[];
+  /** Total de alumnos que cumplen los filtros de la consulta (para "Mostrando X de N"). */
+  total: number;
+  /** Página efectiva aplicada por el servidor. */
+  limit: number;
+  offset: number;
+  /** Contadores reales de la cartera completa para los KPIs (independientes de la página). */
+  resumen: ResumenDirectorioAlumnosDTO;
+}
+
 export interface ResumenFinancieroAlumnoDTO {
   alumnoId: string;
   usuarioId: string;
@@ -671,6 +701,11 @@ export interface PerimetrosCorporalesDTO {
 export interface ControlAntropometricoDetalleDTO {
   id: string;
   alumnoId: string;
+  /**
+   * WU20 (aditivo): nombre completo del alumno (nombres + apellidos) resuelto por el servidor.
+   * Hoy solo lo completa la cola de pendientes; si falta, el cliente cae al ID recortado.
+   */
+  alumnoNombre?: string | null;
   fechaEvaluacion: string; // Formato YYYY-MM-DD
   pesoKg: string; // Decimal string con hasta 2 decimales (ej. "75.50")
   alturaCm?: string | null; // Decimal string con hasta 2 decimales (ej. "178.00")

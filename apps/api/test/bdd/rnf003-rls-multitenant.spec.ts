@@ -87,6 +87,7 @@ function crearSuperficieRls(rowsPorTabla: Record<string, any[]>): SuperficieRls 
     const q: any = {
       where: () => q,
       orderBy: () => q,
+      groupBy: () => q,
       limit: () => q,
       then: (resolve: any, reject: any) => Promise.resolve(rows).then(resolve, reject),
     };

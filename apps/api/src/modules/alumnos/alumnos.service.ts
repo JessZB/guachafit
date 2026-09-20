@@ -13,6 +13,17 @@ import {
   or,
   isNull,
   isNotNull,
+  ilike,
+  lt,
+  gt,
+  inArray,
+  ne,
+  notInArray,
+  count,
+  countDistinct,
+  desc,
+  asc,
+  cuotasMembresia,
   usuarios,
   perfilesAlumno,
   perfilesEntrenador,
@@ -26,10 +37,43 @@ import {
   PerfilAlumnoDetalleDTO,
   FiltroDirectorioAlumnosDTO,
   RestaurarAlumnoDTO,
+  ResumenDirectorioAlumnosDTO,
+  DirectorioAlumnosDTO,
+  LIMITE_DIRECTORIO_ALUMNOS_POR_DEFECTO,
   Rol,
   EstadoUsuario,
   EstadoAlumno,
+  EstadoCuota,
+  Modalidad,
 } from '@guachafit/shared';
+
+/**
+ * Escapa `%`, `_` y `\` de un término de búsqueda para usarlo como patrón LIKE literal
+ * (Postgres usa `\` como escape por defecto en `ILIKE`).
+ */
+function escaparPatronLike(texto: string): string {
+  return texto.replace(/[\\%_]/g, (caracter) => `\\${caracter}`);
+}
+
+/**
+ * WU23: regla ÚNICA de "cuota en mora" (idéntica a la bandeja "Alumnos en Mora" del dashboard,
+ * `entrenador.service.ts`):
+ * - la cuota está marcada como VENCIDA, o
+ * - su fecha de corte ya pasó, tiene saldo pendiente y su estado no es AL_DIA/ANULADA.
+ *
+ * Se usa tanto para el COUNT del resumen del directorio como para hidratar `semaforoPago` por
+ * fila: una sola definición, cero divergencia entre el KPI "En Mora" y la lista filtrada.
+ */
+function condicionCuotaEnMora(ahora: Date) {
+  return or(
+    eq(cuotasMembresia.estado, EstadoCuota.VENCIDA),
+    and(
+      lt(cuotasMembresia.fechaCorteUtc, ahora),
+      gt(cuotasMembresia.saldoPendienteUsd, '0'),
+      notInArray(cuotasMembresia.estado, [EstadoCuota.AL_DIA, EstadoCuota.ANULADA])
+    )
+  )!;
+}
 
 @Injectable()
 export class AlumnosService {
@@ -459,16 +503,28 @@ export class AlumnosService {
 
   /**
    * Listar Directorio de Alumnos del Entrenador (RF-011, RF-012)
+   *
+   * WU19: respuesta paginada `{ items, total, limit, offset, resumen }`.
+   * - `items`: página actual (default 100, techo 100) con la búsqueda y filtros aplicados EN SQL,
+   *   con orden estable por `createdAtUtc` + `id` para que el offset no repita ni salte filas.
+   * - `total`: COUNT real de filas que cumplen la consulta (sin traer el resto a memoria).
+   * - `resumen`: contadores de la cartera COMPLETA (COUNT en el servidor) para los KPIs del
+   *   directorio; no dependen de la página, la búsqueda ni los filtros.
+   *
+   * `incluirArchivados: true` devuelve la cartera completa (vigentes + archivados); el default
+   * `false` mantiene la semántica histórica de solo alumnos vigentes.
    */
   async listarAlumnos(
     entrenadorId: string,
     filtro?: FiltroDirectorioAlumnosDTO
-  ): Promise<PerfilAlumnoDetalleDTO[]> {
+  ): Promise<DirectorioAlumnosDTO> {
+    const limit = filtro?.limit ?? LIMITE_DIRECTORIO_ALUMNOS_POR_DEFECTO;
+    const offset = filtro?.offset ?? 0;
+    const busqueda = (filtro?.busqueda ?? '').trim();
+
     const conditions = [eq(perfilesAlumno.entrenadorId, entrenadorId)];
 
-    if (filtro?.incluirArchivados) {
-      conditions.push(isNotNull(perfilesAlumno.deletedAtUtc));
-    } else {
+    if (!filtro?.incluirArchivados) {
       conditions.push(isNull(perfilesAlumno.deletedAtUtc));
     }
 
@@ -480,49 +536,214 @@ export class AlumnosService {
       conditions.push(eq(perfilesAlumno.modalidad, filtro.modalidad));
     }
 
-    const records = await this.db
-      .select({
-        id: perfilesAlumno.id,
-        usuarioId: perfilesAlumno.usuarioId,
-        entrenadorId: perfilesAlumno.entrenadorId,
-        tipoDocumento: perfilesAlumno.tipoDocumento,
-        numeroDocumento: perfilesAlumno.numeroDocumento,
-        nombres: perfilesAlumno.nombres,
-        apellidos: perfilesAlumno.apellidos,
-        email: usuarios.email,
-        fechaNacimiento: perfilesAlumno.fechaNacimiento,
-        telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
-        fichaSaludPrivada: perfilesAlumno.fichaSaludPrivada,
-        estadoActivacion: perfilesAlumno.estadoActivacion,
-        modalidad: perfilesAlumno.modalidad,
-        tasaFijadaOverride: perfilesAlumno.tasaFijadaOverride,
-        deletedAtUtc: perfilesAlumno.deletedAtUtc,
-        createdAtUtc: perfilesAlumno.createdAtUtc,
-      })
-      .from(perfilesAlumno)
-      .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
-      .where(and(...conditions));
-
-    let resultados = records.map((perfil) => this.sanitizarPerfilParaRol(perfil, Rol.ENTRENADOR));
-
-    if (filtro?.busqueda && filtro.busqueda.trim().length > 0) {
-      const q = filtro.busqueda.toLowerCase().trim();
-      resultados = resultados.filter(
-        (a) =>
-          a.nombres.toLowerCase().includes(q) ||
-          a.apellidos.toLowerCase().includes(q) ||
-          (a.email || '').toLowerCase().includes(q) ||
-          a.numeroDocumento.includes(q)
+    if (busqueda.length > 0) {
+      // Paridad con la búsqueda previa en memoria (case-insensitive por nombre/apellido/correo/
+      // documento) pero resuelta en SQL para poder paginar y contar de verdad. El patrón escapa
+      // `%`, `_` y `\` para que el texto del usuario se trate como literal.
+      const patron = `%${escaparPatronLike(busqueda)}%`;
+      conditions.push(
+        or(
+          ilike(perfilesAlumno.nombres, patron),
+          ilike(perfilesAlumno.apellidos, patron),
+          ilike(usuarios.email, patron),
+          ilike(perfilesAlumno.numeroDocumento, patron)
+        )!
       );
     }
 
-    if (filtro?.offset !== undefined || filtro?.limit !== undefined) {
-      const offset = filtro.offset ?? 0;
-      const limit = filtro.limit ?? 50;
-      resultados = resultados.slice(offset, offset + limit);
+    const whereDirectorio = and(...conditions);
+
+    const [filaTotal, records, resumen] = await Promise.all([
+      this.db
+        .select({ total: count() })
+        .from(perfilesAlumno)
+        .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
+        .where(whereDirectorio),
+      this.db
+        .select({
+          id: perfilesAlumno.id,
+          usuarioId: perfilesAlumno.usuarioId,
+          entrenadorId: perfilesAlumno.entrenadorId,
+          tipoDocumento: perfilesAlumno.tipoDocumento,
+          numeroDocumento: perfilesAlumno.numeroDocumento,
+          nombres: perfilesAlumno.nombres,
+          apellidos: perfilesAlumno.apellidos,
+          email: usuarios.email,
+          fechaNacimiento: perfilesAlumno.fechaNacimiento,
+          telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
+          fichaSaludPrivada: perfilesAlumno.fichaSaludPrivada,
+          estadoActivacion: perfilesAlumno.estadoActivacion,
+          modalidad: perfilesAlumno.modalidad,
+          tasaFijadaOverride: perfilesAlumno.tasaFijadaOverride,
+          deletedAtUtc: perfilesAlumno.deletedAtUtc,
+          createdAtUtc: perfilesAlumno.createdAtUtc,
+        })
+        .from(perfilesAlumno)
+        .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
+        .where(whereDirectorio)
+        .orderBy(desc(perfilesAlumno.createdAtUtc), asc(perfilesAlumno.id))
+        .limit(limit)
+        .offset(offset),
+      this.calcularResumenDirectorio(entrenadorId),
+    ]);
+
+    // WU23: semáforo de pago real por fila (misma regla de mora que `resumen.morosos`) para que
+    // la pestaña "En Mora" y los badges de fila coincidan con el KPI del servidor.
+    const semaforosPago = await this.hidratarSemaforoPago(
+      entrenadorId,
+      records.map((perfil) => perfil.usuarioId)
+    );
+
+    const items = records.map((perfil) => ({
+      ...this.sanitizarPerfilParaRol(perfil, Rol.ENTRENADOR),
+      // El helper asigna una entrada por cada `usuarioId` recibido: siempre hay valor.
+      semaforoPago: semaforosPago.get(perfil.usuarioId)!,
+    }));
+
+    return {
+      items,
+      total: Number(filaTotal[0]?.total ?? 0),
+      limit,
+      offset,
+      resumen,
+    };
+  }
+
+  /**
+   * WU19: contadores reales de la cartera para los KPIs del directorio.
+   *
+   * Tres COUNT en el servidor (jamás se traen los perfiles a memoria):
+   * 1. Agrupado de alumnos vigentes por estado + modalidad (suma de grupos).
+   * 2. Archivados (soft-deleted).
+   * 3. Morosos: alumnos vigentes con al menos una cuota vencida; se reutiliza la misma regla
+   *    de la bandeja "Alumnos en Mora" del dashboard (`entrenador.service.ts`) para no divergir.
+   */
+  private async calcularResumenDirectorio(
+    entrenadorId: string
+  ): Promise<ResumenDirectorioAlumnosDTO> {
+    const ahora = new Date();
+
+    const [grupos, filaArchivados, filaMorosos] = await Promise.all([
+      this.db
+        .select({
+          estadoActivacion: perfilesAlumno.estadoActivacion,
+          modalidad: perfilesAlumno.modalidad,
+          total: count(),
+        })
+        .from(perfilesAlumno)
+        .where(
+          and(
+            eq(perfilesAlumno.entrenadorId, entrenadorId),
+            isNull(perfilesAlumno.deletedAtUtc)
+          )
+        )
+        .groupBy(perfilesAlumno.estadoActivacion, perfilesAlumno.modalidad),
+      this.db
+        .select({ total: count() })
+        .from(perfilesAlumno)
+        .where(
+          and(
+            eq(perfilesAlumno.entrenadorId, entrenadorId),
+            isNotNull(perfilesAlumno.deletedAtUtc)
+          )
+        ),
+      this.db
+        .select({ total: countDistinct(cuotasMembresia.clienteId) })
+        .from(cuotasMembresia)
+        .innerJoin(
+          perfilesAlumno,
+          and(
+            eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId),
+            eq(perfilesAlumno.entrenadorId, entrenadorId),
+            isNull(perfilesAlumno.deletedAtUtc)
+          )
+        )
+        .where(
+          and(
+            eq(cuotasMembresia.entrenadorId, entrenadorId),
+            condicionCuotaEnMora(ahora)
+          )
+        ),
+    ]);
+
+    const resumen: ResumenDirectorioAlumnosDTO = {
+      total: 0,
+      activos: 0,
+      pausados: 0,
+      morosos: Number(filaMorosos[0]?.total ?? 0),
+      presenciales: 0,
+      remotos: 0,
+      archivados: Number(filaArchivados[0]?.total ?? 0),
+    };
+
+    for (const grupo of grupos) {
+      const cantidad = Number(grupo.total ?? 0);
+      resumen.total += cantidad;
+      if (grupo.estadoActivacion === EstadoAlumno.ACTIVO) resumen.activos += cantidad;
+      if (grupo.estadoActivacion === EstadoAlumno.INACTIVO_PAUSADO) resumen.pausados += cantidad;
+      if (grupo.modalidad === Modalidad.PRESENCIAL) resumen.presenciales += cantidad;
+      if (grupo.modalidad === Modalidad.REMOTO) resumen.remotos += cantidad;
+    }
+    resumen.total += resumen.archivados;
+
+    return resumen;
+  }
+
+  /**
+   * WU23: hidrata `semaforoPago` de la página listada del directorio.
+   *
+   * Contexto: la pestaña "En Mora" y los badges de fila dependían de `semaforoPago`, un campo
+   * que ninguna ruta del API completaba (siempre `undefined` => la UI asumía "Al día"). Con el
+   * KPI `resumen.morosos` ya real, la pestaña decía "En Mora (N)" y la lista mostraba 0 filas.
+   *
+   * Dos consultas en lote sobre las cuotas de los alumnos listados (sin N+1), coherentes con la
+   * MISMA condición de mora del resumen (`condicionCuotaEnMora`):
+   * 1. `moroso`: tiene al menos una cuota que cumple la condición de mora.
+   * 2. `al_dia`: tiene al menos una cuota no anulada que no está en mora.
+   * 3. `sin_cuota`: no tiene ninguna cuota registrada (ni vigente ni vencida).
+   */
+  private async hidratarSemaforoPago(
+    entrenadorId: string,
+    alumnoUsuarioIds: string[]
+  ): Promise<Map<string, 'al_dia' | 'moroso' | 'sin_cuota'>> {
+    const semaforos = new Map<string, 'al_dia' | 'moroso' | 'sin_cuota'>();
+    if (alumnoUsuarioIds.length === 0) return semaforos;
+
+    const ahora = new Date();
+    const [filasMorosas, filasConCuota] = await Promise.all([
+      this.db
+        .select({ clienteId: cuotasMembresia.clienteId })
+        .from(cuotasMembresia)
+        .where(
+          and(
+            eq(cuotasMembresia.entrenadorId, entrenadorId),
+            inArray(cuotasMembresia.clienteId, alumnoUsuarioIds),
+            condicionCuotaEnMora(ahora)
+          )
+        ),
+      this.db
+        .select({ clienteId: cuotasMembresia.clienteId })
+        .from(cuotasMembresia)
+        .where(
+          and(
+            eq(cuotasMembresia.entrenadorId, entrenadorId),
+            inArray(cuotasMembresia.clienteId, alumnoUsuarioIds),
+            ne(cuotasMembresia.estado, EstadoCuota.ANULADA)
+          )
+        ),
+    ]);
+
+    const enMora = new Set(filasMorosas.map((fila) => fila.clienteId));
+    const conCuota = new Set(filasConCuota.map((fila) => fila.clienteId));
+
+    for (const usuarioId of alumnoUsuarioIds) {
+      semaforos.set(
+        usuarioId,
+        enMora.has(usuarioId) ? 'moroso' : conCuota.has(usuarioId) ? 'al_dia' : 'sin_cuota'
+      );
     }
 
-    return resultados;
+    return semaforos;
   }
 
   /**

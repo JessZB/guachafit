@@ -504,7 +504,11 @@ export class AntropometriaService {
    */
   async listarPendientes(coachId: string): Promise<ControlAntropometricoDetalleDTO[]> {
     const alumnosCoach = await this.db
-      .select({ usuarioId: perfilesAlumno.usuarioId })
+      .select({
+        usuarioId: perfilesAlumno.usuarioId,
+        nombres: perfilesAlumno.nombres,
+        apellidos: perfilesAlumno.apellidos,
+      })
       .from(perfilesAlumno)
       .where(eq(perfilesAlumno.entrenadorId, coachId));
 
@@ -512,6 +516,11 @@ export class AntropometriaService {
     if (alumnoIds.length === 0) {
       return [];
     }
+
+    // WU20: nombre visible del alumno para la cola del coach (aditivo; el cliente tiene fallback).
+    const nombrePorAlumno = new Map(
+      alumnosCoach.map((a) => [a.usuarioId, `${a.nombres} ${a.apellidos}`])
+    );
 
     const rows = await this.db
       .select()
@@ -524,7 +533,9 @@ export class AntropometriaService {
       )
       .orderBy(desc(controlesAntropometricos.fechaEvaluacion));
 
-    return Promise.all(rows.map((row) => this.hidratarControl(row)));
+    return Promise.all(
+      rows.map((row) => this.hidratarControl(row, true, nombrePorAlumno.get(row.alumnoId) ?? null))
+    );
   }
 
   /**
@@ -571,7 +582,8 @@ export class AntropometriaService {
 
   private async hidratarControl(
     control: any,
-    cargarFotos = true
+    cargarFotos = true,
+    alumnoNombre: string | null = null
   ): Promise<ControlAntropometricoDetalleDTO> {
     let fotos: FotoAntropometriaDetalleDTO[] = [];
     if (cargarFotos) {
@@ -613,6 +625,7 @@ export class AntropometriaService {
     return {
       id: control.id,
       alumnoId: control.alumnoId,
+      alumnoNombre,
       fechaEvaluacion: control.fechaEvaluacion,
       pesoKg: control.pesoKg,
       alturaCm: control.alturaCm ?? null,

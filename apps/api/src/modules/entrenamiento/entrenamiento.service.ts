@@ -17,11 +17,13 @@ import {
   and,
   or,
   isNull,
+  isNotNull,
   desc,
   asc,
   inArray,
   gte,
   lte,
+  max,
   sql,
   ejerciciosCatalogo,
   sesionesEntrenamiento,
@@ -1720,6 +1722,9 @@ export class EntrenamientoService {
    * - `tienePlanActivo` permite a la UI distinguir "sin plan" de un ROJO 0/0 engañoso.
    * - `alumnoPerfilId` expone `perfiles_alumno.id` (el `GET /alumnos/:id` espera ese ID) para que
    *   la UI pueda enlazar al expediente; `alumnoId` sigue siendo el `usuarios.id` de sesiones/rutinas.
+   * - `diasInactivo`/`ultimaSesionUtc` salen de la ÚLTIMA sesión completada real del alumno
+   *   (consulta agregada `MAX(fecha_fin_utc) GROUP BY alumno`, una fila por alumno). Un alumno
+   *   sin ninguna sesión completada mantiene `null` + `7` (default RN-03), sin inventar fechas.
    * - Rendimiento: 4 consultas en lote independientes del número de alumnos (sin N+1).
    * - Orden por nivel de riesgo (ROJO al tope) y racha efectiva RN-02 (WU1).
    */
@@ -1786,22 +1791,30 @@ export class EntrenamientoService {
       );
     }
 
-    // 4. Última sesión completada histórica por alumno (en lote) para la inactividad.
-    const completadasHistoricas = await this.db
-      .select()
+    // 4. Última sesión completada REAL por alumno (en lote). WU23: una consulta agregada
+    //    `MAX(fecha_fin_utc) GROUP BY alumno_id` devuelve una fila por alumno (jamás el
+    //    histórico en crudo) con la última sesión real, aunque sea más antigua que la ventana
+    //    de 30 días de WU19. Antes, un alumno con historial viejo quedaba en `diasInactivo = 7`
+    //    (default) y `ultimaSesionUtc = null`, y la UI lo mostraba como inactividad falsa.
+    const ultimasSesiones = await this.db
+      .select({
+        alumnoId: sesionesEntrenamiento.alumnoId,
+        ultimaSesionUtc: max(sesionesEntrenamiento.fechaFinUtc),
+      })
       .from(sesionesEntrenamiento)
       .where(
         and(
           inArray(sesionesEntrenamiento.alumnoId, alumnoIds),
-          eq(sesionesEntrenamiento.estado, EstadoSesion.COMPLETADA)
+          eq(sesionesEntrenamiento.estado, EstadoSesion.COMPLETADA),
+          isNotNull(sesionesEntrenamiento.fechaFinUtc)
         )
       )
-      .orderBy(desc(sesionesEntrenamiento.fechaFinUtc));
+      .groupBy(sesionesEntrenamiento.alumnoId);
 
-    const ultimaPorAlumno = new Map<string, (typeof completadasHistoricas)[number]>();
-    for (const sesion of completadasHistoricas) {
-      if (sesion.fechaFinUtc && !ultimaPorAlumno.has(sesion.alumnoId)) {
-        ultimaPorAlumno.set(sesion.alumnoId, sesion);
+    const ultimaPorAlumno = new Map<string, Date>();
+    for (const fila of ultimasSesiones) {
+      if (fila.alumnoId && fila.ultimaSesionUtc) {
+        ultimaPorAlumno.set(fila.alumnoId, new Date(fila.ultimaSesionUtc));
       }
     }
 
@@ -1820,10 +1833,10 @@ export class EntrenamientoService {
       let diasInactivo = 7; // Inactividad máxima por defecto si nunca ha entrenado
       let ultimaSesionUtc: string | null = null;
 
-      const ultimaSesion = ultimaPorAlumno.get(alumno.usuarioId);
-      if (ultimaSesion?.fechaFinUtc) {
-        ultimaSesionUtc = toIsoUtcString(ultimaSesion.fechaFinUtc);
-        const fechaLocalUltima = obtenerFechaLocalYyyyMmDd(ultimaSesion.fechaFinUtc, timezone);
+      const ultimaFechaSesion = ultimaPorAlumno.get(alumno.usuarioId);
+      if (ultimaFechaSesion) {
+        ultimaSesionUtc = toIsoUtcString(ultimaFechaSesion);
+        const fechaLocalUltima = obtenerFechaLocalYyyyMmDd(ultimaFechaSesion, timezone);
         diasInactivo = diferenciaDiasCalendario(fechaLocalUltima, ventana.hoyLocal);
       }
 
