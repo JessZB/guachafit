@@ -169,6 +169,17 @@ describe('parsearNotasAlumno (feedback visible del alumno)', () => {
     expect(resultado.textoLibre).toBe('Buen bombeo en cuadriceps');
   });
 
+  it('parsea el tag de descanso promedio con separador interno "·" como una sola etiqueta', () => {
+    const resultado = parsearNotasAlumno(
+      '[RPE: 8.0/10] • [Descanso promedio: 2 min (planificado: 1 min 30 s · +30 s)] • Buen ritmo'
+    );
+    expect(resultado.etiquetas).toEqual([
+      { titulo: 'RPE', valor: '8.0/10' },
+      { titulo: 'Descanso promedio', valor: '2 min (planificado: 1 min 30 s · +30 s)' },
+    ]);
+    expect(resultado.textoLibre).toBe('Buen ritmo');
+  });
+
   it('acepta texto plano sin etiquetas', () => {
     const resultado = parsearNotasAlumno('Todo bien, subí carga en prensa');
     expect(resultado.etiquetas).toEqual([]);

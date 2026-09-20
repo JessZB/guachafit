@@ -64,6 +64,12 @@ import {
   formatRangoHorasLocal,
 } from '../../lib/date-format';
 import { estimarCumpleRachaPorVolumen } from '../../lib/racha';
+import {
+  descansosRealesEntreSeries,
+  formatearDeltaSegundos,
+  formatearSegundos,
+  marcarInicioSerieReal,
+} from '../../lib/sesion-tiempos';
 
 const DEMO_BLOQUES_CATALOGO = [
   {
@@ -831,6 +837,75 @@ export function EntrenamientoPage() {
     limpiarBorrador(clave);
   };
 
+  // ===========================================================================
+  // WU17: CAPTURA DEL INICIO REAL DE LA SERIE (medición del descanso)
+  // ===========================================================================
+  //
+  // Semántica: `timestampInicioUtc` es la marca del momento en que el alumno EMPIEZA una
+  // serie concreta. Se fija UNA sola vez y solo en series pendientes de una sesión
+  // EnProgreso; el prefill programático (heredar peso/reps de la serie anterior) NO la
+  // dispara porque no pasa por estos handlers. El descanso real se deriva luego:
+  //   descanso real = inicio(serie N) − completada(serie N−1)
+  // Sin marca no se inventa medición (la UI muestra '—').
+
+  /**
+   * Fija el inicio real sobre la serie indicada (mutando el objeto serie que los handlers ya
+   * clonaron en el estado optimista). Devuelve `true` solo si la marca cambió. No marca series
+   * completadas ni sobrescribe una marca existente.
+   */
+  const marcarInicioEnSerie = useCallback(
+    (serie: SerieRegistroDetalleDTO): boolean => {
+      if (!sesion || sesion.estado !== EstadoSesion.EN_PROGRESO) return false;
+      const conMarca = marcarInicioSerieReal(serie, new Date().toISOString());
+      if (!conMarca) return false;
+      serie.timestampInicioUtc = conMarca.timestampInicioUtc;
+      return true;
+    },
+    [sesion]
+  );
+
+  /**
+   * Afordancia explícita "Iniciar serie" (▶) para la serie pendiente que aún no tiene marca.
+   * El envío viaja después dentro del MISMO batch de la serie (al completarla o ajustar el
+   * temporizador): no se crean endpoints ni mutaciones parciales nuevas.
+   */
+  const handleIniciarSerie = (ejercicioIndex: number, serieIndex: number) => {
+    if (!sesion || sesion.estado !== EstadoSesion.EN_PROGRESO) return;
+    const original = sesion.ejercicios[ejercicioIndex]?.series[serieIndex];
+    if (!original) return;
+    const serie = { ...original };
+    if (!marcarInicioEnSerie(serie)) return;
+    triggerHaptic('selection');
+
+    const updated: SesionEntrenamientoDetalleDTO = {
+      ...sesion,
+      ejercicios: sesion.ejercicios.map((ejercicio, indice) =>
+        indice === ejercicioIndex
+          ? {
+              ...ejercicio,
+              series: ejercicio.series.map((s, indiceSerie) =>
+                indiceSerie === serieIndex ? serie : s
+              ),
+            }
+          : ejercicio
+      ),
+    };
+    setSesion(updated);
+
+    // Modo demo: interacción local sin cache ni mutaciones reales.
+    if (isDemoMode) return;
+
+    offlineDb.rutinaHoy
+      .put({
+        id: updated.id,
+        alumnoId: user?.id || '',
+        fechaProgramada: updated.fechaProgramada,
+        sesion: updated,
+        updatedAt: Date.now(),
+      })
+      .catch(() => {});
+  };
+
   // Notificación de cambio de duración en el temporizador (Alumno ajusta descanso)
   const handleRestDurationChange = useCallback(
     async (newSeconds: number) => {
@@ -879,6 +954,8 @@ export function EntrenamientoPage() {
                   rpe: serie.rpe,
                   descansoSegundos: newSeconds,
                   completada: serie.completada,
+                  // WU17: la marca de inicio viaja en el mismo batch (undefined = no se envía).
+                  timestampInicioUtc: serie.timestampInicioUtc ?? undefined,
                   timestampCompletadaUtc: serie.timestampCompletadaUtc,
                 },
               ],
@@ -985,6 +1062,8 @@ export function EntrenamientoPage() {
           rpe: serie.rpe,
           descansoSegundos: serie.descansoSegundos ?? null,
           completada: willBeCompleted,
+          // WU17: marca de inicio real capturada en esta sesión (si existe) en el mismo batch.
+          timestampInicioUtc: serie.timestampInicioUtc ?? undefined,
           timestampCompletadaUtc: serie.timestampCompletadaUtc,
         },
       ],
@@ -1030,6 +1109,9 @@ export function EntrenamientoPage() {
     if (!sesion) return;
     const updated = { ...sesion };
     const serie = updated.ejercicios[ejercicioIndex].series[serieIndex];
+
+    // WU17: editar pesos/reps/RPE es interacción real => marca el inicio si aún no existe.
+    marcarInicioEnSerie(serie);
 
     if (field === 'pesoKg') {
       // RN-01: el alumno escribe en su unidad; se valida y se persiste SIEMPRE en kg.
@@ -1090,6 +1172,10 @@ export function EntrenamientoPage() {
     triggerHaptic('light');
     const updated = { ...sesion };
     const serie = updated.ejercicios[ejercicioIndex].series[serieIndex];
+
+    // WU17: tocar los steppers de peso/reps es interacción real => marca el inicio si falta.
+    marcarInicioEnSerie(serie);
+
     if (field === 'pesoKg') {
       // RN-01: el stepper avanza en la unidad visible (±2.5 kg / ±5 lb) sin deriva decimal.
       const clave = `${serie.id}:pesoKg`;
@@ -1164,8 +1250,15 @@ export function EntrenamientoPage() {
       const avgReal = Math.round(totalDescansoReal / countSeriesDescanso);
       const avgPrescrito = Math.round(totalDescansoPrescrito / countSeriesDescanso);
       const diff = avgReal - avgPrescrito;
-      const diffStr = diff > 0 ? `+${diff}s` : diff < 0 ? `${diff}s` : 'exacto';
-      descansoTag = `[Descanso prom: ${avgReal}s (prescrito: ${avgPrescrito}s • ${diffStr})]`;
+      const diffStr =
+        diff > 0
+          ? `+${formatearSegundos(diff)}`
+          : diff < 0
+          ? `${formatearSegundos(-diff)} menos`
+          : 'exacto';
+      // Separador interno "·" (no "•") para que parsearNotasAlumno lo trate
+      // como una sola etiqueta y no parta el tag en dos.
+      descansoTag = `[Descanso promedio: ${formatearSegundos(avgReal)} (planificado: ${formatearSegundos(avgPrescrito)} · ${diffStr})]`;
     }
 
     const notasCompletas = [
@@ -1923,6 +2016,8 @@ export function EntrenamientoPage() {
       <div className="space-y-4">
         {sesion.ejercicios.map((ejercicioSesion, ejIdx) => {
           const prescripcion = calcularResumenPrescripcion(ejercicioSesion);
+          // WU17: descanso real derivado por serie (inicio N − completada N−1); null sin marcas.
+          const descansosReales = descansosRealesEntreSeries(ejercicioSesion.series);
           const rpeSugerido = rpeSugeridoPorEjercicio[ejercicioSesion.id] ?? null;
           const pesoPrescritoTexto =
             prescripcion.pesosKg.length === 0
@@ -1957,7 +2052,7 @@ export function EntrenamientoPage() {
                   </span>
                   <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-secondary text-foreground border border-border">
                     <Timer className="h-3 w-3 text-primary" />
-                    <span>Descanso: {ejercicioSesion.descansoPrescritoSegundos || 90}s</span>
+                    <span>Descanso: {formatearSegundos(ejercicioSesion.descansoPrescritoSegundos || 90)}</span>
                   </span>
                   {/* Escenario 1: video demostrativo del catálogo (si existe) */}
                   {videoUrl && (
@@ -2095,9 +2190,9 @@ export function EntrenamientoPage() {
                     {prescritoSerie && (
                       <span
                         className="block text-center text-[9px] font-bold text-muted-foreground leading-tight mt-0.5 truncate"
-                        title={`Prescrito: ${formatearPesoConUnidad(prescritoSerie, unidadPeso)}`}
+                        title={`Plan: ${formatearPesoConUnidad(prescritoSerie, unidadPeso)}`}
                       >
-                        Presc. {formatearPesoConUnidad(prescritoSerie, unidadPeso)}
+                        Plan: {formatearPesoConUnidad(prescritoSerie, unidadPeso)}
                       </span>
                     )}
                   </div>
@@ -2141,7 +2236,7 @@ export function EntrenamientoPage() {
                       </button>
                     </div>
                     <span className="block text-center text-[9px] font-bold text-muted-foreground leading-tight mt-0.5">
-                      Obj. {serie.repsObjetivo}
+                      Objetivo: {serie.repsObjetivo} reps
                     </span>
                   </div>
 
@@ -2182,6 +2277,31 @@ export function EntrenamientoPage() {
                     </button>
                   </div>
                   </div>
+
+                  {/* WU17: captura sin fricción del inicio real (mide el descanso de la próxima serie) */}
+                  {!isReadOnly && !serie.completada && !serie.timestampInicioUtc && (
+                    <button
+                      type="button"
+                      onClick={() => handleIniciarSerie(ejIdx, sIdx)}
+                      title="Marca el inicio de esta serie para medir tu descanso real"
+                      className="mt-1.5 w-full py-1.5 rounded-lg inline-flex items-center justify-center gap-1 text-[10px] font-bold bg-primary/10 text-primary border border-primary/25 hover:bg-primary/20 transition-colors cursor-pointer active:scale-95"
+                    >
+                      <Play className="h-3 w-3 fill-current" />
+                      <span>Iniciar serie</span>
+                    </button>
+                  )}
+                  {!isReadOnly && !serie.completada && serie.timestampInicioUtc && (
+                    <p className="mt-1.5 px-1 text-[10px] font-mono font-bold text-primary">
+                      Iniciada {formatFechaHoraLocal(serie.timestampInicioUtc) ?? ''}
+                    </p>
+                  )}
+                  {/* WU17: feedback inmediato del descanso real al cerrar la serie */}
+                  {serie.completada && descansosReales[sIdx] !== null && (
+                    <p className="mt-1.5 px-1 text-[10px] font-mono font-bold text-primary flex items-center gap-1">
+                      <Zap className="h-3 w-3 shrink-0" />
+                      <span>Descanso real: {formatearDeltaSegundos(descansosReales[sIdx])}</span>
+                    </p>
+                  )}
 
                   {/* WU3b: error inline, nunca silencioso */}
                   {errorSerie && (
@@ -2342,11 +2462,11 @@ export function EntrenamientoPage() {
                     <Timer className="h-4 w-4 text-primary" />
                     <div>
                       <span className="font-bold text-foreground block">Descanso Promedio</span>
-                      <span className="text-[11px] text-muted-foreground">Prescrito: {avgPresc}s</span>
+                      <span className="text-[11px] text-muted-foreground">Planificado: {formatearSegundos(avgPresc)}</span>
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="font-mono font-black text-sm text-foreground">{avgReal}s</span>
+                    <span className="font-mono font-black text-sm text-foreground">{formatearSegundos(avgReal)}</span>
                     <span
                       className={`text-[10px] font-bold block ${
                         diff > 15
@@ -2356,7 +2476,11 @@ export function EntrenamientoPage() {
                           : 'text-emerald-400'
                       }`}
                     >
-                      {diff > 0 ? `+${diff}s extra` : diff < 0 ? `${diff}s menos` : 'Adherido al plan'}
+                      {diff > 0
+                        ? `+${formatearSegundos(diff)} extra`
+                        : diff < 0
+                        ? `${formatearSegundos(-diff)} menos`
+                        : 'Adherido al plan'}
                     </span>
                   </div>
                 </div>

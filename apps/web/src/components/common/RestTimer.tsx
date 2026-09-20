@@ -9,6 +9,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { triggerHaptic } from '../../lib/haptics';
+import { formatearSegundos } from '../../lib/sesion-tiempos';
 
 interface RestTimerProps {
   initialSeconds?: number;
@@ -182,14 +183,14 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
             {isRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 ml-0.5" />}
           </button>
 
-          {/* Botón rápido +30s */}
+          {/* Botón rápido +30 s */}
           <button
             type="button"
             onClick={() => adjustSeconds(30)}
             title="Agregar 30 segundos"
             className="px-2.5 py-1 rounded-lg bg-secondary/80 hover:bg-secondary text-xs font-bold text-foreground cursor-pointer transition-colors"
           >
-            +30s
+            +{formatearSegundos(30)}
           </button>
 
           {/* Botón Expandir a Pantalla Completa */}
@@ -291,7 +292,7 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
                     : 'bg-secondary/60 hover:bg-secondary border-border text-foreground'
                 }`}
               >
-                {sec < 60 ? `${sec}s` : `${sec / 60} min`}
+                {formatearSegundos(sec)}
               </button>
             ))}
           </div>
@@ -305,7 +306,7 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
                 className="px-2.5 py-1.5 rounded-xl bg-secondary/80 hover:bg-secondary text-xs font-black text-foreground cursor-pointer"
                 title="-15 segundos"
               >
-                -15s
+                -{formatearSegundos(15)}
               </button>
               <button
                 type="button"
@@ -313,7 +314,7 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
                 className="px-2.5 py-1.5 rounded-xl bg-secondary/80 hover:bg-secondary text-xs font-black text-foreground cursor-pointer"
                 title="+30 segundos"
               >
-                +30s
+                +{formatearSegundos(30)}
               </button>
             </div>
 

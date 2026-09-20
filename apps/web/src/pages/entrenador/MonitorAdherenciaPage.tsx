@@ -1,24 +1,38 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient, ApiError } from '../../lib/api-client';
+import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
-import { obtenerTimezoneDispositivo, formatFechaHoraLocal } from '../../lib/date-format';
 import {
+  obtenerTimezoneDispositivo,
+  formatFechaCalendario,
+  formatFechaHoraLocal,
+} from '../../lib/date-format';
+import { crearMonitorAdherenciaDemo } from '../../lib/demo-monitor-adherencia';
+import { sesionesDemoAlumno } from '../../lib/demo-sesiones';
+import {
+  etiquetaEstadoSesion,
   etiquetaMonitorAdherencia,
   pesoOrdenRiesgoMonitor,
   rutaExpedienteMonitor,
   type TonoSemaforo,
 } from '../../lib/adherencia';
-import { MonitorAdherenciaSemanalDTO } from '@guachafit/shared';
+import { MonitorAdherenciaSemanalDTO, SesionEntrenamientoDetalleDTO } from '@guachafit/shared';
+import { DetalleSesionEntrenamiento } from '../../components/entrenador/DetalleSesionEntrenamiento';
 import {
   Activity,
   AlertTriangle,
   ArrowRight,
   CalendarClock,
+  ChevronDown,
   ChevronRight,
+  Dumbbell,
+  ExternalLink,
   Flame,
+  History,
   RefreshCw,
   Users,
+  X,
 } from 'lucide-react';
 
 type OrdenMonitor = 'riesgo' | 'nombre';
@@ -73,17 +87,305 @@ function porcentajeSeguro(valor: string): number {
   return Math.max(0, Math.min(100, numerico));
 }
 
+/**
+ * WU15: modal "Actividad de {alumno}" con las últimas sesiones del alumno sin salir del monitor.
+ *
+ * Es un componente propio para que cada apertura arranque con estado limpio (fetch + acordeón).
+ * En demo lee el fixture local (`sesionesDemoAlumno`), cero llamadas API; en real consulta
+ * `GET /sesiones/alumno/:alumnoId/historial?limit=10` con loading, error y reintento.
+ *
+ * A11y: role dialog, Escape cierra, foco inicial en el botón de cierre y scroll interno.
+ */
+function ModalActividadAlumno({
+  alumno,
+  onCerrar,
+}: {
+  alumno: MonitorAdherenciaSemanalDTO;
+  onCerrar: () => void;
+}) {
+  const { isDemoMode } = useAuth();
+  const [sesiones, setSesiones] = useState<SesionEntrenamientoDetalleDTO[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sesionExpandidaId, setSesionExpandidaId] = useState<string | null>(null);
+  const botonCerrarRef = useRef<HTMLButtonElement | null>(null);
+
+  const cargarHistorial = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      // El endpoint resuelve el perfil por `perfiles_alumno.id` o por `usuarioId`; se usa
+      // `alumnoId` (usuarioId, siempre presente en el DTO) para no depender del opcional.
+      const data = await apiClient<SesionEntrenamientoDetalleDTO[]>(
+        `/sesiones/alumno/${encodeURIComponent(alumno.alumnoId)}/historial?limit=10`
+      );
+      setSesiones(Array.isArray(data) ? data : []);
+    } catch (err) {
+      const detalle =
+        err instanceof ApiError
+          ? err.problem?.detail || err.message
+          : 'No pudimos cargar la actividad del alumno.';
+      setError(detalle);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [alumno.alumnoId]);
+
+  useEffect(() => {
+    // MODO DEMO EXPLÍCITO (isDemoMode): fixture local relativo a hoy y cero llamadas API.
+    if (isDemoMode) {
+      setSesiones(sesionesDemoAlumno(alumno.alumnoId));
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+    void cargarHistorial();
+  }, [isDemoMode, alumno.alumnoId, cargarHistorial]);
+
+  // La sesión más reciente arranca expandida; después el acordeón queda libre.
+  useEffect(() => {
+    setSesionExpandidaId(sesiones[0]?.id ?? null);
+  }, [sesiones]);
+
+  useEffect(() => {
+    // Foco inicial en el cierre al abrir; al desmontar se devuelve al disparador (tarjeta/botón).
+    const elementoPrevio = document.activeElement as HTMLElement | null;
+    botonCerrarRef.current?.focus();
+    return () => elementoPrevio?.focus?.();
+  }, []);
+
+  useEffect(() => {
+    const alPresionarTecla = (evento: KeyboardEvent) => {
+      if (evento.key === 'Escape') onCerrar();
+    };
+    document.addEventListener('keydown', alPresionarTecla);
+    return () => document.removeEventListener('keydown', alPresionarTecla);
+  }, [onCerrar]);
+
+  const etiquetaAlumno = etiquetaMonitorAdherencia(alumno);
+  const tonoAlumno = CLASES_TONO[etiquetaAlumno.tono];
+  const porcentajeAlumno = porcentajeSeguro(alumno.porcentajeCumplimientoSemanal);
+  const perfilId = (alumno.alumnoPerfilId ?? '').trim();
+  // La ficha leerá `?tab=entrenamiento` en otra unidad; aquí solo se genera el enlace.
+  const rutaFichaCompleta = perfilId
+    ? `/coach/alumnos/${encodeURIComponent(perfilId)}?tab=entrenamiento`
+    : null;
+
+  return (
+    <div
+      onClick={(evento) => {
+        if (evento.target === evento.currentTarget) onCerrar();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-actividad-titulo"
+        className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl bg-card border border-border shadow-2xl"
+      >
+        {/* Cabecera fija para poder cerrar sin perder el contexto al hacer scroll */}
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border/80 bg-card/95 backdrop-blur-sm p-5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="h-9 w-9 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <History className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <h2 id="modal-actividad-titulo" className="font-black text-base text-foreground truncate">
+                Actividad de {alumno.nombreCompleto}
+              </h2>
+              <p className="text-[11px] text-muted-foreground">
+                Últimas sesiones con series, cargas y tiempos reales.
+              </p>
+            </div>
+          </div>
+          <button
+            ref={botonCerrarRef}
+            type="button"
+            onClick={onCerrar}
+            className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+            title="Cerrar"
+            aria-label="Cerrar la actividad del alumno"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Resumen del alumno */}
+          <div className="p-3.5 rounded-2xl bg-secondary/30 border border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border ${tonoAlumno.chip}`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${tonoAlumno.punto}`} />
+                {etiquetaAlumno.texto}
+              </span>
+              {alumno.tienePlanActivo && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full border border-border/60">
+                  <Flame className="h-3 w-3 text-amber-400" />
+                  Racha: {alumno.rachaDiasConsecutivos}{' '}
+                  {alumno.rachaDiasConsecutivos === 1 ? 'día' : 'días'}
+                </span>
+              )}
+              {alumno.tienePlanActivo && !alumno.sinPendientesSemana && (
+                <span
+                  className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-secondary/60 border border-border/60 ${tonoAlumno.texto}`}
+                >
+                  {alumno.sesionesCompletadas}/{alumno.sesionesPrescritas} sesiones ·{' '}
+                  {porcentajeAlumno}%
+                </span>
+              )}
+            </div>
+            {rutaFichaCompleta && (
+              <Link
+                to={rutaFichaCompleta}
+                onClick={() => triggerHaptic('light')}
+                className="self-start inline-flex items-center gap-2 py-2 px-3 rounded-xl bg-primary text-primary-foreground font-bold text-[11px] shadow-md shadow-primary/20 hover:brightness-110 transition-all active:scale-95 shrink-0"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Abrir ficha completa
+              </Link>
+            )}
+          </div>
+
+          {/* Estados de carga / error / vacío */}
+          {isLoading && (
+            <div className="space-y-2" role="status" aria-live="polite">
+              <span className="sr-only">Cargando la actividad del alumno…</span>
+              {[0, 1].map((i) => (
+                <div
+                  key={i}
+                  className="h-20 rounded-2xl bg-secondary/30 border border-border/60 animate-pulse"
+                />
+              ))}
+            </div>
+          )}
+
+          {!isLoading && error && (
+            <div className="p-6 rounded-2xl bg-card border border-destructive/30 text-center space-y-2">
+              <AlertTriangle className="h-7 w-7 text-destructive mx-auto" />
+              <p className="text-xs font-bold text-foreground">No se pudo cargar la actividad</p>
+              <p className="text-[11px] text-muted-foreground">{error}</p>
+              <button
+                type="button"
+                onClick={() => cargarHistorial()}
+                className="inline-flex items-center gap-2 py-2 px-3 rounded-xl bg-primary text-primary-foreground font-bold text-[11px] shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Reintentar
+              </button>
+            </div>
+          )}
+
+          {!isLoading && !error && sesiones.length === 0 && (
+            <div className="p-8 rounded-2xl bg-card border border-dashed border-border/70 text-center space-y-2">
+              <CalendarClock className="h-8 w-8 text-muted-foreground mx-auto opacity-40" />
+              <p className="text-xs font-bold text-foreground">Sin sesiones registradas</p>
+              <p className="text-[11px] text-muted-foreground max-w-md mx-auto">
+                Cuando el alumno entrene, aquí verás el detalle de sus series, cargas y tiempos.
+              </p>
+            </div>
+          )}
+
+          {!isLoading && !error && sesiones.length > 0 && (
+            <div className="space-y-2.5">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                Últimas {sesiones.length} {sesiones.length === 1 ? 'sesión' : 'sesiones'}
+              </p>
+              {sesiones.map((sesion) => {
+                const expandida = sesionExpandidaId === sesion.id;
+                const etiquetaSesion = etiquetaEstadoSesion(sesion.estado, sesion.motivoOmision);
+                const fechaSesion =
+                  formatFechaHoraLocal(sesion.fechaInicioUtc) ??
+                  formatFechaCalendario(sesion.fechaProgramada) ??
+                  sesion.fechaProgramada;
+                const totalSeries = sesion.ejercicios.reduce(
+                  (total, ejercicio) => total + ejercicio.series.length,
+                  0
+                );
+
+                return (
+                  <div key={sesion.id} className="rounded-2xl border border-border/70 bg-card overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        triggerHaptic('selection');
+                        setSesionExpandidaId(expandida ? null : sesion.id);
+                      }}
+                      aria-expanded={expandida}
+                      aria-controls={`actividad-sesion-${sesion.id}`}
+                      className="w-full p-3.5 flex items-center justify-between gap-3 text-left hover:bg-secondary/30 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                          <Dumbbell className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="font-bold text-xs text-foreground truncate">{fechaSesion}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {sesion.ejercicios.length}{' '}
+                            {sesion.ejercicios.length === 1 ? 'ejercicio' : 'ejercicios'} · {totalSeries}{' '}
+                            {totalSeries === 1 ? 'serie' : 'series'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span
+                          className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${CLASES_TONO[etiquetaSesion.tono].chip}`}
+                        >
+                          {etiquetaSesion.texto}
+                        </span>
+                        <ChevronDown
+                          className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
+                            expandida ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </div>
+                    </button>
+                    {expandida && (
+                      <div
+                        id={`actividad-sesion-${sesion.id}`}
+                        role="region"
+                        aria-label={`Detalle de la sesión del ${fechaSesion}`}
+                        className="px-3.5 pb-3.5 animate-in fade-in-50 slide-in-from-top-2 duration-200"
+                      >
+                        <DetalleSesionEntrenamiento sesion={sesion} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function MonitorAdherenciaPage() {
+  const { isDemoMode } = useAuth();
   const [alumnos, setAlumnos] = useState<MonitorAdherenciaSemanalDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [orden, setOrden] = useState<OrdenMonitor>('riesgo');
+  const [alumnoActivo, setAlumnoActivo] = useState<MonitorAdherenciaSemanalDTO | null>(null);
 
   const timezone = useMemo(() => obtenerTimezoneDispositivo(), []);
 
   const cargarMonitor = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+
+    // MODO DEMO EXPLÍCITO (isDemoMode): fixture local relativo a hoy y cero llamadas API.
+    // En sesión real, un fallo se muestra con su error honesto y reintento.
+    if (isDemoMode) {
+      setAlumnos(crearMonitorAdherenciaDemo());
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const data = await apiClient<MonitorAdherenciaSemanalDTO[]>(
         `/entrenador/monitor-adherencia?timezone=${encodeURIComponent(timezone)}`
@@ -98,7 +400,7 @@ export function MonitorAdherenciaPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [timezone]);
+  }, [timezone, isDemoMode]);
 
   useEffect(() => {
     cargarMonitor();
@@ -140,13 +442,13 @@ export function MonitorAdherenciaPage() {
           <div>
             <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
               <Activity className="h-4 w-4" />
-              <span>Semáforo semanal · RF-001 RN-03</span>
+              <span>Cumplimiento semanal</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground mt-1">
-              Monitor de Alumnos
+              Seguimiento de Alumnos
             </h1>
             <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
-              Adherencia de la semana en curso por alumno, ordenada por nivel de riesgo.
+              Cumplimiento de la semana por alumno, ordenado por nivel de riesgo.
               Las horas se muestran en tu zona horaria local ({timezone}).
             </p>
           </div>
@@ -270,7 +572,12 @@ export function MonitorAdherenciaPage() {
               return (
                 <article
                   key={alumno.alumnoId}
-                  className="p-5 rounded-3xl bg-card border border-border/80 shadow-xs hover:border-primary/40 transition-colors space-y-4"
+                  onClick={() => {
+                    triggerHaptic('light');
+                    setAlumnoActivo(alumno);
+                  }}
+                  title={`Ver la actividad reciente de ${alumno.nombreCompleto}`}
+                  className="p-5 rounded-3xl bg-card border border-border/80 shadow-xs hover:border-primary/40 transition-colors space-y-4 cursor-pointer"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
@@ -316,6 +623,8 @@ export function MonitorAdherenciaPage() {
                       </span>
                       <Link
                         to={rutaExpedienteMonitor(alumno.alumnoPerfilId)}
+                        onClick={(evento) => evento.stopPropagation()}
+                        onKeyDown={(evento) => evento.stopPropagation()}
                         className="p-2 rounded-xl bg-secondary/70 hover:bg-secondary text-muted-foreground hover:text-foreground border border-border/60 transition-colors focus-visible:outline-2 focus-visible:outline-primary"
                         title={`Abrir el expediente de ${alumno.nombreCompleto}`}
                         aria-label={`Abrir el expediente de ${alumno.nombreCompleto}`}
@@ -365,11 +674,35 @@ export function MonitorAdherenciaPage() {
                       semanal.
                     </p>
                   )}
+
+                  {/* Afordancia del modal: la tarjeta es clicable con puntero y este botón es el
+                      acceso real por teclado/AT (el chevron sigue siendo el atajo a la ficha). */}
+                  <button
+                    type="button"
+                    onClick={(evento) => {
+                      evento.stopPropagation();
+                      triggerHaptic('light');
+                      setAlumnoActivo(alumno);
+                    }}
+                    aria-haspopup="dialog"
+                    className="text-[10px] font-bold text-muted-foreground/80 hover:text-primary flex items-center gap-1.5 transition-colors cursor-pointer rounded-md focus-visible:outline-2 focus-visible:outline-primary"
+                  >
+                    <History className="h-3 w-3" />
+                    Ver últimas sesiones en detalle
+                  </button>
                 </article>
               );
             })}
           </div>
         </div>
+      )}
+
+      {/* WU15: modal de actividad reciente (detalle en sitio sin salir del monitor) */}
+      {alumnoActivo && (
+        <ModalActividadAlumno
+          alumno={alumnoActivo}
+          onCerrar={() => setAlumnoActivo(null)}
+        />
       )}
     </div>
   );

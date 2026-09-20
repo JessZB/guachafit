@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { apiClient } from '../../lib/api-client';
 import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
@@ -14,6 +14,12 @@ import {
   type TonoSemaforo,
 } from '../../lib/adherencia';
 import { normalizarPesoPrescritoTexto } from '../../lib/weight-unit';
+import { sesionesDemoAlumno } from '../../lib/demo-sesiones';
+import {
+  aplicarTabEnQuery,
+  parsearTabFichaAlumno,
+  type TabFichaAlumno,
+} from '../../lib/alumno-detalle-tab';
 import { construirPayloadCheckinAntropometrico } from '../../lib/antropometria-checkin';
 import {
   NOMBRES_DIAS_SEMANA,
@@ -27,6 +33,7 @@ import {
 } from '../../lib/rutina-bloques';
 import { CampoPesoPrescrito } from '../../components/entrenador/CampoPesoPrescrito';
 import { SelectorPlantillaAsignacion } from '../../components/entrenador/SelectorPlantillaAsignacion';
+import { DetalleSesionEntrenamiento } from '../../components/entrenador/DetalleSesionEntrenamiento';
 import {
   PerfilAlumnoDetalleDTO,
   ResumenFinancieroAlumnoDTO,
@@ -82,7 +89,12 @@ import {
   ClipboardList,
 } from 'lucide-react';
 
-type TabType = 'resumen' | 'finanzas' | 'antropometria' | 'entrenamiento';
+/** WU16: el tab activo vive en la URL (`?tab=…`); el tipo válido lo define el parser compartido. */
+type TabType = TabFichaAlumno;
+
+/** WU16: pills de navegación interna del tab de entrenamiento (scroll suave entre secciones). */
+const CLASES_PILL_ANCLA_ENTRENAMIENTO =
+  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground border border-border transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-primary';
 
 
 /** Clases de chip por tono del estado de sesión (comparten paleta con el resto del panel). */
@@ -142,7 +154,17 @@ export function AlumnoDetallePage() {
   const navigate = useNavigate();
   const { isDemoMode } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<TabType>('resumen');
+  // WU16: el tab activo se deriva del deep-link `?tab=…` (el monitor abre
+  // `/coach/alumnos/:id?tab=entrenamiento`). Un valor ausente o inválido cae a `resumen`.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = parsearTabFichaAlumno(searchParams.get('tab'));
+
+  /** Cambia de pestaña sincronizando la URL con `replace` (sin entradas extra en el historial). */
+  const cambiarTab = (nuevoTab: TabType) => {
+    triggerHaptic('light');
+    setSearchParams(aplicarTabEnQuery(searchParams, nuevoTab), { replace: true });
+  };
+
   const [alumno, setAlumno] = useState<PerfilAlumnoDetalleDTO | null>(null);
   const [finanzas, setFinanzas] = useState<ResumenFinancieroAlumnoDTO | null>(null);
   const [planesCatalogo, setPlanesCatalogo] = useState<PlanMembresiaDetalleDTO[]>([]);
@@ -366,40 +388,11 @@ export function AlumnoDetallePage() {
         },
       ]);
 
-      const demoUltimaSesion: SesionEntrenamientoDetalleDTO = {
-        id: 'sesion-last-' + id,
-        alumnoId: id,
-        fechaProgramada: '2026-09-12',
-        estado: 'completada' as any,
-        porcentajeCumplimiento: '100.00',
-        timezoneCliente: 'America/Caracas',
-        notasAlumno:
-          '[RPE: 8.0/10] • [Molestia: Ninguna 👍] • Buen bombeo en cuadriceps, cuidando rango en rodilla.',
-        createdAtUtc: new Date().toISOString(),
-        updatedAtUtc: new Date().toISOString(),
-        ejercicios: [
-          {
-            id: 'ej-1',
-            sesionId: 'sesion-last-' + id,
-            ejercicioId: 'ej-prensa',
-            orden: 1,
-            notasCoach: 'Rango controlado',
-            ejercicio: {
-              id: 'ej-prensa',
-              nombre: 'Prensa Inclinada 45°',
-              grupoMuscular: 'Cuádriceps',
-              activo: true,
-              createdAtUtc: new Date().toISOString(),
-            },
-            series: [
-              { id: 's-1', ejercicioSesionId: 'ej-1', numeroSerie: 1, repsObjetivo: 12, repsLogradas: 12, pesoKg: '120.00', rpe: '7.5', completada: true },
-              { id: 's-2', ejercicioSesionId: 'ej-1', numeroSerie: 2, repsObjetivo: 10, repsLogradas: 10, pesoKg: '140.00', rpe: '8.0', completada: true },
-            ],
-          },
-        ],
-      };
-      setUltimaSesion(demoUltimaSesion);
-      setHistorialSesiones([demoUltimaSesion]);
+      // WU15: historial demo enriquecido y relativo a hoy (mismo fixture que el modal del
+      // monitor, en `lib/demo-sesiones.ts`), para que la ficha muestre series, cargas y tiempos.
+      const demoHistorial = sesionesDemoAlumno(id);
+      setUltimaSesion(demoHistorial.find((sesion) => esSesionRealizada(sesion)) ?? null);
+      setHistorialSesiones(demoHistorial);
 
       setEjerciciosCatalogo([
         { id: '11111111-1111-4111-8111-111111111c01', nombre: 'Press Plano con Mancuernas', grupoMuscular: 'Pecho', activo: true, createdAtUtc: new Date().toISOString() },
@@ -1117,6 +1110,22 @@ export function AlumnoDetallePage() {
   const hayFiltroCatalogo =
     selectedGrupoMuscular !== 'Todos' || filtroBusquedaEj.trim() !== '';
 
+  /**
+   * WU16: navegación interna del tab "Entrenamiento & Rutinas". El historial quedó arriba,
+   * inmediatamente después del último entrenamiento; estas anclas llevan a cada sección con
+   * scroll suave y respetan `prefers-reduced-motion`. Las secciones destino usan `scroll-mt-24`
+   * para no quedar debajo del header sticky, y la URL no cambia (sin ruido en el historial).
+   */
+  const irASeccionEntrenamiento = (idSeccion: string) => {
+    triggerHaptic('light');
+    const movimientoReducido =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    document
+      .getElementById(idSeccion)
+      ?.scrollIntoView({ behavior: movimientoReducido ? 'auto' : 'smooth', block: 'start' });
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-12">
       {/* Top Breadcrumb & Back */}
@@ -1126,7 +1135,7 @@ export function AlumnoDetallePage() {
           className="inline-flex items-center gap-2 text-xs font-bold text-muted-foreground hover:text-primary transition-colors cursor-pointer"
         >
           <ArrowLeft className="h-4 w-4" />
-          <span>Volver al Directorio de Alumnos</span>
+          <span>Volver a Mis Alumnos</span>
         </Link>
         <span className="text-[11px] font-mono text-muted-foreground">
           ID: {alumno.id.slice(0, 12)}...
@@ -1308,7 +1317,7 @@ export function AlumnoDetallePage() {
               <span className="truncate">{alumno.fichaSaludPrivada}</span>
             </div>
             <button
-              onClick={() => setActiveTab('resumen')}
+              onClick={() => cambiarTab('resumen')}
               className="text-[11px] font-bold text-primary underline hover:text-primary/80 cursor-pointer"
             >
               Ver Ficha Completa
@@ -1320,7 +1329,7 @@ export function AlumnoDetallePage() {
       {/* BARRA DE PESTAÑAS (TABS 360) */}
       <div
         role="tablist"
-        aria-label="Pestañas de expediente del alumno"
+        aria-label="Pestañas de la ficha del alumno"
         className="flex items-center gap-2 border-b border-border/80 pb-2 overflow-x-auto"
       >
         <button
@@ -1329,10 +1338,7 @@ export function AlumnoDetallePage() {
           id="tab-resumen"
           aria-controls="panel-resumen"
           aria-selected={activeTab === 'resumen'}
-          onClick={() => {
-            triggerHaptic('light');
-            setActiveTab('resumen');
-          }}
+          onClick={() => cambiarTab('resumen')}
           className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap focus-visible:outline-2 focus-visible:outline-primary ${
             activeTab === 'resumen'
               ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
@@ -1349,10 +1355,7 @@ export function AlumnoDetallePage() {
           id="tab-finanzas"
           aria-controls="panel-finanzas"
           aria-selected={activeTab === 'finanzas'}
-          onClick={() => {
-            triggerHaptic('light');
-            setActiveTab('finanzas');
-          }}
+          onClick={() => cambiarTab('finanzas')}
           className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap focus-visible:outline-2 focus-visible:outline-primary ${
             activeTab === 'finanzas'
               ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
@@ -1374,10 +1377,7 @@ export function AlumnoDetallePage() {
           id="tab-antropometria"
           aria-controls="panel-antropometria"
           aria-selected={activeTab === 'antropometria'}
-          onClick={() => {
-            triggerHaptic('light');
-            setActiveTab('antropometria');
-          }}
+          onClick={() => cambiarTab('antropometria')}
           className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap focus-visible:outline-2 focus-visible:outline-primary ${
             activeTab === 'antropometria'
               ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
@@ -1394,10 +1394,7 @@ export function AlumnoDetallePage() {
           id="tab-entrenamiento"
           aria-controls="panel-entrenamiento"
           aria-selected={activeTab === 'entrenamiento'}
-          onClick={() => {
-            triggerHaptic('light');
-            setActiveTab('entrenamiento');
-          }}
+          onClick={() => cambiarTab('entrenamiento')}
           className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap focus-visible:outline-2 focus-visible:outline-primary ${
             activeTab === 'entrenamiento'
               ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
@@ -2057,9 +2054,45 @@ export function AlumnoDetallePage() {
           aria-labelledby="tab-entrenamiento"
           className="space-y-6 animate-in fade-in-50 duration-200 slide-in-from-bottom-1"
         >
+          {/* WU16: anclas internas — el historial vive arriba; estas pills evitan buscar a ciegas */}
+          <nav
+            aria-label="Secciones del entrenamiento"
+            className="flex flex-wrap items-center gap-2"
+          >
+            {ultimoEntrenamiento && (
+              <button
+                type="button"
+                onClick={() => irASeccionEntrenamiento('seccion-ultimo-entrenamiento')}
+                className={CLASES_PILL_ANCLA_ENTRENAMIENTO}
+              >
+                <Dumbbell className="h-3.5 w-3.5 text-primary" />
+                Último entrenamiento
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => irASeccionEntrenamiento('seccion-historial-sesiones')}
+              className={CLASES_PILL_ANCLA_ENTRENAMIENTO}
+            >
+              <History className="h-3.5 w-3.5 text-primary" />
+              Historial ({historialSesiones.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => irASeccionEntrenamiento('seccion-rutina-semanal')}
+              className={CLASES_PILL_ANCLA_ENTRENAMIENTO}
+            >
+              <ClipboardList className="h-3.5 w-3.5 text-primary" />
+              Rutina semanal
+            </button>
+          </nav>
+
           {/* Auditoría del Último Entrenamiento del Alumno (solo sesiones realizadas) */}
           {ultimoEntrenamiento && etiquetaUltimoEntrenamiento && (
-            <div className="p-6 rounded-3xl bg-card border border-border shadow-md space-y-4">
+            <div
+              id="seccion-ultimo-entrenamiento"
+              className="scroll-mt-24 p-6 rounded-3xl bg-card border border-border shadow-md space-y-4"
+            >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/80 pb-3">
                 <div className="flex items-center gap-2">
                   <Dumbbell className="h-4 w-4 text-primary" />
@@ -2086,6 +2119,15 @@ export function AlumnoDetallePage() {
                       {ultimoEntrenamiento.porcentajeCumplimiento}% cumplido
                     </span>
                   )}
+                  {/* WU16: acceso directo al historial sin salir de la ficha */}
+                  <button
+                    type="button"
+                    onClick={() => irASeccionEntrenamiento('seccion-historial-sesiones')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-[11px] border border-border transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+                  >
+                    <History className="h-3.5 w-3.5 text-primary" />
+                    Ver historial completo
+                  </button>
                 </div>
               </div>
 
@@ -2120,8 +2162,126 @@ export function AlumnoDetallePage() {
             </div>
           )}
 
-          {/* 1. Subsección: Rutina Semanal Asignada */}
-          <div className="space-y-4">
+          {/* 1. Subsección: Historial Cronológico de Entrenamientos Realizados
+              (WU16: sube al tope, inmediatamente después del último entrenamiento) */}
+          <div
+            id="seccion-historial-sesiones"
+            className="scroll-mt-24 pt-6 border-t border-border/70 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <History className="h-5 w-5 text-primary" />
+                <div>
+                  <h3 className="text-base font-black text-foreground">
+                    Historial de Sesiones ({historialSesiones.length})
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Abre «Ver Series» para revisar cargas, notas del coach y los tiempos Δ entre
+                    marcas de cada serie.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {historialSesiones.length === 0 ? (
+              <div className="p-8 rounded-2xl bg-card border border-dashed border-border/70 text-center">
+                <Dumbbell className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-40" />
+                <p className="text-xs text-muted-foreground">
+                  El alumno aún no registra entrenamientos completados.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {historialSesiones.map((ses) => {
+                  const bloqueEncontrado = rutinaSemanal.find((b) => b.diaId === ses.bloqueId);
+                  const diaSemanaNombre = (() => {
+                    if (!ses.fechaProgramada) return '';
+                    try {
+                      const [y, m, d] = ses.fechaProgramada.split('-').map(Number);
+                      const fecha = new Date(Date.UTC(y, m - 1, d));
+                      return new Intl.DateTimeFormat('es-ES', { weekday: 'long', timeZone: 'UTC' }).format(fecha);
+                    } catch {
+                      return '';
+                    }
+                  })();
+                  const diaSemanaCapitalizado = diaSemanaNombre
+                    ? diaSemanaNombre.charAt(0).toUpperCase() + diaSemanaNombre.slice(1)
+                    : '';
+                  const expandida = expandedSesionId === ses.id;
+
+                  return (
+                    <DetalleSesionEntrenamiento
+                      key={ses.id}
+                      sesion={ses}
+                      titulo={
+                        bloqueEncontrado
+                          ? bloqueEncontrado.titulo
+                          : `Entrenamiento: ${ses.fechaProgramada}`
+                      }
+                      chipRecuperada={
+                        ses.esDiaDescansoOriginal
+                          ? `Recuperada en ${diaSemanaCapitalizado || 'Descanso'} (Día de descanso)`
+                          : null
+                      }
+                      mostrarGrupoMuscular
+                      mostrarSeries={expandida}
+                      idSeries={`sesion-series-${ses.id}`}
+                      accionesCabecera={
+                        <button
+                          type="button"
+                          onClick={() => {
+                            triggerHaptic('light');
+                            setExpandedSesionId(expandida ? null : ses.id);
+                          }}
+                          aria-expanded={expandida}
+                          aria-controls={expandida ? `sesion-series-${ses.id}` : undefined}
+                          className="px-3 py-1.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+                        >
+                          <span>{expandida ? 'Ocultar Series' : 'Ver Series'}</span>
+                          <ChevronDown
+                            className={`h-3.5 w-3.5 text-primary transition-transform duration-300 ease-out ${
+                              expandida ? 'rotate-180' : ''
+                            }`}
+                          />
+                        </button>
+                      }
+                    />
+                  );
+                })}
+                {historialError && (
+                  <div
+                    role="alert"
+                    className="p-3 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-bold flex items-center gap-2"
+                  >
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>{historialError}</span>
+                  </div>
+                )}
+                {historialSesiones.length >= historialLimit && historialLimit < 100 && (
+                  <div className="flex flex-col items-center gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={verMasHistorial}
+                      disabled={isCargandoHistorial}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs border border-border transition-all active:scale-95 disabled:opacity-50 cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${isCargandoHistorial ? 'animate-spin' : ''}`} />
+                      <span>{isCargandoHistorial ? 'Cargando historial…' : 'Cargar más sesiones'}</span>
+                    </button>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      Mostrando {historialSesiones.length} · máximo 100
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 2. Subsección: Rutina Semanal Asignada (WU16: debajo del historial) */}
+          <div
+            id="seccion-rutina-semanal"
+            className="scroll-mt-24 pt-6 border-t border-border/70 space-y-4"
+          >
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h3 className="text-base font-black text-foreground">Rutina Semanal Asignada</h3>
@@ -2141,7 +2301,7 @@ export function AlumnoDetallePage() {
                   title={
                     isArchived
                       ? 'Restaura al alumno para asignarle una plantilla'
-                      : 'Selecciona una plantilla del banco y ajusta cargas antes de confirmar'
+                      : 'Selecciona una plantilla y ajusta cargas antes de confirmar'
                   }
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground font-bold text-xs border border-border transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -2215,292 +2375,6 @@ export function AlumnoDetallePage() {
                   </div>
                 </div>
               ))}
-              </div>
-            )}
-          </div>
-
-          {/* 2. Subsección: Historial Cronológico de Entrenamientos Realizados */}
-          <div className="pt-6 border-t border-border/70 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <History className="h-5 w-5 text-primary" />
-                <h3 className="text-base font-black text-foreground">
-                  Historial de Sesiones ({historialSesiones.length})
-                </h3>
-              </div>
-            </div>
-
-            {historialSesiones.length === 0 ? (
-              <div className="p-8 rounded-2xl bg-card border border-dashed border-border/70 text-center">
-                <Dumbbell className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-40" />
-                <p className="text-xs text-muted-foreground">
-                  El alumno aún no registra entrenamientos completados.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {historialSesiones.map((ses) => {
-                  const bloqueEncontrado = rutinaSemanal.find((b) => b.diaId === ses.bloqueId);
-                  const diaSemanaNombre = (() => {
-                    if (!ses.fechaProgramada) return '';
-                    try {
-                      const [y, m, d] = ses.fechaProgramada.split('-').map(Number);
-                      const fecha = new Date(Date.UTC(y, m - 1, d));
-                      return new Intl.DateTimeFormat('es-ES', { weekday: 'long', timeZone: 'UTC' }).format(fecha);
-                    } catch {
-                      return '';
-                    }
-                  })();
-                  const diaSemanaCapitalizado = diaSemanaNombre
-                    ? diaSemanaNombre.charAt(0).toUpperCase() + diaSemanaNombre.slice(1)
-                    : '';
-                  const etiquetaEstado = etiquetaEstadoSesion(ses.estado, ses.motivoOmision);
-                  const rangoHorasLocal = formatRangoHorasLocal(ses.fechaInicioUtc, ses.fechaFinUtc);
-                  const duracionSesion = formatDuracionMinutos(ses.duracionMinutos);
-                  const fechaLocal = formatFechaCalendario(ses.fechaProgramada);
-
-                  return (
-                    <div key={ses.id} className="p-4 rounded-2xl bg-card border border-border shadow-xs space-y-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div className="flex items-center gap-2.5">
-                          <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-mono font-bold text-xs shrink-0">
-                            <Calendar className="h-4 w-4" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h4 className="font-extrabold text-sm text-foreground">
-                                {bloqueEncontrado ? bloqueEncontrado.titulo : `Entrenamiento: ${ses.fechaProgramada}`}
-                              </h4>
-                              {ses.esDiaDescansoOriginal && (
-                                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-1">
-                                  ⏱️ Recuperada en {diaSemanaCapitalizado || 'Descanso'} (Día de descanso)
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[11px] text-muted-foreground">
-                              {fechaLocal || ses.fechaProgramada}
-                              {rangoHorasLocal ? ` · ${rangoHorasLocal} (hora local)` : ''}
-                              {duracionSesion ? ` · ${duracionSesion} de duración` : ''}
-                            </p>
-                          </div>
-                        </div>
-
-                      <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
-                        {ses.volumenTotalKg && ses.volumenTotalKg !== '0.00' && (
-                          <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/30 flex items-center gap-1">
-                            <Dumbbell className="h-3 w-3" />
-                            <span>{ses.volumenTotalKg} kg</span>
-                          </span>
-                        )}
-                        <span
-                          className={`text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full border ${
-                            CLASES_TONO_SESION[etiquetaEstado.tono]
-                          }`}
-                        >
-                          {etiquetaEstado.texto}
-                        </span>
-                        {ses.estado === EstadoSesion.COMPLETADA && (
-                          <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                            {ses.porcentajeCumplimiento}% cumplido
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            triggerHaptic('light');
-                            setExpandedSesionId(expandedSesionId === ses.id ? null : ses.id);
-                          }}
-                          aria-expanded={expandedSesionId === ses.id}
-                          aria-controls={`sesion-accordion-${ses.id}`}
-                          className="px-3 py-1.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
-                        >
-                          <span>{expandedSesionId === ses.id ? 'Ocultar Series' : 'Ver Series'}</span>
-                          <ChevronDown
-                            className={`h-3.5 w-3.5 text-primary transition-transform duration-300 ease-out ${
-                              expandedSesionId === ses.id ? 'rotate-180' : ''
-                            }`}
-                          />
-                        </button>
-                      </div>
-                    </div>
-
-                    <FeedbackAlumno notas={ses.notasAlumno} />
-
-                    {expandedSesionId === ses.id && (
-                      <div
-                        id={`sesion-accordion-${ses.id}`}
-                        role="region"
-                        aria-label={`Detalle de series del entrenamiento del ${ses.fechaProgramada}`}
-                        className="pt-3 border-t border-border/50 space-y-2.5 animate-in fade-in-50 slide-in-from-top-2 duration-300 ease-out"
-                      >
-                        {ses.ejercicios && ses.ejercicios.length > 0 ? (
-                          ses.ejercicios.map((ej, ejIdx) => (
-                            <div
-                              key={ej.id || ejIdx}
-                              className="p-3.5 rounded-2xl bg-secondary/20 hover:bg-secondary/30 transition-colors border border-border/50 text-xs space-y-2.5"
-                            >
-                              <div className="font-bold text-foreground flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className="h-5 w-5 rounded-lg bg-primary/10 text-primary text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
-                                    {ejIdx + 1}
-                                  </span>
-                                  <span className="font-bold text-foreground">{ej.ejercicio?.nombre || 'Ejercicio prescrito'}</span>
-                                </div>
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="text-[10px] font-mono font-bold text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md border border-border/60">
-                                    ⏱️ Prescrito: {ej.descansoPrescritoSegundos || 90}s
-                                  </span>
-                                  <span className="text-[10px] font-mono font-bold text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md border border-border/60">
-                                    {ej.ejercicio?.grupoMuscular || 'Musculación'}
-                                  </span>
-                                </div>
-                              </div>
-
-                              {ej.series && ej.series.length > 0 ? (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 font-mono text-[11px]">
-                                  {ej.series.map((s) => {
-                                    const prescrito = ej.descansoPrescritoSegundos || 90;
-                                    const descansoReal = s.descansoSegundos;
-                                    const delta = descansoReal != null ? descansoReal - prescrito : 0;
-                                    const isExcessive = delta > 15;
-                                    const isRushed = delta < -15;
-                                    const pesoPrescrito =
-                                      s.pesoPrescritoKg && Number(s.pesoPrescritoKg) > 0
-                                        ? s.pesoPrescritoKg
-                                        : null;
-
-                                    return (
-                                      <div
-                                        key={s.id}
-                                        className={`p-2.5 rounded-xl border space-y-1.5 transition-colors ${
-                                          s.completada
-                                            ? 'bg-emerald-500/10 border-emerald-500/30 text-foreground'
-                                            : 'bg-card border-border/60 text-foreground'
-                                        }`}
-                                      >
-                                        <div className="flex items-center justify-between gap-2">
-                                          <span className="text-muted-foreground font-bold">
-                                            S{s.numeroSerie}
-                                          </span>
-                                          <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                                            {s.rpe && (
-                                              <span
-                                                className="text-[10px] text-amber-400 font-bold"
-                                                title="RPE real registrado por el alumno"
-                                              >
-                                                @{s.rpe}
-                                              </span>
-                                            )}
-                                            {descansoReal != null && (
-                                              <span
-                                                title={`Descanso tomado: ${descansoReal}s (prescrito: ${prescrito}s, desviación: ${delta > 0 ? `+${delta}s` : `${delta}s`})`}
-                                                className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md border whitespace-nowrap ${
-                                                  isExcessive
-                                                    ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                                                    : isRushed
-                                                    ? 'bg-sky-500/15 text-sky-400 border-sky-500/30'
-                                                    : 'bg-secondary text-muted-foreground border-border/60'
-                                                }`}
-                                              >
-                                                ⏱️ {descansoReal}s{' '}
-                                                {isExcessive
-                                                  ? `(+${delta}s)`
-                                                  : isRushed
-                                                  ? `(${delta}s)`
-                                                  : '(en meta)'}
-                                              </span>
-                                            )}
-                                          </div>
-                                        </div>
-
-                                        {/* Real registrado por el alumno (sin fallback que oculte la falta de dato) */}
-                                        <div className="flex items-baseline justify-between gap-2">
-                                          <span
-                                            className={`font-bold ${
-                                              s.repsLogradas == null
-                                                ? 'text-muted-foreground italic'
-                                                : 'text-foreground'
-                                            }`}
-                                            title={
-                                              s.repsLogradas == null
-                                                ? 'Sin repeticiones reales registradas'
-                                                : 'Repeticiones logradas'
-                                            }
-                                          >
-                                            {s.repsLogradas == null
-                                              ? 'Sin reps'
-                                              : `${s.repsLogradas} reps`}
-                                          </span>
-                                          <span
-                                            className={`font-black ${
-                                              s.pesoKg
-                                                ? 'text-primary'
-                                                : 'text-muted-foreground italic'
-                                            }`}
-                                            title={
-                                              s.pesoKg
-                                                ? 'Peso real levantado'
-                                                : 'Sin peso real registrado'
-                                            }
-                                          >
-                                            {s.pesoKg ? `${s.pesoKg} kg` : 'Sin peso'}
-                                          </span>
-                                        </div>
-
-                                        {/* Prescrito por el coach */}
-                                        <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground border-t border-border/40 pt-1.5">
-                                          <span className="font-mono">
-                                            Presc: {s.repsObjetivo} reps ·{' '}
-                                            {pesoPrescrito ? `${pesoPrescrito} kg` : 'sin carga'}
-                                          </span>
-                                          {!s.completada && (
-                                            <span className="font-bold text-amber-400 whitespace-nowrap">
-                                              No completada
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              ) : (
-                                <p className="text-[11px] text-muted-foreground">Sin series detalladas.</p>
-                              )}
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-xs text-muted-foreground">Sin detalle de ejercicios registrado en esta sesión.</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-                {historialError && (
-                  <div
-                    role="alert"
-                    className="p-3 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-bold flex items-center gap-2"
-                  >
-                    <AlertCircle className="h-4 w-4 shrink-0" />
-                    <span>{historialError}</span>
-                  </div>
-                )}
-                {historialSesiones.length >= historialLimit && historialLimit < 100 && (
-                  <div className="flex flex-col items-center gap-1.5 pt-1">
-                    <button
-                      type="button"
-                      onClick={verMasHistorial}
-                      disabled={isCargandoHistorial}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs border border-border transition-all active:scale-95 disabled:opacity-50 cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
-                    >
-                      <RefreshCw className={`h-3.5 w-3.5 ${isCargandoHistorial ? 'animate-spin' : ''}`} />
-                      <span>{isCargandoHistorial ? 'Cargando historial…' : 'Cargar más sesiones'}</span>
-                    </button>
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      Mostrando {historialSesiones.length} · máximo 100
-                    </span>
-                  </div>
-                )}
               </div>
             )}
           </div>
