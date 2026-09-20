@@ -6,8 +6,17 @@ import {
   type PlantillaRutinaResumenDTO,
 } from '@guachafit/shared';
 import { apiClient } from '../../lib/api-client';
+import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
 import { formatFechaLocal } from '../../lib/date-format';
+import {
+  CATALOGO_DEMO,
+  PLANTILLAS_DEMO,
+  crearPlantillaDemo,
+  generarIdDemo,
+  plantillasDemoResumen,
+  resumirPlantillaDemo,
+} from '../../lib/demo-plantillas';
 import {
   ETIQUETAS_NIVEL_PLANTILLA,
   NIVELES_PLANTILLA_ORDEN,
@@ -63,6 +72,7 @@ const CLASES_NIVEL: Record<NivelObjetivoPlantilla, string> = {
  * selectores estructurados y el picker de catálogo del modal de prescripción (WU5).
  */
 export function PlantillasPage() {
+  const { isDemoMode } = useAuth();
   const [plantillas, setPlantillas] = useState<PlantillaRutinaResumenDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +81,11 @@ export function PlantillasPage() {
 
   const [catalogo, setCatalogo] = useState<EjercicioCatalogoDetalleDTO[]>([]);
   const [catalogoError, setCatalogoError] = useState<string | null>(null);
+
+  // MODO DEMO: detalles locales (fixture + altas/ediciones de la sesión) para editar sin API.
+  const [detallesDemo, setDetallesDemo] = useState<Record<string, PlantillaRutinaDTO>>(() =>
+    Object.fromEntries(PLANTILLAS_DEMO.map((plantilla) => [plantilla.id, plantilla]))
+  );
 
   // Modal de creación/edición
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -95,11 +110,20 @@ export function PlantillasPage() {
   const cargarPlantillas = async () => {
     setIsLoading(true);
     setError(null);
+
+    // MODO DEMO EXPLÍCITO (isDemoMode): banco de ejemplo solo con la bandera activa.
+    if (isDemoMode) {
+      setDetallesDemo(Object.fromEntries(PLANTILLAS_DEMO.map((plantilla) => [plantilla.id, plantilla])));
+      setPlantillas(plantillasDemoResumen());
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const res = await apiClient<PlantillaRutinaResumenDTO[]>('/plantillas');
       setPlantillas(Array.isArray(res) ? res : []);
     } catch (err: any) {
-      setError(err?.message || 'No se pudo cargar tu banco de plantillas.');
+      setError(err?.message || 'No se pudieron cargar tus plantillas de ejercicios.');
     } finally {
       setIsLoading(false);
     }
@@ -107,6 +131,13 @@ export function PlantillasPage() {
 
   const cargarCatalogo = async () => {
     setCatalogoError(null);
+
+    // MODO DEMO EXPLÍCITO (isDemoMode): catálogo de ejemplo sin llamada API.
+    if (isDemoMode) {
+      setCatalogo(CATALOGO_DEMO);
+      return;
+    }
+
     try {
       const res = await apiClient<EjercicioCatalogoDetalleDTO[]>('/ejercicios/catalogo');
       setCatalogo(Array.isArray(res) ? res : []);
@@ -118,7 +149,7 @@ export function PlantillasPage() {
   useEffect(() => {
     cargarPlantillas();
     cargarCatalogo();
-  }, []);
+  }, [isDemoMode]);
 
   // Accesibilidad: cierre del modal de plantilla con Escape (paridad con el resto de modales).
   useEffect(() => {
@@ -165,23 +196,41 @@ export function PlantillasPage() {
     setIsModalOpen(true);
   };
 
+  /** Carga un detalle en el formulario del modal (mismo estado en demo y en sesión real). */
+  const cargarDetalleEnFormulario = (detalle: PlantillaRutinaDTO) => {
+    setEditando(detalle);
+    setFormNombre(detalle.nombre);
+    setFormNivel(detalle.nivelObjetivo);
+    setBloquesEdit(
+      (detalle.bloques ?? []).map((bloque, idx) => parsearBloqueParaEdicion(bloque, idx))
+    );
+    setEditorKey((k) => k + 1);
+    setSaveSuccess(null);
+    setSaveError(null);
+    setIntentoGuardar(false);
+    setIsModalOpen(true);
+  };
+
   const abrirEditar = async (resumen: PlantillaRutinaResumenDTO) => {
     triggerHaptic('light');
-    setCargandoDetalleId(resumen.id);
     setAccionError(null);
+
+    // MODO DEMO EXPLÍCITO (isDemoMode): el detalle sale del estado local, sin llamada API.
+    if (isDemoMode) {
+      const detalle = detallesDemo[resumen.id];
+      if (!detalle) {
+        setAccionError('No se pudo abrir la plantilla para edición.');
+        triggerHaptic('warning');
+        return;
+      }
+      cargarDetalleEnFormulario(detalle);
+      return;
+    }
+
+    setCargandoDetalleId(resumen.id);
     try {
       const detalle = await apiClient<PlantillaRutinaDTO>(`/plantillas/${resumen.id}`);
-      setEditando(detalle);
-      setFormNombre(detalle.nombre);
-      setFormNivel(detalle.nivelObjetivo);
-      setBloquesEdit(
-        (detalle.bloques ?? []).map((bloque, idx) => parsearBloqueParaEdicion(bloque, idx))
-      );
-      setEditorKey((k) => k + 1);
-      setSaveSuccess(null);
-      setSaveError(null);
-      setIntentoGuardar(false);
-      setIsModalOpen(true);
+      cargarDetalleEnFormulario(detalle);
     } catch (err: any) {
       setAccionError(err?.message || 'No se pudo abrir la plantilla para edición.');
       triggerHaptic('warning');
@@ -208,14 +257,43 @@ export function PlantillasPage() {
       return;
     }
 
+    const payload = {
+      nombre: formNombre.trim(),
+      nivelObjetivo: formNivel,
+      bloques,
+    };
+
+    // MODO DEMO EXPLÍCITO (isDemoMode): crear/editar en estado LOCAL, sin llamada API,
+    // con los mismos mensajes de éxito y la misma actualización del listado.
+    if (isDemoMode) {
+      const detalle = crearPlantillaDemo({
+        id: editando?.id,
+        nombre: payload.nombre,
+        nivelObjetivo: payload.nivelObjetivo,
+        bloques: payload.bloques,
+        activa: editando?.activa ?? true,
+        createdAtUtc: editando?.createdAtUtc,
+      });
+      setDetallesDemo((prev) => ({ ...prev, [detalle.id]: detalle }));
+      setPlantillas((prev) => [
+        resumirPlantillaDemo(detalle),
+        ...prev.filter((p) => p.id !== detalle.id),
+      ]);
+      setEditando(detalle);
+      triggerHaptic('success');
+      setSaveError(null);
+      // WU5: el mensaje persiste inline hasta que el coach cierre el panel.
+      setSaveSuccess(
+        editando
+          ? 'Plantilla actualizada. Las rutinas ya asignadas a alumnos no se modifican.'
+          : 'Plantilla creada y activa. Puedes seguir ajustándola o cerrar este panel.'
+      );
+      return;
+    }
+
     setIsSaving(true);
     setSaveError(null);
     try {
-      const payload = {
-        nombre: formNombre.trim(),
-        nivelObjetivo: formNivel,
-        bloques,
-      };
       const res = editando
         ? await apiClient<PlantillaRutinaDTO>(`/plantillas/${editando.id}`, {
             method: 'PATCH',
@@ -247,7 +325,7 @@ export function PlantillasPage() {
       setSaveSuccess(
         editando
           ? 'Plantilla actualizada. Las rutinas ya asignadas a alumnos no se modifican.'
-          : 'Plantilla creada y activa en tu banco. Puedes seguir ajustándola o cerrar este panel.'
+          : 'Plantilla creada y activa. Puedes seguir ajustándola o cerrar este panel.'
       );
     } catch (err: any) {
       setSaveError(err?.message || 'No se pudo guardar la plantilla en el servidor.');
@@ -257,9 +335,25 @@ export function PlantillasPage() {
     }
   };
 
+  /** Cambia activa/inactiva en el banco local del modo demo (listado + detalle). */
+  const actualizarActivaLocal = (id: string, activa: boolean) => {
+    setPlantillas((prev) => prev.map((p) => (p.id === id ? { ...p, activa } : p)));
+    setDetallesDemo((prev) => (prev[id] ? { ...prev, [id]: { ...prev[id], activa } } : prev));
+  };
+
   const desactivarPlantilla = async (id: string) => {
     setOcupadaId(id);
     setAccionError(null);
+
+    // MODO DEMO EXPLÍCITO (isDemoMode): desactivación local, sin llamada API.
+    if (isDemoMode) {
+      actualizarActivaLocal(id, false);
+      triggerHaptic('success');
+      setOcupadaId(null);
+      setConfirmandoId(null);
+      return;
+    }
+
     try {
       await apiClient<PlantillaRutinaResumenDTO>(`/plantillas/${id}`, { method: 'DELETE' });
       setPlantillas((prev) => prev.map((p) => (p.id === id ? { ...p, activa: false } : p)));
@@ -276,6 +370,15 @@ export function PlantillasPage() {
   const reactivarPlantilla = async (id: string) => {
     setOcupadaId(id);
     setAccionError(null);
+
+    // MODO DEMO EXPLÍCITO (isDemoMode): reactivación local, sin llamada API.
+    if (isDemoMode) {
+      actualizarActivaLocal(id, true);
+      triggerHaptic('success');
+      setOcupadaId(null);
+      return;
+    }
+
     try {
       const res = await apiClient<PlantillaRutinaDTO>(`/plantillas/${id}`, {
         method: 'PATCH',
@@ -294,6 +397,21 @@ export function PlantillasPage() {
   const crearEjercicioEnCatalogo = async (
     datos: DatosEjercicioNuevo
   ): Promise<EjercicioCatalogoDetalleDTO | null> => {
+    // MODO DEMO EXPLÍCITO (isDemoMode): alta local en el catálogo de ejemplo, sin API.
+    if (isDemoMode) {
+      const nuevo: EjercicioCatalogoDetalleDTO = {
+        id: generarIdDemo(),
+        entrenadorId: null,
+        nombre: datos.nombre,
+        grupoMuscular: datos.grupoMuscular,
+        patronMovimiento: datos.patronMovimiento || null,
+        activo: true,
+        createdAtUtc: new Date().toISOString(),
+      };
+      setCatalogo((prev) => [nuevo, ...prev]);
+      return nuevo;
+    }
+
     try {
       const res = await apiClient<EjercicioCatalogoDetalleDTO>('/ejercicios/catalogo', {
         method: 'POST',
@@ -322,7 +440,7 @@ export function PlantillasPage() {
         <div>
           <div className="flex items-center gap-2">
             <ClipboardList className="h-5 w-5 text-primary" />
-            <h1 className="text-2xl font-black tracking-tight text-foreground">Banco de Plantillas</h1>
+            <h1 className="text-2xl font-black tracking-tight text-foreground">Plantillas de ejercicios</h1>
           </div>
           <p className="text-xs text-muted-foreground mt-1">
             Diseña rutinas reutilizables y asígnalas a tus alumnos en segundos. Cada asignación es una
@@ -405,7 +523,7 @@ export function PlantillasPage() {
       ) : error ? (
         <div className="p-8 rounded-3xl bg-card border border-border text-center space-y-3 max-w-lg mx-auto">
           <AlertCircle className="h-9 w-9 text-destructive mx-auto" />
-          <h3 className="text-sm font-black text-foreground">No se pudo cargar el banco</h3>
+          <h3 className="text-sm font-black text-foreground">No se pudieron cargar las plantillas</h3>
           <p className="text-xs text-muted-foreground">{error}</p>
           <button
             type="button"
@@ -424,7 +542,7 @@ export function PlantillasPage() {
               ? 'No tienes plantillas activas'
               : filtro === 'desactivadas'
               ? 'No tienes plantillas desactivadas'
-              : 'Tu banco de plantillas está vacío'}
+              : 'Todavía no tienes plantillas de ejercicios'}
           </h3>
           <p className="text-xs text-muted-foreground max-w-md mx-auto">
             {filtro === 'activas'

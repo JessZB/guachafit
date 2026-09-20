@@ -8,7 +8,12 @@ import {
   type PlantillaRutinaResumenDTO,
 } from '@guachafit/shared';
 import { apiClient } from '../../lib/api-client';
+import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
+import {
+  detallePlantillaDemo,
+  plantillasDemoActivas,
+} from '../../lib/demo-plantillas';
 import {
   ETIQUETAS_NIVEL_PLANTILLA,
   aplicarOverridesPreview,
@@ -56,6 +61,7 @@ export function SelectorPlantillaAsignacion({
   onCerrar,
   onAsignada,
 }: SelectorPlantillaAsignacionProps) {
+  const { isDemoMode } = useAuth();
   const [plantillas, setPlantillas] = useState<PlantillaRutinaResumenDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
@@ -75,11 +81,19 @@ export function SelectorPlantillaAsignacion({
   const cargarPlantillas = async () => {
     setIsLoading(true);
     setErrorCarga(null);
+
+    // MODO DEMO EXPLÍCITO (isDemoMode): mismas plantillas demo del banco, sin llamada API.
+    if (isDemoMode) {
+      setPlantillas(plantillasDemoActivas());
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const res = await apiClient<PlantillaRutinaResumenDTO[]>('/plantillas?activa=true');
       setPlantillas(Array.isArray(res) ? res : []);
     } catch (err: any) {
-      setErrorCarga(err?.message || 'No se pudo cargar tu banco de plantillas.');
+      setErrorCarga(err?.message || 'No se pudieron cargar tus plantillas de ejercicios.');
     } finally {
       setIsLoading(false);
     }
@@ -87,7 +101,7 @@ export function SelectorPlantillaAsignacion({
 
   useEffect(() => {
     cargarPlantillas();
-  }, []);
+  }, [isDemoMode]);
 
   const plantillasFiltradas = useMemo(
     () =>
@@ -100,12 +114,25 @@ export function SelectorPlantillaAsignacion({
   const seleccionarPlantilla = async (resumen: PlantillaRutinaResumenDTO) => {
     if (cargandoDetalleId) return;
     triggerHaptic('selection');
-    setCargandoDetalleId(resumen.id);
     setErrorDetalle(null);
     setOverrides({});
     setErroresAjustes([]);
     setResultado(null);
     setErrorAsignacion(null);
+
+    // MODO DEMO EXPLÍCITO (isDemoMode): el detalle sale del fixture local, sin llamada API.
+    if (isDemoMode) {
+      const demoDetalle = detallePlantillaDemo(resumen.id);
+      if (!demoDetalle) {
+        setDetalle(null);
+        setErrorDetalle('No se pudo cargar el detalle de la plantilla.');
+        return;
+      }
+      setDetalle(demoDetalle);
+      return;
+    }
+
+    setCargandoDetalleId(resumen.id);
     try {
       const detalleRes = await apiClient<PlantillaRutinaDTO>(`/plantillas/${resumen.id}`);
       setDetalle(detalleRes);
@@ -175,6 +202,31 @@ export function SelectorPlantillaAsignacion({
     if (errores.length > 0) {
       setErroresAjustes(errores);
       triggerHaptic('warning');
+      return;
+    }
+
+    // MODO DEMO EXPLÍCITO (isDemoMode): asignación simulada en estado local, sin llamada API.
+    // No se invoca `onAsignada`: el refresco del padre consulta la API real, innecesaria en
+    // demo porque el expediente ya se hidrata de fixtures.
+    if (isDemoMode) {
+      const res: AsignacionPlantillaResponseDTO = {
+        plantillaId: detalle.id,
+        modo,
+        totalSolicitados: 1,
+        exitosos: 1,
+        fallidos: 0,
+        resultados: [
+          {
+            alumnoId,
+            exito: true,
+            rutinaId: `demo-rutina-${alumnoId}`,
+            rutinaNombre: detalle.nombre,
+            bloquesTotal: detalle.bloques.length,
+          },
+        ],
+      };
+      setResultado(res);
+      triggerHaptic('success');
       return;
     }
 
@@ -257,7 +309,7 @@ export function SelectorPlantillaAsignacion({
                 Plantillas Activas
               </span>
               <span className="text-[10px] font-mono text-muted-foreground">
-                {plantillas.length} en el banco
+                {plantillas.length} disponibles
               </span>
             </div>
 
@@ -312,7 +364,7 @@ export function SelectorPlantillaAsignacion({
                         className="text-primary font-bold hover:underline"
                         onClick={onCerrar}
                       >
-                        Banco de Plantillas
+                        Plantillas de ejercicios
                       </Link>{' '}
                       y vuelve a intentarlo.
                     </>
