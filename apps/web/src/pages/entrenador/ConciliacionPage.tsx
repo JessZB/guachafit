@@ -1,7 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { apiClient } from '../../lib/api-client';
 import { useAuth } from '../../context/auth-context';
 import { TransaccionPagoDetalleDTO, Moneda, MetodoPago } from '@guachafit/shared';
+import {
+  etiquetaMetodoPago,
+  filtrarTransaccionesConciliacion,
+  hayFiltroConciliacionActivo,
+  metodosPagoPresentes,
+  type FiltroMetodoPago,
+} from '../../lib/conciliacion-filtros';
 import {
   DollarSign,
   Receipt,
@@ -14,6 +21,9 @@ import {
   ShieldCheck,
   Eye,
   Image as ImageIcon,
+  RotateCcw,
+  Search,
+  SearchX,
 } from 'lucide-react';
 
 /**
@@ -38,6 +48,9 @@ export function ConciliacionPage() {
   const [error, setError] = useState<string | null>(null);
   // D5: fallo de conciliación visible; la transacción no desaparece si el server no confirmó.
   const [actionError, setActionError] = useState<string | null>(null);
+  // WU20: filtros client-side de la bandeja (búsqueda por alumno/referencia + método de pago).
+  const [busqueda, setBusqueda] = useState('');
+  const [filtroMetodo, setFiltroMetodo] = useState<FiltroMetodoPago>('todos');
 
   const cargarPendientes = async () => {
     setIsLoading(true);
@@ -114,6 +127,28 @@ export function ConciliacionPage() {
   useEffect(() => {
     cargarPendientes();
   }, [isDemoMode]);
+
+  const visibles = useMemo(
+    () => filtrarTransaccionesConciliacion(transacciones, { busqueda, metodoPago: filtroMetodo }),
+    [transacciones, busqueda, filtroMetodo]
+  );
+
+  const metodosPresentes = useMemo(() => metodosPagoPresentes(transacciones), [transacciones]);
+
+  const hayFiltroActivo = hayFiltroConciliacionActivo({ busqueda, metodoPago: filtroMetodo });
+
+  // Si el método filtrado desaparece de la cola (p. ej. tras aprobar la única transacción de ese
+  // método), el chip activo ya no existiría: se vuelve a "Todos" para no dejar un filtro fantasma.
+  useEffect(() => {
+    if (filtroMetodo !== 'todos' && !metodosPresentes.includes(filtroMetodo)) {
+      setFiltroMetodo('todos');
+    }
+  }, [metodosPresentes, filtroMetodo]);
+
+  const limpiarFiltros = () => {
+    setBusqueda('');
+    setFiltroMetodo('todos');
+  };
 
   const handleAprobar = async (txId: string) => {
     setActionError(null);
@@ -224,7 +259,87 @@ export function ConciliacionPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {transacciones.map((tx) => (
+          {/* WU20: filtros de la bandeja (búsqueda por alumno/referencia + método real de la tarjeta) */}
+          <div className="p-4 rounded-3xl bg-card border border-border/80 space-y-3">
+            <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setFiltroMetodo('todos')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    filtroMetodo === 'todos'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Todos
+                </button>
+                {metodosPresentes.map((metodo) => {
+                  const activo = filtroMetodo === metodo;
+                  return (
+                    <button
+                      key={metodo}
+                      type="button"
+                      onClick={() => setFiltroMetodo(metodo)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        activo
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <span className="capitalize">{etiquetaMetodoPago(metodo)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="relative flex-1 lg:max-w-xs lg:ml-auto">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                <input
+                  type="search"
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  placeholder="Buscar por alumno o referencia..."
+                  aria-label="Buscar pago por alumno o referencia"
+                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-background border border-border text-xs font-semibold text-foreground focus:outline-hidden focus:border-primary transition-colors"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] text-muted-foreground font-mono">
+                Mostrando {visibles.length} de {transacciones.length} transacciones
+              </p>
+              {hayFiltroActivo && (
+                <button
+                  type="button"
+                  onClick={limpiarFiltros}
+                  className="text-[11px] font-bold text-primary hover:underline cursor-pointer"
+                >
+                  Limpiar filtros
+                </button>
+              )}
+            </div>
+          </div>
+
+          {visibles.length === 0 ? (
+            <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
+              <SearchX className="h-9 w-9 text-muted-foreground mx-auto opacity-50" />
+              <h3 className="text-sm font-black text-foreground">Sin resultados</h3>
+              <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                Ningún pago en cola coincide con la búsqueda o el método seleccionado.
+              </p>
+              <button
+                type="button"
+                onClick={limpiarFiltros}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs cursor-pointer"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span>Limpiar filtros</span>
+              </button>
+            </div>
+          ) : (
+            visibles.map((tx) => (
             <div
               key={tx.id}
               className="p-5 sm:p-6 rounded-3xl bg-card border border-border/80 shadow-xs space-y-4 hover:border-primary/40 transition-all"
@@ -236,7 +351,7 @@ export function ConciliacionPage() {
                       {tx.clienteNombre || 'Alumno'}
                     </h2>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border uppercase">
-                      {tx.metodoPago.replace('_', ' ')}
+                      {etiquetaMetodoPago(tx.metodoPago)}
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 mt-2">
@@ -301,7 +416,8 @@ export function ConciliacionPage() {
                 </div>
               </div>
             </div>
-          ))}
+            ))
+          )}
         </div>
       )}
 

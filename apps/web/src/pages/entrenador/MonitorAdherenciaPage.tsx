@@ -10,6 +10,7 @@ import {
 } from '../../lib/date-format';
 import { crearMonitorAdherenciaDemo } from '../../lib/demo-monitor-adherencia';
 import { sesionesDemoAlumno } from '../../lib/demo-sesiones';
+import { pluralizar } from '../../lib/pluralizar';
 import {
   etiquetaEstadoSesion,
   etiquetaMonitorAdherencia,
@@ -17,6 +18,11 @@ import {
   rutaExpedienteMonitor,
   type TonoSemaforo,
 } from '../../lib/adherencia';
+import {
+  filtrarMonitorAlumnos,
+  hayFiltroMonitorActivo,
+  type FiltroSemaforoMonitor,
+} from '../../lib/monitor-filtros';
 import { MonitorAdherenciaSemanalDTO, SesionEntrenamientoDetalleDTO } from '@guachafit/shared';
 import { DetalleSesionEntrenamiento } from '../../components/entrenador/DetalleSesionEntrenamiento';
 import {
@@ -31,11 +37,19 @@ import {
   Flame,
   History,
   RefreshCw,
+  Search,
   Users,
   X,
 } from 'lucide-react';
 
 type OrdenMonitor = 'riesgo' | 'nombre';
+
+/**
+ * WU19: escalones del modal de actividad. El endpoint `historial` acepta `limit` hasta 100
+ * (mismo techo en real y demo), así que el botón solo sube hasta el tope.
+ */
+const LIMITES_HISTORIAL = [10, 30, 100] as const;
+const LIMITE_HISTORIAL_INICIAL = LIMITES_HISTORIAL[0];
 
 const CLASES_TONO: Record<
   TonoSemaforo,
@@ -106,41 +120,53 @@ function ModalActividadAlumno({
   const { isDemoMode } = useAuth();
   const [sesiones, setSesiones] = useState<SesionEntrenamientoDetalleDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMas, setIsLoadingMas] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [limite, setLimite] = useState<number>(LIMITE_HISTORIAL_INICIAL);
   const [sesionExpandidaId, setSesionExpandidaId] = useState<string | null>(null);
   const botonCerrarRef = useRef<HTMLButtonElement | null>(null);
 
-  const cargarHistorial = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      // El endpoint resuelve el perfil por `perfiles_alumno.id` o por `usuarioId`; se usa
-      // `alumnoId` (usuarioId, siempre presente en el DTO) para no depender del opcional.
-      const data = await apiClient<SesionEntrenamientoDetalleDTO[]>(
-        `/sesiones/alumno/${encodeURIComponent(alumno.alumnoId)}/historial?limit=10`
-      );
-      setSesiones(Array.isArray(data) ? data : []);
-    } catch (err) {
-      const detalle =
-        err instanceof ApiError
-          ? err.problem?.detail || err.message
-          : 'No pudimos cargar la actividad del alumno.';
-      setError(detalle);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [alumno.alumnoId]);
+  const cargarHistorial = useCallback(
+    async (limiteSolicitado: number) => {
+      setIsLoadingMas(true);
+      setError(null);
+      try {
+        // El endpoint resuelve el perfil por `perfiles_alumno.id` o por `usuarioId`; se usa
+        // `alumnoId` (usuarioId, siempre presente en el DTO) para no depender del opcional.
+        const data = await apiClient<SesionEntrenamientoDetalleDTO[]>(
+          `/sesiones/alumno/${encodeURIComponent(alumno.alumnoId)}/historial?limit=${limiteSolicitado}`
+        );
+        setSesiones(Array.isArray(data) ? data : []);
+      } catch (err) {
+        const detalle =
+          err instanceof ApiError
+            ? err.problem?.detail || err.message
+            : 'No pudimos cargar la actividad del alumno.';
+        setError(detalle);
+      } finally {
+        setIsLoading(false);
+        setIsLoadingMas(false);
+      }
+    },
+    [alumno.alumnoId]
+  );
 
   useEffect(() => {
     // MODO DEMO EXPLÍCITO (isDemoMode): fixture local relativo a hoy y cero llamadas API.
+    // WU19: el fixture respeta el mismo techo de `limit` que el endpoint real.
     if (isDemoMode) {
-      setSesiones(sesionesDemoAlumno(alumno.alumnoId));
+      setSesiones(sesionesDemoAlumno(alumno.alumnoId).slice(0, limite));
       setError(null);
       setIsLoading(false);
+      setIsLoadingMas(false);
       return;
     }
-    void cargarHistorial();
-  }, [isDemoMode, alumno.alumnoId, cargarHistorial]);
+    void cargarHistorial(limite);
+  }, [isDemoMode, alumno.alumnoId, limite, cargarHistorial]);
+
+  /** WU19: siguiente escalón del historial (10 → 30 → 100) o null si ya está en el tope. */
+  const siguienteLimite = LIMITES_HISTORIAL.find((valor) => valor > limite) ?? null;
+  const puedeVerMas = siguienteLimite !== null && sesiones.length >= limite;
 
   // La sesión más reciente arranca expandida; después el acordeón queda libre.
   useEffect(() => {
@@ -232,7 +258,8 @@ function ModalActividadAlumno({
                 <span
                   className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-secondary/60 border border-border/60 ${tonoAlumno.texto}`}
                 >
-                  {alumno.sesionesCompletadas}/{alumno.sesionesPrescritas} sesiones ·{' '}
+                  {alumno.sesionesCompletadas}/
+                  {pluralizar(alumno.sesionesPrescritas, 'sesión', 'sesiones')} ·{' '}
                   {porcentajeAlumno}%
                 </span>
               )}
@@ -269,7 +296,7 @@ function ModalActividadAlumno({
               <p className="text-[11px] text-muted-foreground">{error}</p>
               <button
                 type="button"
-                onClick={() => cargarHistorial()}
+                onClick={() => cargarHistorial(limite)}
                 className="inline-flex items-center gap-2 py-2 px-3 rounded-xl bg-primary text-primary-foreground font-bold text-[11px] shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
@@ -356,6 +383,23 @@ function ModalActividadAlumno({
                   </div>
                 );
               })}
+
+              {/* WU19: sube el límite 10 → 30 → 100 (re-fetch real; el demo recorta el fixture) */}
+              {puedeVerMas && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic('selection');
+                    setLimite(siguienteLimite);
+                  }}
+                  disabled={isLoadingMas}
+                  className="w-full py-2.5 px-4 rounded-2xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs border border-border transition-all active:scale-[0.99] disabled:opacity-50 cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+                >
+                  {isLoadingMas
+                    ? 'Cargando más sesiones…'
+                    : `Ver más sesiones (hasta ${siguienteLimite})`}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -371,6 +415,9 @@ export function MonitorAdherenciaPage() {
   const [error, setError] = useState<string | null>(null);
   const [orden, setOrden] = useState<OrdenMonitor>('riesgo');
   const [alumnoActivo, setAlumnoActivo] = useState<MonitorAdherenciaSemanalDTO | null>(null);
+  // WU19: filtros del monitor (chips del semáforo + búsqueda por nombre).
+  const [filtroSemaforo, setFiltroSemaforo] = useState<FiltroSemaforoMonitor>('todos');
+  const [busqueda, setBusqueda] = useState('');
 
   const timezone = useMemo(() => obtenerTimezoneDispositivo(), []);
 
@@ -434,6 +481,17 @@ export function MonitorAdherenciaPage() {
     );
   }, [alumnos, orden]);
 
+  // WU19: el filtro se aplica sobre la lista YA ordenada (respeta el orden activo).
+  const filtrados = useMemo(
+    () => filtrarMonitorAlumnos(ordenados, { busqueda, filtroSemaforo }),
+    [ordenados, busqueda, filtroSemaforo]
+  );
+  const filtroActivo = hayFiltroMonitorActivo({ busqueda, filtroSemaforo });
+  const limpiarFiltros = () => {
+    setBusqueda('');
+    setFiltroSemaforo('todos');
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Cabecera */}
@@ -467,22 +525,114 @@ export function MonitorAdherenciaPage() {
           </button>
         </div>
 
-        {/* Resumen del semáforo */}
+        {/* Resumen del semáforo: chips clicables que filtran la lista (WU19) + búsqueda */}
         {!isLoading && !error && alumnos.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" role="status" aria-live="polite">
-            {[
-              { etiqueta: 'En riesgo (Rojo)', valor: resumen.rojo, clase: CLASES_TONO.danger.texto },
-              { etiqueta: 'En observación (Amarillo)', valor: resumen.amarillo, clase: CLASES_TONO.warning.texto },
-              { etiqueta: 'Al día (Verde)', valor: resumen.verde, clase: CLASES_TONO.success.texto },
-              { etiqueta: 'Sin plan activo', valor: resumen.sinPlan, clase: CLASES_TONO.neutral.texto },
-            ].map(({ etiqueta, valor, clase }) => (
-              <div key={etiqueta} className="p-3.5 rounded-2xl bg-secondary/30 border border-border/60">
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('selection');
+                  setFiltroSemaforo('todos');
+                }}
+                aria-pressed={filtroSemaforo === 'todos'}
+                title="Ver todos los alumnos en seguimiento"
+                className={`p-3.5 rounded-2xl bg-secondary/30 border text-left transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] ${
+                  filtroSemaforo === 'todos'
+                    ? 'border-primary/50 ring-1 ring-primary/30 shadow-xs'
+                    : 'border-border/60 hover:border-border'
+                }`}
+              >
                 <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
-                  {etiqueta}
+                  Todos
                 </span>
-                <span className={`text-2xl font-black font-mono ${clase}`}>{valor}</span>
+                <span className="text-2xl font-black font-mono text-foreground">
+                  {resumen.total}
+                </span>
+              </button>
+
+              {[
+                {
+                  clave: 'rojo' as const,
+                  etiqueta: 'En riesgo (Rojo)',
+                  valor: resumen.rojo,
+                  clase: CLASES_TONO.danger.texto,
+                  anillo: 'border-rose-500/50 ring-rose-500/30',
+                },
+                {
+                  clave: 'amarillo' as const,
+                  etiqueta: 'En observación (Amarillo)',
+                  valor: resumen.amarillo,
+                  clase: CLASES_TONO.warning.texto,
+                  anillo: 'border-amber-500/50 ring-amber-500/30',
+                },
+                {
+                  clave: 'verde' as const,
+                  etiqueta: 'Al día (Verde)',
+                  valor: resumen.verde,
+                  clase: CLASES_TONO.success.texto,
+                  anillo: 'border-emerald-500/50 ring-emerald-500/30',
+                },
+                {
+                  clave: 'sin_plan' as const,
+                  etiqueta: 'Sin plan activo',
+                  valor: resumen.sinPlan,
+                  clase: CLASES_TONO.neutral.texto,
+                  anillo: 'border-border ring-border',
+                },
+              ].map(({ clave, etiqueta, valor, clase, anillo }) => (
+                <button
+                  key={clave}
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic('selection');
+                    // Toggle: volver a tocar el chip activo limpia el filtro.
+                    setFiltroSemaforo((prev) => (prev === clave ? 'todos' : clave));
+                  }}
+                  aria-pressed={filtroSemaforo === clave}
+                  title={`Filtrar: ${etiqueta}`}
+                  className={`p-3.5 rounded-2xl bg-secondary/30 border text-left transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] ${
+                    filtroSemaforo === clave
+                      ? `${anillo} ring-1 shadow-xs`
+                      : 'border-border/60 hover:border-border'
+                  }`}
+                >
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    {etiqueta}
+                  </span>
+                  <span className={`text-2xl font-black font-mono ${clase}`}>{valor}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="relative w-full sm:max-w-xs">
+                <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-2.5" />
+                <input
+                  type="search"
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  placeholder="Buscar alumno por nombre…"
+                  aria-label="Buscar alumno por nombre"
+                  className="w-full pl-9 pr-9 py-2 rounded-xl bg-card border border-border text-xs text-foreground focus:outline-hidden focus:border-primary"
+                />
+                {busqueda.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setBusqueda('')}
+                    aria-label="Limpiar búsqueda"
+                    className="absolute right-2 top-1.5 p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
-            ))}
+              {filtroActivo && (
+                <span className="text-xs font-bold text-muted-foreground" role="status" aria-live="polite">
+                  {filtrados.length} {filtrados.length === 1 ? 'resultado' : 'resultados'}
+                </span>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -534,12 +684,35 @@ export function MonitorAdherenciaPage() {
         </div>
       )}
 
+      {/* WU19: estado vacío honesto de filtros (cartera con alumnos, filtro sin coincidencias) */}
+      {!isLoading && !error && alumnos.length > 0 && filtrados.length === 0 && (
+        <div className="p-10 rounded-3xl bg-card border border-dashed border-border/70 text-center space-y-3">
+          <Search className="h-10 w-10 text-muted-foreground mx-auto opacity-40" />
+          <h2 className="text-base font-bold text-foreground">Sin resultados</h2>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            Ningún alumno coincide con la búsqueda o el filtro seleccionado.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              triggerHaptic('light');
+              limpiarFiltros();
+            }}
+            className="inline-flex items-center gap-2 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+          >
+            <span>Limpiar filtros</span>
+          </button>
+        </div>
+      )}
+
       {/* Controles + listado */}
-      {!isLoading && !error && alumnos.length > 0 && (
+      {!isLoading && !error && alumnos.length > 0 && filtrados.length > 0 && (
         <div className="space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <span className="text-xs font-bold text-muted-foreground">
-              {alumnos.length} {alumnos.length === 1 ? 'alumno' : 'alumnos'} en seguimiento
+              {filtroActivo
+                ? `${filtrados.length} ${filtrados.length === 1 ? 'resultado' : 'resultados'}`
+                : `${alumnos.length} ${alumnos.length === 1 ? 'alumno' : 'alumnos'} en seguimiento`}
             </span>
             <div className="flex items-center gap-2">
               <label htmlFor="orden-monitor" className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
@@ -561,7 +734,7 @@ export function MonitorAdherenciaPage() {
           </div>
 
           <div className="space-y-3">
-            {ordenados.map((alumno) => {
+            {filtrados.map((alumno) => {
               const conPlan = alumno.tienePlanActivo;
               const etiqueta = etiquetaMonitorAdherencia(alumno);
               const tono = CLASES_TONO[etiqueta.tono];
@@ -609,7 +782,7 @@ export function MonitorAdherenciaPage() {
                           {inactivo && (
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/30">
                               <AlertTriangle className="h-3 w-3" />
-                              {alumno.diasInactivo} días sin entrenar
+                              {pluralizar(alumno.diasInactivo, 'día sin entrenar', 'días sin entrenar')}
                             </span>
                           )}
                         </div>
@@ -645,8 +818,8 @@ export function MonitorAdherenciaPage() {
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-xs">
                           <span className="font-bold text-foreground">
-                            {alumno.sesionesCompletadas}/{alumno.sesionesPrescritas} sesiones
-                            completadas
+                            {alumno.sesionesCompletadas}/
+                            {pluralizar(alumno.sesionesPrescritas, 'sesión completada', 'sesiones completadas')}
                           </span>
                           <span className={`font-mono font-black ${tono.texto}`}>
                             {alumno.porcentajeCumplimientoSemanal}%

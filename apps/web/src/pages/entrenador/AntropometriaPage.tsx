@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { apiClient } from '../../lib/api-client';
 import { useAuth } from '../../context/auth-context';
 import {
@@ -6,6 +6,11 @@ import {
   AnguloFoto,
   ComparativaAngularDTO,
 } from '@guachafit/shared';
+import {
+  etiquetaAlumnoPendiente,
+  filtrarPendientesAntropometria,
+  hayBusquedaAntropometriaActiva,
+} from '../../lib/antropometria-filtros';
 import {
   Camera,
   CheckCircle2,
@@ -17,6 +22,9 @@ import {
   Eye,
   ShieldCheck,
   Scale,
+  RotateCcw,
+  Search,
+  SearchX,
 } from 'lucide-react';
 
 export function AntropometriaPage() {
@@ -28,6 +36,8 @@ export function AntropometriaPage() {
   const [error, setError] = useState<string | null>(null);
   // D5: fallo de conciliación visible; la tarjeta no desaparece si el server no confirmó.
   const [actionError, setActionError] = useState<string | null>(null);
+  // WU20: búsqueda client-side por nombre en la cola de pendientes.
+  const [busqueda, setBusqueda] = useState('');
 
   // Comparator State
   const [angulo, setAngulo] = useState<AnguloFoto>(AnguloFoto.FRONTAL);
@@ -45,6 +55,7 @@ export function AntropometriaPage() {
         {
           id: 'ctrl-p1',
           alumnoId: 'al-002',
+          alumnoNombre: 'Mariana Pérez Gómez',
           fechaEvaluacion: '2026-09-06',
           pesoKg: '68.20',
           alturaCm: '165.00',
@@ -89,6 +100,15 @@ export function AntropometriaPage() {
   useEffect(() => {
     cargarPendientes();
   }, [isDemoMode]);
+
+  const visibles = useMemo(
+    () => filtrarPendientesAntropometria(pendientes, busqueda),
+    [pendientes, busqueda]
+  );
+
+  const hayBusquedaActiva = hayBusquedaAntropometriaActiva(busqueda);
+
+  const limpiarBusqueda = () => setBusqueda('');
 
   const handleConciliar = async (id: string, accion: 'aprobar' | 'rechazar') => {
     setActionError(null);
@@ -194,6 +214,25 @@ export function AntropometriaPage() {
       ) : activeTab === 'pendientes' ? (
         /* Review Queue */
         <div className="space-y-4">
+          {pendientes.length > 0 && (
+            <div className="p-4 rounded-3xl bg-card border border-border/80 space-y-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                <input
+                  type="search"
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  placeholder="Buscar por alumno..."
+                  aria-label="Buscar evaluación pendiente por alumno"
+                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-background border border-border text-xs font-semibold text-foreground focus:outline-hidden focus:border-primary transition-colors"
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground font-mono">
+                Mostrando {visibles.length} de {pendientes.length} evaluaciones
+              </p>
+            </div>
+          )}
+
           {pendientes.length === 0 ? (
             <div className="p-12 text-center space-y-3 bg-card rounded-3xl border border-border">
               <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto" />
@@ -202,8 +241,24 @@ export function AntropometriaPage() {
                 Todos los check-ins antropométricos remotos han sido validados.
               </p>
             </div>
+          ) : visibles.length === 0 ? (
+            <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
+              <SearchX className="h-9 w-9 text-muted-foreground mx-auto opacity-50" />
+              <h3 className="text-sm font-black text-foreground">Sin resultados</h3>
+              <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                Ninguna evaluación pendiente coincide con la búsqueda.
+              </p>
+              <button
+                type="button"
+                onClick={limpiarBusqueda}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs cursor-pointer"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span>Limpiar búsqueda</span>
+              </button>
+            </div>
           ) : (
-            pendientes.map((ctrl) => (
+            visibles.map((ctrl) => (
               <div
                 key={ctrl.id}
                 className="p-5 sm:p-6 rounded-3xl bg-card border border-border/80 shadow-xs space-y-4"
@@ -217,8 +272,8 @@ export function AntropometriaPage() {
                       Pendiente Aprobación
                     </span>
                   </div>
-                  <span className="text-xs text-muted-foreground font-mono">
-                    ID Alumno: {ctrl.alumnoId.slice(0, 8)}...
+                  <span className="text-xs font-bold text-foreground">
+                    {etiquetaAlumnoPendiente(ctrl)}
                   </span>
                 </div>
 
@@ -250,7 +305,7 @@ export function AntropometriaPage() {
                       Fotos Adjuntas
                     </span>
                     <p className="font-mono font-bold text-base text-foreground">
-                      {ctrl.fotos.length} foto(s)
+                      {ctrl.fotos.length === 1 ? '1 foto' : `${ctrl.fotos.length} fotos`}
                     </p>
                   </div>
                 </div>
@@ -357,8 +412,8 @@ export function AntropometriaPage() {
               </span>
             </div>
             <div className="flex items-center gap-4 text-xs font-mono font-bold">
-              <span className="text-emerald-400">Δ Peso: -3.20 kg</span>
-              <span className="text-emerald-400">Δ Grasa: -2.40%</span>
+              <span className="text-emerald-400">Variación de peso: -3.20 kg</span>
+              <span className="text-emerald-400">Variación de grasa: -2.40%</span>
             </div>
           </div>
         </div>

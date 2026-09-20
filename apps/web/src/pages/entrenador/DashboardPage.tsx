@@ -4,6 +4,7 @@ import { apiClient } from '../../lib/api-client';
 import { useAuth } from '../../context/auth-context';
 import { MetricCard } from '../../components/common/MetricCard';
 import { clasificarTasaAdherencia, etiquetaSemaforo } from '../../lib/adherencia';
+import { pluralizar } from '../../lib/pluralizar';
 import { DashboardComandoDTO } from '@guachafit/shared';
 import {
   LayoutDashboard,
@@ -17,6 +18,9 @@ import {
   ShieldCheck,
   UserX,
 } from 'lucide-react';
+
+/** WU20: tope de filas visibles por bandeja de riesgo; el resto se ve en su sección completa. */
+const TOPE_FILAS_RIESGO = 5;
 
 export function DashboardPage() {
   const { isDemoMode } = useAuth();
@@ -203,7 +207,7 @@ export function DashboardPage() {
           <MetricCard
             title="Alumnos en Riesgo"
             value={dashboard.kpisMacro.alumnosEnRiesgoDeportivo}
-            subtitle="Sin entrenar hace 4 días o más"
+            subtitle="Cumplimiento bajo o 4+ días sin entrenar"
             icon={UserX}
             badge={{
               text: dashboard.kpisMacro.alumnosEnRiesgoDeportivo > 0 ? 'Requiere atención' : 'Sin alertas',
@@ -286,8 +290,14 @@ export function DashboardPage() {
             <span>Alumnos con Pagos Vencidos</span>
           </h3>
 
+          {dashboard && dashboard.bandejasRapidas.alumnosEnMora.length === 0 && (
+            <p className="text-xs text-muted-foreground py-4 text-center">
+              Sin pagos vencidos por ahora 🎉
+            </p>
+          )}
+
           <div className="space-y-2">
-            {dashboard?.bandejasRapidas.alumnosEnMora.map((mora) => (
+            {dashboard?.bandejasRapidas.alumnosEnMora.slice(0, TOPE_FILAS_RIESGO).map((mora) => (
               <div
                 key={mora.alumnoId}
                 className="p-3 rounded-2xl bg-secondary/40 border border-border flex items-center justify-between gap-3"
@@ -295,7 +305,7 @@ export function DashboardPage() {
                 <div className="min-w-0">
                   <p className="font-bold text-xs text-foreground truncate">{mora.nombre}</p>
                   <p className="text-[10px] text-destructive font-semibold">
-                    {mora.diasVencido} días de atraso
+                    {pluralizar(mora.diasVencido, 'día de atraso', 'días de atraso')}
                   </p>
                 </div>
                 <div className="text-right shrink-0">
@@ -306,6 +316,16 @@ export function DashboardPage() {
               </div>
             ))}
           </div>
+
+          {dashboard && dashboard.bandejasRapidas.alumnosEnMora.length > TOPE_FILAS_RIESGO && (
+            <Link
+              to="/coach/alumnos"
+              className="w-full py-2 px-3 rounded-xl bg-secondary/60 hover:bg-secondary text-foreground font-bold text-[11px] flex items-center justify-between transition-colors"
+            >
+              <span>Ver todos ({dashboard.bandejasRapidas.alumnosEnMora.length})</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
         </div>
 
         {/* Inactivity List */}
@@ -315,24 +335,45 @@ export function DashboardPage() {
             <span>Alumnos sin Entrenar</span>
           </h3>
 
+          {dashboard && dashboard.bandejasRapidas.alumnosInactivosEntrenamiento.length === 0 && (
+            <p className="text-xs text-muted-foreground py-4 text-center">
+              Sin alumnos inactivos por ahora 🎉
+            </p>
+          )}
+
           <div className="space-y-2">
-            {dashboard?.bandejasRapidas.alumnosInactivosEntrenamiento.map((inac) => (
-              <div
-                key={inac.alumnoId}
-                className="p-3 rounded-2xl bg-secondary/40 border border-border flex items-center justify-between gap-3"
-              >
-                <div className="min-w-0">
-                  <p className="font-bold text-xs text-foreground truncate">{inac.nombre}</p>
-                  <p className="text-[10px] text-muted-foreground">Sin registrar series</p>
+            {dashboard?.bandejasRapidas.alumnosInactivosEntrenamiento
+              .slice(0, TOPE_FILAS_RIESGO)
+              .map((inac) => (
+                <div
+                  key={inac.alumnoId}
+                  className="p-3 rounded-2xl bg-secondary/40 border border-border flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <p className="font-bold text-xs text-foreground truncate">{inac.nombre}</p>
+                    <p className="text-[10px] text-muted-foreground">Sin registrar series</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="font-mono font-bold text-xs text-destructive">
+                      {pluralizar(inac.diasSinEntrenar, 'día sin entrenar', 'días sin entrenar')}
+                    </span>
+                  </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <span className="font-mono font-bold text-xs text-destructive">
-                    {inac.diasSinEntrenar} días sin entrenar
-                  </span>
-                </div>
-              </div>
-            ))}
+              ))}
           </div>
+
+          {dashboard &&
+            dashboard.bandejasRapidas.alumnosInactivosEntrenamiento.length > TOPE_FILAS_RIESGO && (
+              <Link
+                to="/coach/monitor-adherencia"
+                className="w-full py-2 px-3 rounded-xl bg-secondary/60 hover:bg-secondary text-foreground font-bold text-[11px] flex items-center justify-between transition-colors"
+              >
+                <span>
+                  Ver todos ({dashboard.bandejasRapidas.alumnosInactivosEntrenamiento.length})
+                </span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            )}
         </div>
       </div>
     </div>

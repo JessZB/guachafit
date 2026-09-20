@@ -1,15 +1,24 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../../context/auth-context';
 import { apiClient } from '../../lib/api-client';
+import { pluralizar } from '../../lib/pluralizar';
 import {
   Moneda,
   MetodoPago,
   EstadoCuota,
+  EstadoConciliacion,
   CuotaDetalleDTO,
   TasaCambioVigenteDTO,
   PresignedUploadUrlResponseDTO,
   ResumenFinancieroAlumnoDTO,
+  TransaccionPagoDetalleDTO,
 } from '@guachafit/shared';
+import {
+  etiquetaEstadoTransaccion,
+  filtrarTransaccionesPorEstado,
+  normalizarEstadoTransaccion,
+  type FiltroEstadoTransaccionPago,
+} from '../../lib/pagos-historial-filtros';
 import {
   CreditCard,
   TrendingUp,
@@ -26,6 +35,8 @@ import {
   ChevronRight,
   ArrowUpRight,
   ShieldCheck,
+  RotateCcw,
+  SearchX,
 } from 'lucide-react';
 
 /**
@@ -35,6 +46,56 @@ import {
  */
 const COMPROBANTE_DEMO_URL =
   'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=600&q=80';
+
+/** WU20: chips del historial (mismos estados que ya renderiza el badge de cada fila). */
+const OPCIONES_ESTADO_HISTORIAL: Array<{
+  valor: FiltroEstadoTransaccionPago;
+  label: string;
+}> = [
+  { valor: 'todos', label: 'Todos' },
+  { valor: EstadoConciliacion.PENDIENTE, label: etiquetaEstadoTransaccion(EstadoConciliacion.PENDIENTE) },
+  { valor: EstadoConciliacion.APROBADO, label: etiquetaEstadoTransaccion(EstadoConciliacion.APROBADO) },
+  { valor: EstadoConciliacion.RECHAZADO, label: etiquetaEstadoTransaccion(EstadoConciliacion.RECHAZADO) },
+];
+
+/**
+ * WU20: normaliza las transacciones del historial real al DTO que renderiza la vista.
+ * `GET /finanzas/clientes/:id/historial` entrega `estado`/`referencia`/`montoUsd`/`montoBs`
+ * (no `estadoConciliacion`/`referenciaBancaria`/`montoEquivalenteUsd`); sin este mapeo la fila
+ * mostraba "En Revisión" y montos indefinidos. Es solo lectura: no toca el flujo de reportar pago.
+ */
+function adaptarTransaccionesHistorial(
+  transacciones: ResumenFinancieroAlumnoDTO['transacciones'],
+  contexto: { clienteId: string; entrenadorId: string }
+): TransaccionPagoDetalleDTO[] {
+  return transacciones.map((tx) => {
+    const esVes = Boolean(tx.montoBs);
+    const tasa = esVes
+      ? Number(tx.montoUsd) > 0
+        ? (Number(tx.montoBs) / Number(tx.montoUsd)).toFixed(4)
+        : ''
+      : '1.0000';
+
+    return {
+      id: tx.id,
+      cuotaId: tx.cuotaId,
+      clienteId: contexto.clienteId,
+      entrenadorId: contexto.entrenadorId,
+      registradoPor: contexto.clienteId,
+      montoOriginal: tx.montoBs ?? tx.montoUsd,
+      monedaOriginal: esVes ? Moneda.VES : Moneda.USD,
+      tasaCambioFijada: tasa,
+      montoEquivalenteUsd: tx.montoUsd,
+      metodoPago: tx.metodoPago as MetodoPago,
+      referenciaBancaria: tx.referencia ?? null,
+      fechaOperacion: tx.createdAtUtc ? tx.createdAtUtc.slice(0, 10) : '',
+      estadoConciliacion: (tx.estado as EstadoConciliacion) ?? EstadoConciliacion.PENDIENTE,
+      fechaReporteUtc: tx.createdAtUtc,
+      createdAtUtc: tx.createdAtUtc,
+      updatedAtUtc: tx.createdAtUtc,
+    };
+  });
+}
 
 /**
  * Adapta el resumen financiero real (`GET /finanzas/clientes/:id/historial`) a la vista de cuota.
@@ -60,7 +121,10 @@ function adaptarCuotaDesdeResumen(
     fechaEmisionUtc: c.fechaVencimiento,
     fechaCorteUtc: c.fechaVencimiento,
     estado: c.estado as EstadoCuota,
-    transacciones: resumen.transacciones as unknown as CuotaDetalleDTO['transacciones'],
+    transacciones: adaptarTransaccionesHistorial(resumen.transacciones, {
+      clienteId: resumen.usuarioId,
+      entrenadorId,
+    }),
     createdAtUtc: new Date().toISOString(),
     updatedAtUtc: new Date().toISOString(),
   };
@@ -76,6 +140,9 @@ export function PagosPage() {
 
   // Progressive Disclosure: 'hub' (selector) | 'nuevo-pago' | 'historial'
   const [vistaActiva, setVistaActiva] = useState<'hub' | 'nuevo-pago' | 'historial'>('hub');
+  // WU20: chip de estado del historial (solo lectura; no afecta el flujo de reportar pago).
+  const [filtroEstadoHistorial, setFiltroEstadoHistorial] =
+    useState<FiltroEstadoTransaccionPago>('todos');
 
   // Form State
   const [metodoPago, setMetodoPago] = useState<MetodoPago>(MetodoPago.PAGO_MOVIL);
@@ -196,6 +263,13 @@ export function PagosPage() {
     tasaEfectivaNum > 0
       ? (Number(cuota?.saldoPendienteUsd || 0) * tasaEfectivaNum).toFixed(2)
       : '—';
+
+  // WU20: historial visible según el chip de estado (mismo criterio que el badge de cada fila).
+  const transaccionesHistorial = cuota?.transacciones ?? [];
+  const transaccionesFiltradas = useMemo(
+    () => filtrarTransaccionesPorEstado(transaccionesHistorial, filtroEstadoHistorial),
+    [transaccionesHistorial, filtroEstadoHistorial]
+  );
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -487,7 +561,7 @@ export function PagosPage() {
                       </h3>
                       {cuota?.transacciones && cuota.transacciones.length > 0 && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
-                          {cuota.transacciones.length} pago(s)
+                          {pluralizar(cuota.transacciones.length, 'pago', 'pagos')}
                         </span>
                       )}
                     </div>
@@ -722,13 +796,61 @@ export function PagosPage() {
                 <span>Historial de Pagos y Recibos</span>
               </h2>
               <span className="text-xs text-muted-foreground font-mono">
-                {cuota?.transacciones?.length || 0} registro(s)
+                {pluralizar(cuota?.transacciones?.length || 0, 'registro', 'registros')}
               </span>
             </div>
 
-            {cuota?.transacciones && cuota.transacciones.length > 0 ? (
+            {transaccionesHistorial.length > 0 && (
+              <div className="p-3 rounded-2xl bg-secondary/20 border border-border/70 space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {OPCIONES_ESTADO_HISTORIAL.map((opcion) => {
+                    const activo = filtroEstadoHistorial === opcion.valor;
+                    return (
+                      <button
+                        key={opcion.valor}
+                        type="button"
+                        onClick={() => setFiltroEstadoHistorial(opcion.valor)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          activo
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {opcion.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-muted-foreground font-mono">
+                  Mostrando {transaccionesFiltradas.length} de{' '}
+                  {pluralizar(transaccionesHistorial.length, 'registro', 'registros')}
+                </p>
+              </div>
+            )}
+
+            {transaccionesHistorial.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-6 text-center">
+                No hay transacciones registradas para este periodo.
+              </p>
+            ) : transaccionesFiltradas.length === 0 ? (
+              <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
+                <SearchX className="h-9 w-9 text-muted-foreground mx-auto opacity-50" />
+                <h3 className="text-sm font-black text-foreground">Sin resultados</h3>
+                <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                  Ningún pago del historial coincide con el estado seleccionado.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setFiltroEstadoHistorial('todos')}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs cursor-pointer"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>Limpiar filtro</span>
+                </button>
+              </div>
+            ) : (
               <div className="space-y-3">
-                {cuota.transacciones.map((tx) => (
+                {transaccionesFiltradas.map((tx) => (
                   <div
                     key={tx.id}
                     className="p-4 rounded-2xl bg-secondary/30 border border-border/80 flex flex-col gap-2.5"
@@ -741,18 +863,16 @@ export function PagosPage() {
                           </span>
                           <span
                             className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase ${
-                              tx.estadoConciliacion === 'aprobado'
+                              normalizarEstadoTransaccion(tx.estadoConciliacion) ===
+                              EstadoConciliacion.APROBADO
                                 ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
-                                : tx.estadoConciliacion === 'rechazado'
+                                : normalizarEstadoTransaccion(tx.estadoConciliacion) ===
+                                  EstadoConciliacion.RECHAZADO
                                 ? 'bg-destructive/15 text-destructive border border-destructive/20'
                                 : 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
                             }`}
                           >
-                            {tx.estadoConciliacion === 'aprobado'
-                              ? 'Verificado'
-                              : tx.estadoConciliacion === 'rechazado'
-                              ? 'Rechazado'
-                              : 'En Revisión'}
+                            {etiquetaEstadoTransaccion(tx.estadoConciliacion)}
                           </span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
@@ -771,7 +891,8 @@ export function PagosPage() {
                     </div>
 
                     {/* UX CRÍTICA: VISIBILIDAD DEL MOTIVO DE RECHAZO */}
-                    {tx.estadoConciliacion === 'rechazado' && (
+                    {normalizarEstadoTransaccion(tx.estadoConciliacion) ===
+                      EstadoConciliacion.RECHAZADO && (
                       <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/25 text-xs text-destructive flex flex-col sm:flex-row sm:items-center justify-between gap-2 mt-1">
                         <div className="flex items-start gap-2">
                           <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -812,10 +933,6 @@ export function PagosPage() {
                   </div>
                 ))}
               </div>
-            ) : (
-              <p className="text-xs text-muted-foreground py-6 text-center">
-                No hay transacciones registradas para este periodo.
-              </p>
             )}
           </div>
         </div>

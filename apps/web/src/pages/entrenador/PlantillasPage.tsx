@@ -9,6 +9,7 @@ import { apiClient } from '../../lib/api-client';
 import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
 import { formatFechaLocal } from '../../lib/date-format';
+import { pluralizar } from '../../lib/pluralizar';
 import {
   CATALOGO_DEMO,
   PLANTILLAS_DEMO,
@@ -43,14 +44,22 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Search,
+  SearchX,
   Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
 
-type FiltroEstado = 'activas' | 'desactivadas' | 'todas';
+import {
+  contarPlantillasPorEstado,
+  filtrarPlantillas,
+  hayFiltroPlantillasActivo,
+  type FiltroEstadoPlantilla,
+  type FiltroNivelPlantilla,
+} from '../../lib/plantillas-filtros';
 
-const OPCIONES_FILTRO: Array<{ valor: FiltroEstado; label: string }> = [
+const OPCIONES_FILTRO: Array<{ valor: FiltroEstadoPlantilla; label: string }> = [
   { valor: 'activas', label: 'Activas' },
   { valor: 'desactivadas', label: 'Desactivadas' },
   { valor: 'todas', label: 'Todas' },
@@ -76,7 +85,9 @@ export function PlantillasPage() {
   const [plantillas, setPlantillas] = useState<PlantillaRutinaResumenDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filtro, setFiltro] = useState<FiltroEstado>('activas');
+  const [filtro, setFiltro] = useState<FiltroEstadoPlantilla>('activas');
+  const [busqueda, setBusqueda] = useState('');
+  const [filtroNivel, setFiltroNivel] = useState<FiltroNivelPlantilla>('todos');
   const [accionError, setAccionError] = useState<string | null>(null);
 
   const [catalogo, setCatalogo] = useState<EjercicioCatalogoDetalleDTO[]>([]);
@@ -165,20 +176,20 @@ export function PlantillasPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isModalOpen]);
 
-  const conteos = useMemo(
-    () => ({
-      activas: plantillas.filter((p) => p.activa).length,
-      desactivadas: plantillas.filter((p) => !p.activa).length,
-      todas: plantillas.length,
-    }),
-    [plantillas]
+  const conteos = useMemo(() => contarPlantillasPorEstado(plantillas), [plantillas]);
+
+  const visibles = useMemo(
+    () => filtrarPlantillas(plantillas, { estado: filtro, busqueda, nivel: filtroNivel }),
+    [plantillas, filtro, busqueda, filtroNivel]
   );
 
-  const visibles = useMemo(() => {
-    if (filtro === 'activas') return plantillas.filter((p) => p.activa);
-    if (filtro === 'desactivadas') return plantillas.filter((p) => !p.activa);
-    return plantillas;
-  }, [plantillas, filtro]);
+  const hayFiltroActivo = hayFiltroPlantillasActivo({ busqueda, nivel: filtroNivel });
+
+  const limpiarFiltros = () => {
+    triggerHaptic('selection');
+    setBusqueda('');
+    setFiltroNivel('todos');
+  };
 
   const nombreError = validarNombrePlantilla(formNombre);
   const mostrarNombreError = Boolean(nombreError) && (intentoGuardar || formNombre.trim() !== '');
@@ -478,32 +489,71 @@ export function PlantillasPage() {
         </div>
       )}
 
-      {/* Filtro por estado */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {OPCIONES_FILTRO.map((opcion) => {
-          const activo = filtro === opcion.valor;
-          const conteo = conteos[opcion.valor];
-          return (
-            <button
-              key={opcion.valor}
-              type="button"
-              onClick={() => {
-                triggerHaptic('selection');
-                setFiltro(opcion.valor);
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activo
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
-              }`}
+      {/* Filtros: estado + búsqueda por nombre + nivel objetivo */}
+      <div className="p-4 rounded-3xl bg-card border border-border/80 space-y-3">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            {OPCIONES_FILTRO.map((opcion) => {
+              const activo = filtro === opcion.valor;
+              const conteo = conteos[opcion.valor];
+              return (
+                <button
+                  key={opcion.valor}
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic('selection');
+                    setFiltro(opcion.valor);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    activo
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <span>{opcion.label}</span>
+                  <span className={`font-mono text-[10px] ${activo ? 'opacity-80' : 'opacity-60'}`}>
+                    {conteo}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-1 flex-col sm:flex-row gap-2 lg:justify-end">
+            <div className="relative flex-1 sm:max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <input
+                type="search"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Buscar por nombre..."
+                aria-label="Buscar plantilla por nombre"
+                className="w-full pl-9 pr-3 py-2 rounded-xl bg-background border border-border text-xs font-semibold text-foreground focus:outline-hidden focus:border-primary transition-colors"
+              />
+            </div>
+
+            <select
+              value={filtroNivel}
+              onChange={(e) => setFiltroNivel(e.target.value as FiltroNivelPlantilla)}
+              aria-label="Filtrar plantillas por nivel objetivo"
+              className="px-3 py-2 rounded-xl bg-background border border-border text-xs font-bold text-foreground focus:outline-hidden focus:border-primary transition-colors cursor-pointer"
             >
-              <span>{opcion.label}</span>
-              <span className={`font-mono text-[10px] ${activo ? 'opacity-80' : 'opacity-60'}`}>
-                {conteo}
-              </span>
-            </button>
-          );
-        })}
+              <option value="todos">Todos los niveles</option>
+              {NIVELES_PLANTILLA_ORDEN.map((nivel) => (
+                <option key={nivel} value={nivel}>
+                  {ETIQUETAS_NIVEL_PLANTILLA[nivel]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {!isLoading && !error && (
+          <p className="text-[11px] text-muted-foreground font-mono">
+            Mostrando {visibles.length} de {conteos[filtro]}{' '}
+            {filtro === 'todas' ? 'plantillas' : filtro}
+          </p>
+        )}
       </div>
 
       {/* Estados de la lista */}
@@ -535,29 +585,47 @@ export function PlantillasPage() {
           </button>
         </div>
       ) : visibles.length === 0 ? (
-        <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
-          <Dumbbell className="h-9 w-9 text-muted-foreground mx-auto opacity-50" />
-          <h3 className="text-sm font-black text-foreground">
-            {filtro === 'activas'
-              ? 'No tienes plantillas activas'
-              : filtro === 'desactivadas'
-              ? 'No tienes plantillas desactivadas'
-              : 'Todavía no tienes plantillas de ejercicios'}
-          </h3>
-          <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            {filtro === 'activas'
-              ? 'Crea tu primera plantilla para prescribir una semana completa con un clic a cualquier alumno.'
-              : 'Las plantillas desactivadas se conservan y pueden reactivarse cuando quieras.'}
-          </p>
-          <button
-            type="button"
-            onClick={abrirCrear}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs cursor-pointer"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <span>Crear Plantilla</span>
-          </button>
-        </div>
+        hayFiltroActivo ? (
+          <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
+            <SearchX className="h-9 w-9 text-muted-foreground mx-auto opacity-50" />
+            <h3 className="text-sm font-black text-foreground">Sin resultados</h3>
+            <p className="text-xs text-muted-foreground max-w-md mx-auto">
+              Ninguna plantilla coincide con la búsqueda o el nivel seleccionado.
+            </p>
+            <button
+              type="button"
+              onClick={limpiarFiltros}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs cursor-pointer"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span>Limpiar filtros</span>
+            </button>
+          </div>
+        ) : (
+          <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
+            <Dumbbell className="h-9 w-9 text-muted-foreground mx-auto opacity-50" />
+            <h3 className="text-sm font-black text-foreground">
+              {filtro === 'activas'
+                ? 'No tienes plantillas activas'
+                : filtro === 'desactivadas'
+                ? 'No tienes plantillas desactivadas'
+                : 'Todavía no tienes plantillas de ejercicios'}
+            </h3>
+            <p className="text-xs text-muted-foreground max-w-md mx-auto">
+              {filtro === 'activas'
+                ? 'Crea tu primera plantilla para prescribir una semana completa con un clic a cualquier alumno.'
+                : 'Las plantillas desactivadas se conservan y pueden reactivarse cuando quieras.'}
+            </p>
+            <button
+              type="button"
+              onClick={abrirCrear}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>Crear Plantilla</span>
+            </button>
+          </div>
+        )
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {visibles.map((plantilla) => (
@@ -596,7 +664,7 @@ export function PlantillasPage() {
                     {plantilla.totalDias} {plantilla.totalDias === 1 ? 'día' : 'días'}
                   </span>
                   <span className="px-2 py-0.5 rounded-md bg-secondary border border-border/60 font-bold text-foreground">
-                    {plantilla.totalEjercicios} ejercicios
+                    {pluralizar(plantilla.totalEjercicios, 'ejercicio', 'ejercicios')}
                   </span>
                 </div>
 
@@ -812,7 +880,8 @@ export function PlantillasPage() {
                 <Sparkles className="h-3.5 w-3.5 text-primary" />
                 {resumenEditor.totalDias} día{resumenEditor.totalDias === 1 ? '' : 's'} ·{' '}
                 {resumenEditor.totalEjercicios} ejercicio
-                {resumenEditor.totalEjercicios === 1 ? '' : 's'} · {resumenEditor.totalSeries} series
+                {resumenEditor.totalEjercicios === 1 ? '' : 's'} ·{' '}
+                {pluralizar(resumenEditor.totalSeries, 'serie', 'series')}
               </span>
 
               <div className="flex gap-2 self-end sm:self-auto">
