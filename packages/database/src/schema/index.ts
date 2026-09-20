@@ -22,6 +22,7 @@ import {
   EstadoAlumno,
   Modalidad,
   EstadoSesion,
+  MotivoOmision,
   SemaforoNutricional,
   TipoComida,
   OrigenAntropometria,
@@ -34,6 +35,7 @@ import {
   PlataformaDispositivo,
   TemaUi,
   BloqueDiaRutinaDTO,
+  NivelObjetivoPlantilla,
 } from '@guachafit/shared';
 
 // =============================================================================
@@ -70,6 +72,10 @@ export const estadoSesionEnum = pgEnum('enum_estado_sesion', [
   EstadoSesion.EN_PROGRESO,
   EstadoSesion.COMPLETADA,
   EstadoSesion.OMITIDA,
+]);
+export const motivoOmisionEnum = pgEnum('enum_motivo_omision', [
+  MotivoOmision.DESCANSO,
+  MotivoOmision.INCOMPLETO,
 ]);
 export const semaforoNutricionalEnum = pgEnum('enum_semaforo_nutricional', [
   SemaforoNutricional.CUMPLIDO,
@@ -118,6 +124,12 @@ export const estadoConciliacionEnum = pgEnum('enum_estado_conciliacion', [
   EstadoConciliacion.PENDIENTE,
   EstadoConciliacion.APROBADO,
   EstadoConciliacion.RECHAZADO,
+]);
+/** RF-017 RN-01: nivel objetivo de una plantilla de rutina del banco del coach. */
+export const nivelObjetivoPlantillaEnum = pgEnum('enum_nivel_objetivo_plantilla', [
+  NivelObjetivoPlantilla.PRINCIPIANTE,
+  NivelObjetivoPlantilla.INTERMEDIO,
+  NivelObjetivoPlantilla.AVANZADO,
 ]);
 
 // =============================================================================
@@ -188,6 +200,10 @@ export const perfilesAlumno = pgTable(
       .notNull(),
     modalidad: modalidadEnum('modalidad').default(Modalidad.PRESENCIAL).notNull(),
     tasaFijadaOverride: numeric('tasa_fijada_override', { precision: 12, scale: 4 }),
+    /** RF-001 RN-02: racha de días consecutivos con cumplimiento >= 70% del volumen prescrito. */
+    rachaDias: integer('racha_dias').default(0).notNull(),
+    /** Última fecha local (YYYY-MM-DD) en la que se incrementó la racha. */
+    rachaUltimaFecha: date('racha_ultima_fecha'),
     deletedAtUtc: timestamp('deleted_at_utc', { withTimezone: true }),
     createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
     updatedAtUtc: timestamp('updated_at_utc', { withTimezone: true }).defaultNow().notNull(),
@@ -265,6 +281,33 @@ export const ejerciciosCatalogo = pgTable('ejercicios_catalogo', {
   createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
 });
 
+/**
+ * RF-017: banco de plantillas de rutina reutilizables del entrenador.
+ * Replica el patrón de `rutinas`: bloques de días/ejercicios en JSONB tipado con
+ * `BloqueDiaRutinaDTO` para que la asignación sea una copia profunda fiel.
+ */
+export const plantillasRutina = pgTable(
+  'plantillas_rutina',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    entrenadorId: uuid('entrenador_id')
+      .notNull()
+      .references(() => usuarios.id, { onDelete: 'cascade' }),
+    nombre: varchar('nombre', { length: 120 }).notNull(),
+    nivelObjetivo: nivelObjetivoPlantillaEnum('nivel_objetivo').notNull(),
+    bloques: jsonb('bloques').$type<BloqueDiaRutinaDTO[]>().notNull(),
+    activa: boolean('activa').default(true).notNull(),
+    createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
+    updatedAtUtc: timestamp('updated_at_utc', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    entrenadorActivaIndex: index('idx_plantillas_entrenador_activa').on(
+      table.entrenadorId,
+      table.activa
+    ),
+  })
+);
+
 export const rutinas = pgTable('rutinas', {
   id: uuid('id').defaultRandom().primaryKey(),
   alumnoId: uuid('alumno_id')
@@ -291,6 +334,8 @@ export const sesionesEntrenamiento = pgTable('sesiones_entrenamiento', {
   fechaFinUtc: timestamp('fecha_fin_utc', { withTimezone: true }),
   timezoneCliente: varchar('timezone_cliente', { length: 64 }).default('America/Caracas').notNull(),
   estado: estadoSesionEnum('estado').default(EstadoSesion.PLANIFICADA).notNull(),
+  /** Motivo cuando la sesión se cierra como OMITIDA (RF-001 Escenario 5). */
+  motivoOmision: motivoOmisionEnum('motivo_omision'),
   porcentajeCumplimiento: numeric('porcentaje_cumplimiento', { precision: 5, scale: 2 })
     .default('0.00')
     .notNull(),
@@ -325,7 +370,10 @@ export const seriesRegistro = pgTable('series_registro', {
   numeroSerie: integer('numero_serie').notNull(),
   repsObjetivo: integer('reps_objetivo').notNull(),
   repsLogradas: integer('reps_logradas'),
+  /** Peso real levantado (se sobrescribe al sincronizar). */
   pesoKg: numeric('peso_kg', { precision: 6, scale: 2 }),
+  /** Peso prescrito por el coach (null si la prescripción es cualitativa o al peso corporal). */
+  pesoPrescritoKg: numeric('peso_prescrito_kg', { precision: 6, scale: 2 }),
   rpe: numeric('rpe', { precision: 3, scale: 1 }),
   descansoSegundos: integer('descanso_segundos'),
   completada: boolean('completada').default(false).notNull(),

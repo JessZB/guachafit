@@ -1,20 +1,41 @@
 {
-  "version": "7",
-  "dialect": "postgresql",
-  "entries": [
-    {
-      "idx": 0,
-      "version": "7",
-      "when": 1788729402277,
-      "tag": "0000_wealthy_morlocks",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1789348620132,
-      "tag": "0001_many_swordsman",
-      "breakpoints": true
-    }
-  ]
+    "version":  "7",
+    "dialect":  "postgresql",
+    "entries":  [
+                    {
+                        "idx":  0,
+                        "version":  "7",
+                        "when":  1788729402277,
+                        "tag":  "0000_wealthy_morlocks",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  1,
+                        "version":  "7",
+                        "when":  1789348620132,
+                        "tag":  "0001_many_swordsman",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  2,
+                        "version":  "7",
+                        "when":  1789851342672,
+                        "tag":  "0002_happy_viper",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  3,
+                        "version":  "7",
+                        "when":  1789856632593,
+                        "tag":  "0003_noisy_young_avengers",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  4,
+                        "version":  "7",
+                        "when":  1789858574975,
+                        "tag":  "0004_rls_multitenant",
+                        "breakpoints":  true
+                    }
+                ]
 }

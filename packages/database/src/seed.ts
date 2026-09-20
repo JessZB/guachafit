@@ -2,6 +2,7 @@ import * as crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import {
   db,
+  withTenant,
   queryClient,
   usuarios,
   perfilesEntrenador,
@@ -9,6 +10,7 @@ import {
   preferenciasNotificacion,
   ejerciciosCatalogo,
   rutinas,
+  plantillasRutina,
   sesionesEntrenamiento,
   ejerciciosSesion,
   seriesRegistro,
@@ -37,6 +39,7 @@ import {
   MetodoPago,
   EstadoConciliacion,
   BloqueDiaRutinaDTO,
+  NivelObjetivoPlantilla,
 } from '@guachafit/shared';
 
 // =============================================================================
@@ -91,7 +94,12 @@ async function seed() {
     await db.delete(seriesRegistro);
     await db.delete(ejerciciosSesion);
     await db.delete(sesionesEntrenamiento);
-    await db.delete(rutinas);
+    // RNF-003/ADR-009: `rutinas` tiene RLS; el seed es una ruta de sistema y usa el
+    // bypass explícito de superadmin para operar sobre cualquier tenant.
+    await withTenant({ isSuperadmin: true }, async (tx) => {
+      await tx.delete(rutinas);
+    });
+    await db.delete(plantillasRutina);
     await db.delete(ejerciciosCatalogo);
     await db.delete(transaccionesPago);
     await db.delete(cuotasMembresia);
@@ -409,6 +417,8 @@ async function seed() {
         fichaSaludPrivada: fichaSaludCifrada1,
         estadoActivacion: EstadoAlumno.ACTIVO,
         modalidad: Modalidad.PRESENCIAL,
+        rachaDias: 4,
+        rachaUltimaFecha: nowUtc.toISOString().split('T')[0],
         createdAtUtc: nowUtc,
         updatedAtUtc: nowUtc,
       })
@@ -845,16 +855,271 @@ async function seed() {
       },
     ];
 
-    await db.insert(rutinas).values({
-      id: rutinaId,
-      alumnoId: user1.id,
-      entrenadorId: coachUser.id,
-      nombre: 'Fuerza & Hipertrofia (Push/Pull/Legs)',
-      bloques: bloquesRutina,
-      activa: true,
-      createdAtUtc: nowUtc,
-      updatedAtUtc: nowUtc,
+    // RNF-003/ADR-009: inserción de rutina bajo el bypass explícito de sistema.
+    await withTenant({ isSuperadmin: true }, async (tx) => {
+      await tx.insert(rutinas).values({
+        id: rutinaId,
+        alumnoId: user1.id,
+        entrenadorId: coachUser.id,
+        nombre: 'Fuerza & Hipertrofia (Push/Pull/Legs)',
+        bloques: bloquesRutina,
+        activa: true,
+        createdAtUtc: nowUtc,
+        updatedAtUtc: nowUtc,
+      });
     });
+
+    // -------------------------------------------------------------------------
+    // 6b. Banco de Plantillas de Rutina del Coach (RF-017)
+    // -------------------------------------------------------------------------
+    console.log('🗂️  Creando banco de plantillas de rutina reutilizables (RF-017)...');
+
+    const ejercicioTricepsCuerdaId = mapaEjercicios.get(
+      'Extensiones de Tríceps en Polea Alta con Cuerda'
+    )!;
+    const ejercicioFacePullId = mapaEjercicios.get(
+      'Pájaros Posteriores en Polea (Face Pull / Deltoides Posterior)'
+    )!;
+    const ejercicioPlanchaId = mapaEjercicios.get('Plancha Abdominal Isométrica (Plank)')!;
+    const ejercicioJalonId = mapaEjercicios.get('Jalón al Pecho en Polea Alta')!;
+    const ejercicioHipThrustId = mapaEjercicios.get('Hip Thrust con Barra')!;
+    const ejercicioElevacionesLateralesId = mapaEjercicios.get(
+      'Elevaciones Laterales con Mancuernas'
+    )!;
+
+    const bloquesTrenSuperiorHipertrofia: BloqueDiaRutinaDTO[] = [
+      {
+        diaId: 'tsh-d1',
+        titulo: 'Día 1 (Lunes): Empuje — Pecho, Hombro y Tríceps',
+        enfoque: 'Hipertrofia con RPE 8',
+        diaSugerido: 1,
+        ejercicios: [
+          {
+            ejercicioId: ejercicioBancaId,
+            nombre: 'Press de Banca Plano con Barra',
+            series: 4,
+            reps: '6-8',
+            peso: '80.00',
+            rpe: '8.0',
+            descansoSegundos: 120,
+            notas: 'Tempo controlado 2-1-2. Última serie al fallo técnico.',
+          },
+          {
+            ejercicioId: ejercicioInclinadoId,
+            nombre: 'Press Inclinado con Mancuernas',
+            series: 3,
+            reps: '8-10',
+            peso: '26.00',
+            rpe: '8.5',
+            descansoSegundos: 90,
+          },
+          {
+            ejercicioId: ejercicioMilitarId,
+            nombre: 'Press Militar de Pie con Barra (Overhead Press)',
+            series: 3,
+            reps: '8-10',
+            peso: '45.00',
+            rpe: '8.5',
+            descansoSegundos: 90,
+            notas: 'Sin balanceo lumbar; glúteos activos.',
+          },
+          {
+            ejercicioId: ejercicioTricepsCuerdaId,
+            nombre: 'Extensiones de Tríceps en Polea Alta con Cuerda',
+            series: 3,
+            reps: '12-15',
+            peso: '25.00',
+            rpe: '8.0',
+            descansoSegundos: 60,
+          },
+        ],
+      },
+      {
+        diaId: 'tsh-d2',
+        titulo: 'Día 2 (Miércoles): Tracción — Espalda y Bíceps',
+        enfoque: 'Volumen y control escapular',
+        diaSugerido: 3,
+        ejercicios: [
+          {
+            ejercicioId: ejercicioDominadasId,
+            nombre: 'Dominadas en Barra (Pull-ups)',
+            series: 4,
+            reps: '6-10',
+            peso: '0.00',
+            rpe: '8.0',
+            descansoSegundos: 120,
+            notas: 'Agregar lastre cuando supere 10 reps limpias.',
+          },
+          {
+            ejercicioId: ejercicioRemoId,
+            nombre: 'Remo con Barra Prono',
+            series: 4,
+            reps: '8-10',
+            peso: '65.00',
+            rpe: '8.5',
+            descansoSegundos: 90,
+          },
+          {
+            ejercicioId: ejercicioCurlZId,
+            nombre: 'Curl de Bíceps con Barra Z',
+            series: 3,
+            reps: '10-12',
+            peso: '32.50',
+            rpe: '8.5',
+            descansoSegundos: 60,
+          },
+          {
+            ejercicioId: ejercicioFacePullId,
+            nombre: 'Pájaros Posteriores en Polea (Face Pull / Deltoides Posterior)',
+            series: 3,
+            reps: '15',
+            peso: '20.00',
+            rpe: '8.0',
+            descansoSegundos: 60,
+          },
+        ],
+      },
+    ];
+
+    const bloquesFullbodyPrincipiante: BloqueDiaRutinaDTO[] = [
+      {
+        diaId: 'fb-d1',
+        titulo: 'Día 1 (Lunes): Full Body A',
+        enfoque: 'Técnica y adaptación neuromuscular',
+        diaSugerido: 1,
+        ejercicios: [
+          {
+            ejercicioId: ejercicioSentadillaId,
+            nombre: 'Sentadilla Trasera con Barra (Back Squat)',
+            series: 3,
+            reps: '10-12',
+            peso: '40.00',
+            rpe: '7.0',
+            descansoSegundos: 120,
+            notas: 'Profundidad a paralelo; sin rebote.',
+          },
+          {
+            ejercicioId: ejercicioBancaId,
+            nombre: 'Press de Banca Plano con Barra',
+            series: 3,
+            reps: '10-12',
+            peso: '40.00',
+            rpe: '7.5',
+            descansoSegundos: 90,
+          },
+          {
+            ejercicioId: ejercicioRemoId,
+            nombre: 'Remo con Barra Prono',
+            series: 3,
+            reps: '10-12',
+            peso: '40.00',
+            rpe: '7.5',
+            descansoSegundos: 90,
+          },
+          {
+            ejercicioId: ejercicioPlanchaId,
+            nombre: 'Plancha Abdominal Isométrica (Plank)',
+            series: 3,
+            reps: '30-45',
+            peso: '0.00',
+            rpe: '7.0',
+            descansoSegundos: 45,
+          },
+        ],
+      },
+      {
+        diaId: 'fb-d2',
+        titulo: 'Día 2 (Miércoles): Full Body B',
+        enfoque: 'Empuje vertical y tracción vertical',
+        diaSugerido: 3,
+        ejercicios: [
+          {
+            ejercicioId: ejercicioPrensaId,
+            nombre: 'Prensa Inclinada de Piernas a 45°',
+            series: 3,
+            reps: '12-15',
+            peso: '80.00',
+            rpe: '7.5',
+            descansoSegundos: 90,
+          },
+          {
+            ejercicioId: ejercicioMilitarId,
+            nombre: 'Press Militar de Pie con Barra (Overhead Press)',
+            series: 3,
+            reps: '10-12',
+            peso: '25.00',
+            rpe: '8.0',
+            descansoSegundos: 90,
+          },
+          {
+            ejercicioId: ejercicioJalonId,
+            nombre: 'Jalón al Pecho en Polea Alta',
+            series: 3,
+            reps: '10-12',
+            peso: '40.00',
+            rpe: '8.0',
+            descansoSegundos: 90,
+          },
+        ],
+      },
+      {
+        diaId: 'fb-d3',
+        titulo: 'Día 3 (Viernes): Full Body C',
+        enfoque: 'Bisagra de cadera y glúteo',
+        diaSugerido: 5,
+        ejercicios: [
+          {
+            ejercicioId: ejercicioRdlId,
+            nombre: 'Peso Muerto Rumano con Barra (RDL)',
+            series: 3,
+            reps: '10-12',
+            peso: '50.00',
+            rpe: '7.5',
+            descansoSegundos: 90,
+            notas: 'Bisagra de cadera pura; barra rozando el muslo.',
+          },
+          {
+            ejercicioId: ejercicioHipThrustId,
+            nombre: 'Hip Thrust con Barra',
+            series: 3,
+            reps: '12-15',
+            peso: '60.00',
+            rpe: '8.0',
+            descansoSegundos: 90,
+          },
+          {
+            ejercicioId: ejercicioElevacionesLateralesId,
+            nombre: 'Elevaciones Laterales con Mancuernas',
+            series: 2,
+            reps: '12-15',
+            peso: '8.00',
+            rpe: '8.0',
+            descansoSegundos: 60,
+          },
+        ],
+      },
+    ];
+
+    await db.insert(plantillasRutina).values([
+      {
+        entrenadorId: coachUser.id,
+        nombre: 'Tren Superior Hipertrofia A',
+        nivelObjetivo: NivelObjetivoPlantilla.INTERMEDIO,
+        bloques: bloquesTrenSuperiorHipertrofia,
+        activa: true,
+        createdAtUtc: nowUtc,
+        updatedAtUtc: nowUtc,
+      },
+      {
+        entrenadorId: coachUser.id,
+        nombre: 'Fullbody 3 Días Principiante',
+        nivelObjetivo: NivelObjetivoPlantilla.PRINCIPIANTE,
+        bloques: bloquesFullbodyPrincipiante,
+        activa: true,
+        createdAtUtc: nowUtc,
+        updatedAtUtc: nowUtc,
+      },
+    ]);
 
     // Sesión 1: PUSH (Completada hoy por Alumno 1)
     const [sesionPush] = await db
@@ -924,6 +1189,7 @@ async function seed() {
         repsObjetivo: 10,
         repsLogradas: 10,
         pesoKg: '70.00',
+        pesoPrescritoKg: '70.00',
         rpe: '7.5',
         completada: true,
         timestampCompletadaUtc: new Date(Date.now() - 3000 * 1000),
@@ -934,6 +1200,7 @@ async function seed() {
         repsObjetivo: 8,
         repsLogradas: 8,
         pesoKg: '75.00',
+        pesoPrescritoKg: '75.00',
         rpe: '8.0',
         completada: true,
         timestampCompletadaUtc: new Date(Date.now() - 2700 * 1000),
@@ -944,6 +1211,7 @@ async function seed() {
         repsObjetivo: 8,
         repsLogradas: 8,
         pesoKg: '80.00',
+        pesoPrescritoKg: '80.00',
         rpe: '9.0',
         completada: true,
         timestampCompletadaUtc: new Date(Date.now() - 2400 * 1000),
@@ -954,6 +1222,7 @@ async function seed() {
         repsObjetivo: 10,
         repsLogradas: 10,
         pesoKg: '24.00',
+        pesoPrescritoKg: '24.00',
         rpe: '8.0',
         completada: true,
         timestampCompletadaUtc: new Date(Date.now() - 2000 * 1000),
@@ -964,6 +1233,7 @@ async function seed() {
         repsObjetivo: 8,
         repsLogradas: 8,
         pesoKg: '45.00',
+        pesoPrescritoKg: '45.00',
         rpe: '8.5',
         completada: true,
         timestampCompletadaUtc: new Date(Date.now() - 1500 * 1000),
@@ -974,6 +1244,7 @@ async function seed() {
         repsObjetivo: 12,
         repsLogradas: 12,
         pesoKg: '0.00',
+        pesoPrescritoKg: null, // Ejercicio a peso corporal: sin prescripción cuantitativa
         rpe: '8.0',
         completada: true,
         timestampCompletadaUtc: new Date(Date.now() - 1000 * 1000),
