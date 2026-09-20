@@ -1400,6 +1400,13 @@ export class EntrenamientoService {
         ? new Date(sInput.timestampCompletadaUtc)
         : new Date();
 
+      // WU17: el inicio real solo se escribe cuando el cliente lo envía; si no llega
+      // (cliente previo o re-sync sin la marca), se conserva lo ya persistido y nunca
+      // se inventa. El cliente jamás retro-marca series ya completadas.
+      const timestampInicioUtc = sInput.timestampInicioUtc
+        ? new Date(sInput.timestampInicioUtc)
+        : serie.timestampInicioUtc ?? null;
+
       await this.db
         .update(seriesRegistro)
         .set({
@@ -1408,6 +1415,7 @@ export class EntrenamientoService {
           rpe: rpeFinal,
           descansoSegundos: sInput.descansoSegundos !== undefined ? sInput.descansoSegundos : (serie.descansoSegundos ?? null),
           completada: sInput.completada,
+          timestampInicioUtc,
           timestampCompletadaUtc: timestampUtc,
         })
         .where(eq(seriesRegistro.id, sInput.serieId));
@@ -1913,6 +1921,7 @@ export class EntrenamientoService {
           rpe: s.rpe,
           descansoSegundos: s.descansoSegundos ?? null,
           completada: s.completada,
+          timestampInicioUtc: toIsoUtcString(s.timestampInicioUtc),
           timestampCompletadaUtc: toIsoUtcString(s.timestampCompletadaUtc),
         });
       }

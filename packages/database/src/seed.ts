@@ -1189,6 +1189,7 @@ async function seed() {
       .returning();
 
     // Series de Press de Banca (Alumno 1 completadas)
+    // WU17: inicio real ≈ 45-60 s antes de la marca de completada (ejecución del set).
     await db.insert(seriesRegistro).values([
       {
         ejercicioSesionId: ejSesion1.id,
@@ -1199,6 +1200,7 @@ async function seed() {
         pesoPrescritoKg: '70.00',
         rpe: '7.5',
         completada: true,
+        timestampInicioUtc: new Date(Date.now() - 3060 * 1000),
         timestampCompletadaUtc: new Date(Date.now() - 3000 * 1000),
       },
       {
@@ -1210,6 +1212,7 @@ async function seed() {
         pesoPrescritoKg: '75.00',
         rpe: '8.0',
         completada: true,
+        timestampInicioUtc: new Date(Date.now() - 2755 * 1000),
         timestampCompletadaUtc: new Date(Date.now() - 2700 * 1000),
       },
       {
@@ -1221,6 +1224,7 @@ async function seed() {
         pesoPrescritoKg: '80.00',
         rpe: '9.0',
         completada: true,
+        timestampInicioUtc: new Date(Date.now() - 2455 * 1000),
         timestampCompletadaUtc: new Date(Date.now() - 2400 * 1000),
       },
       {
@@ -1232,6 +1236,7 @@ async function seed() {
         pesoPrescritoKg: '24.00',
         rpe: '8.0',
         completada: true,
+        timestampInicioUtc: new Date(Date.now() - 2050 * 1000),
         timestampCompletadaUtc: new Date(Date.now() - 2000 * 1000),
       },
       {
@@ -1243,6 +1248,7 @@ async function seed() {
         pesoPrescritoKg: '45.00',
         rpe: '8.5',
         completada: true,
+        timestampInicioUtc: new Date(Date.now() - 1545 * 1000),
         timestampCompletadaUtc: new Date(Date.now() - 1500 * 1000),
       },
       {
@@ -1254,6 +1260,7 @@ async function seed() {
         pesoPrescritoKg: null, // Ejercicio a peso corporal: sin prescripción cuantitativa
         rpe: '8.0',
         completada: true,
+        timestampInicioUtc: new Date(Date.now() - 1050 * 1000),
         timestampCompletadaUtc: new Date(Date.now() - 1000 * 1000),
       },
     ]);

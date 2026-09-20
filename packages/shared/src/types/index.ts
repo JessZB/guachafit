@@ -410,6 +410,13 @@ export interface SerieRegistroDetalleDTO {
   pesoPrescritoKg?: string | null;
   rpe?: string | null;
   descansoSegundos?: number | null;
+  /**
+   * WU17: marca REAL de inicio de la serie (ISO 8601 UTC) capturada cuando el alumno
+   * interactúa con la serie o pulsa "Iniciar serie". `descansoSegundos` sigue siendo el
+   * valor del temporizador (objetivo), no una medición. Null/ausente = sin marca: el
+   * descanso real no se inventa.
+   */
+  timestampInicioUtc?: string | null;
   completada: boolean;
   timestampCompletadaUtc?: string | null;
 }

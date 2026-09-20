@@ -679,6 +679,65 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
       expect(s1?.completada).toBe(true);
     });
 
+    it('WU17: persiste el inicio real, lo hidrata y lo conserva cuando el re-sync no trae la marca', async () => {
+      const sesion = await entrenamientoService.crearSesion(coachId1, {
+        alumnoId: alumnoId1,
+        fechaProgramada: '2026-09-06',
+        ejercicios: [
+          {
+            ejercicioId: ejercicioGlobalId,
+            series: [
+              { numeroSerie: 1, repsObjetivo: 10, pesoSugeridoKg: '60.00' },
+              { numeroSerie: 2, repsObjetivo: 10, pesoSugeridoKg: '60.00' },
+            ],
+          },
+        ],
+      });
+
+      await entrenamientoService.iniciarSesion(sesion.id, alumnoId1, {
+        timezoneCliente: 'America/Caracas',
+      });
+
+      const serieId = sesion.ejercicios[0].series[0].id;
+      const primera = await entrenamientoService.sincronizarSeries(sesion.id, alumnoId1, {
+        series: [
+          {
+            serieId,
+            repsLogradas: 10,
+            pesoKg: '65.00',
+            rpe: '8.5',
+            completada: true,
+            timestampInicioUtc: '2026-09-06T10:19:20Z',
+            timestampCompletadaUtc: '2026-09-06T10:20:00Z',
+          },
+        ],
+      });
+
+      const hidratada = primera.ejercicios[0].series.find((s) => s.id === serieId);
+      expect(hidratada?.timestampInicioUtc).toBe('2026-09-06T10:19:20.000Z');
+      // La serie pendiente sin marca queda honestamente sin inicio (no se inventa).
+      const sinMarca = primera.ejercicios[0].series.find((s) => s.numeroSerie === 2);
+      expect(sinMarca?.timestampInicioUtc ?? null).toBeNull();
+
+      // Ajuste posterior del temporizador (payload sin la marca): se conserva la persistida.
+      const segunda = await entrenamientoService.sincronizarSeries(sesion.id, alumnoId1, {
+        series: [
+          {
+            serieId,
+            repsLogradas: 10,
+            pesoKg: '65.00',
+            rpe: '8.5',
+            descansoSegundos: 120,
+            completada: true,
+            timestampCompletadaUtc: '2026-09-06T10:20:00Z',
+          },
+        ],
+      });
+
+      const conservada = segunda.ejercicios[0].series.find((s) => s.id === serieId);
+      expect(conservada?.timestampInicioUtc).toBe('2026-09-06T10:19:20.000Z');
+    });
+
     it('debe denegar la sincronización si la sesión no está en progreso', async () => {
       const sesion = await entrenamientoService.crearSesion(coachId1, {
         alumnoId: alumnoId1,

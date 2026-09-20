@@ -1,0 +1,26 @@
+-- =============================================================================
+-- WU17 (RF-001): marca de INICIO real de la serie en `series_registro`
+-- =============================================================================
+-- Alcance de esta migración:
+--
+--   * `timestamp_inicio_utc` registra CUÁNDO el alumno empezó la serie: marca
+--     capturada al interactuar con la fila (peso/reps/RPE con steppers o input)
+--     o al pulsar "Iniciar serie". Mismo tipo que `timestamp_completada_utc`
+--     (timestamptz). Nullable: si el alumno nunca marca el inicio, no se
+--     inventa medición.
+--
+--   * Semántica de `descanso_segundos`: NO cambia. Sigue siendo el valor del
+--     TEMPORIZADOR de descanso configurado/visible en pantalla (objetivo), no
+--     una medición del descanso efectivo.
+--
+--   * Descanso real derivado (solo lectura, calculado en cliente/servidor):
+--       descanso_real(serie N) = timestamp_inicio_utc(serie N)
+--                              - timestamp_completada_utc(serie N-1)
+--       descanso_real(ejercicio M) = timestamp_inicio_utc(primera serie de M)
+--                                  - timestamp_completada_utc(última serie de M-1)
+--
+--   * Aditiva y compatible hacia atrás: los clientes viejos siguen enviando
+--     solo `timestamp_completada_utc`; la columna queda NULL.
+-- =============================================================================
+
+ALTER TABLE "series_registro" ADD COLUMN "timestamp_inicio_utc" timestamp with time zone;

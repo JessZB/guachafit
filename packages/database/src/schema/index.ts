@@ -377,6 +377,13 @@ export const seriesRegistro = pgTable('series_registro', {
   rpe: numeric('rpe', { precision: 3, scale: 1 }),
   descansoSegundos: integer('descanso_segundos'),
   completada: boolean('completada').default(false).notNull(),
+  /**
+   * WU17: marca real de INICIO de la serie (cuando el alumno interactúa con ella o pulsa
+   * "Iniciar serie"). `descanso_segundos` sigue siendo el valor del temporizador (objetivo);
+   * el descanso real se deriva: inicio(serie N+1) - completada(serie N). Nullable: sin marca
+   * no se inventa medición.
+   */
+  timestampInicioUtc: timestamp('timestamp_inicio_utc', { withTimezone: true }),
   timestampCompletadaUtc: timestamp('timestamp_completada_utc', { withTimezone: true }),
 });
 

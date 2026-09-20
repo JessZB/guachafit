@@ -60,6 +60,8 @@ export interface SerieRegistroState {
   pesoPrescritoKg?: string | null;
   rpe: string | null;
   completada: boolean;
+  /** WU17: marca real de inicio de la serie (ISO 8601 UTC); null/ausente si el alumno no la marcó. */
+  timestampInicioUtc?: string | null;
   timestampCompletadaUtc: string | null;
 }
 
@@ -204,6 +206,11 @@ export class WorkoutTestEngine {
       serie.pesoKg = serieInput.pesoKg;
       serie.rpe = serieInput.rpe ?? null;
       serie.completada = serieInput.completada;
+      // WU17: mismo contrato que el servicio real: solo se escribe si el cliente lo envía
+      // (se conserva lo persistido en re-syncs que no traen la marca) y nunca se inventa.
+      if (serieInput.timestampInicioUtc) {
+        serie.timestampInicioUtc = serieInput.timestampInicioUtc;
+      }
       serie.timestampCompletadaUtc = serieInput.timestampCompletadaUtc ?? new Date().toISOString();
     }
 

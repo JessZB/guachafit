@@ -318,25 +318,49 @@ export const IniciarSesionSchema = z.object({
   fechaInicioUtc: z.string().datetime({ message: 'La fecha de inicio debe ser un timestamp ISO 8601 UTC válido' }).optional(),
 });
 
-export const RegistrarSerieSchema = z.object({
-  serieId: z.string().uuid('El ID de la serie debe ser un UUID válido'),
-  repsLogradas: z.number().int().min(0).max(200),
-  pesoKg: z
-    .string()
-    .regex(DECIMAL_STRING_REGEX, 'El peso en kg debe tener formato decimal con hasta 2 decimales')
-    .nullable()
-    .optional()
-    .or(z.literal('')),
-  rpe: z
-    .string()
-    .regex(/^\d+(\.\d)?$/, 'El RPE debe ser un valor decimal (ej. 8 o 8.5)')
-    .nullable()
-    .optional()
-    .or(z.literal('')),
-  descansoSegundos: z.number().int().min(0).max(3600).nullable().optional(),
-  completada: z.boolean(),
-  timestampCompletadaUtc: z.string().datetime({ message: 'El timestamp debe estar en formato ISO 8601 UTC' }).optional(),
-});
+export const RegistrarSerieSchema = z
+  .object({
+    serieId: z.string().uuid('El ID de la serie debe ser un UUID válido'),
+    repsLogradas: z.number().int().min(0).max(200),
+    pesoKg: z
+      .string()
+      .regex(DECIMAL_STRING_REGEX, 'El peso en kg debe tener formato decimal con hasta 2 decimales')
+      .nullable()
+      .optional()
+      .or(z.literal('')),
+    rpe: z
+      .string()
+      .regex(/^\d+(\.\d)?$/, 'El RPE debe ser un valor decimal (ej. 8 o 8.5)')
+      .nullable()
+      .optional()
+      .or(z.literal('')),
+    descansoSegundos: z.number().int().min(0).max(3600).nullable().optional(),
+    completada: z.boolean(),
+    /**
+     * WU17: marca REAL de inicio de la serie. Misma validación UTC estricta (`Z`) que
+     * `timestampCompletadaUtc`. Opcional: los clientes previos a WU17 no la envían.
+     */
+    timestampInicioUtc: z
+      .string()
+      .datetime({ message: 'El timestamp de inicio debe estar en formato ISO 8601 UTC' })
+      .optional(),
+    timestampCompletadaUtc: z.string().datetime({ message: 'El timestamp debe estar en formato ISO 8601 UTC' }).optional(),
+  })
+  /**
+   * WU17: coherencia temporal dentro de la misma serie. Si llegan ambas marcas, el inicio
+   * no puede ser posterior a la finalización (misma fuente de reloj: el dispositivo).
+   */
+  .refine(
+    (serie) =>
+      !serie.timestampInicioUtc ||
+      !serie.timestampCompletadaUtc ||
+      new Date(serie.timestampInicioUtc).getTime() <=
+        new Date(serie.timestampCompletadaUtc).getTime(),
+    {
+      message: 'El timestamp de inicio no puede ser posterior al de completada',
+      path: ['timestampInicioUtc'],
+    }
+  );
 
 export const SincronizarSeriesBatchSchema = z.object({
   series: z.array(RegistrarSerieSchema).min(1, 'Debe incluir al menos una serie para sincronizar'),

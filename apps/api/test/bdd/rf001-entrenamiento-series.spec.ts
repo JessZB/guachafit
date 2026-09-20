@@ -302,6 +302,91 @@ describe('RF-001: Checklist Interactivo de Entrenamiento Diario y Monitor Semana
       expect(parsed.success).toBe(false);
     });
 
+    it('WU17: acepta timestampInicioUtc y lo persiste; sin marca no se inventa', () => {
+      const payload = {
+        series: [
+          {
+            serieId: serie1Id,
+            repsLogradas: 10,
+            pesoKg: '80.00',
+            completada: true,
+            timestampInicioUtc: '2026-09-06T10:04:45Z',
+            timestampCompletadaUtc: '2026-09-06T10:05:30Z',
+          },
+          {
+            serieId: serie2Id,
+            repsLogradas: 10,
+            pesoKg: '82.50',
+            completada: true,
+            timestampCompletadaUtc: '2026-09-06T10:09:15Z',
+          },
+        ],
+      };
+
+      const parsed = SincronizarSeriesBatchSchema.safeParse(payload);
+      expect(parsed.success).toBe(true);
+
+      const sesionActualizada = engine.sincronizarSeries(sesionInicial, payload);
+      expect(sesionActualizada.ejercicios[0].series[0].timestampInicioUtc).toBe(
+        '2026-09-06T10:04:45Z'
+      );
+      // Sin marca en el payload el inicio queda ausente: no se fabrica una medición.
+      expect(sesionActualizada.ejercicios[0].series[1].timestampInicioUtc ?? null).toBeNull();
+
+      // Re-sync posterior (ajuste del temporizador) sin la marca: se conserva el inicio ya persistido.
+      engine.sincronizarSeries(sesionInicial, {
+        series: [
+          {
+            serieId: serie1Id,
+            repsLogradas: 10,
+            pesoKg: '80.00',
+            completada: true,
+            descansoSegundos: 120,
+            timestampCompletadaUtc: '2026-09-06T10:05:30Z',
+          },
+        ],
+      });
+      expect(sesionActualizada.ejercicios[0].series[0].timestampInicioUtc).toBe(
+        '2026-09-06T10:04:45Z'
+      );
+    });
+
+    it('WU17: rechaza un timestamp de inicio que no sea ISO 8601 UTC estricto (sufijo Z)', () => {
+      const parsed = SincronizarSeriesBatchSchema.safeParse({
+        series: [
+          {
+            serieId: serie1Id,
+            repsLogradas: 10,
+            pesoKg: '80.00',
+            completada: true,
+            timestampInicioUtc: '2026-09-06T10:04:45-04:00', // Offset local, no UTC estricto
+          },
+        ],
+      });
+      expect(parsed.success).toBe(false);
+    });
+
+    it('WU17: rechaza un inicio posterior a la completada de la misma serie', () => {
+      const parsed = SincronizarSeriesBatchSchema.safeParse({
+        series: [
+          {
+            serieId: serie1Id,
+            repsLogradas: 10,
+            pesoKg: '80.00',
+            completada: true,
+            timestampInicioUtc: '2026-09-06T10:06:00Z',
+            timestampCompletadaUtc: '2026-09-06T10:05:30Z',
+          },
+        ],
+      });
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(
+          parsed.error.issues.some((issue) => issue.path.join('.') === 'series.0.timestampInicioUtc')
+        ).toBe(true);
+      }
+    });
+
     it('debe denegar la sincronización si la sesión no está en progreso', () => {
       // Simular sesión en estado 'planificada'
       sesionInicial.estado = EstadoSesion.PLANIFICADA;
