@@ -72,8 +72,9 @@ export class PlantillasService {
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
-    // RNF-003/ADR-009: las consultas/escrituras sobre `rutinas` (tabla con RLS)
-    // corren dentro de este envoltorio transaccional con el GUC del tenant.
+    // RNF-003/ADR-009: las consultas/escrituras sobre `rutinas` y
+    // `plantillas_rutina` (tablas con RLS) corren dentro de este envoltorio
+    // transaccional con el GUC del tenant.
     @Inject(WITH_TENANT) private readonly withTenant: WithTenantFn
   ) {}
 
@@ -94,11 +95,13 @@ export class PlantillasService {
       conditions.push(eq(plantillasRutina.activa, activa));
     }
 
-    const rows = await this.db
-      .select()
-      .from(plantillasRutina)
-      .where(and(...conditions))
-      .orderBy(desc(plantillasRutina.createdAtUtc));
+    const rows = await this.withTenant({ entrenadorId }, async (tx) =>
+      tx
+        .select()
+        .from(plantillasRutina)
+        .where(and(...conditions))
+        .orderBy(desc(plantillasRutina.createdAtUtc))
+    );
 
     return rows.map((row) => this.toResumen(row));
   }
@@ -123,19 +126,23 @@ export class PlantillasService {
     const bloques = await this.validarEjerciciosDeBloques(entrenadorId, validado.bloques);
     const ahora = new Date();
 
-    const [nueva] = await this.db
-      .insert(plantillasRutina)
-      .values({
-        id: crypto.randomUUID(),
-        entrenadorId,
-        nombre: validado.nombre.trim(),
-        nivelObjetivo: validado.nivelObjetivo,
-        bloques,
-        activa: validado.activa ?? true,
-        createdAtUtc: ahora,
-        updatedAtUtc: ahora,
-      })
-      .returning();
+    // RNF-003/ADR-011: `plantillas_rutina` tiene RLS; la inserción corre con el
+    // GUC del coach y la política WITH CHECK rechaza un `entrenador_id` ajeno.
+    const [nueva] = await this.withTenant({ entrenadorId }, async (tx) =>
+      tx
+        .insert(plantillasRutina)
+        .values({
+          id: crypto.randomUUID(),
+          entrenadorId,
+          nombre: validado.nombre.trim(),
+          nivelObjetivo: validado.nivelObjetivo,
+          bloques,
+          activa: validado.activa ?? true,
+          createdAtUtc: ahora,
+          updatedAtUtc: ahora,
+        })
+        .returning()
+    );
 
     return this.toDTO(nueva);
   }
@@ -166,7 +173,10 @@ export class PlantillasService {
     }
     if (validado.activa !== undefined) cambios.activa = validado.activa;
 
-    await this.db.update(plantillasRutina).set(cambios).where(eq(plantillasRutina.id, existente.id));
+    // RNF-003/ADR-011: escritura tenant-scoped sobre `plantillas_rutina` con RLS.
+    await this.withTenant({ entrenadorId }, async (tx) => {
+      await tx.update(plantillasRutina).set(cambios).where(eq(plantillasRutina.id, existente.id));
+    });
 
     return this.toDTO({ ...existente, ...cambios });
   }
@@ -182,10 +192,13 @@ export class PlantillasService {
     const existente = await this.cargarPlantillaDelCoach(entrenadorId, plantillaId);
     const desactivada = { ...existente, activa: false, updatedAtUtc: new Date() };
 
-    await this.db
-      .update(plantillasRutina)
-      .set({ activa: false, updatedAtUtc: desactivada.updatedAtUtc })
-      .where(eq(plantillasRutina.id, existente.id));
+    // RNF-003/ADR-011: soft delete tenant-scoped sobre `plantillas_rutina` con RLS.
+    await this.withTenant({ entrenadorId }, async (tx) => {
+      await tx
+        .update(plantillasRutina)
+        .set({ activa: false, updatedAtUtc: desactivada.updatedAtUtc })
+        .where(eq(plantillasRutina.id, existente.id));
+    });
 
     return this.toResumen(desactivada);
   }
@@ -345,11 +358,16 @@ export class PlantillasService {
     entrenadorId: string,
     plantillaId: string
   ): Promise<PlantillaRow> {
-    const [plantilla] = await this.db
-      .select()
-      .from(plantillasRutina)
-      .where(eq(plantillasRutina.id, plantillaId))
-      .limit(1);
+    // RNF-003/ADR-011: lectura de `plantillas_rutina` con RLS. Si la plantilla es
+    // de otro tenant, la política la oculta (misma respuesta 404 que el filtro
+    // explícito: no se filtra la existencia del recurso).
+    const [plantilla] = await this.withTenant({ entrenadorId }, async (tx) =>
+      tx
+        .select()
+        .from(plantillasRutina)
+        .where(eq(plantillasRutina.id, plantillaId))
+        .limit(1)
+    );
 
     if (!plantilla || plantilla.entrenadorId !== entrenadorId) {
       throw new NotFoundException(`Plantilla de rutina con ID '${plantillaId}' no encontrada.`);

@@ -99,7 +99,11 @@ async function seed() {
     await withTenant({ isSuperadmin: true }, async (tx) => {
       await tx.delete(rutinas);
     });
-    await db.delete(plantillasRutina);
+    // RNF-003/ADR-011: `plantillas_rutina` tiene RLS; el seed es ruta de sistema y
+    // usa el mismo bypass explícito de superadmin que `rutinas`.
+    await withTenant({ isSuperadmin: true }, async (tx) => {
+      await tx.delete(plantillasRutina);
+    });
     await db.delete(ejerciciosCatalogo);
     await db.delete(transaccionesPago);
     await db.delete(cuotasMembresia);
@@ -1100,26 +1104,29 @@ async function seed() {
       },
     ];
 
-    await db.insert(plantillasRutina).values([
-      {
-        entrenadorId: coachUser.id,
-        nombre: 'Tren Superior Hipertrofia A',
-        nivelObjetivo: NivelObjetivoPlantilla.INTERMEDIO,
-        bloques: bloquesTrenSuperiorHipertrofia,
-        activa: true,
-        createdAtUtc: nowUtc,
-        updatedAtUtc: nowUtc,
-      },
-      {
-        entrenadorId: coachUser.id,
-        nombre: 'Fullbody 3 Días Principiante',
-        nivelObjetivo: NivelObjetivoPlantilla.PRINCIPIANTE,
-        bloques: bloquesFullbodyPrincipiante,
-        activa: true,
-        createdAtUtc: nowUtc,
-        updatedAtUtc: nowUtc,
-      },
-    ]);
+    // RNF-003/ADR-011: inserción de sistema con bypass superadmin (RLS activo).
+    await withTenant({ isSuperadmin: true }, async (tx) => {
+      await tx.insert(plantillasRutina).values([
+        {
+          entrenadorId: coachUser.id,
+          nombre: 'Tren Superior Hipertrofia A',
+          nivelObjetivo: NivelObjetivoPlantilla.INTERMEDIO,
+          bloques: bloquesTrenSuperiorHipertrofia,
+          activa: true,
+          createdAtUtc: nowUtc,
+          updatedAtUtc: nowUtc,
+        },
+        {
+          entrenadorId: coachUser.id,
+          nombre: 'Fullbody 3 Días Principiante',
+          nivelObjetivo: NivelObjetivoPlantilla.PRINCIPIANTE,
+          bloques: bloquesFullbodyPrincipiante,
+          activa: true,
+          createdAtUtc: nowUtc,
+          updatedAtUtc: nowUtc,
+        },
+      ]);
+    });
 
     // Sesión 1: PUSH (Completada hoy por Alumno 1)
     const [sesionPush] = await db
