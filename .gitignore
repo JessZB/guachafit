@@ -56,3 +56,6 @@ logs/
 
 # CodeGraph: índice local del codebase (generado por herramienta, no versionar)
 .codegraph/
+
+# Tooling local: caché del registry de skills y estado de automatizaciones (no versionar)
+.atl/
