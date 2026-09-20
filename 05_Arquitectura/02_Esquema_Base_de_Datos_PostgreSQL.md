@@ -651,7 +651,7 @@ CREATE TABLE ejercicios_catalogo (
 );
 
 -- =============================================================================
--- TABLA: plantillas_rutina (Banco de Plantillas del Coach - RF-017, migración 0003)
+-- TABLA: plantillas_rutina (Banco de Plantillas del Coach - RF-017, migración 0003; RLS etapa 1 desde 0005)
 -- =============================================================================
 CREATE TABLE plantillas_rutina (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -939,9 +939,10 @@ CREATE TABLE tasas_cambio_referencia (
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
--- ENTREGA POR ETAPAS (migración 0004_rls_multitenant.sql):
---   * Políticas creadas para las 5 tablas de RNF-003.
---   * ENABLE ROW LEVEL SECURITY aplicado SOLO en `rutinas` (etapa 1).
+-- ENTREGA POR ETAPAS (migraciones 0004_rls_multitenant.sql y 0005_rls_plantillas.sql):
+--   * Políticas creadas para las 6 tablas de RNF-003 + RF-017 (se sumó plantillas_rutina).
+--   * ENABLE ROW LEVEL SECURITY aplicado SOLO en `rutinas` (0004) y
+--     `plantillas_rutina` (0005) — etapa 1.
 --   * Las 4 tablas restantes quedan PREPARADAS (políticas creadas, ENABLE
 --     comentado) hasta que el 100% de sus caminos corran dentro de withTenant().
 -- -----------------------------------------------------------------------------
@@ -973,6 +974,15 @@ CREATE POLICY rls_rutinas_self_select ON rutinas
   USING (alumno_id = current_usuario_id());
 
 ALTER TABLE rutinas ENABLE ROW LEVEL SECURITY;
+
+-- plantillas_rutina (ETAPA 1: RLS habilitado desde 0005_rls_plantillas.sql)
+-- Banco de plantillas del coach (RF-017): sin política "self" (el alumno no accede).
+CREATE POLICY rls_plantillas_rutina ON plantillas_rutina
+  FOR ALL
+  USING (is_superadmin() OR entrenador_id = current_entrenador_id())
+  WITH CHECK (is_superadmin() OR entrenador_id = current_entrenador_id());
+
+ALTER TABLE plantillas_rutina ENABLE ROW LEVEL SECURITY;
 
 -- perfiles_alumno — PREPARADA (ENABLE pendiente)
 CREATE POLICY rls_perfiles_alumno ON perfiles_alumno
@@ -1017,10 +1027,12 @@ CREATE POLICY rls_transacciones_pago_self_select ON transacciones_pago
 -- ALTER TABLE cuotas_membresia ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE transacciones_pago ENABLE ROW LEVEL SECURITY;
 
--- REQUISITO DE EFECTIVIDAD: sin FORCE ROW LEVEL SECURITY, el rol dueño de las
--- tablas (y los superusers) ignora RLS. La API debe conectarse con un rol NO
--- dueño (p. ej. `guachafit_app` con GRANT sobre las tablas) o aplicarse
--- FORCE ROW LEVEL SECURITY por tabla.
+-- REQUISITO DE EFECTIVIDAD: el rol dueño de las tablas ignora RLS y
+-- FORCE ROW LEVEL SECURITY solo somete al dueño; los superusers y los roles con
+-- BYPASSRLS siguen exentos incluso con FORCE (comprobado empíricamente). La API
+-- debe conectarse con un rol NO dueño NOSUPERUSER NOBYPASSRLS (p. ej.
+-- `guachafit_app` con GRANT sobre las tablas). SQL de referencia: apéndice de
+-- ADR-011.
 ```
 
 ---
@@ -1029,7 +1041,7 @@ CREATE POLICY rls_transacciones_pago_self_select ON transacciones_pago
 
 | Requerimiento / ADR | Invariante de Negocio | Implementación en PostgreSQL |
 | :--- | :--- | :--- |
-| **RNF-003 / ADR-009 / [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]]** | Aislamiento multi-tenant entre carteras de entrenadores (entrega por etapas). | Row-Level Security con funciones `current_entrenador_id()` / `current_usuario_id()` / `is_superadmin()`: `ENABLE` operativo en `rutinas` (etapa 1); las otras 4 tablas tienen políticas creadas y `ENABLE` pendiente. Efectividad condicionada a rol de conexión no-dueño y/o `FORCE ROW LEVEL SECURITY`. |
+| **RNF-003 / ADR-009 / [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]]** | Aislamiento multi-tenant entre carteras de entrenadores (entrega por etapas). | Row-Level Security con funciones `current_entrenador_id()` / `current_usuario_id()` / `is_superadmin()`: `ENABLE` operativo en `rutinas` y `plantillas_rutina` (etapa 1, migraciones `0004`/`0005`); las otras 4 tablas tienen políticas creadas y `ENABLE` pendiente. Efectividad condicionada a rol de conexión no-dueño `NOSUPERUSER NOBYPASSRLS` (`FORCE RLS` no cubre a superusers/`BYPASSRLS`). |
 | **RF-011 / RNF-003** | Ficha de salud privada confidencial (exclusiva del coach). | Columna `ficha_salud_privada TEXT` cifrada con `AES-256-GCM` y excluida de los DTOs de alumnos. |
 | **RF-012 (Soft Delete)** | Preservación del histórico deportivo y contable al dar de baja un cliente. | Columna `deleted_at_utc` con índice parcial `WHERE deleted_at_utc IS NULL`. |
 | **RNF-002 (Precisión Decimal)** | Cero error binario de redondeo (prohibido IEEE 754 `float`/`double`). | Columnas `NUMERIC(14,2)` para dinero y `NUMERIC(12,4)` para tasas cambiarias. |
@@ -1043,13 +1055,14 @@ CREATE POLICY rls_transacciones_pago_self_select ON transacciones_pago
 
 | Tabla | Políticas creadas | `ENABLE RLS` | Caminos de tenant envueltos en `withTenant` |
 | :--- | :---: | :---: | :--- |
-| `rutinas` | ✅ | ✅ (etapa 1) | 100% |
+| `rutinas` | ✅ | ✅ (etapa 1, WU7) | 100% |
+| `plantillas_rutina` | ✅ | ✅ (etapa 1, WU11 — migración `0005`) | 100% |
 | `perfiles_alumno` | ✅ | ⏳ pendiente | parcial |
 | `planes_membresia` | ✅ | ⏳ pendiente | parcial |
 | `cuotas_membresia` | ✅ | ⏳ pendiente | parcial |
 | `transacciones_pago` | ✅ | ⏳ pendiente | parcial |
 
-> **Verificación real pendiente:** la suite `rnf003-rls-multitenant.spec.ts` valida el mecanismo/contrato con mocks. El aislamiento efectivo (rol de conexión no-dueño y/o `FORCE ROW LEVEL SECURITY`) y su verificación contra PostgreSQL real quedan fuera de la etapa 1. Ver [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]].
+> **Verificación real de etapa 1 ejecutada:** la suite `rnf003-rls-multitenant.spec.ts` valida mecanismo/contrato con mocks y la batería real contra PostgreSQL con rol no-dueño `NOSUPERUSER NOBYPASSRLS` confirmó `deny-by-default` sin GUC, aislamiento por GUC, bypass superadmin explícito y bloqueo de escrituras cross-tenant en `rutinas` y `plantillas_rutina`. `FORCE ROW LEVEL SECURITY` no sustituye al rol no-dueño (superusers/`BYPASSRLS` la ignoran); las etapas restantes deben repetir la batería. Ver [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]].
 
 ---
 
