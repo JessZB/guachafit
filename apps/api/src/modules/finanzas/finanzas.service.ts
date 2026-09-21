@@ -181,18 +181,33 @@ export class FinanzasService {
   // ===========================================================================
 
   resolverTasa(
-    tasaActivaCoach: string,
+    tasaActivaCoach: string | null,
     tasaOverrideCliente?: string | null
   ): {
-    tasaEfectiva: string;
+    tasaEfectiva: string | null;
     esTasaOverride: boolean;
-    fuenteTasa: 'oficial_bcv' | 'paralelo' | 'entrenador_activa' | 'override_cliente';
+    fuenteTasa:
+      | 'oficial_bcv'
+      | 'paralelo'
+      | 'entrenador_activa'
+      | 'override_cliente'
+      | 'sin_configurar';
   } {
     if (tasaOverrideCliente && parseFloat(tasaOverrideCliente) > 0) {
       return {
         tasaEfectiva: tasaOverrideCliente,
         esTasaOverride: true,
         fuenteTasa: 'override_cliente',
+      };
+    }
+
+    // Sin tasa configurada (ni activa del coach ni override del alumno) NO se inventa una
+    // tasa: se devuelve null y cada consumidor decide (estado honesto u error de negocio).
+    if (!tasaActivaCoach || parseFloat(tasaActivaCoach) <= 0) {
+      return {
+        tasaEfectiva: null,
+        esTasaOverride: false,
+        fuenteTasa: 'sin_configurar',
       };
     }
 
@@ -224,25 +239,37 @@ export class FinanzasService {
     const { tasaEfectiva, esTasaOverride, fuente } = tasaVigente;
 
     let montoConvertido: string;
-    let tasaAplicada = tasaEfectiva;
+    let tasaAplicada = tasaEfectiva ?? '1.0000';
 
-    if (dto.monedaOrigen === Moneda.USD && dto.monedaDestino === Moneda.VES) {
+    if (dto.monedaOrigen === dto.monedaDestino) {
+      // Conversión identidad: no requiere tasa de cambio.
+      montoConvertido = dto.monto;
+      tasaAplicada = '1.0000';
+    } else if (!tasaEfectiva || parseFloat(tasaEfectiva) <= 0) {
+      // Operación bimonetaria sin tasa vigente: error de negocio claro, jamás una tasa inventada.
+      throw new BadRequestException(
+        'El entrenador aún no ha configurado la tasa de cambio. No es posible convertir entre USD y VES sin una tasa vigente.'
+      );
+    } else if (dto.monedaOrigen === Moneda.USD && dto.monedaDestino === Moneda.VES) {
       montoConvertido = this.proyectarVES(dto.monto, tasaEfectiva);
     } else if (dto.monedaOrigen === Moneda.VES && dto.monedaDestino === Moneda.USD) {
       montoConvertido = this.calcularContravalorUSD(dto.monto, tasaEfectiva);
-    } else if (dto.monedaOrigen === dto.monedaDestino) {
-      montoConvertido = dto.monto;
-      tasaAplicada = '1.0000';
     } else {
       throw new BadRequestException('Conversión de monedas no soportada.');
     }
 
-    const fuenteTasa: 'oficial_bcv' | 'paralelo' | 'entrenador_activa' | 'override_cliente' =
-      esTasaOverride
-        ? 'override_cliente'
-        : fuente === 'bcv'
-        ? 'oficial_bcv'
-        : 'entrenador_activa';
+    const fuenteTasa:
+      | 'oficial_bcv'
+      | 'paralelo'
+      | 'entrenador_activa'
+      | 'override_cliente'
+      | 'sin_configurar' = esTasaOverride
+      ? 'override_cliente'
+      : fuente === 'bcv'
+      ? 'oficial_bcv'
+      : fuente === 'sin_configurar'
+      ? 'sin_configurar'
+      : 'entrenador_activa';
 
     return {
       montoOriginal: dto.monto,
@@ -316,12 +343,13 @@ export class FinanzasService {
       .orderBy(desc(tasasCambioReferencia.fechaActualizacionUtc))
       .limit(1);
 
-    // Si no hay histórico en tasasCambioReferencia, buscar en perfil entrenador
-    let tasaOficialBcv = '65.0000';
+    // Sin histórico ni perfil NO se inventa una tasa "default": el vacío se propaga como
+    // `null` (dato honesto) y cada operación que necesite la tasa valida y falla con claridad.
+    let tasaOficialBcv: string | null = null;
     let tasaParalelo: string | null = null;
-    let tasaActivaCoach = '65.0000';
-    let fuente = 'default';
-    let fechaActualizacionUtc = new Date().toISOString();
+    let tasaActivaCoach: string | null = null;
+    let fuente = 'sin_configurar';
+    let fechaActualizacionUtc: string | null = null;
 
     if (tasaRef) {
       tasaOficialBcv = tasaRef.tasaOficialBcv;
@@ -335,7 +363,7 @@ export class FinanzasService {
         .from(perfilesEntrenador)
         .where(eq(perfilesEntrenador.usuarioId, entrenadorId));
 
-      if (coachPerfil?.tasaCambioGlobal) {
+      if (coachPerfil?.tasaCambioGlobal && parseFloat(coachPerfil.tasaCambioGlobal) > 0) {
         tasaActivaCoach = coachPerfil.tasaCambioGlobal;
         tasaOficialBcv = coachPerfil.tasaCambioGlobal;
         fuente = 'perfil_coach';
@@ -673,9 +701,12 @@ export class FinanzasService {
       })
       .returning();
 
-    // Calcular proyección en Bs y tasa aplicada
+    // Calcular proyección en Bs solo con tasa real: sin tasa configurada se omite el dato
+    // en vez de inventar un valor (la emisión en USD no requiere tasa).
     const tasa = await this.obtenerTasaVigente(entrenadorId, clienteUsuarioId);
-    const saldoPendienteVes = this.proyectarVES(cuota.saldoPendienteUsd, tasa.tasaEfectiva);
+    const saldoPendienteVes = tasa.tasaEfectiva
+      ? this.proyectarVES(cuota.saldoPendienteUsd, tasa.tasaEfectiva)
+      : undefined;
 
     return {
       id: cuota.id,
@@ -687,7 +718,7 @@ export class FinanzasService {
       montoAbonadoUsd: cuota.montoAbonadoUsd,
       saldoPendienteUsd: cuota.saldoPendienteUsd,
       saldoPendienteVes,
-      tasaAplicada: tasa.tasaEfectiva,
+      tasaAplicada: tasa.tasaEfectiva ?? undefined,
       fechaEmisionUtc: cuota.fechaEmisionUtc.toISOString(),
       fechaCorteUtc: cuota.fechaCorteUtc.toISOString(),
       estado: cuota.estado,
@@ -772,8 +803,11 @@ export class FinanzasService {
       }))
     );
 
+    // Proyección en Bs solo con tasa real (misma regla que la emisión: sin tasa, se omite).
     const tasa = await this.obtenerTasaVigente(cuota.entrenadorId, cuota.clienteId);
-    const saldoPendienteVes = this.proyectarVES(cuota.saldoPendienteUsd, tasa.tasaEfectiva);
+    const saldoPendienteVes = tasa.tasaEfectiva
+      ? this.proyectarVES(cuota.saldoPendienteUsd, tasa.tasaEfectiva)
+      : undefined;
 
     return {
       id: cuota.id,
@@ -785,7 +819,7 @@ export class FinanzasService {
       montoAbonadoUsd: cuota.montoAbonadoUsd,
       saldoPendienteUsd: cuota.saldoPendienteUsd,
       saldoPendienteVes,
-      tasaAplicada: tasa.tasaEfectiva,
+      tasaAplicada: tasa.tasaEfectiva ?? undefined,
       fechaEmisionUtc: toIsoSafe(cuota.fechaEmisionUtc),
       fechaCorteUtc: toIsoSafe(cuota.fechaCorteUtc),
       estado: cuota.estado,
@@ -873,15 +907,22 @@ export class FinanzasService {
       }
     }
 
-    // 4. Congelar la tasa de cambio vigente (ADR-003 rate snapshot)
+    // 4. Congelar la tasa de cambio vigente (ADR-003 rate snapshot).
+    //    Un pago en VES exige tasa real: sin ella no se puede calcular el contravalor USD y
+    //    se devuelve un error de negocio claro en vez de inventar un equivalente.
     const tasa = await this.obtenerTasaVigente(cuota.entrenadorId, alumnoUserId);
-    let tasaCambioFijada = tasa.tasaEfectiva;
+    let tasaCambioFijada = '1.0000';
     let montoEquivalenteUsd = dto.montoOriginal;
 
     if (dto.monedaOriginal === Moneda.VES) {
-      montoEquivalenteUsd = this.calcularContravalorUSD(dto.montoOriginal, tasaCambioFijada);
-    } else {
-      tasaCambioFijada = '1.0000';
+      const tasaEfectiva = tasa.tasaEfectiva;
+      if (!tasaEfectiva || parseFloat(tasaEfectiva) <= 0) {
+        throw new BadRequestException(
+          'El entrenador aún no ha configurado la tasa de cambio. No es posible calcular el equivalente en USD de un pago en bolívares.'
+        );
+      }
+      tasaCambioFijada = tasaEfectiva;
+      montoEquivalenteUsd = this.calcularContravalorUSD(dto.montoOriginal, tasaEfectiva);
     }
 
     const nowUtc = new Date();
@@ -1029,12 +1070,18 @@ export class FinanzasService {
         throw new BadRequestException('La cuota se encuentra anulada.');
       }
 
-      // Calcular contravalor USD
+      // Calcular contravalor USD. Un cobro en VES exige tasa real: sin ella se aborta la
+      // transacción con error de negocio claro (nunca un contravalor fabricado).
       let tasaCambioFijada = '1.0000';
       let montoEquivalenteUsd = dto.montoOriginal;
 
       if (dto.monedaOriginal === Moneda.VES) {
         const tasa = await this.obtenerTasaVigente(entrenadorId, cuotaLock.clienteId);
+        if (!tasa.tasaEfectiva || parseFloat(tasa.tasaEfectiva) <= 0) {
+          throw new BadRequestException(
+            'Aún no has configurado la tasa de cambio. Configura tu tasa activa en Ajustes → Tasas para cobrar en bolívares.'
+          );
+        }
         tasaCambioFijada = tasa.tasaEfectiva;
         montoEquivalenteUsd = this.calcularContravalorUSD(dto.montoOriginal, tasaCambioFijada);
       }
@@ -1106,11 +1153,11 @@ export class FinanzasService {
         updatedAtUtc: nuevaTx.updatedAtUtc.toISOString(),
       };
 
+      // Proyección informativa en Bs: solo con tasa real (sin tasa, se omite el dato).
       const tasa = await this.obtenerTasaVigente(entrenadorId, cuotaActualizada.clienteId);
-      const saldoPendienteVes = this.proyectarVES(
-        cuotaActualizada.saldoPendienteUsd,
-        tasa.tasaEfectiva
-      );
+      const saldoPendienteVes = tasa.tasaEfectiva
+        ? this.proyectarVES(cuotaActualizada.saldoPendienteUsd, tasa.tasaEfectiva)
+        : undefined;
 
       const cuotaDto: CuotaDetalleDTO = {
         id: cuotaActualizada.id,
@@ -1122,7 +1169,7 @@ export class FinanzasService {
         montoAbonadoUsd: cuotaActualizada.montoAbonadoUsd,
         saldoPendienteUsd: cuotaActualizada.saldoPendienteUsd,
         saldoPendienteVes,
-        tasaAplicada: tasa.tasaEfectiva,
+        tasaAplicada: tasa.tasaEfectiva ?? undefined,
         fechaEmisionUtc: toIsoSafe(cuotaActualizada.fechaEmisionUtc),
         fechaCorteUtc: toIsoSafe(cuotaActualizada.fechaCorteUtc),
         estado: cuotaActualizada.estado,
@@ -1659,7 +1706,18 @@ export class FinanzasService {
 
     const clienteUsuarioId = perfil.usuarioId;
 
-    // 2. Buscar si hay una cuota abierta
+    // 2. Un cobro en VES exige tasa configurada ANTES de emitir cualquier cuota: así la
+    //    operación falla entera y no deja una cuota emitida como efecto colateral.
+    if (dto.monedaOriginal === Moneda.VES) {
+      const tasa = await this.obtenerTasaVigente(entrenadorId, clienteUsuarioId);
+      if (!tasa.tasaEfectiva || parseFloat(tasa.tasaEfectiva) <= 0) {
+        throw new BadRequestException(
+          'Aún no has configurado la tasa de cambio. Configura tu tasa activa en Ajustes → Tasas para cobrar en bolívares.'
+        );
+      }
+    }
+
+    // 3. Buscar si hay una cuota abierta
     const [cuotaAbierta] = await this.db
       .select()
       .from(cuotasMembresia)
@@ -1674,7 +1732,7 @@ export class FinanzasService {
 
     let targetCuotaId = cuotaAbierta?.id;
 
-    // 3. Si no hay cuota abierta, buscar plan asignado
+    // 4. Si no hay cuota abierta, buscar plan asignado
     if (!targetCuotaId) {
       // Buscar override de plan para este alumno
       const [override] = await this.db
@@ -1742,7 +1800,7 @@ export class FinanzasService {
       targetCuotaId = cuotaEmitida.id;
     }
 
-    // 4. Ejecutar el cobro directo sobre la cuota
+    // 5. Ejecutar el cobro directo sobre la cuota
     return this.cobroDirecto(targetCuotaId, entrenadorId, dto);
   }
 }

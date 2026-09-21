@@ -91,7 +91,7 @@ export class AntropometriaService {
       }
       if (validado.modulo === 'antropometria' && alumno.modalidad === Modalidad.PRESENCIAL) {
         throw new ForbiddenException(
-          'RBAC Híbrido: Los alumnos en modalidad presencial tienen permisos de solo lectura. El registro debe ser realizado por el entrenador en sala.'
+          'Los alumnos en modalidad presencial no registran sus propias medidas: las toma tu entrenador y quedan verificadas.'
         );
       }
     } else if (caller.rol === Rol.ENTRENADOR) {
@@ -139,7 +139,7 @@ export class AntropometriaService {
       }
       if (alumno.modalidad === Modalidad.PRESENCIAL) {
         throw new ForbiddenException(
-          'RBAC Híbrido: Los alumnos en modalidad presencial tienen permisos de solo lectura. El registro debe ser realizado por el entrenador en sala.'
+          'Los alumnos en modalidad presencial no registran sus propias medidas: las toma tu entrenador y quedan verificadas.'
         );
       }
       origen = OrigenAntropometria.REMOTO_AUTOREPORTE;

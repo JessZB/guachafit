@@ -142,7 +142,7 @@ describe('RF-003: Check-in Antropométrico y Auditoría RBAC Híbrida (Presencia
           alumno: alumnoPresencial,
           dto: checkinIntentoFraudulento,
         })
-      ).rejects.toThrow(/modalidad presencial tienen permisos de solo lectura/i);
+      ).rejects.toThrow(/no registran sus propias medidas/i);
     });
 
     it('debe rechazar con HTTP 403 Forbidden si un alumno intenta registrar medidas para otro alumno', async () => {

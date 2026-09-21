@@ -134,7 +134,7 @@ export class AntropometriaTestEngine {
       // Invariante ADR-001: Alumno en modalidad Presencial NO tiene permiso de escritura
       if (alumno.modalidad === Modalidad.PRESENCIAL) {
         throw new ForbiddenException(
-          'RBAC Híbrido: Los alumnos en modalidad presencial tienen permisos de solo lectura. El registro debe ser realizado por el entrenador en sala.'
+          'Los alumnos en modalidad presencial no registran sus propias medidas: las toma tu entrenador y quedan verificadas.'
         );
       }
 

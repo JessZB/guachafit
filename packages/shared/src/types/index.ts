@@ -77,6 +77,7 @@ import {
   MotivoOmision,
   NivelObjetivoPlantilla,
   ModoAsignacionPlantilla,
+  EstadoLicencia,
 } from '../enums';
 
 // Tipos inferidos de DTOs - IAM & Onboarding
@@ -255,6 +256,66 @@ export interface DirectorioAlumnosDTO extends PaginadoDTO<PerfilAlumnoDetalleDTO
   resumen: ResumenDirectorioAlumnosDTO;
 }
 
+/**
+ * WU-E (RF-011): perfil operativo del entrenador autenticado.
+ * Expone el `coachCode` REAL de la BD (nunca un valor hardcodeado en el cliente) para construir
+ * el enlace único de captación.
+ */
+export interface PerfilEntrenadorDTO {
+  id: string;
+  usuarioId: string;
+  nombres: string;
+  apellidos: string;
+  nombreComercial: string | null;
+  coachCode: string;
+  estadoLicencia: EstadoLicencia;
+  capacidadMaxima: number;
+  telefonoContacto: string;
+}
+
+/**
+ * RF-010 Escenario 1: resultado del alta de entrenador por el Superadmin.
+ * `tokenInvitacion` es el token crudo de un solo uso (TTL 48h) con el que el entrenador crea su
+ * contraseña; la API devuelve `null` cuando el alta se hace con contraseña directa.
+ */
+export interface EntrenadorCreadoDTO {
+  id: string;
+  usuarioId: string;
+  nombres: string;
+  apellidos: string;
+  email: string;
+  coachCode: string;
+  tokenInvitacion: string | null;
+  mensaje: string;
+}
+
+/**
+ * WU-E (RF-011 RN-06/RN-07.1): resolución pública del `coach_code` de un enlace de captación.
+ * Solo datos de identidad comercial del coach; jamás información sensible (licencia, contacto,
+ * cartera o identidad legal completa).
+ */
+export interface CoachPublicoDTO {
+  coachCode: string;
+  /** Nombre humano del coach (`nombres apellidos`). */
+  nombre: string;
+  /** Marca/gimnasio del coach si lo configuró; `null` si no existe. */
+  nombreComercial: string | null;
+}
+
+/** WU-E (RF-011 RN-05): resultado del alta manual con el token para compartir el enlace de activación. */
+export interface AltaManualAlumnoResultadoDTO {
+  id: string;
+  nombres: string;
+  apellidos: string;
+  email: string;
+  edadCalculada: number;
+  modalidad: Modalidad;
+  estadoActivacion: EstadoAlumno;
+  /** Token de un solo uso (TTL 48h) con el que el alumno crea su contraseña en `/activar`. */
+  tokenInvitacion: string;
+  mensaje: string;
+}
+
 export interface ResumenFinancieroAlumnoDTO {
   alumnoId: string;
   usuarioId: string;
@@ -297,8 +358,14 @@ export interface DashboardComandoDTO {
     capacidadMaxima: number;
     porcentajeOcupacion: string;
     cobranzaMesUsd: string;
-    metaCobranzaMesUsd: string;
-    porcentajeCobranza: string;
+    /**
+     * Meta de cobranza del mes = suma de las cuotas emitidas del periodo.
+     * `null` cuando no hay ninguna cuota emitida: sin meta real el cliente muestra
+     * "Sin meta de cobranza configurada" y NUNCA un valor heurístico inventado.
+     */
+    metaCobranzaMesUsd: string | null;
+    /** `cobranzaMesUsd / metaCobranzaMesUsd * 100`; `null` cuando no hay meta real. */
+    porcentajeCobranza: string | null;
     /**
      * Adherencia agregada de la semana en curso (RN-03), calculada como
      * sesiones completadas / sesiones prescritas de los alumnos con plan activo.
@@ -425,7 +492,12 @@ export interface CalculoConversionDTO {
   montoConvertido: string;
   monedaConvertida: Moneda;
   tasaAplicada: string;
-  fuenteTasa: 'oficial_bcv' | 'paralelo' | 'entrenador_activa' | 'override_cliente';
+  fuenteTasa:
+    | 'oficial_bcv'
+    | 'paralelo'
+    | 'entrenador_activa'
+    | 'override_cliente'
+    | 'sin_configurar';
   esTasaOverride: boolean;
   fechaCalculoUtc: string;
 }
@@ -433,13 +505,24 @@ export interface CalculoConversionDTO {
 export interface TasaCambioVigenteDTO {
   id?: string;
   entrenadorId: string;
-  tasaOficialBcv: string;
+  /**
+   * Tasa BCV de referencia. `null` cuando el entrenador no ha configurado ninguna tasa:
+   * el vacío es un dato y la UI debe mostrar un estado honesto, nunca un valor inventado.
+   */
+  tasaOficialBcv: string | null;
   tasaParalelo?: string | null;
-  tasaActivaEntrenador: string;
+  /** Tasa activa del entrenador. `null` cuando no existe configuración de tasa. */
+  tasaActivaEntrenador: string | null;
   tasaAcordadaCliente?: string | null;
-  tasaEfectiva: string;
+  /**
+   * Tasa efectiva aplicable (override del cliente > tasa activa). `null` cuando no hay
+   * ninguna tasa utilizable; los consumidores deben omitir proyecciones o pedir configurarla.
+   */
+  tasaEfectiva: string | null;
+  /** `'sin_configurar'` cuando no existe tasa vigente (nunca se reporta una fuente ficticia). */
   fuente: string;
-  fechaActualizacionUtc: string;
+  /** Fecha de la última actualización real. `null` cuando no hay tasa configurada. */
+  fechaActualizacionUtc: string | null;
 }
 
 // =============================================================================
@@ -865,7 +948,14 @@ export type CategoriaNotificacion =
   | 'ENTRENAMIENTO'
   | 'ANTROPOMETRIA'
   | 'RESUMEN_SEMANAL'
-  | 'SEGURIDAD';
+  | 'SEGURIDAD'
+  /**
+   * WU-E (RF-011 RN-07.4 / RF-015 §B "Nuevos Registros"): alertas operativas de onboarding del
+   * coach (p. ej. alumno registrado por su deep link). El Despachador las persiste SIEMPRE en la
+   * bandeja In-App (RF-014 RN-04); aún no existen columnas de preferencia propias para enrutar
+   * Push/Email (RF-015 pendiente), por lo que no se reutilizan preferencias de otra categoría.
+   */
+  | 'ALUMNOS';
 
 export interface EventoNotificacionPayload {
   tipoEvento: string;

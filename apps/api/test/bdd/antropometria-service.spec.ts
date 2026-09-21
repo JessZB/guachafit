@@ -411,7 +411,7 @@ describe('Módulo 4: Control Antropométrico & Bóveda R2 (AntropometriaService 
 
       await expect(
         antropometriaService.solicitarPresignedUploadUrl(caller, dto)
-      ).rejects.toThrow(/modalidad presencial tienen permisos de solo lectura/i);
+      ).rejects.toThrow(/no registran sus propias medidas/i);
     });
 
     it('debe rechazar si un alumno solicita URL para otro alumno', async () => {

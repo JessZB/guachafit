@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
 import {
   Database,
@@ -14,6 +14,7 @@ import {
   inArray,
   desc,
   gte,
+  sql,
   perfilesEntrenador,
   perfilesAlumno,
   transaccionesPago,
@@ -30,6 +31,7 @@ import {
   EstadoCuota,
   EstadoMedicion,
   EstadoSesion,
+  PerfilEntrenadorDTO,
   SemaforoAdherencia,
 } from '@guachafit/shared';
 import {
@@ -40,6 +42,27 @@ import {
   obtenerFechaLocalYyyyMmDd,
 } from '../../common/adherencia.util';
 
+/**
+ * Ventana del mes calendario en UTC para los KPIs financieros del dashboard (RF-013).
+ *
+ * El resto del dashboard ya usa UTC como referencia (p. ej. `periodoActual` de las cuotas), así
+ * que "Cobros del Mes" se delimita con el mismo criterio: [inicio de mes UTC, inicio del mes
+ * siguiente UTC). Nunca se suma el histórico completo de pagos aprobados.
+ */
+export function calcularVentanaMesUtc(ahora: Date): {
+  periodoActual: string;
+  inicioMesUtc: Date;
+  inicioMesSiguienteUtc: Date;
+} {
+  const anio = ahora.getUTCFullYear();
+  const mes = ahora.getUTCMonth();
+  return {
+    periodoActual: `${anio}-${String(mes + 1).padStart(2, '0')}`,
+    inicioMesUtc: new Date(Date.UTC(anio, mes, 1)),
+    inicioMesSiguienteUtc: new Date(Date.UTC(anio, mes + 1, 1)),
+  };
+}
+
 @Injectable()
 export class EntrenadorService {
   constructor(
@@ -49,11 +72,39 @@ export class EntrenadorService {
   ) {}
 
   /**
+   * Perfil operativo del entrenador autenticado (WU-E / RF-011 RN-06).
+   * Es la fuente REAL del `coachCode` para el enlace único de captación del coach; el cliente
+   * nunca debe inventar ni hardcodear este valor. Solo devuelve datos propios del solicitante.
+   */
+  async obtenerPerfil(usuarioId: string): Promise<PerfilEntrenadorDTO> {
+    const [coach] = await this.db
+      .select()
+      .from(perfilesEntrenador)
+      .where(eq(perfilesEntrenador.usuarioId, usuarioId));
+
+    if (!coach) {
+      throw new NotFoundException('Perfil de entrenador no encontrado.');
+    }
+
+    return {
+      id: coach.id,
+      usuarioId: coach.usuarioId,
+      nombres: coach.nombres,
+      apellidos: coach.apellidos,
+      nombreComercial: coach.nombreComercial,
+      coachCode: coach.coachCode,
+      estadoLicencia: coach.estadoLicencia,
+      capacidadMaxima: coach.capacidadMaxima,
+      telefonoContacto: coach.telefonoContacto,
+    };
+  }
+
+  /**
    * Genera el payload consolidado del Dashboard de Comando Central del Entrenador (RF-013)
    */
   async obtenerDashboardComando(coachId: string): Promise<DashboardComandoDTO> {
     const now = new Date();
-    const periodoActual = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+    const { periodoActual, inicioMesUtc, inicioMesSiguienteUtc } = calcularVentanaMesUtc(now);
 
     // 1. Capacidad Máxima del Entrenador
     const [coachProfile] = await this.db
@@ -93,6 +144,11 @@ export class EntrenadorService {
         : '0.00';
 
     // 3. Métricas Financieras (Cobranza Mes y Meta)
+    //    "Cobros del Mes" = SOLO pagos aprobados del mes en curso (UTC), con la fecha real de
+    //    entrada del dinero: `fechaConciliacionUtc` y, para filas legadas sin ella, la fecha
+    //    de reporte. Antes se sumaba el histórico completo, inflando el KPI.
+    //    `coalesce` se expresa con SQL: no existe como helper en drizzle-orm 0.33.
+    const fechaCobroEfectiva = sql`coalesce(${transaccionesPago.fechaConciliacionUtc}, ${transaccionesPago.fechaReporteUtc})`;
     const pagosAprobados = await this.db
       .select({
         montoEquivalenteUsd: transaccionesPago.montoEquivalenteUsd,
@@ -101,7 +157,9 @@ export class EntrenadorService {
       .where(
         and(
           eq(transaccionesPago.entrenadorId, coachId),
-          eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.APROBADO)
+          eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.APROBADO),
+          gte(fechaCobroEfectiva, inicioMesUtc),
+          lt(fechaCobroEfectiva, inicioMesSiguienteUtc)
         )
       );
 
@@ -127,18 +185,15 @@ export class EntrenadorService {
       (acc, c) => acc + Number(c.montoTotalUsd || 0),
       0
     );
-    const metaCalculada =
-      totalMetaUsd > 0
-        ? totalMetaUsd
-        : alumnosActivos > 0
-          ? alumnosActivos * 35
-          : 2500;
-    const metaCobranzaMesUsd = metaCalculada.toFixed(2);
+    // §6 honestidad de presentación: la meta SOLO existe si hay cuotas emitidas del periodo que
+    // la respalden. Sin meta real no se inventa un valor (antes: `alumnos * 35` o 2500 USD) y el
+    // cliente muestra "Sin meta de cobranza configurada"; el porcentaje tampoco se calcula.
+    const metaCobranzaMesUsd = totalMetaUsd > 0 ? totalMetaUsd.toFixed(2) : null;
 
     const porcentajeCobranza =
-      Number(metaCobranzaMesUsd) > 0
+      metaCobranzaMesUsd !== null
         ? ((Number(cobranzaMesUsd) / Number(metaCobranzaMesUsd)) * 100).toFixed(2)
-        : '100.00';
+        : null;
 
     // 4. Adherencia Semanal (RF-001 RN-03) — misma semántica que el monitor del coach.
     //    Ventana: Lunes 00:00 local (default UTC) -> ahora; prescritas = bloques de la rutina

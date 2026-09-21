@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { EntrenadorService } from '../../src/modules/entrenador/entrenador.service';
+import { EntrenadorService, calcularVentanaMesUtc } from '../../src/modules/entrenador/entrenador.service';
 import {
   EstadoAlumno,
   EstadoCuota,
@@ -10,10 +10,12 @@ type RespuestaTabla = any[] | ((n: number) => any[]);
 
 /**
  * Mock de Drizzle basado en el nombre de tabla, con contador de invocaciones por tabla
- * para distinguir consultas sucesivas sobre la misma entidad.
+ * para distinguir consultas sucesivas sobre la misma entidad. Los predicados de `where`
+ * se capturan para poder auditar los filtros SQL (p. ej. la ventana del mes de cobranza).
  */
 function crearMockDb(respuestas: Record<string, RespuestaTabla>) {
   const contadores: Record<string, number> = {};
+  const predicados: any[] = [];
   const db: any = {
     select: vi.fn(() => ({
       from: vi.fn((table: any) => {
@@ -24,7 +26,10 @@ function crearMockDb(respuestas: Record<string, RespuestaTabla>) {
           typeof definicion === 'function' ? definicion(contadores[nombre]) : definicion ?? [];
 
         const queryObj: any = {
-          where: vi.fn(() => queryObj),
+          where: vi.fn((predicate: any) => {
+            predicados.push(predicate);
+            return queryObj;
+          }),
           orderBy: vi.fn(() => Promise.resolve(data)),
           limit: vi.fn(() => Promise.resolve(data)),
           then: (resolve: any) => resolve(data),
@@ -33,7 +38,40 @@ function crearMockDb(respuestas: Record<string, RespuestaTabla>) {
       }),
     })),
   };
-  return { db, contadores };
+  return { db, contadores, predicados };
+}
+
+/** Texto SQL de una expresión Drizzle (fragmentos de texto + nombres de columna). */
+function textoDeExpresion(expr: any): string {
+  if (!expr || typeof expr !== 'object' || !Array.isArray(expr.queryChunks)) return '';
+  const partes: string[] = [];
+  const visitar = (chunks: any[]) => {
+    for (const c of chunks) {
+      if (typeof c?.name === 'string') partes.push(c.name);
+      if (Array.isArray(c?.value)) partes.push(c.value.join(' '));
+      if (Array.isArray(c?.queryChunks)) visitar(c.queryChunks);
+    }
+  };
+  visitar(expr.queryChunks);
+  return partes.join(' ').toLowerCase();
+}
+
+/** Valores de los parámetros ligados a una expresión Drizzle (p. ej. las fechas de la ventana). */
+function parametrosDeExpresion(expr: any): any[] {
+  const valores: any[] = [];
+  const visitar = (chunks: any[]) => {
+    for (const c of chunks) {
+      if (c instanceof Date) {
+        // Drizzle embebe el valor crudo cuando el lado izquierdo es un fragmento SQL.
+        valores.push(c);
+      } else if (c && 'value' in c && !Array.isArray(c.value)) {
+        valores.push(c.value);
+      }
+      if (Array.isArray(c?.queryChunks)) visitar(c.queryChunks);
+    }
+  };
+  if (expr && Array.isArray(expr.queryChunks)) visitar(expr.queryChunks);
+  return valores;
 }
 
 /**
@@ -236,5 +274,60 @@ describe('RF-013: Dashboard de Comando del Entrenador y Métricas de Capacidad',
     expect(resultado.kpisMacro.alumnosEnRiesgoDeportivo).toBe(0);
     expect(resultado.kpisMacro.alumnosEnMoraFinanciera).toBe(1);
     expect(resultado.kpisMacro.alumnosEnRiesgo).toBe(1);
+  });
+
+  it('"Cobros del Mes" suma solo pagos aprobados del mes en curso y filtra por la ventana UTC', async () => {
+    // El mock no filtra SQL: el primer arreglo representa lo que la BD devolvería YA filtrado
+    // (pagos aprobados del mes). El filtro real se audita inspeccionando el predicado capturado.
+    const { db, predicados } = crearMockDb({
+      perfiles_entrenador: [{ capacidadMaxima: 50 }],
+      perfiles_alumno: [],
+      transacciones_pago: (n) => (n === 1 ? [{ montoEquivalenteUsd: '35.00' }] : []),
+      cuotas_membresia: [],
+      rutinas: [],
+      sesiones_entrenamiento: [],
+      controles_antropometricos: [],
+    });
+
+    const withTenantMock = crearWithTenantMock(db);
+    const entrenadorService = new EntrenadorService(db, withTenantMock);
+    const resultado = await entrenadorService.obtenerDashboardComando(coachId);
+
+    expect(resultado.kpisMacro.cobranzaMesUsd).toBe('35.00');
+
+    const predicadoPagos = predicados.find((p) =>
+      textoDeExpresion(p).includes('fecha_conciliacion_utc')
+    );
+    expect(predicadoPagos).toBeDefined();
+
+    const texto = textoDeExpresion(predicadoPagos);
+    // La fecha real de entrada del dinero manda; las filas legadas sin conciliación usan reporte.
+    expect(texto).toContain('coalesce');
+    expect(texto).toContain('fecha_reporte_utc');
+    expect(texto).toContain('>=');
+    expect(texto).toContain('<');
+
+    const { inicioMesUtc, inicioMesSiguienteUtc } = calcularVentanaMesUtc(new Date());
+    const fechas = parametrosDeExpresion(predicadoPagos)
+      .filter((valor) => valor instanceof Date)
+      .map((fecha: Date) => fecha.toISOString());
+    expect(fechas).toContain(inicioMesUtc.toISOString());
+    expect(fechas).toContain(inicioMesSiguienteUtc.toISOString());
+  });
+
+  describe('calcularVentanaMesUtc (ventana del mes calendario en UTC)', () => {
+    it('delimita el mes UTC y conserva el formato YYYY-MM de `periodoActual`', () => {
+      const ventana = calcularVentanaMesUtc(new Date('2026-09-20T22:30:00.000Z'));
+      expect(ventana.periodoActual).toBe('2026-09');
+      expect(ventana.inicioMesUtc.toISOString()).toBe('2026-09-01T00:00:00.000Z');
+      expect(ventana.inicioMesSiguienteUtc.toISOString()).toBe('2026-10-01T00:00:00.000Z');
+    });
+
+    it('cruza el cambio de año sin desfases', () => {
+      const ventana = calcularVentanaMesUtc(new Date('2026-12-31T23:59:59.000Z'));
+      expect(ventana.periodoActual).toBe('2026-12');
+      expect(ventana.inicioMesUtc.toISOString()).toBe('2026-12-01T00:00:00.000Z');
+      expect(ventana.inicioMesSiguienteUtc.toISOString()).toBe('2027-01-01T00:00:00.000Z');
+    });
   });
 });

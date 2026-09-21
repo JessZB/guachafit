@@ -1241,4 +1241,141 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
       expect(res.transaccion.estadoConciliacion).toBe(EstadoConciliacion.APROBADO);
     });
   });
+
+  // ===========================================================================
+  // J. HONESTIDAD DE TASA (RF-006): SIN TASA CONFIGURADA NO HAY VALOR INVENTADO
+  // ===========================================================================
+  describe('10. Sin tasa configurada: null y errores de negocio (nunca 65.0000)', () => {
+    beforeEach(() => {
+      // Ausencia REAL de configuración: sin histórico de tasas y sin tasa global en el perfil.
+      mockTasasCambioReferencia = [];
+      mockPerfilesEntrenador[0].tasaCambioGlobal = null;
+    });
+
+    function crearCuotaAbierta(id: string) {
+      mockCuotasMembresia = [
+        {
+          id,
+          clienteId: 'alumno-uuid-1',
+          entrenadorId: 'coach-uuid-1',
+          planId: 'plan-uuid-1',
+          periodo: '2026-09',
+          montoTotalUsd: '50.00',
+          montoAbonadoUsd: '0.00',
+          saldoPendienteUsd: '50.00',
+          fechaEmisionUtc: new Date(),
+          fechaCorteUtc: new Date(Date.now() + 15 * 86400000),
+          estado: EstadoCuota.EMITIDA,
+        },
+      ];
+    }
+
+    it('resolverTasa devuelve null con fuente "sin_configurar" y conserva el override si existe', () => {
+      const sinTasa = finanzasService.resolverTasa(null, null);
+      expect(sinTasa.tasaEfectiva).toBeNull();
+      expect(sinTasa.esTasaOverride).toBe(false);
+      expect(sinTasa.fuenteTasa).toBe('sin_configurar');
+
+      const conOverride = finanzasService.resolverTasa(null, '58.0000');
+      expect(conOverride.tasaEfectiva).toBe('58.0000');
+      expect(conOverride.fuenteTasa).toBe('override_cliente');
+    });
+
+    it('obtenerTasaVigente no fabrica 65.0000: nulls, fuente "sin_configurar" y fecha null', async () => {
+      const tasa = await finanzasService.obtenerTasaVigente('coach-uuid-1');
+      expect(tasa.tasaEfectiva).toBeNull();
+      expect(tasa.tasaOficialBcv).toBeNull();
+      expect(tasa.tasaActivaEntrenador).toBeNull();
+      expect(tasa.fuente).toBe('sin_configurar');
+      expect(tasa.fechaActualizacionUtc).toBeNull();
+    });
+
+    it('calcularConversion USD→VES sin tasa falla con error de negocio claro', async () => {
+      await expect(
+        finanzasService.calcularConversion(
+          { monto: '50.00', monedaOrigen: Moneda.USD, monedaDestino: Moneda.VES },
+          'coach-uuid-1'
+        )
+      ).rejects.toThrow(/aún no ha configurado la tasa de cambio/i);
+    });
+
+    it('calcularConversion USD→USD (identidad) no requiere tasa vigente', async () => {
+      const res = await finanzasService.calcularConversion(
+        { monto: '50.00', monedaOrigen: Moneda.USD, monedaDestino: Moneda.USD },
+        'coach-uuid-1'
+      );
+      expect(res.montoConvertido).toBe('50.00');
+      expect(res.tasaAplicada).toBe('1.0000');
+      expect(res.fuenteTasa).toBe('sin_configurar');
+    });
+
+    it('emitirCuota sin tasa omite saldoPendienteVes y tasaAplicada (no inventa proyección)', async () => {
+      const cuota = await finanzasService.emitirCuota('coach-uuid-1', {
+        clienteId: 'alumno-uuid-1',
+        planId: 'plan-uuid-1',
+        periodo: '2026-09',
+        montoTotalUsd: '50.00',
+        fechaCorteUtc: '2026-09-30T23:59:59Z',
+      });
+
+      expect(cuota.saldoPendienteUsd).toBe('50.00');
+      expect(cuota.saldoPendienteVes).toBeUndefined();
+      expect(cuota.tasaAplicada).toBeUndefined();
+    });
+
+    it('reportarPago en VES sin tasa se rechaza; en USD se registra con tasa 1.0000', async () => {
+      crearCuotaAbierta('cuota-sin-tasa');
+
+      await expect(
+        finanzasService.reportarPago('cuota-sin-tasa', 'alumno-uuid-1', {
+          montoOriginal: '1500.00',
+          monedaOriginal: Moneda.VES,
+          metodoPago: MetodoPago.PAGO_MOVIL,
+          referenciaBancaria: 'ref-sin-tasa',
+          fechaOperacion: '2026-09-06',
+        })
+      ).rejects.toThrow(/aún no ha configurado la tasa de cambio/i);
+
+      const res = await finanzasService.reportarPago('cuota-sin-tasa', 'alumno-uuid-1', {
+        montoOriginal: '30.00',
+        monedaOriginal: Moneda.USD,
+        metodoPago: MetodoPago.EFECTIVO_USD,
+        fechaOperacion: '2026-09-06',
+      });
+      expect(res.transaccion.tasaCambioFijada).toBe('1.0000');
+      expect(res.transaccion.montoEquivalenteUsd).toBe('30.00');
+      expect(res.cuota.saldoPendienteVes).toBeUndefined();
+    });
+
+    it('cobroDirecto en VES sin tasa se rechaza sin liquidar la cuota', async () => {
+      crearCuotaAbierta('cuota-cobro-sin-tasa');
+
+      await expect(
+        finanzasService.cobroDirecto('cuota-cobro-sin-tasa', 'coach-uuid-1', {
+          montoOriginal: '1500.00',
+          monedaOriginal: Moneda.VES,
+          metodoPago: MetodoPago.EFECTIVO_VES,
+          fechaOperacion: '2026-09-06',
+        })
+      ).rejects.toThrow(/no has configurado la tasa de cambio/i);
+
+      expect(mockCuotasMembresia[0].saldoPendienteUsd).toBe('50.00');
+      expect(mockTransaccionesPago).toHaveLength(0);
+    });
+
+    it('cobroDirectoInteligente en VES sin tasa falla ANTES de emitir una cuota colateral', async () => {
+      mockCuotasMembresia = [];
+
+      await expect(
+        finanzasService.cobroDirectoInteligente('coach-uuid-1', 'alumno-uuid-1', {
+          montoOriginal: '1500.00',
+          monedaOriginal: Moneda.VES,
+          metodoPago: MetodoPago.EFECTIVO_VES,
+          fechaOperacion: '2026-09-06',
+        })
+      ).rejects.toThrow(/no has configurado la tasa de cambio/i);
+
+      expect(mockCuotasMembresia).toHaveLength(0);
+    });
+  });
 });
