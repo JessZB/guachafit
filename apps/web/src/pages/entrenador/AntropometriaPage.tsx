@@ -13,6 +13,7 @@ import {
   hayBusquedaAntropometriaActiva,
 } from '../../lib/antropometria-filtros';
 import { pluralizar } from '../../lib/pluralizar';
+import { formatFechaCalendario } from '../../lib/date-format';
 import { rebanarPagina } from '../../lib/paginacion';
 import { usePaginacionServidor } from '../../lib/use-paginacion-servidor';
 import { Paginacion } from '../../components/common/Paginacion';
@@ -328,7 +329,8 @@ export function AntropometriaPage() {
                 <div className="flex items-center justify-between border-b border-border/50 pb-3">
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-base text-foreground">
-                      Fecha de Toma: {ctrl.fechaEvaluacion}
+                      Fecha de Toma:{' '}
+                      {formatFechaCalendario(ctrl.fechaEvaluacion) ?? ctrl.fechaEvaluacion}
                     </span>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 uppercase">
                       Pendiente Aprobación
@@ -351,7 +353,7 @@ export function AntropometriaPage() {
                       % Grasa
                     </span>
                     <p className="font-mono font-bold text-base text-foreground">
-                      {ctrl.porcentajeGrasa ? `${ctrl.porcentajeGrasa}%` : 'N/D'}
+                      {ctrl.porcentajeGrasa ? `${ctrl.porcentajeGrasa}%` : '—'}
                     </p>
                   </div>
                   <div className="p-3 rounded-2xl bg-secondary/30">
@@ -359,7 +361,7 @@ export function AntropometriaPage() {
                       Cintura
                     </span>
                     <p className="font-mono font-bold text-base text-foreground">
-                      {ctrl.perimetros?.cinturaCm ? `${ctrl.perimetros.cinturaCm} cm` : 'N/D'}
+                      {ctrl.perimetros?.cinturaCm ? `${ctrl.perimetros.cinturaCm} cm` : '—'}
                     </p>
                   </div>
                   <div className="p-3 rounded-2xl bg-secondary/30">

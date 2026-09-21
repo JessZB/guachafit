@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { Rol } from '@guachafit/shared';
 import { useAuth } from './context/auth-context';
+import { rutaInicioPorRol } from './lib/rutas-rol';
 
 // Layout & Guards
 import { AppLayout } from './components/layout/AppLayout';
@@ -27,6 +28,10 @@ const LoginPage = lazy(() =>
 );
 const OnboardingPage = lazy(() =>
   import('./pages/auth/OnboardingPage').then((m) => ({ default: m.OnboardingPage }))
+);
+// WU-E (RF-011 RN-05): activación pública de credenciales con token de invitación.
+const ActivacionPage = lazy(() =>
+  import('./pages/auth/ActivacionPage').then((m) => ({ default: m.ActivacionPage }))
 );
 
 // Lazy Athlete Pages
@@ -77,17 +82,19 @@ const AjustesPage = lazy(() =>
   import('./pages/entrenador/AjustesPage').then((m) => ({ default: m.AjustesPage }))
 );
 
+// Lazy Admin Pages
+const AdminPage = lazy(() =>
+  import('./pages/admin/AdminPage').then((m) => ({ default: m.AdminPage }))
+);
+
 function RootRedirect() {
   const { user, isAuthenticated } = useAuth();
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;
   }
   // WU12: primer aterrizaje tras login = menú de cada rol (el dashboard y el "hoy" se abren desde ahí).
-  return user.rol === Rol.ENTRENADOR ? (
-    <Navigate to="/coach/menu" replace />
-  ) : (
-    <Navigate to="/app/menu" replace />
-  );
+  // RF-010 RN-01: el superadmin aterriza en /admin; nunca en las rutas de coach/alumno.
+  return <Navigate to={rutaInicioPorRol(user.rol)} replace />;
 }
 
 export const router = createBrowserRouter([
@@ -109,13 +116,21 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    path: '/activar',
+    element: (
+      <Suspense fallback={<PublicFallback />}>
+        <ActivacionPage />
+      </Suspense>
+    ),
+  },
+  {
     path: '/',
     element: <RootRedirect />,
   },
 
   // Athlete Protected Routes
   {
-    element: <ProtectedRoute allowedRoles={[Rol.ALUMNO, Rol.SUPERADMIN]} />,
+    element: <ProtectedRoute allowedRoles={[Rol.ALUMNO]} />,
     children: [
       {
         element: <AppLayout />,
@@ -147,7 +162,7 @@ export const router = createBrowserRouter([
 
   // Coach Protected Routes
   {
-    element: <ProtectedRoute allowedRoles={[Rol.ENTRENADOR, Rol.SUPERADMIN]} />,
+    element: <ProtectedRoute allowedRoles={[Rol.ENTRENADOR]} />,
     children: [
       {
         element: <AppLayout />,
@@ -187,6 +202,22 @@ export const router = createBrowserRouter([
           {
             path: '/coach/ajustes',
             element: <AjustesPage />,
+          },
+        ],
+      },
+    ],
+  },
+
+  // Superadmin Protected Routes (RF-010 RN-01: solo administración de la plataforma)
+  {
+    element: <ProtectedRoute allowedRoles={[Rol.SUPERADMIN]} />,
+    children: [
+      {
+        element: <AppLayout />,
+        children: [
+          {
+            path: '/admin',
+            element: <AdminPage />,
           },
         ],
       },

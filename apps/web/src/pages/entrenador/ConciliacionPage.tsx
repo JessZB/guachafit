@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { apiClient } from '../../lib/api-client';
 import { useAuth } from '../../context/auth-context';
 import { pluralizar } from '../../lib/pluralizar';
+import { formatFechaCalendario } from '../../lib/date-format';
 import { rebanarPagina } from '../../lib/paginacion';
 import { usePaginacionServidor } from '../../lib/use-paginacion-servidor';
 import { Paginacion } from '../../components/common/Paginacion';
@@ -421,7 +422,8 @@ export function ConciliacionPage() {
                   <div className="flex flex-wrap items-center gap-2 mt-2">
                     <p className="text-xs text-muted-foreground">
                       Ref: <span className="font-mono font-bold text-foreground">{tx.referenciaBancaria}</span> •
-                      Fecha Operación: {tx.fechaOperacion}
+                      Fecha Operación:{' '}
+                      {formatFechaCalendario(tx.fechaOperacion) ?? tx.fechaOperacion}
                     </p>
                     {tx.comprobanteUrl || tx.comprobanteStorageKey ? (
                       <button
@@ -552,7 +554,7 @@ export function ConciliacionPage() {
                     Auditoría de Comprobante Bancario
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    Alumno: <span className="font-bold text-foreground">{viewingComprobanteTx.clienteNombre || 'Alumno'}</span> • {viewingComprobanteTx.metodoPago.replace('_', ' ').toUpperCase()}
+                    Alumno: <span className="font-bold text-foreground">{viewingComprobanteTx.clienteNombre || 'Alumno'}</span> • {etiquetaMetodoPago(viewingComprobanteTx.metodoPago).toUpperCase()}
                   </p>
                 </div>
               </div>
@@ -587,7 +589,8 @@ export function ConciliacionPage() {
               <div>
                 <span className="text-[10px] text-muted-foreground uppercase font-bold">Fecha Operación</span>
                 <p className="font-medium text-foreground mt-0.5">
-                  {viewingComprobanteTx.fechaOperacion}
+                  {formatFechaCalendario(viewingComprobanteTx.fechaOperacion) ??
+                    viewingComprobanteTx.fechaOperacion}
                 </p>
               </div>
             </div>

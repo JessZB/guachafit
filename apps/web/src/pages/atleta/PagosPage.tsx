@@ -22,6 +22,9 @@ import {
   normalizarEstadoTransaccion,
   type FiltroEstadoTransaccionPago,
 } from '../../lib/pagos-historial-filtros';
+import { etiquetaEstadoCuota } from '../../lib/etiquetas-dominio';
+import { etiquetaMetodoPago } from '../../lib/conciliacion-filtros';
+import { formatFechaCalendario } from '../../lib/date-format';
 import {
   CreditCard,
   TrendingUp,
@@ -164,6 +167,8 @@ export function PagosPage() {
   const { user, isDemoMode } = useAuth();
   const [cuota, setCuota] = useState<CuotaDetalleDTO | null>(null);
   const [tasa, setTasa] = useState<TasaCambioVigenteDTO | null>(null);
+  // D6: distingue "sin tasa configurada" (dato real de la API) de "no se pudo consultar".
+  const [tasaError, setTasaError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   // D2: fallo de carga honesto (sin cuota demo fuera del modo demo).
   const [error, setError] = useState<string | null>(null);
@@ -243,9 +248,16 @@ export function PagosPage() {
 
     // Sesión real: tasa vigente y cuota/transacciones reales del alumno titular.
     try {
-      const tasaData = await apiClient<TasaCambioVigenteDTO>('/finanzas/tasas/vigente').catch(
-        () => null
-      );
+      const tasaData = await apiClient<TasaCambioVigenteDTO>('/finanzas/tasas/vigente')
+        .then((data) => {
+          setTasaError(false);
+          return data;
+        })
+        .catch(() => {
+          // D6: si la consulta falla no se afirma "sin tasa"; se dice "no disponible".
+          setTasaError(true);
+          return null;
+        });
       setTasa(tasaData ?? null);
 
       if (!user?.id) {
@@ -340,8 +352,17 @@ export function PagosPage() {
     cargarDatos();
   }, [user, isDemoMode]);
 
-  // D2: sin tasa real no se inventa una conversión: se muestra "—" hasta que exista dato.
+  // D2/D6: sin tasa real no se inventa una conversión. Se distingue el dato real de la API
+  // ("sin tasa configurada") de un fallo de consulta ("no disponible").
   const tasaEfectivaNum = Number(tasa?.tasaEfectiva || '0') || 0;
+  const etiquetaSinTasa = tasa?.tasaEfectiva
+    ? null
+    : tasaError
+    ? 'Tasa no disponible'
+    : 'Sin tasa configurada';
+  // Operación que SÍ requiere tasa (pago en VES con dato confirmado de ausencia): se bloquea con
+  // mensaje claro en vez de dejar que el usuario llene el formulario para recibir un error tardío.
+  const pagoVesSinTasa = moneda === Moneda.VES && !tasa?.tasaEfectiva && !tasaError;
   const montoNum = Number(montoOriginal) || 0;
   const contravalorUsd =
     moneda === Moneda.VES
@@ -501,7 +522,7 @@ export function PagosPage() {
               Tasa del Día
             </span>
             <span className="text-xs font-bold font-mono text-foreground">
-              {tasa?.tasaEfectiva ? `1 USD = ${tasa.tasaEfectiva} VES` : 'Tasa no disponible'}
+              {tasa?.tasaEfectiva ? `1 USD = ${tasa.tasaEfectiva} VES` : etiquetaSinTasa}
             </span>
           </div>
         </div>
@@ -565,7 +586,7 @@ export function PagosPage() {
                       : 'bg-destructive/15 text-destructive border border-destructive/20'
                   }`}
                 >
-                  {cuota.estado.replace('_', ' ')}
+                  {etiquetaEstadoCuota(cuota.estado).texto}
                 </span>
               </div>
 
@@ -751,11 +772,23 @@ export function PagosPage() {
                 </div>
 
                 {/* Previsualización de conversión */}
-                <div className="p-3.5 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Contravalor acreditado a tu cuota:</span>
-                  <span className="font-mono font-black text-sm text-primary">
-                    ${contravalorUsd} USD
+                <div
+                  className={`p-3.5 rounded-2xl border flex items-center justify-between ${
+                    pagoVesSinTasa
+                      ? 'bg-amber-500/10 border-amber-500/30'
+                      : 'bg-primary/10 border-primary/20'
+                  }`}
+                >
+                  <span className="text-xs text-muted-foreground">
+                    {pagoVesSinTasa
+                      ? 'Sin tasa configurada: tu entrenador debe definirla para reportar pagos en bolívares.'
+                      : 'Contravalor acreditado a tu cuota:'}
                   </span>
+                  {!pagoVesSinTasa && (
+                    <span className="font-mono font-black text-sm text-primary">
+                      ${contravalorUsd} USD
+                    </span>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -848,7 +881,7 @@ export function PagosPage() {
 
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || pagoVesSinTasa}
                   className="w-full py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
                 >
                   {isSubmitting ? 'Enviando al coach...' : 'Enviar Comprobante de Pago'}
@@ -953,7 +986,7 @@ export function PagosPage() {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-sm text-foreground capitalize">
-                            {tx.metodoPago.replace('_', ' ')}
+                            {etiquetaMetodoPago(tx.metodoPago)}
                           </span>
                           <span
                             className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase ${
@@ -970,7 +1003,8 @@ export function PagosPage() {
                           </span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Ref: {tx.referenciaBancaria || 'Sin referencia'} • Fecha: {tx.fechaOperacion}
+                          Ref: {tx.referenciaBancaria || 'Sin referencia'} • Fecha:{' '}
+                          {formatFechaCalendario(tx.fechaOperacion) ?? tx.fechaOperacion}
                         </p>
                       </div>
 

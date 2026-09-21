@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../context/auth-context';
 import { Rol } from '@guachafit/shared';
+import { rutaInicioPorRol } from '../../lib/rutas-rol';
 
 interface ProtectedRouteProps {
   allowedRoles?: Rol[];
@@ -16,9 +17,8 @@ export function ProtectedRoute({ allowedRoles, redirectTo = '/login' }: Protecte
   }
 
   if (allowedRoles && !allowedRoles.includes(user.rol)) {
-    // Redirect to their respective default home
-    const defaultRoute = user.rol === Rol.ENTRENADOR ? '/coach/menu' : '/app/menu';
-    return <Navigate to={defaultRoute} replace />;
+    // RF-010 RN-01: cada rol vuelve a su propio espacio (el superadmin a /admin).
+    return <Navigate to={rutaInicioPorRol(user.rol)} replace />;
   }
 
   return <Outlet />;

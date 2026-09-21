@@ -6,6 +6,8 @@ import { triggerHaptic } from '../../lib/haptics';
 import {
   formatDuracionMinutos,
   formatFechaCalendario,
+  formatFechaHoraLocal,
+  formatFechaLocal,
   formatRangoHorasLocal,
 } from '../../lib/date-format';
 import {
@@ -13,6 +15,13 @@ import {
   parsearNotasAlumno,
   type TonoSemaforo,
 } from '../../lib/adherencia';
+import {
+  etiquetaEstadoActivacion,
+  etiquetaSemaforoPago,
+  formatearDocumento,
+  type SemaforoPago,
+} from '../../lib/etiquetas-dominio';
+import { etiquetaMetodoPago } from '../../lib/conciliacion-filtros';
 import { normalizarPesoPrescritoTexto } from '../../lib/weight-unit';
 import { formatearSegundos } from '../../lib/sesion-tiempos';
 import { pluralizar } from '../../lib/pluralizar';
@@ -123,6 +132,27 @@ function esSesionRealizada(sesion?: SesionEntrenamientoDetalleDTO | null): boole
     sesion?.estado === EstadoSesion.COMPLETADA || sesion?.estado === EstadoSesion.EN_PROGRESO
   );
 }
+
+/**
+ * WU-D (RF-012): confirmación explícita del cambio de estado con el impacto REAL de cada uno.
+ * El coach siempre sabe qué gana y qué pierde el alumno antes de aplicarlo.
+ */
+const CONFIRMACION_CAMBIO_ESTADO: Record<EstadoAlumno, (nombre: string) => string> = {
+  [EstadoAlumno.ACTIVO]: (nombre) =>
+    `¿Reactivar a ${nombre}? Recuperará el acceso completo a su planificación, reportes y pagos.`,
+  [EstadoAlumno.INACTIVO_PAUSADO]: (nombre) =>
+    `¿Pausar a ${nombre}? Dejará de ver su planificación y no podrá iniciar sesiones ni enviar reportes; su historial se conserva en modo lectura.`,
+  [EstadoAlumno.SUSPENDIDO_PAGO]: (nombre) =>
+    `¿Suspender por pago a ${nombre}? Su planificación quedará bloqueada con la pantalla de mensualidad pendiente; podrá seguir reportando pagos.`,
+};
+
+/** WU-D: feedback humano solo después de un 2xx (o del cambio local en modo demo). */
+const MENSAJE_EXITO_ESTADO: Record<EstadoAlumno, string> = {
+  [EstadoAlumno.ACTIVO]: 'Alumno reactivado: recupera su acceso completo.',
+  [EstadoAlumno.INACTIVO_PAUSADO]: 'Alumno pausado: su historial se conserva en modo lectura.',
+  [EstadoAlumno.SUSPENDIDO_PAGO]:
+    'Alumno suspendido por pago: conserva el reporte de pagos y su cuenta.',
+};
 
 /**
  * WU25b: tamaño de página por defecto de los listados paginados de la ficha (historial de
@@ -278,6 +308,8 @@ export function AlumnoDetallePage() {
   // D5: el éxito solo se declara con respuesta 2xx; el fallo se muestra y no muta estado local.
   const [saveErrorMsg, setSaveErrorMsg] = useState<string | null>(null);
   const [headerActionError, setHeaderActionError] = useState<string | null>(null);
+  // WU-D (RF-012): confirmación honesta de las acciones del ciclo de vida (pausar/suspender/reactivar).
+  const [headerActionSuccess, setHeaderActionSuccess] = useState<string | null>(null);
 
   // Cobro Directo Modal State
   const [isCobroModalOpen, setIsCobroModalOpen] = useState(false);
@@ -307,7 +339,7 @@ export function AlumnoDetallePage() {
 
   // Controles antropométricos reales del alumno. En modo demo se cargan fixtures locales;
   // en sesión real, sin dato => lista vacía (nunca mediciones inventadas). Los campos
-  // opcionales pueden venir nulos de la API y la UI los muestra como "N/D".
+  // opcionales pueden venir nulos de la API y la UI los muestra como "—".
   const [controlesAntro, setControlesAntro] = useState<ControlAntroFila[]>([]);
   // WU25b: paginación server-side de la tabla (`controlesLimit`/`controlesOffset` + total).
   // `controlesDemo` conserva los controles creados en modo demo para que sigan visibles al paginar.
@@ -775,7 +807,7 @@ export function AlumnoDetallePage() {
 
   /**
    * N3: normaliza un control antropométrico real de la API a la fila de la tabla del expediente.
-   * Los perímetros opcionales sin dato quedan en null y la tabla los muestra como "N/D".
+   * Los perímetros opcionales sin dato quedan en null y la tabla los muestra como "—".
    */
   const mapearControlAntro = (control: ControlAntropometricoDetalleDTO): ControlAntroFila => ({
     id: control.id,
@@ -906,14 +938,30 @@ export function AlumnoDetallePage() {
     }
   };
 
-  // Cambio de Estado de Activación (Pausar / Reactivar / Suspender)
+  // Cambio de Estado de Activación (Pausar / Reactivar / Suspender por pago) — RF-012
   const handleCambiarEstado = async (nuevoEstado: EstadoAlumno) => {
     if (!id || !alumno) return;
+    const nombre = `${alumno.nombres} ${alumno.apellidos}`.trim();
+    if (!window.confirm(CONFIRMACION_CAMBIO_ESTADO[nuevoEstado](nombre))) return;
+
     setHeaderActionError(null);
+    setHeaderActionSuccess(null);
+
+    // MODO DEMO EXPLÍCITO: el cambio vive en estado local, sin llamada real ni éxito fabricado
+    // desde el servidor (el badge demo lo declara).
+    if (isDemoMode) {
+      setAlumno((prev) => (prev ? { ...prev, estadoActivacion: nuevoEstado } : null));
+      setHeaderActionSuccess(MENSAJE_EXITO_ESTADO[nuevoEstado]);
+      setTimeout(() => setHeaderActionSuccess(null), 3000);
+      return;
+    }
 
     try {
       await apiClient.patch(`/alumnos/${id}/estado`, { nuevoEstado });
+      // D5: el estado solo cambia con la respuesta 2xx del servidor; nunca éxito falso.
       setAlumno((prev) => (prev ? { ...prev, estadoActivacion: nuevoEstado } : null));
+      setHeaderActionSuccess(MENSAJE_EXITO_ESTADO[nuevoEstado]);
+      setTimeout(() => setHeaderActionSuccess(null), 3000);
     } catch (err: any) {
       setHeaderActionError(
         err?.message || 'No se pudo cambiar el estado del alumno. Inténtalo de nuevo.'
@@ -1316,13 +1364,14 @@ export function AlumnoDetallePage() {
 
   const isArchived = Boolean(alumno.deletedAtUtc);
   // D2: sin resumen financiero real no se inventa un semáforo (nada de "moroso" por fallo de red).
-  const semaforo: 'al_dia' | 'por_vencer' | 'moroso' | null = alumno.semaforoPago
-    ? (alumno.semaforoPago as 'al_dia' | 'por_vencer' | 'moroso')
+  const semaforo: SemaforoPago | null = alumno.semaforoPago
+    ? alumno.semaforoPago
     : finanzas
     ? Number(finanzas.saldoPendienteTotalUsd) > 0
       ? 'moroso'
       : 'al_dia'
     : null;
+  const estadoPago = etiquetaSemaforoPago(semaforo);
 
   // WU5: "Último Entrenamiento Realizado" solo considera sesiones completadas o en progreso.
   // WU25b: con el historial paginado la página 2+ puede contener sesiones realizadas más
@@ -1378,7 +1427,7 @@ export function AlumnoDetallePage() {
         </Link>
         {alumno.tipoDocumento && alumno.numeroDocumento ? (
           <span className="text-[11px] font-mono text-muted-foreground">
-            Documento: {alumno.tipoDocumento} {alumno.numeroDocumento}
+            Documento: {formatearDocumento(alumno.tipoDocumento, alumno.numeroDocumento)}
           </span>
         ) : null}
       </div>
@@ -1420,13 +1469,7 @@ export function AlumnoDetallePage() {
                         : 'bg-muted-foreground'
                     }`}
                   />
-                  {semaforo === 'al_dia'
-                    ? 'Al Día'
-                    : semaforo === 'por_vencer'
-                    ? 'Por Vencer'
-                    : semaforo === 'moroso'
-                    ? 'Cuota Pendiente'
-                    : 'Sin dato'}
+                  {estadoPago.texto}
                 </span>
 
                 {/* Badge Estado de Activación */}
@@ -1448,7 +1491,7 @@ export function AlumnoDetallePage() {
                         : 'bg-amber-400'
                     }`}
                   />
-                  {isArchived ? 'Archivado' : alumno.estadoActivacion}
+                  {isArchived ? 'Archivado' : etiquetaEstadoActivacion(alumno.estadoActivacion)}
                 </span>
 
                 {/* Badge Modalidad */}
@@ -1461,7 +1504,8 @@ export function AlumnoDetallePage() {
               <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1 font-mono">
                   <User className="h-3.5 w-3.5 text-primary" />
-                  {alumno.tipoDocumento}{alumno.numeroDocumento} • {alumno.edadCalculada} años
+                  {formatearDocumento(alumno.tipoDocumento, alumno.numeroDocumento) ?? '—'} •{' '}
+                  {alumno.edadCalculada} años
                 </span>
                 <span className="flex items-center gap-1">
                   <Mail className="h-3.5 w-3.5 text-primary" />
@@ -1490,7 +1534,7 @@ export function AlumnoDetallePage() {
               <span>WhatsApp</span>
             </a>
 
-            {/* Ciclo de Vida: Pausar / Reactivar */}
+            {/* Ciclo de Vida RF-012: Pausar / Suspender por pago / Reactivar */}
             {!isArchived && (
               <>
                 {alumno.estadoActivacion === EstadoAlumno.ACTIVO ? (
@@ -1510,6 +1554,17 @@ export function AlumnoDetallePage() {
                   >
                     <PlayCircle className="h-4 w-4 text-emerald-400" />
                     <span>Reactivar</span>
+                  </button>
+                )}
+
+                {alumno.estadoActivacion !== EstadoAlumno.SUSPENDIDO_PAGO && (
+                  <button
+                    onClick={() => handleCambiarEstado(EstadoAlumno.SUSPENDIDO_PAGO)}
+                    className="py-2 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 font-semibold text-xs border border-amber-500/25 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                    title="Suspender la planificación por mensualidad pendiente"
+                  >
+                    <DollarSign className="h-4 w-4" />
+                    <span>Suspender por pago</span>
                   </button>
                 )}
 
@@ -1546,6 +1601,17 @@ export function AlumnoDetallePage() {
           >
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{headerActionError}</span>
+          </div>
+        )}
+
+        {/* WU-D: confirmación honesta del cambio de estado (solo tras 2xx o cambio demo local) */}
+        {headerActionSuccess && (
+          <div
+            role="status"
+            className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>{headerActionSuccess}</span>
           </div>
         )}
 
@@ -2039,7 +2105,7 @@ export function AlumnoDetallePage() {
                 <div className="p-3 rounded-2xl bg-secondary/30 border border-border/50">
                   <span className="text-[10px] text-muted-foreground uppercase font-semibold">Vencimiento</span>
                   <p className="font-mono font-bold text-xs text-foreground mt-0.5 truncate">
-                    {finanzas.cuotaMesActual.fechaVencimiento.split('T')[0]}
+                    {formatFechaLocal(finanzas.cuotaMesActual.fechaVencimiento) ?? '—'}
                   </p>
                 </div>
               </div>
@@ -2086,7 +2152,7 @@ export function AlumnoDetallePage() {
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-foreground capitalize">
-                          {tx.metodoPago.replace('_', ' ')}
+                          {etiquetaMetodoPago(tx.metodoPago)}
                         </span>
                         {tx.referencia && (
                           <span className="font-mono text-[10px] text-muted-foreground">
@@ -2095,7 +2161,7 @@ export function AlumnoDetallePage() {
                         )}
                       </div>
                       <span className="text-[10px] text-muted-foreground font-mono">
-                        {tx.createdAtUtc.split('T')[0]} • {tx.createdAtUtc.split('T')[1]?.slice(0, 5)}
+                        {formatFechaHoraLocal(tx.createdAtUtc) ?? '—'}
                       </span>
                     </div>
 
@@ -2208,7 +2274,7 @@ export function AlumnoDetallePage() {
                   <span className="text-[10px] uppercase font-bold text-muted-foreground block">% Grasa Estimada</span>
                   <div className="flex items-baseline gap-2">
                     <p className="text-2xl font-black font-mono text-foreground">
-                      {actual.grasaPorcentaje ? `${actual.grasaPorcentaje}%` : 'N/D'}
+                      {actual.grasaPorcentaje ? `${actual.grasaPorcentaje}%` : '—'}
                     </p>
                     {deltaGrasa && (
                       <span
@@ -2228,7 +2294,7 @@ export function AlumnoDetallePage() {
                   <span className="text-[10px] uppercase font-bold text-muted-foreground block">Cintura</span>
                   <div className="flex items-baseline gap-2">
                     <p className="text-2xl font-black font-mono text-foreground">
-                      {actual.cinturaCm ? `${actual.cinturaCm} cm` : 'N/D'}
+                      {actual.cinturaCm ? `${actual.cinturaCm} cm` : '—'}
                     </p>
                     {deltaCintura && (
                       <span
@@ -2247,7 +2313,7 @@ export function AlumnoDetallePage() {
                 <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1">
                   <span className="text-[10px] uppercase font-bold text-muted-foreground block">Brazo / Pecho</span>
                   <p className="text-2xl font-black font-mono text-primary">
-                    {actual.brazoCm ?? 'N/D'} / {actual.pechoCm ?? 'N/D'} cm
+                    {actual.brazoCm ?? '—'} / {actual.pechoCm ?? '—'} cm
                   </p>
                 </div>
               </div>
@@ -2293,15 +2359,15 @@ export function AlumnoDetallePage() {
                   )}
                   {controlesAntro.map((c) => (
                     <tr key={c.id} className="hover:bg-secondary/30 transition-colors">
-                      <td className="py-3 px-3 font-sans font-bold text-foreground">{c.fecha}</td>
-                      <td className="py-3 px-3 font-bold">{c.pesoKg} kg</td>
-                      <td className="py-3 px-3">
-                        {c.grasaPorcentaje ? `${c.grasaPorcentaje}%` : 'N/D'}
+                      <td className="py-3 px-3 font-sans font-bold text-foreground">
+                        {formatFechaCalendario(c.fecha) ?? c.fecha}
                       </td>
-                      <td className="py-3 px-3">{c.cinturaCm ? `${c.cinturaCm} cm` : 'N/D'}</td>
-                      <td className="py-3 px-3">{c.brazoCm ? `${c.brazoCm} cm` : 'N/D'}</td>
-                      <td className="py-3 px-3">{c.pechoCm ? `${c.pechoCm} cm` : 'N/D'}</td>
-                      <td className="py-3 px-3">{c.musloCm ? `${c.musloCm} cm` : 'N/D'}</td>
+                      <td className="py-3 px-3 font-bold">{c.pesoKg} kg</td>
+                      <td className="py-3 px-3">{c.grasaPorcentaje ? `${c.grasaPorcentaje}%` : '—'}</td>
+                      <td className="py-3 px-3">{c.cinturaCm ? `${c.cinturaCm} cm` : '—'}</td>
+                      <td className="py-3 px-3">{c.brazoCm ? `${c.brazoCm} cm` : '—'}</td>
+                      <td className="py-3 px-3">{c.pechoCm ? `${c.pechoCm} cm` : '—'}</td>
+                      <td className="py-3 px-3">{c.musloCm ? `${c.musloCm} cm` : '—'}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -14,11 +14,13 @@ import {
   SlidersHorizontal,
   Activity,
   ClipboardList,
+  ShieldCheck,
 } from 'lucide-react';
 
 export function Sidebar() {
   const { user } = useAuth();
   const isCoach = user?.rol === 'entrenador';
+  const isSuperadmin = user?.rol === 'superadmin';
 
   const athleteLinks = [
     { to: '/app/menu', label: 'Menú de Acciones', icon: LayoutGrid, description: 'Todos tus accesos' },
@@ -39,14 +41,21 @@ export function Sidebar() {
     { to: '/coach/ajustes', label: 'Configuración', icon: SlidersHorizontal, description: 'Planes y tasas' },
   ];
 
-  const links = isCoach ? coachLinks : athleteLinks;
+  // RF-010 RN-01: el superadmin solo ve el acceso administrativo; nunca el negocio del coach.
+  const adminLinks = [
+    { to: '/admin', label: 'Administración', icon: ShieldCheck, description: 'Crear entrenadores' },
+  ];
+
+  const links = isSuperadmin ? adminLinks : isCoach ? coachLinks : athleteLinks;
 
   return (
     <aside className="hidden lg:flex flex-col w-64 border-r border-border/80 bg-card/40 p-4 min-h-[calc(100vh-57px)]">
       <div className="mb-6 px-3">
         <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           <Activity className="h-3.5 w-3.5 text-primary" />
-          <span>{isCoach ? 'Gestión Diaria' : 'Rendimiento Personal'}</span>
+          <span>
+            {isSuperadmin ? 'Plataforma' : isCoach ? 'Gestión Diaria' : 'Rendimiento Personal'}
+          </span>
         </div>
       </div>
 

@@ -7,11 +7,13 @@ import {
   CreditCard,
   LayoutDashboard,
   Users,
+  ShieldCheck,
 } from 'lucide-react';
 
 export function BottomNav() {
   const { user } = useAuth();
   const isCoach = user?.rol === 'entrenador';
+  const isSuperadmin = user?.rol === 'superadmin';
 
   const athleteLinks = [
     { to: '/app/menu', label: 'Menú', icon: LayoutGrid },
@@ -25,7 +27,11 @@ export function BottomNav() {
     { to: '/coach/alumnos', label: 'Alumnos', icon: Users },
   ];
 
-  const links = isCoach ? coachLinks : athleteLinks;
+  const adminLinks = [
+    { to: '/admin', label: 'Admin', icon: ShieldCheck, isCenter: true },
+  ];
+
+  const links = isSuperadmin ? adminLinks : isCoach ? coachLinks : athleteLinks;
 
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-lg border-t border-border/80 px-4 py-2 safe-area-pb">

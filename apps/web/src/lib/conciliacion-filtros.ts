@@ -17,9 +17,13 @@ type TransaccionFiltrable = Pick<
 /**
  * Etiqueta visible del método de pago: usa los valores reales del enum y reemplaza TODOS los
  * guiones bajos (`transferencia_bancaria` → `transferencia bancaria`), como ya hacía la tarjeta.
+ *
+ * Acepta `string` porque los DTOs de historial del alumno tipan el método como texto; un valor
+ * ausente se declara "Sin dato" en lugar de imprimirse vacío.
  */
-export function etiquetaMetodoPago(metodo: MetodoPago): string {
-  return metodo.replace(/_/g, ' ');
+export function etiquetaMetodoPago(metodo?: MetodoPago | string | null): string {
+  const valor = (metodo ?? '').trim();
+  return valor.length > 0 ? valor.replace(/_/g, ' ') : 'Sin dato';
 }
 
 /** Métodos de pago presentes en la cola, en orden de primera aparición (para los chips). */

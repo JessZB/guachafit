@@ -52,16 +52,18 @@ export function AjustesPage() {
   const [isLoadingTasas, setIsLoadingTasas] = useState(true);
   // D2: error honesto de tasas (sin tasa demo fuera del modo demo).
   const [tasasError, setTasasError] = useState<string | null>(null);
-  const [tasaOficialBcvInput, setTasaOficialBcvInput] = useState('66.5000');
-  const [tasaParaleloInput, setTasaParaleloInput] = useState('74.2000');
-  const [tasaActivaInput, setTasaActivaInput] = useState('66.5000');
+  // D6: en sesión real los campos arrancan vacíos; solo el modo demo (y la carga real de una
+  // tasa existente) los rellena. Nada de valores "placeholder" que parezcan tasa configurada.
+  const [tasaOficialBcvInput, setTasaOficialBcvInput] = useState('');
+  const [tasaParaleloInput, setTasaParaleloInput] = useState('');
+  const [tasaActivaInput, setTasaActivaInput] = useState('');
   const [fuenteSeleccionada, setFuenteSeleccionada] = useState<'oficial_bcv' | 'paralelo' | 'manual'>('oficial_bcv');
   const [isSavingTasa, setIsSavingTasa] = useState(false);
   const [tasaSuccessMsg, setTasaSuccessMsg] = useState<string | null>(null);
 
   // Conversor interactivo rápido
   const [calculadoraUsd, setCalculadoraUsd] = useState('40.00');
-  const [calculadoraVes, setCalculadoraVes] = useState('2660.00');
+  const [calculadoraVes, setCalculadoraVes] = useState('');
 
   useEffect(() => {
     cargarPlanes();
@@ -147,10 +149,16 @@ export function AjustesPage() {
     try {
       const data = await apiClient<TasaCambioVigenteDTO>('/finanzas/tasas/vigente');
       setTasaVigente(data);
-      if (data.tasaOficialBcv) setTasaOficialBcvInput(data.tasaOficialBcv);
-      if (data.tasaParalelo) setTasaParaleloInput(data.tasaParalelo);
-      if (data.tasaActivaEntrenador) setTasaActivaInput(data.tasaActivaEntrenador);
-      actualizarCalculosVes(data.tasaActivaEntrenador || '0', calculadoraUsd);
+      // D6: la API devuelve `null` cuando no hay tasa configurada; se limpian los campos en vez
+      // de conservar defaults ficticios. La UI muestra el estado "sin tasa configurada".
+      setTasaOficialBcvInput(data.tasaOficialBcv ?? '');
+      setTasaParaleloInput(data.tasaParalelo ?? '');
+      setTasaActivaInput(data.tasaActivaEntrenador ?? '');
+      if (data.tasaEfectiva) {
+        actualizarCalculosVes(data.tasaEfectiva, calculadoraUsd);
+      } else {
+        setCalculadoraVes('');
+      }
     } catch (err: any) {
       // D2: sin tasa demo en sesión real; error visible con reintento.
       setTasaVigente(null);
@@ -165,7 +173,8 @@ export function AjustesPage() {
   function actualizarCalculosVes(tasaStr: string, usdStr: string) {
     const tasa = parseFloat(tasaStr) || 0;
     const usd = parseFloat(usdStr) || 0;
-    setCalculadoraVes((usd * tasa).toFixed(2));
+    // Sin tasa configurada no se proyecta un resultado ficticio: el campo queda vacío.
+    setCalculadoraVes(tasa > 0 ? (usd * tasa).toFixed(2) : '');
   }
 
   function actualizarCalculosUsd(tasaStr: string, vesStr: string) {
@@ -300,14 +309,17 @@ export function AjustesPage() {
         method: 'PUT',
         body: JSON.stringify({
           tasaOficialBcv: parseFloat(tasaOficialBcvInput).toFixed(4),
-          tasaParalelo: parseFloat(tasaParaleloInput).toFixed(4),
+          // D6: si el entrenador no informa paralelo, el campo se omite (nunca se envía "NaN").
+          tasaParalelo: parseFloat(tasaParaleloInput) > 0
+            ? parseFloat(tasaParaleloInput).toFixed(4)
+            : undefined,
           tasaActivaEntrenador: parseFloat(tasaFinal).toFixed(4),
           fuente: fuenteSeleccionada,
         }),
       });
 
       setTasaVigente(res);
-      actualizarCalculosVes(res.tasaEfectiva, calculadoraUsd);
+      actualizarCalculosVes(res.tasaEfectiva ?? '', calculadoraUsd);
       setTasaSuccessMsg('Tasa activa guardada. Se aplicará a todos los cobros y cuotas de tus alumnos.');
       triggerHaptic('success');
     } catch (err: any) {
@@ -551,6 +563,18 @@ export function AjustesPage() {
                 </div>
               )}
 
+              {/* D6: estado honesto cuando todavía no existe ninguna tasa configurada. */}
+              {!isLoadingTasas && !tasasError && !tasaVigente?.tasaEfectiva && (
+                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs space-y-1">
+                  <p className="font-bold">Sin tasa configurada</p>
+                  <p className="text-[11px] text-amber-200/90">
+                    Define al menos tu tasa BCV y tu tasa activa de cobro y guárdalas. Mientras no
+                    exista una tasa vigente, los cobros y reportes de pago en bolívares quedan
+                    bloqueados con un mensaje claro y no se muestran proyecciones en Bs.
+                  </p>
+                </div>
+              )}
+
               {/* Selector de Fuente Predilecta */}
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-muted-foreground">
@@ -572,7 +596,7 @@ export function AjustesPage() {
                   >
                     <div className="text-[11px] font-bold">Oficial BCV</div>
                     <div className="text-xs font-mono font-bold mt-1 text-primary">
-                      {tasaOficialBcvInput} Bs
+                      {tasaOficialBcvInput ? `${tasaOficialBcvInput} Bs` : '—'}
                     </div>
                   </button>
 
@@ -591,7 +615,7 @@ export function AjustesPage() {
                   >
                     <div className="text-[11px] font-bold">Paralelo</div>
                     <div className="text-xs font-mono font-bold mt-1 text-primary">
-                      {tasaParaleloInput} Bs
+                      {tasaParaleloInput ? `${tasaParaleloInput} Bs` : '—'}
                     </div>
                   </button>
 
@@ -609,7 +633,7 @@ export function AjustesPage() {
                   >
                     <div className="text-[11px] font-bold">Personalizada</div>
                     <div className="text-xs font-mono font-bold mt-1 text-primary">
-                      {tasaActivaInput} Bs
+                      {tasaActivaInput ? `${tasaActivaInput} Bs` : '—'}
                     </div>
                   </button>
                 </div>
@@ -734,10 +758,17 @@ export function AjustesPage() {
                 </div>
 
                 <div className="p-3 rounded-2xl bg-secondary/40 border border-border/60 text-[11px] text-muted-foreground">
-                  <p>
-                    Calculado con redondeo bancario exacto (ADR-003) a la tasa de{' '}
-                    <strong className="text-foreground font-mono">{tasaActivaInput} Bs/USD</strong>.
-                  </p>
+                  {parseFloat(tasaActivaInput) > 0 ? (
+                    <p>
+                      Calculado con redondeo bancario exacto (ADR-003) a la tasa de{' '}
+                      <strong className="text-foreground font-mono">{tasaActivaInput} Bs/USD</strong>.
+                    </p>
+                  ) : (
+                    <p>
+                      Sin tasa configurada no hay conversión: define y guarda tu tasa activa para
+                      calcular equivalentes en bolívares.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

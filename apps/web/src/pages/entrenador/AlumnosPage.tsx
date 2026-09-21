@@ -5,11 +5,17 @@ import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
 import {
   PerfilAlumnoDetalleDTO,
+  PerfilEntrenadorDTO,
+  AltaManualAlumnoResultadoDTO,
   DirectorioAlumnosDTO,
   Modalidad,
   TipoDocumento,
   EstadoAlumno,
 } from '@guachafit/shared';
+import {
+  construirLinkActivacion,
+  construirLinkOnboarding,
+} from '../../lib/onboarding-links';
 import {
   calcularResumenDirectorio,
   filtrarDirectorioDemo,
@@ -18,6 +24,12 @@ import {
 import { usePaginacionServidor } from '../../lib/use-paginacion-servidor';
 import { useValorDebounced } from '../../lib/use-valor-debounced';
 import { rebanarPagina } from '../../lib/paginacion';
+import {
+  etiquetaEstadoActivacion,
+  etiquetaSemaforoPago,
+  formatearDocumento,
+} from '../../lib/etiquetas-dominio';
+import type { TonoSemaforo } from '../../lib/adherencia';
 import { Paginacion } from '../../components/common/Paginacion';
 import {
   Users,
@@ -54,6 +66,26 @@ type ViewMode = 'cards' | 'table';
 /** WU25a: página por defecto del directorio (el endpoint acepta hasta 100). */
 const TAMANO_PAGINA_POR_DEFECTO = 25;
 
+/**
+ * §6: clases del semáforo de pago por tono semántico (DESIGN.md). `sin_cuota` es neutro:
+ * no es deuda y nunca se pinta en rojo.
+ */
+const CLASES_TEXTO_SEMAFORO_PAGO: Record<TonoSemaforo, string> = {
+  success: 'text-emerald-400',
+  warning: 'text-amber-400',
+  danger: 'text-rose-400',
+  info: 'text-sky-400',
+  neutral: 'text-muted-foreground',
+};
+
+const CLASES_PUNTO_SEMAFORO_PAGO: Record<TonoSemaforo, string> = {
+  success: 'bg-emerald-400',
+  warning: 'bg-amber-400',
+  danger: 'bg-rose-500',
+  info: 'bg-sky-400',
+  neutral: 'bg-muted-foreground',
+};
+
 export function AlumnosPage() {
   const navigate = useNavigate();
   const { isDemoMode } = useAuth();
@@ -83,10 +115,49 @@ export function AlumnosPage() {
   const [modalidad, setModalidad] = useState<Modalidad>(Modalidad.PRESENCIAL);
   const [fichaSaludPrivada, setFichaSaludPrivada] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  // WU-E (RF-011 RN-05): resultado del alta con el enlace de activación que el coach comparte.
+  const [alumnoCreado, setAlumnoCreado] = useState<{
+    nombres: string;
+    apellidos: string;
+    linkActivacion: string;
+  } | null>(null);
+  const [activacionCopiada, setActivacionCopiada] = useState(false);
 
-  const coachCode = 'ALEXFIT';
-  const registrationUrl = `${window.location.origin}/onboarding?coach_code=${coachCode}`;
+  // WU-E (RF-011 RN-06): el enlace de captación usa el coachCode REAL del entrenador
+  // (GET /entrenador/perfil). Nunca un código hardcodeado; en modo demo no se consulta la API.
+  const [coachCode, setCoachCode] = useState<string | null>(null);
+  const [coachCodeError, setCoachCodeError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isDemoMode) {
+      // Modo demo explícito: sin llamadas a la API real. El enlace se muestra solo con el
+      // código real del entrenador; no se inventa una identidad de coach para la demo.
+      setCoachCode(null);
+      setCoachCodeError(null);
+      return;
+    }
+
+    let cancelado = false;
+    apiClient<PerfilEntrenadorDTO>('/entrenador/perfil')
+      .then((perfil) => {
+        if (cancelado) return;
+        setCoachCode(perfil.coachCode);
+        setCoachCodeError(null);
+      })
+      .catch(() => {
+        if (cancelado) return;
+        setCoachCode(null);
+        setCoachCodeError('No se pudo cargar tu enlace de captación. Recarga la página.');
+      });
+
+    return () => {
+      cancelado = true;
+    };
+  }, [isDemoMode]);
+
+  const registrationUrl = coachCode
+    ? construirLinkOnboarding(coachCode, window.location.origin)
+    : null;
 
   const calculateAge = (fechaStr: string): number => {
     if (!fechaStr) return 0;
@@ -194,17 +265,43 @@ export function AlumnosPage() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isModalOpen) {
-        setIsModalOpen(false);
+        cerrarModal();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isModalOpen]);
 
+  /**
+   * WU-E: apertura limpia del modal de inscripción (nunca arrastra el enlace de un alta previa).
+   */
+  const abrirModalInscripcion = () => {
+    setAlumnoCreado(null);
+    setFormError(null);
+    setActivacionCopiada(false);
+    setIsModalOpen(true);
+  };
+
   const handleCopyLink = () => {
+    if (!registrationUrl) return;
     navigator.clipboard.writeText(registrationUrl);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  const handleCopyActivacionLink = () => {
+    if (!alumnoCreado) return;
+    navigator.clipboard.writeText(alumnoCreado.linkActivacion);
+    setActivacionCopiada(true);
+    setTimeout(() => setActivacionCopiada(false), 2000);
+  };
+
+  /** Cierre limpio del modal: nunca deja a la vista el enlace de un alta anterior. */
+  const cerrarModal = () => {
+    setIsModalOpen(false);
+    setAlumnoCreado(null);
+    setFormError(null);
+    setActivacionCopiada(false);
   };
 
   const handleCrearAlumnoManual = async (e: React.FormEvent) => {
@@ -213,7 +310,7 @@ export function AlumnosPage() {
     setFormError(null);
 
     try {
-      await apiClient<PerfilAlumnoDetalleDTO>('/alumnos/manual', {
+      const resultado = await apiClient<AltaManualAlumnoResultadoDTO>('/alumnos/manual', {
         method: 'POST',
         body: JSON.stringify({
           nombres,
@@ -228,15 +325,20 @@ export function AlumnosPage() {
         }),
       });
 
-      setSuccessMessage('Alumno registrado exitosamente en la cartera.');
+      // WU-E (RF-011 RN-05): sin correo fantasma. El token de un solo uso se convierte en un
+      // enlace visible y copiable para que el coach lo comparta con su alumno.
+      setAlumnoCreado({
+        nombres: resultado.nombres,
+        apellidos: resultado.apellidos,
+        linkActivacion: construirLinkActivacion(
+          resultado.tokenInvitacion,
+          window.location.origin
+        ),
+      });
       // WU25a: el alta vive en el servidor; se vuelve a la página 1 y se recarga la fuente de
       // verdad (nunca se inventa un alumno local ni se ajusta el resumen a mano).
       setPagina(1);
       recargar();
-      setTimeout(() => {
-        setIsModalOpen(false);
-        setSuccessMessage(null);
-      }, 1500);
     } catch (err: any) {
       // D5: sin alumno fantasma; el alta solo existe si el servidor la aceptó.
       setFormError(
@@ -321,7 +423,7 @@ export function AlumnosPage() {
 
             {/* Inscribir Alumno */}
             <button
-              onClick={() => setIsModalOpen(true)}
+              onClick={abrirModalInscripcion}
               className="py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <UserPlus className="h-4 w-4" />
@@ -468,31 +570,48 @@ export function AlumnosPage() {
             <span>Enlace Único de Captación de Alumnos (Deep Link)</span>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Comparte este enlace con tus prospectos para que se autorregistren y se vinculen automáticamente a tu cartera.
+            {registrationUrl
+              ? 'Comparte este enlace con tus prospectos para que se autorregistren y se vinculen automáticamente a tu cartera.'
+              : coachCodeError ||
+                (isDemoMode
+                  ? 'En modo demostración no se consulta tu coach_code real; inicia sesión con tu cuenta para ver tu enlace.'
+                  : 'Cargando tu enlace personalizado...')}
           </p>
+          {coachCode && (
+            <p className="text-[11px] text-muted-foreground font-mono">
+              Tu código: <span className="text-primary font-bold">{coachCode}</span>
+            </p>
+          )}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={handleCopyLink}
-            className="py-2 px-3.5 rounded-xl bg-card hover:bg-secondary text-foreground text-xs font-bold border border-border flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer"
+            disabled={!registrationUrl}
+            className="py-2 px-3.5 rounded-xl bg-card hover:bg-secondary text-foreground text-xs font-bold border border-border flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isCopied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 text-primary" />}
             <span>{isCopied ? '¡Enlace Copiado!' : 'Copiar Enlace'}</span>
           </button>
 
-          <a
-            href={`https://wa.me/?text=${encodeURIComponent(
-              `¡Hola! Para inscribirte conmigo en Guachafit y comenzar tu planificación deportiva, completa tu registro aquí: ${registrationUrl}`
-            )}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="py-2 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all active:scale-95 cursor-pointer"
-          >
-            <MessageSquare className="h-3.5 w-3.5" />
-            <span>Compartir por WhatsApp</span>
-          </a>
+          {registrationUrl ? (
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(
+                `¡Hola! Para inscribirte conmigo en Guachafit y comenzar tu planificación deportiva, completa tu registro aquí: ${registrationUrl}`
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="py-2 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all active:scale-95 cursor-pointer"
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              <span>Compartir por WhatsApp</span>
+            </a>
+          ) : (
+            <span className="py-2 px-3.5 rounded-xl bg-card/60 text-muted-foreground text-xs font-bold border border-border">
+              Enlace no disponible
+            </span>
+          )}
         </div>
       </div>
 
@@ -682,7 +801,7 @@ export function AlumnosPage() {
       {viewMode === 'cards' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
           {alumnos.map((a) => {
-            const semaforo = a.semaforoPago || 'al_dia';
+            const estadoPago = etiquetaSemaforoPago(a.semaforoPago);
             const isArchived = Boolean(a.deletedAtUtc);
 
             return (
@@ -714,16 +833,8 @@ export function AlumnosPage() {
                       </div>
                       {/* Punto de Semáforo */}
                       <span
-                        className={`absolute -top-1 -right-1 h-3 w-3 rounded-full border-2 border-card ${
-                          semaforo === 'al_dia'
-                            ? 'bg-emerald-400'
-                            : semaforo === 'por_vencer'
-                            ? 'bg-amber-400'
-                            : semaforo === 'moroso'
-                            ? 'bg-rose-500'
-                            : 'bg-muted-foreground'
-                        }`}
-                        title={`Estado de pago: ${semaforo}`}
+                        className={`absolute -top-1 -right-1 h-3 w-3 rounded-full border-2 border-card ${CLASES_PUNTO_SEMAFORO_PAGO[estadoPago.tono]}`}
+                        title={`Estado de pago: ${estadoPago.texto}`}
                       />
                     </div>
 
@@ -732,7 +843,8 @@ export function AlumnosPage() {
                         {a.nombres} {a.apellidos}
                       </h3>
                       <p className="text-[11px] text-muted-foreground font-mono truncate">
-                        {a.tipoDocumento}{a.numeroDocumento} • {a.edadCalculada}a
+                        {formatearDocumento(a.tipoDocumento, a.numeroDocumento) ?? '—'} •{' '}
+                        {a.edadCalculada}a
                       </p>
                     </div>
                   </div>
@@ -744,17 +856,16 @@ export function AlumnosPage() {
 
                 {/* Middle Info: Plan y Estado */}
                 <div className="flex items-center justify-between text-[11px] border-t border-border/40 pt-2 text-muted-foreground">
-                  <span className="truncate">{a.planActivoNombre || 'Plan Estándar'}</span>
+                  {/* D6: sin plan real se muestra "Sin plan asignado"; nunca un nombre inventado. */}
+                  {a.planActivoNombre ? (
+                    <span className="truncate">{a.planActivoNombre}</span>
+                  ) : (
+                    <span className="truncate italic">Sin plan asignado</span>
+                  )}
                   <span
-                    className={`font-mono font-bold uppercase text-[10px] ${
-                      semaforo === 'al_dia'
-                        ? 'text-emerald-400'
-                        : semaforo === 'por_vencer'
-                        ? 'text-amber-400'
-                        : 'text-rose-400'
-                    }`}
+                    className={`font-mono font-bold uppercase text-[10px] ${CLASES_TEXTO_SEMAFORO_PAGO[estadoPago.tono]}`}
                   >
-                    {semaforo === 'al_dia' ? 'Al Día' : semaforo === 'por_vencer' ? 'Por Vencer' : 'Cuota Pendiente'}
+                    {estadoPago.texto}
                   </span>
                 </div>
 
@@ -822,7 +933,7 @@ export function AlumnosPage() {
             </thead>
             <tbody className="divide-y divide-border/50">
               {alumnos.map((a) => {
-                const semaforo = a.semaforoPago || 'al_dia';
+                const estadoPago = etiquetaSemaforoPago(a.semaforoPago);
                 const isArchived = Boolean(a.deletedAtUtc);
 
                 return (
@@ -847,7 +958,8 @@ export function AlumnosPage() {
                     </td>
 
                     <td className="py-3 px-3 font-mono">
-                      {a.tipoDocumento}{a.numeroDocumento} ({a.edadCalculada}a)
+                      {formatearDocumento(a.tipoDocumento, a.numeroDocumento) ?? '—'} (
+                      {a.edadCalculada}a)
                     </td>
 
                     <td className="py-3 px-3">
@@ -866,21 +978,15 @@ export function AlumnosPage() {
                             : 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
                         }`}
                       >
-                        {isArchived ? 'Archivado' : a.estadoActivacion}
+                        {isArchived ? 'Archivado' : etiquetaEstadoActivacion(a.estadoActivacion)}
                       </span>
                     </td>
 
                     <td className="py-3 px-3 font-mono font-bold">
                       <span
-                        className={`text-[10px] uppercase ${
-                          semaforo === 'al_dia'
-                            ? 'text-emerald-400'
-                            : semaforo === 'por_vencer'
-                            ? 'text-amber-400'
-                            : 'text-rose-400'
-                        }`}
+                        className={`text-[10px] uppercase ${CLASES_TEXTO_SEMAFORO_PAGO[estadoPago.tono]}`}
                       >
-                        {semaforo === 'al_dia' ? '● Al Día' : semaforo === 'por_vencer' ? '● Por Vencer' : '● Pendiente'}
+                        ● {estadoPago.texto}
                       </span>
                     </td>
 
@@ -937,7 +1043,7 @@ export function AlumnosPage() {
       {isModalOpen && (
         <div
           onClick={(e) => {
-            if (e.target === e.currentTarget) setIsModalOpen(false);
+            if (e.target === e.currentTarget) cerrarModal();
           }}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
         >
@@ -955,17 +1061,59 @@ export function AlumnosPage() {
                 </h3>
               </div>
               <button
-                onClick={() => setIsModalOpen(false)}
+                onClick={cerrarModal}
                 className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            {successMessage ? (
-              <div className="p-6 text-center space-y-2">
-                <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto" />
-                <p className="text-xs font-bold text-foreground">{successMessage}</p>
+            {alumnoCreado ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-1.5">
+                  <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto" />
+                  <p className="text-sm font-bold text-foreground">
+                    {alumnoCreado.nombres} {alumnoCreado.apellidos} fue registrado en tu cartera.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Comparte el enlace de activación con tu alumno para que cree su contraseña.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">
+                    Enlace de activación (un solo uso, caduca en 48 horas)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={alumnoCreado.linkActivacion}
+                      onFocus={(e) => e.currentTarget.select()}
+                      className="w-full px-3 py-2 rounded-xl bg-background border border-border font-mono text-[11px] text-foreground focus:outline-hidden focus:border-primary"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCopyActivacionLink}
+                      className="shrink-0 py-2 px-3.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold flex items-center gap-1.5 shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+                    >
+                      {activacionCopiada ? (
+                        <Check className="h-3.5 w-3.5" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                      <span>{activacionCopiada ? '¡Copiado!' : 'Copiar enlace'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={cerrarModal}
+                  className="w-full py-2.5 px-4 rounded-xl bg-secondary text-foreground font-bold text-sm border border-border hover:bg-secondary/80 active:scale-98 transition-all cursor-pointer"
+                >
+                  Listo
+                </button>
               </div>
             ) : (
               <form onSubmit={handleCrearAlumnoManual} className="space-y-3">

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   construirPayloadCheckinAntropometrico,
   fechaLocalHoy,
+  obtenerUltimaMedicionReal,
 } from './antropometria-checkin';
 
 const ALUMNO_ID = 'a3333333-3333-4333-8333-333333333333';
@@ -61,6 +62,42 @@ describe('construirPayloadCheckinAntropometrico (RF-003: contrato del check-in r
     expect(() =>
       construirPayloadCheckinAntropometrico('user-demo-1', { pesoKg: '70.00' }, '2026-09-20')
     ).toThrowError(/UUID válido/i);
+  });
+});
+
+describe('obtenerUltimaMedicionReal (RF-003/D6: prefill honesto del check-in)', () => {
+  it('devuelve la última evaluación (la serie llega en orden ascendente) con sus perímetros', () => {
+    const medidas = obtenerUltimaMedicionReal({
+      evaluaciones: [
+        {
+          pesoKg: '77.70',
+          porcentajeGrasa: '17.20',
+          perimetros: { cinturaCm: '85.00', brazoCm: '36.00' },
+        },
+        {
+          pesoKg: '74.50',
+          porcentajeGrasa: '14.80',
+          perimetros: { cinturaCm: '81.00', brazoCm: '37.50' },
+        },
+      ],
+    } as any);
+
+    expect(medidas).toEqual({
+      pesoKg: '74.50',
+      porcentajeGrasa: '14.80',
+      cinturaCm: '81.00',
+      brazoCm: '37.50',
+    });
+  });
+
+  it('devuelve null sin evaluaciones: el formulario queda vacío, sin fixtures', () => {
+    expect(obtenerUltimaMedicionReal(null)).toBeNull();
+    expect(obtenerUltimaMedicionReal({ evaluaciones: [] } as any)).toBeNull();
+  });
+
+  it('tolera campos opcionales ausentes sin inventar valores', () => {
+    const medidas = obtenerUltimaMedicionReal({ evaluaciones: [{ pesoKg: '70.00' }] } as any);
+    expect(medidas).toEqual({ pesoKg: '70.00', porcentajeGrasa: '', cinturaCm: '', brazoCm: '' });
   });
 });
 

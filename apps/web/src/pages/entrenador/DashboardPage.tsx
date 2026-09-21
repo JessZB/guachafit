@@ -177,7 +177,11 @@ export function DashboardPage() {
           <MetricCard
             title="Cobros del Mes"
             value={`$${dashboard.kpisMacro.cobranzaMesUsd}`}
-            subtitle={`Meta: $${dashboard.kpisMacro.metaCobranzaMesUsd} USD (${dashboard.kpisMacro.porcentajeCobranza}%)`}
+            subtitle={
+              dashboard.kpisMacro.metaCobranzaMesUsd !== null
+                ? `Meta: $${dashboard.kpisMacro.metaCobranzaMesUsd} USD (${dashboard.kpisMacro.porcentajeCobranza}%)`
+                : 'Sin meta de cobranza configurada'
+            }
             icon={DollarSign}
             badge={{
               text: 'Montos en USD',

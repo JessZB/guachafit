@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/auth-context';
 import { apiClient } from '../../lib/api-client';
+import { resolverBloqueoAlumno, type BloqueoAlumno } from '../../lib/acceso-alumno';
+import { BloqueoAlumnoPanel } from '../../components/common/BloqueoAlumnoPanel';
 import { badgeEstadoCuota, type ResumenParaBadge, type TonoCuota } from '../../lib/estado-cuota';
 import {
   EstadoCuota,
@@ -53,6 +55,8 @@ export function AtletaMenuPage() {
   // WU12b: resumen financiero que alimenta el badge de "Pagos y cuotas".
   // `null` = sin dato (cargando o error de red) → el badge se omite, nunca un verde falso.
   const [resumenFinanciero, setResumenFinanciero] = useState<ResumenParaBadge | null>(null);
+  // RF-012: estado de bloqueo del ciclo de vida (pausado / suspendido / archivado) como banner.
+  const [bloqueo, setBloqueo] = useState<BloqueoAlumno | null>(null);
 
   useEffect(() => {
     // MODO DEMO EXPLÍCITO: datos de ejemplo, jamás como si fueran reales.
@@ -85,9 +89,13 @@ export function AtletaMenuPage() {
       .then((data) => {
         setSemanaProgreso(data ?? null);
         setRachaNoDisponible(false);
+        setBloqueo(null);
       })
-      .catch(() => {
-        // Sin datos inventados: estado honesto de "no disponible".
+      .catch((err) => {
+        // RF-012: un bloqueo de ciclo de vida se muestra como estado; el resto sigue siendo
+        // "no disponible" (sin datos inventados).
+        const bloqueoDetectado = resolverBloqueoAlumno(err);
+        setBloqueo(bloqueoDetectado);
         setSemanaProgreso(null);
         setRachaNoDisponible(true);
       });
@@ -154,6 +162,9 @@ export function AtletaMenuPage() {
         </div>
       </div>
 
+      {/* RF-012: estado de bloqueo del ciclo de vida (pausado / suspendido / archivado) */}
+      {bloqueo && <BloqueoAlumnoPanel bloqueo={bloqueo} className="max-w-none" />}
+
       {/* Bento Grid de Acciones */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* TARJETA HERO (Acción Prioritaria): ¡A Entrenar! */}
@@ -215,8 +226,16 @@ export function AtletaMenuPage() {
 
           <div className="mt-4 flex items-center justify-between pt-3 border-t border-border/60">
             <span className="text-xs font-medium text-foreground flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              {semanaProgreso?.esDiaDescansoHoy ? 'Día de descanso (recuperación activa)' : 'Listo para iniciar'}
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  bloqueo ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'
+                }`}
+              />
+              {bloqueo
+                ? 'Planificación bloqueada'
+                : semanaProgreso?.esDiaDescansoHoy
+                ? 'Día de descanso (recuperación activa)'
+                : 'Listo para iniciar'}
             </span>
             <span className="text-xs font-bold text-primary flex items-center gap-1 group-hover:translate-x-1 transition-transform">
               Empezar ahora <ChevronRight className="h-4 w-4" />

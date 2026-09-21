@@ -12,7 +12,11 @@
  * en estas páginas: se omite `fotos` en lugar de inventar una subida o mandar un array vacío
  * que sugiera un contrato inexistente.
  */
-import { CheckinAntropometricoSchema, type CheckinAntropometricoDTO } from '@guachafit/shared';
+import {
+  CheckinAntropometricoSchema,
+  type CheckinAntropometricoDTO,
+  type EvolucionCorporalDTO,
+} from '@guachafit/shared';
 import { normalizarEntradaDecimal } from './weight-unit';
 
 /** Medidas tal como las escribe el usuario en los formularios (texto libre). */
@@ -43,6 +47,36 @@ function textoOpcional(valor?: string): string | undefined {
   if (valor === undefined || valor === null) return undefined;
   const normalizado = normalizarEntradaDecimal(valor);
   return normalizado === '' ? undefined : normalizado;
+}
+
+/** Medidas listas para precargar el formulario de check-in remoto (todas de texto, '' = vacío). */
+export interface MedidasUltimaEvaluacion {
+  pesoKg: string;
+  porcentajeGrasa: string;
+  cinturaCm: string;
+  brazoCm: string;
+}
+
+/**
+ * Última medición real disponible en la evolución cargada.
+ *
+ * `GET /antropometria/evolucion/:alumnoId` devuelve las evaluaciones en orden cronológico
+ * ASCENDENTE, así que la última es la del final del arreglo. Solo se usa para precargar el
+ * formulario con datos reales; si no hay serie, devuelve `null` y el formulario queda vacío
+ * (nunca se inventan medidas de fixture).
+ */
+export function obtenerUltimaMedicionReal(
+  evolucion: Pick<EvolucionCorporalDTO, 'evaluaciones'> | null | undefined
+): MedidasUltimaEvaluacion | null {
+  const evaluaciones = evolucion?.evaluaciones ?? [];
+  if (evaluaciones.length === 0) return null;
+  const ultima = evaluaciones[evaluaciones.length - 1];
+  return {
+    pesoKg: ultima.pesoKg ?? '',
+    porcentajeGrasa: ultima.porcentajeGrasa ?? '',
+    cinturaCm: ultima.perimetros?.cinturaCm ?? '',
+    brazoCm: ultima.perimetros?.brazoCm ?? '',
+  };
 }
 
 /**

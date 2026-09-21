@@ -61,6 +61,16 @@ describe('etiquetaMetodoPago (WU20)', () => {
     expect(etiquetaMetodoPago(MetodoPago.TRANSFERENCIA_BANCARIA)).toBe('transferencia bancaria');
     expect(etiquetaMetodoPago(MetodoPago.BINANCE_USDT)).toBe('binance usdt');
   });
+
+  it('acepta el método como texto crudo del historial (`metodoPago: string`)', () => {
+    expect(etiquetaMetodoPago('transferencia_bancaria')).toBe('transferencia bancaria');
+  });
+
+  it('sin método no imprime un string vacío', () => {
+    expect(etiquetaMetodoPago(null)).toBe('Sin dato');
+    expect(etiquetaMetodoPago(undefined)).toBe('Sin dato');
+    expect(etiquetaMetodoPago('')).toBe('Sin dato');
+  });
 });
 
 describe('metodosPagoPresentes (WU20: chips solo con métodos reales de la cola)', () => {

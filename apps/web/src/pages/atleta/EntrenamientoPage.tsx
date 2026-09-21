@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '../../context/auth-context';
 import { apiClient, ApiError, generateIdempotencyKey } from '../../lib/api-client';
+import { resolverBloqueoAlumno, type BloqueoAlumno } from '../../lib/acceso-alumno';
 import { queueOfflineMutation, offlineDb, getLatestCachedRutina } from '../../lib/offline-db';
 import { subscribeToSyncStatus, type SyncStatusState } from '../../lib/offline-sync';
+import { BloqueoAlumnoPanel } from '../../components/common/BloqueoAlumnoPanel';
 import { SyncQueuePanel } from '../../components/common/SyncQueuePanel';
 import { RestTimer } from '../../components/common/RestTimer';
 import { triggerHaptic } from '../../lib/haptics';
@@ -495,6 +497,10 @@ export function EntrenamientoPage() {
   const [isOffline, setIsOffline] = useState(() => !navigator.onLine);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // RF-012: bloqueo por ciclo de vida (pausado / suspendido por pago / archivado). Cuando la API
+  // responde 403 ALUMNO_BLOQUEADO, la pantalla informativa sustituye al checklist.
+  const [bloqueo, setBloqueo] = useState<BloqueoAlumno | null>(null);
+
   // Modal de Finalización y Feedback al Coach
   const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
   const [rpeSesion, setRpeSesion] = useState(8);
@@ -554,8 +560,10 @@ export function EntrenamientoPage() {
         `/alumnos/me/rutina/semana-actual?timezone=${encodeURIComponent(tz)}`
       );
       if (progreso) setSemanaProgreso(progreso);
-    } catch {
-      // Refresco best-effort: no rompe la vista actual
+    } catch (err) {
+      // Refresco best-effort: no rompe la vista actual. Un bloqueo de ciclo de vida sí se muestra.
+      const bloqueoDetectado = resolverBloqueoAlumno(err);
+      if (bloqueoDetectado) setBloqueo(bloqueoDetectado);
     }
   }, [isDemoMode, tz]);
 
@@ -595,6 +603,9 @@ export function EntrenamientoPage() {
       setIsLoading(true);
       setLoadError(false);
       setActionError(null);
+      // Cada carga real re-evalúa el ciclo de vida: si el alumno fue reactivado, la pantalla de
+      // bloqueo desaparece sola con el siguiente intento.
+      setBloqueo(null);
       // El feedback de finalización pertenece a la sesión finalizada, no a la recién cargada
       setFinishFeedback(null);
       setPendienteSync(false);
@@ -651,7 +662,15 @@ export function EntrenamientoPage() {
         if (data?.id) await cacheSesion(data);
         setIsOffline(false);
       } catch (err) {
-        // Error real de red/servidor: estado de error con retry (jamás datos demo)
+        // RF-012: el bloqueo por ciclo de vida tiene su propia pantalla; cualquier otro error de
+        // red/servidor conserva el estado de error con retry (jamás datos demo).
+        const bloqueoDetectado = resolverBloqueoAlumno(err);
+        if (bloqueoDetectado) {
+          setBloqueo(bloqueoDetectado);
+          setSesion(null);
+          setSemanaProgreso(null);
+          return;
+        }
         console.warn('No se pudo cargar la sesión del alumno:', err);
         setLoadError(true);
       } finally {
@@ -723,11 +742,17 @@ export function EntrenamientoPage() {
       await cacheSesion(nueva);
       await refreshSemana();
     } catch (err) {
-      setActionError(
-        err instanceof ApiError
-          ? err.message
-          : 'No pudimos iniciar el bloque. Revisa tu conexión e inténtalo de nuevo.'
-      );
+      // RF-012: si el estado cambió en medio de la sesión, el bloqueo sustituye al error genérico.
+      const bloqueoDetectado = resolverBloqueoAlumno(err);
+      if (bloqueoDetectado) {
+        setBloqueo(bloqueoDetectado);
+      } else {
+        setActionError(
+          err instanceof ApiError
+            ? err.message
+            : 'No pudimos iniciar el bloque. Revisa tu conexión e inténtalo de nuevo.'
+        );
+      }
     } finally {
       setIsSwitchingBloque(false);
     }
@@ -765,6 +790,13 @@ export function EntrenamientoPage() {
           idempotencyKey,
         });
       } catch (err) {
+        // RF-012: un bloqueo nunca se encola offline (reintentaría contra un 403 para siempre).
+        const bloqueoDetectado = resolverBloqueoAlumno(err);
+        if (bloqueoDetectado) {
+          setBloqueo(bloqueoDetectado);
+          setSesion(sesion);
+          return;
+        }
         await queueOfflineMutation(
           `/sesiones/${sesion.id}/iniciar`,
           'POST',
@@ -1080,7 +1112,13 @@ export function EntrenamientoPage() {
           body: JSON.stringify(payload),
           idempotencyKey,
         });
-      } catch {
+      } catch (err) {
+        // RF-012: un bloqueo no se encola; se muestra la pantalla informativa.
+        const bloqueoDetectado = resolverBloqueoAlumno(err);
+        if (bloqueoDetectado) {
+          setBloqueo(bloqueoDetectado);
+          return;
+        }
         await queueOfflineMutation(
           `/sesiones/${sesion.id}/series`,
           'PUT',
@@ -1321,6 +1359,14 @@ export function EntrenamientoPage() {
           setPendienteSync(false);
         }
       } catch (err) {
+        // RF-012: bloqueo por ciclo de vida en pleno cierre → pantalla informativa, sin encolar.
+        const bloqueoDetectado = resolverBloqueoAlumno(err);
+        if (bloqueoDetectado) {
+          setBloqueo(bloqueoDetectado);
+          setIsFinishing(false);
+          setIsFinishModalOpen(false);
+          return;
+        }
         // Defensa (RF-001 Escenario 5): SOLO el 400 con código máquina estable `SESION_VACIA`
         // abre el modal de cierre vacío; cualquier otro 400 es un error normal visible.
         if (err instanceof ApiError && err.status === 400) {
@@ -1407,6 +1453,15 @@ export function EntrenamientoPage() {
           setSesion(res.sesion);
         }
       } catch (err) {
+        // RF-012: bloqueo por ciclo de vida en pleno cierre → pantalla informativa, sin encolar.
+        const bloqueoDetectado = resolverBloqueoAlumno(err);
+        if (bloqueoDetectado) {
+          setBloqueo(bloqueoDetectado);
+          setSesion(sesion);
+          setIsFinishing(false);
+          setIsEmptyCloseModalOpen(false);
+          return;
+        }
         if (err instanceof ApiError && err.status === 400) {
           setActionError(err.problem?.message || err.message);
           setSesion(sesion); // revertir
@@ -1434,6 +1489,15 @@ export function EntrenamientoPage() {
       <div className="flex items-center justify-center min-h-[50vh]">
         <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary/20 border-t-primary" />
       </div>
+    );
+  }
+
+  // RF-012: pantalla de bloqueo informativa (pausado / suspendido por pago / archivado) en la
+  // pantalla principal de entrenamiento. En modo demo jamás se bloquea: los fixtures no
+  // representan estados de ciclo de vida reales.
+  if (bloqueo && !isDemoMode) {
+    return (
+      <BloqueoAlumnoPanel bloqueo={bloqueo} onReintentar={() => loadSessionAndProgress()} />
     );
   }
 

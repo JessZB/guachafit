@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/auth-context';
 import { apiClient } from '../../lib/api-client';
-import { construirPayloadCheckinAntropometrico } from '../../lib/antropometria-checkin';
+import { resolverBloqueoAlumno, type BloqueoAlumno } from '../../lib/acceso-alumno';
+import { BloqueoAlumnoPanel } from '../../components/common/BloqueoAlumnoPanel';
+import { construirPayloadCheckinAntropometrico, obtenerUltimaMedicionReal } from '../../lib/antropometria-checkin';
+import { formatFechaCalendario } from '../../lib/date-format';
+import {
+  etiquetaEstadoMedicion,
+  etiquetaOrigenAntropometria,
+} from '../../lib/etiquetas-dominio';
+import type { TonoSemaforo } from '../../lib/adherencia';
 import {
   EvolucionCorporalDTO,
   ControlAntropometricoDetalleDTO,
@@ -24,6 +32,15 @@ import {
   Upload,
 } from 'lucide-react';
 
+/** Clases del badge de estado del control antropométrico por tono semántico (DESIGN.md). */
+const CLASES_BADGE_ESTADO_MEDICION: Record<TonoSemaforo, string> = {
+  success: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
+  warning: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
+  danger: 'bg-destructive/15 text-destructive border-destructive/20',
+  info: 'bg-sky-500/15 text-sky-400 border-sky-500/20',
+  neutral: 'bg-secondary text-muted-foreground border-border',
+};
+
 export function ProgresoPage() {
   const { user, isDemoMode } = useAuth();
   const [evolucion, setEvolucion] = useState<EvolucionCorporalDTO | null>(null);
@@ -32,17 +49,38 @@ export function ProgresoPage() {
   const [error, setError] = useState<string | null>(null);
   // D5: fallo de envío visible; el check-in no se declara exitoso si el server no lo aceptó.
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // RF-012: alumno pausado no puede enviar el check-in remoto; el panel informativo lo declara.
+  const [bloqueo, setBloqueo] = useState<BloqueoAlumno | null>(null);
 
   // Progressive Disclosure: 'hub' (selector) | 'nuevo' | 'evolucion'
   const [vistaActiva, setVistaActiva] = useState<'hub' | 'nuevo' | 'evolucion'>('hub');
 
-  // Form for remote athlete check-in
-  const [pesoKg, setPesoKg] = useState('74.50');
-  const [porcentajeGrasa, setPorcentajeGrasa] = useState('14.80');
-  const [cinturaCm, setCinturaCm] = useState('81.00');
-  const [brazoCm, setBrazoCm] = useState('37.50');
+  // Form for remote athlete check-in.
+  // D6: en sesión real los campos arrancan VACÍOS (los fixtures solo viven tras isDemoMode);
+  // al abrir el formulario se precargan con la última medición real de la evolución cargada.
+  const [pesoKg, setPesoKg] = useState(() => (isDemoMode ? '74.50' : ''));
+  const [porcentajeGrasa, setPorcentajeGrasa] = useState(() => (isDemoMode ? '14.80' : ''));
+  const [cinturaCm, setCinturaCm] = useState(() => (isDemoMode ? '81.00' : ''));
+  const [brazoCm, setBrazoCm] = useState(() => (isDemoMode ? '37.50' : ''));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+
+  /**
+   * Abre el formulario de check-in. En sesión real precarga la última medición real disponible
+   * (sin pisar lo que el alumno ya haya escrito); sin evolución, los campos quedan vacíos.
+   */
+  const abrirFormularioCheckin = () => {
+    if (!isDemoMode) {
+      const ultima = obtenerUltimaMedicionReal(evolucion);
+      if (ultima) {
+        setPesoKg((prev) => prev || ultima.pesoKg);
+        setPorcentajeGrasa((prev) => prev || ultima.porcentajeGrasa);
+        setCinturaCm((prev) => prev || ultima.cinturaCm);
+        setBrazoCm((prev) => prev || ultima.brazoCm);
+      }
+    }
+    setVistaActiva('nuevo');
+  };
 
   const cargarEvolucion = async () => {
     setIsLoading(true);
@@ -190,6 +228,13 @@ export function ProgresoPage() {
         setVistaActiva('evolucion');
       }, 1800);
     } catch (err: any) {
+      // RF-012: bloqueo de ciclo de vida (pausado) → panel informativo; el historial sigue visible.
+      const bloqueoDetectado = resolverBloqueoAlumno(err);
+      if (bloqueoDetectado) {
+        setBloqueo(bloqueoDetectado);
+        setSubmitError(null);
+        return;
+      }
       // D5: sin éxito falso; el check-in solo queda enviado si el servidor lo aceptó (2xx).
       setSubmitError(
         err?.message || 'No se pudo enviar tu check-in. Revisa los datos e inténtalo de nuevo.'
@@ -238,6 +283,15 @@ export function ProgresoPage() {
             Reintentar
           </button>
         </div>
+      )}
+
+      {/* RF-012: aviso de bloqueo del check-in remoto (el historial sigue en modo lectura) */}
+      {bloqueo && !isDemoMode && (
+        <BloqueoAlumnoPanel
+          bloqueo={bloqueo}
+          onReintentar={() => setBloqueo(null)}
+          className="max-w-none"
+        />
       )}
 
       {/* ========================================================================= */}
@@ -289,10 +343,10 @@ export function ProgresoPage() {
 
             {/* Opción A: Actualizar Medidas */}
             <div
-              onClick={() => setVistaActiva('nuevo')}
+              onClick={abrirFormularioCheckin}
               role="button"
               tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && setVistaActiva('nuevo')}
+              onKeyDown={(e) => e.key === 'Enter' && abrirFormularioCheckin()}
               className="group p-5 rounded-3xl bg-gradient-to-br from-card to-cyan-500/10 border-2 border-cyan-500/30 hover:border-cyan-500/70 transition-all duration-200 cursor-pointer shadow-md hover:shadow-cyan-500/5 active:scale-[0.99]"
             >
               <div className="flex items-center justify-between">
@@ -478,7 +532,7 @@ export function ProgresoPage() {
               <span>Volver a opciones de progreso</span>
             </button>
             <button
-              onClick={() => setVistaActiva('nuevo')}
+              onClick={abrirFormularioCheckin}
               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 text-xs font-bold transition-colors cursor-pointer"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -492,60 +546,67 @@ export function ProgresoPage() {
             </h3>
 
             {evolucion?.evaluaciones && evolucion.evaluaciones.length > 0 ? (
-              evolucion.evaluaciones.map((item) => (
-                <div
-                  key={item.id}
-                  className="p-5 rounded-3xl bg-card border border-border/80 shadow-xs space-y-3"
-                >
-                  <div className="flex items-center justify-between border-b border-border/50 pb-3">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-primary" />
-                      <span className="font-bold text-sm text-foreground">
-                        {item.fechaEvaluacion}
-                      </span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 uppercase">
-                        {item.estado}
+              evolucion.evaluaciones.map((item) => {
+                const estadoMedicion = etiquetaEstadoMedicion(item.estado);
+                return (
+                  <div
+                    key={item.id}
+                    className="p-5 rounded-3xl bg-card border border-border/80 shadow-xs space-y-3"
+                  >
+                    <div className="flex items-center justify-between border-b border-border/50 pb-3">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-primary" />
+                        <span className="font-bold text-sm text-foreground">
+                          {formatFechaCalendario(item.fechaEvaluacion) ?? item.fechaEvaluacion}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase ${CLASES_BADGE_ESTADO_MEDICION[estadoMedicion.tono]}`}
+                        >
+                          {estadoMedicion.texto}
+                        </span>
+                      </div>
+                      <span className="text-xs font-semibold text-muted-foreground">
+                        {etiquetaOrigenAntropometria(item.origen)}
                       </span>
                     </div>
-                    <span className="text-xs font-semibold text-muted-foreground capitalize">
-                      {item.origen.replace('_', ' ')}
-                    </span>
-                  </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <div className="p-2.5 rounded-xl bg-secondary/30">
-                      <span className="text-[10px] text-muted-foreground uppercase font-semibold">
-                        Peso
-                      </span>
-                      <p className="font-mono font-bold text-sm text-foreground">{item.pesoKg} kg</p>
-                    </div>
-                    <div className="p-2.5 rounded-xl bg-secondary/30">
-                      <span className="text-[10px] text-muted-foreground uppercase font-semibold">
-                        % Grasa
-                      </span>
-                      <p className="font-mono font-bold text-sm text-foreground">
-                        {item.porcentajeGrasa ? `${item.porcentajeGrasa}%` : 'N/D'}
-                      </p>
-                    </div>
-                    <div className="p-2.5 rounded-xl bg-secondary/30">
-                      <span className="text-[10px] text-muted-foreground uppercase font-semibold">
-                        Cintura
-                      </span>
-                      <p className="font-mono font-bold text-sm text-foreground">
-                        {item.perimetros?.cinturaCm ? `${item.perimetros.cinturaCm} cm` : 'N/D'}
-                      </p>
-                    </div>
-                    <div className="p-2.5 rounded-xl bg-secondary/30">
-                      <span className="text-[10px] text-muted-foreground uppercase font-semibold">
-                        Brazo
-                      </span>
-                      <p className="font-mono font-bold text-sm text-foreground">
-                        {item.perimetros?.brazoCm ? `${item.perimetros.brazoCm} cm` : 'N/D'}
-                      </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div className="p-2.5 rounded-xl bg-secondary/30">
+                        <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                          Peso
+                        </span>
+                        <p className="font-mono font-bold text-sm text-foreground">
+                          {item.pesoKg} kg
+                        </p>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-secondary/30">
+                        <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                          % Grasa
+                        </span>
+                        <p className="font-mono font-bold text-sm text-foreground">
+                          {item.porcentajeGrasa ? `${item.porcentajeGrasa}%` : '—'}
+                        </p>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-secondary/30">
+                        <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                          Cintura
+                        </span>
+                        <p className="font-mono font-bold text-sm text-foreground">
+                          {item.perimetros?.cinturaCm ? `${item.perimetros.cinturaCm} cm` : '—'}
+                        </p>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-secondary/30">
+                        <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                          Brazo
+                        </span>
+                        <p className="font-mono font-bold text-sm text-foreground">
+                          {item.perimetros?.brazoCm ? `${item.perimetros.brazoCm} cm` : '—'}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <p className="text-xs text-muted-foreground py-6 text-center">
                 No hay evaluaciones registradas aún.
