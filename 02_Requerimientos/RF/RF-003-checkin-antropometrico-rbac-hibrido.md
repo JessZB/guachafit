@@ -2,9 +2,9 @@
 id: RF-003
 modulo: Antropometria
 prioridad: alta
-estado: implementado
+estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-06
+fecha_verificacion: 2026-09-20
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0
@@ -102,3 +102,14 @@ Then debe interceptar la solicitud mediante la política RBAC
 ## 6. Casos Borde y Excepciones
 - **Expiración de la ventana de check-in:** Si el alumno remoto no completa el check-in en la ventana de 48h, el formulario se deshabilita automáticamente y se notifica al entrenador para reprogramación.
 - **Valores biológicamente imposibles:** Validación de rango (ej. peso $< 30$ kg o $> 300$ kg; % grasa $< 2\%$ o $> 70\%$) para evitar errores de tipeo accidentales antes de persistir.
+
+---
+
+## 7. Estado real de implementación
+
+- Núcleo RBAC híbrido implementado: presencial de solo lectura y remoto con aprobación del coach.
+- Ventana de check-in de ±24 h / 48 h (RN-04) no implementada.
+- Periodicidad configurable y recordatorio de las 06:00 (RN-01) ausentes.
+- Modelo de RN-02 incompleto: un solo brazo/muslo y sin pliegues cutáneos.
+- El alumno presencial no tiene vista de solo lectura en la UI.
+- El coach no puede ver las fotos que debe auditar (RN-04).

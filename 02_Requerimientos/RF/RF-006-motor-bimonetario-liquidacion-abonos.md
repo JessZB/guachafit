@@ -2,9 +2,9 @@
 id: RF-006
 modulo: Finanzas
 prioridad: alta
-estado: implementado
+estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-06
+fecha_verificacion: 2026-09-20
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -91,3 +91,13 @@ Then el saldo pendiente del cliente en USD debe permanecer inalterado en $25.00 
 ## 6. Casos Borde y Excepciones
 - **Abonos en Céntimos / Redondeo:** Todas las conversiones intermedias deben redondearse al céntimo más cercano (2 decimales en USD y Bs.) utilizando la regla bancaria *Round Half to Even* para evitar discrepancias por acumulación de fracciones.
 - **Tasa Cero o Negativa:** La interfaz y la API deben rechazar cualquier intento de fijar una tasa $\le 0$ con un error `422 Unprocessable Entity`.
+
+---
+
+## 7. Estado real de implementación
+
+- Motor bimonetario (USD maestro / Bs. dinámico) implementado y funcional en los flujos principales.
+- Resuelto (2026-09-21): eliminada la tasa default `65.0000` fabricada. Sin tasa configurada la API devuelve `null` (fuente `sin_configurar`) y errores de negocio claros; la UI muestra "Sin tasa configurada" en lugar de proyectar un valor ficticio.
+- RN-05 ausente: el remanente de un abono en exceso no se registra como saldo a favor para el siguiente ciclo.
+- Conversión con punto flotante: sin garantía de precisión decimal estricta en todos los caminos.
+- Idempotencia débil: con clave nueva, un pago duplicado responde 409 en lugar de reutilizar el registro; el índice único es cross-tenant.

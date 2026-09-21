@@ -3,9 +3,9 @@ id: RNF-002
 modulo: Finanzas
 categoria: consistencia-financiera # consistencia-financiera | seguridad | rendimiento
 prioridad: alta
-estado: implementado
+estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-06
+fecha_verificacion: 2026-09-20
 requisito_origen: "[[RF-006-motor-bimonetario-liquidacion-abonos]]"
 metrica_objetivo: "100% precisión decimal (cero floating-point error) / Idempotencia estricta"
 fecha_creacion: 2026-09-06
@@ -67,3 +67,12 @@ El módulo de finanzas maneja saldos adeudados, deducciones de abonos y conversi
 ## 6. Seguridad y Retención de Comprobantes
 - Los comprobantes bancarios (imágenes) deben almacenarse en bucket privado con cifrado en reposo (SSE-S3 / AES-256).
 - Retención mínima de comprobantes: 5 años para cumplimiento tributario y resolución de disputas.
+
+---
+
+## 7. Estado real de implementación
+
+- Base decimal y transaccionalidad ACID implementadas en los caminos principales.
+- Conversión bimonetaria con punto flotante: sin garantía de precisión decimal estricta.
+- Idempotencia no persistente: no se garantiza la deduplicación de reportes de pago.
+- Sin detección de sobre-abono ni reconciliador de la invariante de saldo.

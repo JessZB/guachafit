@@ -2,9 +2,9 @@
 id: RF-012
 modulo: Clientes
 prioridad: alta
-estado: implementado
+estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-06
+fecha_verificacion: 2026-09-20
 problema_origen: "[[PROB-003-acceso-onboarding-dashboard-central]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -113,3 +113,12 @@ Then el sistema debe ejecutar PATCH /alumnos/:id/restaurar
 ## 6. Casos Borde y Excepciones
 - **Transición Manual vs Automática:** El entrenador siempre tiene potestad de anular un bloqueo automático por pago si acuerda una prórroga de palabra con el alumno, manteniendo su estatus en `Activo` mediante una bandera de excepción temporal.
 - **Intento de Restaurar Alumno No Dado de Baja:** Si se invoca la restauración sobre un alumno que no está en baja lógica (`deleted_at_utc IS NULL`), el sistema responde exitosamente de forma idempotente confirmando que el alumno ya está activo.
+
+---
+
+## 7. Estado real de implementación
+
+- Estados de activación, baja lógica y restauración implementados (cobertura de tests parcial).
+- Resuelto (2026-09-21): enforcement de acceso por estado implementado (`AlumnoHabilitadoGuard` + `@BloquearAlumnoEn`): la planificación responde 403 `ALUMNO_BLOQUEADO`, la app muestra la pantalla de bloqueo con acción "Reportar pago" y el coach puede suspender por pago.
+- Resuelto (2026-09-21): el soft delete revoca login y refresh de la cuenta vinculada (`auth.service`).
+- Siguen pendientes: motor automático de morosidad (crons) y las reglas finas de transición manual vs automática (§6).

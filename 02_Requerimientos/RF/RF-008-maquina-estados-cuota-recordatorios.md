@@ -2,9 +2,9 @@
 id: RF-008
 modulo: Finanzas
 prioridad: alta
-estado: implementado
+estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-06
+fecha_verificacion: 2026-09-20
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -98,3 +98,12 @@ Then el estado de la cuota debe transicionar a "Vencida / En Mora"
 ## 6. Casos Borde y Excepciones
 - **Abono Parcial en Día T:** Si el alumno pagó el 50% de la cuota, la notificación de T+2 debe adaptarse dinámicamente indicando: *"Tu cuota se encuentra parcialmente vencida con un saldo remanente de $[X] USD"*.
 - **Desactivación de Notificaciones por el Coach:** El entrenador puede marcar un cliente como *"Exento de recordatorios automáticos"* en caso de acuerdos personales fuera de plataforma.
+
+---
+
+## 7. Estado real de implementación
+
+- Recordatorios T-5, T-1, Día T y T+2 inexistentes: cero crons de cobranza implementados.
+- Corte diario y renovaciones automáticas ausentes.
+- El estado `Por Vencer` no existe en la implementación.
+- La máquina de estados solo vive en el simulador de tests, no opera en producción.

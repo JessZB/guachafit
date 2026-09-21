@@ -2,9 +2,9 @@
 id: RF-010
 modulo: Acceso
 prioridad: alta
-estado: implementado
+estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-06
+fecha_verificacion: 2026-09-20
 problema_origen: "[[PROB-003-acceso-onboarding-dashboard-central]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -93,3 +93,12 @@ Then solo debe poder visualizar sus rutinas asignadas, sus medidas y sus cuotas 
 
 ## 6. Casos Borde y Excepciones
 - **Desactivación de Cuenta de Entrenador:** Si el Superadmin deshabilita a un entrenador (por cese de suscripción de la plataforma), todos los tokens activos de dicho entrenador y de sus alumnos asociados son invalidados en el siguiente ciclo de verificación.
+
+---
+
+## 7. Estado real de implementación
+
+- RBAC base y aislamiento de tenancy de alumnos implementados con tests reales.
+- Resuelto (2026-09-21): bypass total del SUPERADMIN eliminado. El guard aplica la matriz RN-01 sin jerarquía implícita (el negocio del coach/alumno le responde 403) y el front aterriza por rol: el superadmin solo accede a `/admin` (`apps/web/src/lib/rutas-rol.ts`).
+- Sin deshabilitar entrenadores ni gestión de licencias desde el panel maestro (el alta de entrenador ya está disponible).
+- Sin invalidación de tokens activos al desactivar una cuenta (caso borde).

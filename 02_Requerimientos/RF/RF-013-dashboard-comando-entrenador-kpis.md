@@ -3,6 +3,7 @@ id: RF-013
 modulo: Dashboard
 prioridad: alta
 estado: aprobado
+estado_implementacion: parcial
 problema_origen: "[[PROB-003-acceso-onboarding-dashboard-central]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -111,3 +112,14 @@ Then el contador del KPI debe actualizarse de "2" a "1" instantáneamente sin re
 
 ## 6. Casos Borde y Excepciones
 - **Entrenador Nuevo sin Alumnos:** Si un coach recién creado ingresa al dashboard por primera vez, el sistema renderiza un estado vacío amigable (*empty state*) invitándolo a: *"1. Comparte tu link único de registro: app.guachafit.com/registro?coach_code=XYZ"* o *"2. Registra tu primer alumno manualmente"*.
+
+---
+
+## 7. Estado real de implementación
+
+- KPIs base no financieros implementados y reales, con UX honesta.
+- Falta la alerta visual de ocupación > 90 % (KPI-01).
+- Las tres pestañas operativas (morosidad, conciliación, alumnos recientes) no existen.
+- Sin empty state para el entrenador nuevo.
+- Resuelto (2026-09-21): la meta de cobranza ya no se inventa; sin cuotas emitidas del periodo la API devuelve `null` y la UI muestra "Sin meta de cobranza configurada" (sin porcentaje).
+- Resuelto (2026-09-21): el KPI financiero de ingresos del mes ya no suma el histórico; se delimita al mes UTC en curso (pagos aprobados por fecha efectiva de cobro, mismo criterio que [[RF-009-tablero-control-cartera-morosidad]]).

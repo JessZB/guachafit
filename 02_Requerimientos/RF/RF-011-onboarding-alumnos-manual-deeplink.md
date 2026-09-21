@@ -2,9 +2,9 @@
 id: RF-011
 modulo: Onboarding
 prioridad: alta
-estado: implementado
+estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-06
+fecha_verificacion: 2026-09-20
 problema_origen: "[[PROB-003-acceso-onboarding-dashboard-central]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -124,3 +124,11 @@ Then la aplicación debe navegar a "/coach/alumnos/al-001"
 - **Enlace con Coach Code Invalido o Desactivado:** Si un usuario intenta registrarse con un `coach_code` que no existe o cuyo entrenador está suspendido, el sistema debe mostrar un mensaje amigable: *"El código de entrenador no es válido o no está disponible. Por favor contacta a tu coach."*
 - **Correo Electrónico Duplicado:** Si el email ya existe en la base de datos de la plataforma, el sistema debe indicar: *"Este correo ya se encuentra registrado. Si eres tú, inicia sesión o recupera tu contraseña."*
 - **Alumno Sin Cuotas Emitidas en el Semáforo:** Si un alumno recién registrado no posee aún ninguna cuota emitida, el semáforo se mostrará en gris neutro con etiqueta "Sin Cuota Emitida".
+
+---
+
+## 7. Estado real de implementación
+
+- Resuelto (2026-09-21): deep link con `coachCode` REAL (perfil del coach + `construirLinkOnboarding`), validación de licencia activa (404 uniforme) y notificación al coach del nuevo registro (evento `ALUMNO_REGISTRADO`). Sin hardcodes.
+- Resuelto (2026-09-21): el alta manual entrega credenciales con token de un solo uso (TTL 48 h) y enlace copiable a la página pública `/activar`; el canje establece la contraseña (RN-05). Sigue pendiente el envío automático por correo transaccional.
+- Resuelto parcial (2026-09-21): "Sin cuota emitida" ya se rotula correctamente vía etiquetas centralizadas (`apps/web/src/lib/etiquetas-dominio.ts`). El estado de datos `Por Vencer` sigue sin existir.

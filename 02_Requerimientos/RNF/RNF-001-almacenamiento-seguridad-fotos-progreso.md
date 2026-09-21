@@ -3,9 +3,9 @@ id: RNF-001
 modulo: Antropometria
 categoria: seguridad # seguridad | rendimiento | disponibilidad
 prioridad: alta
-estado: implementado
+estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-06
+fecha_verificacion: 2026-09-20
 requisito_origen: "[[RF-003-checkin-antropometrico-rbac-hibrido]]"
 metrica_objetivo: "p95 < 800ms subida / URLs firmadas TTL < 15 min"
 fecha_creacion: 2026-09-05
@@ -59,3 +59,12 @@ Las fotografías de control corporal y progreso físico constituyen datos biomé
 ## 6. Estrategia de Verificación y Pruebas
 - **Pruebas de Carga:** Simulación con k6 de 200 usuarios subiendo 3 fotos de 800 KB en una ventana de 5 minutos.
 - **Pruebas de Seguridad (Pen-testing):** Verificación de que peticiones sin token o con tokens manipulados sobre los buckets arrojen `HTTP 403 Access Denied`.
+
+---
+
+## 7. Estado real de implementación
+
+- TTL de URLs presignadas y subida directa a storage (direct-to-storage) implementados.
+- Compresión en el cliente sin evidencia de implementación.
+- Cifrado en reposo (SSE-S3 / SSE-KMS) sin evidencia.
+- Validación de `storageKey` sin evidencia.

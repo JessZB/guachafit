@@ -3,6 +3,7 @@ id: RF-014
 modulo: Notificaciones
 prioridad: alta
 estado: aprobado
+estado_implementacion: parcial
 problema_origen: "[[PROB-004-orquestacion-preferencias-notificaciones]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -89,3 +90,13 @@ Then el Despachador NO debe enviar trabajos a las colas de Push ni Email
 
 ## 6. Casos Borde y Excepciones
 - **Eventos a Múltiples Destinatarios:** En caso de anuncios globales del coach a todos sus alumnos, el despachador debe fragmentar el envío en lotes (*batch chunking*) de 50 usuarios para no saturar la memoria de Redis ni las cuotas por segundo del proveedor.
+
+---
+
+## 7. Estado real de implementación
+
+- Colas, dispatcher y persistencia In-App implementados y operativos.
+- Sin bus de eventos de dominio: los emisores no publican eventos como exige RN-01.
+- Sin DLQ ni idempotencia (jobId): no declarable `implementado`.
+- 3 de 5 categorías de notificación sin emisores.
+- Sin UI: ni campana In-App ni pantalla de preferencias.

@@ -3,6 +3,7 @@ id: RF-015
 modulo: Notificaciones
 prioridad: alta
 estado: aprobado
+estado_implementacion: parcial
 problema_origen: "[[PROB-004-orquestacion-preferencias-notificaciones]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -96,3 +97,11 @@ Then el sistema debe generar el reporte consolidado de ingresos de la semana y c
 
 ## 6. Casos Borde y Excepciones
 - **Migración de Nuevas Categorías:** Si en el futuro se añade una nueva categoría (ej. *Comunidad / Chat*), el sistema debe insertar automáticamente los valores por defecto sin romper las preferencias preexistentes del usuario.
+
+---
+
+## 7. Estado real de implementación
+
+- Matriz de preferencias parcial en base de datos: sin dimensión de rol/entrenador.
+- Sin UI de ajustes de notificaciones (categorías/canales).
+- RN-02 sin validación: no existe la advertencia al apagar a la vez Push y Email en finanzas.

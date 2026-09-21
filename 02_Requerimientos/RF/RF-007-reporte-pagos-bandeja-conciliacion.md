@@ -2,9 +2,9 @@
 id: RF-007
 modulo: Finanzas
 prioridad: alta
-estado: implementado
+estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-06
+fecha_verificacion: 2026-09-20
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -102,3 +102,12 @@ Then la transacción debe transicionar a estado "Rechazado"
 ## 6. Casos Borde y Excepciones
 - **Referencias Bancarias Duplicadas:** Si un alumno intenta enviar una referencia ya existente para el mismo banco y fecha, el sistema debe alertar: *"Esta referencia ya ha sido registrada previamente"* para evitar fraude o doble reporte accidental.
 - **Cancelación de Pago Erróneo:** Si el entrenador aprueba un pago por error, debe existir una opción de reversión administrativa auditada que devuelva el saldo a su estado original.
+
+---
+
+## 7. Estado real de implementación
+
+- Flujo completo implementado y probado: reporte del alumno, bandeja FIFO, aprobación y rechazo.
+- Sin reversión administrativa de un pago aprobado por error (caso borde del requisito).
+- El comprobante es opcional en la implementación, aunque RN-02 lo define obligatorio.
+- Entrega de notificaciones simulada: no hay envío push/email real verificado.

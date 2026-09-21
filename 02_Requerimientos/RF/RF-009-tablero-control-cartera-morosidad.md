@@ -3,6 +3,7 @@ id: RF-009
 modulo: Finanzas
 prioridad: alta
 estado: aprobado
+estado_implementacion: no implementado
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -104,3 +105,12 @@ Then el sistema debe crear una transacción con estado "Aprobado"
 ## 6. Casos Borde y Excepciones
 - **Cambio de Tasa Cambiaria en Vivo:** Si la tasa global cambia mientras el entrenador tiene abierta la tabla de mora, una actualización reactiva en el frontend debe recalcular las columnas de *"Saldo en Bs."* sin necesidad de recargar toda la página.
 - **Concurrencia en Aprobación de Pagos:** Si un pago pendiente es aprobado desde la bandeja de conciliación y simultáneamente el coach intenta registrar un cobro en efectivo sobre la misma cuota, la transacción de base de datos debe validar el saldo restante para evitar cobros dobles o saldos negativos accidentales.
+
+---
+
+## 7. Estado real de implementación
+
+- El tablero de control de cartera no existe como pantalla; solo hay fragmentos de consultas y datos financieros.
+- Resuelto (2026-09-21): KPI-01 "Total Recaudado en el Mes" ahora se delimita al mes UTC en curso (pagos aprobados por fecha efectiva de cobro); ya no suma el histórico. El KPI vive en el dashboard del entrenador (ver [[RF-013-dashboard-comando-entrenador-kpis]]).
+- KPI-03 (clientes próximos a vencer) ausente.
+- Sin tabla segmentada por pestañas ni acciones rápidas de cobranza (cobro en efectivo, recordatorio manual).

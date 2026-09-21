@@ -2,9 +2,9 @@
 id: RF-004
 modulo: Antropometria
 prioridad: media
-estado: implementado
+estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-06
+fecha_verificacion: 2026-09-20
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0
@@ -68,3 +68,12 @@ Then el sistema debe presentar ambas imágenes alineadas lado a lado o con slide
 
 ## 6. Casos Borde y Excepciones
 - **Registros incompletos:** Si en una fecha el alumno subió peso pero no subió foto lateral, el comparador debe inhabilitar esa perspectiva específica con un aviso: *"Foto no disponible para esta fecha"*.
+
+---
+
+## 7. Estado real de implementación
+
+- API de evolución y comparador implementada a nivel de backend.
+- UI real inexistente: no hay gráficos de tendencia ni comparador fotográfico en modo real.
+- El alumno nunca ve sus fotografías de progreso desde la app.
+- Sin implementar los flujos de RN-01 (gráficos multieje con filtros) y RN-02 (comparador slider/lado a lado) en interfaz.

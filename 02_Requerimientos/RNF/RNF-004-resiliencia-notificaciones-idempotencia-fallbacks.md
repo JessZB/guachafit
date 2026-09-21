@@ -4,6 +4,7 @@ modulo: Notificaciones
 categoria: resiliencia-rendimiento # resiliencia-rendimiento | disponibilidad | seguridad
 prioridad: alta
 estado: aprobado
+estado_implementacion: parcial
 requisito_origen: "[[RF-014-arquitectura-event-driven-despachador-notificaciones]]"
 metrica_objetivo: "Push p95 < 3s / Email p95 < 10s / 0% duplicados por reintentos"
 fecha_creacion: 2026-09-06
@@ -56,3 +57,13 @@ Define las garantías operativas y estándares no funcionales requeridos para el
 
 ## 5. Control de Sobrecarga y Rate Limiting
 - **Throttling por Proveedor:** Los workers deben implementar limitación de tasa (*rate limiting*) compatible con los límites de la capa gratuita o contratada del proveedor (ej. máximo 50 emails por segundo en Resend) para evitar códigos `429 Too Many Requests`.
+
+---
+
+## 6. Estado real de implementación
+
+- Dispatcher y colas implementados y operativos como base del pipeline.
+- Sin idempotencia por `jobId`: una tarea reintentada puede generar un segundo envío.
+- Sin Dead-Letter Queue ni alerta de observabilidad (Sentry/Datadog).
+- Push sin reintentos ante fallos del proveedor.
+- Sin rate limiting por proveedor ni SLOs de latencia verificados.

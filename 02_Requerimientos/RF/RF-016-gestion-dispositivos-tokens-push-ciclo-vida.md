@@ -3,6 +3,7 @@ id: RF-016
 modulo: Notificaciones
 prioridad: alta
 estado: aprobado
+estado_implementacion: parcial
 problema_origen: "[[PROB-004-orquestacion-preferencias-notificaciones]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -88,3 +89,11 @@ Then el sistema debe actualizar inmediatamente el registro a `is_active = false`
 
 ## 6. Casos Borde y Excepciones
 - **Rotación de Tokens en Segundo Plano por el SO:** Si el sistema operativo rota o refresca el token push, la app móvil debe capturar el evento `onTokenRefresh` y notificar inmediatamente a la API para reemplazar el token antiguo sin interrumpir la recepción de mensajes.
+
+---
+
+## 7. Estado real de implementación
+
+- API de dispositivos implementada y testeada.
+- Sin cliente real que registre tokens: ningún flujo de la app ejecuta el registro (RN-02).
+- Contrato desalineado entre el endpoint real y el documentado en este requisito.

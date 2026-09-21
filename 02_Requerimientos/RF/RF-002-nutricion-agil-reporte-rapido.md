@@ -2,9 +2,9 @@
 id: RF-002
 modulo: Nutricion
 prioridad: alta
-estado: implementado
+estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-06
+fecha_verificacion: 2026-09-20
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0
@@ -83,3 +83,14 @@ Then el sistema debe persistir los totales numéricos asociados a la fecha
 ## 6. Casos Borde y Excepciones
 - **Omisión del reporte diario:** Si el alumno no registra el semáforo a las 23:59, el sistema marca el día como `No reportado` (gris) y no penaliza la racha de entrenamiento, pero alerta al entrenador en el resumen semanal.
 - **Subida fallida de fotos:** Si la conexión a internet es inestable, las imágenes deben quedar encoladas para reintento automático en segundo plano.
+
+---
+
+## 7. Estado real de implementación
+
+- API parcial: el semáforo 1-Tap y los totales manuales existen a nivel de endpoint, pero el flujo no está completo end-to-end.
+- Metas del coach ausentes: no hay tabla ni UI para configurar calorías, macros y agua (RN-01).
+- Diario fotográfico inutilizable: la web envía `fotosPlatos: []` (no hay captura real de fotos).
+- Tolerancia ±10 % muerta en la ruta real: el controller no pasa las metas del coach a la comparación (Escenario 3).
+- Sin vista del coach (calendario nutricional); `No reportado` y alerta semanal ausentes.
+- Resuelto (2026-09-21): éxito fabricado al guardar eliminado. La UI solo confirma con 2xx; un 409 refresca el día ya registrado sin encolarlo; la cola offline queda solo para fallos no concluyentes (red/5xx) y "Actualizar" ya no promete una edición inexistente (`apps/web/src/lib/nutricion-checkin.ts`).

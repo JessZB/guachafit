@@ -2,9 +2,9 @@
 id: RF-005
 modulo: Finanzas
 prioridad: alta
-estado: implementado
+estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-06
+fecha_verificacion: 2026-09-20
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -89,3 +89,13 @@ Then el monto total a pagar debe ser exactamente de $40.00 USD
 ## 6. Casos Borde y Excepciones
 - **Desactivación de Plan del Catálogo:** Si un plan estándar se desactiva o elimina del catálogo, los clientes que ya lo tienen contratado deben mantener sus condiciones históricas activas hasta que el coach cambie manualmente su membresía.
 - **Override con Precio Cero ($0.00):** Permitido exclusivamente para alumnos becados o acuerdos de intercambio, generando cuotas en estado automático `Al Día / Becado`.
+
+---
+
+## 7. Estado real de implementación
+
+- Catálogo de planes y override existen a nivel de API.
+- Resuelto (2026-09-21): la UI ya no inventa un "Plan Estándar" para alumnos sin plan; muestra "Sin plan asignado" (`apps/web/src/pages/entrenador/AlumnosPage.tsx`).
+- Sin UI funcional de override: los campos quedan muertos y la interfaz espera campos que la API no hidrata.
+- Sin precedencia de override al emitir la cuota (RN-03 no aplica en el flujo real).
+- Sin soporte del estado `Becado / $0` para override con precio cero (caso borde).
