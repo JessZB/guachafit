@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
+import { BullBoardModule } from '@bull-board/nestjs';
+import { ExpressAdapter } from '@bull-board/express';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -14,6 +16,7 @@ import { NutricionModule } from './modules/nutricion/nutricion.module';
 import { AntropometriaModule } from './modules/antropometria/antropometria.module';
 import { EntrenadorModule } from './modules/entrenador/entrenador.module';
 import { NotificacionesModule } from './modules/notificaciones/notificaciones.module';
+import { crearBullBoardAuthMiddleware } from './common/bull-board-auth.middleware';
 
 @Module({
   imports: [
@@ -31,6 +34,13 @@ import { NotificacionesModule } from './modules/notificaciones/notificaciones.mo
           maxRetriesPerRequest: null,
         },
       }),
+    }),
+    // WU-H (ADR-008 §4.4): Bull-Board en /admin/queues, SIEMPRE protegido. Sin
+    // BULL_BOARD_USER/BULL_BOARD_PASS el middleware responde 404 (ruta deshabilitada).
+    BullBoardModule.forRoot({
+      route: '/admin/queues',
+      adapter: ExpressAdapter,
+      middleware: crearBullBoardAuthMiddleware(),
     }),
     DatabaseModule,
     CommonModule,

@@ -52,6 +52,8 @@ export function badgeEstadoCuota(
       return { texto: 'Abono parcial', tono: 'warning' };
     case EstadoCuota.EMITIDA:
       return { texto: 'Pendiente', tono: 'warning' };
+    case EstadoCuota.POR_VENCER:
+      return { texto: 'Por vencer', tono: 'warning' };
     case EstadoCuota.PENDIENTE_REVISION:
       return { texto: 'Pago en revisión', tono: 'info' };
     case EstadoCuota.VENCIDA:

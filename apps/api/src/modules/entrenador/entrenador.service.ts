@@ -332,7 +332,14 @@ export class EntrenadorService {
             and(
               lt(cuotasMembresia.fechaCorteUtc, now),
               gt(cuotasMembresia.saldoPendienteUsd, '0'),
-              notInArray(cuotasMembresia.estado, [EstadoCuota.AL_DIA, EstadoCuota.ANULADA])
+              // WU-H: misma regla única que el directorio (`condicionCuotaEnMora`): POR_VENCER
+              // es preventivo (ámbar), nunca mora; el barrido diario lo degrada a VENCIDA
+              // cuando la fecha de corte realmente pasa.
+              notInArray(cuotasMembresia.estado, [
+                EstadoCuota.AL_DIA,
+                EstadoCuota.ANULADA,
+                EstadoCuota.POR_VENCER,
+              ])
             )
           )
         )

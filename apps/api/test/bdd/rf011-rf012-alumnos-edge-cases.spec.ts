@@ -223,6 +223,77 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
     return columna.replace(/_([a-z])/g, (_: string, l: string) => l.toUpperCase());
   }
 
+  /** WU-H: ¿el chunk es un operador lógico de primer nivel (`and`/`or`)? */
+  function esOperadorLogico(chunk: any): boolean {
+    const valores = chunk?.value;
+    return (
+      Array.isArray(valores) &&
+      valores.length === 1 &&
+      typeof valores[0] === 'string' &&
+      /^\s*(and|or)\s*$/i.test(valores[0])
+    );
+  }
+
+  function esParentesisPuro(chunk: any): boolean {
+    const valores = chunk?.value;
+    return (
+      Array.isArray(valores) &&
+      valores.length === 1 &&
+      typeof valores[0] === 'string' &&
+      /^\s*[()]\s*$/.test(valores[0])
+    );
+  }
+
+  /**
+   * WU-H: evaluador recursivo del AST de drizzle que respeta la semántica de `and`/`or`
+   * (antes TODAS las condiciones extraídas se combinaban con AND, lo que rompía cualquier
+   * `or(...)` real como el semáforo por_vencer o la mora).
+   */
+  function evaluarPredicado(predicado: any, item: any): boolean {
+    const chunks: any[] = predicado?.queryChunks ?? [];
+    if (chunks.length === 0) return true;
+
+    const partes: Array<{ op: string | null; sql: any }> = [];
+    let opPendiente: string | null = null;
+    for (const chunk of chunks) {
+      if (esOperadorLogico(chunk)) {
+        opPendiente = /or/i.test(chunk.value[0]) ? 'or' : 'and';
+        continue;
+      }
+      if (!chunk || !Array.isArray(chunk.queryChunks) || esParentesisPuro(chunk)) continue;
+      partes.push({ op: opPendiente, sql: chunk });
+      opPendiente = null;
+    }
+
+    const tieneColumna = chunks.some((c: any) => c && typeof c.name === 'string');
+    const tieneOperador = partes.some((parte) => parte.op !== null);
+
+    // Sin columna propia en este nivel: es un contenedor (paréntesis/grupo lógico).
+    if (!tieneColumna) {
+      if (partes.length === 0) return true;
+      if (!tieneOperador) return partes.every((parte) => evaluarPredicado(parte.sql, item));
+
+      // Combinar partes respetando `and`/`or` (drizzle anida los grupos, por lo que un
+      // recorrido secuencial con acumulación por AND y cierre por OR reproduce la semántica).
+      let resultado = false;
+      let grupoActual: boolean | null = null;
+      for (const parte of partes) {
+        const valor = evaluarPredicado(parte.sql, item);
+        if (parte.op === 'or' || grupoActual === null) {
+          if (grupoActual !== null) resultado = resultado || grupoActual;
+          grupoActual = valor;
+        } else {
+          grupoActual = grupoActual && valor;
+        }
+      }
+      return resultado || (grupoActual ?? true);
+    }
+
+    // Condición atómica (eq/ne/in/notIn/gt/gte/lt/lte/ilike/isNull...).
+    const condiciones = extractConditions(predicado);
+    return condiciones.every((cond) => matchesField(item, cond));
+  }
+
   function esExpresionCount(expr: any): boolean {
     if (!expr || typeof expr !== 'object' || !Array.isArray(expr.queryChunks)) return false;
     return expr.queryChunks.some(
@@ -292,19 +363,9 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
             innerJoin: vi.fn((joinTable: any) => queryObj),
             leftJoin: vi.fn((joinTable: any) => queryObj),
             where: vi.fn((predicate: any) => {
-              const conditions = extractConditions(predicate);
-              if (conditions.length > 0) {
-                // WU24: las búsquedas `ilike` viajan dentro de un `or(...)` entre columnas
-                // (nombre/apellido/correo/documento): son ALTERNATIVAS, no un AND. El resto de
-                // filtros (eq/in/null/rango) se mantienen combinados con AND.
-                const ilike = conditions.filter((cond) => cond.op === 'ilike');
-                const resto = conditions.filter((cond) => cond.op !== 'ilike');
-                filtered = filtered.filter(
-                  (item) =>
-                    resto.every((cond) => matchesField(item, cond)) &&
-                    (ilike.length === 0 || ilike.some((cond) => matchesField(item, cond)))
-                );
-              }
+              // WU-H: el evaluador respeta la semántica real de `and`/`or` del AST de drizzle
+              // (la búsqueda `q` y el semáforo por_vencer dependen de `or(...)`).
+              filtered = filtered.filter((item) => evaluarPredicado(predicate, item));
               return queryObj;
             }),
             orderBy: vi.fn(() => queryObj),
@@ -818,6 +879,74 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
       expect(res.items.filter((a) => a.semaforoPago === 'moroso')).toHaveLength(
         res.resumen.morosos
       );
+    });
+
+    it('1.20 WU-H: hidrata semaforoPago por_vencer (RF-008) sin clasificarlo como mora', async () => {
+      // Alumno A5: cuota EMITIDA a 3 días del corte con saldo (el barrido aún no corrió) => por_vencer.
+      const ALUMNO_A5_USER_ID = 'aaaaaaaa-eeee-4aaa-8aaa-aaaaaaaaaaaa';
+      const ALUMNO_A5_PERFIL_ID = 'a5555555-5555-4555-8555-555555555555';
+      mockUsuarios.push({
+        id: ALUMNO_A5_USER_ID,
+        email: 'alumno.a5@guachafit.com',
+        rol: Rol.ALUMNO,
+        activo: true,
+      });
+      mockPerfilesAlumno.push({
+        id: ALUMNO_A5_PERFIL_ID,
+        usuarioId: ALUMNO_A5_USER_ID,
+        entrenadorId: COACH_A_ID,
+        tipoDocumento: TipoDocumento.V,
+        numeroDocumento: '66666666',
+        nombres: 'Vera',
+        apellidos: 'Vencimiento',
+        fechaNacimiento: '1999-02-02',
+        telefonoWhatsapp: '+584126666666',
+        modalidad: Modalidad.PRESENCIAL,
+        estadoActivacion: EstadoAlumno.ACTIVO,
+        fichaSaludPrivada: null,
+        deletedAtUtc: null,
+      });
+
+      mockCuotasMembresia.push(
+        {
+          id: 'cuota-por-vencer-a5-wuh',
+          clienteId: ALUMNO_A5_USER_ID,
+          entrenadorId: COACH_A_ID,
+          planId: PLAN_COACH_A_ID,
+          periodo: '2026-10',
+          montoTotalUsd: '45.00',
+          montoAbonadoUsd: '0.00',
+          saldoPendienteUsd: '45.00',
+          fechaEmisionUtc: new Date(),
+          fechaCorteUtc: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+          estado: EstadoCuota.EMITIDA,
+        },
+        {
+          // Cuota ya marcada POR_VENCER por el barrido y con corte pasado: NO es mora.
+          id: 'cuota-por-vencer-vencida-a1-wuh',
+          clienteId: ALUMNO_A1_USER_ID,
+          entrenadorId: COACH_A_ID,
+          planId: PLAN_COACH_A_ID,
+          periodo: '2026-09',
+          montoTotalUsd: '45.00',
+          montoAbonadoUsd: '0.00',
+          saldoPendienteUsd: '45.00',
+          fechaEmisionUtc: new Date('2026-08-01T00:00:00Z'),
+          fechaCorteUtc: new Date(Date.now() - 24 * 60 * 60 * 1000),
+          estado: EstadoCuota.POR_VENCER,
+        }
+      );
+
+      const req = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
+      const res = await alumnosController.listarAlumnos(
+        req,
+        FiltroDirectorioAlumnosSchema.parse({ limit: '100' })
+      );
+
+      const semaforoPorPerfil = new Map(res.items.map((a) => [a.id, a.semaforoPago]));
+      expect(semaforoPorPerfil.get(ALUMNO_A5_PERFIL_ID)).toBe('por_vencer');
+      expect(semaforoPorPerfil.get(ALUMNO_A1_PERFIL_ID)).toBe('por_vencer');
+      expect(res.resumen.morosos).toBe(0);
     });
 
     it('1.12 WU24: q busca server-side por nombre/apellido con ILIKE y ajusta el total', async () => {

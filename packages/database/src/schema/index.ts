@@ -105,6 +105,7 @@ export const anguloFotoEnum = pgEnum('enum_angulo_foto', [
 export const estadoCuotaEnum = pgEnum('enum_estado_cuota', [
   EstadoCuota.EMITIDA,
   EstadoCuota.ABONADA_PARCIAL,
+  EstadoCuota.POR_VENCER,
   EstadoCuota.AL_DIA,
   EstadoCuota.PENDIENTE_REVISION,
   EstadoCuota.VENCIDA,

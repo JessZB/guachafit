@@ -1,6 +1,7 @@
 import {
   Injectable,
   Inject,
+  Logger,
   Optional,
   NotFoundException,
   ConflictException,
@@ -9,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { NotificationDispatcherService } from '../notificaciones/notification-dispatcher.service';
 import { R2StorageService } from '../antropometria/r2-storage.service';
+import { BillingSchedulerService } from './billing-scheduler.service';
 import { DRIZZLE_DB } from '../../database/database.module';
 import {
   Database,
@@ -164,8 +166,28 @@ export class FinanzasService {
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
     @Optional() private readonly dispatcherService?: NotificationDispatcherService,
-    @Optional() private readonly r2StorageService?: R2StorageService
+    @Optional() private readonly r2StorageService?: R2StorageService,
+    @Optional() private readonly billingSchedulerService?: BillingSchedulerService
   ) {}
+
+  private readonly logger = new Logger(FinanzasService.name);
+
+  /**
+   * WU-H (RF-008 / ADR-008 §3.2): al liquidarse una cuota (saldo $0.00) se cancelan los
+   * recordatorios futuros. Se ejecuta DESPUÉS del commit: un fallo de Redis no revierte el pago.
+   */
+  private async cancelarRecordatoriosSiLiquidada(cuotaId: string): Promise<void> {
+    if (!this.billingSchedulerService) return;
+    try {
+      await this.billingSchedulerService.cancelarRecordatoriosCuota(cuotaId);
+    } catch (error) {
+      this.logger.error(
+        `No se pudieron cancelar los recordatorios de la cuota ${cuotaId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
 
   private async resolverComprobanteUrl(storageKey?: string | null): Promise<string | null> {
     if (!storageKey || !this.r2StorageService) return null;
@@ -701,6 +723,23 @@ export class FinanzasService {
       })
       .returning();
 
+    // WU-H (RF-008 §4.B / ADR-008): agenda los recordatorios T-5, T-1, T (corte) y T+2 contra
+    // `fecha_corte_utc`. La cuota YA quedó emitida: un fallo de Redis no revierte la emisión.
+    if (this.billingSchedulerService) {
+      try {
+        await this.billingSchedulerService.programarRecordatoriosCuota({
+          id: cuota.id,
+          fechaCorteUtc: cuota.fechaCorteUtc,
+        });
+      } catch (error) {
+        this.logger.error(
+          `No se pudieron programar los recordatorios de la cuota ${cuota.id}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+
     // Calcular proyección en Bs solo con tasa real: sin tasa configurada se omite el dato
     // en vez de inventar un valor (la emisión en USD no requiere tasa).
     const tasa = await this.obtenerTasaVigente(entrenadorId, clienteUsuarioId);
@@ -1050,7 +1089,7 @@ export class FinanzasService {
       );
     }
 
-    return await this.db.transaction(async (tx) => {
+    const resultado = await this.db.transaction(async (tx) => {
       // Bloqueo Pesimista (SELECT ... FOR UPDATE) con RLS Tenant
       await tx.execute(sql`SET LOCAL app.current_entrenador_id = ${entrenadorId}`);
       await tx.execute(sql`SELECT id FROM cuotas_membresia WHERE id = ${cuotaId} FOR UPDATE`);
@@ -1184,6 +1223,14 @@ export class FinanzasService {
         mensaje: 'Cobro directo en efectivo registrado y auto-aprobado exitosamente.',
       };
     });
+
+    // WU-H (RF-008 / ADR-008 §3.2): un cobro directo que liquida la cuota cancela los
+    // recordatorios futuros pendientes.
+    if (toCents(resultado.cuota.saldoPendienteUsd) === 0) {
+      await this.cancelarRecordatoriosSiLiquidada(resultado.cuota.id);
+    }
+
+    return resultado;
   }
 
   // ===========================================================================
@@ -1340,6 +1387,12 @@ export class FinanzasService {
         };
       }
     });
+
+    // WU-H (RF-008 / ADR-008 §3.2): aprobar el pago que deja la cuota en $0.00 cancela los
+    // recordatorios futuros (T-1/T/T+2) para no cobrarle a un cliente que ya está al día.
+    if (dto.accion === 'aprobar' && toCents(resultado.cuota.saldoPendienteUsd) === 0) {
+      await this.cancelarRecordatoriosSiLiquidada(resultado.cuota.id);
+    }
 
     if (this.dispatcherService) {
       if (dto.accion === 'aprobar') {

@@ -952,6 +952,166 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
   });
 
   // ===========================================================================
+  // H.2 WU-H: RECORDATORIOS DE COBRANZA (RF-008 / ADR-008)
+  // ===========================================================================
+  describe('8b. WU-H: programación y cancelación de recordatorios de cobranza', () => {
+    let mockScheduler: any;
+    let servicioConScheduler: FinanzasService;
+
+    function crearTxPendiente(id: string, cuotaId: string, montoUsd: string) {
+      return {
+        id,
+        cuotaId,
+        clienteId: 'alumno-uuid-1',
+        entrenadorId: 'coach-uuid-1',
+        registradoPor: 'alumno-uuid-1',
+        montoOriginal: montoUsd,
+        monedaOriginal: Moneda.USD,
+        tasaCambioFijada: '1.0000',
+        montoEquivalenteUsd: montoUsd,
+        metodoPago: MetodoPago.ZELLE,
+        referenciaBancaria: `ref-${id}`,
+        fechaOperacion: '2026-09-06',
+        estadoConciliacion: EstadoConciliacion.PENDIENTE,
+        motivoRechazo: null,
+        fechaReporteUtc: new Date(),
+        fechaConciliacionUtc: null,
+        createdAtUtc: new Date(),
+        updatedAtUtc: new Date(),
+      };
+    }
+
+    beforeEach(() => {
+      mockScheduler = {
+        programarRecordatoriosCuota: vi.fn().mockResolvedValue(['T_MINUS_5']),
+        cancelarRecordatoriosCuota: vi.fn().mockResolvedValue(4),
+      };
+      servicioConScheduler = new FinanzasService(mockDb, undefined, undefined, mockScheduler);
+    });
+
+    it('programa los recordatorios T-5/T-1/T/T+2 al emitir una cuota', async () => {
+      const cuota = await servicioConScheduler.emitirCuota('coach-uuid-1', {
+        clienteId: 'alumno-uuid-1',
+        planId: 'plan-uuid-1',
+        periodo: '2026-09',
+        montoTotalUsd: '50.00',
+        fechaCorteUtc: '2026-09-30T23:59:59Z',
+      });
+
+      expect(mockScheduler.programarRecordatoriosCuota).toHaveBeenCalledWith({
+        id: cuota.id,
+        fechaCorteUtc: expect.any(Date),
+      });
+    });
+
+    it('la emisión NO se cae si Redis falla al agendar los recordatorios', async () => {
+      mockScheduler.programarRecordatoriosCuota.mockRejectedValueOnce(
+        new Error('ECONNREFUSED 127.0.0.1:6379')
+      );
+
+      const cuota = await servicioConScheduler.emitirCuota('coach-uuid-1', {
+        clienteId: 'alumno-uuid-1',
+        planId: 'plan-uuid-1',
+        periodo: '2026-09',
+        montoTotalUsd: '50.00',
+        fechaCorteUtc: '2026-09-30T23:59:59Z',
+      });
+
+      expect(cuota.saldoPendienteUsd).toBe('50.00');
+    });
+
+    it('cancela los recordatorios al aprobar el pago que deja la cuota en $0.00', async () => {
+      mockCuotasMembresia = [
+        {
+          id: 'cuota-liquidada-wuh',
+          clienteId: 'alumno-uuid-1',
+          entrenadorId: 'coach-uuid-1',
+          planId: 'plan-uuid-1',
+          periodo: '2026-09',
+          montoTotalUsd: '30.00',
+          montoAbonadoUsd: '0.00',
+          saldoPendienteUsd: '30.00',
+          fechaEmisionUtc: new Date(),
+          fechaCorteUtc: new Date(Date.now() + 15 * 86400000),
+          estado: EstadoCuota.PENDIENTE_REVISION,
+        },
+      ];
+      mockTransaccionesPago = [crearTxPendiente('tx-liquidada-wuh', 'cuota-liquidada-wuh', '30.00')];
+
+      const res = await servicioConScheduler.conciliarTransaccion(
+        'tx-liquidada-wuh',
+        'coach-uuid-1',
+        { accion: 'aprobar' }
+      );
+
+      expect(res.cuota.saldoPendienteUsd).toBe('0.00');
+      expect(mockScheduler.cancelarRecordatoriosCuota).toHaveBeenCalledWith('cuota-liquidada-wuh');
+    });
+
+    it('NO cancela recordatorios cuando la aprobación deja saldo pendiente (abono parcial)', async () => {
+      mockCuotasMembresia = [
+        {
+          id: 'cuota-parcial-wuh',
+          clienteId: 'alumno-uuid-1',
+          entrenadorId: 'coach-uuid-1',
+          planId: 'plan-uuid-1',
+          periodo: '2026-09',
+          montoTotalUsd: '60.00',
+          montoAbonadoUsd: '0.00',
+          saldoPendienteUsd: '60.00',
+          fechaEmisionUtc: new Date(),
+          fechaCorteUtc: new Date(Date.now() + 15 * 86400000),
+          estado: EstadoCuota.PENDIENTE_REVISION,
+        },
+      ];
+      mockTransaccionesPago = [crearTxPendiente('tx-parcial-wuh', 'cuota-parcial-wuh', '20.00')];
+
+      const res = await servicioConScheduler.conciliarTransaccion(
+        'tx-parcial-wuh',
+        'coach-uuid-1',
+        { accion: 'aprobar' }
+      );
+
+      expect(res.cuota.saldoPendienteUsd).toBe('40.00');
+      expect(mockScheduler.cancelarRecordatoriosCuota).not.toHaveBeenCalled();
+    });
+
+    it('cancela los recordatorios cuando el cobro directo liquida la cuota', async () => {
+      mockCuotasMembresia = [
+        {
+          id: 'cuota-cobro-directo-wuh',
+          clienteId: 'alumno-uuid-1',
+          entrenadorId: 'coach-uuid-1',
+          planId: 'plan-uuid-1',
+          periodo: '2026-09',
+          montoTotalUsd: '50.00',
+          montoAbonadoUsd: '0.00',
+          saldoPendienteUsd: '50.00',
+          fechaEmisionUtc: new Date(),
+          fechaCorteUtc: new Date(Date.now() + 15 * 86400000),
+          estado: EstadoCuota.EMITIDA,
+        },
+      ];
+
+      const res = await servicioConScheduler.cobroDirecto(
+        'cuota-cobro-directo-wuh',
+        'coach-uuid-1',
+        {
+          montoOriginal: '50.00',
+          monedaOriginal: Moneda.USD,
+          metodoPago: MetodoPago.EFECTIVO_USD,
+          fechaOperacion: '2026-09-06',
+        }
+      );
+
+      expect(res.cuota.saldoPendienteUsd).toBe('0.00');
+      expect(mockScheduler.cancelarRecordatoriosCuota).toHaveBeenCalledWith(
+        'cuota-cobro-directo-wuh'
+      );
+    });
+  });
+
+  // ===========================================================================
   // I. BANDEJA DE CONCILIACIÓN FIFO (RF-007)
   // ===========================================================================
   describe('9. Bandeja de Conciliación del Entrenador (FIFO)', () => {

@@ -18,6 +18,8 @@ import {
   ilike,
   lt,
   gt,
+  gte,
+  lte,
   inArray,
   ne,
   notInArray,
@@ -74,6 +76,10 @@ const UUID_SIN_CANDIDATOS = '00000000-0000-4000-8000-000000000000';
  * - la cuota está marcada como VENCIDA, o
  * - su fecha de corte ya pasó, tiene saldo pendiente y su estado no es AL_DIA/ANULADA.
  *
+ * WU-H: `POR_VENCER` queda EXCLUIDO de la mora (RF-008 §4.A: "por vencer" es preventivo, no
+ * deuda vencida; la UI lo pinta ámbar, nunca rojo). El barrido diario es quien degrada
+ * POR_VENCER -> VENCIDA cuando la fecha de corte efectivamente pasa.
+ *
  * Se usa tanto para el COUNT del resumen del directorio como para hidratar `semaforoPago` por
  * fila: una sola definición, cero divergencia entre el KPI "En Mora" y la lista filtrada.
  */
@@ -83,7 +89,38 @@ function condicionCuotaEnMora(ahora: Date) {
     and(
       lt(cuotasMembresia.fechaCorteUtc, ahora),
       gt(cuotasMembresia.saldoPendienteUsd, '0'),
-      notInArray(cuotasMembresia.estado, [EstadoCuota.AL_DIA, EstadoCuota.ANULADA])
+      notInArray(cuotasMembresia.estado, [
+        EstadoCuota.AL_DIA,
+        EstadoCuota.ANULADA,
+        EstadoCuota.POR_VENCER,
+      ])
+    )
+  )!;
+}
+
+/** Días previos al corte en los que una cuota impaga cuenta como "por vencer" (RF-008 §4.A). */
+const DIAS_VENTANA_POR_VENCER = 5;
+const MS_POR_DIA = 24 * 60 * 60 * 1000;
+
+/**
+ * WU-H (RF-008 §4.A): regla de "cuota por vencer" para el semáforo de la cartera.
+ *
+ * - El estado persistido ya es POR_VENCER (lo marcó el barrido diario), o
+ * - el barrido aún no corrió y faltan entre 5 y 0 días para el corte con saldo pendiente
+ *   (EMITIDA/ABONADA_PARCIAL). Así el semáforo es correcto aunque la cuota se emita después
+ *   del último barrido.
+ *
+ * `PENDIENTE_REVISION` no cuenta como por vencer: un pago en revisión pausa el cobro.
+ */
+function condicionCuotaPorVencer(ahora: Date) {
+  const limite = new Date(ahora.getTime() + DIAS_VENTANA_POR_VENCER * MS_POR_DIA);
+  return or(
+    eq(cuotasMembresia.estado, EstadoCuota.POR_VENCER),
+    and(
+      inArray(cuotasMembresia.estado, [EstadoCuota.EMITIDA, EstadoCuota.ABONADA_PARCIAL]),
+      gt(cuotasMembresia.saldoPendienteUsd, '0'),
+      gte(cuotasMembresia.fechaCorteUtc, ahora),
+      lte(cuotasMembresia.fechaCorteUtc, limite)
     )
   )!;
 }
@@ -881,9 +918,10 @@ export class AlumnosService {
   }
 
   /**
-   * WU25a/WU23: conjuntos de alumnos por semáforo de pago con dos consultas en lote:
+   * WU25a/WU23/WU-H: conjuntos de alumnos por semáforo de pago con tres consultas en lote:
    * 1. `enMora`: alumnos con al menos una cuota que cumple `condicionCuotaEnMora`.
-   * 2. `conCuota`: alumnos con al menos una cuota no anulada (vigente o vencida).
+   * 2. `porVencer`: alumnos con al menos una cuota que cumple `condicionCuotaPorVencer`.
+   * 3. `conCuota`: alumnos con al menos una cuota no anulada (vigente o vencida).
    *
    * Sin `alumnoUsuarioIds` cubre la cartera completa del coach (filtro server-side); con la
    * lista de la página, solo esos alumnos (hidratación por fila, sin N+1).
@@ -891,14 +929,14 @@ export class AlumnosService {
   private async calcularConjuntosSemaforoPago(
     entrenadorId: string,
     alumnoUsuarioIds?: string[]
-  ): Promise<{ enMora: Set<string>; conCuota: Set<string> }> {
+  ): Promise<{ enMora: Set<string>; porVencer: Set<string>; conCuota: Set<string> }> {
     const ahora = new Date();
     const filtroAlumnos =
       alumnoUsuarioIds && alumnoUsuarioIds.length > 0
         ? inArray(cuotasMembresia.clienteId, alumnoUsuarioIds)
         : undefined;
 
-    const [filasMorosas, filasConCuota] = await Promise.all([
+    const [filasMorosas, filasPorVencer, filasConCuota] = await Promise.all([
       this.db
         .select({ clienteId: cuotasMembresia.clienteId })
         .from(cuotasMembresia)
@@ -916,6 +954,16 @@ export class AlumnosService {
           and(
             eq(cuotasMembresia.entrenadorId, entrenadorId),
             filtroAlumnos,
+            condicionCuotaPorVencer(ahora)
+          )
+        ),
+      this.db
+        .select({ clienteId: cuotasMembresia.clienteId })
+        .from(cuotasMembresia)
+        .where(
+          and(
+            eq(cuotasMembresia.entrenadorId, entrenadorId),
+            filtroAlumnos,
             ne(cuotasMembresia.estado, EstadoCuota.ANULADA)
           )
         ),
@@ -923,6 +971,7 @@ export class AlumnosService {
 
     return {
       enMora: new Set(filasMorosas.map((fila) => fila.clienteId)),
+      porVencer: new Set(filasPorVencer.map((fila) => fila.clienteId)),
       conCuota: new Set(filasConCuota.map((fila) => fila.clienteId)),
     };
   }
@@ -937,17 +986,18 @@ export class AlumnosService {
    * Reutiliza `calcularConjuntosSemaforoPago` (misma condición de mora que el resumen) limitado a
    * los `usuarioId` de la página, para no traer las cuotas de toda la cartera:
    * 1. `moroso`: tiene al menos una cuota que cumple la condición de mora.
-   * 2. `al_dia`: tiene al menos una cuota no anulada que no está en mora.
-   * 3. `sin_cuota`: no tiene ninguna cuota registrada (ni vigente ni vencida).
+   * 2. `por_vencer`: no está en mora y tiene una cuota impaga a ≤5 días del corte (WU-H).
+   * 3. `al_dia`: tiene al menos una cuota no anulada que no está en mora ni por vencer.
+   * 4. `sin_cuota`: no tiene ninguna cuota registrada (ni vigente ni vencida).
    */
   private async hidratarSemaforoPago(
     entrenadorId: string,
     alumnoUsuarioIds: string[]
-  ): Promise<Map<string, 'al_dia' | 'moroso' | 'sin_cuota'>> {
-    const semaforos = new Map<string, 'al_dia' | 'moroso' | 'sin_cuota'>();
+  ): Promise<Map<string, 'al_dia' | 'por_vencer' | 'moroso' | 'sin_cuota'>> {
+    const semaforos = new Map<string, 'al_dia' | 'por_vencer' | 'moroso' | 'sin_cuota'>();
     if (alumnoUsuarioIds.length === 0) return semaforos;
 
-    const { enMora, conCuota } = await this.calcularConjuntosSemaforoPago(
+    const { enMora, porVencer, conCuota } = await this.calcularConjuntosSemaforoPago(
       entrenadorId,
       alumnoUsuarioIds
     );
@@ -955,7 +1005,13 @@ export class AlumnosService {
     for (const usuarioId of alumnoUsuarioIds) {
       semaforos.set(
         usuarioId,
-        enMora.has(usuarioId) ? 'moroso' : conCuota.has(usuarioId) ? 'al_dia' : 'sin_cuota'
+        enMora.has(usuarioId)
+          ? 'moroso'
+          : porVencer.has(usuarioId)
+          ? 'por_vencer'
+          : conCuota.has(usuarioId)
+          ? 'al_dia'
+          : 'sin_cuota'
       );
     }
 

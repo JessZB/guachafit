@@ -16,6 +16,9 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.690.0",
     "@aws-sdk/s3-request-presigner": "^3.690.0",
+    "@bull-board/api": "^9.10.1",
+    "@bull-board/express": "^9.10.1",
+    "@bull-board/nestjs": "^9.10.1",
     "@guachafit/database": "workspace:*",
     "@guachafit/shared": "workspace:*",
     "@nestjs/bullmq": "^11.0.0",

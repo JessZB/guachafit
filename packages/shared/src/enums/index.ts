@@ -109,6 +109,11 @@ export enum ModuloUpload {
 export enum EstadoCuota {
   EMITIDA = 'emitida',
   ABONADA_PARCIAL = 'abonada_parcial',
+  /**
+   * RF-008 §4.A: faltan entre 5 y 1 días para `fecha_corte_utc` y la cuota no está saldada.
+   * El barrido diario (WU-H) es el único productor real de este estado en producción.
+   */
+  POR_VENCER = 'por_vencer',
   AL_DIA = 'al_dia',
   PENDIENTE_REVISION = 'pendiente_revision',
   VENCIDA = 'vencida',

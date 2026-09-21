@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
+import { RequestMethod } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from '@nestjs/common';
@@ -8,8 +9,12 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 
-  // Global Route Prefix
-  app.setGlobalPrefix('api/v1');
+  // Global Route Prefix. `/admin/queues` (Bull-Board, ADR-008 §4.4) queda EXCLUIDO del prefijo
+  // para montarse exactamente en la ruta administrativa documentada; su protección vive en el
+  // middleware de BullBoardModule (Basic Auth por env o 404 si no hay credenciales).
+  app.setGlobalPrefix('api/v1', {
+    exclude: [{ path: 'admin/queues', method: RequestMethod.ALL }],
+  });
 
   // Enable CORS
   app.enableCors({

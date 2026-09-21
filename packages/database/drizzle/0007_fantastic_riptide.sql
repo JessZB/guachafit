@@ -1,0 +1,1 @@
+ALTER TYPE "enum_estado_cuota" ADD VALUE 'por_vencer';
