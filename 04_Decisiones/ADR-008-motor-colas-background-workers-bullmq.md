@@ -53,10 +53,10 @@ Elegimos la **Opción C: Redis 7+ con BullMQ integrado mediante el módulo ofici
                     │
    Calcula timestamps UTC exactos (T-5, T-1, T, T+2)
                     │
-                    ├── Agenda Job (T-5): jobId = "cuota_{id}_T-5", delay = deltaMs
-                    ├── Agenda Job (T-1): jobId = "cuota_{id}_T-1", delay = deltaMs
-                    ├── Agenda Job (T):   jobId = "cuota_{id}_T-0", delay = deltaMs
-                    └── Agenda Job (T+2): jobId = "cuota_{id}_T+2", delay = deltaMs
+                    ├── Agenda Job (T-5): jobId = "cuota_{id}_hito_T_MINUS_5", delay = deltaMs
+                    ├── Agenda Job (T-1): jobId = "cuota_{id}_hito_T_MINUS_1", delay = deltaMs
+                    ├── Agenda Job (T):   jobId = "cuota_{id}_hito_T_ZERO",   delay = deltaMs
+                    └── Agenda Job (T+2): jobId = "cuota_{id}_hito_T_PLUS_2", delay = deltaMs
                     │
                     ▼
            [Redis BullMQ Queue] ──── (Espera pasiva en memoria)
@@ -74,15 +74,16 @@ Elegimos la **Opción C: Redis 7+ con BullMQ integrado mediante el módulo ofici
 1. **Estructura de Identificadores de Job Determinísticos:**
    Todo trabajo diferido encolado en BullMQ tiene un `jobId` predecible:
    ```
-   cuota:{cuotaId}:hito:{T_MINUS_5 | T_MINUS_1 | T_ZERO | T_PLUS_2}
+   cuota_{cuotaId}_hito_{T_MINUS_5 | T_MINUS_1 | T_ZERO | T_PLUS_2}
    ```
    Esto garantiza que, si por alguna razón se re-emite el evento o se reintenta la operación, BullMQ descarte automáticamente el job duplicado.
+   > **Nota (verificada empíricamente):** el separador real es `_`, no `:`. BullMQ 5.x rechaza todo `jobId` personalizado que contenga `:` salvo que tenga exactamente 3 segmentos (`Custom Id cannot contain :`), comprobado contra el Redis real del proyecto. El id sigue siendo determinista: deduplica re-emisiones y permite cancelar por id exacto.
 2. **Cancelación ante Pago Aprobado (`CuotaLiquidadaEvent`):**
    Cuando un pago es conciliado y el saldo pendiente llega a cero (`saldo_pendiente_usd == 0.00`), el manejador del evento ejecuta:
    ```typescript
-   await billingQueue.remove(`cuota:${cuotaId}:hito:T_MINUS_1`);
-   await billingQueue.remove(`cuota:${cuotaId}:hito:T_ZERO`);
-   await billingQueue.remove(`cuota:${cuotaId}:hito:T_PLUS_2`);
+   await billingQueue.remove(`cuota_${cuotaId}_hito_T_MINUS_1`);
+   await billingQueue.remove(`cuota_${cuotaId}_hito_T_ZERO`);
+   await billingQueue.remove(`cuota_${cuotaId}_hito_T_PLUS_2`);
    ```
 3. **Reintentos y Resiliencia:** Cada worker de notificación está configurado con 3 reintentos y política de retroceso exponencial (`backoff: { type: 'exponential', delay: 5000 }`) para tolerar caídas momentáneas de proveedores de mensajería.
 4. **Dashboard de Observabilidad:** Se monta **Bull-Board** en una ruta administrativa protegida (`/admin/queues`) para que el equipo de soporte técnico monitoree trabajos activos, fallidos y en espera.

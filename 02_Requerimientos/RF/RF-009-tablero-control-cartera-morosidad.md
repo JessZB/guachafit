@@ -3,7 +3,7 @@ id: RF-009
 modulo: Finanzas
 prioridad: alta
 estado: aprobado
-estado_implementacion: no implementado
+estado_implementacion: implementado
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -110,7 +110,18 @@ Then el sistema debe crear una transacción con estado "Aprobado"
 
 ## 7. Estado real de implementación
 
-- El tablero de control de cartera no existe como pantalla; solo hay fragmentos de consultas y datos financieros.
-- Resuelto (2026-09-21): KPI-01 "Total Recaudado en el Mes" ahora se delimita al mes UTC en curso (pagos aprobados por fecha efectiva de cobro); ya no suma el histórico. El KPI vive en el dashboard del entrenador (ver [[RF-013-dashboard-comando-entrenador-kpis]]).
-- KPI-03 (clientes próximos a vencer) ausente.
-- Sin tabla segmentada por pestañas ni acciones rápidas de cobranza (cobro en efectivo, recordatorio manual).
+**Implementado (verificado 2026-09-21):**
+
+- Endpoint `GET /finanzas/cartera` (rol Entrenador; `entrenadorId` sale del token): KPIs del mes + lista paginada de la pestaña activa (`mora` | `por_vencer` | `revision` | `al_dia`), búsqueda server-side por nombre y aislamiento de tenant en todas las consultas.
+- KPIs con sumas reales de PostgreSQL (calculados sobre la cartera completa, nunca sobre la página cargada): recaudado del mes UTC en curso, total y alumnos en mora, total y próximos a vencer, y pagos por validar.
+- Orden por urgencia: `MIN(fecha_corte_utc)` ascendente — días de atraso descendente en "En Mora" y vencimiento más próximo en "Próximos a Vencer" — con desempate por `cliente_id` para paginación estable.
+- Página **"Control de Cobros"** (`apps/web/src/pages/entrenador/CarteraPage.tsx`) con las 4 pestañas con contadores, búsqueda, paginación y estados vacíos honestos por pestaña.
+- RN-01 (Registro Directo de Efectivo): modal por fila (monto, moneda USD/Bs., fecha) que dispara el cobro directo auto-aprobado y recarga el saldo al confirmar.
+- RN-02 (Recordatorio Manual Un-Clic): despacho por notificaciones (categoría FINANZAS, in-app garantizada) con el saldo exacto en USD y proyección en Bs. a tasa real; cooldown anti-spam de 6 h entre recordatorios manuales (no afecta a los automáticos de RF-008), pausa si hay pago en revisión y motivo honesto si no hay saldo; copia del texto y enlace a WhatsApp.
+- KPI-01 del dashboard ([[RF-013-dashboard-comando-entrenador-kpis]]): corregido — se delimita al mes UTC en curso con `fecha_conciliacion_utc` (fallback `fecha_reporte_utc`) y cast explícito `::timestamptz` en los límites, que evita el fallo real del driver al enviar `Date` dentro de SQL crudo.
+
+**Matices honestos (verificados):**
+
+- **Unidades mezcladas en los contadores:** "En Mora" y "Próximos a Vencer" cuentan ALUMNOS (`count(distinct cliente_id)`), "Pendiente de Revisión" cuenta PAGOS y "Al Día" cuenta CUOTAS del periodo. No son magnitudes sumables entre sí, y el contador de "Al Día" puede repetir alumno si tiene dos planes cubiertos.
+- **Pestaña "Próximos a Vencer" y mensaje manual:** esa pestaña ofrece Recordatorio / Registrar cobro / Ver ficha, pero NO "Ver Historial de Pagos" (§4.B lo lista). Además, el mensaje manual no incluye los datos bancarios del coach porque no están persistidos en el modelo; el compositor no los inventa (queda pendiente el modelo de datos).
+- La "Próxima fecha de facturación" de la tabla §4.B no existe como dato persistido: la columna muestra el corte real del ciclo ya cubierto, sin inventar una fecha futura.

@@ -4,7 +4,7 @@ modulo: Finanzas
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-20
+fecha_verificacion: 2026-09-21
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -96,6 +96,8 @@ Then el monto total a pagar debe ser exactamente de $40.00 USD
 
 - Catálogo de planes y override existen a nivel de API.
 - Resuelto (2026-09-21): la UI ya no inventa un "Plan Estándar" para alumnos sin plan; muestra "Sin plan asignado" (`apps/web/src/pages/entrenador/AlumnosPage.tsx`).
-- Sin UI funcional de override: los campos quedan muertos y la interfaz espera campos que la API no hidrata.
-- Sin precedencia de override al emitir la cuota (RN-03 no aplica en el flujo real).
-- Sin soporte del estado `Becado / $0` para override con precio cero (caso borde).
+- Resuelto (2026-09-21, WU-J): contrato de override completo — `GET /finanzas/planes/override?clienteId=` (listado por coach y por alumno, hidratado con nombre de plan, precio base y nombre del cliente) y `DELETE /finanzas/planes/override/:id` (quita el override y limpia la tasa sincronizada del alumno). Se retiró `ActualizarOverridePlanSchema` (huérfano): el upsert `POST` acepta `null` explícito para limpiar precio/tasa.
+- Resuelto (2026-09-21, WU-J): precedencia RN-03 real al emitir cuota — `emitirCuota` resuelve `precio_acordado_usd` del override del alumno > `precio_base_usd` del plan del catálogo; el monto del DTO quedó como contrato legado opcional que ya NO decide el monto.
+- Resuelto (2026-09-21, WU-J): estado `Becado / $0` — un override de precio 0.00 emite la cuota por $0.00 en estado `al_dia`, sin recordatorios de cobro (RF-005 §6). RN-01 exige precio base > 0.00 en el catálogo (el becado se expresa con override, nunca con un plan de $0).
+- Resuelto (2026-09-21, WU-J): la API hidrata `planActivoId`, `planActivoNombre` y `precioAcordadoOverride` (override vigente o, en su defecto, plan de la última cuota) en el directorio y en el expediente del alumno; la ficha permite asignar plan, fijar precio acordado y tasa especial, ver el override vigente y quitarlo con feedback honesto (solo 2xx).
+- Pendiente: editor de `beneficiosPersonalizados` en la UI (la API los persiste y los devuelve, pero la ficha no los edita) y selección de "fuente de cambio particular" por cliente (hoy la tasa especial es un valor fijo).

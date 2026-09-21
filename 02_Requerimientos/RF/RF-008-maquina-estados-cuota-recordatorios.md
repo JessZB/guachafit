@@ -103,7 +103,19 @@ Then el estado de la cuota debe transicionar a "Vencida / En Mora"
 
 ## 7. Estado real de implementación
 
-- Recordatorios T-5, T-1, Día T y T+2 inexistentes: cero crons de cobranza implementados.
-- Corte diario y renovaciones automáticas ausentes.
-- El estado `Por Vencer` no existe en la implementación.
-- La máquina de estados solo vive en el simulador de tests, no opera en producción.
+**Resuelto (verificado 2026-09-21):**
+
+- Recordatorios T-5, T-1, Día T y T+2: colas BullMQ ([[ADR-008-motor-colas-background-workers-bullmq]]) con los 4 hitos agendados contra `fecha_corte_utc` al emitirse la cuota; los hitos ya vencidos se omiten (nunca se envía un mensaje con fechas incorrectas). El procesador reverifica el estado real en PostgreSQL antes de despachar, pausa si hay pago en revisión (Gherkin 2) y adapta el T+2 al caso de abono parcial (§6).
+- Cancelación al liquidar: cuando el pago conciliado deja el saldo en $0.00 se eliminan los jobs futuros por `jobId`; es best-effort posterior al commit (un fallo de Redis no revierte el pago).
+- Barrido diario repetible e idempotente (`upsertJobScheduler`, cron UTC 09:00 configurable por env) para todos los tenants: transiciona a `VENCIDA` cuando el corte ya pasó y a `POR_VENCER` dentro de la ventana de 5 días, sin degradar cuotas anuladas, saldadas ni pendientes de revisión.
+- Migración `0007`: `ALTER TYPE enum_estado_cuota ADD VALUE 'por_vencer'` — el estado `Por Vencer` ya existe en la base real.
+- Semáforo: `POR_VENCER` es preventivo (ámbar) y nunca cuenta como mora; la regla única de mora lo excluye y el dashboard lo mantiene fuera de "Alumnos en Mora".
+- Recordatorio manual un clic (RF-009 RN-02): despacho inmediato con cooldown anti-spam, independiente del cronograma automático.
+
+**Pendiente:**
+
+- Renovación automática de periodo / avance de corte: no definida en este RF. El barrido no inventa un nuevo periodo: `VENCIDA` persiste con la misma `fecha_corte_utc` y el saldo acumulado hasta que un pago la liquide o un humano la anule.
+
+**Nota técnica verificada — formato de `jobId`:**
+
+El ADR-008 §3.1 documentaba `cuota:{cuotaId}:hito:{HITO}`, pero la implementación real usa `cuota_{cuotaId}_hito_{T_MINUS_5 | T_MINUS_1 | T_ZERO | T_PLUS_2}`. El porqué: BullMQ 5.x rechaza todo `jobId` personalizado que contenga `:` salvo que tenga exactamente 3 segmentos (`Custom Id cannot contain :`), verificado empíricamente contra el Redis real del proyecto. Con `_` el id sigue siendo determinista: deduplica re-emisiones y permite cancelar por id exacto.
