@@ -5,16 +5,11 @@ import {
   WithTenantFn,
   eq,
   and,
-  or,
-  lt,
-  gt,
   lte,
-  notInArray,
   isNull,
   inArray,
   desc,
   gte,
-  sql,
   perfilesEntrenador,
   perfilesAlumno,
   transaccionesPago,
@@ -28,12 +23,17 @@ import {
   DashboardComandoDTO,
   EstadoAlumno,
   EstadoConciliacion,
-  EstadoCuota,
   EstadoMedicion,
   EstadoSesion,
   PerfilEntrenadorDTO,
   SemaforoAdherencia,
 } from '@guachafit/shared';
+import {
+  calcularDiasAtraso,
+  calcularRecaudadoMesUsd,
+  calcularVentanaMesUtc,
+  condicionCuotaEnMora,
+} from '../../common/cartera.util';
 import {
   calcularVentanaSemana,
   contarBloquesPrescritosHasta,
@@ -45,23 +45,11 @@ import {
 /**
  * Ventana del mes calendario en UTC para los KPIs financieros del dashboard (RF-013).
  *
- * El resto del dashboard ya usa UTC como referencia (p. ej. `periodoActual` de las cuotas), así
- * que "Cobros del Mes" se delimita con el mismo criterio: [inicio de mes UTC, inicio del mes
- * siguiente UTC). Nunca se suma el histórico completo de pagos aprobados.
+ * Definida en `common/cartera.util` (WU-I) para que el dashboard y el tablero de cartera usen
+ * EXACTAMENTE el mismo criterio; se re-exporta aquí por compatibilidad con los consumidores
+ * históricos (`rf013-dashboard-comando.spec.ts`).
  */
-export function calcularVentanaMesUtc(ahora: Date): {
-  periodoActual: string;
-  inicioMesUtc: Date;
-  inicioMesSiguienteUtc: Date;
-} {
-  const anio = ahora.getUTCFullYear();
-  const mes = ahora.getUTCMonth();
-  return {
-    periodoActual: `${anio}-${String(mes + 1).padStart(2, '0')}`,
-    inicioMesUtc: new Date(Date.UTC(anio, mes, 1)),
-    inicioMesSiguienteUtc: new Date(Date.UTC(anio, mes + 1, 1)),
-  };
-}
+export { calcularVentanaMesUtc };
 
 @Injectable()
 export class EntrenadorService {
@@ -145,29 +133,10 @@ export class EntrenadorService {
 
     // 3. Métricas Financieras (Cobranza Mes y Meta)
     //    "Cobros del Mes" = SOLO pagos aprobados del mes en curso (UTC), con la fecha real de
-    //    entrada del dinero: `fechaConciliacionUtc` y, para filas legadas sin ella, la fecha
-    //    de reporte. Antes se sumaba el histórico completo, inflando el KPI.
-    //    `coalesce` se expresa con SQL: no existe como helper en drizzle-orm 0.33.
-    const fechaCobroEfectiva = sql`coalesce(${transaccionesPago.fechaConciliacionUtc}, ${transaccionesPago.fechaReporteUtc})`;
-    const pagosAprobados = await this.db
-      .select({
-        montoEquivalenteUsd: transaccionesPago.montoEquivalenteUsd,
-      })
-      .from(transaccionesPago)
-      .where(
-        and(
-          eq(transaccionesPago.entrenadorId, coachId),
-          eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.APROBADO),
-          gte(fechaCobroEfectiva, inicioMesUtc),
-          lt(fechaCobroEfectiva, inicioMesSiguienteUtc)
-        )
-      );
-
-    const totalCobradoUsd = pagosAprobados.reduce(
-      (acc, p) => acc + Number(p.montoEquivalenteUsd || 0),
-      0
-    );
-    const cobranzaMesUsd = totalCobradoUsd.toFixed(2);
+    //    entrada del dinero. La suma vive en `common/cartera.util` para que el tablero de
+    //    cartera (RF-009 KPI-01) y este dashboard no divergan.
+    const ventanaMes = { inicioMesUtc, inicioMesSiguienteUtc };
+    const cobranzaMesUsd = await calcularRecaudadoMesUsd(this.db, coachId, ventanaMes);
 
     const cuotasPeriodo = await this.db
       .select({
@@ -315,6 +284,8 @@ export class EntrenadorService {
     }
 
     // 5.3 Alumnos en Mora
+    //     WU-I: regla ÚNICA compartida (`condicionCuotaEnMora`). POR_VENCER es preventivo (ámbar),
+    //     nunca mora, y PENDIENTE_REVISION pausa la mora mientras el comprobante está en revisión.
     const cuotasMora = await this.db
       .select({
         id: cuotasMembresia.id,
@@ -327,33 +298,13 @@ export class EntrenadorService {
       .where(
         and(
           eq(cuotasMembresia.entrenadorId, coachId),
-          or(
-            eq(cuotasMembresia.estado, EstadoCuota.VENCIDA),
-            and(
-              lt(cuotasMembresia.fechaCorteUtc, now),
-              gt(cuotasMembresia.saldoPendienteUsd, '0'),
-              // WU-H: misma regla única que el directorio (`condicionCuotaEnMora`): POR_VENCER
-              // es preventivo (ámbar), nunca mora; el barrido diario lo degrada a VENCIDA
-              // cuando la fecha de corte realmente pasa.
-              notInArray(cuotasMembresia.estado, [
-                EstadoCuota.AL_DIA,
-                EstadoCuota.ANULADA,
-                EstadoCuota.POR_VENCER,
-              ])
-            )
-          )
+          condicionCuotaEnMora(now)
         )
       );
 
     const alumnosEnMora = cuotasMora.map((c) => {
       const al = alumnos.find((a) => a.usuarioId === c.clienteId);
-      const diasVencido = Math.max(
-        1,
-        Math.round(
-          (now.getTime() - new Date(c.fechaCorteUtc).getTime()) /
-            (1000 * 60 * 60 * 24)
-        )
-      );
+      const diasVencido = calcularDiasAtraso(new Date(c.fechaCorteUtc), now);
       return {
         alumnoId: al?.id || c.clienteId,
         nombre: al ? `${al.nombres} ${al.apellidos}` : 'Alumno Registrado',

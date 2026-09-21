@@ -20,6 +20,7 @@ import {
   desc,
   asc,
   ne,
+  inArray,
   sql,
   count,
   sum,
@@ -52,6 +53,7 @@ import {
   ConciliarTransaccionDTO,
   PlanMembresiaDetalleDTO,
   OverridePlanDetalleDTO,
+  EliminarOverridePlanResultadoDTO,
   CuotaDetalleDTO,
   TransaccionPagoDetalleDTO,
   BandejaConciliacionDTO,
@@ -189,7 +191,11 @@ export class FinanzasService {
     }
   }
 
-  private async resolverComprobanteUrl(storageKey?: string | null): Promise<string | null> {
+  /**
+   * WU-I: público para que el servicio de cartera reutilice la MISMA resolución de comprobantes
+   * (presigned URL con TTL, `null` honesto si R2 no está configurado o falla).
+   */
+  async resolverComprobanteUrl(storageKey?: string | null): Promise<string | null> {
     if (!storageKey || !this.r2StorageService) return null;
     try {
       return await this.r2StorageService.generarPresignedGetUrl(storageKey, 900);
@@ -584,14 +590,25 @@ export class FinanzasService {
     const nowUtc = new Date();
 
     if (existente) {
+      // Semántica de upsert (RF-005 RN-02): `undefined` conserva el valor vigente; `null`
+      // explícito lo limpia (p. ej. quitar el precio acordado para volver al precio del plan).
       [override] = await this.db
         .update(overridesClientePlan)
         .set({
-          precioAcordadoUsd: dto.precioAcordadoUsd ?? existente.precioAcordadoUsd,
-          tasaFijadaOverride: dto.tasaFijadaOverride ?? existente.tasaFijadaOverride,
+          precioAcordadoUsd:
+            dto.precioAcordadoUsd !== undefined
+              ? dto.precioAcordadoUsd
+              : existente.precioAcordadoUsd,
+          tasaFijadaOverride:
+            dto.tasaFijadaOverride !== undefined
+              ? dto.tasaFijadaOverride
+              : existente.tasaFijadaOverride,
           beneficiosPersonalizados:
-            dto.beneficiosPersonalizados ?? existente.beneficiosPersonalizados,
-          motivoOverride: dto.motivoOverride ?? existente.motivoOverride,
+            dto.beneficiosPersonalizados !== undefined
+              ? dto.beneficiosPersonalizados
+              : existente.beneficiosPersonalizados,
+          motivoOverride:
+            dto.motivoOverride !== undefined ? dto.motivoOverride : existente.motivoOverride,
           updatedAtUtc: nowUtc,
         })
         .where(eq(overridesClientePlan.id, existente.id))
@@ -602,25 +619,32 @@ export class FinanzasService {
         .values({
           planId: dto.planId,
           clienteId: clienteUsuarioId,
-          precioAcordadoUsd: dto.precioAcordadoUsd || null,
-          tasaFijadaOverride: dto.tasaFijadaOverride || null,
-          beneficiosPersonalizados: dto.beneficiosPersonalizados || null,
-          motivoOverride: dto.motivoOverride || null,
+          precioAcordadoUsd: dto.precioAcordadoUsd ?? null,
+          tasaFijadaOverride: dto.tasaFijadaOverride ?? null,
+          beneficiosPersonalizados: dto.beneficiosPersonalizados ?? null,
+          motivoOverride: dto.motivoOverride ?? null,
           createdAtUtc: nowUtc,
           updatedAtUtc: nowUtc,
         })
         .returning();
     }
 
-    // Si se fijó una tasa override, actualizar también perfilesAlumno para cálculo global del alumno
-    if (dto.tasaFijadaOverride) {
+    // ADR-003 §3.2 / RF-005 RN-02: la tasa especial del alumno vive en `perfiles_alumno`
+    // (`tasa_fijada_override`) para que TODAS las operaciones bimonetarias la usen. El override
+    // del plan la sincroniza; un `null` explícito la limpia y el alumno vuelve a la tasa global.
+    if (dto.tasaFijadaOverride !== undefined) {
       await this.db
         .update(perfilesAlumno)
         .set({
           tasaFijadaOverride: dto.tasaFijadaOverride,
           updatedAtUtc: nowUtc,
         })
-        .where(eq(perfilesAlumno.usuarioId, clienteUsuarioId));
+        .where(
+          and(
+            eq(perfilesAlumno.usuarioId, clienteUsuarioId),
+            eq(perfilesAlumno.entrenadorId, entrenadorId)
+          )
+        );
     }
 
     return {
@@ -631,8 +655,172 @@ export class FinanzasService {
       tasaFijadaOverride: override.tasaFijadaOverride,
       beneficiosPersonalizados: (override.beneficiosPersonalizados as string[]) || null,
       motivoOverride: override.motivoOverride,
+      planNombre: plan.nombre,
+      planPrecioBaseUsd: plan.precioBaseUsd,
+      clienteNombre: `${alumno.nombres} ${alumno.apellidos}`.trim(),
       createdAtUtc: override.createdAtUtc.toISOString(),
       updatedAtUtc: override.updatedAtUtc.toISOString(),
+    };
+  }
+
+  /**
+   * Listado de overrides del catálogo (RF-005 RN-02).
+   *
+   * - Sin `clienteId`: todos los overrides de la cartera del entrenador (soporta la UI de
+   *   catálogo/planes).
+   * - Con `clienteId` (usuarioId o perfilId): solo los del alumno, validando que pertenezca a
+   *   su cartera (404 uniforme si no existe o es de otro coach — aislamiento multi-tenant).
+   *
+   * El aislamiento se garantiza filtrando por los planes del propio entrenador: un override
+   * solo existe si su plan es del catálogo del coach autenticado.
+   */
+  async listarOverrides(entrenadorId: string, clienteId?: string): Promise<OverridePlanDetalleDTO[]> {
+    const planes = await this.db
+      .select({
+        id: planesMembresia.id,
+        nombre: planesMembresia.nombre,
+        precioBaseUsd: planesMembresia.precioBaseUsd,
+      })
+      .from(planesMembresia)
+      .where(eq(planesMembresia.entrenadorId, entrenadorId));
+
+    if (planes.length === 0) return [];
+    const planesPorId = new Map(planes.map((plan) => [plan.id, plan]));
+
+    let clienteUsuarioId: string | undefined;
+    if (clienteId) {
+      clienteUsuarioId = await this.resolveClienteUsuarioId(clienteId);
+      const [alumno] = await this.db
+        .select({ id: perfilesAlumno.id })
+        .from(perfilesAlumno)
+        .where(
+          and(
+            eq(perfilesAlumno.usuarioId, clienteUsuarioId),
+            eq(perfilesAlumno.entrenadorId, entrenadorId)
+          )
+        );
+
+      if (!alumno) {
+        throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
+      }
+    }
+
+    const whereOverrides = clienteUsuarioId
+      ? and(
+          inArray(
+            overridesClientePlan.planId,
+            planes.map((plan) => plan.id)
+          ),
+          eq(overridesClientePlan.clienteId, clienteUsuarioId)
+        )
+      : inArray(
+          overridesClientePlan.planId,
+          planes.map((plan) => plan.id)
+        );
+
+    const overrides = await this.db
+      .select()
+      .from(overridesClientePlan)
+      .where(whereOverrides)
+      .orderBy(desc(overridesClientePlan.updatedAtUtc), desc(overridesClientePlan.id));
+
+    if (overrides.length === 0) return [];
+
+    const clienteIds = [...new Set(overrides.map((o) => o.clienteId))];
+    const alumnos = await this.db
+      .select({
+        usuarioId: perfilesAlumno.usuarioId,
+        nombres: perfilesAlumno.nombres,
+        apellidos: perfilesAlumno.apellidos,
+      })
+      .from(perfilesAlumno)
+      .where(
+        and(
+          inArray(perfilesAlumno.usuarioId, clienteIds),
+          eq(perfilesAlumno.entrenadorId, entrenadorId)
+        )
+      );
+    const nombresPorUsuario = new Map(
+      alumnos.map((alumno) => [
+        alumno.usuarioId,
+        `${alumno.nombres} ${alumno.apellidos}`.trim(),
+      ])
+    );
+
+    return overrides.map((o) => {
+      const plan = planesPorId.get(o.planId);
+      return {
+        id: o.id,
+        planId: o.planId,
+        clienteId: o.clienteId,
+        precioAcordadoUsd: o.precioAcordadoUsd,
+        tasaFijadaOverride: o.tasaFijadaOverride,
+        beneficiosPersonalizados: (o.beneficiosPersonalizados as string[]) || null,
+        motivoOverride: o.motivoOverride,
+        planNombre: plan?.nombre ?? null,
+        planPrecioBaseUsd: plan?.precioBaseUsd ?? null,
+        clienteNombre: nombresPorUsuario.get(o.clienteId) ?? null,
+        createdAtUtc: toIsoSafe(o.createdAtUtc),
+        updatedAtUtc: toIsoSafe(o.updatedAtUtc),
+      };
+    });
+  }
+
+  /**
+   * Elimina un override individual (RF-005 RN-02): el alumno vuelve a heredar los valores del
+   * plan del catálogo. La verificación de tenancy se hace contra el plan dueño del override.
+   *
+   * Si la tasa global del alumno (`perfiles_alumno.tasa_fijada_override`) coincidía con la tasa
+   * de este override, se limpia junto con él para no dejar una tasa huérfana aplicándose en
+   * operaciones bimonetarias (ADR-003 §3.2). Una tasa fijada manualmente distinta se conserva.
+   */
+  async eliminarOverride(
+    entrenadorId: string,
+    overrideId: string
+  ): Promise<EliminarOverridePlanResultadoDTO> {
+    const [override] = await this.db
+      .select()
+      .from(overridesClientePlan)
+      .where(eq(overridesClientePlan.id, overrideId))
+      .limit(1);
+
+    if (!override) {
+      throw new NotFoundException('Override no encontrado.');
+    }
+
+    const [plan] = await this.db
+      .select()
+      .from(planesMembresia)
+      .where(eq(planesMembresia.id, override.planId))
+      .limit(1);
+
+    if (!plan || plan.entrenadorId !== entrenadorId) {
+      throw new ForbiddenException(
+        'Aislamiento de Tenant: Acceso denegado a overrides de otro entrenador.'
+      );
+    }
+
+    await this.db
+      .delete(overridesClientePlan)
+      .where(eq(overridesClientePlan.id, overrideId));
+
+    if (override.tasaFijadaOverride) {
+      await this.db
+        .update(perfilesAlumno)
+        .set({ tasaFijadaOverride: null, updatedAtUtc: new Date() })
+        .where(
+          and(
+            eq(perfilesAlumno.usuarioId, override.clienteId),
+            eq(perfilesAlumno.entrenadorId, entrenadorId),
+            eq(perfilesAlumno.tasaFijadaOverride, override.tasaFijadaOverride)
+          )
+        );
+    }
+
+    return {
+      id: overrideId,
+      eliminado: true,
+      mensaje: `Override de ${plan.nombre} eliminado: el alumno vuelve a los valores del catálogo.`,
     };
   }
 
@@ -641,8 +829,9 @@ export class FinanzasService {
   // ===========================================================================
 
   async emitirCuota(entrenadorId: string, dto: EmitirCuotaDTO): Promise<CuotaDetalleDTO> {
-    // Validar monto positivo
-    if (toCents(dto.montoTotalUsd) <= 0) {
+    // Contrato legado: si un cliente aún envía un monto explícito, debe ser > 0.00. El monto
+    // real de la cuota NO se toma de aquí (RF-005 RN-03, ver resolución tras validar el plan).
+    if (dto.montoTotalUsd !== undefined && toCents(dto.montoTotalUsd) <= 0) {
       throw new BadRequestException('El monto total de la cuota debe ser estrictamente mayor a 0.00 USD.');
     }
 
@@ -693,8 +882,47 @@ export class FinanzasService {
       );
     }
 
-    // Al emitir: montoAbonadoUsd = 0.00, saldoPendienteUsd = montoTotalUsd (Invariante RNF-002)
-    const montoTotal = dto.montoTotalUsd;
+    // -------------------------------------------------------------------------
+    // RF-005 RN-03 (Precedencia de Valores) — corazón de este requerimiento:
+    // "Al generarse una nueva cuota para un cliente, el sistema evalúa: si existe un Override
+    //  activo para ese cliente, toma sus valores; en caso contrario, toma los valores por
+    //  defecto del plan estándar del catálogo."
+    // Orden exacto aplicado:
+    //   1. `precio_acordado_usd` del override del alumno para ESTE plan (si existe y no es null).
+    //      Un override de 0.00 es legítimo: becado/intercambio (RF-005 §6) y la cuota nace
+    //      saldada en estado `al_dia` (sin recordatorios de cobro).
+    //   2. `precio_base_usd` del plan del catálogo (RN-01: mayor a 0.00).
+    // Un plan sin precio base y sin override de precio no emite cuota: jamás se inventa un monto.
+    // -------------------------------------------------------------------------
+    const [override] = await this.db
+      .select()
+      .from(overridesClientePlan)
+      .where(
+        and(
+          eq(overridesClientePlan.planId, dto.planId),
+          eq(overridesClientePlan.clienteId, clienteUsuarioId)
+        )
+      );
+
+    const precioAcordado = override?.precioAcordadoUsd ?? null;
+    if (precioAcordado !== null && toCents(precioAcordado) < 0) {
+      throw new BadRequestException('El precio acordado del alumno no puede ser negativo.');
+    }
+
+    let montoTotal: string;
+    let esBecado = false;
+    if (precioAcordado !== null) {
+      // El override del alumno SIEMPRE gana sobre el precio del catálogo (RN-03), incluso en 0.00.
+      montoTotal = precioAcordado;
+      esBecado = toCents(precioAcordado) === 0;
+    } else if (toCents(plan.precioBaseUsd) > 0) {
+      montoTotal = plan.precioBaseUsd;
+    } else {
+      throw new BadRequestException(
+        'El plan no tiene un precio base mayor a 0.00. Para un alumno becado o un acuerdo de intercambio, define un override con precio acordado 0.00 (RF-005 §6).'
+      );
+    }
+
     const montoAbonado = '0.00';
     const saldoPendiente = montoTotal;
 
@@ -716,7 +944,8 @@ export class FinanzasService {
         saldoPendienteUsd: saldoPendiente,
         fechaEmisionUtc: fechaEmision,
         fechaCorteUtc: fechaCorte,
-        estado: EstadoCuota.EMITIDA,
+        // RF-005 §6: la cuota del becado nace Al Día (no hay deuda que cobrar).
+        estado: esBecado ? EstadoCuota.AL_DIA : EstadoCuota.EMITIDA,
         notas: dto.notas || null,
         createdAtUtc: nowUtc,
         updatedAtUtc: nowUtc,
@@ -725,7 +954,8 @@ export class FinanzasService {
 
     // WU-H (RF-008 §4.B / ADR-008): agenda los recordatorios T-5, T-1, T (corte) y T+2 contra
     // `fecha_corte_utc`. La cuota YA quedó emitida: un fallo de Redis no revierte la emisión.
-    if (this.billingSchedulerService) {
+    // Un becado no genera recordatorios: no hay deuda pendiente que cobrar.
+    if (this.billingSchedulerService && !esBecado) {
       try {
         await this.billingSchedulerService.programarRecordatoriosCuota({
           id: cuota.id,
@@ -762,6 +992,7 @@ export class FinanzasService {
       fechaCorteUtc: cuota.fechaCorteUtc.toISOString(),
       estado: cuota.estado,
       notas: cuota.notas,
+      esBecado,
       planNombre: plan.nombre,
       clienteNombre: `${alumno.nombres} ${alumno.apellidos}`,
       transacciones: [],
@@ -863,6 +1094,8 @@ export class FinanzasService {
       fechaCorteUtc: toIsoSafe(cuota.fechaCorteUtc),
       estado: cuota.estado,
       notas: cuota.notas,
+      // RF-005 §6: reconocible en cualquier lectura de la cuota (becado = emitida en 0.00).
+      esBecado: toCents(cuota.montoTotalUsd) === 0,
       planNombre: plan?.nombre,
       clienteNombre: alumno ? `${alumno.nombres} ${alumno.apellidos}` : undefined,
       transacciones,
@@ -1213,6 +1446,8 @@ export class FinanzasService {
         fechaCorteUtc: toIsoSafe(cuotaActualizada.fechaCorteUtc),
         estado: cuotaActualizada.estado,
         notas: cuotaActualizada.notas,
+        // RF-005 §6: una cuota emitida en 0.00 es de un becado (también en el cobro directo).
+        esBecado: toCents(cuotaActualizada.montoTotalUsd) === 0,
         createdAtUtc: toIsoSafe(cuotaActualizada.createdAtUtc),
         updatedAtUtc: toIsoSafe(cuotaActualizada.updatedAtUtc),
       };
@@ -1787,14 +2022,17 @@ export class FinanzasService {
 
     // 4. Si no hay cuota abierta, buscar plan asignado
     if (!targetCuotaId) {
-      // Buscar override de plan para este alumno
+      // Buscar el override vigente de plan para este alumno (el más reciente si hubiera más de
+      // uno; la unicidad real es por plan+cliente). El monto YA no se decide aquí: `emitirCuota`
+      // aplica RF-005 RN-03 (override del alumno > precio base del plan).
       const [override] = await this.db
         .select()
         .from(overridesClientePlan)
-        .where(eq(overridesClientePlan.clienteId, clienteUsuarioId));
+        .where(eq(overridesClientePlan.clienteId, clienteUsuarioId))
+        .orderBy(desc(overridesClientePlan.updatedAtUtc))
+        .limit(1);
 
       let planIdToUse = override?.planId;
-      let montoUsd = override?.precioAcordadoUsd;
 
       if (!planIdToUse) {
         // Buscar si tiene alguna cuota previa para identificar su plan habitual
@@ -1846,7 +2084,6 @@ export class FinanzasService {
         clienteId: clienteUsuarioId,
         planId: plan.id,
         periodo,
-        montoTotalUsd: montoUsd || plan.precioBaseUsd || dto.montoOriginal,
         fechaCorteUtc: fechaCorte,
       });
 

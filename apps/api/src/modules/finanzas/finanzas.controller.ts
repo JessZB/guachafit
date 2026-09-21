@@ -4,6 +4,7 @@ import {
   Post,
   Put,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -166,6 +167,38 @@ export class FinanzasController {
     const dto = CrearOverridePlanSchema.parse(body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.finanzasService.crearOverride(entrenadorId, dto);
+  }
+
+  /**
+   * Listar overrides del catálogo comercial (RF-005 RN-02)
+   * - Sin `clienteId`: todos los overrides de la cartera del entrenador.
+   * - Con `clienteId` (usuarioId o perfilId): solo los del alumno, con aislamiento de tenant.
+   * Rol: Entrenador
+   */
+  @Get('planes/override')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR)
+  async listarOverrides(@Req() req: any, @Query('clienteId') clienteId?: string) {
+    if (clienteId !== undefined && !UUID_REGEX.test(clienteId)) {
+      throw new BadRequestException(`El ID de cliente '${clienteId}' no es un UUID válido.`);
+    }
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    return this.finanzasService.listarOverrides(entrenadorId, clienteId || undefined);
+  }
+
+  /**
+   * Eliminar el override de un alumno (RF-005 RN-02): vuelve a heredar los valores del plan.
+   * Rol: Entrenador
+   */
+  @Delete('planes/override/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR)
+  async eliminarOverride(@Req() req: any, @Param('id') overrideId: string) {
+    if (!UUID_REGEX.test(overrideId)) {
+      throw new BadRequestException(`El ID de override '${overrideId}' no es un UUID válido.`);
+    }
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    return this.finanzasService.eliminarOverride(entrenadorId, overrideId);
   }
 
   /**

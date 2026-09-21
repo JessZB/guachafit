@@ -1451,4 +1451,120 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
       });
     });
   });
+
+  // ===========================================================================
+  // SECCIÓN WU-J (RF-005): HIDRATACIÓN DEL PLAN ACTIVO Y PRECIO ACORDADO
+  // ===========================================================================
+  describe('WU-J (RF-005): hidratación de plan activo, precio acordado y tenancy', () => {
+    const reqCoachA = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
+
+    function sembrarOverridePlanA(precioAcordadoUsd: string | null) {
+      mockOverridesClientePlan.push({
+        id: 'override-hidratacion-1',
+        planId: PLAN_COACH_A_ID,
+        clienteId: ALUMNO_A1_USER_ID,
+        precioAcordadoUsd,
+        tasaFijadaOverride: null,
+        beneficiosPersonalizados: null,
+        motivoOverride: null,
+        createdAtUtc: new Date(),
+        updatedAtUtc: new Date(),
+      });
+    }
+
+    it('listarAlumnos hidrata plan activo y precio acordado desde el override vigente', async () => {
+      sembrarOverridePlanA('40.00');
+
+      const res = await alumnosController.listarAlumnos(reqCoachA, {});
+      const alumno = res.items.find((a) => a.id === ALUMNO_A1_PERFIL_ID);
+
+      expect(alumno).toBeDefined();
+      expect(alumno!.planActivoId).toBe(PLAN_COACH_A_ID);
+      expect(alumno!.planActivoNombre).toBe('Plan Full Presencial');
+      expect(alumno!.precioAcordadoOverride).toBe('40.00');
+    });
+
+    it('sin override, el plan activo cae a la última cuota emitida y el precio acordado queda null', async () => {
+      mockCuotasMembresia.push({
+        id: 'cuota-hidratacion-1',
+        clienteId: ALUMNO_A1_USER_ID,
+        entrenadorId: COACH_A_ID,
+        planId: PLAN_COACH_A_ID,
+        periodo: '2026-09',
+        montoTotalUsd: '45.00',
+        montoAbonadoUsd: '0.00',
+        saldoPendienteUsd: '45.00',
+        fechaEmisionUtc: new Date(),
+        fechaCorteUtc: new Date(),
+        estado: EstadoCuota.EMITIDA,
+        createdAtUtc: new Date(),
+      });
+
+      const res = await alumnosController.listarAlumnos(reqCoachA, {});
+      const alumno = res.items.find((a) => a.id === ALUMNO_A1_PERFIL_ID);
+
+      expect(alumno!.planActivoId).toBe(PLAN_COACH_A_ID);
+      expect(alumno!.planActivoNombre).toBe('Plan Full Presencial');
+      expect(alumno!.precioAcordadoOverride).toBeNull();
+    });
+
+    it('sin override ni cuotas, el alumno queda honestamente sin plan (null, nunca inventado)', async () => {
+      const res = await alumnosController.listarAlumnos(reqCoachA, {});
+      const alumno = res.items.find((a) => a.id === ALUMNO_A1_PERFIL_ID);
+
+      expect(alumno!.planActivoId).toBeNull();
+      expect(alumno!.planActivoNombre).toBeNull();
+      expect(alumno!.precioAcordadoOverride).toBeNull();
+    });
+
+    it('tenancy: un override sobre un plan de OTRO coach no hidrata el plan del alumno', async () => {
+      mockPlanesMembresia.push({
+        id: 'plan-otro-coach',
+        entrenadorId: COACH_B_ID,
+        nombre: 'Plan Ajeno',
+        precioBaseUsd: '80.00',
+        duracionMeses: 1,
+        activo: true,
+      });
+      mockOverridesClientePlan.push({
+        id: 'override-ajeno',
+        planId: 'plan-otro-coach',
+        clienteId: ALUMNO_A1_USER_ID,
+        precioAcordadoUsd: '10.00',
+        tasaFijadaOverride: null,
+        beneficiosPersonalizados: null,
+        motivoOverride: null,
+        createdAtUtc: new Date(),
+        updatedAtUtc: new Date(),
+      });
+
+      const res = await alumnosController.listarAlumnos(reqCoachA, {});
+      const alumno = res.items.find((a) => a.id === ALUMNO_A1_PERFIL_ID);
+
+      expect(alumno!.planActivoId).toBeNull();
+      expect(alumno!.planActivoNombre).toBeNull();
+    });
+
+    it('obtenerPorId hidrata el plan y el precio acordado del expediente', async () => {
+      sembrarOverridePlanA('38.00');
+
+      const res = await alumnosController.obtenerPorId(reqCoachA, ALUMNO_A1_PERFIL_ID);
+
+      expect(res.planActivoId).toBe(PLAN_COACH_A_ID);
+      expect(res.planActivoNombre).toBe('Plan Full Presencial');
+      expect(res.precioAcordadoOverride).toBe('38.00');
+    });
+
+    it('actualizarAlumno conserva el plan hidratado en la respuesta del PATCH', async () => {
+      sembrarOverridePlanA('38.00');
+
+      const res = await alumnosController.actualizarAlumno(reqCoachA, ALUMNO_A1_PERFIL_ID, {
+        telefonoWhatsapp: '+584129999999',
+      });
+
+      expect(res.telefonoWhatsapp).toBe('+584129999999');
+      expect(res.planActivoNombre).toBe('Plan Full Presencial');
+      expect(res.precioAcordadoOverride).toBe('38.00');
+    });
+  });
 });

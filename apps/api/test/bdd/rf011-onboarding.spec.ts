@@ -97,11 +97,21 @@ describe('RF-011: Onboarding Híbrido de Alumnos (Registro Manual y Enlace Deep 
     function createMockDbForUpdate(initialRecord: any) {
       return {
         select: () => ({
-          from: () => ({
-            innerJoin: () => ({
-              where: () => Promise.resolve(initialRecord ? [{ ...initialRecord }] : []),
-            }),
-          }),
+          from: () => {
+            // WU-J (RF-005): la hidratación del plan activo consulta planes/overrides/cuotas en
+            // lote; este mock responde vacío (el expediente bajo prueba no tiene plan asignado)
+            // sin romper la cadena `select().from().where()` del perfil.
+            const vacio: any = {
+              where: () => vacio,
+              orderBy: () => vacio,
+              limit: () => vacio,
+              innerJoin: () => ({
+                where: () => Promise.resolve(initialRecord ? [{ ...initialRecord }] : []),
+              }),
+              then: (resolve: any) => resolve([]),
+            };
+            return vacio;
+          },
         }),
         update: () => ({
           set: (valores: any) => ({

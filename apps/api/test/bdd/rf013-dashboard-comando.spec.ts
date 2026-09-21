@@ -61,6 +61,15 @@ function parametrosDeExpresion(expr: any): any[] {
   const valores: any[] = [];
   const visitar = (chunks: any[]) => {
     for (const c of chunks) {
+      if (Array.isArray(c)) {
+        visitar(c);
+        continue;
+      }
+      // Los strings sueltos en un template `sql` se ligan como parámetros (no son texto SQL).
+      if (typeof c === 'string' || typeof c === 'number' || typeof c === 'boolean') {
+        valores.push(c);
+        continue;
+      }
       if (c instanceof Date) {
         // Drizzle embebe el valor crudo cuando el lado izquierdo es un fragmento SQL.
         valores.push(c);
@@ -307,12 +316,12 @@ describe('RF-013: Dashboard de Comando del Entrenador y Métricas de Capacidad',
     expect(texto).toContain('>=');
     expect(texto).toContain('<');
 
+    // WU-I: los límites viajan como ISO string con cast `::timestamptz` (un Date crudo contra un
+    // fragmento SQL revienta el driver postgres-js; verificado contra Postgres real).
     const { inicioMesUtc, inicioMesSiguienteUtc } = calcularVentanaMesUtc(new Date());
-    const fechas = parametrosDeExpresion(predicadoPagos)
-      .filter((valor) => valor instanceof Date)
-      .map((fecha: Date) => fecha.toISOString());
-    expect(fechas).toContain(inicioMesUtc.toISOString());
-    expect(fechas).toContain(inicioMesSiguienteUtc.toISOString());
+    const valores = parametrosDeExpresion(predicadoPagos).map((valor) => String(valor));
+    expect(valores).toContain(inicioMesUtc.toISOString());
+    expect(valores).toContain(inicioMesSiguienteUtc.toISOString());
   });
 
   describe('calcularVentanaMesUtc (ventana del mes calendario en UTC)', () => {

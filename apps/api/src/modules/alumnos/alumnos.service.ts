@@ -16,10 +16,6 @@ import {
   isNull,
   isNotNull,
   ilike,
-  lt,
-  gt,
-  gte,
-  lte,
   inArray,
   ne,
   notInArray,
@@ -31,6 +27,8 @@ import {
   usuarios,
   perfilesAlumno,
   perfilesEntrenador,
+  overridesClientePlan,
+  planesMembresia,
 } from '@guachafit/database';
 import { CryptoService } from '../../common/services/crypto.service';
 import { NotificationDispatcherService } from '../notificaciones/notification-dispatcher.service';
@@ -54,14 +52,11 @@ import {
   EstadoLicencia,
   Modalidad,
 } from '@guachafit/shared';
-
-/**
- * Escapa `%`, `_` y `\` de un término de búsqueda para usarlo como patrón LIKE literal
- * (Postgres usa `\` como escape por defecto en `ILIKE`).
- */
-function escaparPatronLike(texto: string): string {
-  return texto.replace(/[\\%_]/g, (caracter) => `\\${caracter}`);
-}
+import {
+  condicionCuotaEnMora,
+  condicionCuotaPorVencer,
+  escaparPatronLike,
+} from '../../common/cartera.util';
 
 /**
  * WU25a: UUID nil (RFC 4122) para representar "sin candidatos" en un `IN`.
@@ -69,61 +64,6 @@ function escaparPatronLike(texto: string): string {
  * consulta); ningún perfil real usa este UUID.
  */
 const UUID_SIN_CANDIDATOS = '00000000-0000-4000-8000-000000000000';
-
-/**
- * WU23: regla ÚNICA de "cuota en mora" (idéntica a la bandeja "Alumnos en Mora" del dashboard,
- * `entrenador.service.ts`):
- * - la cuota está marcada como VENCIDA, o
- * - su fecha de corte ya pasó, tiene saldo pendiente y su estado no es AL_DIA/ANULADA.
- *
- * WU-H: `POR_VENCER` queda EXCLUIDO de la mora (RF-008 §4.A: "por vencer" es preventivo, no
- * deuda vencida; la UI lo pinta ámbar, nunca rojo). El barrido diario es quien degrada
- * POR_VENCER -> VENCIDA cuando la fecha de corte efectivamente pasa.
- *
- * Se usa tanto para el COUNT del resumen del directorio como para hidratar `semaforoPago` por
- * fila: una sola definición, cero divergencia entre el KPI "En Mora" y la lista filtrada.
- */
-function condicionCuotaEnMora(ahora: Date) {
-  return or(
-    eq(cuotasMembresia.estado, EstadoCuota.VENCIDA),
-    and(
-      lt(cuotasMembresia.fechaCorteUtc, ahora),
-      gt(cuotasMembresia.saldoPendienteUsd, '0'),
-      notInArray(cuotasMembresia.estado, [
-        EstadoCuota.AL_DIA,
-        EstadoCuota.ANULADA,
-        EstadoCuota.POR_VENCER,
-      ])
-    )
-  )!;
-}
-
-/** Días previos al corte en los que una cuota impaga cuenta como "por vencer" (RF-008 §4.A). */
-const DIAS_VENTANA_POR_VENCER = 5;
-const MS_POR_DIA = 24 * 60 * 60 * 1000;
-
-/**
- * WU-H (RF-008 §4.A): regla de "cuota por vencer" para el semáforo de la cartera.
- *
- * - El estado persistido ya es POR_VENCER (lo marcó el barrido diario), o
- * - el barrido aún no corrió y faltan entre 5 y 0 días para el corte con saldo pendiente
- *   (EMITIDA/ABONADA_PARCIAL). Así el semáforo es correcto aunque la cuota se emita después
- *   del último barrido.
- *
- * `PENDIENTE_REVISION` no cuenta como por vencer: un pago en revisión pausa el cobro.
- */
-function condicionCuotaPorVencer(ahora: Date) {
-  const limite = new Date(ahora.getTime() + DIAS_VENTANA_POR_VENCER * MS_POR_DIA);
-  return or(
-    eq(cuotasMembresia.estado, EstadoCuota.POR_VENCER),
-    and(
-      inArray(cuotasMembresia.estado, [EstadoCuota.EMITIDA, EstadoCuota.ABONADA_PARCIAL]),
-      gt(cuotasMembresia.saldoPendienteUsd, '0'),
-      gte(cuotasMembresia.fechaCorteUtc, ahora),
-      lte(cuotasMembresia.fechaCorteUtc, limite)
-    )
-  )!;
-}
 
 /**
  * §6: etiquetas humanas del estado de activación para los mensajes devueltos al usuario.
@@ -193,6 +133,11 @@ export class AlumnosService {
       modalidad: perfil.modalidad,
       estadoActivacion: perfil.estadoActivacion,
       tasaFijadaOverride: perfil.tasaFijadaOverride,
+      // RF-005: plan y tarifa hidratados (override vigente > plan de la última cuota). Nunca
+      // se inventa un plan: si no hay dato real, quedan `null` y la UI muestra "Sin plan asignado".
+      planActivoId: perfil.planActivoId ?? null,
+      planActivoNombre: perfil.planActivoNombre ?? null,
+      precioAcordadoOverride: perfil.precioAcordadoOverride ?? null,
       fichaSaludPrivada: fichaSalud,
       deletedAtUtc: perfil.deletedAtUtc ? new Date(perfil.deletedAtUtc).toISOString() : null,
       createdAtUtc: perfil.createdAtUtc ? new Date(perfil.createdAtUtc).toISOString() : new Date().toISOString(),
@@ -575,7 +520,16 @@ export class AlumnosService {
       email: perfil.email,
     };
 
-    return this.sanitizarPerfilParaRol(perfilActualizadoConEmail, Rol.ENTRENADOR);
+    // RF-005: la respuesta del PATCH conserva plan activo y precio acordado reales (la UI fusiona
+    // la respuesta en su estado; sin esto el expediente perdería el plan hasta recargar).
+    const planActivo = (
+      await this.hidratarPlanActivo(actualizado.entrenadorId, [actualizado.usuarioId])
+    ).get(actualizado.usuarioId);
+
+    return this.sanitizarPerfilParaRol(
+      planActivo ? { ...perfilActualizadoConEmail, ...planActivo } : perfilActualizadoConEmail,
+      Rol.ENTRENADOR
+    );
   }
 
   /**
@@ -790,11 +744,23 @@ export class AlumnosService {
       records.map((perfil) => perfil.usuarioId)
     );
 
-    const items = records.map((perfil) => ({
-      ...this.sanitizarPerfilParaRol(perfil, Rol.ENTRENADOR),
-      // El helper asigna una entrada por cada `usuarioId` recibido: siempre hay valor.
-      semaforoPago: semaforosPago.get(perfil.usuarioId)!,
-    }));
+    // RF-005: plan activo y precio acordado por fila (una consulta en lote, sin N+1).
+    const planesActivos = await this.hidratarPlanActivo(
+      entrenadorId,
+      records.map((perfil) => perfil.usuarioId)
+    );
+
+    const items = records.map((perfil) => {
+      const planActivo = planesActivos.get(perfil.usuarioId);
+      return {
+        ...this.sanitizarPerfilParaRol(
+          planActivo ? { ...perfil, ...planActivo } : perfil,
+          Rol.ENTRENADOR
+        ),
+        // El helper asigna una entrada por cada `usuarioId` recibido: siempre hay valor.
+        semaforoPago: semaforosPago.get(perfil.usuarioId)!,
+      };
+    });
 
     return {
       items,
@@ -1019,6 +985,106 @@ export class AlumnosService {
   }
 
   /**
+   * RF-005: hidrata el "plan activo" y el precio acordado de un lote de alumnos.
+   *
+   * Semántica (no hay columna de plan asignado en `perfiles_alumno`; el plan se deriva de datos
+   * reales, nunca de un valor inventado):
+   * 1. Override vigente del alumno (el más reciente si tuviera varios): define plan activo,
+   *    nombre del plan y `precioAcordadoUsd` (puede ser 0.00 en becados).
+   * 2. Sin override: el plan de la ÚLTIMA cuota emitida por el coach (la deuda vigente describe
+   *    el plan contratado). `precioAcordadoOverride` queda `null` (hereda precio del catálogo).
+   * 3. Sin override ni cuotas: sin plan (los campos quedan `null` y la UI dice "Sin plan asignado").
+   *
+   * El aislamiento de tenant se garantiza filtrando por los planes y cuotas del propio entrenador;
+   * se resuelve con consultas en lote (sin N+1) sobre las tablas `overrides_cliente_plan`,
+   * `planes_membresia` y `cuotas_membresia`.
+   */
+  private async hidratarPlanActivo(
+    entrenadorId: string,
+    alumnoUsuarioIds: string[]
+  ): Promise<
+    Map<
+      string,
+      { planActivoId: string | null; planActivoNombre: string | null; precioAcordadoOverride: string | null }
+    >
+  > {
+    const planesActivos = new Map<
+      string,
+      { planActivoId: string | null; planActivoNombre: string | null; precioAcordadoOverride: string | null }
+    >();
+    const ids = [...new Set(alumnoUsuarioIds)].filter(Boolean);
+    if (ids.length === 0) return planesActivos;
+
+    const planes = await this.db
+      .select({
+        id: planesMembresia.id,
+        nombre: planesMembresia.nombre,
+        precioBaseUsd: planesMembresia.precioBaseUsd,
+      })
+      .from(planesMembresia)
+      .where(eq(planesMembresia.entrenadorId, entrenadorId));
+
+    if (planes.length === 0) return planesActivos;
+    const planesPorId = new Map(planes.map((plan) => [plan.id, plan]));
+    const idsPlanes = planes.map((plan) => plan.id);
+
+    // 1. Overrides del lote (más recientes primero) — solo de planes del coach.
+    const overrides = await this.db
+      .select()
+      .from(overridesClientePlan)
+      .where(
+        and(
+          inArray(overridesClientePlan.clienteId, ids),
+          inArray(overridesClientePlan.planId, idsPlanes)
+        )
+      )
+      .orderBy(desc(overridesClientePlan.updatedAtUtc), desc(overridesClientePlan.id));
+
+    for (const override of overrides) {
+      if (planesActivos.has(override.clienteId)) continue;
+      const plan = planesPorId.get(override.planId);
+      if (!plan) continue;
+      planesActivos.set(override.clienteId, {
+        planActivoId: plan.id,
+        planActivoNombre: plan.nombre,
+        precioAcordadoOverride: override.precioAcordadoUsd ?? null,
+      });
+    }
+
+    // 2. Sin override: plan de la última cuota emitida por el coach (una consulta en lote).
+    const sinOverride = ids.filter((usuarioId) => !planesActivos.has(usuarioId));
+    if (sinOverride.length > 0) {
+      const cuotas = await this.db
+        .select({
+          clienteId: cuotasMembresia.clienteId,
+          planId: cuotasMembresia.planId,
+          createdAtUtc: cuotasMembresia.createdAtUtc,
+        })
+        .from(cuotasMembresia)
+        .where(
+          and(
+            inArray(cuotasMembresia.clienteId, sinOverride),
+            eq(cuotasMembresia.entrenadorId, entrenadorId)
+          )
+        )
+        .orderBy(desc(cuotasMembresia.createdAtUtc), desc(cuotasMembresia.id));
+
+      for (const cuota of cuotas) {
+        if (planesActivos.has(cuota.clienteId)) continue;
+        const plan = planesPorId.get(cuota.planId);
+        if (!plan) continue;
+        planesActivos.set(cuota.clienteId, {
+          planActivoId: plan.id,
+          planActivoNombre: plan.nombre,
+          precioAcordadoOverride: null,
+        });
+      }
+    }
+
+    return planesActivos;
+  }
+
+  /**
    * Obtener perfil por ID con aislamiento de Tenancy
    */
   async obtenerPorId(alumnoId: string, actorUserId: string, actorRole: Rol, actorEntrenadorId?: string) {
@@ -1059,6 +1125,14 @@ export class AlumnosService {
       throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');
     }
 
-    return this.sanitizarPerfilParaRol(perfil, actorRole);
+    // RF-005: plan activo + precio acordado reales del expediente (override o última cuota).
+    const planActivo = (
+      await this.hidratarPlanActivo(perfil.entrenadorId, [perfil.usuarioId])
+    ).get(perfil.usuarioId);
+
+    return this.sanitizarPerfilParaRol(
+      planActivo ? { ...perfil, ...planActivo } : perfil,
+      actorRole
+    );
   }
 }

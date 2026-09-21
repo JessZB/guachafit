@@ -160,6 +160,46 @@ export const LIMITE_BANDEJA_CONCILIACION_MAXIMO = 100;
  */
 export const LIMITE_TRANSACCIONES_HISTORIAL_MAXIMO = 100;
 
+/**
+ * WU-I (RF-009 §4.B): pestañas del tablero de control de cartera del coach.
+ *
+ * - `mora`: cuotas con corte superado y saldo > 0 (excluye pagos en revisión).
+ * - `por_vencer`: cuotas con corte en los próximos ≤ 5 días y saldo > 0.
+ * - `revision`: comprobantes reportados esperando conciliación.
+ * - `al_dia`: cuotas del ciclo en curso cubiertas al 100%.
+ */
+export const PestanaCarteraSchema = z.enum(['mora', 'por_vencer', 'revision', 'al_dia']);
+
+/** WU-I: página por defecto y techo duro de `GET /finanzas/cartera`. */
+export const LIMITE_CARTERA_POR_DEFECTO = 25;
+export const LIMITE_CARTERA_MAXIMO = 100;
+
+/**
+ * WU-I (RF-009): filtros server-side del tablero de cartera.
+ *
+ * `q` busca por nombre/apellido del alumno (case-insensitive, texto literal) y `pestana`
+ * selecciona la lista; el `resumen` (KPIs + contadores) siempre describe la cartera completa.
+ */
+export const FiltroCarteraSchema = z.object({
+  q: z.string().max(200, 'El término de búsqueda no puede exceder 200 caracteres').optional(),
+  pestana: PestanaCarteraSchema.optional().default('mora'),
+  limit: z
+    .coerce
+    .number()
+    .int('El límite debe ser un número entero')
+    .min(1, 'El límite debe ser al menos 1')
+    .max(LIMITE_CARTERA_MAXIMO, 'El límite no puede exceder 100')
+    .optional()
+    .default(LIMITE_CARTERA_POR_DEFECTO),
+  offset: z
+    .coerce
+    .number()
+    .int('El offset debe ser un número entero')
+    .min(0, 'El offset debe ser mayor o igual a 0')
+    .optional()
+    .default(0),
+});
+
 /** WU24b: página por defecto y techo duro de `GET /antropometria/pendientes` (cola del coach). */
 export const LIMITE_COLA_ANTROPOMETRIA_POR_DEFECTO = 25;
 export const LIMITE_COLA_ANTROPOMETRIA_MAXIMO = 100;
@@ -636,10 +676,13 @@ export const CrearPlanMembresiaSchema = z.object({
   nombre: z.string().min(3).max(60),
   descripcion: z.string().max(1000).optional(),
   beneficios: z.array(z.string().min(1)).min(1, 'Debe incluir al menos un beneficio'),
+  // RF-005 RN-01: el precio base del catálogo es un monto numérico MAYOR a 0.00 con 2 decimales.
+  // El precio cero NO es una vía válida para becados: eso se expresa con un override individual
+  // (RN-02/§6), no con un plan estándar de $0.
   precioBaseUsd: z
     .string()
     .regex(DECIMAL_STRING_REGEX, 'El precio base debe ser una cadena decimal con hasta 2 decimales')
-    .refine((val) => Number(val) >= 0, 'El precio base debe ser mayor o igual a 0.00'),
+    .refine((val) => Number(val) > 0, 'El precio base debe ser mayor a 0.00'),
   duracionMeses: z.number().int().min(1).max(36).default(1),
   activo: z.boolean().default(true).optional(),
   entrenadorId: z.string().uuid().optional(),
@@ -649,10 +692,11 @@ export const ActualizarPlanMembresiaSchema = z.object({
   nombre: z.string().min(3).max(60).optional(),
   descripcion: z.string().max(1000).optional(),
   beneficios: z.array(z.string().min(1)).min(1).optional(),
+  // RF-005 RN-01: si se define, el precio base del catálogo debe ser mayor a 0.00.
   precioBaseUsd: z
     .string()
     .regex(DECIMAL_STRING_REGEX, 'El precio base debe ser una cadena decimal con hasta 2 decimales')
-    .refine((val) => Number(val) >= 0, 'El precio base debe ser mayor o igual a 0.00')
+    .refine((val) => Number(val) > 0, 'El precio base debe ser mayor a 0.00')
     .optional(),
   duracionMeses: z.number().int().min(1).max(36).optional(),
   activo: z.boolean().optional(),
@@ -661,33 +705,26 @@ export const ActualizarPlanMembresiaSchema = z.object({
 export const CrearOverridePlanSchema = z.object({
   planId: z.string().uuid(),
   clienteId: z.string().uuid(),
+  /**
+   * RF-005 RN-02: `null` explícito limpia el precio acordado (el alumno vuelve a heredar el
+   * precio base del plan); `undefined` conserva el valor existente en el upsert.
+   * El precio 0.00 es legítimo y queda reservado a becados/intercambio (RF-005 §6).
+   */
   precioAcordadoUsd: z
     .string()
     .regex(DECIMAL_STRING_REGEX, 'El precio acordado debe tener hasta 2 decimales')
     .refine((val) => Number(val) >= 0, 'El precio acordado debe ser mayor o igual a 0.00')
+    .nullable()
     .optional(),
+  /** `null` explícito quita la tasa especial del alumno (vuelve a la tasa global, ADR-003 §3.2). */
   tasaFijadaOverride: z
     .string()
     .regex(TASA_STRING_REGEX, 'La tasa override debe tener hasta 4 decimales')
     .refine((val) => Number(val) > 0, 'La tasa override debe ser mayor a 0')
+    .nullable()
     .optional(),
-  beneficiosPersonalizados: z.array(z.string().min(1)).optional(),
-  motivoOverride: z.string().max(500).optional(),
-});
-
-export const ActualizarOverridePlanSchema = z.object({
-  precioAcordadoUsd: z
-    .string()
-    .regex(DECIMAL_STRING_REGEX, 'El precio acordado debe tener hasta 2 decimales')
-    .refine((val) => Number(val) >= 0, 'El precio acordado debe ser mayor o igual a 0.00')
-    .optional(),
-  tasaFijadaOverride: z
-    .string()
-    .regex(TASA_STRING_REGEX, 'La tasa override debe tener hasta 4 decimales')
-    .refine((val) => Number(val) > 0, 'La tasa override debe ser mayor a 0')
-    .optional(),
-  beneficiosPersonalizados: z.array(z.string().min(1)).optional(),
-  motivoOverride: z.string().max(500).optional(),
+  beneficiosPersonalizados: z.array(z.string().min(1)).nullable().optional(),
+  motivoOverride: z.string().max(500).nullable().optional(),
 });
 
 export const EmitirCuotaSchema = z.object({
@@ -695,10 +732,18 @@ export const EmitirCuotaSchema = z.object({
   planId: z.string().uuid(),
   entrenadorId: z.string().uuid().optional(),
   periodo: z.string().regex(PERIODO_MES_REGEX, 'El formato de periodo debe ser YYYY-MM'),
+  /**
+   * RF-005 RN-03 (Precedencia de Valores): el monto de una cuota NUEVA NO lo dicta el cliente.
+   * El servidor lo resuelve con el override activo del alumno (`precio_acordado_usd`) o, en su
+   * defecto, con el precio base del plan del catálogo. El campo queda como contrato legado
+   * opcional: si se envía, debe ser > 0.00 (nunca una vía para fabricar cuotas de $0 por error;
+   * el becado se expresa con un override de precio 0.00 — RF-005 §6).
+   */
   montoTotalUsd: z
     .string()
     .regex(DECIMAL_STRING_REGEX, 'El monto total debe ser una cadena decimal con hasta 2 decimales')
-    .refine((val) => Number(val) > 0, 'El monto total debe ser mayor a 0.00'),
+    .refine((val) => Number(val) > 0, 'El monto total debe ser mayor a 0.00')
+    .optional(),
   fechaCorteUtc: z.string().datetime({ message: 'La fecha de corte debe ser una fecha ISO 8601 UTC válida' }),
   fechaEmisionUtc: z.string().datetime({ message: 'La fecha de emisión debe ser una fecha ISO 8601 UTC válida' }).optional(),
   notas: z.string().max(1000).optional(),

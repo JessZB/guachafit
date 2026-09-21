@@ -17,6 +17,8 @@ import {
   MetodoPago,
   EstadoCuota,
   EstadoConciliacion,
+  CrearOverridePlanSchema,
+  EmitirCuotaSchema,
 } from '@guachafit/shared';
 import {
   ConflictException,
@@ -41,7 +43,17 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
   let mockTransaccionesPago: any[];
   let mockTasasCambioReferencia: any[];
 
-  type OpCondicion = 'eq' | 'ne' | 'isNull' | 'isNotNull' | 'gt' | 'gte' | 'lt' | 'lte';
+  type OpCondicion =
+    | 'eq'
+    | 'ne'
+    | 'isNull'
+    | 'isNotNull'
+    | 'in'
+    | 'notIn'
+    | 'gt'
+    | 'gte'
+    | 'lt'
+    | 'lte';
 
   function extractConditions(sqlObj: any): Array<{ column: string; value: any; op: OpCondicion }> {
     const conditions: Array<{ column: string; value: any; op: OpCondicion }> = [];
@@ -55,26 +67,71 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
           traverse(chunk.queryChunks);
         } else if (chunk && typeof chunk.name === 'string') {
           const subsequent = chunks.slice(i + 1);
-          // Operador: texto SQL entre la columna y el primer parámetro.
+          // Operador: texto SQL entre la columna y el primer parámetro (incluye `in`/`is null`).
           let opText = '';
           for (const c of subsequent) {
+            if (typeof c === 'string') {
+              opText += ` ${c}`;
+              continue;
+            }
+            if (Array.isArray(c)) continue;
             if (c && 'value' in c && !Array.isArray(c.value)) break;
             if (Array.isArray(c?.value)) opText += ` ${c.value.join(' ')}`;
           }
           const texto = opText.toLowerCase();
+
+          // WU-J: `inArray`/`notInArray` (drizzle) parametrizan la lista como array de Params.
+          const esNotIn = /\snot\s+in\s/.test(texto);
+          const esIn = !esNotIn && /\sin\s/.test(texto);
           const comparador = texto.match(/>=|<=|>|</)?.[0];
           let op: OpCondicion = 'eq';
-          if (comparador === '>=') op = 'gte';
+          if (texto.includes('is not null')) op = 'isNotNull';
+          else if (texto.includes('is null')) op = 'isNull';
+          else if (esNotIn) op = 'notIn';
+          else if (esIn) op = 'in';
+          else if (comparador === '>=') op = 'gte';
           else if (comparador === '<=') op = 'lte';
           else if (comparador === '>') op = 'gt';
           else if (comparador === '<') op = 'lt';
           else if (texto.includes('<>') || texto.includes('!=')) op = 'ne';
 
-          const nextParam = subsequent.find(
-            (c: any) => c && 'value' in c && !Array.isArray(c.value)
-          );
-          if (nextParam) {
-            conditions.push({ column: chunk.name, value: nextParam.value, op });
+          if (op === 'isNull' || op === 'isNotNull') {
+            conditions.push({ column: chunk.name, value: null, op });
+            continue;
+          }
+
+          const params: any[] = [];
+          for (const c of subsequent) {
+            if (Array.isArray(c)) {
+              for (const item of c) {
+                if (
+                  item &&
+                  typeof item === 'object' &&
+                  'value' in item &&
+                  !Array.isArray(item.value) &&
+                  !item.queryChunks
+                ) {
+                  params.push(item.value);
+                }
+              }
+            } else if (
+              c &&
+              typeof c === 'object' &&
+              'value' in c &&
+              !Array.isArray(c.value) &&
+              !c.queryChunks
+            ) {
+              params.push(c.value);
+              break;
+            }
+          }
+
+          if (params.length > 0) {
+            conditions.push({
+              column: chunk.name,
+              value: op === 'in' || op === 'notIn' ? params : params[0],
+              op,
+            });
           }
         }
       }
@@ -110,6 +167,14 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
     switch (cond.op) {
       case 'ne':
         return colVal !== cond.value;
+      case 'isNull':
+        return colVal === null || colVal === undefined;
+      case 'isNotNull':
+        return colVal !== null && colVal !== undefined;
+      case 'in':
+        return Array.isArray(cond.value) && cond.value.includes(colVal);
+      case 'notIn':
+        return Array.isArray(cond.value) && !cond.value.includes(colVal);
       case 'gt':
         return compararValores(colVal, cond.value) > 0;
       case 'gte':
@@ -197,6 +262,19 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
     else if (tableName === 'perfiles_alumno') arr = mockPerfilesAlumno;
     else if (tableName === 'usuarios') arr = mockUsuarios;
     return arr.map(normalizeRecord);
+  }
+
+  /** WU-J: acceso a la MISMA referencia del store (los `delete` deben mutar el arreglo real). */
+  function getTablaCruda(tableName: string): any[] {
+    if (tableName === 'planes_membresia') return mockPlanesMembresia;
+    if (tableName === 'overrides_cliente_plan') return mockOverridesClientePlan;
+    if (tableName === 'cuotas_membresia') return mockCuotasMembresia;
+    if (tableName === 'transacciones_pago') return mockTransaccionesPago;
+    if (tableName === 'tasas_cambio_referencia') return mockTasasCambioReferencia;
+    if (tableName === 'perfiles_entrenador') return mockPerfilesEntrenador;
+    if (tableName === 'perfiles_alumno') return mockPerfilesAlumno;
+    if (tableName === 'usuarios') return mockUsuarios;
+    return [];
   }
 
   function createMockDb() {
@@ -338,6 +416,23 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
             };
           }),
         })),
+      })),
+      // WU-J (RF-005): soporte de DELETE para `eliminarOverride` (borra sobre el store real).
+      delete: vi.fn((table: any) => ({
+        where: vi.fn((predicate: any) => {
+          const tableName = table ? getTableName(table) : '';
+          const targetArray = getTablaCruda(tableName);
+          const conditions = extractConditions(predicate);
+          for (let i = targetArray.length - 1; i >= 0; i--) {
+            if (
+              conditions.length === 0 ||
+              conditions.every((cond) => matchesField(targetArray[i], cond))
+            ) {
+              targetArray.splice(i, 1);
+            }
+          }
+          return Promise.resolve(undefined);
+        }),
       })),
       execute: vi.fn().mockResolvedValue([]),
       transaction: vi.fn(async (cb: any) => cb(db)),
@@ -1536,6 +1631,328 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
       ).rejects.toThrow(/no has configurado la tasa de cambio/i);
 
       expect(mockCuotasMembresia).toHaveLength(0);
+    });
+  });
+
+  // ===========================================================================
+  // G. WU-J (RF-005): OVERRIDE COMPLETO Y PRECEDENCIA AL EMITIR CUOTA
+  // ===========================================================================
+  describe('7. WU-J (RF-005): contrato de override, precedencia RN-03 y becado $0', () => {
+    const UUID_COACH = '11111111-1111-4111-8111-111111111111';
+    const UUID_ALUMNO = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const UUID_PLAN = '99999999-9999-4999-8999-999999999999';
+    const UUID_PLAN_AJENO = '88888888-8888-4888-8888-888888888888';
+    const UUID_INEXISTENTE = '00000000-0000-4000-8000-000000000000';
+
+    function sembrarOverride(precioAcordadoUsd: string | null, tasaFijadaOverride: string | null = null) {
+      mockOverridesClientePlan.push({
+        id: 'override-1',
+        planId: 'plan-uuid-1',
+        clienteId: 'alumno-uuid-1',
+        precioAcordadoUsd,
+        tasaFijadaOverride,
+        beneficiosPersonalizados: null,
+        motivoOverride: 'Descuento fidelidad 1 año',
+        createdAtUtc: new Date(),
+        updatedAtUtc: new Date(),
+      });
+    }
+
+    it('RN-03: el precio acordado del alumno gana sobre el precio base del plan al emitir', async () => {
+      sembrarOverride('35.00');
+
+      const cuota = await finanzasService.emitirCuota('coach-uuid-1', {
+        clienteId: 'alumno-uuid-1',
+        planId: 'plan-uuid-1',
+        periodo: '2026-09',
+        fechaCorteUtc: '2026-09-30T23:59:59Z',
+      });
+
+      expect(cuota.montoTotalUsd).toBe('35.00'); // no el 50.00 del catálogo
+      expect(cuota.saldoPendienteUsd).toBe('35.00');
+      expect(cuota.estado).toBe(EstadoCuota.EMITIDA);
+      expect(cuota.esBecado).toBe(false);
+      expect(cuota.saldoPendienteVes).toBe('2100.00'); // 35.00 * 60.0000
+    });
+
+    it('RN-03: sin override, la cuota toma exactamente el precio base del plan', async () => {
+      const cuota = await finanzasService.emitirCuota('coach-uuid-1', {
+        clienteId: 'alumno-uuid-1',
+        planId: 'plan-uuid-1',
+        periodo: '2026-10',
+        fechaCorteUtc: '2026-10-31T23:59:59Z',
+      });
+
+      expect(cuota.montoTotalUsd).toBe('50.00');
+      expect(cuota.esBecado).toBe(false);
+    });
+
+    it('RN-03: un monto legado en el DTO no puede saltarse la precedencia del override', async () => {
+      sembrarOverride('35.00');
+
+      const cuota = await finanzasService.emitirCuota('coach-uuid-1', {
+        clienteId: 'alumno-uuid-1',
+        planId: 'plan-uuid-1',
+        periodo: '2026-09',
+        montoTotalUsd: '99.00', // contrato legado: se valida pero no decide el monto
+        fechaCorteUtc: '2026-09-30T23:59:59Z',
+      });
+
+      expect(cuota.montoTotalUsd).toBe('35.00');
+    });
+
+    it('RF-005 §6 becado: un override de 0.00 emite una cuota Al Día por 0.00, sin deuda', async () => {
+      sembrarOverride('0.00');
+
+      const cuota = await finanzasService.emitirCuota('coach-uuid-1', {
+        clienteId: 'alumno-uuid-1',
+        planId: 'plan-uuid-1',
+        periodo: '2026-09',
+        fechaCorteUtc: '2026-09-30T23:59:59Z',
+      });
+
+      expect(cuota.montoTotalUsd).toBe('0.00');
+      expect(cuota.montoAbonadoUsd).toBe('0.00');
+      expect(cuota.saldoPendienteUsd).toBe('0.00');
+      expect(cuota.estado).toBe(EstadoCuota.AL_DIA);
+      expect(cuota.esBecado).toBe(true);
+      expect(cuota.saldoPendienteVes).toBe('0.00');
+    });
+
+    it('RF-005 §6: un plan con precio 0 sin override de precio NO emite cuota (no se inventa el monto)', async () => {
+      mockPlanesMembresia[0].precioBaseUsd = '0.00';
+
+      await expect(
+        finanzasService.emitirCuota('coach-uuid-1', {
+          clienteId: 'alumno-uuid-1',
+          planId: 'plan-uuid-1',
+          periodo: '2026-09',
+          fechaCorteUtc: '2026-09-30T23:59:59Z',
+        })
+      ).rejects.toThrow(/no tiene un precio base mayor a 0.00/i);
+    });
+
+    it('RF-005 §6: un override de 0.00 SÍ emite aunque el plan tenga precio 0 (el becado no depende del catálogo)', async () => {
+      mockPlanesMembresia[0].precioBaseUsd = '0.00';
+      sembrarOverride('0.00');
+
+      const cuota = await finanzasService.emitirCuota('coach-uuid-1', {
+        clienteId: 'alumno-uuid-1',
+        planId: 'plan-uuid-1',
+        periodo: '2026-09',
+        fechaCorteUtc: '2026-09-30T23:59:59Z',
+      });
+
+      expect(cuota.montoTotalUsd).toBe('0.00');
+      expect(cuota.estado).toBe(EstadoCuota.AL_DIA);
+      expect(cuota.esBecado).toBe(true);
+    });
+
+    it('listarOverrides hidrata plan y alumno, y filtra por clienteId con 404 si no es de su cartera', async () => {
+      sembrarOverride('45.00', '58.0000');
+
+      const todos = await finanzasService.listarOverrides('coach-uuid-1');
+      expect(todos).toHaveLength(1);
+      expect(todos[0].planId).toBe('plan-uuid-1');
+      expect(todos[0].planNombre).toBe('Plan Mensual Estándar');
+      expect(todos[0].planPrecioBaseUsd).toBe('50.00');
+      expect(todos[0].clienteNombre).toBe('Pedro Pérez');
+      expect(todos[0].precioAcordadoUsd).toBe('45.00');
+      expect(todos[0].tasaFijadaOverride).toBe('58.0000');
+      expect(todos[0].motivoOverride).toBe('Descuento fidelidad 1 año');
+
+      const delAlumno = await finanzasService.listarOverrides('coach-uuid-1', 'alumno-uuid-1');
+      expect(delAlumno).toHaveLength(1);
+
+      await expect(
+        finanzasService.listarOverrides('coach-uuid-1', 'usuario-ajeno-a-la-cartera')
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('tenancy: un override cuyo plan no pertenece al coach no aparece en el listado', async () => {
+      mockOverridesClientePlan.push({
+        id: 'override-ajeno',
+        planId: 'plan-de-otro-coach',
+        clienteId: 'alumno-uuid-1',
+        precioAcordadoUsd: '10.00',
+        tasaFijadaOverride: null,
+        beneficiosPersonalizados: null,
+        motivoOverride: null,
+        createdAtUtc: new Date(),
+        updatedAtUtc: new Date(),
+      });
+
+      const overrides = await finanzasService.listarOverrides('coach-uuid-1');
+      expect(overrides).toHaveLength(0);
+    });
+
+    it('eliminarOverride borra el override y limpia la tasa global del alumno cuando venía de él', async () => {
+      sembrarOverride('45.00', '58.0000');
+      mockPerfilesAlumno[0].tasaFijadaOverride = '58.0000';
+
+      const res = await finanzasService.eliminarOverride('coach-uuid-1', 'override-1');
+
+      expect(res.eliminado).toBe(true);
+      expect(res.mensaje).toMatch(/vuelve a los valores del catálogo/i);
+      expect(mockOverridesClientePlan).toHaveLength(0);
+      expect(mockPerfilesAlumno[0].tasaFijadaOverride).toBeNull();
+    });
+
+    it('eliminarOverride conserva una tasa fijada manualmente distinta a la del override', async () => {
+      sembrarOverride('45.00', '58.0000');
+      mockPerfilesAlumno[0].tasaFijadaOverride = '62.0000';
+
+      await finanzasService.eliminarOverride('coach-uuid-1', 'override-1');
+
+      expect(mockOverridesClientePlan).toHaveLength(0);
+      expect(mockPerfilesAlumno[0].tasaFijadaOverride).toBe('62.0000');
+    });
+
+    it('eliminarOverride rechaza overrides inexistentes (404) y de otro entrenador (403)', async () => {
+      await expect(
+        finanzasService.eliminarOverride('coach-uuid-1', 'override-inexistente')
+      ).rejects.toThrow(NotFoundException);
+
+      mockPlanesMembresia.push({
+        id: 'plan-ajeno',
+        entrenadorId: 'coach-uuid-2',
+        nombre: 'Plan de otro coach',
+        descripcion: null,
+        beneficios: [],
+        precioBaseUsd: '20.00',
+        duracionMeses: 1,
+        activo: true,
+        createdAtUtc: new Date(),
+        updatedAtUtc: new Date(),
+      });
+      mockOverridesClientePlan.push({
+        id: 'override-ajeno',
+        planId: 'plan-ajeno',
+        clienteId: 'alumno-uuid-1',
+        precioAcordadoUsd: '10.00',
+        tasaFijadaOverride: null,
+        beneficiosPersonalizados: null,
+        motivoOverride: null,
+        createdAtUtc: new Date(),
+        updatedAtUtc: new Date(),
+      });
+
+      await expect(
+        finanzasService.eliminarOverride('coach-uuid-1', 'override-ajeno')
+      ).rejects.toThrow(ForbiddenException);
+      // El override ajeno sigue intacto.
+      expect(mockOverridesClientePlan).toHaveLength(1);
+    });
+
+    it('CrearOverridePlanSchema acepta 0.00 (becado) y null explícito para limpiar valores', () => {
+      const conCero = CrearOverridePlanSchema.parse({
+        planId: UUID_PLAN,
+        clienteId: UUID_ALUMNO,
+        precioAcordadoUsd: '0.00',
+      });
+      expect(conCero.precioAcordadoUsd).toBe('0.00');
+
+      const limpiar = CrearOverridePlanSchema.parse({
+        planId: UUID_PLAN,
+        clienteId: UUID_ALUMNO,
+        precioAcordadoUsd: null,
+        tasaFijadaOverride: null,
+      });
+      expect(limpiar.precioAcordadoUsd).toBeNull();
+      expect(limpiar.tasaFijadaOverride).toBeNull();
+
+      expect(() =>
+        CrearOverridePlanSchema.parse({
+          planId: UUID_PLAN,
+          clienteId: UUID_ALUMNO,
+          precioAcordadoUsd: '-1.00',
+        })
+      ).toThrow();
+    });
+
+    it('EmitirCuotaSchema ya no exige monto (RN-03 lo resuelve) pero rechaza un 0.00 explícito', () => {
+      const sinMonto = EmitirCuotaSchema.parse({
+        clienteId: UUID_ALUMNO,
+        planId: UUID_PLAN,
+        periodo: '2026-09',
+        fechaCorteUtc: '2026-09-30T23:59:59Z',
+      });
+      expect(sinMonto.montoTotalUsd).toBeUndefined();
+
+      expect(() =>
+        EmitirCuotaSchema.parse({
+          clienteId: UUID_ALUMNO,
+          planId: UUID_PLAN,
+          periodo: '2026-09',
+          montoTotalUsd: '0.00',
+          fechaCorteUtc: '2026-09-30T23:59:59Z',
+        })
+      ).toThrow();
+    });
+
+    it('POST /finanzas/cuotas/emitir sin monto usa RN-03 (Zod ya no lo exige) y GET/DELETE validan UUID', async () => {
+      // Fixtures con UUIDs reales para atravesar la validación Zod del controller.
+      mockUsuarios.push({ id: UUID_COACH, email: 'coach.uuid@guachafit.com', rol: Rol.ENTRENADOR });
+      mockPerfilesAlumno.push({
+        id: 'perfil-uuid-alumno',
+        usuarioId: UUID_ALUMNO,
+        entrenadorId: UUID_COACH,
+        nombres: 'Ana',
+        apellidos: 'Gómez',
+        tasaFijadaOverride: null,
+      });
+      mockPlanesMembresia.push({
+        id: UUID_PLAN,
+        entrenadorId: UUID_COACH,
+        nombre: 'Asesoría Online Full',
+        descripcion: null,
+        beneficios: ['Rutina interactiva'],
+        precioBaseUsd: '40.00',
+        duracionMeses: 1,
+        activo: true,
+        createdAtUtc: new Date(),
+        updatedAtUtc: new Date(),
+      });
+      mockOverridesClientePlan.push({
+        id: '11111111-2222-4333-8444-555555555555',
+        planId: UUID_PLAN,
+        clienteId: UUID_ALUMNO,
+        precioAcordadoUsd: '35.00',
+        tasaFijadaOverride: null,
+        beneficiosPersonalizados: null,
+        motivoOverride: 'Acuerdo especial',
+        createdAtUtc: new Date(),
+        updatedAtUtc: new Date(),
+      });
+
+      const req = { user: { sub: UUID_COACH, entrenadorId: UUID_COACH, rol: Rol.ENTRENADOR } };
+
+      const cuota = await finanzasController.emitirCuota(req, {
+        clienteId: UUID_ALUMNO,
+        planId: UUID_PLAN,
+        periodo: '2026-11',
+        fechaCorteUtc: '2026-11-30T23:59:59Z',
+      });
+      expect(cuota.montoTotalUsd).toBe('35.00');
+
+      await expect(
+        finanzasController.listarOverrides(req, 'no-es-uuid')
+      ).rejects.toThrow(BadRequestException);
+
+      const listado = await finanzasController.listarOverrides(req, UUID_ALUMNO);
+      expect(listado).toHaveLength(1);
+      expect(listado[0].planNombre).toBe('Asesoría Online Full');
+      expect(listado[0].clienteNombre).toBe('Ana Gómez');
+
+      await expect(
+        finanzasController.eliminarOverride(req, 'no-es-uuid')
+      ).rejects.toThrow(BadRequestException);
+
+      const eliminado = await finanzasController.eliminarOverride(
+        req,
+        '11111111-2222-4333-8444-555555555555'
+      );
+      expect(eliminado.eliminado).toBe(true);
     });
   });
 });

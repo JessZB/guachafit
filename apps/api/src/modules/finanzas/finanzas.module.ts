@@ -4,6 +4,8 @@ import { BullBoardModule } from '@bull-board/nestjs';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { FinanzasService } from './finanzas.service';
 import { FinanzasController } from './finanzas.controller';
+import { CarteraService } from './cartera.service';
+import { CarteraController } from './cartera.controller';
 import { DatabaseModule } from '../../database/database.module';
 import { CommonModule } from '../../common/common.module';
 import { NotificacionesModule } from '../notificaciones/notificaciones.module';
@@ -32,8 +34,8 @@ import { COBRANZA_QUEUE } from './cobranza-hitos';
       adapter: BullMQAdapter,
     }),
   ],
-  controllers: [FinanzasController],
-  providers: [FinanzasService, BillingSchedulerService, BillingReminderProcessor],
+  controllers: [FinanzasController, CarteraController],
+  providers: [FinanzasService, CarteraService, BillingSchedulerService, BillingReminderProcessor],
   exports: [FinanzasService],
 })
 export class FinanzasModule {}

@@ -215,6 +215,9 @@ describe('RF-010 RN-01: matriz de control de acceso sin bypass de Superadmin', (
       ['GET /ejercicios/catalogo', EntrenamientoController.prototype.listarEjercicios, EntrenamientoController],
       ['GET /finanzas/tasas/vigente', FinanzasController.prototype.obtenerTasaVigente, FinanzasController],
       ['POST /finanzas/cuotas/:id/reportar-pago', FinanzasController.prototype.reportarPago, FinanzasController],
+      // WU-J (RF-005): contrato de override solo para el entrenador autenticado.
+      ['GET /finanzas/planes/override', FinanzasController.prototype.listarOverrides, FinanzasController],
+      ['DELETE /finanzas/planes/override/:id', FinanzasController.prototype.eliminarOverride, FinanzasController],
       [
         'GET /finanzas/clientes/:clienteId/historial',
         FinanzasController.prototype.obtenerHistorialCliente,
