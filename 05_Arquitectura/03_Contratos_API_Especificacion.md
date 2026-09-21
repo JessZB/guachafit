@@ -55,6 +55,42 @@ tags:
   }
   ```
 
+### 1.1. Convención de Paginación Server-Side (`WU24–WU26`, `ADR-013`)
+Los listados del coach con crecimiento no acotado devuelven un **envelope estándar** (`PaginadoDTO<T>`) en lugar de un arreglo plano:
+
+```json
+{
+  "items": [],
+  "total": 137,
+  "limit": 25,
+  "offset": 50
+}
+```
+
+- `total` es el COUNT real de filas que cumplen los filtros (nunca el tamaño de `items`): la UI puede mostrar "Mostrando X de N" y pedir la siguiente página con `offset` sin repetir ni saltar filas.
+- `limit`/`offset` reflejan la página efectiva aplicada por el servidor (pueden diferir de lo solicitado si se aplicó un techo).
+- **Defaults y techos por endpoint:**
+
+| Endpoint | `limit` por defecto | Techo de `limit` | `total` |
+| :--- | :---: | :---: | :--- |
+| `GET /alumnos` (directorio) | 100 | 100 | COUNT del directorio filtrado; `resumen` describe la cartera completa. |
+| `GET /sesiones/alumno/{alumnoId}/historial` | 30 | 100 | COUNT del historial completo del alumno. |
+| `GET /entrenador/monitor-adherencia` | 25 | 100 | COUNT de la cartera filtrada; `resumen` describe la cartera completa. |
+| `GET /finanzas/conciliacion/bandeja` | 25 | 100 | COUNT de la cola FIFO. |
+| `GET /antropometria/pendientes` | 25 | 100 | COUNT de la cola del coach. |
+
+- **Paginación opt-in (compatibilidad hacia atrás):** en los endpoints que alimentan charts o fichas completas, la **ausencia** de parámetros de página conserva el comportamiento histórico (serie/lista completa) y el total viaja siempre:
+  - `GET /finanzas/clientes/{clienteId}/historial`: `txLimit`/`txOffset` (techo 100); `transaccionesTotal` siempre presente.
+  - `GET /antropometria/evolucion/{alumnoId}`: `controlesLimit`/`controlesOffset` (default 25 al paginar, techo 100); `controlesTotal` siempre presente. Los charts siguen solicitando la serie completa.
+- **Filtros server-side:** se aplican **antes** del slice de página (paginación coherente entre páginas) y no alteran los totales globales de contexto (`resumen`, contadores de cartera).
+- **UI (`WU25a`):** componente reutilizable `Paginacion` (`apps/web/src/components/common/Paginacion.tsx`) con Radix DropdownMenu (selector 10/25/50/100, números con elipsis, `aria-current="page"`, controles deshabilitados durante la carga) + hook `usePaginacionServidor` con TanStack Query (`placeholderData: keepPreviousData` para evitar parpadeos). Ver `ADR-013`.
+
+### 1.2. Pendientes Conocidos (Deuda Declarada)
+> Registro honesto de lo que **aún no** es server-side. No bloquea la entrega; se declara para que el copy de la UI no prometa más de lo que hace.
+
+- **Filtros de página visible:** la búsqueda/método de `GET /finanzas/conciliacion/bandeja`, la búsqueda de `GET /antropometria/pendientes` y el filtro de estado de los pagos del alumno en `GET /finanzas/clientes/{clienteId}/historial` filtran SOLO la página cargada; el copy lo declara explícitamente ("en esta página").
+- **Plantillas sin paginar (`RF-017`):** `GET /plantillas` devuelve el catálogo completo del tenant; el filtro por nombre/nivel/estado es client-side. Se paginará cuando el volumen lo justifique.
+
 ---
 
 ## 👤 2. Módulo de IAM, Onboarding y Ciclo de Vida de Clientes
@@ -229,6 +265,40 @@ Provee la fotografía ejecutiva del negocio en un solo payload optimizado ($p95 
 }
 ```
 
+### 2.7. Directorio de Alumnos Paginado (`RF-011`, `RF-012`, `RF-013`)
+Listado principal de la cartera del coach con búsqueda, filtros y paginación server-side.
+
+- **Método y Ruta:** `GET /alumnos`
+- **Permisos:** `entrenador`, `superadmin`.
+- **Parámetros de consulta:** `q` (búsqueda literal case-insensitive sobre nombre/apellido/correo/documento, máx. 200 caracteres), `estado`, `modalidad`, `incluirArchivados` (default `false`), `soloArchivados` (default `false`; tiene prioridad sobre `incluirArchivados`), `semaforoPago` (`moroso | al_dia | sin_cuota`), `limit` (default y techo 100) y `offset` (default 0).
+- **Respuesta Exitosa (`200 OK`):** envelope `{ items, total, limit, offset, resumen }`. `resumen` son contadores de la cartera COMPLETA (COUNT en el servidor) y nunca se altera por la búsqueda, los filtros ni la página.
+```json
+{
+  "items": [
+    {
+      "id": "4a5b6c7d-8e9f-0a1b-2c3d-4e5f6a7b8c9d",
+      "nombres": "Carlos Alberto",
+      "apellidos": "Mendoza Silva",
+      "estadoActivacion": "activo",
+      "modalidad": "presencial",
+      "semaforoPago": "al_dia"
+    }
+  ],
+  "total": 38,
+  "limit": 100,
+  "offset": 0,
+  "resumen": {
+    "total": 41,
+    "activos": 38,
+    "pausados": 2,
+    "morosos": 4,
+    "presenciales": 20,
+    "remotos": 21,
+    "archivados": 3
+  }
+}
+```
+
 ---
 
 ## 🔔 3. Módulo de Notificaciones, Preferencias y Dispositivos
@@ -346,7 +416,8 @@ Permite almacenar la preferencia de visualización en la cuenta del usuario para
     ```
     Con decisión explícita `DESCANSADA`/`INCOMPLETA` la sesión queda `omitida` con `motivoOmision: DESCANSO | INCOMPLETO` y no incrementa la racha; `COMPLETADA` con 0 series se rechaza.
 - **Progreso semanal del alumno:** `GET /alumnos/me/rutina/semana-actual?timezone={IANA}` (Rol `alumno`). Expone `bloques[]` (con `estadoSesion`/`motivoOmision` cuando aplica), `porcentajeCumplimiento`, `siguienteBloqueSugeridoId`, `esDiaDescansoHoy` y `rachaDias` (racha efectiva; 0 si la cadena está rota).
-- **Monitor semanal del coach (RN-03):** `GET /entrenador/monitor-adherencia?timezone={IANA}` (Rol `entrenador`). Evalúa la ventana Lunes 00:00 local → ahora y ordena por riesgo (rojo primero).
+- **Historial de sesiones del alumno (`WU24`):** `GET /sesiones/alumno/{alumnoId}/historial?limit={1..100}&offset={n}` (Roles `entrenador`, `alumno` titular, `superadmin`). Envelope `{ items, total, limit, offset }`; `limit` default 30 (techo 100), `offset` default 0; `total` es el COUNT real del historial completo.
+- **Monitor semanal del coach (RN-03):** `GET /entrenador/monitor-adherencia?timezone={IANA}` (Rol `entrenador`). Evalúa la ventana Lunes 00:00 local → ahora y ordena por riesgo (rojo primero). Ejemplo de un elemento del arreglo `items[]` del envelope:
   ```json
   {
     "alumnoId": "4a5b6c7d-8e9f-0a1b-2c3d-4e5f6a7b8c9d",
@@ -364,6 +435,9 @@ Permite almacenar la preferencia de visualización en la cuenta del usuario para
   }
   ```
   `tienePlanActivo = false` → la UI muestra "sin plan" (nunca rojo); `sinPendientesSemana = true` → "Al día — sin pendientes" (nunca rojo). `alumnoPerfilId` habilita el enlace directo al expediente del alumno.
+  - **Paginación (`WU24`):** envelope `{ items, total, limit, offset, resumen }`; `limit` default 25 (techo 100), `offset` default 0. `resumen` cuenta la cartera completa, nunca la página.
+  - **Filtros y orden server-side (`WU25a`, `WU26`):** `q` (nombre normalizado, literal) y `semaforo` (`rojo | amarillo | verde | sinPlan | sinPendientes`) recortan la lista, y `orden` (`riesgo` default | `nombre` A–Z) se aplica **antes** del slice; ambos órdenes mantienen la paginación por offset coherente. `resumen` no se altera por los filtros.
+  - **Nota honesta:** el filtro `semaforo` se aplica en el servidor, pero el semáforo se **calcula en memoria** (agregados por alumno), no es una columna SQL consultable.
 
 ### 4.2. Banco de Plantillas del Entrenador (`RF-017`)
 
@@ -405,7 +479,8 @@ Permite almacenar la preferencia de visualización en la cuenta del usuario para
 
 - `POST /antropometria/presigned-upload-url`: Genera URL PUT directa a Cloudflare R2 (TTL 15 min, `RNF-001`).
 - `POST /antropometria/checkin`: Envío de evaluación corporal (Presencial $\rightarrow$ Aprobado; Remoto $\rightarrow$ Pendiente según `ADR-001`).
-- `GET /antropometria/evolucion/{alumnoId}`: Historial y URLs presignadas GET de 15 minutos para el comparador (`RF-004`).
+- `GET /antropometria/pendientes`: Cola de check-ins pendientes del coach con envelope `{ items, total, limit, offset }` (`limit` default 25, techo 100; `offset` default 0; orden por fecha de evaluación descendente).
+- `GET /antropometria/evolucion/{alumnoId}`: Historial y URLs presignadas GET de 15 minutos para el comparador (`RF-004`). Paginación **opt-in**: `controlesLimit`/`controlesOffset` (default 25 al paginar, techo 100) y `controlesTotal` siempre presente; sin estos parámetros devuelve la serie cronológica completa (los charts la necesitan).
 - `PATCH /antropometria/{id}/conciliar`: Aprobación o rechazo con observaciones por el coach.
 
 ---
@@ -415,7 +490,9 @@ Permite almacenar la preferencia de visualización en la cuenta del usuario para
 - `GET /finanzas/tasas/vigente`: Consulta de tasa BCV, tasa activa del coach y tasa acordada (`ADR-003`).
 - `POST /finanzas/cuotas/{id}/reportar-pago`: Abono bimonetario reportado con `X-Idempotency-Key`. Congela tasa snapshot.
 - `POST /finanzas/cuotas/{id}/cobro-directo`: Cobro en efectivo en sala registrado por el coach (auto-aprobado inmediato).
+- `GET /finanzas/conciliacion/bandeja`: Bandeja FIFO de transacciones pendientes del coach con envelope `{ items, total, limit, offset }` (`limit` default 25, techo 100; `offset` default 0).
 - `PATCH /finanzas/transacciones/{id}/conciliar`: Conciliación bancaria bajo transacción interactiva ACID en PostgreSQL con lock pesimista `SELECT ... FOR UPDATE` (`RNF-002`).
+- `GET /finanzas/clientes/{clienteId}/historial`: Historial financiero y resumen del alumno (Roles `entrenador`, `alumno` titular, `superadmin`). Paginación **opt-in** de transacciones con `txLimit`/`txOffset` (techo 100) y `transaccionesTotal` siempre presente; sin estos parámetros devuelve todas las transacciones (comportamiento histórico).
 - `GET /finanzas/cartera/dashboard`: Tablero analítico de cobranza y morosidad (`RF-009`).
 
 ---
@@ -430,7 +507,12 @@ Permite almacenar la preferencia de visualización en la cuenta del usuario para
 | `PATCH /alumnos/{id}/estado` | ❌ | ✅ | ❌ | Solo sobre alumnos de su propio tenant. |
 | `DELETE /alumnos/{id}` | ❌ | ✅ | ❌ | Aplica Soft Delete (`deleted_at_utc`). |
 | `GET /entrenador/dashboard-comando` | ❌ | ✅ | ❌ | Agrega métricas exclusivas de su cartera. |
-| `GET /entrenador/monitor-adherencia` | ❌ | ✅ | ❌ | Semáforo RN-03 de su cartera; ordenado por riesgo. |
+| `GET /entrenador/monitor-adherencia` | ❌ | ✅ | ❌ | Semáforo RN-03 de su cartera; filtros (`q`, `semaforo`, `orden`) y paginación server-side. |
+| `GET /alumnos` | ✅ | ✅ | ❌ | Directorio paginado y filtrado server-side del tenant activo. |
+| `GET /sesiones/alumno/{alumnoId}/historial` | ✅ | ✅ | ✅ (titular) | Historial paginado; el alumno solo accede a su propio historial. |
+| `GET /finanzas/conciliacion/bandeja` | ❌ | ✅ | ❌ | Bandeja FIFO paginada de su cartera. |
+| `GET /finanzas/clientes/{clienteId}/historial` | ✅ | ✅ | ✅ (titular) | Paginación opt-in de transacciones; `transaccionesTotal` real. |
+| `GET /antropometria/pendientes` | ✅ | ✅ | ❌ | Cola paginada de check-ins pendientes del tenant. |
 | `GET/POST/PATCH/DELETE /plantillas` y `POST /plantillas/{id}/asignar` | ❌ | ✅ | ❌ | Banco de plantillas tenant-scoped; asignación con reporte parcial por alumno. |
 | `GET /alumnos/me/sesiones/hoy` | ❌ | ❌ | ✅ | Acceso exclusivo a sus propios datos. |
 | `POST /sesiones/{id}/iniciar` | ❌ | ❌ | ✅ | Titular de la sesión. |
@@ -452,5 +534,5 @@ Permite almacenar la preferencia de visualización en la cuenta del usuario para
 - **Problemas resueltos:** [[PROB-001-adherencia-trazabilidad]] al [[PROB-004-orquestacion-preferencias-notificaciones]].
 - **Requerimientos funcionales:** [[RF-001-checklist-entrenamiento-diario]] al [[RF-017-banco-plantillas-rutinas-entrenamiento]].
 - **Requerimientos no funcionales:** [[RNF-001-almacenamiento-seguridad-fotos-progreso]] al [[RNF-004-resiliencia-notificaciones-idempotencia-fallbacks]].
-- **Decisiones arquitecturales:** [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-010-arquitectura-event-driven-notificaciones-multicanal]]; borradores [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]] y [[ADR-012-modo-demo-explicito-datos-sinteticos]].
+- **Decisiones arquitecturales:** [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-010-arquitectura-event-driven-notificaciones-multicanal]]; borradores [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]], [[ADR-012-modo-demo-explicito-datos-sinteticos]] y [[ADR-013-paginacion-server-side-stack-listas]].
 - **Documentos de diseño:** [[01_Evaluacion_Stack_Tecnologico]], [[02_Esquema_Base_de_Datos_PostgreSQL]].

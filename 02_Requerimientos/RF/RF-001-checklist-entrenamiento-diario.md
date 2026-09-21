@@ -3,7 +3,7 @@ id: RF-001
 modulo: Entrenamiento
 prioridad: alta
 estado: implementado
-version_implementada: v1.1.0
+version_implementada: v1.2.0
 fecha_verificacion: 2026-09-20
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
@@ -113,7 +113,7 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
 
 ---
 
-## 7. Notas de Implementación (v1.1.0)
+## 7. Notas de Implementación (v1.2.0)
 
 > Registro de decisiones de implementación y límites conocidos de la entrega verificada el 2026-09-20. Los criterios de aceptación Gherkin de la sección 5 permanecen sin cambios.
 
@@ -150,3 +150,6 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
 - **Fórmula:** `descanso_real = timestamp_inicio_utc(serie siguiente) − timestamp_completada_utc(serie anterior)` (misma fórmula entre ejercicios: inicio de la primera serie del siguiente − completada de la última del anterior). `series_registro.timestamp_inicio_utc` se captura sin fricción al interactuar con la serie (peso/reps/RPE) o con el botón "Iniciar serie", una sola vez y solo en series pendientes de una sesión `EnProgreso`; las series ya completadas nunca se retro-marcan y el prefill programático no la dispara.
 - **UI:** con marcas se muestra "Descanso real" y "Ejecución" (fin − inicio); sin marcas se conserva el Δ entre marcas de WU15 (cota superior) o "—". Nunca se muestran valores negativos.
 - **Límite honesto:** la precisión depende de que el alumno marque el inicio; sin marca no se inventa la medición y `descansoSegundos` sigue siendo el valor del temporizador (objetivo), no el descanso efectivo.
+
+### 7.8. Listados server-side (WU24–WU26)
+- Monitor de adherencia con búsqueda (`q`), semáforo y orden (`riesgo | nombre`) server-side y paginación `{ items, total, limit, offset, resumen }` (`limit` default 25, techo 100); historial de sesiones del alumno paginado en `GET /sesiones/alumno/{alumnoId}/historial` (`limit` default 30, techo 100). El `total` del historial y el `resumen` del monitor son siempre reales (nunca del slice de página); el detalle de contrato vive en [[03_Contratos_API_Especificacion]] §1.1 y §4.1.

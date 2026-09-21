@@ -81,3 +81,4 @@ Then el sistema debe clonar los 4 ejercicios a la rutina de Carlos
 - **Ajustes antes de confirmar:** `ajustes[]` (`AjusteEjercicioPlantillaSchema`) permite override de `pesoPrescritoKg`, `series`, `reps` y `rpe`, localizado por `diaId` + (`ejercicioId` o `nombre` del ejercicio).
 - **UI:** página "Banco de Plantillas" (`/coach/plantillas`) y acción "Cargar desde Plantilla" en el Expediente 360°.
 - **Tests:** 19 pruebas dedicadas (`rf017-plantillas.spec.ts` y suites asociadas).
+- **Pendiente registrado (WU24–WU26):** la lista de plantillas aún no está paginada: `GET /plantillas` devuelve el catálogo completo del tenant y el filtro por nombre/nivel/estado es client-side. Se paginará cuando el volumen lo justifique (deuda declarada en [[03_Contratos_API_Especificacion]] §1.2).

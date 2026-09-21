@@ -63,6 +63,7 @@ Establece los requerimientos de seguridad, privacidad y rendimiento asociados a 
 ## 4. Confidencialidad y Protección de Datos de Salud
 - La ficha médica y notas de salud (`lesiones`, `cirugias`, `patologias`) constituyen datos de categoría especial (sensibles bajo GDPR y estándares de protección biomédica).
 - **Control de Acceso Estricto:** La columna de notas de salud solo se expone en endpoints autorizados para el rol `ENTRENADOR` y jamás debe serializarse en los DTOs de respuesta destinados al frontend del alumno.
+- **Higiene de logout en dispositivos compartidos (WU22):** al cerrar sesión se eliminan los datos locales del usuario en IndexedDB/offline (cola outbox, rutina cacheada, check-ins de nutrición y catálogo de ejercicios) y las cachés runtime del Service Worker que contienen respuestas de API autenticadas (`api-cache`, `workbox-runtime-*`), conservando únicamente el precache del app shell (assets estáticos, sin datos de usuario). Las mutaciones pendientes de sincronizar se descartan a propósito, con rastro en consola: la privacidad en un dispositivo compartido prevalece sobre la pérdida de una mutación local (`clearOfflineData`/`limpiarCachesRuntime`, best-effort: un fallo de limpieza nunca rompe el logout).
 
 ---
 

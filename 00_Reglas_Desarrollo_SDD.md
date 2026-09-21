@@ -126,7 +126,7 @@ GUACHAFIT/
 │   ├── RF/                       # RF-001 al RF-017 (Gherkin)
 │   └── RNF/                      # RNF-001 al RNF-004 (Métricas y SLOs)
 ├── 03_Dominio/                   # Entidades y Agregados DDD
-├── 04_Decisiones/                # ADR-001 al ADR-012
+├── 04_Decisiones/                # ADR-001 al ADR-013
 ├── 05_Arquitectura/              # Especificación técnica, DDL y contratos API
 ├── apps/                         # Aplicaciones ejecutables
 │   ├── api/                      # Backend NestJS + Drizzle + BullMQ
@@ -146,4 +146,17 @@ GUACHAFIT/
 ## 🔗 5. Trazabilidad
 - Ecosistema de Requerimientos: [[RF-001-checklist-entrenamiento-diario]] al [[RF-017-banco-plantillas-rutinas-entrenamiento]].
 - Atributos de Calidad: [[RNF-001-almacenamiento-seguridad-fotos-progreso]] al [[RNF-004-resiliencia-notificaciones-idempotencia-fallbacks]].
-- Decisiones Arquitecturales: [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-012-modo-demo-explicito-datos-sinteticos]] (incluye [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]]).
+- Decisiones Arquitecturales: [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-013-paginacion-server-side-stack-listas]] (incluye [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]] y [[ADR-012-modo-demo-explicito-datos-sinteticos]]).
+
+---
+
+## 🎨 6. Convenciones de Interfaz y Copy
+
+Reglas transversales del frontend, vinculantes para toda vista nueva (se revisan en la auditoría de conformidad, §2.3):
+
+1. **Español claro, sin jerga técnica interna:** la UI no expone vocabulario de implementación ni abreviaturas opacas. Prohibido en copy visible: "Presc." (usar "Prescrito" / "Plan"), "Δ" (usar "Diferencia" o el formato humano de tiempo), "Comando Central" (usar "Panel del entrenador"), UUIDs crudos (usar nombres o enlaces) y "pago(s)" (pluralizar correctamente).
+2. **Formatos humanos:** los tiempos visibles se formatean con el formateador compartido (`formatearSegundos` en `apps/web/src/lib/sesion-tiempos.ts`): "45 s", "2 min", "1 min 30 s", "1 h 12 min". Nunca se muestran segundos crudos ni valores negativos (se usa "—" cuando no hay dato).
+3. **Pluralización correcta:** usar el helper compartido (`pluralizar` en `apps/web/src/lib/pluralizar.ts`) en lugar de concatenar "(s)".
+4. **Paginación estándar:** los listados paginados consumen el envelope `{ items, total, limit, offset }` con `total` real del servidor y el componente `Paginacion` + hook `usePaginacionServidor` (TanStack Query + Radix); contrato en `05_Arquitectura/03_Contratos_API_Especificacion.md` §1.1 y decisión en [[ADR-013-paginacion-server-side-stack-listas]].
+5. **Datos demo solo con frontera explícita:** los datos sintéticos viven exclusivamente detrás de `isDemoMode` y se muestran con banner visible; en modo real está prohibido el fallback demo ([[ADR-012-modo-demo-explicito-datos-sinteticos]]).
+6. **Estados honestos:** toda vista de datos implementa carga, vacío explícito y error con acción de reintento; nunca un éxito fabricado. El copy de filtros parciales declara su alcance ("en esta página") cuando el filtro no es server-side.
