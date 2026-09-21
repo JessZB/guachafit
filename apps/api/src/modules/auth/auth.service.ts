@@ -86,6 +86,16 @@ export class AuthService {
         .select()
         .from(perfilesAlumno)
         .where(eq(perfilesAlumno.usuarioId, usuario.id));
+
+      // RF-012 RN-02: la baja lógica revoca el acceso de la cuenta vinculada. Sin este chequeo,
+      // el alumno archivado seguía iniciando sesión (y renovando tokens) pese a no tener acceso
+      // operativo. El mensaje es claro y no expone datos del perfil ni del entrenador.
+      if (perfil?.deletedAtUtc) {
+        throw new UnauthorizedException(
+          'Tu cuenta fue dada de baja por tu entrenador. Contacta con tu entrenador para restaurar tu acceso.'
+        );
+      }
+
       entrenadorId = perfil?.entrenadorId;
     }
 
@@ -119,6 +129,9 @@ export class AuthService {
 
   /**
    * Establece contraseña definitiva a partir de token SHA-256 de invitación (RF-011, ARCH-003 §2.1)
+   *
+   * WU-E: un token vigente NO habilita por sí solo la activación. Se rechazan cuentas inactivas o
+   * bloqueadas (RF-012 "bloqueado total") y alumnos con baja lógica, sin consumir el token.
    */
   async establecerPasswordConToken(dto: EstablecerPasswordConTokenDTO) {
     const tokenHash = this.cryptoService.hashSha256(dto.token);
@@ -140,6 +153,28 @@ export class AuthService {
       );
     }
 
+    if (!usuario.activo || usuario.estado === EstadoUsuario.BLOQUEADO) {
+      throw new UnauthorizedException('Su cuenta se encuentra inactiva o bloqueada.');
+    }
+
+    // La resolución del perfil ocurre ANTES de escribir: un alumno archivado no activa su cuenta.
+    let entrenadorId: string | undefined;
+    if (usuario.rol === Rol.ALUMNO) {
+      const [perfil] = await this.db
+        .select()
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.usuarioId, usuario.id));
+
+      // RF-012 RN-02: la baja lógica revoca el acceso; el mensaje es el mismo que en el login.
+      if (perfil?.deletedAtUtc) {
+        throw new UnauthorizedException(
+          'Tu cuenta fue dada de baja por tu entrenador. Contacta con tu entrenador para restaurar tu acceso.'
+        );
+      }
+
+      entrenadorId = perfil?.entrenadorId;
+    }
+
     const passwordHash = await this.cryptoService.hashPassword(dto.password);
 
     // Actualizar usuario: guardar contraseña y limpiar token (Un solo uso, RNF-003)
@@ -152,15 +187,6 @@ export class AuthService {
         ultimoAccesoUtc: now,
       })
       .where(eq(usuarios.id, usuario.id));
-
-    let entrenadorId: string | undefined;
-    if (usuario.rol === Rol.ALUMNO) {
-      const [perfil] = await this.db
-        .select()
-        .from(perfilesAlumno)
-        .where(eq(perfilesAlumno.usuarioId, usuario.id));
-      entrenadorId = perfil?.entrenadorId;
-    }
 
     const payload: JwtPayload = {
       sub: usuario.id,
@@ -188,43 +214,54 @@ export class AuthService {
    * Renovación de token de acceso mediante Refresh Token
    */
   async refresh(refreshToken: string) {
+    let decoded: any;
     try {
-      const decoded = jwt.verify(refreshToken, this.refreshSecret) as any;
-      const [usuario] = await this.db
-        .select()
-        .from(usuarios)
-        .where(eq(usuarios.id, decoded.sub));
-
-      if (!usuario || !usuario.activo) {
-        throw new UnauthorizedException('Usuario no válido o inactivo.');
-      }
-
-      let entrenadorId: string | undefined;
-      if (usuario.rol === Rol.ENTRENADOR) {
-        entrenadorId = usuario.id;
-      } else if (usuario.rol === Rol.ALUMNO) {
-        const [perfil] = await this.db
-          .select()
-          .from(perfilesAlumno)
-          .where(eq(perfilesAlumno.usuarioId, usuario.id));
-        entrenadorId = perfil?.entrenadorId;
-      }
-
-      const payload: JwtPayload = {
-        sub: usuario.id,
-        email: usuario.email,
-        rol: usuario.rol as Rol,
-        entrenadorId,
-      };
-
-      const tokens = this.generateTokens(payload);
-      return {
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-      };
+      decoded = jwt.verify(refreshToken, this.refreshSecret);
     } catch {
       throw new UnauthorizedException('Refresh token expirado o inválido.');
     }
+
+    const [usuario] = await this.db
+      .select()
+      .from(usuarios)
+      .where(eq(usuarios.id, decoded.sub));
+
+    // "Bloqueado total" (RF-012): inactivo o bloqueado no renueva tokens.
+    if (!usuario || !usuario.activo || usuario.estado === EstadoUsuario.BLOQUEADO) {
+      throw new UnauthorizedException('Usuario no válido o inactivo.');
+    }
+
+    let entrenadorId: string | undefined;
+    if (usuario.rol === Rol.ENTRENADOR) {
+      entrenadorId = usuario.id;
+    } else if (usuario.rol === Rol.ALUMNO) {
+      const [perfil] = await this.db
+        .select()
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.usuarioId, usuario.id));
+
+      // RF-012 RN-02: la baja lógica también revoca la renovación de tokens.
+      if (perfil?.deletedAtUtc) {
+        throw new UnauthorizedException(
+          'Tu cuenta fue dada de baja por tu entrenador. Contacta con tu entrenador para restaurar tu acceso.'
+        );
+      }
+
+      entrenadorId = perfil?.entrenadorId;
+    }
+
+    const payload: JwtPayload = {
+      sub: usuario.id,
+      email: usuario.email,
+      rol: usuario.rol as Rol,
+      entrenadorId,
+    };
+
+    const tokens = this.generateTokens(payload);
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    };
   }
 
   /**

@@ -26,6 +26,11 @@ export const DECIMAL_STRING_REGEX = /^\d+(\.\d{1,2})?$/;
 export const TASA_STRING_REGEX = /^\d+(\.\d{1,4})?$/;
 export const PERIODO_MES_REGEX = /^\d{4}-\d{2}$/;
 export const FECHA_CALENDARIO_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+/**
+ * WU-E (RF-011 RN-06): formato compartido del `coach_code` de captación.
+ * Se usa al crear entrenadores y al resolver códigos públicos de deep link.
+ */
+export const COACH_CODE_REGEX = /^[A-Za-z0-9_-]{4,15}$/;
 
 // =============================================================================
 // IAM & ONBOARDING SCHEMAS

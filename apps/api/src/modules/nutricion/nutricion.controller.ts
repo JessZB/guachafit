@@ -8,29 +8,38 @@ import {
   Req,
   Res,
   UseGuards,
+  Inject,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
 import { NutricionService } from './nutricion.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { AlumnoHabilitadoGuard } from '../../common/guards/alumno-habilitado.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { BloquearAlumnoEn } from '../../common/decorators/bloqueo-alumno.decorator';
 import {
   Rol,
+  EstadoAlumno,
   CheckinNutricionalSchema,
   FiltroCheckinsNutricionalesSchema,
 } from '@guachafit/shared';
 
 @Controller('nutricion')
 export class NutricionController {
-  constructor(private readonly nutricionService: NutricionService) {}
+  // Token explícito (como los `@Inject(DRIZZLE_DB)` del proyecto): la inyección no depende de
+  // `design:paramtypes`, que los transformadores de test (esbuild) no emiten.
+  constructor(@Inject(NutricionService) private readonly nutricionService: NutricionService) {}
 
   /**
    * Registrar check-in nutricional diario 1-Tap con fotos de comidas opcionales (RN-02, RN-03).
+   * RF-012: "enviar reportes" se bloquea al alumno pausado (403 ALUMNO_BLOQUEADO). El suspendido
+   * por pago conserva este reporte: su bloqueo es de planificación, no de reportes.
    * Rol: Alumno
    */
   @Post('checkin-diario')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AlumnoHabilitadoGuard)
+  @BloquearAlumnoEn(EstadoAlumno.INACTIVO_PAUSADO)
   @Roles(Rol.ALUMNO)
   @HttpCode(HttpStatus.CREATED)
   async registrarCheckinDiario(@Req() req: any, @Body() body: unknown) {
@@ -62,11 +71,11 @@ export class NutricionController {
 
   /**
    * Consultar historial de check-ins de un alumno con filtros de fechas y semáforo.
-   * Roles: Entrenador (de su alumno), Alumno (propio historial), SuperAdmin
+   * Roles: Entrenador (de su alumno), Alumno (propio historial)
    */
   @Get('alumnos/:alumnoId/checkins')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Rol.ENTRENADOR, Rol.ALUMNO, Rol.SUPERADMIN)
+  @Roles(Rol.ENTRENADOR, Rol.ALUMNO)
   async listarCheckins(
     @Req() req: any,
     @Param('alumnoId') alumnoId: string,

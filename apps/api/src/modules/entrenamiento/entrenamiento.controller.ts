@@ -17,9 +17,12 @@ import {
 import { EntrenamientoService } from './entrenamiento.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { AlumnoHabilitadoGuard } from '../../common/guards/alumno-habilitado.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { BloquearAlumnoEn } from '../../common/decorators/bloqueo-alumno.decorator';
 import {
   Rol,
+  EstadoAlumno,
   UUID_REGEX,
   CrearEjercicioCatalogoSchema,
   CrearSesionEntrenamientoSchema,
@@ -43,10 +46,12 @@ export class EntrenamientoController {
    * Consulta pasiva y READ-ONLY de la sesión de hoy para el alumno (RF-001 Escenario 1 / RN-04).
    * Admite bloqueId opcional para consultar un bloque específico; NO crea, reemplaza ni elimina sesiones.
    * Para instanciar o cambiar de bloque existe la acción explícita `entrenarBloqueHoy`.
+   * RF-012: pausado/suspendido no ven planificación (403 ALUMNO_BLOQUEADO).
    * Rol: Alumno
    */
   @Get(['alumnos/me/sesiones/hoy', 'sesiones/hoy'])
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AlumnoHabilitadoGuard)
+  @BloquearAlumnoEn(EstadoAlumno.INACTIVO_PAUSADO, EstadoAlumno.SUSPENDIDO_PAGO)
   @Roles(Rol.ALUMNO)
   async obtenerSesionHoy(
     @Req() req: any,
@@ -67,10 +72,12 @@ export class EntrenamientoController {
    * Acción explícita del alumno para entrenar un bloque hoy (RN-04): instancia o cambia la sesión
    * del día sin destruir sesiones existentes. Con `iniciarInmediato: true` (repetir un bloque ya
    * completado) la nueva sesión arranca directamente 'en_progreso' conservando el historial previo.
+   * RF-012: pausado/suspendido no pueden iniciar nuevas sesiones (403 ALUMNO_BLOQUEADO).
    * Rol: Alumno
    */
   @Post('alumnos/me/sesiones/bloques/:bloqueId/entrenar-hoy')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AlumnoHabilitadoGuard)
+  @BloquearAlumnoEn(EstadoAlumno.INACTIVO_PAUSADO, EstadoAlumno.SUSPENDIDO_PAGO)
   @Roles(Rol.ALUMNO)
   @HttpCode(HttpStatus.OK)
   async entrenarBloqueHoy(
@@ -90,10 +97,12 @@ export class EntrenamientoController {
 
   /**
    * Progreso de la semana en curso (Lunes a Domingo) por bloques de entrenamiento.
+   * RF-012: la planificación (incluida la semana en curso) se bloquea a pausado/suspendido.
    * Rol: Alumno
    */
   @Get('alumnos/me/rutina/semana-actual')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AlumnoHabilitadoGuard)
+  @BloquearAlumnoEn(EstadoAlumno.INACTIVO_PAUSADO, EstadoAlumno.SUSPENDIDO_PAGO)
   @Roles(Rol.ALUMNO)
   async obtenerSemanaActualProgreso(
     @Req() req: any,
@@ -123,11 +132,14 @@ export class EntrenamientoController {
 
   /**
    * Consulta de la rutina semanal activa del alumno.
-   * Roles: Entrenador, Alumno, SuperAdmin
+   * RF-012: "bloqueo de visualización de nuevas rutinas" para pausado/suspendido (el coach que
+   * consulta la ficha del alumno no se ve afectado: el guard sólo evalúa al rol Alumno).
+   * Roles: Entrenador, Alumno
    */
   @Get('rutinas/alumno/:alumnoId/activa')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Rol.ENTRENADOR, Rol.ALUMNO, Rol.SUPERADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard, AlumnoHabilitadoGuard)
+  @BloquearAlumnoEn(EstadoAlumno.INACTIVO_PAUSADO, EstadoAlumno.SUSPENDIDO_PAGO)
+  @Roles(Rol.ENTRENADOR, Rol.ALUMNO)
   async obtenerRutinaActivaAlumno(
     @Req() req: any,
     @Param('alumnoId') alumnoId: string,
@@ -163,10 +175,12 @@ export class EntrenamientoController {
 
   /**
    * Inicio explícito de sesión: transiciona de 'planificada' a 'en_progreso'.
+   * RF-012: pausado/suspendido no pueden iniciar sesiones (403 ALUMNO_BLOQUEADO).
    * Rol: Alumno
    */
   @Post('sesiones/:id/iniciar')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AlumnoHabilitadoGuard)
+  @BloquearAlumnoEn(EstadoAlumno.INACTIVO_PAUSADO, EstadoAlumno.SUSPENDIDO_PAGO)
   @Roles(Rol.ALUMNO)
   @HttpCode(HttpStatus.OK)
   async iniciarSesion(
@@ -182,10 +196,12 @@ export class EntrenamientoController {
 
   /**
    * Sincronización batch de series (Offline-first checklist interactivo).
+   * RF-012: el checklist interactivo se bloquea a pausado/suspendido (403 ALUMNO_BLOQUEADO).
    * Rol: Alumno
    */
   @Put('sesiones/:id/series')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AlumnoHabilitadoGuard)
+  @BloquearAlumnoEn(EstadoAlumno.INACTIVO_PAUSADO, EstadoAlumno.SUSPENDIDO_PAGO)
   @Roles(Rol.ALUMNO)
   async sincronizarSeries(
     @Req() req: any,
@@ -200,10 +216,12 @@ export class EntrenamientoController {
 
   /**
    * Finalización de sesión: calcula cumplimiento y evalúa regla de racha (RN-02).
+   * RF-012: el checklist interactivo se bloquea a pausado/suspendido (403 ALUMNO_BLOQUEADO).
    * Rol: Alumno
    */
   @Post('sesiones/:id/finalizar')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AlumnoHabilitadoGuard)
+  @BloquearAlumnoEn(EstadoAlumno.INACTIVO_PAUSADO, EstadoAlumno.SUSPENDIDO_PAGO)
   @Roles(Rol.ALUMNO)
   @HttpCode(HttpStatus.OK)
   async finalizarSesion(
@@ -220,11 +238,11 @@ export class EntrenamientoController {
   /**
    * Obtener la última sesión registrada de un alumno (auditoría coach).
    * Solo sesiones COMPLETADA o EN_PROGRESO; excluye PLANIFICADA y OMITIDA.
-   * Roles: Entrenador, SuperAdmin
+   * Rol: Entrenador
    */
   @Get(['sesiones/alumno/:alumnoId/ultima', 'sesiones/:alumnoId/ultima'])
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Rol.ENTRENADOR, Rol.SUPERADMIN)
+  @Roles(Rol.ENTRENADOR)
   async obtenerUltimaSesionAlumno(
     @Req() req: any,
     @Param('alumnoId') alumnoId: string,
@@ -248,11 +266,11 @@ export class EntrenamientoController {
    * Consultar historial cronológico de sesiones de un alumno (auditoría coach).
    * WU24: envelope `{ items, total, limit, offset }`; `offset` opcional (default 0) y `limit`
    * opcional (default 30, techo 100). El `total` es el COUNT real del historial del alumno.
-   * Roles: Entrenador, Alumno titular, SuperAdmin
+   * Roles: Entrenador, Alumno titular
    */
   @Get(['sesiones/alumno/:alumnoId/historial', 'sesiones/:alumnoId/historial'])
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Rol.ENTRENADOR, Rol.ALUMNO, Rol.SUPERADMIN)
+  @Roles(Rol.ENTRENADOR, Rol.ALUMNO)
   async obtenerHistorialSesionesAlumno(
     @Req() req: any,
     @Param('alumnoId') alumnoId: string,
@@ -282,11 +300,11 @@ export class EntrenamientoController {
 
   /**
    * Consultar detalle de sesión por ID con aislamiento Tenancy.
-   * Roles: Alumno, Entrenador, SuperAdmin
+   * Roles: Alumno, Entrenador
    */
   @Get('sesiones/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Rol.ALUMNO, Rol.ENTRENADOR, Rol.SUPERADMIN)
+  @Roles(Rol.ALUMNO, Rol.ENTRENADOR)
   async obtenerSesionPorId(@Req() req: any, @Param('id') sesionId: string) {
     return this.entrenamientoService.obtenerSesionPorId(
       sesionId,
@@ -298,11 +316,11 @@ export class EntrenamientoController {
 
   /**
    * Listar ejercicios del catálogo (Globales + específicos del coach).
-   * Autenticado (Entrenador, Alumno, SuperAdmin)
+   * Autenticado (Entrenador, Alumno)
    */
   @Get('ejercicios/catalogo')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Rol.ENTRENADOR, Rol.ALUMNO, Rol.SUPERADMIN)
+  @Roles(Rol.ENTRENADOR, Rol.ALUMNO)
   async listarEjercicios(@Req() req: any) {
     const entrenadorId =
       req.user.rol === Rol.ENTRENADOR

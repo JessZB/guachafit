@@ -22,11 +22,9 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('Acceso denegado: Usuario no autenticado o sin rol asignado.');
     }
 
-    // Jerarquía de roles: SuperAdmin tiene acceso a todo salvo requerimiento específico
-    if (user.rol === Rol.SUPERADMIN) {
-      return true;
-    }
-
+    // RF-010 RN-01 (matriz de control de acceso): NO existe jerarquía con bypass. Cada endpoint
+    // declara explícitamente los roles autorizados; el superadmin solo entra donde la matriz lo
+    // permite (gestión de entrenadores y licencias), nunca al negocio del coach o del alumno.
     const hasRole = requiredRoles.includes(user.rol);
     if (!hasRole) {
       throw new ForbiddenException(

@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Req,
+  Inject,
   HttpCode,
   HttpStatus,
   BadRequestException,
@@ -20,17 +21,22 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import {
   Rol,
   UUID_REGEX,
+  COACH_CODE_REGEX,
   AltaManualAlumnoSchema,
   RegistroPublicoAlumnoSchema,
   CambioEstadoAlumnoSchema,
   ActualizarPerfilAlumnoSchema,
   FiltroDirectorioAlumnosSchema,
   RestaurarAlumnoSchema,
+  AltaManualAlumnoResultadoDTO,
+  CoachPublicoDTO,
 } from '@guachafit/shared';
 
 @Controller('alumnos')
 export class AlumnosController {
-  constructor(private readonly alumnosService: AlumnosService) {}
+  // Token explícito (como los `@Inject(DRIZZLE_DB)` del proyecto): la inyección no depende de
+  // `design:paramtypes`, que los transformadores de test (esbuild) no emiten.
+  constructor(@Inject(AlumnosService) private readonly alumnosService: AlumnosService) {}
 
   /**
    * Alta Manual de Alumno por el Entrenador (RF-011, Vía A)
@@ -39,7 +45,7 @@ export class AlumnosController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
   @HttpCode(HttpStatus.CREATED)
-  async altaManual(@Req() req: any, @Body() body: unknown) {
+  async altaManual(@Req() req: any, @Body() body: unknown): Promise<AltaManualAlumnoResultadoDTO> {
     const dto = AltaManualAlumnoSchema.parse(body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.alumnosService.crearAlumnoManual(entrenadorId, dto);
@@ -53,6 +59,24 @@ export class AlumnosController {
   async registroPublico(@Body() body: unknown) {
     const dto = RegistroPublicoAlumnoSchema.parse(body);
     return this.alumnosService.registroPublico(dto);
+  }
+
+  /**
+   * Resolución Pública del coach_code para el deep link de captación (RF-011, RN-06/RN-07.1).
+   * No requiere autenticación: solo identidad comercial del coach si el código existe y su
+   * licencia está vigente. Declarado antes de `GET /alumnos/:id` para que el segmento `coach`
+   * nunca se interprete como un ID de alumno.
+   */
+  @Get('coach/:code')
+  @HttpCode(HttpStatus.OK)
+  async resolverCoachPublico(@Param('code') code: string): Promise<CoachPublicoDTO> {
+    const codigo = (code ?? '').trim().toUpperCase();
+    if (!COACH_CODE_REGEX.test(codigo)) {
+      throw new BadRequestException(
+        'El código de entrenador no es válido o no está disponible. Por favor contacta a tu coach.'
+      );
+    }
+    return this.alumnosService.resolverCoachPublico(codigo);
   }
 
   /**
@@ -130,10 +154,11 @@ export class AlumnosController {
 
   /**
    * Listar Directorio de Alumnos del Entrenador (RF-011, RF-012)
+   * Rol: Entrenador (RF-010 RN-01: el superadmin no accede al negocio del coach)
    */
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Rol.ENTRENADOR, Rol.SUPERADMIN)
+  @Roles(Rol.ENTRENADOR)
   async listarAlumnos(@Req() req: any, @Query() query: unknown) {
     const filtro = query && typeof query === 'object' && Object.keys(query).length > 0
       ? FiltroDirectorioAlumnosSchema.parse(query)
@@ -144,10 +169,11 @@ export class AlumnosController {
 
   /**
    * Consultar Perfil de Alumno por ID con RBAC y Aislamiento Tenancy
+   * Roles: Entrenador (su cartera), Alumno (su propio perfil)
    */
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Rol.ENTRENADOR, Rol.ALUMNO, Rol.SUPERADMIN)
+  @Roles(Rol.ENTRENADOR, Rol.ALUMNO)
   async obtenerPorId(@Req() req: any, @Param('id') alumnoId: string) {
     if (!UUID_REGEX.test(alumnoId)) {
       throw new BadRequestException('El ID del alumno debe ser un UUID válido.');

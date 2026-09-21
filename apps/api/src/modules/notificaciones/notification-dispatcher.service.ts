@@ -92,6 +92,10 @@ export class NotificationDispatcherService {
       case 'ANTROPOMETRIA':
         shouldSendPush = prefs.notifyCheckinsPush;
         break;
+      // WU-E: "Nuevos Registros" del coach (RF-015 §B) aún no tiene preferencia propia de
+      // Push/Email; se garantiza el In-App universal (RN-04) sin robar la preferencia de otra
+      // categoría. Al migrar RF-015 se enrutarán aquí sus canales.
+      case 'ALUMNOS':
       case 'SEGURIDAD':
       case 'RESUMEN_SEMANAL':
       default:
@@ -151,6 +155,10 @@ export class NotificationDispatcherService {
           break;
         case 'RESUMEN_SEMANAL':
           shouldSendEmail = prefs.digestWeeklyEmail;
+          break;
+        // WU-E: sin preferencia propia todavía (ver nota del switch de Push): In-App universal.
+        case 'ALUMNOS':
+          shouldSendEmail = false;
           break;
         default:
           shouldSendEmail = false;

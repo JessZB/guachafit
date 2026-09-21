@@ -5,6 +5,7 @@ import {
   Body,
   UseGuards,
   Req,
+  Inject,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -22,7 +23,9 @@ import {
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  // Token explícito (como los `@Inject(DRIZZLE_DB)` del proyecto): la inyección no depende de
+  // `design:paramtypes`, que los transformadores de test (esbuild) no emiten.
+  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
 
   /**
    * Inicio de Sesión estándar

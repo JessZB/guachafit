@@ -1,6 +1,8 @@
 import {
   Injectable,
   Inject,
+  Logger,
+  Optional,
   ConflictException,
   NotFoundException,
   ForbiddenException,
@@ -29,8 +31,11 @@ import {
   perfilesEntrenador,
 } from '@guachafit/database';
 import { CryptoService } from '../../common/services/crypto.service';
+import { NotificationDispatcherService } from '../notificaciones/notification-dispatcher.service';
 import {
   AltaManualAlumnoDTO,
+  AltaManualAlumnoResultadoDTO,
+  CoachPublicoDTO,
   RegistroPublicoAlumnoDTO,
   CambioEstadoAlumnoDTO,
   ActualizarPerfilAlumnoDTO,
@@ -44,6 +49,7 @@ import {
   EstadoUsuario,
   EstadoAlumno,
   EstadoCuota,
+  EstadoLicencia,
   Modalidad,
 } from '@guachafit/shared';
 
@@ -82,11 +88,26 @@ function condicionCuotaEnMora(ahora: Date) {
   )!;
 }
 
+/**
+ * §6: etiquetas humanas del estado de activación para los mensajes devueltos al usuario.
+ * Nunca se interpola el valor crudo del enum (`inactivo_pausado`).
+ */
+const ETIQUETA_ESTADO_ACTIVACION: Record<EstadoAlumno, string> = {
+  [EstadoAlumno.ACTIVO]: 'activo',
+  [EstadoAlumno.INACTIVO_PAUSADO]: 'pausado',
+  [EstadoAlumno.SUSPENDIDO_PAGO]: 'suspendido por pago',
+};
+
 @Injectable()
 export class AlumnosService {
+  private readonly logger = new Logger(AlumnosService.name);
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
-    private readonly cryptoService: CryptoService
+    private readonly cryptoService: CryptoService,
+    // RF-014 / WU-E: notificación al coach del nuevo registro por deep link (RN-07.4).
+    // Opcional para no romper los consumidores que instancian el servicio sin el despachador.
+    @Optional() private readonly dispatcherService?: NotificationDispatcherService
   ) {}
 
   /**
@@ -143,8 +164,15 @@ export class AlumnosService {
 
   /**
    * Alta Manual de Alumno por el Entrenador (RF-011, Vía A)
+   *
+   * WU-E (RN-05): el backend NO envía correos por sí mismo (no existe adaptador de email en este
+   * flujo). Devuelve el token de un solo uso para que el entrenador comparta el enlace de
+   * activación; el mensaje nunca afirma un envío que no ocurrió.
    */
-  async crearAlumnoManual(entrenadorId: string, dto: AltaManualAlumnoDTO) {
+  async crearAlumnoManual(
+    entrenadorId: string,
+    dto: AltaManualAlumnoDTO
+  ): Promise<AltaManualAlumnoResultadoDTO> {
     // 1. Verificar unicidad de correo
     const [existente] = await this.db
       .select()
@@ -205,22 +233,62 @@ export class AlumnosService {
       edadCalculada: this.calcularEdad(nuevoPerfil.fechaNacimiento),
       modalidad: nuevoPerfil.modalidad,
       estadoActivacion: nuevoPerfil.estadoActivacion,
-      tokenInvitacion: rawToken, // Solo se retorna en el alta para disparo de correo de bienvenida
-      mensaje: 'Alumno registrado con éxito. Se ha enviado un correo con el enlace de activación.',
+      tokenInvitacion: rawToken, // Único momento en que el token en claro sale del backend
+      mensaje:
+        'Alumno registrado con éxito. Comparte el enlace de activación con tu alumno para que cree su contraseña.',
+    };
+  }
+
+  /**
+   * Resolución Pública del `coach_code` para el Deep Link de captación (RF-011, RN-06/RN-07.1).
+   *
+   * Solo devuelve identidad comercial del coach cuando el código existe Y su licencia está
+   * vigente. Un código inexistente y uno con licencia suspendida responden igual (404): nunca se
+   * filtra qué códigos existen. No expone datos sensibles (teléfono, capacidad, cartera, etc.).
+   */
+  async resolverCoachPublico(code: string): Promise<CoachPublicoDTO> {
+    const codigoNormalizado = code.trim().toUpperCase();
+
+    const [coach] = await this.db
+      .select()
+      .from(perfilesEntrenador)
+      .where(eq(perfilesEntrenador.coachCode, codigoNormalizado));
+
+    if (!coach || coach.estadoLicencia !== EstadoLicencia.ACTIVA) {
+      throw new NotFoundException(
+        'El código de entrenador no es válido o no está disponible. Por favor contacta a tu coach.'
+      );
+    }
+
+    return {
+      coachCode: coach.coachCode,
+      nombre: `${coach.nombres} ${coach.apellidos}`.trim(),
+      nombreComercial: coach.nombreComercial,
     };
   }
 
   /**
    * Registro Público Autónomo vía Deep Link coachCode (RF-011, Vía B)
+   *
+   * RN-07: valida el código y la vigencia de la licencia del coach, crea la cuenta vinculada al
+   * tenant y notifica al coach del nuevo registro.
    */
   async registroPublico(dto: RegistroPublicoAlumnoDTO) {
-    // 1. Validar existencia del coach_code
+    // 1. Validar existencia del coach_code (los códigos se persisten en mayúsculas)
     const [coach] = await this.db
       .select()
       .from(perfilesEntrenador)
-      .where(eq(perfilesEntrenador.coachCode, dto.coachCode));
+      .where(eq(perfilesEntrenador.coachCode, dto.coachCode.trim().toUpperCase()));
 
     if (!coach) {
+      throw new NotFoundException(
+        'El código de entrenador no es válido o no está disponible. Por favor contacta a tu coach.'
+      );
+    }
+
+    // RN-07.1: el deep link solo puede vincular alumnos a un coach con licencia vigente.
+    // Mismo mensaje que un código inexistente: no se filtra el estado de licencia de un coach.
+    if (coach.estadoLicencia !== EstadoLicencia.ACTIVA) {
       throw new NotFoundException(
         'El código de entrenador no es válido o no está disponible. Por favor contacta a tu coach.'
       );
@@ -270,6 +338,16 @@ export class AlumnosService {
       })
       .returning();
 
+    // 6. RN-07.4: notificar al coach del nuevo registro por la infraestructura existente
+    //    (RF-014). Fire-and-forget: un fallo de la bandeja/colas NUNCA tumba el alta del alumno.
+    this.notificarCoachNuevoAlumno(coach, {
+      alumnoId: nuevoPerfil.id,
+      usuarioId: nuevoUsuario.id,
+      email: nuevoUsuario.email,
+      nombres: nuevoPerfil.nombres,
+      apellidos: nuevoPerfil.apellidos,
+    });
+
     return {
       id: nuevoPerfil.id,
       nombres: nuevoPerfil.nombres,
@@ -277,6 +355,52 @@ export class AlumnosService {
       coachAsignado: coach.nombreComercial || `${coach.nombres} ${coach.apellidos}`,
       mensaje: 'Registro completado con éxito.',
     };
+  }
+
+  /**
+   * WU-E (RF-011 RN-07.4): emite el evento de dominio "Nuevo alumno registrado" hacia el coach.
+   * La categoría `ALUMNOS` ("Nuevos Registros" en RF-015 §B) se persiste siempre en la bandeja
+   * In-App (RF-014 RN-04); los canales externos quedan deshabilitados hasta que RF-015 defina
+   * sus columnas de preferencia (no se reutilizan las de otra categoría).
+   */
+  private notificarCoachNuevoAlumno(
+    coach: { usuarioId: string; coachCode: string; nombres: string; apellidos: string; nombreComercial: string | null },
+    alumno: {
+      alumnoId: string;
+      usuarioId: string;
+      email: string;
+      nombres: string;
+      apellidos: string;
+    }
+  ): void {
+    if (!this.dispatcherService) return;
+
+    const nombreCompleto = `${alumno.nombres} ${alumno.apellidos}`.trim();
+
+    this.dispatcherService
+      .despacharEvento({
+        tipoEvento: 'ALUMNO_REGISTRADO',
+        destinatarioUserId: coach.usuarioId,
+        entrenadorId: coach.usuarioId,
+        categoria: 'ALUMNOS',
+        titulo: 'Nuevo alumno registrado',
+        cuerpo: `${nombreCompleto} se registró con tu enlace de invitación.`,
+        linkAccion: `/coach/alumnos/${alumno.alumnoId}`,
+        datosAdicionales: {
+          alumnoId: alumno.alumnoId,
+          usuarioId: alumno.usuarioId,
+          email: alumno.email,
+          coachCode: coach.coachCode,
+        },
+        esCriticoSeguridad: false,
+      })
+      .catch((error) => {
+        this.logger.warn(
+          `No se pudo notificar al coach ${coach.usuarioId} el registro del alumno ${alumno.alumnoId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      });
   }
 
   /**
@@ -310,7 +434,9 @@ export class AlumnosService {
     return {
       id: actualizado.id,
       estadoActivacion: actualizado.estadoActivacion,
-      mensaje: `El estado del alumno ha sido actualizado a ${actualizado.estadoActivacion}.`,
+      mensaje: `El estado del alumno ha sido actualizado a ${
+        ETIQUETA_ESTADO_ACTIVACION[actualizado.estadoActivacion] ?? 'sin dato'
+      }.`,
     };
   }
 
@@ -356,6 +482,14 @@ export class AlumnosService {
 
     if (perfil.entrenadorId !== entrenadorId) {
       throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');
+    }
+
+    // RF-012 RN-02/RN-04: un alumno archivado sólo admite la restauración; editar su expediente
+    // mientras está de baja sería operar sobre una cuenta sin acceso operativo.
+    if (perfil.deletedAtUtc) {
+      throw new ConflictException(
+        'El alumno está dado de baja. Restáuralo para volver a operar sobre su expediente.'
+      );
     }
 
     const valoresAActualizar: Record<string, any> = {

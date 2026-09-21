@@ -42,11 +42,11 @@ export class FinanzasController {
 
   /**
    * Consulta de tasas de cambio vigentes (BCV, Paralelo, Coach, Override cliente)
-   * Autenticado (Entrenador, Alumno, SuperAdmin)
+   * Autenticado (Entrenador, Alumno)
    */
   @Get('tasas/vigente')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Rol.ENTRENADOR, Rol.ALUMNO, Rol.SUPERADMIN)
+  @Roles(Rol.ENTRENADOR, Rol.ALUMNO)
   async obtenerTasaVigente(@Req() req: any, @Query('clienteId') clienteId?: string) {
     let entrenadorId = req.user.entrenadorId;
     let targetClienteId = clienteId;
@@ -83,11 +83,11 @@ export class FinanzasController {
 
   /**
    * Calcular conversión bimonetaria precisa entre USD y VES
-   * Autenticado (Entrenador, Alumno, SuperAdmin)
+   * Autenticado (Entrenador, Alumno)
    */
   @Post('tasas/calcular')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Rol.ENTRENADOR, Rol.ALUMNO, Rol.SUPERADMIN)
+  @Roles(Rol.ENTRENADOR, Rol.ALUMNO)
   @HttpCode(HttpStatus.OK)
   async calcularConversion(@Req() req: any, @Body() body: unknown) {
     const dto = CalcularConversionSchema.parse(body);
@@ -184,11 +184,11 @@ export class FinanzasController {
 
   /**
    * Consultar detalle de una cuota por ID
-   * Rol: Entrenador, Alumno titular, SuperAdmin
+   * Roles: Entrenador, Alumno titular
    */
   @Get('cuotas/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Rol.ENTRENADOR, Rol.ALUMNO, Rol.SUPERADMIN)
+  @Roles(Rol.ENTRENADOR, Rol.ALUMNO)
   async obtenerCuota(@Req() req: any, @Param('id') cuotaId: string) {
     return this.finanzasService.obtenerCuotaPorId(
       cuotaId,
@@ -286,11 +286,11 @@ export class FinanzasController {
    * Historial financiero y resumen del alumno (cuotas, transacciones, saldos)
    * WU24b: `transaccionesTotal` es el COUNT real SIEMPRE presente. `txLimit`/`txOffset` son
    * OPT-IN: sin ellos `transacciones` trae todas (contrato histórico del resumen).
-   * Rol: Entrenador, Alumno titular, SuperAdmin
+   * Roles: Entrenador, Alumno titular
    */
   @Get('clientes/:clienteId/historial')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Rol.ENTRENADOR, Rol.ALUMNO, Rol.SUPERADMIN)
+  @Roles(Rol.ENTRENADOR, Rol.ALUMNO)
   async obtenerHistorialCliente(
     @Req() req: any,
     @Param('clienteId') clienteId: string,
