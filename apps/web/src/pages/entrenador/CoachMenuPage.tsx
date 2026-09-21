@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   ClipboardList,
+  Wallet,
 } from 'lucide-react';
 
 export function CoachMenuPage() {
@@ -85,7 +86,35 @@ export function CoachMenuPage() {
           </div>
         </Link>
 
-        {/* TARJETA 2: Revisar Evaluaciones Físicas */}
+        {/* TARJETA 2: Control de Cobros (RF-009) */}
+        <Link
+          to="/coach/cartera"
+          className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-amber-500/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
+        >
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/15 text-amber-400">
+                <Wallet className="h-6 w-6" />
+              </div>
+              <span className="text-[11px] font-medium text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md">
+                Cartera
+              </span>
+            </div>
+            <h3 className="text-base font-bold text-foreground group-hover:text-amber-400 transition-colors">
+              Control de Cobros
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Mira quién te debe y cuánto, quién vence pronto y envía recordatorios con un clic.
+            </p>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs font-semibold text-amber-400">
+            <span>Ver cartera</span>
+            <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+          </div>
+        </Link>
+
+        {/* TARJETA 3: Revisar Evaluaciones Físicas */}
         <Link
           to="/coach/antropometria"
           className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
@@ -113,7 +142,7 @@ export function CoachMenuPage() {
           </div>
         </Link>
 
-        {/* TARJETA 3: Alumnos en Alerta */}
+        {/* TARJETA 4: Alumnos en Alerta */}
         <Link
           to="/coach/monitor-adherencia"
           className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-amber-500/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
@@ -141,7 +170,7 @@ export function CoachMenuPage() {
           </div>
         </Link>
 
-        {/* TARJETA 4: Mis Alumnos */}
+        {/* TARJETA 5: Mis Alumnos */}
         <Link
           to="/coach/alumnos"
           className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
@@ -169,7 +198,7 @@ export function CoachMenuPage() {
           </div>
         </Link>
 
-        {/* TARJETA 5: Panel administrativo (resumen y métricas) */}
+        {/* TARJETA 6: Panel administrativo (resumen y métricas) */}
         <Link
           to="/coach/dashboard"
           className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
@@ -197,7 +226,7 @@ export function CoachMenuPage() {
           </div>
         </Link>
 
-        {/* TARJETA 6: Planes y Tasa de Cambio */}
+        {/* TARJETA 7: Planes y Tasa de Cambio */}
         <Link
           to="/coach/ajustes"
           className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
@@ -225,7 +254,7 @@ export function CoachMenuPage() {
           </div>
         </Link>
 
-        {/* TARJETA 7: Banco de Plantillas (RF-017) */}
+        {/* TARJETA 8: Banco de Plantillas (RF-017) */}
         <Link
           to="/coach/plantillas"
           className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"

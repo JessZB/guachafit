@@ -64,6 +64,7 @@ import {
   MetodoPago,
   Moneda,
   PlanMembresiaDetalleDTO,
+  OverridePlanDetalleDTO,
   SesionEntrenamientoDetalleDTO,
   EjercicioCatalogoDetalleDTO,
   GuardarRutinaSemanalDTO,
@@ -73,6 +74,12 @@ import {
   EvolucionCorporalDTO,
   UUID_REGEX,
 } from '@guachafit/shared';
+import {
+  decidirGuardadoPlanTarifa,
+  overrideDemoAlumno,
+  textoPrecioVigente,
+  type DecisionPlanTarifa,
+} from '../../lib/plan-tarifa';
 import {
   ArrowLeft,
   User,
@@ -287,6 +294,10 @@ export function AlumnoDetallePage() {
   const [isCargandoTx, setIsCargandoTx] = useState(false);
   const [transaccionesError, setTransaccionesError] = useState<string | null>(null);
   const [planesCatalogo, setPlanesCatalogo] = useState<PlanMembresiaDetalleDTO[]>([]);
+  // WU-J (RF-005): override vigente del alumno (precio/tasa pactados) y su error de carga.
+  const [overridesAlumno, setOverridesAlumno] = useState<OverridePlanDetalleDTO[]>([]);
+  const [overrideError, setOverrideError] = useState<string | null>(null);
+  const [isGuardandoPlan, setIsGuardandoPlan] = useState(false);
   const [ultimaSesion, setUltimaSesion] = useState<SesionEntrenamientoDetalleDTO | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -432,7 +443,8 @@ export function AlumnoDetallePage() {
           'Cirugía de rodilla en 2022. Rango controlado en prensa, evitar sentadilla libre pesada.',
         planActivoId: 'plan-presencial',
         planActivoNombre: 'Presencial Completo Sala',
-        precioAcordadoOverride: '40.00',
+        // WU-J: override de ejemplo (base $40.00 → acordado $35.00) tras la bandera demo.
+        precioAcordadoOverride: '35.00',
         semaforoPago: 'al_dia',
         createdAtUtc: new Date().toISOString(),
       };
@@ -446,7 +458,10 @@ export function AlumnoDetallePage() {
       setModalidad(demoPerfil.modalidad);
       setFichaSaludPrivada(demoPerfil.fichaSaludPrivada || '');
       setSelectedPlanId(demoPerfil.planActivoId || '');
-      setPrecioOverride('40.00');
+      setPrecioOverride('35.00');
+      setTasaFijadaOverride('65.0000');
+      setOverridesAlumno([overrideDemoAlumno()]);
+      setOverrideError(null);
 
       setFinanzas({
         alumnoId: id,
@@ -616,6 +631,9 @@ export function AlumnoDetallePage() {
       );
       setPlanesCatalogo(Array.isArray(planesRes) ? planesRes : []);
 
+      // 3b. WU-J (RF-005): override vigente real del alumno (precio/tasa pactados).
+      await cargarOverrides(perfilRes.usuarioId);
+
       // 4. Última sesión: sin dato => sin tarjeta de "último entrenamiento" (nunca fabricada).
       const sesionRes = await apiClient<SesionEntrenamientoDetalleDTO>(
         `/sesiones/alumno/${id}/ultima`
@@ -658,6 +676,28 @@ export function AlumnoDetallePage() {
   useEffect(() => {
     loadData();
   }, [id, isDemoMode]);
+
+  /** WU-J (RF-005): override vigente (el más reciente) y plan elegido del catálogo. */
+  const overrideVigente = overridesAlumno.length > 0 ? overridesAlumno[0] : null;
+  const planSeleccionado = planesCatalogo.find((plan) => plan.id === selectedPlanId) ?? null;
+
+  /**
+   * WU-J (RF-005): carga los overrides del alumno. Un fallo NO se disfraza de "sin override":
+   * se expone `overrideError` y la tarjeta lo advierte (nunca se afirma un estado falso).
+   */
+  const cargarOverrides = async (clienteUsuarioId: string) => {
+    setOverrideError(null);
+    try {
+      const res = await apiClient<OverridePlanDetalleDTO[]>(
+        `/finanzas/planes/override?clienteId=${clienteUsuarioId}`
+      );
+      setOverridesAlumno(Array.isArray(res) ? res : []);
+    } catch (err: any) {
+      setOverrideError(
+        err?.message || 'No se pudo cargar el override vigente del alumno.'
+      );
+    }
+  };
 
   /**
    * WU25b: carga UNA página del historial de sesiones.
@@ -903,7 +943,7 @@ export function AlumnoDetallePage() {
     void cargarControles(1, nuevoTamano, alumno.usuarioId);
   };
 
-  // Guardar Cambios de Perfil & Ficha Médica
+  // Guardar Cambios de Perfil & Ficha Médica + Plan/Tarifa (RF-005)
   const handleGuardarPerfil = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!id) return;
@@ -911,7 +951,23 @@ export function AlumnoDetallePage() {
     setSaveSuccessMsg(null);
     setSaveErrorMsg(null);
 
-    const payload = {
+    // WU-J (RF-005): se decide ANTES de escribir nada (validación local de precio/tasa).
+    const decisionPlanTarifa = decidirGuardadoPlanTarifa({
+      planSeleccionadoId: selectedPlanId,
+      precioAcordado: precioOverride,
+      tasaEspecial: tasaFijadaOverride,
+      overridesVigentes: overridesAlumno,
+    });
+
+    if (decisionPlanTarifa.accion === 'error') {
+      setSaveErrorMsg(decisionPlanTarifa.mensaje);
+      setIsSavingPerfil(false);
+      return;
+    }
+
+    // La tasa especial viaja por el POST del override cuando hay plan elegido (el override la
+    // sincroniza en `perfiles_alumno`); sin plan elegido, el PATCH conserva el contrato legado.
+    const payload: Record<string, unknown> = {
       nombres: nombres.trim(),
       apellidos: apellidos.trim(),
       tipoDocumento,
@@ -919,14 +975,63 @@ export function AlumnoDetallePage() {
       fechaNacimiento,
       telefonoWhatsapp: telefonoWhatsapp.trim(),
       modalidad,
-      tasaFijadaOverride: tasaFijadaOverride.trim() ? tasaFijadaOverride.trim() : null,
       fichaSaludPrivada: fichaSaludPrivada.trim() ? fichaSaludPrivada.trim() : null,
     };
+    if (decisionPlanTarifa.accion !== 'guardar_override') {
+      payload.tasaFijadaOverride = tasaFijadaOverride.trim()
+        ? tasaFijadaOverride.trim()
+        : null;
+    }
+
+    // MODO DEMO EXPLÍCITO: el guardado vive en estado local, sin llamadas reales (el banner
+    // demo visible lo declara). Nunca se declara éxito de un servidor que no respondió.
+    if (isDemoMode) {
+      if (decisionPlanTarifa.accion !== 'ninguna') {
+        aplicarDecisionPlanTarifaDemo(decisionPlanTarifa);
+        const planDemo = planesCatalogo.find((p) => p.id === selectedPlanId) ?? null;
+        setAlumno((prev) =>
+          prev
+            ? {
+                ...prev,
+                planActivoId: selectedPlanId || null,
+                planActivoNombre:
+                  decisionPlanTarifa.accion === 'guardar_override'
+                    ? planDemo?.nombre ?? prev.planActivoNombre
+                    : null,
+                precioAcordadoOverride:
+                  decisionPlanTarifa.accion === 'guardar_override'
+                    ? decisionPlanTarifa.payload.precioAcordadoUsd
+                    : null,
+              }
+            : prev
+        );
+      }
+      setSaveSuccessMsg('Expediente, plan y tarifa actualizados con éxito (demo).');
+      setTimeout(() => setSaveSuccessMsg(null), 2500);
+      setIsSavingPerfil(false);
+      return;
+    }
 
     try {
       const res = await apiClient.patch<PerfilAlumnoDetalleDTO>(`/alumnos/${id}`, payload);
       setAlumno((prev) => (prev ? { ...prev, ...res } : res));
-      setSaveSuccessMsg('Expediente y ficha médica actualizados con éxito.');
+
+      // RF-005: el plan y la tarifa se persisten por los endpoints de override (upsert/borrado),
+      // la única vía que alimenta la precedencia RN-03 al emitir cuotas.
+      setIsGuardandoPlan(true);
+      const resultadoPlan = await aplicarDecisionPlanTarifa(
+        decisionPlanTarifa,
+        alumno?.usuarioId ?? res.usuarioId
+      );
+      if (!resultadoPlan.ok) {
+        // Honestidad: el expediente SÍ se guardó; el plan/tarifa no. Se dice exactamente eso.
+        setSaveErrorMsg(
+          `Los datos del expediente se guardaron, pero no se pudo guardar el plan y la tarifa: ${resultadoPlan.error}`
+        );
+        return;
+      }
+
+      setSaveSuccessMsg('Expediente, plan y tarifa actualizados con éxito.');
       setTimeout(() => setSaveSuccessMsg(null), 2500);
     } catch (err: any) {
       // D5: el expediente solo cambia con respuesta OK; nunca éxito falso ni mutación local.
@@ -934,7 +1039,121 @@ export function AlumnoDetallePage() {
         err?.message || 'No se pudo guardar el expediente. Revisa los datos e inténtalo de nuevo.'
       );
     } finally {
+      setIsGuardandoPlan(false);
       setIsSavingPerfil(false);
+    }
+  };
+
+  /**
+   * WU-J (RF-005): aplica la decisión de plan/tarifa contra los endpoints de override.
+   * - `guardar_override`: POST upsert (201) y luego DELETE de overrides de otros planes.
+   * - `eliminar_override`: DELETE de los overrides vigentes.
+   * Solo se declara éxito con respuestas 2xx; el primer fallo se devuelve con su mensaje.
+   */
+  const aplicarDecisionPlanTarifa = async (
+    decision: DecisionPlanTarifa,
+    clienteUsuarioId: string
+  ): Promise<{ ok: true } | { ok: false; error: string }> => {
+    try {
+      if (decision.accion === 'guardar_override') {
+        await apiClient.post<OverridePlanDetalleDTO>('/finanzas/planes/override', {
+          planId: decision.payload.planId,
+          clienteId: clienteUsuarioId,
+          precioAcordadoUsd: decision.payload.precioAcordadoUsd,
+          tasaFijadaOverride: decision.payload.tasaFijadaOverride,
+        });
+        for (const overrideId of decision.overridesAEliminar) {
+          await apiClient.delete(`/finanzas/planes/override/${overrideId}`);
+        }
+      } else if (decision.accion === 'eliminar_override') {
+        for (const overrideId of decision.overridesAEliminar) {
+          await apiClient.delete(`/finanzas/planes/override/${overrideId}`);
+        }
+      }
+
+      if (decision.accion !== 'ninguna') {
+        await cargarOverrides(clienteUsuarioId);
+      }
+      return { ok: true };
+    } catch (err: any) {
+      return {
+        ok: false,
+        error: err?.message || 'No se pudo guardar el override del alumno.',
+      };
+    }
+  };
+
+  /** MODO DEMO: la misma decisión, aplicada al estado local (sin llamadas a la API). */
+  const aplicarDecisionPlanTarifaDemo = (decision: DecisionPlanTarifa) => {
+    if (decision.accion === 'guardar_override') {
+      const plan = planesCatalogo.find((p) => p.id === decision.payload.planId) ?? null;
+      const ahora = new Date().toISOString();
+      setOverridesAlumno((prev) => {
+        const base = prev.find((o) => o.planId === decision.payload.planId);
+        return [
+          {
+            id: base?.id ?? `override-demo-${Date.now()}`,
+            planId: decision.payload.planId,
+            clienteId: alumno?.usuarioId ?? 'user-demo',
+            precioAcordadoUsd: decision.payload.precioAcordadoUsd,
+            tasaFijadaOverride: decision.payload.tasaFijadaOverride,
+            beneficiosPersonalizados: base?.beneficiosPersonalizados ?? null,
+            motivoOverride: base?.motivoOverride ?? null,
+            planNombre: plan?.nombre ?? base?.planNombre ?? null,
+            planPrecioBaseUsd: plan?.precioBaseUsd ?? base?.planPrecioBaseUsd ?? null,
+            clienteNombre: base?.clienteNombre ?? null,
+            createdAtUtc: base?.createdAtUtc ?? ahora,
+            updatedAtUtc: ahora,
+          },
+        ];
+      });
+    } else if (decision.accion === 'eliminar_override') {
+      setOverridesAlumno([]);
+    }
+  };
+
+  /** WU-J (RF-005): quitar el override vigente (el alumno vuelve al catálogo). */
+  const handleQuitarOverride = async () => {
+    if (!alumno || overridesAlumno.length === 0) return;
+    if (
+      !window.confirm(
+        '¿Quitar el override de este alumno? Volverá a los valores del plan del catálogo y a la tasa global.'
+      )
+    ) {
+      return;
+    }
+    setSaveSuccessMsg(null);
+    setSaveErrorMsg(null);
+
+    if (isDemoMode) {
+      setOverridesAlumno([]);
+      setPrecioOverride('');
+      setTasaFijadaOverride('');
+      setAlumno((prev) => (prev ? { ...prev, precioAcordadoOverride: null } : prev));
+      setSaveSuccessMsg('Override eliminado: el alumno vuelve a los valores del catálogo (demo).');
+      setTimeout(() => setSaveSuccessMsg(null), 2500);
+      return;
+    }
+
+    try {
+      for (const override of overridesAlumno) {
+        await apiClient.delete(`/finanzas/planes/override/${override.id}`);
+      }
+      // La API limpia la tasa global del alumno si venía de este override (ADR-003 §3.2).
+      const tasasEliminadas = overridesAlumno
+        .map((o) => o.tasaFijadaOverride)
+        .filter((tasa): tasa is string => Boolean(tasa));
+      if (tasasEliminadas.includes(tasaFijadaOverride.trim())) {
+        setTasaFijadaOverride('');
+      }
+      setPrecioOverride('');
+      await cargarOverrides(alumno.usuarioId);
+      setSaveSuccessMsg('Override eliminado: el alumno vuelve a los valores del catálogo.');
+      setTimeout(() => setSaveSuccessMsg(null), 2500);
+    } catch (err: any) {
+      setSaveErrorMsg(
+        err?.message || 'No se pudo quitar el override. Inténtalo de nuevo.'
+      );
     }
   };
 
@@ -1831,10 +2050,72 @@ export function AlumnoDetallePage() {
                     <CreditCard className="h-4 w-4 text-primary" />
                     <h3 className="font-extrabold text-sm text-foreground">Plan Comercial & Tarifa (RF-005)</h3>
                   </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase">
-                    Override Activo
-                  </span>
+                  {/* D6/WU-J: el badge dice la verdad: override real, catálogo real o sin dato. */}
+                  {overrideVigente ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase">
+                      Override activo
+                    </span>
+                  ) : overrideError ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase">
+                      Sin dato
+                    </span>
+                  ) : alumno?.planActivoNombre ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase">
+                      Precio del catálogo
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase">
+                      Sin plan asignado
+                    </span>
+                  )}
                 </div>
+
+                {overrideError && (
+                  <p
+                    role="alert"
+                    className="text-[11px] font-bold text-destructive flex items-start gap-1.5"
+                  >
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    {overrideError}
+                  </p>
+                )}
+
+                {overrideVigente && (
+                  <div className="rounded-2xl border border-primary/25 bg-primary/5 p-3 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-foreground">
+                        {textoPrecioVigente(
+                          overrideVigente,
+                          planesCatalogo.find((p) => p.id === overrideVigente.planId) ??
+                            planSeleccionado
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleQuitarOverride}
+                        className="inline-flex items-center gap-1 text-[10px] font-bold text-destructive hover:underline cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+                        title="Quitar el override y volver a los valores del catálogo"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        Quitar override
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      {overrideVigente.planNombre ??
+                        planSeleccionado?.nombre ??
+                        'Plan del catálogo'}
+                      {' · '}
+                      {overrideVigente.tasaFijadaOverride
+                        ? `Tasa especial ${overrideVigente.tasaFijadaOverride} Bs/USD`
+                        : 'Tasa global del entrenador'}
+                    </p>
+                    {overrideVigente.motivoOverride && (
+                      <p className="text-[11px] text-muted-foreground italic">
+                        Motivo: {overrideVigente.motivoOverride}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-3">
                   <div className="space-y-1">
@@ -1842,10 +2123,16 @@ export function AlumnoDetallePage() {
                     <select
                       value={selectedPlanId}
                       onChange={(e) => {
-                        setSelectedPlanId(e.target.value);
-                        const planSel = planesCatalogo.find((p) => p.id === e.target.value);
-                        if (planSel && !precioOverride) {
-                          setPrecioOverride(planSel.precioBaseUsd);
+                        const nuevoPlanId = e.target.value;
+                        setSelectedPlanId(nuevoPlanId);
+                        // Al cambiar de plan se limpia el precio: vacío = hereda el del plan.
+                        // Si ya existe un override para el plan elegido, se precarga su valor real.
+                        const overrideDelPlan = overridesAlumno.find(
+                          (o) => o.planId === nuevoPlanId
+                        );
+                        setPrecioOverride(overrideDelPlan?.precioAcordadoUsd ?? '');
+                        if (overrideDelPlan?.tasaFijadaOverride) {
+                          setTasaFijadaOverride(overrideDelPlan.tasaFijadaOverride);
                         }
                       }}
                       className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
@@ -1857,6 +2144,24 @@ export function AlumnoDetallePage() {
                         </option>
                       ))}
                     </select>
+                    {planSeleccionado && (
+                      <div className="rounded-xl bg-secondary/50 border border-border/60 px-3 py-2 space-y-1">
+                        <p className="text-[11px] text-muted-foreground">
+                          Precio base:{' '}
+                          <span className="font-mono font-bold text-foreground">
+                            ${planSeleccionado.precioBaseUsd} USD
+                          </span>
+                          {' · '}
+                          {planSeleccionado.duracionMeses}{' '}
+                          {planSeleccionado.duracionMeses === 1 ? 'mes' : 'meses'}
+                        </p>
+                        {planSeleccionado.beneficios.length > 0 && (
+                          <p className="text-[11px] text-muted-foreground leading-relaxed">
+                            Incluye: {planSeleccionado.beneficios.join(' · ')}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -1868,9 +2173,12 @@ export function AlumnoDetallePage() {
                         type="text"
                         value={precioOverride}
                         onChange={(e) => setPrecioOverride(e.target.value)}
-                        placeholder="ej. 35.00"
+                        placeholder="Vacío = precio del plan"
                         className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground font-mono font-bold focus:outline-hidden focus:border-primary"
                       />
+                      <p className="text-[10px] text-muted-foreground">
+                        Vacío hereda el precio del plan. 0.00 = becado.
+                      </p>
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-muted-foreground">
@@ -1880,9 +2188,12 @@ export function AlumnoDetallePage() {
                         type="text"
                         value={tasaFijadaOverride}
                         onChange={(e) => setTasaFijadaOverride(e.target.value)}
-                        placeholder="ej. 65.0000"
+                        placeholder="Vacío = tasa global"
                         className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground font-mono focus:outline-hidden focus:border-primary"
                       />
+                      <p className="text-[10px] text-muted-foreground">
+                        Vacío usa la tasa global del entrenador.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -2073,6 +2384,13 @@ export function AlumnoDetallePage() {
                 type="button"
                 onClick={() => {
                   triggerHaptic('medium');
+                  // WU-J (RF-005): precarga el precio efectivo real (override > plan del catálogo)
+                  // para que el cobro en sala coincida con la deuda que el servidor emite.
+                  const precioEfectivo =
+                    overrideVigente?.precioAcordadoUsd ??
+                    planSeleccionado?.precioBaseUsd ??
+                    planesCatalogo.find((p) => p.id === alumno?.planActivoId)?.precioBaseUsd;
+                  if (precioEfectivo) setCobroMonto(precioEfectivo);
                   setIsCobroModalOpen(true);
                 }}
                 className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md shadow-emerald-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-emerald-400"

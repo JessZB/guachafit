@@ -15,6 +15,7 @@ import {
   Activity,
   ClipboardList,
   ShieldCheck,
+  Wallet,
 } from 'lucide-react';
 
 export function Sidebar() {
@@ -34,6 +35,7 @@ export function Sidebar() {
     { to: '/coach/menu', label: 'Menú de Acciones', icon: LayoutGrid, description: 'Todas tus tareas' },
     { to: '/coach/dashboard', label: 'Panel administrativo', icon: LayoutDashboard, description: 'Resumen y cobros' },
     { to: '/coach/monitor-adherencia', label: 'Seguimiento de Alumnos', icon: Activity, description: 'Riesgo semanal de tus alumnos' },
+    { to: '/coach/cartera', label: 'Control de Cobros', icon: Wallet, description: 'Mora, vencimientos y recordatorios' },
     { to: '/coach/conciliacion', label: 'Validar Pagos', icon: DollarSign, description: 'Pagos por confirmar' },
     { to: '/coach/alumnos', label: 'Mis Alumnos', icon: Users, description: 'Datos, planes y pagos' },
     { to: '/coach/plantillas', label: 'Plantillas de ejercicios', icon: ClipboardList, description: 'Rutinas reutilizables' },

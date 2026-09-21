@@ -323,7 +323,7 @@ export function DashboardPage() {
 
           {dashboard && dashboard.bandejasRapidas.alumnosEnMora.length > TOPE_FILAS_RIESGO && (
             <Link
-              to="/coach/alumnos"
+              to="/coach/cartera?pestana=mora"
               className="w-full py-2 px-3 rounded-xl bg-secondary/60 hover:bg-secondary text-foreground font-bold text-[11px] flex items-center justify-between transition-colors"
             >
               <span>Ver todos ({dashboard.bandejasRapidas.alumnosEnMora.length})</span>

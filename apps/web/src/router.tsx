@@ -61,6 +61,10 @@ const CoachMenuPage = lazy(() =>
 const ConciliacionPage = lazy(() =>
   import('./pages/entrenador/ConciliacionPage').then((m) => ({ default: m.ConciliacionPage }))
 );
+// WU-I (RF-009): tablero de control de cartera y cobros del coach.
+const CarteraPage = lazy(() =>
+  import('./pages/entrenador/CarteraPage').then((m) => ({ default: m.CarteraPage }))
+);
 const AlumnosPage = lazy(() =>
   import('./pages/entrenador/AlumnosPage').then((m) => ({ default: m.AlumnosPage }))
 );
@@ -178,6 +182,10 @@ export const router = createBrowserRouter([
           {
             path: '/coach/conciliacion',
             element: <ConciliacionPage />,
+          },
+          {
+            path: '/coach/cartera',
+            element: <CarteraPage />,
           },
           {
             path: '/coach/alumnos',
