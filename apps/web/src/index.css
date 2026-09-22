@@ -17,6 +17,20 @@
   --color-accent-foreground: hsl(var(--accent-foreground));
   --color-destructive: hsl(var(--destructive));
   --color-destructive-foreground: hsl(var(--destructive-foreground));
+  /* Semantic status colors. `strong` = solid fill (dark keeps the current -500/-600
+     palette step, light uses an AA-compliant deep tone); `-foreground` = content
+     placed on top of a solid semantic fill; `decor` = non-semantic violet accent. */
+  --color-success: hsl(var(--success));
+  --color-success-strong: hsl(var(--success-strong));
+  --color-success-foreground: hsl(var(--success-foreground));
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+  --color-danger: hsl(var(--danger));
+  --color-danger-strong: hsl(var(--danger-strong));
+  --color-danger-foreground: hsl(var(--danger-foreground));
+  --color-info: hsl(var(--info));
+  --color-info-foreground: hsl(var(--info-foreground));
+  --color-decor: hsl(var(--decor));
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
@@ -35,19 +49,30 @@
     --card-foreground: 222 35% 12%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 35% 12%;
-    --primary: 158 75% 36%;
+    --primary: 158 75% 26%;
     --primary-foreground: 0 0% 98%;
     --secondary: 216 20% 92%;
     --secondary-foreground: 222 35% 15%;
     --muted: 216 20% 93%;
-    --muted-foreground: 215 16% 45%;
+    --muted-foreground: 215 18% 42%;
     --accent: 216 20% 90%;
     --accent-foreground: 222 35% 12%;
-    --destructive: 350 84% 54%;
+    --destructive: 345 83% 41%;
     --destructive-foreground: 0 0% 98%;
+    --success: 163 88% 20%;
+    --success-strong: 163 88% 20%;
+    --success-foreground: 0 0% 98%;
+    --warning: 23 83% 31%;
+    --warning-foreground: 0 0% 98%;
+    --danger: 345 83% 41%;
+    --danger-strong: 345 83% 41%;
+    --danger-foreground: 0 0% 98%;
+    --info: 201 96% 32%;
+    --info-foreground: 0 0% 98%;
+    --decor: 272 72% 47%;
     --border: 215 20% 86%;
     --input: 215 20% 86%;
-    --ring: 158 75% 36%;
+    --ring: 158 75% 26%;
     --radius: 0.875rem;
   }
 
@@ -69,6 +94,17 @@
     --accent-foreground: 210 25% 92%;   /* #eaf0f6 */
     --destructive: 350 84% 60%;         /* #f43f5e - Rose-500 */
     --destructive-foreground: 0 0% 98%;
+    --success: 158 64% 52%;             /* #34d399 - emerald-400 (current de-facto accent) */
+    --success-strong: 161 94% 30%;      /* #059669 - emerald-600 (current solid CTA fill) */
+    --success-foreground: 222 47% 11%;  /* #0f172a */
+    --warning: 43 96% 56%;              /* #fbbf24 - amber-400 */
+    --warning-foreground: 222 47% 11%;  /* #0f172a */
+    --danger: 351 95% 71%;              /* #fb7185 - rose-400 */
+    --danger-strong: 350 89% 60%;       /* #f43f5e - rose-500 (current solid fill) */
+    --danger-foreground: 222 47% 11%;   /* #0f172a */
+    --info: 198 93% 60%;                /* #38bdf8 - sky-400 */
+    --info-foreground: 222 47% 11%;     /* #0f172a */
+    --decor: 270 95% 75%;               /* #c084fc - purple-400 (decorative only) */
     --border: 222 16% 22%;              /* #2d3749 - Refined border separator */
     --input: 222 16% 20%;               /* #283243 */
     --ring: 158 72% 46%;                /* Focus ring */
@@ -80,4 +116,23 @@ body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
   font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+/* PWA safe-areas: index.html declara viewport-fit=cover, así que en modo standalone
+   (iOS/Android) la UI se dibuja bajo la barra de estado y el home indicator.
+   Cada utilidad suma el inset al ritmo vertical propio del elemento, de modo que
+   reemplaza —no acumula— el padding base; en navegador el inset vale 0px. */
+@utility safe-area-pt {
+  /* Header sticky: ritmo base 0.75rem + notch/barra de estado superior. */
+  padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+}
+
+@utility safe-area-pb {
+  /* Bottom nav fijo: ritmo base 0.5rem + home indicator inferior. */
+  padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+@utility safe-area-content-pb {
+  /* Contenido scrollable: despeja el bottom nav (6rem) + home indicator. */
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
 }

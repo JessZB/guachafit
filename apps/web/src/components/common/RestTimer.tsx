@@ -154,7 +154,7 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
             </div>
             <div className="flex flex-col text-left">
               <span
-                className={`text-[10px] uppercase font-bold leading-none tracking-wider ${
+                className={`text-[11px] uppercase font-bold leading-none tracking-wider ${
                   isFinished ? 'text-destructive' : 'text-muted-foreground'
                 }`}
               >
@@ -327,7 +327,7 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
                 }}
                 className={`py-2 px-3.5 rounded-xl font-bold flex items-center gap-1.5 text-xs shadow-md transition-all cursor-pointer ${
                   isRunning
-                    ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30'
+                    ? 'bg-warning/20 text-warning border border-warning/30'
                     : 'bg-primary text-primary-foreground'
                 }`}
               >

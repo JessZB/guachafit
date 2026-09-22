@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../../context/auth-context';
 import { apiClient, ApiError, generateIdempotencyKey } from '../../lib/api-client';
 import { resolverBloqueoAlumno, type BloqueoAlumno } from '../../lib/acceso-alumno';
 import { queueOfflineMutation, offlineDb, getLatestCachedRutina } from '../../lib/offline-db';
 import { subscribeToSyncStatus, type SyncStatusState } from '../../lib/offline-sync';
+import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import { BloqueoAlumnoPanel } from '../../components/common/BloqueoAlumnoPanel';
 import { SyncQueuePanel } from '../../components/common/SyncQueuePanel';
 import { RestTimer } from '../../components/common/RestTimer';
@@ -58,6 +59,7 @@ import {
   Video,
   ExternalLink,
   ClipboardList,
+  ChevronRight,
 } from 'lucide-react';
 import {
   formatDuracionMinutos,
@@ -490,7 +492,6 @@ export function EntrenamientoPage() {
 
   // WU3b (Escenario 1): modal de video demostrativo del catálogo
   const [videoModal, setVideoModal] = useState<{ url: string; nombre: string } | null>(null);
-  const videoCloseRef = useRef<HTMLButtonElement | null>(null);
 
   // Estados honestos de carga: error de red, offline sin cache y errores de acción explícita
   const [loadError, setLoadError] = useState(false);
@@ -510,6 +511,21 @@ export function EntrenamientoPage() {
 
   // RF-001 Escenario 5: cierre de sesión vacía (descansado / incompleto)
   const [isEmptyCloseModalOpen, setIsEmptyCloseModalOpen] = useState(false);
+
+  // U3b: los tres modales comparten el mismo contrato de diálogo accesible (Escape, trampa de
+  // Tab, foco inicial y restore del foco al disparador).
+  const refModalFinalizar = useDialogoAccesible({
+    abierto: isFinishModalOpen,
+    onCerrar: () => setIsFinishModalOpen(false),
+  });
+  const refModalCierreVacio = useDialogoAccesible({
+    abierto: isEmptyCloseModalOpen,
+    onCerrar: () => setIsEmptyCloseModalOpen(false),
+  });
+  const refModalVideo = useDialogoAccesible({
+    abierto: videoModal !== null,
+    onCerrar: () => setVideoModal(null),
+  });
 
   // RN-02: feedback real de la finalización (nunca afirmar racha sin respaldo de la API)
   const [finishFeedback, setFinishFeedback] = useState<{
@@ -577,22 +593,7 @@ export function EntrenamientoPage() {
     return 'Fallo muscular (10/10)';
   };
 
-  // Accesibilidad: cierre de modales con Escape
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (isFinishModalOpen) setIsFinishModalOpen(false);
-      if (isEmptyCloseModalOpen) setIsEmptyCloseModalOpen(false);
-      if (videoModal) setVideoModal(null);
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFinishModalOpen, isEmptyCloseModalOpen, videoModal]);
-
-  // Accesibilidad: al abrir el video demostrativo el foco pasa al botón de cierre del modal.
-  useEffect(() => {
-    if (videoModal) videoCloseRef.current?.focus();
-  }, [videoModal]);
+  // Accesibilidad (U3b): Escape, trampa de foco y restore viven en `useDialogoAccesible`.
 
   // Cargar sesión de hoy y progreso semanal.
   // - Sin argumento: trae la sesión de hoy más reciente del alumno (cualquier bloque).
@@ -1543,7 +1544,7 @@ export function EntrenamientoPage() {
           className={`w-full p-3 rounded-2xl border text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer active:scale-[0.99] ${
             syncRejected > 0
               ? 'bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/15'
-              : 'bg-amber-500/10 border-amber-500/30 text-amber-500 hover:bg-amber-500/15'
+              : 'bg-warning/10 border-warning/30 text-warning hover:bg-warning/15'
           }`}
         >
           {syncRejected > 0 ? (
@@ -1552,7 +1553,7 @@ export function EntrenamientoPage() {
             <RefreshCw className={`h-4 w-4 shrink-0 ${syncState.isSyncing ? 'animate-spin' : ''}`} />
           )}
           <span>{syncSummaryLabel}</span>
-          <span className="ml-auto text-[10px] uppercase tracking-wider font-bold opacity-80">
+          <span className="ml-auto text-[11px] uppercase tracking-wider font-bold opacity-80">
             Ver detalles
           </span>
         </button>
@@ -1581,7 +1582,7 @@ export function EntrenamientoPage() {
                 <span className="text-xs font-black font-mono text-foreground">
                   {semanaProgreso.bloquesCompletados}/{semanaProgreso.totalBloques} Bloques
                 </span>
-                <span className="text-[10px] text-muted-foreground ml-1.5 font-bold">
+                <span className="text-[11px] text-muted-foreground ml-1.5 font-bold">
                   ({semanaProgreso.porcentajeCumplimiento}%)
                 </span>
               </div>
@@ -1597,7 +1598,13 @@ export function EntrenamientoPage() {
           </div>
 
           {/* Chips de Bloques de la Semana */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+          {/* Móvil: scroll horizontal con degradado + chevron que insinúan que se puede deslizar */}
+          <div className="relative">
+            <div
+              className="flex items-center gap-2 overflow-x-auto pb-1 pr-10 sm:pr-2 scrollbar-thin"
+              aria-label="Bloques de la semana"
+              role="group"
+            >
             {semanaProgreso.bloques.map((b) => {
               const esActivo = sesion?.bloqueId === b.bloqueId;
               const esCompletado = b.completado;
@@ -1619,11 +1626,11 @@ export function EntrenamientoPage() {
                 'bg-secondary/60 text-muted-foreground border-border hover:bg-secondary hover:text-foreground';
               if (esCompletado) {
                 badgeStyle = esActivo
-                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 ring-2 ring-emerald-500/30 font-extrabold'
-                  : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 font-bold';
+                  ? 'bg-success/20 text-success border-success/40 ring-2 ring-success/30 font-extrabold'
+                  : 'bg-success/10 text-success border-success/30 hover:bg-success/20 font-bold';
               } else if (esOmitido) {
                 badgeStyle =
-                  'bg-amber-500/10 text-amber-500 border-amber-500/30 hover:bg-amber-500/20 font-bold';
+                  'bg-warning/10 text-warning border-warning/30 hover:bg-warning/20 font-bold';
               } else if (esActivo) {
                 badgeStyle =
                   'bg-primary text-primary-foreground border-primary font-black shadow-md shadow-primary/25 ring-2 ring-primary/30';
@@ -1644,7 +1651,7 @@ export function EntrenamientoPage() {
                   }
                 >
                   {esCompletado ? (
-                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
                   ) : esOmitido ? (
                     b.motivoOmision === MotivoOmision.DESCANSO ? (
                       <Coffee className="h-3.5 w-3.5 shrink-0" />
@@ -1659,22 +1666,29 @@ export function EntrenamientoPage() {
                     <Clock className="h-3.5 w-3.5 shrink-0 opacity-60" />
                   )}
                   <span className="font-semibold">{b.titulo.split(':')[0]}</span>
-                  {esCompletado && <span className="text-[10px] font-bold opacity-80">✓</span>}
+                  {esCompletado && <span className="text-[11px] font-bold opacity-80">✓</span>}
                   {esOmitido && (
-                    <span className="text-[10px] font-bold opacity-90">{etiquetaOmision}</span>
+                    <span className="text-[11px] font-bold opacity-90">{etiquetaOmision}</span>
                   )}
                   {fechaVisible && (esCompletado || esOmitido) && (
-                    <span className="text-[10px] font-medium opacity-70">{fechaVisible}</span>
+                    <span className="text-[11px] font-medium opacity-70">{fechaVisible}</span>
                   )}
-                  {esActivo && <span className="text-[10px] font-mono uppercase tracking-wider ml-0.5">Hoy</span>}
+                  {esActivo && <span className="text-[11px] font-mono uppercase tracking-wider ml-0.5">Hoy</span>}
                   {!esCompletado && !esOmitido && !esActivo && esSugerido && (
-                    <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">
+                    <span className="text-[11px] uppercase font-mono px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">
                       Sugerido
                     </span>
                   )}
                 </button>
               );
             })}
+            </div>
+            <div
+              className="pointer-events-none absolute inset-y-0 right-0 flex w-10 items-center justify-end pr-0.5 bg-gradient-to-l from-card via-card/70 to-transparent sm:hidden"
+              aria-hidden="true"
+            >
+              <ChevronRight className="h-4 w-4 text-muted-foreground/70" />
+            </div>
           </div>
         </div>
       )}
@@ -1809,7 +1823,7 @@ export function EntrenamientoPage() {
                           {b.titulo}
                         </span>
                         {b.esSugeridoHoy && (
-                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-primary/20 text-primary">
+                          <span className="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-primary/20 text-primary">
                             Sugerido
                           </span>
                         )}
@@ -1820,7 +1834,7 @@ export function EntrenamientoPage() {
                         </span>
                       )}
                       {b.fechaProgramada && (
-                        <span className="text-[10px] text-muted-foreground font-medium">
+                        <span className="text-[11px] text-muted-foreground font-medium">
                           Programado: {formatFechaCalendario(b.fechaProgramada)}
                         </span>
                       )}
@@ -1847,11 +1861,11 @@ export function EntrenamientoPage() {
                   <span
                     className={`text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
                       isCompleted
-                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                        ? 'bg-success/15 text-success border border-success/20'
                         : isInProgress
                         ? 'bg-primary/15 text-primary border border-primary/20'
                         : isOmitted
-                        ? 'bg-amber-500/15 text-amber-500 border border-amber-500/25'
+                        ? 'bg-warning/15 text-warning border border-warning/25'
                         : 'bg-secondary text-muted-foreground border border-border'
                     }`}
                   >
@@ -1874,7 +1888,7 @@ export function EntrenamientoPage() {
                     </span>
                   )}
                   {sesion.esDiaDescansoOriginal && (
-                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/25 flex items-center gap-1">
+                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider bg-warning/15 text-warning border border-warning/25 flex items-center gap-1">
                       ⏱️ Recuperada en Descanso
                     </span>
                   )}
@@ -1889,7 +1903,7 @@ export function EntrenamientoPage() {
             <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-secondary/60 border border-border">
               <Flame
                 className={`h-6 w-6 ${
-                  sesion.cumpleReglaRacha ? 'text-amber-500 fill-amber-500 animate-pulse' : 'text-muted-foreground'
+                  sesion.cumpleReglaRacha ? 'text-warning fill-warning animate-pulse' : 'text-muted-foreground'
                 }`}
               />
               <div className="flex flex-col">
@@ -1955,7 +1969,7 @@ export function EntrenamientoPage() {
                   aria-pressed={unidadPeso === u}
                   onClick={() => handleCambiarUnidad(u)}
                   title={`Mostrar y registrar pesos en ${u === 'kg' ? 'kilogramos' : 'libras'}`}
-                  className={`py-2 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer active:scale-95 ${
+                  className={`min-h-11 px-3.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer active:scale-95 ${
                     unidadPeso === u
                       ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/25'
                       : 'text-muted-foreground hover:text-foreground'
@@ -2002,8 +2016,8 @@ export function EntrenamientoPage() {
             <div
               className={`p-3.5 rounded-2xl border flex items-start gap-3 ${
                 isOmitted
-                  ? 'bg-amber-500/10 border-amber-500/25 text-amber-500'
-                  : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                  ? 'bg-warning/10 border-warning/25 text-warning'
+                  : 'bg-success/10 border-success/20 text-success'
               }`}
             >
               {isOmitted ? (
@@ -2019,7 +2033,7 @@ export function EntrenamientoPage() {
                       : 'Día registrado como incompleto'
                     : '¡Sesión de entrenamiento finalizada con éxito!'}
                 </p>
-                <p className={`text-[11px] ${isOmitted ? 'text-amber-500/90' : 'text-emerald-400/80'}`}>
+                <p className={`text-[11px] ${isOmitted ? 'text-warning/90' : 'text-success/80'}`}>
                   {isOmitted
                     ? 'No suma racha. Puedes repetir el entrenamiento cuando quieras: el historial de este día se conserva.'
                     : pendienteSync
@@ -2034,7 +2048,7 @@ export function EntrenamientoPage() {
                   formatRangoHorasLocal(sesion.fechaInicioUtc, sesion.fechaFinUtc)) && (
                   <p
                     className={`text-[11px] mt-0.5 font-medium ${
-                      isOmitted ? 'text-amber-500/80' : 'text-emerald-400/70'
+                      isOmitted ? 'text-warning/80' : 'text-success/80'
                     }`}
                   >
                     {formatDuracionMinutos(sesion.duracionMinutos)
@@ -2054,7 +2068,7 @@ export function EntrenamientoPage() {
 
             {sesion.notasAlumno && (
               <div className="p-3.5 rounded-2xl bg-secondary/50 border border-border/80 text-xs space-y-1">
-                <span className="font-bold text-muted-foreground text-[10px] uppercase tracking-wider flex items-center gap-1.5">
+                <span className="font-bold text-muted-foreground text-[11px] uppercase tracking-wider flex items-center gap-1.5">
                   <MessageSquare className="h-3 w-3 text-primary" />
                   Sensaciones y notas enviadas a tu coach:
                 </span>
@@ -2145,7 +2159,7 @@ export function EntrenamientoPage() {
             <div className="flex items-start gap-2 p-2.5 rounded-2xl bg-primary/5 border border-primary/15">
               <ClipboardList className="h-4 w-4 text-primary shrink-0 mt-0.5" />
               <div className="min-w-0 flex-1">
-                <span className="text-[10px] font-black uppercase tracking-wider text-primary block leading-none mb-1">
+                <span className="text-[11px] font-black uppercase tracking-wider text-primary block leading-none mb-1">
                   Prescrito por tu coach
                 </span>
                 <p className="text-[11px] sm:text-xs font-bold text-foreground leading-snug">
@@ -2167,12 +2181,13 @@ export function EntrenamientoPage() {
             {/* Sets Grid */}
             <div className="space-y-2.5">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                <span className="text-[11px] font-black uppercase tracking-wider text-muted-foreground">
                   Registrado (real)
                 </span>
                 <span className="h-px flex-1 bg-border/60" aria-hidden="true" />
               </div>
-              <div className="grid grid-cols-12 gap-1.5 sm:gap-2.5 text-xs font-black text-muted-foreground uppercase tracking-wider px-2">
+              {/* Cabecera de columnas: solo desde sm; en móvil cada campo lleva su propio label */}
+              <div className="hidden sm:grid grid-cols-12 gap-1.5 sm:gap-2.5 text-xs font-black text-muted-foreground uppercase tracking-wider px-2">
                 <span className="col-span-1 text-center">#</span>
                 <span className="col-span-4 text-center">Peso ({unidadPeso})</span>
                 <span className="col-span-3 text-center">Reps</span>
@@ -2202,25 +2217,28 @@ export function EntrenamientoPage() {
                   key={serie.id}
                   className={`p-2 sm:p-2.5 rounded-2xl border transition-all ${
                     serie.completada
-                      ? 'bg-emerald-500/10 border-emerald-500/30'
+                      ? 'bg-success/10 border-success/30'
                       : 'bg-secondary/30 border-border hover:border-primary/40'
                   }`}
                 >
-                  <div className="grid grid-cols-12 gap-1.5 sm:gap-2.5 items-start">
-                  <span className="col-span-1 self-center text-center font-mono font-black text-sm sm:text-base text-foreground">
+                  {/* Móvil: una columna por campo (input legible + steppers táctiles). Desktop: grid de 12. */}
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-12 sm:gap-2.5 sm:items-start">
+                  <span className="col-span-2 sm:col-span-1 self-center text-left sm:text-center font-mono font-black text-sm sm:text-base text-foreground">
                     #{serie.numeroSerie}
                   </span>
 
                   {/* Weight Input with Steppers (unidad visible: kg/lb, contrato siempre kg) */}
-                  <div className="col-span-4">
-                    <div className="flex items-center rounded-xl bg-background border border-border focus-within:border-primary overflow-hidden transition-colors h-10 sm:h-11 shadow-2xs">
+                  <div className="col-span-2 sm:col-span-4">
+                    <span className="sm:hidden mb-1 block text-[11px] font-black uppercase tracking-wider text-muted-foreground">
+                      Peso ({unidadPeso})
+                    </span>
+                    <div className="flex items-center rounded-xl bg-background border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 overflow-hidden transition-colors h-12 sm:h-11 shadow-2xs">
                       <button
                         type="button"
-                        tabIndex={-1}
                         disabled={isReadOnly}
                         onClick={() => handleStepSerieValue(ejIdx, sIdx, 'pesoKg', -1)}
                         aria-label={`Restar ${pasoVisible} ${unidadPeso}`}
-                        className="h-full w-8 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-sm sm:text-base font-black shrink-0 select-none disabled:opacity-30"
+                        className="h-full w-11 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-black shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
                       >
                         -
                       </button>
@@ -2236,17 +2254,16 @@ export function EntrenamientoPage() {
                         placeholder={unidadPeso}
                         aria-label={`Peso real en ${unidadPeso}, serie ${serie.numeroSerie}`}
                         aria-invalid={Boolean(errorPeso)}
-                        className={`w-full min-w-0 text-center py-2 px-0.5 bg-transparent text-sm sm:text-base font-mono font-black text-foreground focus:outline-hidden ${
+                        className={`w-full min-w-0 text-center py-2 px-1 bg-transparent text-base font-mono font-black text-foreground focus:outline-hidden ${
                           errorPeso ? 'text-destructive' : ''
                         }`}
                       />
                       <button
                         type="button"
-                        tabIndex={-1}
                         disabled={isReadOnly}
                         onClick={() => handleStepSerieValue(ejIdx, sIdx, 'pesoKg', 1)}
                         aria-label={`Sumar ${pasoVisible} ${unidadPeso}`}
-                        className="h-full w-8 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-sm sm:text-base font-black shrink-0 select-none disabled:opacity-30"
+                        className="h-full w-11 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-black shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
                       >
                         +
                       </button>
@@ -2254,7 +2271,7 @@ export function EntrenamientoPage() {
                     {/* Referencia prescrita por serie: permanece visible mientras el alumno edita */}
                     {prescritoSerie && (
                       <span
-                        className="block text-center text-[9px] font-bold text-muted-foreground leading-tight mt-0.5 truncate"
+                        className="block text-center text-[11px] font-bold text-muted-foreground leading-tight mt-1 sm:mt-0.5 truncate"
                         title={`Plan: ${formatearPesoConUnidad(prescritoSerie, unidadPeso)}`}
                       >
                         Plan: {formatearPesoConUnidad(prescritoSerie, unidadPeso)}
@@ -2263,15 +2280,17 @@ export function EntrenamientoPage() {
                   </div>
 
                   {/* Reps Input with Steppers (- / + 1 rep) */}
-                  <div className="col-span-3">
-                    <div className="flex items-center rounded-xl bg-background border border-border focus-within:border-primary overflow-hidden transition-colors h-10 sm:h-11 shadow-2xs">
+                  <div className="col-span-2 sm:col-span-3">
+                    <span className="sm:hidden mb-1 block text-[11px] font-black uppercase tracking-wider text-muted-foreground">
+                      Reps
+                    </span>
+                    <div className="flex items-center rounded-xl bg-background border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 overflow-hidden transition-colors h-12 sm:h-11 shadow-2xs">
                       <button
                         type="button"
-                        tabIndex={-1}
                         disabled={isReadOnly}
                         onClick={() => handleStepSerieValue(ejIdx, sIdx, 'repsLogradas', -1)}
                         aria-label="Restar 1 repetición"
-                        className="h-full w-7 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-sm sm:text-base font-black shrink-0 select-none disabled:opacity-30"
+                        className="h-full w-11 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-black shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
                       >
                         -
                       </button>
@@ -2285,28 +2304,30 @@ export function EntrenamientoPage() {
                         }
                         aria-label={`Reps logradas, serie ${serie.numeroSerie}`}
                         aria-invalid={Boolean(errorReps)}
-                        className={`w-full min-w-0 text-center py-2 px-0.5 bg-transparent text-sm sm:text-base font-mono font-black text-foreground focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                        className={`w-full min-w-0 text-center py-2 px-1 bg-transparent text-base font-mono font-black text-foreground focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
                           errorReps ? 'text-destructive' : ''
                         }`}
                       />
                       <button
                         type="button"
-                        tabIndex={-1}
                         disabled={isReadOnly}
                         onClick={() => handleStepSerieValue(ejIdx, sIdx, 'repsLogradas', 1)}
                         aria-label="Sumar 1 repetición"
-                        className="h-full w-7 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-sm sm:text-base font-black shrink-0 select-none disabled:opacity-30"
+                        className="h-full w-11 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-black shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
                       >
                         +
                       </button>
                     </div>
-                    <span className="block text-center text-[9px] font-bold text-muted-foreground leading-tight mt-0.5">
+                    <span className="block text-center text-[11px] font-bold text-muted-foreground leading-tight mt-1 sm:mt-0.5">
                       Objetivo: {serie.repsObjetivo} reps
                     </span>
                   </div>
 
                   {/* RPE Input (0-10 validado contra el contrato) */}
-                  <div className="col-span-2">
+                  <div className="col-span-1 sm:col-span-2">
+                    <span className="sm:hidden mb-1 block text-[11px] font-black uppercase tracking-wider text-muted-foreground">
+                      RPE
+                    </span>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -2319,27 +2340,32 @@ export function EntrenamientoPage() {
                       placeholder="8.5"
                       aria-label={`RPE real, serie ${serie.numeroSerie}`}
                       aria-invalid={Boolean(errorRpe)}
-                      className={`w-full text-center py-2 px-1 rounded-xl bg-background border text-xs sm:text-sm font-mono font-bold text-foreground focus:outline-hidden focus:border-primary h-10 sm:h-11 shadow-2xs ${
+                      className={`w-full text-center py-2 px-1 rounded-xl bg-background border text-base sm:text-sm font-mono font-bold text-foreground focus:outline-hidden focus:border-primary focus:ring-2 focus:ring-primary/25 h-12 sm:h-11 shadow-2xs ${
                         errorRpe ? 'border-destructive text-destructive' : 'border-border'
                       }`}
                     />
                   </div>
 
                   {/* Complete Checkbox */}
-                  <div className="col-span-2 flex justify-center">
-                    <button
-                      type="button"
-                      disabled={isReadOnly}
-                      onClick={() => handleToggleSet(ejIdx, sIdx)}
-                      aria-label={`Marcar serie ${serie.numeroSerie} como ${serie.completada ? 'pendiente' : 'completada'}`}
-                      className={`h-10 w-10 sm:h-11 sm:w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${
-                        serie.completada
-                          ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25 scale-105'
-                          : 'bg-background border-2 border-border text-muted-foreground hover:border-primary'
-                      }`}
-                    >
-                      {serie.completada && <Check className="h-5 w-5 sm:h-6 sm:w-6 stroke-[3.5]" />}
-                    </button>
+                  <div className="col-span-1 sm:col-span-2">
+                    <span className="sm:hidden mb-1 block text-[11px] font-black uppercase tracking-wider text-muted-foreground">
+                      Listo
+                    </span>
+                    <div className="flex sm:justify-center">
+                      <button
+                        type="button"
+                        disabled={isReadOnly}
+                        onClick={() => handleToggleSet(ejIdx, sIdx)}
+                        aria-label={`Marcar serie ${serie.numeroSerie} como ${serie.completada ? 'pendiente' : 'completada'}`}
+                        className={`h-12 w-12 sm:h-11 sm:w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary ${
+                          serie.completada
+                            ? 'bg-success-strong text-white shadow-md shadow-success-strong/25 scale-105'
+                            : 'bg-background border-2 border-border text-muted-foreground hover:border-primary'
+                        }`}
+                      >
+                        {serie.completada && <Check className="h-5 w-5 sm:h-6 sm:w-6 stroke-[3.5]" />}
+                      </button>
+                    </div>
                   </div>
                   </div>
 
@@ -2349,20 +2375,20 @@ export function EntrenamientoPage() {
                       type="button"
                       onClick={() => handleIniciarSerie(ejIdx, sIdx)}
                       title="Marca el inicio de esta serie para medir tu descanso real"
-                      className="mt-1.5 w-full py-1.5 rounded-lg inline-flex items-center justify-center gap-1 text-[10px] font-bold bg-primary/10 text-primary border border-primary/25 hover:bg-primary/20 transition-colors cursor-pointer active:scale-95"
+                      className="mt-1.5 w-full py-1.5 rounded-lg inline-flex items-center justify-center gap-1 text-[11px] font-bold bg-primary/10 text-primary border border-primary/25 hover:bg-primary/20 transition-colors cursor-pointer active:scale-95"
                     >
                       <Play className="h-3 w-3 fill-current" />
                       <span>Iniciar serie</span>
                     </button>
                   )}
                   {!isReadOnly && !serie.completada && serie.timestampInicioUtc && (
-                    <p className="mt-1.5 px-1 text-[10px] font-mono font-bold text-primary">
+                    <p className="mt-1.5 px-1 text-[11px] font-mono font-bold text-primary">
                       Iniciada {formatFechaHoraLocal(serie.timestampInicioUtc) ?? ''}
                     </p>
                   )}
                   {/* WU17: feedback inmediato del descanso real al cerrar la serie */}
                   {serie.completada && descansosReales[sIdx] !== null && (
-                    <p className="mt-1.5 px-1 text-[10px] font-mono font-bold text-primary flex items-center gap-1">
+                    <p className="mt-1.5 px-1 text-[11px] font-mono font-bold text-primary flex items-center gap-1">
                       <Zap className="h-3 w-3 shrink-0" />
                       <span>Descanso real: {formatearDeltaSegundos(descansosReales[sIdx])}</span>
                     </p>
@@ -2372,7 +2398,7 @@ export function EntrenamientoPage() {
                   {errorSerie && (
                     <p
                       role="alert"
-                      className="mt-1.5 px-1 text-[10px] font-bold text-destructive flex items-center gap-1"
+                      className="mt-1.5 px-1 text-[11px] font-bold text-destructive flex items-center gap-1"
                     >
                       <AlertTriangle className="h-3 w-3 shrink-0" />
                       <span>{errorSerie}</span>
@@ -2396,9 +2422,11 @@ export function EntrenamientoPage() {
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
         >
           <div
+            ref={refModalFinalizar}
             role="dialog"
             aria-modal="true"
             aria-labelledby="modal-finish-title"
+            tabIndex={-1}
             className="p-6 rounded-3xl bg-card border border-border/80 shadow-2xl w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto"
           >
             {/* Header del Modal */}
@@ -2451,7 +2479,7 @@ export function EntrenamientoPage() {
                   </button>
                 ))}
               </div>
-              <div className="flex justify-between text-[10px] text-muted-foreground px-1 font-medium">
+              <div className="flex justify-between text-[11px] text-muted-foreground px-1 font-medium">
                 <span>1-4: Descarga / Ligero</span>
                 <span>5-6: Moderado</span>
                 <span>7-8: Óptimo</span>
@@ -2475,7 +2503,7 @@ export function EntrenamientoPage() {
                     }}
                     className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                       molestia === zona
-                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-xs'
+                        ? 'bg-warning/20 text-warning border border-warning/40 shadow-xs'
                         : 'bg-secondary/40 text-muted-foreground hover:text-foreground border border-transparent'
                     }`}
                   >
@@ -2489,7 +2517,7 @@ export function EntrenamientoPage() {
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-foreground flex items-center justify-between">
                 <span>Notas u observaciones para tu coach</span>
-                <span className="text-[10px] text-muted-foreground font-normal">Opcional</span>
+                <span className="text-[11px] text-muted-foreground font-normal">Opcional</span>
               </label>
               <textarea
                 rows={3}
@@ -2533,12 +2561,12 @@ export function EntrenamientoPage() {
                   <div className="text-right">
                     <span className="font-mono font-black text-sm text-foreground">{formatearSegundos(avgReal)}</span>
                     <span
-                      className={`text-[10px] font-bold block ${
+                      className={`text-[11px] font-bold block ${
                         diff > 15
-                          ? 'text-amber-400'
+                          ? 'text-warning'
                           : diff < -15
-                          ? 'text-sky-400'
-                          : 'text-emerald-400'
+                          ? 'text-info'
+                          : 'text-success'
                       }`}
                     >
                       {diff > 0
@@ -2576,14 +2604,16 @@ export function EntrenamientoPage() {
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
         >
           <div
+            ref={refModalCierreVacio}
             role="dialog"
             aria-modal="true"
             aria-labelledby="modal-empty-close-title"
+            tabIndex={-1}
             className="p-6 rounded-3xl bg-card border border-border/80 shadow-2xl w-full max-w-md space-y-4"
           >
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
               <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-amber-500/15 text-amber-500">
+                <div className="p-2 rounded-xl bg-warning/15 text-warning">
                   <AlertTriangle className="h-5 w-5" />
                 </div>
                 <div>
@@ -2618,7 +2648,7 @@ export function EntrenamientoPage() {
                 onClick={() => confirmEmptyClose(TipoCierreSesion.DESCANSADA)}
                 className="py-3 px-4 rounded-2xl bg-secondary hover:bg-secondary/80 border border-border font-bold text-xs text-foreground transition-all active:scale-98 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                <Coffee className="h-4 w-4 text-amber-500" />
+                <Coffee className="h-4 w-4 text-warning" />
                 <span>Registrar como descansado</span>
               </button>
               <button
@@ -2627,7 +2657,7 @@ export function EntrenamientoPage() {
                 onClick={() => confirmEmptyClose(TipoCierreSesion.INCOMPLETA)}
                 className="py-3 px-4 rounded-2xl bg-secondary hover:bg-secondary/80 border border-border font-bold text-xs text-foreground transition-all active:scale-98 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                <AlertTriangle className="h-4 w-4 text-warning" />
                 <span>Registrar como incompleto</span>
               </button>
             </div>
@@ -2655,9 +2685,11 @@ export function EntrenamientoPage() {
               className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
             >
               <div
+                ref={refModalVideo}
                 role="dialog"
                 aria-modal="true"
-                aria-label={`Video demostrativo: ${videoModal.nombre}`}
+                aria-labelledby="modal-video-title"
+                tabIndex={-1}
                 className="p-5 rounded-3xl bg-card border border-border/80 shadow-2xl w-full max-w-2xl space-y-4"
               >
                 <div className="flex items-center justify-between gap-2 border-b border-border/80 pb-3">
@@ -2666,7 +2698,10 @@ export function EntrenamientoPage() {
                       <Video className="h-5 w-5" />
                     </div>
                     <div className="min-w-0">
-                      <h3 className="font-bold text-base text-foreground leading-tight">
+                      <h3
+                        id="modal-video-title"
+                        className="font-bold text-base text-foreground leading-tight"
+                      >
                         Técnica del ejercicio
                       </h3>
                       <p className="text-[11px] text-muted-foreground truncate">
@@ -2675,7 +2710,6 @@ export function EntrenamientoPage() {
                     </div>
                   </div>
                   <button
-                    ref={videoCloseRef}
                     type="button"
                     onClick={() => setVideoModal(null)}
                     aria-label="Cerrar video demostrativo"

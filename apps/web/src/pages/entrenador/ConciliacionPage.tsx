@@ -5,6 +5,7 @@ import { pluralizar } from '../../lib/pluralizar';
 import { formatFechaCalendario } from '../../lib/date-format';
 import { rebanarPagina } from '../../lib/paginacion';
 import { usePaginacionServidor } from '../../lib/use-paginacion-servidor';
+import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import { Paginacion } from '../../components/common/Paginacion';
 import {
   TransaccionPagoDetalleDTO,
@@ -117,6 +118,17 @@ export function ConciliacionPage() {
   // filtros); la UI muestra el conteo "en esta página" para no confundir con el total en cola.
   const [busqueda, setBusqueda] = useState('');
   const [filtroMetodo, setFiltroMetodo] = useState<FiltroMetodoPago>('todos');
+
+  // U3b: los dos modales de la bandeja (rechazo y visor de comprobante) comparten el contrato de
+  // diálogo accesible: Escape, trampa de Tab, foco inicial y restore del foco al disparador.
+  const refModalRechazo = useDialogoAccesible({
+    abierto: rejectingTx !== null,
+    onCerrar: () => setRejectingTx(null),
+  });
+  const refModalComprobante = useDialogoAccesible({
+    abierto: viewingComprobanteTx !== null,
+    onCerrar: () => setViewingComprobanteTx(null),
+  });
 
   /**
    * WU25b: carga de UNA página de la bandeja. En demo se filtra la cola local (ids ya
@@ -265,14 +277,14 @@ export function ConciliacionPage() {
               Aprueba o rechaza los pagos que reportan tus alumnos.
             </p>
           </div>
-          <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">
+          <span className="text-xs font-bold px-3 py-1 rounded-full bg-warning/15 text-warning border border-warning/20">
             {pluralizar(total, 'transacción en cola', 'transacciones en cola')}
           </span>
         </div>
       </div>
 
       {actionSuccess && (
-        <div className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-2">
+        <div className="p-4 rounded-2xl bg-success/15 border border-success/30 text-success text-xs font-bold flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           <span>{actionSuccess}</span>
         </div>
@@ -303,7 +315,7 @@ export function ConciliacionPage() {
         </div>
       ) : total === 0 ? (
         <div className="p-12 text-center space-y-3 bg-card rounded-3xl border border-border">
-          <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto" />
+          <CheckCircle2 className="h-12 w-12 text-success mx-auto" />
           <h3 className="font-bold text-base text-foreground">Bandeja al Día</h3>
           <p className="text-xs text-muted-foreground max-w-sm mx-auto">
             No hay transacciones pendientes de revisión. Todos los abonos han sido procesados.
@@ -415,7 +427,7 @@ export function ConciliacionPage() {
                     <h2 className="font-black text-lg text-foreground">
                       {tx.clienteNombre || 'Alumno'}
                     </h2>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border uppercase">
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border uppercase">
                       {etiquetaMetodoPago(tx.metodoPago)}
                     </span>
                   </div>
@@ -438,7 +450,7 @@ export function ConciliacionPage() {
                         <span>Ver Comprobante</span>
                       </button>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-secondary text-muted-foreground text-[10px] font-medium">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-secondary text-muted-foreground text-[11px] font-medium">
                         <FileText className="h-3 w-3" />
                         <span>Sin captura digital</span>
                       </span>
@@ -462,7 +474,7 @@ export function ConciliacionPage() {
               {/* Actions Grid */}
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                  <ShieldCheck className="h-4 w-4 text-success" />
                   <span>Acreditación segura con comprobante verificado.</span>
                 </div>
 
@@ -490,14 +502,27 @@ export function ConciliacionPage() {
       {/* Reject Modal */}
       {rejectingTx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
-          <div className="p-6 rounded-3xl bg-card border border-destructive/30 shadow-2xl w-full max-w-md space-y-4">
+          <div
+            ref={refModalRechazo}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="conciliacion-rechazo-titulo"
+            tabIndex={-1}
+            className="p-6 rounded-3xl bg-card border border-destructive/30 shadow-2xl w-full max-w-md space-y-4"
+          >
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
               <div className="flex items-center gap-2 text-destructive">
                 <AlertCircle className="h-5 w-5" />
-                <h3 className="font-bold text-base text-foreground">Rechazar Transacción</h3>
+                <h3
+                  id="conciliacion-rechazo-titulo"
+                  className="font-bold text-base text-foreground"
+                >
+                  Rechazar Transacción
+                </h3>
               </div>
               <button
                 onClick={() => setRejectingTx(null)}
+                aria-label="Cerrar rechazo de transacción"
                 className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground"
               >
                 <X className="h-4 w-4" />
@@ -542,7 +567,14 @@ export function ConciliacionPage() {
       {/* Modal de Inspección de Comprobante Bancario (RF-007, ADR-007) */}
       {viewingComprobanteTx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/85 backdrop-blur-md">
-          <div className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-2xl space-y-4 max-h-[92vh] flex flex-col">
+          <div
+            ref={refModalComprobante}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="conciliacion-comprobante-titulo"
+            tabIndex={-1}
+            className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-2xl space-y-4 max-h-[92vh] flex flex-col"
+          >
             {/* Header */}
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
               <div className="flex items-center gap-2.5">
@@ -550,7 +582,10 @@ export function ConciliacionPage() {
                   <Receipt className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-foreground">
+                  <h3
+                    id="conciliacion-comprobante-titulo"
+                    className="font-bold text-base text-foreground"
+                  >
                     Auditoría de Comprobante Bancario
                   </h3>
                   <p className="text-xs text-muted-foreground">
@@ -560,6 +595,7 @@ export function ConciliacionPage() {
               </div>
               <button
                 onClick={() => setViewingComprobanteTx(null)}
+                aria-label="Cerrar auditoría de comprobante"
                 className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
               >
                 <X className="h-5 w-5" />
@@ -569,25 +605,25 @@ export function ConciliacionPage() {
             {/* Cross-Referenced Transaction Details Bar */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl bg-secondary/30 border border-border text-xs">
               <div>
-                <span className="text-[10px] text-muted-foreground uppercase font-bold">Monto Declarado</span>
+                <span className="text-[11px] text-muted-foreground uppercase font-bold">Monto Declarado</span>
                 <p className="font-mono font-black text-foreground mt-0.5">
                   {viewingComprobanteTx.montoOriginal} {viewingComprobanteTx.monedaOriginal}
                 </p>
               </div>
               <div>
-                <span className="text-[10px] text-muted-foreground uppercase font-bold">Equivalente USD</span>
+                <span className="text-[11px] text-muted-foreground uppercase font-bold">Equivalente USD</span>
                 <p className="font-mono font-black text-primary mt-0.5">
                   +${viewingComprobanteTx.montoEquivalenteUsd}
                 </p>
               </div>
               <div>
-                <span className="text-[10px] text-muted-foreground uppercase font-bold">Referencia</span>
+                <span className="text-[11px] text-muted-foreground uppercase font-bold">Referencia</span>
                 <p className="font-mono font-bold text-foreground mt-0.5">
                   {viewingComprobanteTx.referenciaBancaria || 'Sin referencia'}
                 </p>
               </div>
               <div>
-                <span className="text-[10px] text-muted-foreground uppercase font-bold">Fecha Operación</span>
+                <span className="text-[11px] text-muted-foreground uppercase font-bold">Fecha Operación</span>
                 <p className="font-medium text-foreground mt-0.5">
                   {formatFechaCalendario(viewingComprobanteTx.fechaOperacion) ??
                     viewingComprobanteTx.fechaOperacion}

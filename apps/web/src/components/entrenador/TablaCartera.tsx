@@ -61,8 +61,8 @@ const VACIO_POR_PESTANA: Record<
 };
 
 const CLASES_TONO: Record<string, string> = {
-  success: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
-  warning: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
+  success: 'bg-success/15 text-success border-success/25',
+  warning: 'bg-warning/15 text-warning border-warning/25',
   danger: 'bg-destructive/15 text-destructive border-destructive/25',
   info: 'bg-primary/15 text-primary border-primary/25',
   neutral: 'bg-secondary text-muted-foreground border-border',
@@ -71,7 +71,7 @@ const CLASES_TONO: Record<string, string> = {
 function Badge({ tono, children }: { tono: string; children: React.ReactNode }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide ${
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-bold uppercase tracking-wide ${
         CLASES_TONO[tono] ?? CLASES_TONO.neutral
       }`}
     >
@@ -203,8 +203,8 @@ function SituacionFila({ fila, pestana }: { fila: FilaCarteraDTO; pestana: Pesta
     return (
       <div className="flex flex-col gap-1">
         <Badge tono={etiqueta.tono}>{etiqueta.texto}</Badge>
-        {dias && <span className="text-[11px] font-bold text-amber-400">{dias}</span>}
-        {vence && <span className="text-[10px] text-muted-foreground">Corte: {vence}</span>}
+        {dias && <span className="text-[11px] font-bold text-warning">{dias}</span>}
+        {vence && <span className="text-[11px] text-muted-foreground">Corte: {vence}</span>}
       </div>
     );
   }
@@ -220,7 +220,7 @@ function SituacionFila({ fila, pestana }: { fila: FilaCarteraDTO; pestana: Pesta
             <Clock3 className="h-3 w-3" /> {espera}
           </span>
         )}
-        {reportado && <span className="text-[10px] text-muted-foreground">Reportado: {reportado}</span>}
+        {reportado && <span className="text-[11px] text-muted-foreground">Reportado: {reportado}</span>}
       </div>
     );
   }
@@ -228,7 +228,7 @@ function SituacionFila({ fila, pestana }: { fila: FilaCarteraDTO; pestana: Pesta
   return (
     <div className="flex flex-col gap-1">
       <Badge tono="success">Al día</Badge>
-      <span className="text-[10px] text-muted-foreground">Ciclo {fila.periodo ?? '—'}</span>
+      <span className="text-[11px] text-muted-foreground">Ciclo {fila.periodo ?? '—'}</span>
     </div>
   );
 }
@@ -255,7 +255,7 @@ export function TablaCartera({
       <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
         <Icono
           className={`h-10 w-10 mx-auto ${
-            buscando ? 'text-muted-foreground opacity-50' : 'text-emerald-500'
+            buscando ? 'text-muted-foreground opacity-50' : 'text-success'
           }`}
         />
         <h3 className="text-sm font-black text-foreground">{vacio.titulo}</h3>
@@ -270,7 +270,7 @@ export function TablaCartera({
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
-            <tr className="bg-secondary/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+            <tr className="bg-secondary/40 text-[11px] uppercase tracking-wider text-muted-foreground">
               <th scope="col" className="px-4 py-3 font-bold">Alumno</th>
               <th scope="col" className="px-4 py-3 font-bold">Situación</th>
               {pestana === 'revision' ? (
@@ -302,7 +302,7 @@ export function TablaCartera({
                 <td className="px-4 py-3 align-top">
                   <div className="font-bold text-foreground">{fila.alumnoNombre}</div>
                   {fila.telefonoWhatsapp && (
-                    <div className="text-[10px] text-muted-foreground font-mono">
+                    <div className="text-[11px] text-muted-foreground font-mono">
                       {fila.telefonoWhatsapp}
                     </div>
                   )}
@@ -317,7 +317,7 @@ export function TablaCartera({
                       <div className="font-mono font-bold text-foreground">
                         {fila.montoReportado} {fila.monedaOriginal}
                       </div>
-                      <div className="text-[10px] text-muted-foreground">
+                      <div className="text-[11px] text-muted-foreground">
                         {etiquetaMetodoPago(fila.metodoPago)}
                       </div>
                     </td>
@@ -333,7 +333,7 @@ export function TablaCartera({
                           className="mt-1 h-10 w-16 rounded-md object-cover border border-border"
                         />
                       ) : (
-                        <span className="text-[10px] text-muted-foreground">Sin captura digital</span>
+                        <span className="text-[11px] text-muted-foreground">Sin captura digital</span>
                       )}
                     </td>
                   </>
@@ -391,7 +391,7 @@ export function TablaCartera({
               <div className="min-w-0">
                 <p className="font-bold text-sm text-foreground truncate">{fila.alumnoNombre}</p>
                 {fila.telefonoWhatsapp && (
-                  <p className="text-[10px] text-muted-foreground font-mono">
+                  <p className="text-[11px] text-muted-foreground font-mono">
                     {fila.telefonoWhatsapp}
                   </p>
                 )}

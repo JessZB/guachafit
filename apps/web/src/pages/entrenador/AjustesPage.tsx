@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiClient } from '../../lib/api-client';
 import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
+import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import {
   PlanMembresiaDetalleDTO,
   TasaCambioVigenteDTO,
@@ -46,6 +47,13 @@ export function AjustesPage() {
   const [nuevoBeneficio, setNuevoBeneficio] = useState('');
   const [isSubmittingPlan, setIsSubmittingPlan] = useState(false);
   const [planSuccessMsg, setPlanSuccessMsg] = useState<string | null>(null);
+
+  // U3b: el modal de plan comercial suma semántica de diálogo, Escape, trampa de Tab y restore
+  // del foco al botón que lo abrió.
+  const refModalPlan = useDialogoAccesible({
+    abierto: isPlanModalOpen,
+    onCerrar: () => setIsPlanModalOpen(false),
+  });
 
   // Tasas state
   const [tasaVigente, setTasaVigente] = useState<TasaCambioVigenteDTO | null>(null);
@@ -413,9 +421,9 @@ export function AjustesPage() {
                 <div>
                   <div className="flex items-start justify-between gap-2 mb-3">
                     <span
-                      className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-full uppercase ${
+                      className={`text-[11px] font-bold font-mono px-2 py-0.5 rounded-full uppercase ${
                         plan.activo
-                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                          ? 'bg-success/15 text-success border border-success/30'
                           : 'bg-muted text-muted-foreground'
                       }`}
                     >
@@ -442,13 +450,13 @@ export function AjustesPage() {
 
                   {/* Checklist de Beneficios */}
                   <div className="space-y-1.5 pt-2 border-t border-border/60">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                       Beneficios incluidos:
                     </span>
                     {Array.isArray(plan.beneficios) &&
                       plan.beneficios.map((b, idx) => (
                         <div key={idx} className="flex items-center gap-1.5 text-xs text-foreground">
-                          <CheckCircle className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                          <CheckCircle className="h-3.5 w-3.5 text-success shrink-0" />
                           <span className="line-clamp-1">{b}</span>
                         </div>
                       ))}
@@ -472,7 +480,7 @@ export function AjustesPage() {
                     className={`px-3 py-1.5 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${
                       plan.activo
                         ? 'bg-destructive/10 text-destructive hover:bg-destructive/20'
-                        : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                        : 'bg-success/10 text-success hover:bg-success/20'
                     }`}
                   >
                     <Power className="h-3.5 w-3.5" />
@@ -534,13 +542,13 @@ export function AjustesPage() {
                     Motor de Tasa Activa (Bs/USD)
                   </h3>
                 </div>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase">
+                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase">
                   ADR-003 Vigente
                 </span>
               </div>
 
               {tasaSuccessMsg && (
-                <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+                <div className="p-3 rounded-2xl bg-success/10 border border-success/30 text-success text-xs flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 shrink-0" />
                   <span>{tasaSuccessMsg}</span>
                 </div>
@@ -565,9 +573,9 @@ export function AjustesPage() {
 
               {/* D6: estado honesto cuando todavía no existe ninguna tasa configurada. */}
               {!isLoadingTasas && !tasasError && !tasaVigente?.tasaEfectiva && (
-                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs space-y-1">
+                <div className="p-4 rounded-2xl bg-warning/10 border border-warning/30 text-warning text-xs space-y-1">
                   <p className="font-bold">Sin tasa configurada</p>
-                  <p className="text-[11px] text-amber-200/90">
+                  <p className="text-[11px] text-warning/90">
                     Define al menos tu tasa BCV y tu tasa activa de cobro y guárdalas. Mientras no
                     exista una tasa vigente, los cobros y reportes de pago en bolívares quedan
                     bloqueados con un mensaje claro y no se muestran proyecciones en Bs.
@@ -645,6 +653,7 @@ export function AjustesPage() {
                   <label className="text-xs font-semibold text-muted-foreground">Tasa BCV (Bs/USD)</label>
                   <input
                     type="text"
+                    inputMode="decimal"
                     required
                     value={tasaOficialBcvInput}
                     onChange={(e) => {
@@ -662,6 +671,7 @@ export function AjustesPage() {
                   <label className="text-xs font-semibold text-muted-foreground">Tasa Paralelo (Bs/USD)</label>
                   <input
                     type="text"
+                    inputMode="decimal"
                     value={tasaParaleloInput}
                     onChange={(e) => {
                       setTasaParaleloInput(e.target.value);
@@ -678,6 +688,7 @@ export function AjustesPage() {
                   <label className="text-xs font-semibold text-primary">Tasa Activa de Cobro</label>
                   <input
                     type="text"
+                    inputMode="decimal"
                     required
                     value={tasaActivaInput}
                     onChange={(e) => {
@@ -786,17 +797,28 @@ export function AjustesPage() {
           }}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
         >
-          <div className="w-full max-w-lg rounded-3xl bg-card border border-border p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+          <div
+            ref={refModalPlan}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ajustes-plan-titulo"
+            tabIndex={-1}
+            className="w-full max-w-lg rounded-3xl bg-card border border-border p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200"
+          >
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
               <div className="flex items-center gap-2">
                 <CreditCard className="h-5 w-5 text-primary" />
-                <h3 className="font-extrabold text-base text-foreground">
+                <h3
+                  id="ajustes-plan-titulo"
+                  className="font-extrabold text-base text-foreground"
+                >
                   {editingPlanId ? 'Editar Plan Comercial' : 'Nuevo Plan Comercial'}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsPlanModalOpen(false)}
+                aria-label="Cerrar plan comercial"
                 className="p-1 rounded-lg text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 <X className="h-5 w-5" />
@@ -804,7 +826,7 @@ export function AjustesPage() {
             </div>
 
             {planSuccessMsg && (
-              <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+              <div className="p-3 rounded-2xl bg-success/10 border border-success/30 text-success text-xs flex items-center gap-2">
                 <CheckCircle className="h-4 w-4 shrink-0" />
                 <span>{planSuccessMsg}</span>
               </div>

@@ -16,6 +16,7 @@ import {
 } from '../../lib/demo-plantillas';
 import { formatearSegundos } from '../../lib/sesion-tiempos';
 import { pluralizar } from '../../lib/pluralizar';
+import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import {
   ETIQUETAS_NIVEL_PLANTILLA,
   aplicarOverridesPreview,
@@ -79,6 +80,10 @@ export function SelectorPlantillaAsignacion({
   const [resultado, setResultado] = useState<AsignacionPlantillaResponseDTO | null>(null);
   const [errorAsignacion, setErrorAsignacion] = useState<string | null>(null);
   const [erroresAjustes, setErroresAjustes] = useState<ErrorAjuste[]>([]);
+
+  // U3b: Escape, trampa de Tab y restore del foco; el foco inicial sigue en el buscador
+  // (`autoFocus`), por eso el hook no lo reasigna.
+  const refDialogo = useDialogoAccesible({ onCerrar, enfocarAlAbrir: false });
 
   const cargarPlantillas = async () => {
     setIsLoading(true);
@@ -273,9 +278,11 @@ export function SelectorPlantillaAsignacion({
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
     >
       <div
+        ref={refDialogo}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-plantilla-asignar-title"
+        tabIndex={-1}
         className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-5xl space-y-5 max-h-[90vh] overflow-y-auto"
       >
         {/* Header */}
@@ -297,6 +304,7 @@ export function SelectorPlantillaAsignacion({
             onClick={onCerrar}
             className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer"
             title="Cerrar"
+            aria-label="Cerrar selector de plantilla"
           >
             <X className="h-5 w-5" />
           </button>
@@ -310,7 +318,7 @@ export function SelectorPlantillaAsignacion({
                 <Layers className="h-3.5 w-3.5 text-primary" />
                 Plantillas Activas
               </span>
-              <span className="text-[10px] font-mono text-muted-foreground">
+              <span className="text-[11px] font-mono text-muted-foreground">
                 {plantillas.length} disponibles
               </span>
             </div>
@@ -357,7 +365,7 @@ export function SelectorPlantillaAsignacion({
                     ? 'No tienes plantillas activas'
                     : 'Sin coincidencias'}
                 </p>
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   {plantillas.length === 0 ? (
                     <>
                       Crea una en el{' '}
@@ -402,10 +410,10 @@ export function SelectorPlantillaAsignacion({
                         )}
                       </div>
                       <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                        <span className="px-2 py-0.5 rounded-md bg-secondary border border-border/60 text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
+                        <span className="px-2 py-0.5 rounded-md bg-secondary border border-border/60 text-[11px] font-bold text-muted-foreground uppercase tracking-wide">
                           {ETIQUETAS_NIVEL_PLANTILLA[plantilla.nivelObjetivo]}
                         </span>
-                        <span className="text-[10px] font-mono text-muted-foreground">
+                        <span className="text-[11px] font-mono text-muted-foreground">
                           {pluralizar(plantilla.totalDias, 'día', 'días')} ·{' '}
                           {pluralizar(plantilla.totalEjercicios, 'ejercicio', 'ejercicios')}
                         </span>
@@ -439,7 +447,7 @@ export function SelectorPlantillaAsignacion({
                 <div className="p-4 rounded-2xl bg-secondary/25 border border-border/60 space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
                     <h4 className="text-sm font-black text-foreground break-words">{detalle.nombre}</h4>
-                    <span className="shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border bg-secondary text-foreground border-border">
+                    <span className="shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide border bg-secondary text-foreground border-border">
                       {ETIQUETAS_NIVEL_PLANTILLA[detalle.nivelObjetivo]}
                     </span>
                   </div>
@@ -485,7 +493,7 @@ export function SelectorPlantillaAsignacion({
                       <span className="text-xs font-bold text-foreground block">
                         Reemplazar rutina activa
                       </span>
-                      <span className="text-[10px] text-muted-foreground block mt-1 leading-snug">
+                      <span className="text-[11px] text-muted-foreground block mt-1 leading-snug">
                         Sustituye la rutina vigente de {alumnoNombre} por esta plantilla. La rutina
                         anterior deja de estar activa; su historial no se borra.
                       </span>
@@ -510,7 +518,7 @@ export function SelectorPlantillaAsignacion({
                       <span className="text-xs font-bold text-foreground block">
                         Fusionar con la rutina activa
                       </span>
-                      <span className="text-[10px] text-muted-foreground block mt-1 leading-snug">
+                      <span className="text-[11px] text-muted-foreground block mt-1 leading-snug">
                         Anexa los días de la plantilla a los bloques existentes sin borrar ninguno. Si
                         no hay rutina activa, se crea como nueva.
                       </span>
@@ -535,7 +543,7 @@ export function SelectorPlantillaAsignacion({
                           <span className="text-xs font-extrabold text-foreground">
                             {bloque.titulo}
                           </span>
-                          <span className="text-[10px] font-mono text-muted-foreground">
+                          <span className="text-[11px] font-mono text-muted-foreground">
                             {pluralizar(bloque.ejercicios.length, 'ejercicio', 'ejercicios')}
                           </span>
                         </div>
@@ -565,14 +573,14 @@ export function SelectorPlantillaAsignacion({
                               >
                                 <div className="flex items-center justify-between gap-2">
                                   <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span className="h-4.5 w-4.5 rounded-md bg-primary/10 text-primary font-mono font-black flex items-center justify-center text-[9px] shrink-0">
+                                    <span className="h-4.5 w-4.5 rounded-md bg-primary/10 text-primary font-mono font-black flex items-center justify-center text-[11px] shrink-0">
                                       {ejIdx + 1}
                                     </span>
                                     <span className="font-bold text-foreground break-words">
                                       {ej.nombre}
                                     </span>
                                     {ajustado && (
-                                      <span className="shrink-0 px-1.5 py-0.5 rounded-md bg-primary/15 text-primary text-[9px] font-extrabold uppercase">
+                                      <span className="shrink-0 px-1.5 py-0.5 rounded-md bg-primary/15 text-primary text-[11px] font-extrabold uppercase">
                                         ajustado
                                       </span>
                                     )}
@@ -582,7 +590,7 @@ export function SelectorPlantillaAsignacion({
                                       type="button"
                                       onClick={() => limpiarOverride(clave)}
                                       disabled={asignacionCompletada}
-                                      className="text-[9px] font-bold text-muted-foreground hover:text-foreground underline cursor-pointer shrink-0 disabled:opacity-50"
+                                      className="text-[11px] font-bold text-muted-foreground hover:text-foreground underline cursor-pointer shrink-0 disabled:opacity-50"
                                       title="Descartar los ajustes de este ejercicio"
                                     >
                                       Restablecer
@@ -590,7 +598,7 @@ export function SelectorPlantillaAsignacion({
                                   )}
                                 </div>
 
-                                <div className="flex items-center gap-x-3 gap-y-1 flex-wrap font-mono text-[10px] text-muted-foreground">
+                                <div className="flex items-center gap-x-3 gap-y-1 flex-wrap font-mono text-[11px] text-muted-foreground">
                                   <span className="px-1.5 py-0.5 rounded-md bg-secondary border border-border/60 font-bold text-foreground">
                                     {pluralizar(ej.series, 'serie', 'series')} × {ej.reps}
                                   </span>
@@ -604,7 +612,7 @@ export function SelectorPlantillaAsignacion({
                                 {/* Overrides de peso / series / reps */}
                                 <div className="flex items-end gap-2 flex-wrap pt-1.5 border-t border-border/40">
                                   <div className="flex flex-col">
-                                    <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
+                                    <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
                                       Peso (kg)
                                     </label>
                                     <input
@@ -627,7 +635,7 @@ export function SelectorPlantillaAsignacion({
                                   </div>
 
                                   <div className="flex flex-col">
-                                    <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
+                                    <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
                                       Series
                                     </label>
                                     <input
@@ -647,7 +655,7 @@ export function SelectorPlantillaAsignacion({
                                   </div>
 
                                   <div className="flex flex-col">
-                                    <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
+                                    <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
                                       Reps
                                     </label>
                                     <input
@@ -667,18 +675,18 @@ export function SelectorPlantillaAsignacion({
                                 </div>
 
                                 {(erroresCampo.peso || erroresCampo.series || erroresCampo.reps) && (
-                                  <p className="text-[10px] font-bold text-destructive">
+                                  <p className="text-[11px] font-bold text-destructive">
                                     {erroresCampo.peso || erroresCampo.series || erroresCampo.reps}
                                   </p>
                                 )}
                                 {errorAjuste && !erroresCampo.peso && !erroresCampo.series && !erroresCampo.reps && (
-                                  <p className="text-[10px] font-bold text-destructive">
+                                  <p className="text-[11px] font-bold text-destructive">
                                     {errorAjuste.mensaje}
                                   </p>
                                 )}
 
                                 {ej.notas && (
-                                  <p className="text-[10px] text-muted-foreground leading-snug">
+                                  <p className="text-[11px] text-muted-foreground leading-snug">
                                     <span className="font-bold text-foreground">Nota técnica:</span>{' '}
                                     {ej.notas}
                                   </p>
@@ -697,14 +705,14 @@ export function SelectorPlantillaAsignacion({
                   <div
                     role="status"
                     aria-live="polite"
-                    className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-start gap-2"
+                    className="p-3 rounded-2xl bg-success/10 border border-success/30 text-success text-xs flex items-start gap-2"
                   >
                     <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
                     <div className="space-y-0.5">
                       <span className="block font-bold">
                         Planificación asignada a {alumnoNombre}.
                       </span>
-                      <span className="block text-[11px] text-emerald-400/80">
+                      <span className="block text-[11px] text-success/80">
                         {resultado.modo === ModoAsignacionPlantilla.REEMPLAZAR
                           ? 'Rutina activa reemplazada'
                           : 'Días fusionados con la rutina activa'}
@@ -730,14 +738,14 @@ export function SelectorPlantillaAsignacion({
                 {erroresAjustes.length > 0 && (
                   <div
                     role="alert"
-                    className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs flex items-start gap-2"
+                    className="p-3 rounded-2xl bg-warning/10 border border-warning/30 text-warning text-xs flex items-start gap-2"
                   >
                     <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                     <div className="space-y-0.5">
                       <span className="block font-bold">
                         Revisa los ajustes marcados antes de confirmar.
                       </span>
-                      <span className="block text-[11px] text-amber-400/80">
+                      <span className="block text-[11px] text-warning/80">
                         {erroresAjustes[0].mensaje}
                       </span>
                     </div>

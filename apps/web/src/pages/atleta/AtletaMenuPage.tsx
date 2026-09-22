@@ -32,8 +32,8 @@ import {
  * WU12b: clases del badge de cuota por tono, alineadas a los "Badges de Estado" de DESIGN.md.
  */
 const CLASES_TONO_CUOTA: Record<TonoCuota, string> = {
-  success: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
-  warning: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
+  success: 'bg-success/15 text-success border-success/25',
+  warning: 'bg-warning/15 text-warning border-warning/25',
   danger: 'bg-destructive/15 text-destructive border-destructive/25',
   info: 'bg-primary/15 text-primary border-primary/25',
   neutral: 'bg-secondary text-muted-foreground border-border',
@@ -150,14 +150,14 @@ export function AtletaMenuPage() {
         <div className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-secondary/60 border border-border/80">
           <div
             className={`p-1.5 rounded-xl ${
-              tieneRacha ? 'bg-amber-500/15 text-amber-400' : 'bg-secondary text-muted-foreground'
+              tieneRacha ? 'bg-warning/15 text-warning' : 'bg-secondary text-muted-foreground'
             }`}
           >
-            <Flame className={`h-4 w-4 ${tieneRacha ? 'fill-amber-400/30' : ''}`} />
+            <Flame className={`h-4 w-4 ${tieneRacha ? 'fill-warning/30' : ''}`} />
           </div>
           <div className="text-right">
             <div className="text-xs font-bold font-mono text-foreground">{rachaLabel}</div>
-            <div className="text-[10px] text-muted-foreground">{rachaSublabel}</div>
+            <div className="text-[11px] text-muted-foreground">{rachaSublabel}</div>
           </div>
         </div>
       </div>
@@ -228,7 +228,7 @@ export function AtletaMenuPage() {
             <span className="text-xs font-medium text-foreground flex items-center gap-1.5">
               <span
                 className={`h-2 w-2 rounded-full ${
-                  bloqueo ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'
+                  bloqueo ? 'bg-warning' : 'bg-success animate-pulse'
                 }`}
               />
               {bloqueo
@@ -250,7 +250,7 @@ export function AtletaMenuPage() {
         >
           <div>
             <div className="flex items-center justify-between mb-3">
-              <div className="p-2.5 rounded-xl bg-emerald-500/15 text-emerald-400">
+              <div className="p-2.5 rounded-xl bg-success/15 text-success">
                 <Utensils className="h-6 w-6" />
               </div>
               <span className="text-[11px] font-medium text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md">
@@ -278,7 +278,7 @@ export function AtletaMenuPage() {
         >
           <div>
             <div className="flex items-center justify-between mb-3">
-              <div className="p-2.5 rounded-xl bg-cyan-500/15 text-cyan-400">
+              <div className="p-2.5 rounded-xl bg-info/15 text-info">
                 <Scale className="h-6 w-6" />
               </div>
               <span className="text-[11px] font-medium text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md">
@@ -306,7 +306,7 @@ export function AtletaMenuPage() {
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3.5">
-              <div className="p-3 rounded-xl bg-amber-500/15 text-amber-400">
+              <div className="p-3 rounded-xl bg-warning/15 text-warning">
                 <CreditCard className="h-6 w-6" />
               </div>
               <div>
@@ -316,7 +316,7 @@ export function AtletaMenuPage() {
                   </h3>
                   {badgeCuota && (
                     <span
-                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${CLASES_TONO_CUOTA[badgeCuota.tono]}`}
+                      className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${CLASES_TONO_CUOTA[badgeCuota.tono]}`}
                     >
                       {IconoBadgeCuota && <IconoBadgeCuota className="h-2.5 w-2.5" />}
                       {badgeCuota.texto}

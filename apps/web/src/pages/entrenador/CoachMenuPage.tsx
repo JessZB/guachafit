@@ -42,10 +42,10 @@ export function CoachMenuPage() {
         </div>
 
         <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-2xl bg-secondary/60 border border-border/80">
-          <ShieldCheck className="h-4 w-4 text-emerald-400" />
+          <ShieldCheck className="h-4 w-4 text-success" />
           <div className="text-right">
             <div className="text-xs font-bold font-mono text-foreground">Sesión Segura</div>
-            <div className="text-[10px] text-muted-foreground">Datos Protegidos</div>
+            <div className="text-[11px] text-muted-foreground">Datos Protegidos</div>
           </div>
         </div>
       </div>
@@ -55,21 +55,21 @@ export function CoachMenuPage() {
         {/* TARJETA 1: Validar Pagos (Hero Operativo) */}
         <Link
           to="/coach/conciliacion"
-          className="sm:col-span-2 lg:col-span-2 group relative block overflow-hidden p-6 rounded-3xl bg-gradient-to-br from-card/90 via-card/60 to-emerald-500/10 border-2 border-emerald-500/30 hover:border-emerald-500/70 transition-all duration-200 shadow-lg hover:shadow-emerald-500/5 cursor-pointer active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-primary"
+          className="sm:col-span-2 lg:col-span-2 group relative block overflow-hidden p-6 rounded-3xl bg-gradient-to-br from-card/90 via-card/60 to-success/10 border-2 border-success/30 hover:border-success/70 transition-all duration-200 shadow-lg hover:shadow-success/5 cursor-pointer active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-primary"
         >
           <div className="flex items-start justify-between">
-            <div className="p-3 rounded-2xl bg-emerald-500 text-emerald-950 shadow-md shadow-emerald-500/20">
+            <div className="p-3 rounded-2xl bg-success text-success-foreground shadow-md shadow-success/20">
               <DollarSign className="h-7 w-7" />
             </div>
-            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-success/20 text-success border border-success/30">
               Por orden de llegada
             </span>
           </div>
 
           <div className="mt-4">
-            <h2 className="text-xl font-bold text-foreground group-hover:text-emerald-400 transition-colors flex items-center gap-2">
+            <h2 className="text-xl font-bold text-foreground group-hover:text-success transition-colors flex items-center gap-2">
               Validar Pagos Entrantes
-              <ArrowUpRight className="h-5 w-5 text-emerald-400 opacity-80 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              <ArrowUpRight className="h-5 w-5 text-success opacity-80 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
             </h2>
             <p className="text-sm text-muted-foreground mt-1 max-w-lg">
               Revisa los comprobantes de Pago Móvil, Zelle y transferencias. Confirma el pago y descuéntalo del saldo en USD.
@@ -80,7 +80,7 @@ export function CoachMenuPage() {
             <span className="text-xs font-medium text-muted-foreground">
               Comprobantes con foto ampliable
             </span>
-            <span className="text-xs font-bold text-emerald-400 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+            <span className="text-xs font-bold text-success flex items-center gap-1 group-hover:translate-x-1 transition-transform">
               Revisar pagos <ChevronRight className="h-4 w-4" />
             </span>
           </div>
@@ -89,18 +89,18 @@ export function CoachMenuPage() {
         {/* TARJETA 2: Control de Cobros (RF-009) */}
         <Link
           to="/coach/cartera"
-          className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-amber-500/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
+          className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-warning/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
         >
           <div>
             <div className="flex items-center justify-between mb-3">
-              <div className="p-2.5 rounded-xl bg-amber-500/15 text-amber-400">
+              <div className="p-2.5 rounded-xl bg-warning/15 text-warning">
                 <Wallet className="h-6 w-6" />
               </div>
-              <span className="text-[11px] font-medium text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md">
+              <span className="text-[11px] font-medium text-warning bg-warning/10 px-2 py-0.5 rounded-md">
                 Cartera
               </span>
             </div>
-            <h3 className="text-base font-bold text-foreground group-hover:text-amber-400 transition-colors">
+            <h3 className="text-base font-bold text-foreground group-hover:text-warning transition-colors">
               Control de Cobros
             </h3>
             <p className="text-xs text-muted-foreground mt-1">
@@ -108,7 +108,7 @@ export function CoachMenuPage() {
             </p>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs font-semibold text-amber-400">
+          <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs font-semibold text-warning">
             <span>Ver cartera</span>
             <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
           </div>
@@ -121,7 +121,7 @@ export function CoachMenuPage() {
         >
           <div>
             <div className="flex items-center justify-between mb-3">
-              <div className="p-2.5 rounded-xl bg-cyan-500/15 text-cyan-400">
+              <div className="p-2.5 rounded-xl bg-info/15 text-info">
                 <Camera className="h-6 w-6" />
               </div>
               <span className="text-[11px] font-medium text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md">
@@ -145,18 +145,18 @@ export function CoachMenuPage() {
         {/* TARJETA 4: Alumnos en Alerta */}
         <Link
           to="/coach/monitor-adherencia"
-          className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-amber-500/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
+          className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-warning/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
         >
           <div>
             <div className="flex items-center justify-between mb-3">
-              <div className="p-2.5 rounded-xl bg-amber-500/15 text-amber-400">
+              <div className="p-2.5 rounded-xl bg-warning/15 text-warning">
                 <AlertTriangle className="h-6 w-6" />
               </div>
-              <span className="text-[11px] font-medium text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md">
+              <span className="text-[11px] font-medium text-warning bg-warning/10 px-2 py-0.5 rounded-md">
                 Riesgo
               </span>
             </div>
-            <h3 className="text-base font-bold text-foreground group-hover:text-amber-400 transition-colors">
+            <h3 className="text-base font-bold text-foreground group-hover:text-warning transition-colors">
               Alumnos en Alerta
             </h3>
             <p className="text-xs text-muted-foreground mt-1">
@@ -164,7 +164,7 @@ export function CoachMenuPage() {
             </p>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs font-semibold text-amber-400">
+          <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs font-semibold text-warning">
             <span>Ver alumnos</span>
             <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
           </div>
@@ -177,7 +177,7 @@ export function CoachMenuPage() {
         >
           <div>
             <div className="flex items-center justify-between mb-3">
-              <div className="p-2.5 rounded-xl bg-indigo-500/15 text-indigo-400">
+              <div className="p-2.5 rounded-xl bg-decor/15 text-decor">
                 <Users className="h-6 w-6" />
               </div>
               <span className="text-[11px] font-medium text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md">
@@ -233,7 +233,7 @@ export function CoachMenuPage() {
         >
           <div>
             <div className="flex items-center justify-between mb-3">
-              <div className="p-2.5 rounded-xl bg-purple-500/15 text-purple-400">
+              <div className="p-2.5 rounded-xl bg-decor/15 text-decor">
                 <SlidersHorizontal className="h-6 w-6" />
               </div>
               <span className="text-[11px] font-medium text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md">
@@ -261,7 +261,7 @@ export function CoachMenuPage() {
         >
           <div>
             <div className="flex items-center justify-between mb-3">
-              <div className="p-2.5 rounded-xl bg-rose-500/15 text-rose-400">
+              <div className="p-2.5 rounded-xl bg-danger/15 text-danger">
                 <ClipboardList className="h-6 w-6" />
               </div>
               <span className="text-[11px] font-medium text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md">

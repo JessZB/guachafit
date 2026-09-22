@@ -323,7 +323,7 @@ export function BloquesRutinaEditor({
                   placeholder="ej. Empuje & Pectoral / Tríceps"
                   className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs font-semibold text-foreground focus:outline-hidden focus:border-primary transition-colors"
                 />
-                <span className="text-[10px] text-muted-foreground block">
+                <span className="text-[11px] text-muted-foreground block">
                   Se añade al título tras el día seleccionado para evitar errores manuales.
                 </span>
               </div>
@@ -345,7 +345,7 @@ export function BloquesRutinaEditor({
                   placeholder="ej. Hipertrofia e Intensidad RPE 8"
                   className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
                 />
-                <span className="text-[10px] text-muted-foreground block">
+                <span className="text-[11px] text-muted-foreground block">
                   Instrucciones de esfuerzo o técnica para el alumno.
                 </span>
               </div>
@@ -439,7 +439,7 @@ export function BloquesRutinaEditor({
                     <div className="flex items-center gap-2 sm:gap-3 flex-wrap pt-2 border-t border-border/40">
                       <div className="flex items-center gap-2 p-1.5 rounded-xl bg-secondary/30 border border-border/50">
                         <div className="flex flex-col items-center">
-                          <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
+                          <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
                             Series
                           </label>
                           <div className="flex items-center h-8 rounded-lg bg-background border border-border p-0.5">
@@ -468,7 +468,7 @@ export function BloquesRutinaEditor({
                         </div>
 
                         <div className="flex flex-col items-center">
-                          <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
+                          <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
                             Reps
                           </label>
                           <input
@@ -488,7 +488,7 @@ export function BloquesRutinaEditor({
 
                       <div className="flex items-center gap-2 p-1.5 rounded-xl bg-secondary/30 border border-border/50">
                         <div className="flex flex-col items-center">
-                          <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
+                          <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
                             RPE
                           </label>
                           <input
@@ -501,7 +501,7 @@ export function BloquesRutinaEditor({
                         </div>
 
                         <div className="flex flex-col items-center">
-                          <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
+                          <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
                             Descanso
                           </label>
                           <select
@@ -527,7 +527,7 @@ export function BloquesRutinaEditor({
 
                     {mostrarNotas && (
                       <div className="pt-2 border-t border-border/40">
-                        <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
+                        <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">
                           Notas Técnicas del Coach (Opcional)
                         </label>
                         <input
@@ -707,7 +707,7 @@ export function BloquesRutinaEditor({
                   >
                     <div className="min-w-0 flex-1 pr-1">
                       <span className="font-bold text-foreground break-words block">{ej.nombre}</span>
-                      <span className="text-[10px] text-muted-foreground">• {ej.grupoMuscular}</span>
+                      <span className="text-[11px] text-muted-foreground">• {ej.grupoMuscular}</span>
                     </div>
                     <button
                       type="button"

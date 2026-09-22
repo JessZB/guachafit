@@ -40,8 +40,8 @@ export function App() {
           <div
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
               isOnline
-                ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                ? 'bg-success/10 text-success border border-success/20'
+                : 'bg-warning/10 text-warning border border-warning/20'
             }`}
           >
             {isOnline ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}

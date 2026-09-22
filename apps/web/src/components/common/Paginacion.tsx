@@ -40,9 +40,10 @@ export interface PaginacionProps {
   deshabilitado?: boolean;
 }
 
-/** Botón base de paginación (anterior/siguiente y números). */
+/** Botón base de paginación (anterior/siguiente y números).
+ *  Móvil: 44×44 táctil; desde `sm` recupera la densidad de escritorio (32px). */
 function claseBotonPaginacion(activo: boolean): string {
-  return `min-w-8 h-8 px-2 inline-flex items-center justify-center rounded-xl border text-xs font-bold transition-all active:scale-95 disabled:opacity-40 disabled:pointer-events-none cursor-pointer focus-visible:outline-2 focus-visible:outline-primary ${
+  return `min-w-11 h-11 sm:min-w-8 sm:h-8 px-2 inline-flex items-center justify-center rounded-xl border text-xs font-bold transition-all active:scale-95 disabled:opacity-40 disabled:pointer-events-none cursor-pointer focus-visible:outline-2 focus-visible:outline-primary ${
     activo
       ? 'bg-primary text-primary-foreground border-primary shadow-xs'
       : 'bg-card text-foreground border-border hover:border-primary/50 hover:bg-secondary/60'
@@ -65,7 +66,7 @@ function SelectorFilasPorPagina({
           type="button"
           disabled={deshabilitado}
           aria-label={`Filas por página: ${tamano}`}
-          className="h-8 inline-flex items-center gap-1.5 px-2.5 rounded-xl border border-border bg-card text-xs font-bold text-foreground hover:border-primary/50 hover:bg-secondary/60 transition-all active:scale-95 disabled:opacity-40 disabled:pointer-events-none cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+          className="h-11 min-w-11 sm:h-8 sm:min-w-0 inline-flex items-center justify-center gap-1.5 px-2.5 rounded-xl border border-border bg-card text-xs font-bold text-foreground hover:border-primary/50 hover:bg-secondary/60 transition-all active:scale-95 disabled:opacity-40 disabled:pointer-events-none cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
         >
           <span className="hidden sm:inline text-muted-foreground font-semibold">Filas:</span>
           <span className="font-mono">{tamano}</span>
@@ -78,7 +79,7 @@ function SelectorFilasPorPagina({
           sideOffset={6}
           className="z-50 min-w-36 rounded-2xl border border-border bg-card p-1.5 shadow-xl animate-in fade-in zoom-in-95 duration-150"
         >
-          <DropdownMenu.Label className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          <DropdownMenu.Label className="px-2 py-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
             Filas por página
           </DropdownMenu.Label>
           <DropdownMenu.RadioGroup
@@ -89,7 +90,7 @@ function SelectorFilasPorPagina({
               <DropdownMenu.RadioItem
                 key={opcion}
                 value={String(opcion)}
-                className="flex items-center justify-between gap-3 px-2.5 py-1.5 rounded-xl text-xs font-bold text-foreground cursor-pointer select-none outline-hidden data-[highlighted]:bg-secondary data-[highlighted]:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
+                className="flex min-h-11 sm:min-h-0 items-center justify-between gap-3 px-2.5 py-1.5 rounded-xl text-xs font-bold text-foreground cursor-pointer select-none outline-hidden data-[highlighted]:bg-secondary data-[highlighted]:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
               >
                 <span className="font-mono">{opcion}</span>
                 <DropdownMenu.ItemIndicator>

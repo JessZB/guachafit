@@ -231,7 +231,7 @@ export function AntropometriaPage() {
       </div>
 
       {actionSuccess && (
-        <div className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-2">
+        <div className="p-4 rounded-2xl bg-success/15 border border-success/30 text-success text-xs font-bold flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           <span>{actionSuccess}</span>
         </div>
@@ -298,7 +298,7 @@ export function AntropometriaPage() {
 
           {total === 0 ? (
             <div className="p-12 text-center space-y-3 bg-card rounded-3xl border border-border">
-              <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto" />
+              <CheckCircle2 className="h-12 w-12 text-success mx-auto" />
               <h3 className="font-bold text-base text-foreground">Sin Evaluaciones Pendientes</h3>
               <p className="text-xs text-muted-foreground max-w-sm mx-auto">
                 Todos los check-ins antropométricos remotos han sido validados.
@@ -332,7 +332,7 @@ export function AntropometriaPage() {
                       Fecha de Toma:{' '}
                       {formatFechaCalendario(ctrl.fechaEvaluacion) ?? ctrl.fechaEvaluacion}
                     </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 uppercase">
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/20 uppercase">
                       Pendiente Aprobación
                     </span>
                   </div>
@@ -343,13 +343,13 @@ export function AntropometriaPage() {
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="p-3 rounded-2xl bg-secondary/30">
-                    <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                    <span className="text-[11px] text-muted-foreground uppercase font-semibold">
                       Peso
                     </span>
                     <p className="font-mono font-bold text-base text-foreground">{ctrl.pesoKg} kg</p>
                   </div>
                   <div className="p-3 rounded-2xl bg-secondary/30">
-                    <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                    <span className="text-[11px] text-muted-foreground uppercase font-semibold">
                       % Grasa
                     </span>
                     <p className="font-mono font-bold text-base text-foreground">
@@ -357,7 +357,7 @@ export function AntropometriaPage() {
                     </p>
                   </div>
                   <div className="p-3 rounded-2xl bg-secondary/30">
-                    <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                    <span className="text-[11px] text-muted-foreground uppercase font-semibold">
                       Cintura
                     </span>
                     <p className="font-mono font-bold text-base text-foreground">
@@ -365,7 +365,7 @@ export function AntropometriaPage() {
                     </p>
                   </div>
                   <div className="p-3 rounded-2xl bg-secondary/30">
-                    <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                    <span className="text-[11px] text-muted-foreground uppercase font-semibold">
                       Fotos Adjuntas
                     </span>
                     <p className="font-mono font-bold text-base text-foreground">
@@ -443,7 +443,7 @@ export function AntropometriaPage() {
               <div className="aspect-3/4 rounded-2xl bg-background/60 border border-border flex flex-col items-center justify-center text-muted-foreground space-y-2 p-6 text-center">
                 <Camera className="h-10 w-10 text-primary/60" />
                 <span className="text-xs font-semibold">Perspectiva {angulo}</span>
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-[11px] text-muted-foreground">
                   Grasa: 17.20% • Cintura: 85 cm
                 </span>
               </div>
@@ -460,7 +460,7 @@ export function AntropometriaPage() {
               <div className="aspect-3/4 rounded-2xl bg-background/60 border border-border flex flex-col items-center justify-center text-muted-foreground space-y-2 p-6 text-center">
                 <Camera className="h-10 w-10 text-primary" />
                 <span className="text-xs font-semibold text-foreground">Perspectiva {angulo}</span>
-                <span className="text-[10px] text-emerald-400 font-bold">
+                <span className="text-[11px] text-success font-bold">
                   Grasa: 14.80% (-2.40%) • Cintura: 81 cm (-4 cm)
                 </span>
               </div>
@@ -476,8 +476,8 @@ export function AntropometriaPage() {
               </span>
             </div>
             <div className="flex items-center gap-4 text-xs font-mono font-bold">
-              <span className="text-emerald-400">Variación de peso: -3.20 kg</span>
-              <span className="text-emerald-400">Variación de grasa: -2.40%</span>
+              <span className="text-success">Variación de peso: -3.20 kg</span>
+              <span className="text-success">Variación de grasa: -2.40%</span>
             </div>
           </div>
         </div>

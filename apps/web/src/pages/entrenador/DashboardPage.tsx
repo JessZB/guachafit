@@ -135,7 +135,7 @@ export function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 uppercase">
+            <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-success/15 text-success border border-success/20 uppercase">
               Operación Activa
             </span>
           </div>
@@ -241,7 +241,7 @@ export function DashboardPage() {
               <Receipt className="h-5 w-5 text-primary shrink-0" />
               <h2 className="font-bold text-base text-foreground">Pagos por Revisar</h2>
             </div>
-            <span className="shrink-0 text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">
+            <span className="shrink-0 text-xs font-bold px-2.5 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/20">
               {dashboard?.bandejasRapidas.pagosPorConciliar || 0} pendientes
             </span>
           </div>
@@ -290,7 +290,7 @@ export function DashboardPage() {
         {/* Mora List */}
         <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-xs space-y-3">
           <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+            <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
             <span>Alumnos con Pagos Vencidos</span>
           </h3>
 
@@ -308,7 +308,7 @@ export function DashboardPage() {
               >
                 <div className="min-w-0">
                   <p className="font-bold text-xs text-foreground truncate">{mora.nombre}</p>
-                  <p className="text-[10px] text-destructive font-semibold">
+                  <p className="text-[11px] text-destructive font-semibold">
                     {pluralizar(mora.diasVencido, 'día de atraso', 'días de atraso')}
                   </p>
                 </div>
@@ -355,7 +355,7 @@ export function DashboardPage() {
                 >
                   <div className="min-w-0">
                     <p className="font-bold text-xs text-foreground truncate">{inac.nombre}</p>
-                    <p className="text-[10px] text-muted-foreground">Sin registrar series</p>
+                    <p className="text-[11px] text-muted-foreground">Sin registrar series</p>
                   </div>
                   <div className="text-right shrink-0">
                     <span className="font-mono font-bold text-xs text-destructive">

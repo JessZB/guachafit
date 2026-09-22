@@ -10,6 +10,7 @@ import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
 import { formatFechaLocal } from '../../lib/date-format';
 import { pluralizar } from '../../lib/pluralizar';
+import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import {
   CATALOGO_DEMO,
   PLANTILLAS_DEMO,
@@ -68,11 +69,11 @@ const OPCIONES_FILTRO: Array<{ valor: FiltroEstadoPlantilla; label: string }> = 
 /** Clases de badge por nivel objetivo (paleta Athletic Slate compartida). */
 const CLASES_NIVEL: Record<NivelObjetivoPlantilla, string> = {
   [NivelObjetivoPlantilla.PRINCIPIANTE]:
-    'bg-sky-500/15 text-sky-400 border-sky-500/30',
+    'bg-info/15 text-info border-info/30',
   [NivelObjetivoPlantilla.INTERMEDIO]:
-    'bg-amber-500/15 text-amber-400 border-amber-500/30',
+    'bg-warning/15 text-warning border-warning/30',
   [NivelObjetivoPlantilla.AVANZADO]:
-    'bg-rose-500/15 text-rose-400 border-rose-500/30',
+    'bg-danger/15 text-danger border-danger/30',
 };
 
 /**
@@ -162,19 +163,7 @@ export function PlantillasPage() {
     cargarCatalogo();
   }, [isDemoMode]);
 
-  // Accesibilidad: cierre del modal de plantilla con Escape (paridad con el resto de modales).
-  useEffect(() => {
-    if (!isModalOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setIsModalOpen(false);
-        setSaveSuccess(null);
-        setSaveError(null);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isModalOpen]);
+  // Accesibilidad (U3b): Escape, trampa de foco y restore viven en `useDialogoAccesible`.
 
   const conteos = useMemo(() => contarPlantillasPorEstado(plantillas), [plantillas]);
 
@@ -442,6 +431,14 @@ export function PlantillasPage() {
     setIntentoGuardar(false);
   };
 
+  // U3b: Escape, trampa de Tab y restore del foco; el foco inicial sigue en el nombre
+  // (`autoFocus` del formulario), por eso el hook no lo reasigna.
+  const refModalPlantilla = useDialogoAccesible({
+    abierto: isModalOpen,
+    onCerrar: cerrarModal,
+    enfocarAlAbrir: false,
+  });
+
   const resumenEditor = useMemo(() => resumirBloques(bloquesEdit), [bloquesEdit]);
 
   return (
@@ -511,7 +508,7 @@ export function PlantillasPage() {
                   }`}
                 >
                   <span>{opcion.label}</span>
-                  <span className={`font-mono text-[10px] ${activo ? 'opacity-80' : 'opacity-60'}`}>
+                  <span className={`font-mono text-[11px] ${activo ? 'opacity-80' : 'opacity-60'}`}>
                     {conteo}
                   </span>
                 </button>
@@ -641,9 +638,9 @@ export function PlantillasPage() {
                     {plantilla.nombre}
                   </h3>
                   <span
-                    className={`shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border ${
+                    className={`shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide border ${
                       plantilla.activa
-                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                        ? 'bg-success/15 text-success border-success/30'
                         : 'bg-secondary text-muted-foreground border-border'
                     }`}
                   >
@@ -652,7 +649,7 @@ export function PlantillasPage() {
                 </div>
 
                 <span
-                  className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border ${
+                  className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide border ${
                     CLASES_NIVEL[plantilla.nivelObjetivo]
                   }`}
                 >
@@ -668,7 +665,7 @@ export function PlantillasPage() {
                   </span>
                 </div>
 
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   Actualizada el {formatFechaLocal(plantilla.updatedAtUtc) || '—'}
                 </p>
               </div>
@@ -763,9 +760,11 @@ export function PlantillasPage() {
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
         >
           <div
+            ref={refModalPlantilla}
             role="dialog"
             aria-modal="true"
             aria-labelledby="modal-plantilla-title"
+            tabIndex={-1}
             className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-4xl space-y-5 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
@@ -786,6 +785,7 @@ export function PlantillasPage() {
                 onClick={cerrarModal}
                 className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer"
                 title="Cerrar"
+                aria-label="Cerrar"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -795,12 +795,12 @@ export function PlantillasPage() {
               <div
                 role="status"
                 aria-live="polite"
-                className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-start gap-2"
+                className="p-3 rounded-2xl bg-success/10 border border-success/30 text-success text-xs flex items-start gap-2"
               >
                 <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
                   <span className="block font-bold">{saveSuccess}</span>
-                  <span className="block text-[11px] text-emerald-400/80">
+                  <span className="block text-[11px] text-success/80">
                     Puedes seguir ajustando la plantilla o cerrar este panel cuando quieras.
                   </span>
                 </div>
@@ -830,7 +830,7 @@ export function PlantillasPage() {
                   }`}
                 />
                 {mostrarNombreError && (
-                  <span className="text-[10px] font-bold text-destructive block">{nombreError}</span>
+                  <span className="text-[11px] font-bold text-destructive block">{nombreError}</span>
                 )}
               </div>
 

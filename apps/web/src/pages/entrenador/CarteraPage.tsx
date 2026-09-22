@@ -4,6 +4,8 @@ import { apiClient } from '../../lib/api-client';
 import { useAuth } from '../../context/auth-context';
 import { useValorDebounced } from '../../lib/use-valor-debounced';
 import { usePaginacionServidor } from '../../lib/use-paginacion-servidor';
+import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
+import { useTabsAccesibles } from '../../lib/use-tabs-accesibles';
 import { Paginacion } from '../../components/common/Paginacion';
 import { MetricCard } from '../../components/common/MetricCard';
 import { TablaCartera } from '../../components/entrenador/TablaCartera';
@@ -152,6 +154,13 @@ export function CarteraPage() {
     setCopiado(false);
   };
 
+  // U3b: Escape, trampa de Tab, foco inicial y restore del foco al disparador (los dos modales
+  // de la cartera compartían el overlay sin semántica de diálogo).
+  const refModalRecordatorio = useDialogoAccesible({
+    abierto: filaRecordatorio !== null,
+    onCerrar: cerrarModalRecordatorio,
+  });
+
   const handleEnviarRecordatorio = async () => {
     if (!filaRecordatorio) return;
     setEnviandoRecordatorio(true);
@@ -232,6 +241,20 @@ export function CarteraPage() {
       fechaOperacion: hoyYyyyMmDd(),
     });
   };
+
+  const refModalCobro = useDialogoAccesible({
+    abierto: cobro !== null,
+    onCerrar: () => setCobro(null),
+  });
+
+  // U3b: patrón APG de las pestañas de estado (roving tabindex, flechas, Home/End y enlace con
+  // el `tabpanel` del contenido). El estado sigue viviendo en la URL (`?pestana=`).
+  const tabsCartera = useTabsAccesibles<PestanaCarteraDTO>({
+    claves: PESTANAS_CARTERA.map((item) => item.clave),
+    activa: pestana,
+    onActivar: cambiarPestana,
+    idBase: 'cartera-estados',
+  });
 
   const handleRegistrarCobro = async () => {
     if (!cobro) return;
@@ -377,16 +400,18 @@ export function CarteraPage() {
         <>
           {/* Pestañas del RF-009 con contadores reales */}
           <div className="space-y-2">
-            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Estados de cartera">
+            <div
+              {...tabsCartera.propsTablist}
+              className="flex flex-wrap gap-2"
+              aria-label="Estados de cartera"
+            >
               {PESTANAS_CARTERA.map((pestanaItem) => {
                 const activa = pestanaItem.clave === pestana;
                 return (
                   <button
                     key={pestanaItem.clave}
                     type="button"
-                    role="tab"
-                    aria-selected={activa}
-                    onClick={() => cambiarPestana(pestanaItem.clave)}
+                    {...tabsCartera.propsTab(pestanaItem.clave)}
                     className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       activa
                         ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
@@ -395,7 +420,7 @@ export function CarteraPage() {
                   >
                     <span>{pestanaItem.etiqueta}</span>
                     <span
-                      className={`min-w-[1.5rem] text-center px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+                      className={`min-w-[1.5rem] text-center px-1.5 py-0.5 rounded-full text-[11px] font-black ${
                         activa
                           ? 'bg-primary-foreground/20 text-primary-foreground'
                           : 'bg-background/60 text-foreground border border-border/60'
@@ -410,6 +435,8 @@ export function CarteraPage() {
             <p className="text-[11px] text-muted-foreground">{pestanaActiva.criterio}</p>
           </div>
 
+          {/* U3b: el contenido de la pestaña activa es el `tabpanel` enlazado por `aria-controls`. */}
+          <div {...tabsCartera.propsPanel(pestana)} className="space-y-6">
           {/* Búsqueda server-side + estado de la página */}
           <div className="p-4 rounded-3xl bg-card border border-border/80 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -434,14 +461,19 @@ export function CarteraPage() {
             {sinTasa && (
               <div className="flex items-start gap-2 p-3 rounded-2xl bg-secondary/40 border border-border/60">
                 <Info className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
-                <p className="text-[11px] text-muted-foreground">
-                  Sin tasa de cambio configurada: la columna en bolívares se muestra como «—» para
-                  no inventar montos. Configúrala en{' '}
-                  <Link to="/coach/ajustes" className="font-bold text-primary hover:underline">
+                <div className="min-w-0 space-y-2">
+                  <p className="text-[11px] text-muted-foreground">
+                    Sin tasa de cambio configurada: la columna en bolívares se muestra como «—»
+                    para no inventar montos.
+                  </p>
+                  {/* U2 (Ola 4): destino real como botón táctil (≥44px), no un enlace de 15px */}
+                  <Link
+                    to="/coach/ajustes"
+                    className="inline-flex min-h-11 items-center gap-1 rounded-xl border border-primary/25 bg-primary/10 px-3 text-xs font-bold text-primary hover:bg-primary/20 transition-colors focus-visible:outline-2 focus-visible:outline-primary"
+                  >
                     Ajustes → Tasas
                   </Link>
-                  .
-                </p>
+                </div>
               </div>
             )}
           </div>
@@ -488,17 +520,30 @@ export function CarteraPage() {
               />
             </div>
           )}
+          </div>
         </>
       )}
 
       {/* Modal de recordatorio manual (RN-02) */}
       {filaRecordatorio && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
-          <div className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-lg space-y-4">
+          <div
+            ref={refModalRecordatorio}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cartera-recordatorio-titulo"
+            tabIndex={-1}
+            className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-lg space-y-4"
+          >
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
               <div className="flex items-center gap-2">
                 <BellRing className="h-5 w-5 text-primary" />
-                <h3 className="font-bold text-base text-foreground">Enviar recordatorio manual</h3>
+                <h3
+                  id="cartera-recordatorio-titulo"
+                  className="font-bold text-base text-foreground"
+                >
+                  Enviar recordatorio manual
+                </h3>
               </div>
               <button
                 type="button"
@@ -545,9 +590,9 @@ export function CarteraPage() {
               <div
                 className={`p-3 rounded-2xl border text-xs font-bold flex items-start gap-2 ${
                   tonoResultadoRecordatorio(resultadoRecordatorio) === 'success'
-                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                    ? 'bg-success/15 border-success/30 text-success'
                     : tonoResultadoRecordatorio(resultadoRecordatorio) === 'warning'
-                    ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                    ? 'bg-warning/15 border-warning/30 text-warning'
                     : 'bg-secondary/60 border-border text-muted-foreground'
                 }`}
               >
@@ -587,7 +632,7 @@ export function CarteraPage() {
                       )}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="py-2 px-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold text-xs hover:bg-emerald-500/25 transition-colors"
+                      className="py-2 px-4 rounded-xl bg-success/15 border border-success/30 text-success font-bold text-xs hover:bg-success/25 transition-colors"
                     >
                       Abrir WhatsApp
                     </a>
@@ -622,11 +667,20 @@ export function CarteraPage() {
       {/* Modal de cobro directo en efectivo (RN-01) */}
       {cobro && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
-          <div className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-md space-y-4">
+          <div
+            ref={refModalCobro}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cartera-cobro-titulo"
+            tabIndex={-1}
+            className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-md space-y-4"
+          >
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
               <div className="flex items-center gap-2">
                 <HandCoins className="h-5 w-5 text-primary" />
-                <h3 className="font-bold text-base text-foreground">Registrar cobro en efectivo</h3>
+                <h3 id="cartera-cobro-titulo" className="font-bold text-base text-foreground">
+                  Registrar cobro en efectivo
+                </h3>
               </div>
               <button
                 type="button"
@@ -659,7 +713,7 @@ export function CarteraPage() {
             )}
 
             {exitoCobro ? (
-              <div className="p-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-start gap-2">
+              <div className="p-3 rounded-2xl bg-success/15 border border-success/30 text-success text-xs font-bold flex items-start gap-2">
                 <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
                 <span>{exitoCobro}</span>
               </div>

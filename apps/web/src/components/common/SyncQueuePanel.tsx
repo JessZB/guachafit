@@ -17,6 +17,7 @@ import {
 } from '../../lib/offline-db';
 import { processOutboxQueue, subscribeToSyncStatus, type SyncStatusState } from '../../lib/offline-sync';
 import { formatFechaHoraLocal } from '../../lib/date-format';
+import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 
 interface SyncQueuePanelProps {
   open: boolean;
@@ -27,10 +28,10 @@ const STATUS_META: Record<
   OutboxMutation['status'],
   { label: string; className: string }
 > = {
-  pending: { label: 'Pendiente', className: 'bg-sky-500/15 text-sky-400 border-sky-500/30' },
+  pending: { label: 'Pendiente', className: 'bg-info/15 text-info border-info/30' },
   syncing: { label: 'Sincronizando', className: 'bg-primary/15 text-primary border-primary/30' },
-  synced: { label: 'Sincronizado', className: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
-  failed: { label: 'Reintentando', className: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
+  synced: { label: 'Sincronizado', className: 'bg-success/15 text-success border-success/30' },
+  failed: { label: 'Reintentando', className: 'bg-warning/15 text-warning border-warning/30' },
   rejected: { label: 'Rechazado', className: 'bg-destructive/15 text-destructive border-destructive/30' },
 };
 
@@ -49,6 +50,9 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
     summary: { pending: 0, failed: 0, rejected: 0 },
   });
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
+
+  // U3b: Escape, trampa de Tab, foco inicial y restore del foco al cerrar.
+  const refDialogo = useDialogoAccesible({ abierto: open, onCerrar: onClose });
 
   const isSyncing = syncState.isSyncing;
 
@@ -77,20 +81,16 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
       setConfirmDiscardId(null);
       return;
     }
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
+    // U3b: Escape y trampa de foco viven en `useDialogoAccesible`; aquí solo la conectividad.
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
-    window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -124,9 +124,11 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
       className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
     >
       <div
+        ref={refDialogo}
         role="dialog"
         aria-modal="true"
         aria-labelledby="sync-panel-title"
+        tabIndex={-1}
         className="p-5 rounded-3xl bg-card border border-border/80 shadow-2xl w-full max-w-lg space-y-4 max-h-[85vh] flex flex-col"
       >
         {/* Header */}
@@ -134,7 +136,7 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
           <div className="flex items-center gap-2 min-w-0">
             <div
               className={`p-2 rounded-xl shrink-0 ${
-                rejected > 0 ? 'bg-destructive/15 text-destructive' : 'bg-amber-500/15 text-amber-400'
+                rejected > 0 ? 'bg-destructive/15 text-destructive' : 'bg-warning/15 text-warning'
               }`}
             >
               <AlertTriangle className="h-5 w-5" />
@@ -182,7 +184,7 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
 
           {!isLoading && items.length === 0 && (
             <div className="py-8 text-center space-y-2">
-              <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto" />
+              <CheckCircle2 className="h-8 w-8 text-success mx-auto" />
               <p className="text-sm font-bold text-foreground">Todo sincronizado</p>
               <p className="text-[11px] text-muted-foreground">
                 No hay cambios locales esperando envío.
@@ -202,18 +204,18 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-xs font-bold text-foreground truncate">{item.description}</p>
-                    <p className="text-[10px] text-muted-foreground font-mono truncate">
+                    <p className="text-[11px] text-muted-foreground font-mono truncate">
                       {item.method} {item.endpoint}
                     </p>
                   </div>
                   <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0 ${meta.className}`}
+                    className={`text-[11px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0 ${meta.className}`}
                   >
                     {meta.label}
                   </span>
                 </div>
 
-                <div className="flex items-center gap-3 text-[10px] text-muted-foreground font-medium">
+                <div className="flex items-center gap-3 text-[11px] text-muted-foreground font-medium">
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />
                     {formatFechaHoraLocal(new Date(item.createdAt).toISOString()) ?? '—'}
@@ -227,10 +229,10 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
 
                 {item.lastError && (
                   <p
-                    className={`text-[10px] font-semibold rounded-xl px-2.5 py-1.5 border ${
+                    className={`text-[11px] font-semibold rounded-xl px-2.5 py-1.5 border ${
                       item.status === 'rejected'
                         ? 'text-destructive bg-destructive/10 border-destructive/25'
-                        : 'text-amber-500 bg-amber-500/10 border-amber-500/25'
+                        : 'text-warning bg-warning/10 border-warning/25'
                     }`}
                   >
                     {item.status === 'rejected'
@@ -292,7 +294,7 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
 
         {/* Footer */}
         <div className="pt-3 border-t border-border/80 flex items-center justify-between gap-2">
-          <p className="text-[10px] text-muted-foreground font-medium">
+          <p className="text-[11px] text-muted-foreground font-medium">
             {pending > 0 || failed > 0
               ? 'Los cambios pendientes se envían solos al recuperar conexión.'
               : 'Sin cambios pendientes de envío.'}

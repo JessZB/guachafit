@@ -150,7 +150,7 @@ export function OnboardingPage() {
               <UserPlus className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="font-bold text-lg text-foreground">Vincularse con Entrenador</h2>
+              <h1 className="font-bold text-lg text-foreground">Vincularse con Entrenador</h1>
               <p className="text-xs text-muted-foreground">
                 Completa tu ficha para comenzar tu plan deportivo personalizado.
               </p>
@@ -165,7 +165,7 @@ export function OnboardingPage() {
 
           {success ? (
             <div className="p-6 text-center space-y-3">
-              <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto" />
+              <CheckCircle2 className="h-12 w-12 text-success mx-auto" />
               <h3 className="font-bold text-base text-foreground">¡Registro Exitoso!</h3>
               <p className="text-xs text-muted-foreground">
                 Tu cuenta ha sido vinculada con el entrenador. Redirigiendo a la pantalla de
@@ -195,7 +195,7 @@ export function OnboardingPage() {
                 )}
 
                 {estadoCoach === 'valido' && coachInfo && (
-                  <p className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold">
+                  <p className="flex items-center gap-1.5 text-[11px] text-success font-semibold">
                     <UserCheck className="h-3.5 w-3.5 shrink-0" />
                     <span>
                       Te vincularás con: {coachInfo.nombre}
@@ -205,7 +205,7 @@ export function OnboardingPage() {
                 )}
 
                 {estadoCoach === 'invalido' && (
-                  <p className="flex items-center gap-1.5 text-[11px] text-rose-400 font-semibold">
+                  <p className="flex items-center gap-1.5 text-[11px] text-danger font-semibold">
                     <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
                     <span>{MENSAJE_COACH_NO_DISPONIBLE}</span>
                   </p>

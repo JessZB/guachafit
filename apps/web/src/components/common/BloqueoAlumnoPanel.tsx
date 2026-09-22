@@ -26,8 +26,8 @@ const ESTILO_POR_ESTADO: Record<EstadoBloqueoAlumno, EstiloBloqueo> = {
   [EstadoAlumno.SUSPENDIDO_PAGO]: {
     Icono: CreditCard,
     IconoAccion: CreditCard,
-    tile: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
-    borde: 'border-amber-500/30',
+    tile: 'bg-warning/15 text-warning border-warning/25',
+    borde: 'border-warning/30',
   },
   [EstadoAlumno.INACTIVO_PAUSADO]: {
     Icono: PauseCircle,

@@ -91,7 +91,7 @@ export function ActivacionPage() {
 
           {success ? (
             <div className="p-6 text-center space-y-3">
-              <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto" />
+              <CheckCircle2 className="h-12 w-12 text-success mx-auto" />
               <h2 className="font-bold text-base text-foreground">¡Contraseña creada!</h2>
               <p className="text-xs text-muted-foreground">
                 Ya puedes iniciar sesión con tu correo y tu nueva contraseña. Redirigiendo...

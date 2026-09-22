@@ -23,6 +23,7 @@ import {
 } from '../../lib/directorio-alumnos';
 import { usePaginacionServidor } from '../../lib/use-paginacion-servidor';
 import { useValorDebounced } from '../../lib/use-valor-debounced';
+import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import { rebanarPagina } from '../../lib/paginacion';
 import {
   etiquetaEstadoActivacion,
@@ -71,18 +72,18 @@ const TAMANO_PAGINA_POR_DEFECTO = 25;
  * no es deuda y nunca se pinta en rojo.
  */
 const CLASES_TEXTO_SEMAFORO_PAGO: Record<TonoSemaforo, string> = {
-  success: 'text-emerald-400',
-  warning: 'text-amber-400',
-  danger: 'text-rose-400',
-  info: 'text-sky-400',
+  success: 'text-success',
+  warning: 'text-warning',
+  danger: 'text-danger',
+  info: 'text-info',
   neutral: 'text-muted-foreground',
 };
 
 const CLASES_PUNTO_SEMAFORO_PAGO: Record<TonoSemaforo, string> = {
-  success: 'bg-emerald-400',
-  warning: 'bg-amber-400',
-  danger: 'bg-rose-500',
-  info: 'bg-sky-400',
+  success: 'bg-success',
+  warning: 'bg-warning',
+  danger: 'bg-danger',
+  info: 'bg-info',
   neutral: 'bg-muted-foreground',
 };
 
@@ -261,17 +262,6 @@ export function AlumnosPage() {
     setActionError(null);
   }, [qDebounced, filterEstado, filterModalidad, tamano, isDemoMode]);
 
-  // Accesibilidad: Cierre de modal con tecla Escape
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isModalOpen) {
-        cerrarModal();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isModalOpen]);
-
   /**
    * WU-E: apertura limpia del modal de inscripción (nunca arrastra el enlace de un alta previa).
    */
@@ -303,6 +293,9 @@ export function AlumnosPage() {
     setFormError(null);
     setActivacionCopiada(false);
   };
+
+  // U3b: Escape, trampa de Tab, foco inicial y restore del foco al disparador.
+  const refModalInscripcion = useDialogoAccesible({ abierto: isModalOpen, onCerrar: cerrarModal });
 
   const handleCrearAlumnoManual = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -447,7 +440,7 @@ export function AlumnosPage() {
                 : 'bg-secondary/30 border-border/40 hover:bg-secondary/50 hover:border-border/80'
             }`}
           >
-            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block">
+            <span className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider block">
               Total Cartera
             </span>
             <p className="font-mono font-black text-xl sm:text-2xl text-foreground tracking-tight">
@@ -463,14 +456,14 @@ export function AlumnosPage() {
             }}
             className={`p-3 rounded-2xl border text-left transition-all cursor-pointer space-y-1 hover:scale-[1.02] active:scale-[0.98] ${
               filterEstado === 'activo'
-                ? 'bg-emerald-500/10 border-emerald-500/50 shadow-xs ring-1 ring-emerald-500/30'
+                ? 'bg-success/10 border-success/50 shadow-xs ring-1 ring-success/30'
                 : 'bg-secondary/30 border-border/40 hover:bg-secondary/50 hover:border-border/80'
             }`}
           >
-            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block">
+            <span className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider block">
               Activos
             </span>
-            <p className="font-mono font-black text-xl sm:text-2xl text-emerald-400 tracking-tight">
+            <p className="font-mono font-black text-xl sm:text-2xl text-success tracking-tight">
               {kpis.activos}
             </p>
           </button>
@@ -483,14 +476,14 @@ export function AlumnosPage() {
             }}
             className={`p-3 rounded-2xl border text-left transition-all cursor-pointer space-y-1 hover:scale-[1.02] active:scale-[0.98] ${
               filterEstado === 'pausado'
-                ? 'bg-amber-500/10 border-amber-500/50 shadow-xs ring-1 ring-amber-500/30'
+                ? 'bg-warning/10 border-warning/50 shadow-xs ring-1 ring-warning/30'
                 : 'bg-secondary/30 border-border/40 hover:bg-secondary/50 hover:border-border/80'
             }`}
           >
-            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block">
+            <span className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider block">
               Pausados
             </span>
-            <p className="font-mono font-black text-xl sm:text-2xl text-amber-400 tracking-tight">
+            <p className="font-mono font-black text-xl sm:text-2xl text-warning tracking-tight">
               {kpis.pausados}
             </p>
           </button>
@@ -503,19 +496,19 @@ export function AlumnosPage() {
             }}
             className={`p-3 rounded-2xl border text-left transition-all cursor-pointer space-y-1 hover:scale-[1.02] active:scale-[0.98] ${
               filterEstado === 'mora'
-                ? 'bg-rose-500/10 border-rose-500/50 shadow-xs ring-1 ring-rose-500/30'
+                ? 'bg-danger/10 border-danger/50 shadow-xs ring-1 ring-danger/30'
                 : 'bg-secondary/30 border-border/40 hover:bg-secondary/50 hover:border-border/80'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block">
+              <span className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider block">
                 En Mora
               </span>
               {kpis.morosos > 0 && (
-                <span className="h-2 w-2 rounded-full bg-rose-400 animate-pulse" />
+                <span className="h-2 w-2 rounded-full bg-danger animate-pulse" />
               )}
             </div>
-            <p className="font-mono font-black text-xl sm:text-2xl text-rose-400 tracking-tight">
+            <p className="font-mono font-black text-xl sm:text-2xl text-danger tracking-tight">
               {kpis.morosos}
             </p>
           </button>
@@ -532,7 +525,7 @@ export function AlumnosPage() {
                 : 'bg-secondary/30 border-border/40 hover:bg-secondary/50 hover:border-border/80'
             }`}
           >
-            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block">
+            <span className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider block">
               Presenciales
             </span>
             <p className="font-mono font-black text-xl sm:text-2xl text-primary tracking-tight">
@@ -552,7 +545,7 @@ export function AlumnosPage() {
                 : 'bg-secondary/30 border-border/40 hover:bg-secondary/50 hover:border-border/80'
             }`}
           >
-            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block">
+            <span className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider block">
               Archivados
             </span>
             <p className="font-mono font-black text-xl sm:text-2xl text-muted-foreground tracking-tight">
@@ -591,7 +584,7 @@ export function AlumnosPage() {
             disabled={!registrationUrl}
             className="py-2 px-3.5 rounded-xl bg-card hover:bg-secondary text-foreground text-xs font-bold border border-border flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isCopied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 text-primary" />}
+            {isCopied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5 text-primary" />}
             <span>{isCopied ? '¡Enlace Copiado!' : 'Copiar Enlace'}</span>
           </button>
 
@@ -602,7 +595,7 @@ export function AlumnosPage() {
               )}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="py-2 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all active:scale-95 cursor-pointer"
+              className="py-2 px-3.5 rounded-xl bg-success-strong hover:bg-success-strong/90 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-success-strong/20 transition-all active:scale-95 cursor-pointer"
             >
               <MessageSquare className="h-3.5 w-3.5" />
               <span>Compartir por WhatsApp</span>
@@ -654,7 +647,7 @@ export function AlumnosPage() {
               onClick={() => setFilterEstado('mora')}
               className={`py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                 filterEstado === 'mora'
-                  ? 'bg-rose-500 text-white shadow-xs'
+                  ? 'bg-danger-strong text-white shadow-xs'
                   : 'bg-secondary/70 hover:bg-secondary text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -849,7 +842,7 @@ export function AlumnosPage() {
                     </div>
                   </div>
 
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-secondary text-foreground border border-border uppercase shrink-0">
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary text-foreground border border-border uppercase shrink-0">
                     {a.modalidad}
                   </span>
                 </div>
@@ -863,7 +856,7 @@ export function AlumnosPage() {
                     <span className="truncate italic">Sin plan asignado</span>
                   )}
                   <span
-                    className={`font-mono font-bold uppercase text-[10px] ${CLASES_TEXTO_SEMAFORO_PAGO[estadoPago.tono]}`}
+                    className={`font-mono font-bold uppercase text-[11px] ${CLASES_TEXTO_SEMAFORO_PAGO[estadoPago.tono]}`}
                   >
                     {estadoPago.texto}
                   </span>
@@ -871,7 +864,7 @@ export function AlumnosPage() {
 
                 {/* Bottom Row: Botón WhatsApp y Acción */}
                 <div className="flex items-center justify-between pt-1">
-                  <span className="text-[10px] font-mono text-muted-foreground truncate">
+                  <span className="text-[11px] font-mono text-muted-foreground truncate">
                     {a.telefonoWhatsapp}
                   </span>
 
@@ -882,7 +875,7 @@ export function AlumnosPage() {
                       )}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="p-1.5 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/20 transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-emerald-400"
+                      className="p-1.5 rounded-lg bg-success/15 hover:bg-success/30 text-success border border-success/20 transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-success"
                       title="Enviar mensaje por WhatsApp"
                       aria-label={`Enviar mensaje de WhatsApp a ${a.nombres}`}
                     >
@@ -893,7 +886,7 @@ export function AlumnosPage() {
                       <button
                         type="button"
                         onClick={(e) => handleRestaurarAlumno(a.id, e)}
-                        className="py-1 px-2.5 rounded-lg bg-primary text-primary-foreground font-bold text-[10px] flex items-center gap-1 cursor-pointer hover:brightness-110 active:scale-95 transition-all focus-visible:outline-2 focus-visible:outline-primary"
+                        className="py-1 px-2.5 rounded-lg bg-primary text-primary-foreground font-bold text-[11px] flex items-center gap-1 cursor-pointer hover:brightness-110 active:scale-95 transition-all focus-visible:outline-2 focus-visible:outline-primary"
                         title="Restaurar alumno archivado"
                         aria-label={`Restaurar alumno ${a.nombres} ${a.apellidos}`}
                       >
@@ -920,7 +913,7 @@ export function AlumnosPage() {
       {viewMode === 'table' && (
         <div className="p-4 rounded-3xl bg-card border border-border shadow-xs overflow-x-auto">
           <table className="w-full text-xs text-left">
-            <thead className="border-b border-border/80 text-muted-foreground uppercase text-[10px]">
+            <thead className="border-b border-border/80 text-muted-foreground uppercase text-[11px]">
               <tr>
                 <th className="py-3 px-3">Alumno</th>
                 <th className="py-3 px-3">Documento</th>
@@ -952,7 +945,7 @@ export function AlumnosPage() {
                           <p className="font-extrabold text-foreground group-hover:text-primary transition-colors">
                             {a.nombres} {a.apellidos}
                           </p>
-                          <span className="text-[10px] text-muted-foreground">{a.email}</span>
+                          <span className="text-[11px] text-muted-foreground">{a.email}</span>
                         </div>
                       </div>
                     </td>
@@ -963,19 +956,19 @@ export function AlumnosPage() {
                     </td>
 
                     <td className="py-3 px-3">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-secondary text-foreground border border-border uppercase">
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary text-foreground border border-border uppercase">
                         {a.modalidad}
                       </span>
                     </td>
 
                     <td className="py-3 px-3">
                       <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full uppercase ${
                           isArchived
                             ? 'bg-muted text-muted-foreground border border-border'
                             : a.estadoActivacion === EstadoAlumno.ACTIVO
-                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
-                            : 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
+                            ? 'bg-success/15 text-success border border-success/20'
+                            : 'bg-warning/15 text-warning border border-warning/20'
                         }`}
                       >
                         {isArchived ? 'Archivado' : etiquetaEstadoActivacion(a.estadoActivacion)}
@@ -984,7 +977,7 @@ export function AlumnosPage() {
 
                     <td className="py-3 px-3 font-mono font-bold">
                       <span
-                        className={`text-[10px] uppercase ${CLASES_TEXTO_SEMAFORO_PAGO[estadoPago.tono]}`}
+                        className={`text-[11px] uppercase ${CLASES_TEXTO_SEMAFORO_PAGO[estadoPago.tono]}`}
                       >
                         ● {estadoPago.texto}
                       </span>
@@ -1003,14 +996,14 @@ export function AlumnosPage() {
                           className="p-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer"
                           aria-label={`Contactar por WhatsApp a ${a.nombres}`}
                         >
-                          <MessageSquare className="h-3.5 w-3.5 text-emerald-400" />
+                          <MessageSquare className="h-3.5 w-3.5 text-success" />
                         </a>
 
                         {isArchived ? (
                           <button
                             type="button"
                             onClick={(e) => handleRestaurarAlumno(a.id, e)}
-                            className="py-1 px-2.5 rounded-lg bg-primary text-primary-foreground font-bold text-[10px] flex items-center gap-1 cursor-pointer hover:brightness-110 active:scale-95 transition-all"
+                            className="py-1 px-2.5 rounded-lg bg-primary text-primary-foreground font-bold text-[11px] flex items-center gap-1 cursor-pointer hover:brightness-110 active:scale-95 transition-all"
                             aria-label={`Restaurar alumno ${a.nombres} ${a.apellidos}`}
                           >
                             <RefreshCw className="h-3 w-3" />
@@ -1048,9 +1041,11 @@ export function AlumnosPage() {
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
         >
           <div
+            ref={refModalInscripcion}
             role="dialog"
             aria-modal="true"
             aria-labelledby="modal-inscripcion-title"
+            tabIndex={-1}
             className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
@@ -1062,6 +1057,7 @@ export function AlumnosPage() {
               </div>
               <button
                 onClick={cerrarModal}
+                aria-label="Cerrar"
                 className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
               >
                 <X className="h-4 w-4" />
@@ -1070,8 +1066,8 @@ export function AlumnosPage() {
 
             {alumnoCreado ? (
               <div className="space-y-4">
-                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-1.5">
-                  <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto" />
+                <div className="p-4 rounded-2xl bg-success/10 border border-success/30 text-center space-y-1.5">
+                  <CheckCircle2 className="h-10 w-10 text-success mx-auto" />
                   <p className="text-sm font-bold text-foreground">
                     {alumnoCreado.nombres} {alumnoCreado.apellidos} fue registrado en tu cartera.
                   </p>
@@ -1216,7 +1212,8 @@ export function AlumnosPage() {
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-muted-foreground">WhatsApp</label>
                   <input
-                    type="text"
+                    type="tel"
+                    inputMode="tel"
                     required
                     value={telefonoWhatsapp}
                     onChange={(e) => setTelefonoWhatsapp(e.target.value)}

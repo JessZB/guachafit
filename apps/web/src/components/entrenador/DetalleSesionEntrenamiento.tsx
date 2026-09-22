@@ -53,9 +53,9 @@ export interface DetalleSesionEntrenamientoProps {
 
 /** Misma paleta de chips de estado que el resto del panel del coach. */
 const CLASES_TONO_SESION: Record<TonoSemaforo, string> = {
-  success: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-  warning: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-  danger: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+  success: 'bg-success/15 text-success border-success/30',
+  warning: 'bg-warning/15 text-warning border-warning/30',
+  danger: 'bg-danger/15 text-danger border-danger/30',
   info: 'bg-primary/15 text-primary border-primary/30',
   neutral: 'bg-secondary text-muted-foreground border-border',
 };
@@ -122,7 +122,7 @@ export function DetalleSesionEntrenamiento({
             </span>
             <div className="min-w-0">
               {titulo && (
-                <p className="text-[10px] font-black uppercase tracking-wider text-primary truncate">
+                <p className="text-[11px] font-black uppercase tracking-wider text-primary truncate">
                   {titulo}
                 </p>
               )}
@@ -142,23 +142,23 @@ export function DetalleSesionEntrenamiento({
 
           <div className="flex items-center gap-1.5 flex-wrap">
             {volumen && Number(sesion.volumenTotalKg) > 0 && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/30">
+              <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/30">
                 <Dumbbell className="h-3 w-3" />
                 {volumen}
               </span>
             )}
             <span
-              className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${CLASES_TONO_SESION[etiquetaEstado.tono]}`}
+              className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full border ${CLASES_TONO_SESION[etiquetaEstado.tono]}`}
             >
               {etiquetaEstado.texto}
             </span>
             {porcentaje && (
-              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+              <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-success/15 text-success border border-success/30">
                 {porcentaje} cumplido
               </span>
             )}
             {chipRecuperada && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
+              <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/30">
                 <Timer className="h-3 w-3" />
                 {chipRecuperada}
               </span>
@@ -168,8 +168,8 @@ export function DetalleSesionEntrenamiento({
         </div>
 
         {(etiquetas.length > 0 || textoLibre) && (
-          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 space-y-2">
-            <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+          <div className="p-3 rounded-xl bg-warning/10 border border-warning/25 space-y-2">
+            <span className="text-[11px] font-bold text-warning uppercase tracking-wider flex items-center gap-1.5">
               <MessageSquare className="h-3.5 w-3.5" />
               Feedback del alumno
             </span>
@@ -178,7 +178,7 @@ export function DetalleSesionEntrenamiento({
                 {etiquetas.map((etiqueta, indice) => (
                   <span
                     key={`${etiqueta.titulo}-${indice}`}
-                    className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                    className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/30"
                   >
                     {etiqueta.titulo}
                     {etiqueta.valor ? `: ${etiqueta.valor}` : ''}
@@ -219,7 +219,7 @@ export function DetalleSesionEntrenamiento({
                   >
                     <span className="h-px flex-1 bg-border/60" />
                     <span
-                      className={`text-[10px] font-mono font-bold ${
+                      className={`text-[11px] font-mono font-bold ${
                         descansoRealEjercicio !== null ? 'text-primary' : 'text-muted-foreground'
                       }`}
                     >
@@ -234,7 +234,7 @@ export function DetalleSesionEntrenamiento({
               <div className="p-3.5 rounded-2xl bg-secondary/20 border border-border/50 space-y-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="h-5 w-5 rounded-lg bg-primary/10 text-primary text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
+                    <span className="h-5 w-5 rounded-lg bg-primary/10 text-primary text-[11px] font-mono font-bold flex items-center justify-center shrink-0">
                       {indiceEjercicio + 1}
                     </span>
                     <span className="font-bold text-xs text-foreground truncate">
@@ -244,7 +244,7 @@ export function DetalleSesionEntrenamiento({
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {ejercicio.notasCoach && (
                       <span
-                        className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/25"
+                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/25"
                         title="Nota del coach para este ejercicio"
                       >
                         <MessageSquare className="h-3 w-3" />
@@ -253,7 +253,7 @@ export function DetalleSesionEntrenamiento({
                     )}
                     {mostrarGrupoMuscular && ejercicio.ejercicio?.grupoMuscular && (
                       <span
-                        className="inline-flex items-center text-[10px] font-mono font-bold text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md border border-border/60"
+                        className="inline-flex items-center text-[11px] font-mono font-bold text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md border border-border/60"
                         title="Grupo muscular del ejercicio"
                       >
                         {ejercicio.ejercicio.grupoMuscular}
@@ -261,7 +261,7 @@ export function DetalleSesionEntrenamiento({
                     )}
                     {ejercicio.descansoPrescritoSegundos != null && (
                       <span
-                        className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md border border-border/60"
+                        className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md border border-border/60"
                         title="Descanso planificado por el coach para este ejercicio"
                       >
                         <Timer className="h-3 w-3" />
@@ -295,7 +295,7 @@ export function DetalleSesionEntrenamiento({
                           key={serie.id}
                           className={`p-2.5 rounded-xl border space-y-1.5 ${
                             serie.completada
-                              ? 'bg-emerald-500/10 border-emerald-500/30'
+                              ? 'bg-success/10 border-success/30'
                               : 'bg-card border-border/60'
                           }`}
                         >
@@ -306,14 +306,14 @@ export function DetalleSesionEntrenamiento({
                             <div className="flex items-center gap-1.5 flex-wrap justify-end">
                               {serie.rpe && (
                                 <span
-                                  className="text-[10px] font-bold text-amber-400"
+                                  className="text-[11px] font-bold text-warning"
                                   title="RPE real registrado por el alumno"
                                 >
                                   @{serie.rpe}
                                 </span>
                               )}
                               {!serie.completada && (
-                                <span className="text-[10px] font-bold text-amber-400 whitespace-nowrap">
+                                <span className="text-[11px] font-bold text-warning whitespace-nowrap">
                                   No completada
                                 </span>
                               )}
@@ -336,19 +336,19 @@ export function DetalleSesionEntrenamiento({
                             </span>
                           </div>
 
-                          <div className="text-[10px] text-muted-foreground font-mono border-t border-border/40 pt-1.5">
+                          <div className="text-[11px] text-muted-foreground font-mono border-t border-border/40 pt-1.5">
                             Plan: {serie.repsObjetivo} reps · {pesoPrescrito ?? 'sin carga'}
                           </div>
 
-                          <div className="flex items-center gap-1.5 flex-wrap text-[10px] font-mono">
+                          <div className="flex items-center gap-1.5 flex-wrap text-[11px] font-mono">
                             {timer != null && (
                               <span
                                 title={TITULO_TIMER}
                                 className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border whitespace-nowrap ${
                                   excesivo
-                                    ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                    ? 'bg-warning/15 text-warning border-warning/30'
                                     : apurado
-                                    ? 'bg-sky-500/15 text-sky-400 border-sky-500/30'
+                                    ? 'bg-info/15 text-info border-info/30'
                                     : 'bg-secondary text-muted-foreground border-border/60'
                                 }`}
                               >

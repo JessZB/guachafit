@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient, ApiError } from '../../lib/api-client';
 import { useAuth } from '../../context/auth-context';
@@ -26,6 +26,7 @@ import {
 } from '../../lib/monitor-filtros';
 import { usePaginacionServidor } from '../../lib/use-paginacion-servidor';
 import { useValorDebounced } from '../../lib/use-valor-debounced';
+import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import { rebanarPagina } from '../../lib/paginacion';
 import { Paginacion } from '../../components/common/Paginacion';
 import {
@@ -63,22 +64,22 @@ const CLASES_TONO: Record<
   { chip: string; punto: string; barra: string; texto: string }
 > = {
   success: {
-    chip: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-    punto: 'bg-emerald-400',
-    barra: 'bg-emerald-400',
-    texto: 'text-emerald-400',
+    chip: 'bg-success/15 text-success border-success/30',
+    punto: 'bg-success',
+    barra: 'bg-success',
+    texto: 'text-success',
   },
   warning: {
-    chip: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-    punto: 'bg-amber-400',
-    barra: 'bg-amber-400',
-    texto: 'text-amber-400',
+    chip: 'bg-warning/15 text-warning border-warning/30',
+    punto: 'bg-warning',
+    barra: 'bg-warning',
+    texto: 'text-warning',
   },
   danger: {
-    chip: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
-    punto: 'bg-rose-400',
-    barra: 'bg-rose-400',
-    texto: 'text-rose-400',
+    chip: 'bg-danger/15 text-danger border-danger/30',
+    punto: 'bg-danger',
+    barra: 'bg-danger',
+    texto: 'text-danger',
   },
   info: {
     chip: 'bg-primary/15 text-primary border-primary/30',
@@ -131,7 +132,9 @@ function ModalActividadAlumno({
   const [isLoadingMas, setIsLoadingMas] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sesionExpandidaId, setSesionExpandidaId] = useState<string | null>(null);
-  const botonCerrarRef = useRef<HTMLButtonElement | null>(null);
+
+  // U3b: Escape, trampa de Tab, foco inicial y restore del foco al disparador (antes duplicado aquí).
+  const refDialogo = useDialogoAccesible({ onCerrar });
 
   /**
    * WU25a: el endpoint `historial` devuelve `{ items, total, limit, offset }`. `offset` avanza
@@ -191,21 +194,6 @@ function ModalActividadAlumno({
     setSesionExpandidaId(sesiones[0]?.id ?? null);
   }, [sesiones]);
 
-  useEffect(() => {
-    // Foco inicial en el cierre al abrir; al desmontar se devuelve al disparador (tarjeta/botón).
-    const elementoPrevio = document.activeElement as HTMLElement | null;
-    botonCerrarRef.current?.focus();
-    return () => elementoPrevio?.focus?.();
-  }, []);
-
-  useEffect(() => {
-    const alPresionarTecla = (evento: KeyboardEvent) => {
-      if (evento.key === 'Escape') onCerrar();
-    };
-    document.addEventListener('keydown', alPresionarTecla);
-    return () => document.removeEventListener('keydown', alPresionarTecla);
-  }, [onCerrar]);
-
   const etiquetaAlumno = etiquetaMonitorAdherencia(alumno);
   const tonoAlumno = CLASES_TONO[etiquetaAlumno.tono];
   const porcentajeAlumno = porcentajeSeguro(alumno.porcentajeCumplimientoSemanal);
@@ -223,9 +211,11 @@ function ModalActividadAlumno({
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
     >
       <div
+        ref={refDialogo}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-actividad-titulo"
+        tabIndex={-1}
         className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl bg-card border border-border shadow-2xl"
       >
         {/* Cabecera fija para poder cerrar sin perder el contexto al hacer scroll */}
@@ -244,7 +234,6 @@ function ModalActividadAlumno({
             </div>
           </div>
           <button
-            ref={botonCerrarRef}
             type="button"
             onClick={onCerrar}
             className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
@@ -260,21 +249,21 @@ function ModalActividadAlumno({
           <div className="p-3.5 rounded-2xl bg-secondary/30 border border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2 flex-wrap">
               <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border ${tonoAlumno.chip}`}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide border ${tonoAlumno.chip}`}
               >
                 <span className={`h-1.5 w-1.5 rounded-full ${tonoAlumno.punto}`} />
                 {etiquetaAlumno.texto}
               </span>
               {alumno.tienePlanActivo && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full border border-border/60">
-                  <Flame className="h-3 w-3 text-amber-400" />
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full border border-border/60">
+                  <Flame className="h-3 w-3 text-warning" />
                   Racha: {alumno.rachaDiasConsecutivos}{' '}
                   {alumno.rachaDiasConsecutivos === 1 ? 'día' : 'días'}
                 </span>
               )}
               {alumno.tienePlanActivo && !alumno.sinPendientesSemana && (
                 <span
-                  className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-secondary/60 border border-border/60 ${tonoAlumno.texto}`}
+                  className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-secondary/60 border border-border/60 ${tonoAlumno.texto}`}
                 >
                   {alumno.sesionesCompletadas}/
                   {pluralizar(alumno.sesionesPrescritas, 'sesión', 'sesiones')} ·{' '}
@@ -335,7 +324,7 @@ function ModalActividadAlumno({
 
           {!isLoading && !error && sesiones.length > 0 && (
             <div className="space-y-2.5">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Mostrando {sesiones.length} de {pluralizar(totalHistorial, 'sesión', 'sesiones')}
               </p>
               {sesiones.map((sesion) => {
@@ -368,7 +357,7 @@ function ModalActividadAlumno({
                         </span>
                         <div className="min-w-0">
                           <p className="font-bold text-xs text-foreground truncate">{fechaSesion}</p>
-                          <p className="text-[10px] text-muted-foreground">
+                          <p className="text-[11px] text-muted-foreground">
                             {sesion.ejercicios.length}{' '}
                             {sesion.ejercicios.length === 1 ? 'ejercicio' : 'ejercicios'} · {totalSeries}{' '}
                             {totalSeries === 1 ? 'serie' : 'series'}
@@ -377,7 +366,7 @@ function ModalActividadAlumno({
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span
-                          className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${CLASES_TONO[etiquetaSesion.tono].chip}`}
+                          className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full border ${CLASES_TONO[etiquetaSesion.tono].chip}`}
                         >
                           {etiquetaSesion.texto}
                         </span>
@@ -573,7 +562,7 @@ export function MonitorAdherenciaPage() {
                     : 'border-border/60 hover:border-border'
                 }`}
               >
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                   Todos
                 </span>
                 <span className="text-2xl font-black font-mono text-foreground">
@@ -587,21 +576,21 @@ export function MonitorAdherenciaPage() {
                   etiqueta: 'En riesgo (Rojo)',
                   valor: resumen?.rojo ?? 0,
                   clase: CLASES_TONO.danger.texto,
-                  anillo: 'border-rose-500/50 ring-rose-500/30',
+                  anillo: 'border-danger/50 ring-danger/30',
                 },
                 {
                   clave: 'amarillo' as const,
                   etiqueta: 'En observación (Amarillo)',
                   valor: resumen?.amarillo ?? 0,
                   clase: CLASES_TONO.warning.texto,
-                  anillo: 'border-amber-500/50 ring-amber-500/30',
+                  anillo: 'border-warning/50 ring-warning/30',
                 },
                 {
                   clave: 'verde' as const,
                   etiqueta: 'Al día (Verde)',
                   valor: resumen?.verde ?? 0,
                   clase: CLASES_TONO.success.texto,
-                  anillo: 'border-emerald-500/50 ring-emerald-500/30',
+                  anillo: 'border-success/50 ring-success/30',
                 },
                 {
                   clave: 'sin_plan' as const,
@@ -627,7 +616,7 @@ export function MonitorAdherenciaPage() {
                       : 'border-border/60 hover:border-border'
                   }`}
                 >
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                     {etiqueta}
                   </span>
                   <span className={`text-2xl font-black font-mono ${clase}`}>{valor}</span>
@@ -779,7 +768,7 @@ export function MonitorAdherenciaPage() {
                         </h3>
                         <div className="flex items-center gap-2 flex-wrap mt-1">
                           <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border ${tono.chip}`}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide border ${tono.chip}`}
                           >
                             <span
                               className={`h-1.5 w-1.5 rounded-full ${tono.punto} ${
@@ -789,14 +778,14 @@ export function MonitorAdherenciaPage() {
                             {etiqueta.texto}
                           </span>
                           {conPlan && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full border border-border/60">
-                              <Flame className="h-3 w-3 text-amber-400" />
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full border border-border/60">
+                              <Flame className="h-3 w-3 text-warning" />
                               Racha: {alumno.rachaDiasConsecutivos}{' '}
                               {alumno.rachaDiasConsecutivos === 1 ? 'día' : 'días'}
                             </span>
                           )}
                           {inactivo && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/30">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-danger bg-danger/10 px-2 py-0.5 rounded-full border border-danger/30">
                               <AlertTriangle className="h-3 w-3" />
                               {pluralizar(alumno.diasInactivo, 'día sin entrenar', 'días sin entrenar')}
                             </span>
@@ -858,14 +847,15 @@ export function MonitorAdherenciaPage() {
                     )
                   ) : (
                     <p className="text-xs text-muted-foreground flex items-center gap-2">
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                      <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />
                       Sin rutina activa: asígnale una planificación para calcular su adherencia
                       semanal.
                     </p>
                   )}
 
                   {/* Afordancia del modal: la tarjeta es clicable con puntero y este botón es el
-                      acceso real por teclado/AT (el chevron sigue siendo el atajo a la ficha). */}
+                      acceso real por teclado/AT (el chevron sigue siendo el atajo a la ficha).
+                      U2 (Ola 4): fila de lista con área táctil de 44px y fondo al pasar el cursor. */}
                   <button
                     type="button"
                     onClick={(evento) => {
@@ -874,9 +864,9 @@ export function MonitorAdherenciaPage() {
                       setAlumnoActivo(alumno);
                     }}
                     aria-haspopup="dialog"
-                    className="text-[10px] font-bold text-muted-foreground/80 hover:text-primary flex items-center gap-1.5 transition-colors cursor-pointer rounded-md focus-visible:outline-2 focus-visible:outline-primary"
+                    className="flex min-h-11 w-full items-center gap-1.5 rounded-xl border border-transparent px-2 text-[11px] font-bold text-muted-foreground/90 hover:border-border/60 hover:bg-secondary/40 hover:text-primary transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
                   >
-                    <History className="h-3 w-3" />
+                    <History className="h-3.5 w-3.5" />
                     Ver últimas sesiones en detalle
                   </button>
                 </article>

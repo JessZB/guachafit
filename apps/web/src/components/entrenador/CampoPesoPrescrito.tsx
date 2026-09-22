@@ -16,7 +16,7 @@ export function CampoPesoPrescrito({
   const { error } = normalizarPesoPrescritoTexto(valor);
   return (
     <div className="flex flex-col items-center">
-      <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
+      <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
         Peso
       </label>
       <input
@@ -31,7 +31,7 @@ export function CampoPesoPrescrito({
         }`}
       />
       {error && (
-        <span className="text-[9px] font-bold text-destructive text-center mt-0.5 max-w-24 leading-tight">
+        <span className="text-[11px] font-bold text-destructive text-center mt-0.5 max-w-24 leading-tight">
           {error}
         </span>
       )}

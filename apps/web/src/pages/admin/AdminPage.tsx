@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { EntrenadorCreadoDTO } from '@guachafit/shared';
-import { useAuth } from '../../context/auth-context';
 import { ApiError, apiClient } from '../../lib/api-client';
 import { construirLinkActivacion, normalizarCoachCode } from '../../lib/onboarding-links';
+import { useLogoutSeguro } from '../../lib/use-logout-seguro';
+import { DialogoLogoutPendientes } from '../../components/common/DialogoLogoutPendientes';
 import {
   Check,
   ClipboardCopy,
@@ -35,7 +36,8 @@ const FORMULARIO_INICIAL = {
 };
 
 export function AdminPage() {
-  const { logout } = useAuth();
+  // U4 (Ola 4): logout con confirmación si hay cambios sin sincronizar.
+  const logoutSeguro = useLogoutSeguro();
   const [formulario, setFormulario] = useState(FORMULARIO_INICIAL);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +110,7 @@ export function AdminPage() {
 
         <button
           type="button"
-          onClick={logout}
+          onClick={() => void logoutSeguro.solicitarCierre()}
           className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 text-xs font-semibold transition-colors cursor-pointer"
           title="Cerrar sesión"
         >
@@ -142,8 +144,8 @@ export function AdminPage() {
         )}
 
         {creado && (
-          <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-3">
-            <div className="flex items-center gap-2 text-emerald-400 text-sm font-bold">
+          <div className="p-4 rounded-xl bg-success/10 border border-success/30 space-y-3">
+            <div className="flex items-center gap-2 text-success text-sm font-bold">
               <Check className="h-4 w-4" />
               <span>{creado.mensaje}</span>
             </div>
@@ -240,6 +242,8 @@ export function AdminPage() {
             </label>
             <input
               id="admin-telefono"
+              type="tel"
+              inputMode="tel"
               required
               minLength={8}
               maxLength={30}
@@ -305,7 +309,7 @@ export function AdminPage() {
       {/* Capacidades administrativas pendientes (Ola 3) — copy honesto, sin datos inventados */}
       <section className="p-5 rounded-2xl bg-card/60 border border-border/70 space-y-3">
         <div className="flex items-center gap-2">
-          <Clock className="h-4 w-4 text-amber-400" />
+          <Clock className="h-4 w-4 text-warning" />
           <h2 className="text-sm font-bold text-foreground">En construcción</h2>
         </div>
         <p className="text-xs text-muted-foreground">
@@ -320,6 +324,16 @@ export function AdminPage() {
           ))}
         </ul>
       </section>
+
+      <DialogoLogoutPendientes
+        abierto={logoutSeguro.dialogoAbierto}
+        pendientes={logoutSeguro.pendientes}
+        sincronizando={logoutSeguro.sincronizando}
+        mensaje={logoutSeguro.mensaje}
+        onCancelar={logoutSeguro.cancelar}
+        onConfirmar={logoutSeguro.confirmar}
+        onSincronizar={() => void logoutSeguro.sincronizarAhora()}
+      />
     </div>
   );
 }

@@ -35,9 +35,12 @@ import { sesionesDemoAlumno } from '../../lib/demo-sesiones';
 import {
   aplicarTabEnQuery,
   parsearTabFichaAlumno,
+  TABS_FICHA_ALUMNO,
   type TabFichaAlumno,
 } from '../../lib/alumno-detalle-tab';
 import { construirPayloadCheckinAntropometrico } from '../../lib/antropometria-checkin';
+import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
+import { useTabsAccesibles } from '../../lib/use-tabs-accesibles';
 import {
   DESCANSO_OPCIONES,
   NOMBRES_DIAS_SEMANA,
@@ -126,9 +129,9 @@ const CLASES_PILL_ANCLA_ENTRENAMIENTO =
 
 /** Clases de chip por tono del estado de sesión (comparten paleta con el resto del panel). */
 const CLASES_TONO_SESION: Record<TonoSemaforo, string> = {
-  success: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-  warning: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-  danger: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+  success: 'bg-success/15 text-success border-success/30',
+  warning: 'bg-warning/15 text-warning border-warning/30',
+  danger: 'bg-danger/15 text-danger border-danger/30',
   info: 'bg-primary/15 text-primary border-primary/30',
   neutral: 'bg-secondary text-muted-foreground border-border',
 };
@@ -243,8 +246,8 @@ function FeedbackAlumno({ notas }: { notas?: string | null }) {
   if (etiquetas.length === 0 && !textoLibre) return null;
 
   return (
-    <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 space-y-2">
-      <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+    <div className="p-3.5 rounded-2xl bg-warning/10 border border-warning/25 space-y-2">
+      <span className="text-[11px] font-bold text-warning uppercase tracking-wider flex items-center gap-1.5">
         <MessageSquare className="h-3.5 w-3.5" />
         Feedback del Alumno
       </span>
@@ -253,9 +256,9 @@ function FeedbackAlumno({ notas }: { notas?: string | null }) {
           {etiquetas.map((etiqueta, idx) => (
             <span
               key={`${etiqueta.titulo}-${idx}`}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-background/70 border border-amber-500/25 text-[11px]"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-background/70 border border-warning/25 text-[11px]"
             >
-              <span className="font-bold text-amber-400 uppercase tracking-wide text-[10px]">
+              <span className="font-bold text-warning uppercase tracking-wide text-[11px]">
                 {etiqueta.titulo}
               </span>
               {etiqueta.valor && (
@@ -402,6 +405,30 @@ export function AlumnoDetallePage() {
 
   // WU6b (RF-017): modal "Cargar desde Plantilla" del banco del coach
   const [isPlantillaModalOpen, setIsPlantillaModalOpen] = useState(false);
+
+  // U3b: los tres modales propios + el selector de plantilla comparten el contrato de diálogo
+  // accesible (Escape, trampa de Tab, foco inicial y restore del foco al disparador).
+  const refModalCobro = useDialogoAccesible({
+    abierto: isCobroModalOpen,
+    onCerrar: () => setIsCobroModalOpen(false),
+  });
+  const refModalAntro = useDialogoAccesible({
+    abierto: isAntroModalOpen,
+    onCerrar: () => setIsAntroModalOpen(false),
+  });
+  const refModalRutina = useDialogoAccesible({
+    abierto: isRutinaModalOpen,
+    onCerrar: () => setIsRutinaModalOpen(false),
+  });
+
+  // U3b: patrón APG de la barra de pestañas (roving tabindex, flechas, Home/End y enlace
+  // `aria-controls`/`aria-labelledby` con los paneles). `activar` sigue siendo la URL (?tab=).
+  const tabsFicha = useTabsAccesibles<TabType>({
+    claves: TABS_FICHA_ALUMNO,
+    activa: activeTab,
+    onActivar: cambiarTab,
+    idBase: 'ficha-alumno',
+  });
 
   const calculateAge = (fechaStr: string): number => {
     if (!fechaStr) return 0;
@@ -817,19 +844,8 @@ export function AlumnoDetallePage() {
     void cargarTransacciones(1, nuevoTamano);
   };
 
-  // Accesibilidad: Cierre de modales con Escape
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (isCobroModalOpen) setIsCobroModalOpen(false);
-        if (isAntroModalOpen) setIsAntroModalOpen(false);
-        if (isRutinaModalOpen) setIsRutinaModalOpen(false);
-        if (isPlantillaModalOpen) setIsPlantillaModalOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isCobroModalOpen, isAntroModalOpen, isRutinaModalOpen, isPlantillaModalOpen]);
+  // Accesibilidad (U3b): Escape, trampa de foco y restore viven en `useDialogoAccesible`; el
+  // selector de plantilla cierra con su propio hook dentro de `SelectorPlantillaAsignacion`.
 
   /**
    * WU6b: refresca solo la rutina activa tras asignar una plantilla, sin disparar el
@@ -1667,24 +1683,24 @@ export function AlumnoDetallePage() {
                 </h1>
                 {/* Semáforo de Pago */}
                 <span
-                  className={`px-3 py-1 rounded-full text-[10px] font-extrabold tracking-wide uppercase border flex items-center gap-1.5 shadow-2xs ${
+                  className={`px-3 py-1 rounded-full text-[11px] font-extrabold tracking-wide uppercase border flex items-center gap-1.5 shadow-2xs ${
                     semaforo === 'al_dia'
-                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                      ? 'bg-success/15 text-success border-success/30'
                       : semaforo === 'por_vencer'
-                      ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                      ? 'bg-warning/15 text-warning border-warning/30'
                       : semaforo === 'moroso'
-                      ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                      ? 'bg-danger/15 text-danger border-danger/30'
                       : 'bg-secondary text-muted-foreground border-border'
                   }`}
                 >
                   <span
                     className={`h-1.5 w-1.5 rounded-full ${
                       semaforo === 'al_dia'
-                        ? 'bg-emerald-400'
+                        ? 'bg-success'
                         : semaforo === 'por_vencer'
-                        ? 'bg-amber-400'
+                        ? 'bg-warning'
                         : semaforo === 'moroso'
-                        ? 'bg-rose-400 animate-pulse'
+                        ? 'bg-danger animate-pulse'
                         : 'bg-muted-foreground'
                     }`}
                   />
@@ -1693,12 +1709,12 @@ export function AlumnoDetallePage() {
 
                 {/* Badge Estado de Activación */}
                 <span
-                  className={`px-3 py-1 rounded-full text-[10px] font-extrabold tracking-wide uppercase border flex items-center gap-1.5 shadow-2xs ${
+                  className={`px-3 py-1 rounded-full text-[11px] font-extrabold tracking-wide uppercase border flex items-center gap-1.5 shadow-2xs ${
                     isArchived
                       ? 'bg-secondary text-muted-foreground border-border/80'
                       : alumno.estadoActivacion === EstadoAlumno.ACTIVO
                       ? 'bg-primary/15 text-primary border-primary/30'
-                      : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                      : 'bg-warning/15 text-warning border-warning/30'
                   }`}
                 >
                   <span
@@ -1707,14 +1723,14 @@ export function AlumnoDetallePage() {
                         ? 'bg-muted-foreground'
                         : alumno.estadoActivacion === EstadoAlumno.ACTIVO
                         ? 'bg-primary'
-                        : 'bg-amber-400'
+                        : 'bg-warning'
                     }`}
                   />
                   {isArchived ? 'Archivado' : etiquetaEstadoActivacion(alumno.estadoActivacion)}
                 </span>
 
                 {/* Badge Modalidad */}
-                <span className="px-3 py-1 rounded-full text-[10px] font-extrabold tracking-wide uppercase bg-secondary/80 text-foreground border border-border/70 flex items-center gap-1.5 shadow-2xs">
+                <span className="px-3 py-1 rounded-full text-[11px] font-extrabold tracking-wide uppercase bg-secondary/80 text-foreground border border-border/70 flex items-center gap-1.5 shadow-2xs">
                   <span className="h-1.5 w-1.5 rounded-full bg-foreground/50" />
                   {alumno.modalidad}
                 </span>
@@ -1747,7 +1763,7 @@ export function AlumnoDetallePage() {
               )}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="py-2 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+              className="py-2 px-3.5 rounded-xl bg-success-strong hover:bg-success-strong/90 text-white font-bold text-xs shadow-md shadow-success-strong/20 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <MessageSquare className="h-4 w-4" />
               <span>WhatsApp</span>
@@ -1762,7 +1778,7 @@ export function AlumnoDetallePage() {
                     className="py-2 px-3 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs border border-border flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                     title="Pausar alumno temporalmente por viaje o lesión"
                   >
-                    <PauseCircle className="h-4 w-4 text-amber-400" />
+                    <PauseCircle className="h-4 w-4 text-warning" />
                     <span>Pausar</span>
                   </button>
                 ) : (
@@ -1771,7 +1787,7 @@ export function AlumnoDetallePage() {
                     className="py-2 px-3 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs border border-border flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                     title="Reactivar alumno"
                   >
-                    <PlayCircle className="h-4 w-4 text-emerald-400" />
+                    <PlayCircle className="h-4 w-4 text-success" />
                     <span>Reactivar</span>
                   </button>
                 )}
@@ -1779,7 +1795,7 @@ export function AlumnoDetallePage() {
                 {alumno.estadoActivacion !== EstadoAlumno.SUSPENDIDO_PAGO && (
                   <button
                     onClick={() => handleCambiarEstado(EstadoAlumno.SUSPENDIDO_PAGO)}
-                    className="py-2 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 font-semibold text-xs border border-amber-500/25 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                    className="py-2 px-3 rounded-xl bg-warning/10 hover:bg-warning/20 text-warning font-semibold text-xs border border-warning/25 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                     title="Suspender la planificación por mensualidad pendiente"
                   >
                     <DollarSign className="h-4 w-4" />
@@ -1827,7 +1843,7 @@ export function AlumnoDetallePage() {
         {headerActionSuccess && (
           <div
             role="status"
-            className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2"
+            className="p-3 rounded-2xl bg-success/10 border border-success/30 text-success text-xs flex items-center gap-2"
           >
             <CheckCircle2 className="h-4 w-4 shrink-0" />
             <span>{headerActionSuccess}</span>
@@ -1836,9 +1852,9 @@ export function AlumnoDetallePage() {
 
         {/* ALERTA: Ficha médica confidencial resumen en cabecera si existe */}
         {alumno.fichaSaludPrivada && (
-          <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs flex items-center justify-between gap-3 text-amber-300">
+          <div className="p-3 rounded-2xl bg-warning/10 border border-warning/20 text-xs flex items-center justify-between gap-3 text-warning">
             <div className="flex items-center gap-2">
-              <Lock className="h-4 w-4 text-amber-400 shrink-0" />
+              <Lock className="h-4 w-4 text-warning shrink-0" />
               <span className="font-semibold text-foreground">Alerta Médica:</span>
               <span className="truncate">{alumno.fichaSaludPrivada}</span>
             </div>
@@ -1854,17 +1870,13 @@ export function AlumnoDetallePage() {
 
       {/* BARRA DE PESTAÑAS (TABS 360) */}
       <div
-        role="tablist"
+        {...tabsFicha.propsTablist}
         aria-label="Pestañas de la ficha del alumno"
         className="flex items-center gap-2 border-b border-border/80 pb-2 overflow-x-auto"
       >
         <button
           type="button"
-          role="tab"
-          id="tab-resumen"
-          aria-controls="panel-resumen"
-          aria-selected={activeTab === 'resumen'}
-          onClick={() => cambiarTab('resumen')}
+          {...tabsFicha.propsTab('resumen')}
           className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap focus-visible:outline-2 focus-visible:outline-primary ${
             activeTab === 'resumen'
               ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
@@ -1877,11 +1889,7 @@ export function AlumnoDetallePage() {
 
         <button
           type="button"
-          role="tab"
-          id="tab-finanzas"
-          aria-controls="panel-finanzas"
-          aria-selected={activeTab === 'finanzas'}
-          onClick={() => cambiarTab('finanzas')}
+          {...tabsFicha.propsTab('finanzas')}
           className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap focus-visible:outline-2 focus-visible:outline-primary ${
             activeTab === 'finanzas'
               ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
@@ -1891,7 +1899,7 @@ export function AlumnoDetallePage() {
           <DollarSign className="h-4 w-4" />
           <span>Finanzas & Pagos</span>
           {finanzas && Number(finanzas.saldoPendienteTotalUsd) > 0 && (
-            <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-rose-500 text-white font-black font-mono">
+            <span className="px-1.5 py-0.5 rounded-full text-[11px] bg-danger-strong text-white font-black font-mono">
               ${finanzas.saldoPendienteTotalUsd}
             </span>
           )}
@@ -1899,11 +1907,7 @@ export function AlumnoDetallePage() {
 
         <button
           type="button"
-          role="tab"
-          id="tab-antropometria"
-          aria-controls="panel-antropometria"
-          aria-selected={activeTab === 'antropometria'}
-          onClick={() => cambiarTab('antropometria')}
+          {...tabsFicha.propsTab('antropometria')}
           className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap focus-visible:outline-2 focus-visible:outline-primary ${
             activeTab === 'antropometria'
               ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
@@ -1916,11 +1920,7 @@ export function AlumnoDetallePage() {
 
         <button
           type="button"
-          role="tab"
-          id="tab-entrenamiento"
-          aria-controls="panel-entrenamiento"
-          aria-selected={activeTab === 'entrenamiento'}
-          onClick={() => cambiarTab('entrenamiento')}
+          {...tabsFicha.propsTab('entrenamiento')}
           className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap focus-visible:outline-2 focus-visible:outline-primary ${
             activeTab === 'entrenamiento'
               ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
@@ -1937,9 +1937,7 @@ export function AlumnoDetallePage() {
       {/* ===================================================================== */}
       {activeTab === 'resumen' && (
         <div
-          role="tabpanel"
-          id="panel-resumen"
-          aria-labelledby="tab-resumen"
+          {...tabsFicha.propsPanel('resumen')}
           className="animate-in fade-in-50 duration-200 slide-in-from-bottom-1"
         >
           <form onSubmit={handleGuardarPerfil} className="space-y-6">
@@ -2031,7 +2029,8 @@ export function AlumnoDetallePage() {
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-muted-foreground">Teléfono / WhatsApp</label>
                 <input
-                  type="text"
+                  type="tel"
+                  inputMode="tel"
                   required
                   value={telefonoWhatsapp}
                   onChange={(e) => setTelefonoWhatsapp(e.target.value)}
@@ -2052,19 +2051,19 @@ export function AlumnoDetallePage() {
                   </div>
                   {/* D6/WU-J: el badge dice la verdad: override real, catálogo real o sin dato. */}
                   {overrideVigente ? (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase">
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase">
                       Override activo
                     </span>
                   ) : overrideError ? (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase">
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase">
                       Sin dato
                     </span>
                   ) : alumno?.planActivoNombre ? (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase">
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase">
                       Precio del catálogo
                     </span>
                   ) : (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase">
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase">
                       Sin plan asignado
                     </span>
                   )}
@@ -2093,7 +2092,7 @@ export function AlumnoDetallePage() {
                       <button
                         type="button"
                         onClick={handleQuitarOverride}
-                        className="inline-flex items-center gap-1 text-[10px] font-bold text-destructive hover:underline cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-destructive hover:underline cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
                         title="Quitar el override y volver a los valores del catálogo"
                       >
                         <Trash2 className="h-3 w-3" />
@@ -2176,7 +2175,7 @@ export function AlumnoDetallePage() {
                         placeholder="Vacío = precio del plan"
                         className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground font-mono font-bold focus:outline-hidden focus:border-primary"
                       />
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="text-[11px] text-muted-foreground">
                         Vacío hereda el precio del plan. 0.00 = becado.
                       </p>
                     </div>
@@ -2191,7 +2190,7 @@ export function AlumnoDetallePage() {
                         placeholder="Vacío = tasa global"
                         className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground font-mono focus:outline-hidden focus:border-primary"
                       />
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="text-[11px] text-muted-foreground">
                         Vacío usa la tasa global del entrenador.
                       </p>
                     </div>
@@ -2206,7 +2205,7 @@ export function AlumnoDetallePage() {
                     <Lock className="h-4 w-4" />
                     <h3 className="font-extrabold text-sm text-foreground">Ficha Médica Confidencial</h3>
                   </div>
-                  <span className="text-[10px] font-mono text-muted-foreground">Cifrado AES-256-GCM</span>
+                  <span className="text-[11px] font-mono text-muted-foreground">Cifrado AES-256-GCM</span>
                 </div>
 
                 <p className="text-xs text-muted-foreground leading-relaxed">
@@ -2228,7 +2227,7 @@ export function AlumnoDetallePage() {
           {/* Botón Guardar Cambios */}
           <div className="flex items-center justify-end gap-3 pt-2">
             {saveSuccessMsg && (
-              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 animate-in fade-in">
+              <span className="text-xs font-bold text-success flex items-center gap-1.5 animate-in fade-in">
                 <CheckCircle2 className="h-4 w-4" />
                 {saveSuccessMsg}
               </span>
@@ -2259,16 +2258,14 @@ export function AlumnoDetallePage() {
       {/* ===================================================================== */}
       {activeTab === 'finanzas' && (
         <div
-          role="tabpanel"
-          id="panel-finanzas"
-          aria-labelledby="tab-finanzas"
+          {...tabsFicha.propsPanel('finanzas')}
           className="space-y-6 animate-in fade-in-50 duration-200 slide-in-from-bottom-1"
         >
           {/* D2: sin resumen financiero real no se muestran cifras inventadas */}
           {!finanzas && (
             <div
               role="status"
-              className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs flex items-center gap-2"
+              className="p-3 rounded-2xl bg-warning/10 border border-warning/30 text-warning text-xs flex items-center gap-2"
             >
               <AlertCircle className="h-4 w-4 shrink-0" />
               <span>
@@ -2282,7 +2279,7 @@ export function AlumnoDetallePage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
+                <span className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">
                   Saldo Pendiente Actual
                 </span>
                 <span
@@ -2290,8 +2287,8 @@ export function AlumnoDetallePage() {
                     !finanzas
                       ? 'bg-muted-foreground'
                       : Number(finanzas.saldoPendienteTotalUsd || 0) > 0
-                      ? 'bg-rose-400 animate-pulse'
-                      : 'bg-emerald-400'
+                      ? 'bg-danger animate-pulse'
+                      : 'bg-success'
                   }`}
                   title={
                     !finanzas
@@ -2307,8 +2304,8 @@ export function AlumnoDetallePage() {
                   !finanzas
                     ? 'text-muted-foreground'
                     : Number(finanzas.saldoPendienteTotalUsd || 0) > 0
-                    ? 'text-rose-400'
-                    : 'text-emerald-400'
+                    ? 'text-danger'
+                    : 'text-success'
                 }`}
               >
                 ${finanzas ? finanzas.saldoPendienteTotalUsd || '0.00' : '—'}{' '}
@@ -2324,7 +2321,7 @@ export function AlumnoDetallePage() {
             </div>
 
             <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1.5">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">
+              <span className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block">
                 Pagado en Mes en Curso
               </span>
               <p className="text-2xl font-black font-mono tracking-tight text-foreground">
@@ -2335,7 +2332,7 @@ export function AlumnoDetallePage() {
             </div>
 
             <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1.5">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">
+              <span className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block">
                 Histórico Total Acumulado
               </span>
               <p className="text-2xl font-black font-mono tracking-tight text-primary">
@@ -2361,17 +2358,17 @@ export function AlumnoDetallePage() {
                   </h3>
                   {finanzas?.cuotaMesActual && (
                     <span
-                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold tracking-wide uppercase border flex items-center gap-1.5 shadow-2xs ${
+                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold tracking-wide uppercase border flex items-center gap-1.5 shadow-2xs ${
                         Number(finanzas.cuotaMesActual.saldoPendienteUsd) <= 0
-                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                          : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                          ? 'bg-success/15 text-success border-success/30'
+                          : 'bg-danger/15 text-danger border-danger/30'
                       }`}
                     >
                       <span
                         className={`h-1.5 w-1.5 rounded-full ${
                           Number(finanzas.cuotaMesActual.saldoPendienteUsd) <= 0
-                            ? 'bg-emerald-400'
-                            : 'bg-rose-400 animate-pulse'
+                            ? 'bg-success'
+                            : 'bg-danger animate-pulse'
                         }`}
                       />
                       {Number(finanzas.cuotaMesActual.saldoPendienteUsd) <= 0 ? 'Liquidada' : 'Pendiente'}
@@ -2393,7 +2390,7 @@ export function AlumnoDetallePage() {
                   if (precioEfectivo) setCobroMonto(precioEfectivo);
                   setIsCobroModalOpen(true);
                 }}
-                className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md shadow-emerald-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-emerald-400"
+                className="py-2.5 px-4 rounded-xl bg-success-strong hover:bg-success-strong/90 text-white font-black text-xs shadow-md shadow-success-strong/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-success"
               >
                 <DollarSign className="h-4 w-4" />
                 <span>Registrar Cobro Directo en Sala</span>
@@ -2403,25 +2400,25 @@ export function AlumnoDetallePage() {
             {finanzas?.cuotaMesActual ? (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                 <div className="p-3 rounded-2xl bg-secondary/30 border border-border/50">
-                  <span className="text-[10px] text-muted-foreground uppercase font-semibold">Total Cuota</span>
+                  <span className="text-[11px] text-muted-foreground uppercase font-semibold">Total Cuota</span>
                   <p className="font-mono font-black text-sm text-foreground mt-0.5">
                     ${finanzas.cuotaMesActual.montoTotalUsd} USD
                   </p>
                 </div>
                 <div className="p-3 rounded-2xl bg-secondary/30 border border-border/50">
-                  <span className="text-[10px] text-muted-foreground uppercase font-semibold">Monto Abonado</span>
-                  <p className="font-mono font-black text-sm text-emerald-400 mt-0.5">
+                  <span className="text-[11px] text-muted-foreground uppercase font-semibold">Monto Abonado</span>
+                  <p className="font-mono font-black text-sm text-success mt-0.5">
                     ${finanzas.cuotaMesActual.montoPagadoUsd} USD
                   </p>
                 </div>
                 <div className="p-3 rounded-2xl bg-secondary/30 border border-border/50">
-                  <span className="text-[10px] text-muted-foreground uppercase font-semibold">Saldo Restante</span>
-                  <p className="font-mono font-black text-sm text-rose-400 mt-0.5">
+                  <span className="text-[11px] text-muted-foreground uppercase font-semibold">Saldo Restante</span>
+                  <p className="font-mono font-black text-sm text-danger mt-0.5">
                     ${finanzas.cuotaMesActual.saldoPendienteUsd} USD
                   </p>
                 </div>
                 <div className="p-3 rounded-2xl bg-secondary/30 border border-border/50">
-                  <span className="text-[10px] text-muted-foreground uppercase font-semibold">Vencimiento</span>
+                  <span className="text-[11px] text-muted-foreground uppercase font-semibold">Vencimiento</span>
                   <p className="font-mono font-bold text-xs text-foreground mt-0.5 truncate">
                     {formatFechaLocal(finanzas.cuotaMesActual.fechaVencimiento) ?? '—'}
                   </p>
@@ -2473,22 +2470,22 @@ export function AlumnoDetallePage() {
                           {etiquetaMetodoPago(tx.metodoPago)}
                         </span>
                         {tx.referencia && (
-                          <span className="font-mono text-[10px] text-muted-foreground">
+                          <span className="font-mono text-[11px] text-muted-foreground">
                             • Ref: {tx.referencia}
                           </span>
                         )}
                       </div>
-                      <span className="text-[10px] text-muted-foreground font-mono">
+                      <span className="text-[11px] text-muted-foreground font-mono">
                         {formatFechaHoraLocal(tx.createdAtUtc) ?? '—'}
                       </span>
                     </div>
 
                     <div className="text-right">
-                      <p className="font-mono font-black text-sm text-emerald-400">
+                      <p className="font-mono font-black text-sm text-success">
                         +${tx.montoUsd} USD
                       </p>
                       {tx.montoBs && (
-                        <span className="text-[10px] text-muted-foreground font-mono">
+                        <span className="text-[11px] text-muted-foreground font-mono">
                           ({tx.montoBs} VES)
                         </span>
                       )}
@@ -2524,9 +2521,7 @@ export function AlumnoDetallePage() {
       {/* ===================================================================== */}
       {activeTab === 'antropometria' && (
         <div
-          role="tabpanel"
-          id="panel-antropometria"
-          aria-labelledby="tab-antropometria"
+          {...tabsFicha.propsPanel('antropometria')}
           className="space-y-6 animate-in fade-in-50 duration-200 slide-in-from-bottom-1"
         >
           {/* Header con botón de nuevo control */}
@@ -2571,15 +2566,15 @@ export function AlumnoDetallePage() {
             return (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-muted-foreground block">Peso Actual</span>
+                  <span className="text-[11px] uppercase font-bold text-muted-foreground block">Peso Actual</span>
                   <div className="flex items-baseline gap-2">
                     <p className="text-2xl font-black font-mono text-foreground">{actual.pesoKg} kg</p>
                     {deltaPeso && (
                       <span
                         className={`text-[11px] font-bold font-mono px-2 py-0.5 rounded-full border ${
                           Number(deltaPeso) <= 0
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                            : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            ? 'bg-success/10 text-success border-success/20'
+                            : 'bg-warning/10 text-warning border-warning/20'
                         }`}
                       >
                         {Number(deltaPeso) > 0 ? `+${deltaPeso}` : deltaPeso} kg
@@ -2589,7 +2584,7 @@ export function AlumnoDetallePage() {
                 </div>
 
                 <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-muted-foreground block">% Grasa Estimada</span>
+                  <span className="text-[11px] uppercase font-bold text-muted-foreground block">% Grasa Estimada</span>
                   <div className="flex items-baseline gap-2">
                     <p className="text-2xl font-black font-mono text-foreground">
                       {actual.grasaPorcentaje ? `${actual.grasaPorcentaje}%` : '—'}
@@ -2598,8 +2593,8 @@ export function AlumnoDetallePage() {
                       <span
                         className={`text-[11px] font-bold font-mono px-2 py-0.5 rounded-full border ${
                           Number(deltaGrasa) <= 0
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                            : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            ? 'bg-success/10 text-success border-success/20'
+                            : 'bg-warning/10 text-warning border-warning/20'
                         }`}
                       >
                         {Number(deltaGrasa) > 0 ? `+${deltaGrasa}` : deltaGrasa}%
@@ -2609,7 +2604,7 @@ export function AlumnoDetallePage() {
                 </div>
 
                 <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-muted-foreground block">Cintura</span>
+                  <span className="text-[11px] uppercase font-bold text-muted-foreground block">Cintura</span>
                   <div className="flex items-baseline gap-2">
                     <p className="text-2xl font-black font-mono text-foreground">
                       {actual.cinturaCm ? `${actual.cinturaCm} cm` : '—'}
@@ -2618,8 +2613,8 @@ export function AlumnoDetallePage() {
                       <span
                         className={`text-[11px] font-bold font-mono px-2 py-0.5 rounded-full border ${
                           Number(deltaCintura) <= 0
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                            : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            ? 'bg-success/10 text-success border-success/20'
+                            : 'bg-warning/10 text-warning border-warning/20'
                         }`}
                       >
                         {Number(deltaCintura) > 0 ? `+${deltaCintura}` : deltaCintura} cm
@@ -2629,7 +2624,7 @@ export function AlumnoDetallePage() {
                 </div>
 
                 <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-muted-foreground block">Brazo / Pecho</span>
+                  <span className="text-[11px] uppercase font-bold text-muted-foreground block">Brazo / Pecho</span>
                   <p className="text-2xl font-black font-mono text-primary">
                     {actual.brazoCm ?? '—'} / {actual.pechoCm ?? '—'} cm
                   </p>
@@ -2651,9 +2646,11 @@ export function AlumnoDetallePage() {
                 <span>{controlesErrorMsg}</span>
               </div>
             )}
-            <div className="overflow-x-auto">
+            {/* U2 (Ola 4): en móvil tarjetas apiladas (la tabla de 7 columnas desbordaba a 360px);
+                desde md se mantiene la tabla densa con el mismo dato. */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-xs text-left">
-                <thead className="border-b border-border/80 text-muted-foreground uppercase text-[10px]">
+                <thead className="border-b border-border/80 text-muted-foreground uppercase text-[11px]">
                   <tr>
                     <th className="py-2.5 px-3">Fecha</th>
                     <th className="py-2.5 px-3">Peso (kg)</th>
@@ -2691,6 +2688,41 @@ export function AlumnoDetallePage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Móvil: tarjetas con los mismos datos del historial */}
+            <div className="md:hidden divide-y divide-border/50">
+              {controlesAntro.length === 0 && !controlesErrorMsg && (
+                <p className="py-6 text-center text-muted-foreground text-xs">
+                  Sin controles antropométricos registrados para este alumno.
+                </p>
+              )}
+              {controlesAntro.map((c) => (
+                <div key={c.id} className="py-3 first:pt-0 last:pb-0 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-bold text-foreground">
+                      {formatFechaCalendario(c.fecha) ?? c.fecha}
+                    </span>
+                    <span className="font-mono text-sm font-black text-foreground">
+                      {c.pesoKg} kg
+                    </span>
+                  </div>
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                    {[
+                      { etiqueta: '% Grasa', valor: c.grasaPorcentaje ? `${c.grasaPorcentaje}%` : '—' },
+                      { etiqueta: 'Cintura', valor: c.cinturaCm ? `${c.cinturaCm} cm` : '—' },
+                      { etiqueta: 'Brazo', valor: c.brazoCm ? `${c.brazoCm} cm` : '—' },
+                      { etiqueta: 'Pecho', valor: c.pechoCm ? `${c.pechoCm} cm` : '—' },
+                      { etiqueta: 'Muslo', valor: c.musloCm ? `${c.musloCm} cm` : '—' },
+                    ].map(({ etiqueta, valor }) => (
+                      <div key={etiqueta} className="flex items-center justify-between gap-2">
+                        <dt className="text-muted-foreground">{etiqueta}</dt>
+                        <dd className="font-mono font-bold text-foreground">{valor}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              ))}
+            </div>
             {/* WU25b: paginación numerada con controlesLimit/controlesOffset y controlesTotal real */}
             {controlesTotal > 0 && (
               <div className="pt-1">
@@ -2713,9 +2745,7 @@ export function AlumnoDetallePage() {
       {/* ===================================================================== */}
       {activeTab === 'entrenamiento' && (
         <div
-          role="tabpanel"
-          id="panel-entrenamiento"
-          aria-labelledby="tab-entrenamiento"
+          {...tabsFicha.propsPanel('entrenamiento')}
           className="space-y-6 animate-in fade-in-50 duration-200 slide-in-from-bottom-1"
         >
           {/* WU16: anclas internas — el historial vive arriba; estas pills evitan buscar a ciegas */}
@@ -2779,7 +2809,7 @@ export function AlumnoDetallePage() {
                     {etiquetaUltimoEntrenamiento.texto}
                   </span>
                   {ultimoEntrenamiento.estado === EstadoSesion.COMPLETADA && (
-                    <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                    <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-success/15 text-success border border-success/30">
                       {ultimoEntrenamiento.porcentajeCumplimiento}% cumplido
                     </span>
                   )}
@@ -3003,7 +3033,7 @@ export function AlumnoDetallePage() {
                       <h4 className="font-extrabold text-sm text-foreground">{bloque.titulo}</h4>
                       <p className="text-[11px] text-muted-foreground">{bloque.enfoque}</p>
                     </div>
-                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-secondary text-foreground border border-border">
+                    <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-secondary text-foreground border border-border">
                       {pluralizar(bloque.ejercicios.length, 'ejercicio', 'ejercicios')}
                     </span>
                   </div>
@@ -3015,7 +3045,7 @@ export function AlumnoDetallePage() {
                         className="p-3 rounded-2xl bg-secondary/20 hover:bg-secondary/35 transition-colors border border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
                       >
                         <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <span className="h-5 w-5 rounded-lg bg-primary/10 text-primary font-bold flex items-center justify-center text-[10px] shrink-0">
+                          <span className="h-5 w-5 rounded-lg bg-primary/10 text-primary font-bold flex items-center justify-center text-[11px] shrink-0">
                             {ejIdx + 1}
                           </span>
                           <span className="font-bold text-foreground break-words">{ej.nombre}</span>
@@ -3028,8 +3058,8 @@ export function AlumnoDetallePage() {
                           <span className="px-2 py-0.5 rounded-md bg-primary/10 border border-primary/20 font-bold text-primary">
                             {ej.peso}
                           </span>
-                          <span className="text-[10px]">RPE {ej.rpe}</span>
-                          <span className="px-2 py-0.5 rounded-md bg-secondary text-muted-foreground font-mono font-bold text-[10px] border border-border/60 flex items-center gap-1">
+                          <span className="text-[11px]">RPE {ej.rpe}</span>
+                          <span className="px-2 py-0.5 rounded-md bg-secondary text-muted-foreground font-mono font-bold text-[11px] border border-border/60 flex items-center gap-1">
                             ⏱️ {formatearSegundos(ej.descansoSegundos || 90)}
                           </span>
                         </div>
@@ -3055,20 +3085,23 @@ export function AlumnoDetallePage() {
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
         >
           <div
+            ref={refModalCobro}
             role="dialog"
             aria-modal="true"
             aria-labelledby="modal-cobro-title"
+            tabIndex={-1}
             className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
               <div className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5 text-emerald-500" />
+                <DollarSign className="h-5 w-5 text-success" />
                 <h3 id="modal-cobro-title" className="font-bold text-base text-foreground">
                   Cobro Directo en Sala
                 </h3>
               </div>
               <button
                 onClick={() => setIsCobroModalOpen(false)}
+                aria-label="Cerrar cobro directo"
                 className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
               >
                 <X className="h-4 w-4" />
@@ -3077,7 +3110,7 @@ export function AlumnoDetallePage() {
 
             {cobroSuccessMsg ? (
               <div className="p-6 text-center space-y-2">
-                <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto" />
+                <CheckCircle2 className="h-10 w-10 text-success mx-auto" />
                 <p className="text-xs font-bold text-foreground">{cobroSuccessMsg}</p>
               </div>
             ) : (
@@ -3101,6 +3134,7 @@ export function AlumnoDetallePage() {
                     <label className="text-xs font-semibold text-muted-foreground">Monto Recibido</label>
                     <input
                       type="text"
+                      inputMode="decimal"
                       required
                       value={cobroMonto}
                       onChange={(e) => setCobroMonto(e.target.value)}
@@ -3163,7 +3197,7 @@ export function AlumnoDetallePage() {
                 <button
                   type="submit"
                   disabled={isSubmittingCobro}
-                  className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm tracking-wide shadow-md shadow-emerald-600/20 active:scale-98 transition-all disabled:opacity-50 mt-2 cursor-pointer"
+                  className="w-full py-3 px-4 rounded-xl bg-success-strong hover:bg-success-strong/90 text-white font-black text-sm tracking-wide shadow-md shadow-success-strong/20 active:scale-98 transition-all disabled:opacity-50 mt-2 cursor-pointer"
                 >
                   {isSubmittingCobro ? 'Procesando cobro en BD...' : 'Registrar y Liquidar Cobro'}
                 </button>
@@ -3185,9 +3219,11 @@ export function AlumnoDetallePage() {
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
         >
           <div
+            ref={refModalAntro}
             role="dialog"
             aria-modal="true"
             aria-labelledby="modal-antro-title"
+            tabIndex={-1}
             className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
@@ -3199,6 +3235,7 @@ export function AlumnoDetallePage() {
               </div>
               <button
                 onClick={() => setIsAntroModalOpen(false)}
+                aria-label="Cerrar control antropométrico"
                 className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
               >
                 <X className="h-4 w-4" />
@@ -3305,9 +3342,11 @@ export function AlumnoDetallePage() {
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
         >
           <div
+            ref={refModalRutina}
             role="dialog"
             aria-modal="true"
             aria-labelledby="modal-rutina-title"
+            tabIndex={-1}
             className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-3xl space-y-5 max-h-[90vh] overflow-y-auto"
           >
             {/* Header del modal */}
@@ -3326,6 +3365,7 @@ export function AlumnoDetallePage() {
               <button
                 type="button"
                 onClick={() => setIsRutinaModalOpen(false)}
+                aria-label="Cerrar asignación de rutina"
                 className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 <X className="h-5 w-5" />
@@ -3336,12 +3376,12 @@ export function AlumnoDetallePage() {
               <div
                 role="status"
                 aria-live="polite"
-                className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-start gap-2"
+                className="p-3 rounded-2xl bg-success/10 border border-success/30 text-success text-xs flex items-start gap-2"
               >
                 <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
                   <span className="block font-bold">{rutinaSuccessMsg}</span>
-                  <span className="block text-[11px] text-emerald-400/80">
+                  <span className="block text-[11px] text-success/80">
                     Puedes seguir ajustando el plan o cerrar este panel cuando quieras.
                   </span>
                 </div>
@@ -3475,7 +3515,7 @@ export function AlumnoDetallePage() {
                         placeholder="ej. Empuje & Pectoral / Tríceps"
                         className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs font-semibold text-foreground focus:outline-hidden focus:border-primary transition-colors"
                       />
-                      <span className="text-[10px] text-muted-foreground block">
+                      <span className="text-[11px] text-muted-foreground block">
                         Se añade al título tras el día seleccionado para evitar errores manuales.
                       </span>
                     </div>
@@ -3493,7 +3533,7 @@ export function AlumnoDetallePage() {
                         placeholder="ej. Hipertrofia e Intensidad RPE 8"
                         className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
                       />
-                      <span className="text-[10px] text-muted-foreground block">
+                      <span className="text-[11px] text-muted-foreground block">
                         Instrucciones de esfuerzo o técnica para el alumno.
                       </span>
                     </div>
@@ -3594,7 +3634,7 @@ export function AlumnoDetallePage() {
                             <div className="flex items-center gap-2 p-1.5 rounded-xl bg-secondary/30 border border-border/50">
                               {/* Series Stepper */}
                               <div className="flex flex-col items-center">
-                                <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
+                                <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
                                   Series
                                 </label>
                                 <div className="flex items-center h-8 rounded-lg bg-background border border-border p-0.5">
@@ -3624,7 +3664,7 @@ export function AlumnoDetallePage() {
 
                               {/* Reps */}
                               <div className="flex flex-col items-center">
-                                <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
+                                <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
                                   Reps
                                 </label>
                                 <input
@@ -3649,7 +3689,7 @@ export function AlumnoDetallePage() {
                             <div className="flex items-center gap-2 p-1.5 rounded-xl bg-secondary/30 border border-border/50">
                               {/* RPE */}
                               <div className="flex flex-col items-center">
-                                <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
+                                <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
                                   RPE
                                 </label>
                                 <input
@@ -3663,7 +3703,7 @@ export function AlumnoDetallePage() {
 
                               {/* Descanso */}
                               <div className="flex flex-col items-center">
-                                <label className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
+                                <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
                                   Descanso
                                 </label>
                                 <select
@@ -3837,7 +3877,7 @@ export function AlumnoDetallePage() {
                         >
                           <div className="min-w-0 flex-1 pr-1">
                             <span className="font-bold text-foreground break-words block">{ej.nombre}</span>
-                            <span className="text-[10px] text-muted-foreground">
+                            <span className="text-[11px] text-muted-foreground">
                               • {ej.grupoMuscular}
                             </span>
                           </div>
