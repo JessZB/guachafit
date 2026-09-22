@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../../lib/api-client';
 import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
+import { useTabsAccesibles } from '../../lib/use-tabs-accesibles';
+import { MatrizPreferenciasNotificacion } from '../../components/notificaciones/MatrizPreferenciasNotificacion';
 import {
   PlanMembresiaDetalleDTO,
   TasaCambioVigenteDTO,
   Moneda,
 } from '@guachafit/shared';
 import {
-  SlidersHorizontal,
   CreditCard,
   DollarSign,
   Plus,
@@ -23,13 +25,42 @@ import {
   X,
   ShieldCheck,
   Power,
+  BellRing,
 } from 'lucide-react';
 
-type TabType = 'planes' | 'tasas';
+type TabType = 'planes' | 'tasas' | 'notificaciones';
+
+/** Claves de las pestañas en orden visual (N2b suma "Notificaciones"). */
+const CLAVES_TABS: readonly TabType[] = ['planes', 'tasas', 'notificaciones'];
 
 export function AjustesPage() {
   const { isDemoMode } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabType>('planes');
+  // N2b: la pestaña activa vive en la URL (`?tab=notificaciones`) para que la campana pueda
+  // enlazar directo a la matriz de preferencias del coach.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const activeTab: TabType = CLAVES_TABS.includes(tabParam as TabType)
+    ? (tabParam as TabType)
+    : 'planes';
+
+  const setActiveTab = (tab: TabType) => {
+    triggerHaptic('light');
+    setSearchParams(tab === 'planes' ? {} : { tab }, { replace: true });
+  };
+
+  const tabs = useTabsAccesibles<TabType>({
+    claves: CLAVES_TABS,
+    activa: activeTab,
+    onActivar: setActiveTab,
+    idBase: 'ajustes-tabs',
+  });
+
+  // N2b: al entrar por enlace directo (`?tab=notificaciones`) o cambiar de pestaña, la activa se
+  // trae a la vista dentro del tablist con scroll horizontal en móvil.
+  const idTabActiva = tabs.idTab(activeTab);
+  useEffect(() => {
+    document.getElementById(idTabActiva)?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }, [idTabActiva]);
 
   // Planes state
   const [planes, setPlanes] = useState<PlanMembresiaDetalleDTO[]>([]);
@@ -342,17 +373,11 @@ export function AjustesPage() {
       {/* Encabezado */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-primary flex items-center gap-1.5">
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              Configuración
-            </span>
-          </div>
-          <h1 className="text-2xl lg:text-3xl font-black tracking-tight text-foreground mt-1">
-            Planes y Tasas
+          <h1 className="text-2xl lg:text-3xl font-black tracking-tight text-foreground">
+            Configuración
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Administra tus planes de membresía y las tasas de cambio.
+            Administra tus planes de membresía, las tasas de cambio y tus notificaciones.
           </p>
         </div>
 
@@ -368,38 +393,48 @@ export function AjustesPage() {
         )}
       </div>
 
-      {/* Tabs Selector */}
-      <div className="flex items-center gap-2 border-b border-border/80 pb-3 overflow-x-auto">
+      {/* Tabs Selector (N2b: patrón APG de pestañas con flechas + roving tabindex) */}
+      <div
+        {...tabs.propsTablist}
+        aria-label="Secciones de configuración"
+        className="flex items-center gap-2 border-b border-border/80 pb-3 overflow-x-auto"
+      >
         <button
-          type="button"
-          onClick={() => {
-            triggerHaptic('light');
-            setActiveTab('planes');
-          }}
-          className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+          {...tabs.propsTab('planes')}
+          className={`min-h-11 sm:min-h-0 py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'planes'
               ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
               : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
           }`}
         >
           <CreditCard className="h-4 w-4" />
-          <span>Planes & Membresías ({planes.length})</span>
+          <span className="sm:hidden">Planes ({planes.length})</span>
+          <span className="hidden sm:inline">Planes & Membresías ({planes.length})</span>
         </button>
 
         <button
-          type="button"
-          onClick={() => {
-            triggerHaptic('light');
-            setActiveTab('tasas');
-          }}
-          className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+          {...tabs.propsTab('tasas')}
+          className={`min-h-11 sm:min-h-0 py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'tasas'
               ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
               : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
           }`}
         >
           <DollarSign className="h-4 w-4" />
-          <span>Tasas de Cambio & Divisas</span>
+          <span className="sm:hidden">Tasas</span>
+          <span className="hidden sm:inline">Tasas de Cambio & Divisas</span>
+        </button>
+
+        <button
+          {...tabs.propsTab('notificaciones')}
+          className={`min-h-11 sm:min-h-0 py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'notificaciones'
+              ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
+              : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <BellRing className="h-4 w-4" />
+          <span>Notificaciones</span>
         </button>
       </div>
 
@@ -407,7 +442,7 @@ export function AjustesPage() {
       {/* PESTAÑA 1: CATÁLOGO DE PLANES                                         */}
       {/* ===================================================================== */}
       {activeTab === 'planes' && (
-        <div className="space-y-4 animate-in fade-in-50 duration-200">
+        <div {...tabs.propsPanel('planes')} className="space-y-4 animate-in fade-in-50 duration-200">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {planes.map((plan) => (
               <div
@@ -531,7 +566,10 @@ export function AjustesPage() {
       {/* PESTAÑA 2: TASAS DE CAMBIO & DIVISAS                                   */}
       {/* ===================================================================== */}
       {activeTab === 'tasas' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in-50 duration-200">
+        <div
+          {...tabs.propsPanel('tasas')}
+          className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in-50 duration-200"
+        >
           {/* Columna Izquierda: Configuración de Tasas */}
           <div className="lg:col-span-2 space-y-6">
             <form onSubmit={handleGuardarTasa} className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-5">
@@ -784,6 +822,28 @@ export function AjustesPage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* PESTAÑA 3 (N2b): PREFERENCIAS DE NOTIFICACIÓN (RF-015 §B)              */}
+      {/* ===================================================================== */}
+      {activeTab === 'notificaciones' && (
+        <div
+          {...tabs.propsPanel('notificaciones')}
+          className="space-y-4 animate-in fade-in-50 duration-200"
+        >
+          <div className="p-5 rounded-3xl bg-card border border-border/80 space-y-1">
+            <h2 className="font-extrabold text-base text-foreground">
+              Avisos que recibes como entrenador
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Elige por dónde quieres recibir cada tipo de aviso. Los avisos de seguridad siempre
+              llegan por correo y no pueden desactivarse.
+            </p>
+          </div>
+
+          <MatrizPreferenciasNotificacion />
         </div>
       )}
 

@@ -25,6 +25,7 @@ import {
   Zap,
   AlertTriangle,
   Clock,
+  BellRing,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -334,6 +335,27 @@ export function AtletaMenuPage() {
           </div>
         </Link>
       </div>
+
+      {/* N2b (RF-015): acceso a las preferencias de notificación del alumno */}
+      <Link
+        to="/app/preferencias"
+        className="group flex items-center justify-between gap-3 p-4 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-primary"
+      >
+        <span className="flex items-center gap-3 min-w-0">
+          <span className="p-2.5 rounded-xl bg-secondary text-muted-foreground group-hover:text-primary group-hover:bg-primary/15 transition-colors shrink-0">
+            <BellRing className="h-5 w-5" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-bold text-foreground group-hover:text-primary transition-colors">
+              Mis notificaciones
+            </span>
+            <span className="block text-xs text-muted-foreground mt-0.5">
+              Elige qué avisos quieres recibir y por dónde.
+            </span>
+          </span>
+        </span>
+        <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0" />
+      </Link>
     </div>
   );
 }

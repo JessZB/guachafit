@@ -6,6 +6,7 @@ import { processOutboxQueue, subscribeToSyncStatus, type SyncStatusState } from 
 import { SyncQueuePanel } from '../common/SyncQueuePanel';
 import { InstalarAppPrompt } from '../common/InstalarAppPrompt';
 import { DialogoLogoutPendientes } from '../common/DialogoLogoutPendientes';
+import { CampanaNotificaciones } from '../notificaciones/CampanaNotificaciones';
 import { useLogoutSeguro } from '../../lib/use-logout-seguro';
 import {
   AlertTriangle,
@@ -79,15 +80,15 @@ export function Header() {
     <>
       <header className="sticky top-0 z-40 w-full border-b border-border/80 bg-background/95 backdrop-blur-md px-4 sm:px-8 pb-3 safe-area-pt flex items-center justify-between">
         {/* Brand */}
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-md shadow-primary/25">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-md shadow-primary/25 shrink-0">
             <Dumbbell className="h-5 w-5" />
           </div>
-          <div className="flex flex-col">
-            <span className="font-black text-lg tracking-tight text-foreground leading-none">
+          <div className="flex flex-col min-w-0">
+            <span className="font-black text-lg tracking-tight text-foreground leading-none truncate">
               GUACHAFIT
             </span>
-            <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider mt-0.5">
+            <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider mt-0.5 truncate">
               {user?.rol === 'entrenador'
                 ? 'Panel del entrenador'
                 : user?.rol === 'superadmin'
@@ -98,7 +99,10 @@ export function Header() {
         </div>
 
         {/* Connectivity, Theme & User */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* N2b (RF-014 RN-04): campana In-App con badge de no leídas */}
+          <CampanaNotificaciones />
+
           {/* Connectivity badge: U3b lo convierte en botón real (teclado + aria-label) */}
           <button
             type="button"

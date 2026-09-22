@@ -16,6 +16,7 @@ import {
   ClipboardList,
   ShieldCheck,
   Wallet,
+  Bell,
 } from 'lucide-react';
 
 export function Sidebar() {
@@ -29,6 +30,7 @@ export function Sidebar() {
     { to: '/app/nutricion', label: 'Mi Comida', icon: Utensils, description: 'Cómo vas hoy' },
     { to: '/app/progreso', label: 'Mi Progreso', icon: TrendingUp, description: 'Fotos y medidas' },
     { to: '/app/pagos', label: 'Pagos y Cuotas', icon: CreditCard, description: 'Saldo y comprobantes' },
+    { to: '/app/preferencias', label: 'Mis Notificaciones', icon: Bell, description: 'Avisos y canales' },
   ];
 
   const coachLinks = [
@@ -40,7 +42,7 @@ export function Sidebar() {
     { to: '/coach/alumnos', label: 'Mis Alumnos', icon: Users, description: 'Datos, planes y pagos' },
     { to: '/coach/plantillas', label: 'Plantillas de ejercicios', icon: ClipboardList, description: 'Rutinas reutilizables' },
     { to: '/coach/antropometria', label: 'Revisar Evaluaciones', icon: Camera, description: 'Medidas y fotos de progreso' },
-    { to: '/coach/ajustes', label: 'Configuración', icon: SlidersHorizontal, description: 'Planes y tasas' },
+    { to: '/coach/ajustes', label: 'Configuración', icon: SlidersHorizontal, description: 'Planes, tasas y avisos' },
   ];
 
   // RF-010 RN-01: el superadmin solo ve el acceso administrativo; nunca el negocio del coach.

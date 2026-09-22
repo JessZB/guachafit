@@ -50,6 +50,10 @@ const ProgresoPage = lazy(() =>
 const PagosPage = lazy(() =>
   import('./pages/atleta/PagosPage').then((m) => ({ default: m.PagosPage }))
 );
+// N2b (RF-015): preferencias de notificación del alumno (matriz §A con bloqueos RN-01/RN-02).
+const PreferenciasPage = lazy(() =>
+  import('./pages/atleta/PreferenciasPage').then((m) => ({ default: m.PreferenciasPage }))
+);
 
 // Lazy Coach Pages
 const DashboardPage = lazy(() =>
@@ -158,6 +162,10 @@ export const router = createBrowserRouter([
           {
             path: '/app/pagos',
             element: <PagosPage />,
+          },
+          {
+            path: '/app/preferencias',
+            element: <PreferenciasPage />,
           },
         ],
       },
