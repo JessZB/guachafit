@@ -29,7 +29,7 @@ Empodera al usuario (alumno y entrenador) para decidir qué tipo de comunicacion
 
 ## 2. Actores Involucrados
 - **Alumno:** Configura qué alertas deportivas, financieras y antropométricas desea recibir.
-- **Entrenador:** Configura alertas de nuevos comprobantes, ingresos vía deep link y el resumen semanal dominical.
+- **Entrenador:** Configura alertas de nuevos comprobantes, ingresos vía deep link y el resumen semanal de los lunes.
 - **Sistema:** Aplica las preferencias y bloquea la desactivación de alertas de seguridad.
 
 ---
@@ -58,7 +58,7 @@ Empodera al usuario (alumno y entrenador) para decidir qué tipo de comunicacion
 | **Cobranzas Entrantes** | Alumno cargó comprobante (Pago Móvil, Zelle, etc.). | `true` | `true` | **Configurable** |
 | **Nuevos Registros** | Alumno inscrito a través de su Deep link (`coach_code`). | `true` | `true` | **Configurable** |
 | **Reportes de Progreso** | Alumno completó check-in o subió fotos de evolución. | `true` | `false` | **Configurable** |
-| **Resumen Semanal** | Digest dominical: balance semanal de ingresos y mora. | `false` | `true` | **Configurable** |
+| **Resumen Semanal** | Digest semanal (lunes 08:00 UTC): balance semanal de ingresos y mora. | `false` | `true` | **Configurable** |
 
 ### C. Regla de Alertas Críticas Transaccionales
 - **RN-01 (Inviolabilidad de Alertas de Seguridad):** Las notificaciones de seguridad (reseteo de contraseña, revocación de tokens, inicio de sesión desde nueva IP) y los comprobantes oficiales de pago aprobado se enviarán **obligatoriamente por Email**, anulando cualquier intento de desactivación. En la interfaz gráfica, el switch aparece marcado y deshabilitado (*disabled*) con una nota: *"Obligatorio por motivos de seguridad"*.
@@ -88,10 +88,16 @@ Then la interfaz debe mantener el interruptor bloqueado en estado "Activo"
 ### Escenario 3: Entrenador Activa Resumen Semanal por Correo
 ```gherkin
 Given que el entrenador tiene `digest_weekly_email = true`
-When el cron del sistema se ejecuta el domingo a las 20:00 UTC
+When el cron del sistema se ejecuta el lunes a las 08:00 UTC
 Then el sistema debe generar el reporte consolidado de ingresos de la semana y cartera en mora
   And enviarlo al correo electrónico del entrenador
 ```
+
+> **Nota (doc-sync Ola 3):** el escenario original decía "domingo 20:00 UTC"; la implementación usa
+> **lunes 08:00 UTC** (`0 8 * * 1`, tz UTC), configurable con la env `RESUMEN_SEMANAL_CRON` y
+> documentada igual en [[RF-014-arquitectura-event-driven-despachador-notificaciones]] §7. El digest
+> siempre registra copia In-App; el job de Email se encola según `digest_weekly_email` (default
+> `true` del entrenador) y su entrega sigue simulada por log (proveedor real pendiente).
 
 ---
 
@@ -102,6 +108,43 @@ Then el sistema debe generar el reporte consolidado de ingresos de la semana y c
 
 ## 7. Estado real de implementación
 
-- Matriz de preferencias parcial en base de datos: sin dimensión de rol/entrenador.
-- Sin UI de ajustes de notificaciones (categorías/canales).
-- RN-02 sin validación: no existe la advertencia al apagar a la vez Push y Email en finanzas.
+### N2a (Ola 3) — implementado (base de datos, contrato y despachador)
+- **Esquema/migración `0008_thankful_mimic`:** `preferencias_notificacion` pasa de 7 a 16 booleanos con
+  los defaults de §A y §B. Campos nuevos: `notify_seguridad_push` (false), `notify_seguridad_email`
+  (true, obligatorio), `notify_cobranzas_push`/`_email` (true/true), `notify_nuevos_registros_push`/
+  `_email` (true/true), `notify_reportes_progreso_push`/`_email` (true/false), `digest_weekly_push`
+  (false) y `digest_weekly_email` (pasa a **true** para el entrenador). Aplicada y verificada contra
+  PostgreSQL real; un `INSERT` que solo declara `usuario_id` nace con la matriz exacta del doc.
+- **Matriz por rol:** una fila por usuario con la matriz completa; el rol (`usuarios.rol`) decide qué
+  mitad gobierna (`GET/PUT /notificaciones/preferencias` devuelve `rol`, `matriz` y
+  `canalesObligatorios`, y rechaza campos que no pertenecen al rol).
+- **RN-01:** el correo de seguridad no puede desactivarse — validación Zod + servicio (400 con mensaje
+  explicativo) y `CHECK` en base de datos. El despachador fuerza además el Email en la categoría
+  `SEGURIDAD` y en los comprobantes de pago aprobado (`esCriticoSeguridad`).
+- **RN-02:** apagar Push y Email de "Finanzas y Pagos" exige la confirmación explícita
+  `confirmarSinCanalesFinanzas: true`; sin ella el PUT responde 400 con la advertencia del doc.
+- **Despachador:** enruta cada evento por fila `(rol, categoría)` → campos reales
+  (FINANZAS del coach = "Cobranzas Entrantes"; `ALUMNOS` = "Nuevos Registros"; ENTRENAMIENTO/
+  ANTROPOMETRIA del coach = "Reportes de Progreso"; `RESUMEN_SEMANAL` = digest) con la precedencia
+  canal obligatorio → preferencia del usuario → default del doc; el In-App sigue siendo universal.
+- **Tests:** suite de API en verde ampliada (621 casos, 37 archivos) con la matriz del despachador,
+  RN-01/RN-02 y los defaults por rol.
+
+### N2b (Ola 3) — implementado (UI)
+- **Preferencias del coach:** pestaña **Notificaciones** en Ajustes (`/coach/ajustes?tab=notificaciones`),
+  con la matriz del §B, switches por canal, candado de Seguridad (RN-01) y modal de confirmación de
+  Finanzas (RN-02).
+- **Preferencias del alumno:** pantalla **"Mis Notificaciones"** en `/app/preferencias` (matriz del §A),
+  accesible desde el menú del alumno.
+- **Componente compartido:** `MatrizPreferenciasNotificacion` consume `GET/PUT
+  /notificaciones/preferencias`, pinta `canalesObligatorios` como candados, aplica el copy de RN-02,
+  muestra estados de carga/error/éxito y usa fixtures en modo demo (sin persistir).
+- **Campana In-App:** el panel de la campana enlaza "Configurar mis notificaciones" a la pantalla del
+  rol correspondiente (detalle en [[RF-014-arquitectura-event-driven-despachador-notificaciones]] §7).
+- Suites en verde: web 465 · API 621.
+
+### Pendiente (siguientes)
+- **Emisor de "Reportes de Progreso" por check-in/fotos del alumno:** la fila de la matriz y su ruteo
+  ya existen, pero aún no se publica el evento de dominio desde antropometría.
+- **Entrega real por Email:** el job de Email se encola con la preferencia del usuario; la entrega
+  sigue simulada por log (proveedor real pendiente).

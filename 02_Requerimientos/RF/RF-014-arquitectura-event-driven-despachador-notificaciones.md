@@ -95,8 +95,50 @@ Then el Despachador NO debe enviar trabajos a las colas de Push ni Email
 
 ## 7. Estado real de implementación
 
-- Colas, dispatcher y persistencia In-App implementados y operativos.
-- Sin bus de eventos de dominio: los emisores no publican eventos como exige RN-01.
-- Sin DLQ ni idempotencia (jobId): no declarable `implementado`.
-- 3 de 5 categorías de notificación sin emisores.
-- Sin UI: ni campana In-App ni pantalla de preferencias.
+### N1 (Ola 3, motor por dentro) — implementado
+- **Bus de eventos (RN-01):** `@nestjs/event-emitter` con `EventEmitterModule.forRoot({ wildcard: true })`.
+  Los emisores publican clases de dominio (`notificacion.pago-reportado`, `…pago-aprobado`,
+  `…pago-rechazado`, `…sesion-alumno-finalizada`, `…alumno-registrado`, `…recordatorio-cuota`,
+  `…recordatorio-manual-cobro`, `…resumen-semanal-coach`) y el `NotificationDispatcherService`
+  escucha con `@OnEvent('notificacion.**')`. Ningún servicio de negocio llama al despachador ni a
+  un proveedor externo.
+- **Idempotencia y DLQ (RNF-004):** `jobId` determinista
+  `notif_{categoria}_{tipoEvento}_{destinatarioId}_{referenciaId}_{YYYYMMDD}`; los jobs que agotan
+  intentos se copian a `<cola>-dead-letter` (`notificaciones-push-dead-letter`,
+  `notificaciones-email-dead-letter`, `notificaciones-resumen-semanal-dead-letter`,
+  `cobranza-dead-letter`), visibles en Bull-Board. La DLQ del **resumen semanal** ya recibe jobs
+  (fix D1: el processor del digest escucha `failed` y mueve el job agotado), cubierto por tests.
+- **Push con reintentos reales:** el worker relanza errores transitorios (BullMQ reintenta) y solo
+  desactiva tokens muertos sin retry; la entrega sigue simulada (log) — **integración pendiente de
+  proveedor FCM/APNs**.
+- **Bandeja In-App (API para la campana):** `GET /notificaciones/in-app` devuelve
+  `{ items, total, limit, offset, totalNoLeidas }` con filtro `soloNoLeidas`; se mantienen marcar
+  leída / todas leídas.
+- **Resumen semanal:** job repetible `notificaciones:resumen-semanal` (lunes 08:00 UTC por defecto,
+  env `RESUMEN_SEMANAL_CRON`) que genera el digest del coach (adherencia de 7 días + cobros/por
+  vencer) y lo despacha por el pipeline; el digest siempre deja copia In-App.
+- Colas, dispatcher y persistencia In-App operativos; suite de API en verde (**621 tests, 37 archivos**).
+
+### N2 (Ola 3, superficie visible) — implementado
+- **UI de la campana (N2b):** campana en la cabecera con badge de no leídas (`9+`), panel accesible
+  (Escape, trampa de Tab, foco) con agrupado **Hoy / Ayer / Anteriores**, clic que marca leída y
+  navega al destino, "Marcar todas como leídas", paginación "Ver más" y enlace "Configurar mis
+  notificaciones"; consume la API In-App paginada de N1.
+- **Preferencias por rol (N2b):** coach en Ajustes → pestaña Notificaciones
+  (`?tab=notificaciones`); alumno en `/app/preferencias` ("Mis Notificaciones"). Matriz completa por
+  rol, candados de Seguridad (RN-01) y modal de confirmación de Finanzas (RN-02); modo demo con
+  fixtures.
+- **Matriz RF-015 completa (N2a):** migración `0008` (16 booleanos), `GET/PUT
+  /notificaciones/preferencias` por rol y despachador por `(rol, categoría)` con precedencia canal
+  obligatorio → preferencia → default; detalle en [[RF-015-matriz-preferencias-usuario-canales]] §7.
+- Suites en verde: API 621 · web 465.
+
+### Pendiente (siguientes olas)
+- **Integración real de proveedores** (FCM/APNs/WebPush y Resend/SendGrid/SMTP): los workers
+  simulan la entrega por log.
+- **Chunking de 50 en anuncios masivos (§6):** el despachador encola un job por destinatario, sin
+  lotes por anuncio global.
+- **Recordatorio antropométrico 06:00 por huso IANA:** explícitamente fuera de N1/N2 por complejidad
+  (requiere ventana por zona horaria del alumno; anotado como pendiente).
+- **Observabilidad externa** (Sentry/Datadog) para la alerta de DLQ y verificación de SLOs de
+  latencia del [[RNF-004-resiliencia-notificaciones-idempotencia-fallbacks]].

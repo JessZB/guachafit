@@ -94,6 +94,20 @@ Then el sistema debe actualizar inmediatamente el registro a `is_active = false`
 
 ## 7. Estado real de implementación
 
-- API de dispositivos implementada y testeada.
-- Sin cliente real que registre tokens: ningún flujo de la app ejecuta el registro (RN-02).
-- Contrato desalineado entre el endpoint real y el documentado en este requisito.
+- **API de dispositivos implementada y testeada:** registro/renovación idempotente
+  (`POST /api/v1/dispositivos/token-push`), baja por logout
+  (`DELETE /api/v1/dispositivos/token-push/:token`) y listado de activos
+  (`GET /api/v1/dispositivos`). El Worker Push desactiva tokens muertos sin reintento (RN-04) y
+  relanza solo fallos transitorios para que BullMQ reintente.
+- **La campana In-App ya consume el sistema** (N2b): la bandeja persistente, el panel de la campana y
+  las preferencias por rol están en producción interna (ver
+  [[RF-014-arquitectura-event-driven-despachador-notificaciones]] §7 y
+  [[RF-015-matriz-preferencias-usuario-canales]] §7).
+- **Pendiente — cliente de registro de tokens:** ningún flujo de la app ejecuta el registro (RN-02);
+  no existe UI de WebPush ni captura del evento `onTokenRefresh` (§6).
+- **Pendiente — entrega real:** la entrega Push sigue simulada por log (integración FCM/APNs
+  pendiente de proveedor).
+- **Nota de contrato:** §5 documenta `POST /api/v1/devices` y
+  [[03_Contratos_API_Especificacion]] §3.2 documenta `POST /dispositivos/registrar`; el endpoint
+  real es `POST /api/v1/dispositivos/token-push` con payload `{ deviceToken, platform }`. Alinear
+  los documentos o la API en una próxima pasada.

@@ -62,8 +62,32 @@ Define las garantías operativas y estándares no funcionales requeridos para el
 
 ## 6. Estado real de implementación
 
-- Dispatcher y colas implementados y operativos como base del pipeline.
-- Sin idempotencia por `jobId`: una tarea reintentada puede generar un segundo envío.
-- Sin Dead-Letter Queue ni alerta de observabilidad (Sentry/Datadog).
-- Push sin reintentos ante fallos del proveedor.
-- Sin rate limiting por proveedor ni SLOs de latencia verificados.
+### N1 (Ola 3) — implementado
+- **Idempotencia por `jobId`:** esquema determinista
+  `notif_{categoria}_{tipoEvento}_{destinatarioId}_{referenciaId}_{YYYYMMDD}` (separador `_`,
+  compatible con BullMQ 5.x). Los jobs completados se retienen ≥24h (`removeOnComplete.age`) para
+  cubrir la ventana de deduplicación de 24 horas. Dedupe verificado empíricamente contra el Redis
+  del proyecto (re-emitir el mismo evento no crea un segundo job).
+- **Dead-Letter Queue:** los jobs que agotan intentos se copian a `<cola>-dead-letter` desde el
+  listener `failed` del worker, con payload de triaje (`colaOrigen`, `jobIdOriginal`, `error`,
+  `intentosRealizados`, `fallidoEnUtc`) y `jobId` determinista en la DLQ. Aplica a las tres colas del
+  pipeline (`notificaciones-push`, `notificaciones-email` y `notificaciones-resumen-semanal`,
+  incluida su DLQ propia tras el fix D1) y a `cobranza-dead-letter`; todas visibles en Bull-Board y
+  el reencolado manual documentado en `dead-letter.ts`.
+- **Push con reintentos reales:** el worker relanza errores transitorios del proveedor (BullMQ
+  reintenta con backoff) y solo desactiva tokens muertos sin reintento (RF-016 RN-04). La entrega
+  sigue simulada (log): integración FCM/APNs pendiente de proveedor.
+- **Backoff del §4:** el worker de email usa la política exacta 15s → 2min → 10min vía
+  `settings.backoffStrategy` (verificado empíricamente contra el Redis del proyecto).
+- **Rate limiting (§5):** `limiter` por worker — email 50/s (límite de Resend citado en el
+  requisito), push 100/s conservador.
+- Verificación empírica de jobId/DLQ/reintentos contra el Redis de docker (encola → falla → DLQ →
+  limpieza) y tests de API en verde (621 casos, 37 archivos).
+
+### Pendiente
+- **Alerta de observabilidad (Sentry/Datadog):** la DLQ se registra en logs, sin integración
+  externa todavía.
+- **SLOs de latencia (p95) sin verificar:** requieren proveedores reales e instrumentación.
+- **Reintento por token en Push:** el job agrupa los N tokens del usuario; un fallo transitorio
+  reintenta el lote completo. La integración real debería trocear por token o registrar entregas
+  por token.

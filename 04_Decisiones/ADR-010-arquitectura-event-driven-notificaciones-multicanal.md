@@ -91,3 +91,30 @@ Adoptamos la **Opción C**.
   - [[RNF-004-resiliencia-notificaciones-idempotencia-fallbacks]]
 - Entidades vinculadas: [[Entidad-PreferenciaNotificacion]], [[Entidad-DispositivoUsuario]], [[Entidad-NotificacionInApp]]
 - Complementa la decisión de workers: [[ADR-008-motor-colas-background-workers-bullmq]]
+
+---
+
+## 6. Notas de implementación (Ola 3, N1–N2)
+
+- **Bus:** `@nestjs/event-emitter` (v12.x) con `EventEmitterModule.forRoot({ wildcard: true })`.
+  El despachador escucha `@OnEvent('notificacion.**', { suppressErrors: false })`; los emisores
+  publican con `emitAsync` para conservar la semántica previa (cobranza reintenta su job ante un
+  fallo del pipeline; cartera usa el resultado para el copy de la respuesta; los flujos
+  fire-and-forget consumen el rechazo con `.catch(...)` y jamás tumban su transacción).
+- **Nombres de cola DLQ:** `<cola>-dead-letter` (p. ej. `notificaciones-email-dead-letter`),
+  sin worker, visibles en Bull-Board. El ADR-008 usa `cobranza` como cola de recordatorios, así
+  que su DLQ es `cobranza-dead-letter`. El digest semanal tiene la suya
+  (`notificaciones-resumen-semanal-dead-letter`) y su processor ya mueve a ella los jobs agotados.
+- **`jobId`:** `notif_{categoria}_{tipoEvento}_{destinatarioId}_{referenciaId}_{YYYYMMDD}` con
+  separador `_` (BullMQ 5.x rechaza `:` en ids personalizados; misma nota que el ADR-008). Dedupe
+  real verificado contra Redis.
+- **Matriz por rol (N2a):** migración `0008` con los 16 booleanos del RF-015; el despachador enruta
+  cada evento por `(rol, categoría)` con precedencia canal obligatorio (RN-01) → preferencia del
+  usuario → default del doc, y exige confirmación explícita para apagar ambos canales de Finanzas
+  (RN-02). El In-App sigue siendo universal.
+- **UI (N2b):** campana In-App con panel accesible (badge, agrupado Hoy/Ayer, marcar leídas,
+  navegación por clic) y preferencias por rol: coach en la pestaña Notificaciones de Ajustes
+  (`?tab=notificaciones`), alumno en `/app/preferencias`.
+- **Digest semanal:** job repetible `notificaciones:resumen-semanal` (lunes 08:00 UTC por defecto,
+  env `RESUMEN_SEMANAL_CRON`) con DLQ propia y copia In-App garantizada.
+- Suites en verde: API 621 · web 465.

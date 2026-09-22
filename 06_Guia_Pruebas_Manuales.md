@@ -1,7 +1,7 @@
 ---
 id: GUIA-PRUEBAS
 titulo: "Guía de Pruebas Manuales — GUACHAFIT"
-fecha: 2026-09-21
+fecha: 2026-09-22
 estado: activo
 tags:
   - pruebas
@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** todo versionado y con pruebas automáticas en verde (430 de la web + 547 del API). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (465 de la web + 621 del API). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -108,9 +108,19 @@ tags:
 - [ ] **Tema claro**: todo legible (antes los estados eran ilegibles por contraste bajo). Alterna claro/oscuro/sistema.
 - [ ] **Teclado (desktop)**: Tab recorre; los modales atrapan el foco; Escape cierra y devuelve el foco; pestañas se mueven con flechas; el botón de sincronización de la cabecera responde a teclado.
 
-## 10. ⛔ Lo que AÚN NO existe (no lo reportes como error)
+## 10. Notificaciones (campana, preferencias y resumen semanal)
 
-- **Notificaciones**: la campana in-app y las preferencias por canal todavía no tienen pantalla (el motor ya despacha; la UI está en camino). Tampoco existen los recordatorios de check-in 06:00 ni el resumen semanal.
+- [ ] **Campana (cabecera, coach y alumno):** el icono de campana muestra un **badge** con las no leídas (muestra "9+" si hay más de 9); al pulsarlo se abre el **panel** con las notificaciones agrupadas en **Hoy / Ayer / Anteriores**.
+- [ ] **Marcar leídas y navegar:** al hacer clic en una notificación se marca como leída y te lleva a su pantalla (p. ej. un pago aprobado lleva a Conciliación). Arriba está **"Marcar todas como leídas"**; si hay más de las visibles aparece **"Ver más"**. Con la bandeja vacía se ve **"Estás al día"**.
+- [ ] **Preferencias del coach:** Ajustes → pestaña **Notificaciones** (o directo `http://localhost:3000/coach/ajustes?tab=notificaciones`). Cada categoría tiene switches **Push** y **Email**; en **Seguridad de Cuenta** el Email sale **bloqueado con candado** y la nota "Obligatorio por motivos de seguridad" (RN-01). "Guardar cambios" persiste y muestra confirmación.
+- [ ] **Confirmación RN-02 (Finanzas):** apaga **Push y Email** de la fila de pagos/cobranzas y guarda: debe aparecer el modal **"¿Desactivar todos los avisos de pagos?"** con "Mantener canales activos" y "Sí, desactivar de todos modos"; solo el segundo confirma el guardado.
+- [ ] **Preferencias del alumno:** menú del alumno → **"Mis Notificaciones"** (o directo `http://localhost:3000/app/preferencias`). Es la misma matriz del rol alumno, con su candado de Seguridad y su confirmación de Finanzas.
+- [ ] **Resumen semanal del coach:** llega a la **campana in-app** (el digest se genera lunes 08:00 UTC; en modo demo se ve un ejemplo sin esperar). Opcional: si configuraste `BULL_BOARD_USER`/`BULL_BOARD_PASS`, entra a `http://localhost:4000/admin/queues` y busca la cola **`notificaciones-resumen-semanal`** (job repetible `notificaciones:resumen-semanal`) y su DLQ.
+- [ ] **Modo demo:** con "Modo Coach"/"Modo Alumno" la campana y las preferencias usan datos de ejemplo; al guardar preferencias dice "Preferencias guardadas en esta sesión de demostración" (no finge persistencia).
+
+## 11. ⛔ Lo que AÚN NO existe (no lo reportes como error)
+
+- **Notificaciones**: proveedores reales de push/email (la entrega sigue **simulada por log**), cliente push del navegador (WebPush sin UI), recordatorio de check-in 06:00 por huso horario y alerta externa de colas/DLQ (Sentry/Datadog). La campana, las preferencias y el resumen semanal **ya existen** (sección 10).
 - **Nutrición**: metas del coach y diario fotográfico de platos pendientes; la tolerancia automática depende de esas metas.
 - **Antropometría**: ventana horaria del check-in y periodicidad pendientes; los gráficos/comparador visuales aún no tienen UI real (solo demo).
 - **Admin**: deshabilitar entrenadores, licencias y correo automático pendientes.
@@ -118,7 +128,7 @@ tags:
 - **Seguridad**: RLS activo solo en `rutinas`/`plantillas` (etapas 2-4 pendientes); push del navegador no implementado.
 - **Extras**: iconos provisionales (mancuerna generada) — si hay logo oficial, se reemplazan; instalación real en dispositivo físico pendiente de tu prueba.
 
-## 11. Cómo reportar un hallazgo
+## 12. Cómo reportar un hallazgo
 
 Copia esta plantilla en `00_Inbox/` (o al final de este documento):
 
