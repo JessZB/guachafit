@@ -16,26 +16,68 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
       VitePWA({
-        registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+        // U4 (Ola 4): actualización GUIADA. El SW nuevo queda `waiting` y la app avisa
+        // ("Nueva versión disponible") para que el usuario aplique y recargue cuando quiera;
+        // nunca se activa ni se recarga en silencio a mitad de un entrenamiento.
+        // `virtual:pwa-register` (src/lib/pwa-registro.ts) reemplaza al antiguo registerSW.js.
+        registerType: 'prompt',
+        // Assets reales en apps/web/public (antes apuntaban a archivos inexistentes).
+        includeAssets: ['favicon.svg', 'apple-touch-icon-180x180.png'],
         manifest: {
-          name: 'GUACHAFIT - High-Performance Training',
+          id: '/',
+          name: 'GUACHAFIT — Entrenamiento y Alto Rendimiento',
           short_name: 'GUACHAFIT',
           description: 'Plataforma integral para entrenadores y atletas de alto rendimiento',
+          lang: 'es',
+          dir: 'ltr',
           theme_color: '#11161f',
           background_color: '#11161f',
           display: 'standalone',
-          orientation: 'portrait',
+          start_url: '/',
+          scope: '/',
+          categories: ['fitness', 'health', 'sports'],
+          // Sin `orientation`: queda en "any" para que las tablets de los coaches
+          // puedan rotar a landscape (los alumnos siguen bloqueados por su postura de uso).
           icons: [
             {
               src: 'pwa-192x192.png',
               sizes: '192x192',
               type: 'image/png',
+              purpose: 'any',
             },
             {
               src: 'pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: 'maskable-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable',
+            },
+            {
+              src: 'apple-touch-icon-180x180.png',
+              sizes: '180x180',
+              type: 'image/png',
+              purpose: 'any',
+            },
+          ],
+          shortcuts: [
+            {
+              name: 'Entrenar hoy',
+              short_name: 'Entrenar',
+              description: 'Abrir el entrenamiento de hoy',
+              url: '/app/hoy',
+              icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
+            },
+            {
+              name: 'Mi menú',
+              short_name: 'Mi menú',
+              description: 'Ver el menú del alumno',
+              url: '/app/menu',
+              icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
             },
           ],
         },

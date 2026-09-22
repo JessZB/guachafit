@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="GUACHAFIT">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b2533" />
+      <stop offset="1" stop-color="#11161f" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="12" fill="url(#bg)" />
+  <g fill="#1cd38d">
+    <rect x="14" y="18" width="4.5" height="28" rx="2.25" />
+    <rect x="19" y="22" width="5" height="20" rx="2.5" />
+    <rect x="22" y="29" width="20" height="6" rx="3" />
+    <rect x="40" y="22" width="5" height="20" rx="2.5" />
+    <rect x="45.5" y="18" width="4.5" height="28" rx="2.25" />
+  </g>
+</svg>

@@ -247,6 +247,15 @@ export async function getActionableMutations(): Promise<OutboxMutation[]> {
   return all.filter((item) => item.status !== 'synced').sort((a, b) => a.createdAt - b.createdAt);
 }
 
+/**
+ * U4 — mutaciones que se perderían si se cierra sesión: todo lo que NO está confirmado por el
+ * servidor, es decir `pending` + `syncing` (en vuelo) + `failed` (reintentará con backoff) +
+ * `rejected` (espera una decisión del usuario). Una `synced` ya está a salvo y no cuenta.
+ */
+export async function contarMutacionesPendientes(): Promise<number> {
+  return offlineDb.outboxMutations.where('status').notEqual('synced').count();
+}
+
 export async function getOutboxSummary(): Promise<OutboxSummary> {
   const [pending, syncing, failed, rejected] = await Promise.all([
     offlineDb.outboxMutations.where('status').equals('pending').count(),
@@ -293,9 +302,12 @@ export async function getLatestCachedRutina(alumnoId?: string): Promise<CachedRu
  * Privacidad > datos: preferimos perder una mutación local antes que exponerla
  * al siguiente usuario. Si existen, se registra un `console.warn` con el conteo
  * para que quede rastro al diagnosticar una pérdida de datos reportada.
+ *
+ * U4: la UI de logout consulta `contarMutacionesPendientes()` y exige confirmación
+ * explícita (o una sincronización previa) antes de llegar hasta aquí.
  */
 export async function clearOfflineData(): Promise<void> {
-  const sinSincronizar = await offlineDb.outboxMutations.where('status').notEqual('synced').count();
+  const sinSincronizar = await contarMutacionesPendientes();
   if (sinSincronizar > 0) {
     console.warn(
       `[offline-db] Se descartan ${sinSincronizar} mutación(es) sin sincronizar al cerrar ` +

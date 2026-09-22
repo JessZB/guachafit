@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../../context/auth-context';
-import { apiClient } from '../../lib/api-client';
+import { apiClient, resolverUrlApi } from '../../lib/api-client';
 import { pluralizar } from '../../lib/pluralizar';
 import { calcularTotalPaginas, rebanarPagina } from '../../lib/paginacion';
 import { Paginacion } from '../../components/common/Paginacion';
+import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import {
   Moneda,
   MetodoPago,
@@ -25,6 +26,7 @@ import {
 import { etiquetaEstadoCuota } from '../../lib/etiquetas-dominio';
 import { etiquetaMetodoPago } from '../../lib/conciliacion-filtros';
 import { formatFechaCalendario } from '../../lib/date-format';
+import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import {
   CreditCard,
   TrendingUp,
@@ -205,6 +207,13 @@ export function PagosPage() {
   // N2: visor de comprobante. `url` puede ser null (el server no generó presigned URL): en
   // sesión real se muestra un placeholder honesto; jamás una imagen stock como si fuera propia.
   const [modalComprobante, setModalComprobante] = useState<{ url: string | null } | null>(null);
+
+  // U3b: el visor de comprobante es un diálogo real (no solo un overlay): semántica completa,
+  // Escape, trampa de Tab y restore del foco a la fila que lo abrió.
+  const refModalComprobante = useDialogoAccesible({
+    abierto: modalComprobante !== null,
+    onCerrar: () => setModalComprobante(null),
+  });
   const [comprobanteImgError, setComprobanteImgError] = useState(false);
 
   const cargarDatos = async () => {
@@ -384,6 +393,16 @@ export function PagosPage() {
     [transaccionesHistorial, filtroEstadoHistorial]
   );
 
+  // U4: URL del GET que alimenta la pantalla (misma construcción que `apiClient`), para datar
+  // la copia que el Service Worker tenga en Cache Storage cuando no haya conexión.
+  const urlHistorialActual = useMemo(() => {
+    if (!user?.id) return null;
+    const offset = (Math.max(1, paginaHistorial) - 1) * Math.max(1, tamanoHistorial);
+    return resolverUrlApi(
+      `/finanzas/clientes/${user.id}/historial?txLimit=${tamanoHistorial}&txOffset=${offset}`
+    );
+  }, [user?.id, paginaHistorial, tamanoHistorial]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -518,7 +537,7 @@ export function PagosPage() {
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-secondary/70 border border-border/80 self-start sm:self-auto">
           <TrendingUp className="h-3.5 w-3.5 text-primary" />
           <div className="text-right">
-            <span className="text-[10px] text-muted-foreground font-semibold uppercase block">
+            <span className="text-[11px] text-muted-foreground font-semibold uppercase block">
               Tasa del Día
             </span>
             <span className="text-xs font-bold font-mono text-foreground">
@@ -555,6 +574,11 @@ export function PagosPage() {
         </div>
       )}
 
+      {/* U4: datos de cuenta servidos desde la caché del SW (sin conexión), con su antigüedad. */}
+      {!isDemoMode && !error && (cuota || transaccionesHistorial.length > 0) && (
+        <AvisoDatosOffline url={urlHistorialActual} />
+      )}
+
       {/* ========================================================================= */}
       {/* VISTA 1: HUB PRINCIPAL (Divulgación Progresiva - Nivel 1)                  */}
       {/* ========================================================================= */}
@@ -580,9 +604,9 @@ export function PagosPage() {
                 <span
                   className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${
                     cuota.estado === EstadoCuota.AL_DIA
-                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                      ? 'bg-success/15 text-success border border-success/20'
                       : cuota.estado === EstadoCuota.ABONADA_PARCIAL
-                      ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
+                      ? 'bg-warning/15 text-warning border border-warning/20'
                       : 'bg-destructive/15 text-destructive border border-destructive/20'
                   }`}
                 >
@@ -673,7 +697,7 @@ export function PagosPage() {
                         Ver recibos e historial
                       </h3>
                       {transaccionesTotal > 0 && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
                           {pluralizar(transaccionesTotal, 'pago', 'pagos')}
                         </span>
                       )}
@@ -724,7 +748,7 @@ export function PagosPage() {
 
             {formSuccess ? (
               <div className="p-8 text-center space-y-3">
-                <CheckCircle2 className="h-12 w-12 text-emerald-400 mx-auto" />
+                <CheckCircle2 className="h-12 w-12 text-success mx-auto" />
                 <p className="text-sm font-bold text-foreground">{formSuccess}</p>
                 <p className="text-xs text-muted-foreground">Redirigiendo a tu historial...</p>
               </div>
@@ -763,6 +787,7 @@ export function PagosPage() {
                     <label className="text-xs font-semibold text-muted-foreground">Monto Pagado</label>
                     <input
                       type="text"
+                      inputMode="decimal"
                       required
                       value={montoOriginal}
                       onChange={(e) => setMontoOriginal(e.target.value)}
@@ -775,7 +800,7 @@ export function PagosPage() {
                 <div
                   className={`p-3.5 rounded-2xl border flex items-center justify-between ${
                     pagoVesSinTasa
-                      ? 'bg-amber-500/10 border-amber-500/30'
+                      ? 'bg-warning/10 border-warning/30'
                       : 'bg-primary/10 border-primary/20'
                   }`}
                 >
@@ -819,7 +844,7 @@ export function PagosPage() {
                 <div className="space-y-2">
                   <label className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
                     <span>Captura del Comprobante Bancario</span>
-                    <span className="text-[10px] text-muted-foreground">Recomendado • Max 5MB</span>
+                    <span className="text-[11px] text-muted-foreground">Recomendado • Max 5MB</span>
                   </label>
                   <input
                     ref={fileInputRef}
@@ -840,7 +865,7 @@ export function PagosPage() {
                       <p className="text-xs font-bold text-foreground">
                         Toca para adjuntar foto o captura
                       </p>
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="text-[11px] text-muted-foreground">
                         Captura de Pago Móvil, Zelle o Transferencia (JPG, PNG, WebP)
                       </p>
                     </div>
@@ -862,7 +887,7 @@ export function PagosPage() {
                           <p className="text-xs font-bold text-foreground truncate">
                             {selectedFile.name}
                           </p>
-                          <p className="text-[10px] text-muted-foreground">
+                          <p className="text-[11px] text-muted-foreground">
                             {(selectedFile.size / 1024).toFixed(1)} KB • Listo para enviar
                           </p>
                         </div>
@@ -989,14 +1014,14 @@ export function PagosPage() {
                             {etiquetaMetodoPago(tx.metodoPago)}
                           </span>
                           <span
-                            className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase ${
+                            className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase ${
                               normalizarEstadoTransaccion(tx.estadoConciliacion) ===
                               EstadoConciliacion.APROBADO
-                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                                ? 'bg-success/15 text-success border border-success/20'
                                 : normalizarEstadoTransaccion(tx.estadoConciliacion) ===
                                   EstadoConciliacion.RECHAZADO
                                 ? 'bg-destructive/15 text-destructive border border-destructive/20'
-                                : 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
+                                : 'bg-warning/15 text-warning border border-warning/20'
                             }`}
                           >
                             {etiquetaEstadoTransaccion(tx.estadoConciliacion)}
@@ -1094,14 +1119,24 @@ export function PagosPage() {
       {/* Modal de Comprobante SigV4 */}
       {modalComprobante && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/85 backdrop-blur-md">
-          <div className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-lg space-y-4 max-h-[90vh] flex flex-col">
+          <div
+            ref={refModalComprobante}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pagos-comprobante-titulo"
+            tabIndex={-1}
+            className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-lg space-y-4 max-h-[90vh] flex flex-col"
+          >
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
               <div className="flex items-center gap-2">
                 <Receipt className="h-5 w-5 text-primary" />
-                <h3 className="font-bold text-base text-foreground">Comprobante de Pago</h3>
+                <h3 id="pagos-comprobante-titulo" className="font-bold text-base text-foreground">
+                  Comprobante de Pago
+                </h3>
               </div>
               <button
                 onClick={() => setModalComprobante(null)}
+                aria-label="Cerrar comprobante de pago"
                 className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
               >
                 <X className="h-4 w-4" />
@@ -1145,7 +1180,7 @@ export function PagosPage() {
               <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                 {modalComprobante.url ? (
                   <>
-                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                    <ShieldCheck className="h-3.5 w-3.5 text-success" />
                     Almacenamiento seguro en Cloudflare R2
                   </>
                 ) : (

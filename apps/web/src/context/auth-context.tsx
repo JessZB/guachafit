@@ -4,6 +4,7 @@ import { apiClient, setAuthToken, getAuthToken } from '../lib/api-client';
 import { queryClient } from '../lib/query-client';
 import { clearOfflineData } from '../lib/offline-db';
 import { limpiarCachesRuntime } from '../lib/cache-runtime';
+import { solicitarPersistenciaDeAlmacenamiento } from '../lib/pwa-instalacion';
 
 interface AuthContextType {
   user: AuthUserDTO | null;
@@ -50,6 +51,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
     } else {
       localStorage.removeItem(USER_STORAGE_KEY);
+    }
+  }, [user]);
+
+  // U1 (Ola 4): pide almacenamiento persistente al haber sesión (login nuevo o
+  // restaurada) para que el SO no desaloje la cola offline ni la caché del Service
+  // Worker. Best-effort: un rechazo no afecta la sesión ni la UI.
+  useEffect(() => {
+    if (user) {
+      void solicitarPersistenciaDeAlmacenamiento();
     }
   }, [user]);
 

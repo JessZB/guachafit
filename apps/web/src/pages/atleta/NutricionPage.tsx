@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/auth-context';
-import { apiClient } from '../../lib/api-client';
+import { apiClient, resolverUrlApi } from '../../lib/api-client';
 import { resolverBloqueoAlumno, type BloqueoAlumno } from '../../lib/acceso-alumno';
 import { queueOfflineMutation, offlineDb } from '../../lib/offline-db';
 import { BloqueoAlumnoPanel } from '../../components/common/BloqueoAlumnoPanel';
+import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import {
   decidirAccionErrorCheckinNutricional,
 } from '../../lib/nutricion-checkin';
@@ -27,6 +28,9 @@ import {
  * - `error`: rechazo de negocio (4xx distinto de 409); sin éxito ni encolado.
  */
 type EstadoReporteNutricional = 'idle' | 'saved' | 'queued' | 'error';
+
+/** U4: URL del GET de hoy en Cache Storage (misma que usa `apiClient`). */
+const URL_CHECKIN_HOY = resolverUrlApi('/nutricion/checkin/hoy');
 
 export function NutricionPage() {
   const { user, isDemoMode } = useAuth();
@@ -56,7 +60,8 @@ export function NutricionPage() {
 
   const cargarReporteHoy = useCallback(async () => {
     try {
-      if (!navigator.onLine) return;
+      // U4: sin conexión no se corta la carga — el SW (NetworkFirst `api-cache`) puede servir
+      // el último check-in guardado; el chip de frescura dirá de cuándo es.
       const data = await apiClient<CheckinNutricionalDetalleDTO | null>('/nutricion/checkin/hoy');
       if (data) {
         setExistingCheckin(data);
@@ -192,6 +197,13 @@ export function NutricionPage() {
         </p>
       </div>
 
+      {/* U4: estado honesto sin conexión. Con copia cacheada del check-in de hoy se avisa que
+          es un dato guardado; sin ella, se declara el vacío en vez de simular normalidad. */}
+      {!isDemoMode && existingCheckin && <AvisoDatosOffline url={URL_CHECKIN_HOY} />}
+      {!isDemoMode && !existingCheckin && !reporteEncolado && (
+        <AvisoDatosOffline url={URL_CHECKIN_HOY} variante="sin-datos" />
+      )}
+
       {/* 1-Tap Traffic Light Buttons */}
       <div className="space-y-3">
         <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">
@@ -210,13 +222,13 @@ export function NutricionPage() {
             onClick={() => setSemaforo(SemaforoNutricional.CUMPLIDO)}
             className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${
               semaforo === SemaforoNutricional.CUMPLIDO
-                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-lg shadow-emerald-500/20 scale-102'
-                : 'bg-card border-border hover:border-emerald-500/40 text-muted-foreground'
+                ? 'bg-success/20 border-success text-success shadow-lg shadow-success/20 scale-102'
+                : 'bg-card border-border hover:border-success/40 text-muted-foreground'
             }`}
           >
-            <CheckCircle2 className="h-8 w-8 mb-1 text-emerald-500" />
+            <CheckCircle2 className="h-8 w-8 mb-1 text-success" />
             <span className="font-extrabold text-sm text-foreground">Cumplido</span>
-            <span className="text-[10px] text-muted-foreground mt-0.5">100% en macros</span>
+            <span className="text-[11px] text-muted-foreground mt-0.5">100% en macros</span>
           </button>
 
           {/* Parcial */}
@@ -226,13 +238,13 @@ export function NutricionPage() {
             onClick={() => setSemaforo(SemaforoNutricional.PARCIAL)}
             className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${
               semaforo === SemaforoNutricional.PARCIAL
-                ? 'bg-amber-500/20 border-amber-500 text-amber-400 shadow-lg shadow-amber-500/20 scale-102'
-                : 'bg-card border-border hover:border-amber-500/40 text-muted-foreground'
+                ? 'bg-warning/20 border-warning text-warning shadow-lg shadow-warning/20 scale-102'
+                : 'bg-card border-border hover:border-warning/40 text-muted-foreground'
             }`}
           >
-            <AlertCircle className="h-8 w-8 mb-1 text-amber-500" />
+            <AlertCircle className="h-8 w-8 mb-1 text-warning" />
             <span className="font-extrabold text-sm text-foreground">Parcial</span>
-            <span className="text-[10px] text-muted-foreground mt-0.5">Desvío menor</span>
+            <span className="text-[11px] text-muted-foreground mt-0.5">Desvío menor</span>
           </button>
 
           {/* No Cumplido */}
@@ -248,7 +260,7 @@ export function NutricionPage() {
           >
             <XCircle className="h-8 w-8 mb-1 text-destructive" />
             <span className="font-extrabold text-sm text-foreground">No Cumplido</span>
-            <span className="text-[10px] text-muted-foreground mt-0.5">Fuera de plan</span>
+            <span className="text-[11px] text-muted-foreground mt-0.5">Fuera de plan</span>
           </button>
         </div>
       </div>
@@ -301,7 +313,7 @@ export function NutricionPage() {
         <div className="space-y-1">
           <div className="flex justify-between items-center">
             <label className="text-xs font-semibold text-muted-foreground">Notas breves</label>
-            <span className="text-[10px] text-muted-foreground">{notas.length}/280</span>
+            <span className="text-[11px] text-muted-foreground">{notas.length}/280</span>
           </div>
           <textarea
             rows={2}
@@ -335,13 +347,13 @@ export function NutricionPage() {
         </button>
 
         {reporteRegistradoHoy && (
-          <p className="text-center text-xs text-emerald-400 font-semibold">
+          <p className="text-center text-xs text-success font-semibold">
             ✓ Reporte registrado para hoy ({formatFechaCalendario(todayDate) ?? todayDate}).
           </p>
         )}
 
         {reporteEncolado && (
-          <p className="text-center text-xs text-amber-400 font-semibold">
+          <p className="text-center text-xs text-warning font-semibold">
             ⏳ Guardado en tu dispositivo. Se enviará automáticamente al recuperar la conexión.
           </p>
         )}
@@ -350,7 +362,7 @@ export function NutricionPage() {
           <p
             role={avisoReporte.tono === 'error' ? 'alert' : undefined}
             className={`text-center text-xs font-semibold ${
-              avisoReporte.tono === 'error' ? 'text-destructive' : 'text-amber-400'
+              avisoReporte.tono === 'error' ? 'text-destructive' : 'text-warning'
             }`}
           >
             {avisoReporte.texto}

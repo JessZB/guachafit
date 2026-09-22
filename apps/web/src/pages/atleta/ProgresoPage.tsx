@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/auth-context';
-import { apiClient } from '../../lib/api-client';
+import { apiClient, resolverUrlApi } from '../../lib/api-client';
 import { resolverBloqueoAlumno, type BloqueoAlumno } from '../../lib/acceso-alumno';
 import { BloqueoAlumnoPanel } from '../../components/common/BloqueoAlumnoPanel';
+import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import { construirPayloadCheckinAntropometrico, obtenerUltimaMedicionReal } from '../../lib/antropometria-checkin';
 import { formatFechaCalendario } from '../../lib/date-format';
 import {
@@ -34,10 +35,10 @@ import {
 
 /** Clases del badge de estado del control antropométrico por tono semántico (DESIGN.md). */
 const CLASES_BADGE_ESTADO_MEDICION: Record<TonoSemaforo, string> = {
-  success: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
-  warning: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
+  success: 'bg-success/15 text-success border-success/20',
+  warning: 'bg-warning/15 text-warning border-warning/20',
   danger: 'bg-destructive/15 text-destructive border-destructive/20',
-  info: 'bg-sky-500/15 text-sky-400 border-sky-500/20',
+  info: 'bg-info/15 text-info border-info/20',
   neutral: 'bg-secondary text-muted-foreground border-border',
 };
 
@@ -51,6 +52,9 @@ export function ProgresoPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   // RF-012: alumno pausado no puede enviar el check-in remoto; el panel informativo lo declara.
   const [bloqueo, setBloqueo] = useState<BloqueoAlumno | null>(null);
+
+  // U4: URL del GET de evolución, para datar la copia cacheada cuando no hay conexión.
+  const urlEvolucion = user?.id ? resolverUrlApi(`/antropometria/evolucion/${user.id}`) : null;
 
   // Progressive Disclosure: 'hub' (selector) | 'nuevo' | 'evolucion'
   const [vistaActiva, setVistaActiva] = useState<'hub' | 'nuevo' | 'evolucion'>('hub');
@@ -270,6 +274,9 @@ export function ProgresoPage() {
         </div>
       </div>
 
+      {/* U4: evolución servida desde la caché del SW (sin conexión), con su antigüedad. */}
+      {!isDemoMode && evolucion && <AvisoDatosOffline url={urlEvolucion} />}
+
       {/* D2: error de carga honesto con reintento (sin evolución demo fuera del modo demo) */}
       {error && (
         <div className="p-5 rounded-3xl bg-card border border-destructive/30 text-center space-y-3">
@@ -308,23 +315,23 @@ export function ProgresoPage() {
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-1">
                 <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border">
-                  <span className="text-[10px] font-semibold uppercase text-muted-foreground">
+                  <span className="text-[11px] font-semibold uppercase text-muted-foreground">
                     Cambio de Peso
                   </span>
-                  <p className="text-xl font-black font-mono text-emerald-400 mt-0.5">
+                  <p className="text-xl font-black font-mono text-success mt-0.5">
                     {evolucion.cambioNetoPesoKg} kg
                   </p>
                 </div>
                 <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border">
-                  <span className="text-[10px] font-semibold uppercase text-muted-foreground">
+                  <span className="text-[11px] font-semibold uppercase text-muted-foreground">
                     Grasa Corporal
                   </span>
-                  <p className="text-xl font-black font-mono text-emerald-400 mt-0.5">
+                  <p className="text-xl font-black font-mono text-success mt-0.5">
                     {evolucion.cambioNetoGrasaPorcentaje}%
                   </p>
                 </div>
                 <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border col-span-2 sm:col-span-1">
-                  <span className="text-[10px] font-semibold uppercase text-muted-foreground">
+                  <span className="text-[11px] font-semibold uppercase text-muted-foreground">
                     Evaluaciones
                   </span>
                   <p className="text-xl font-black font-mono text-foreground mt-0.5">
@@ -347,24 +354,24 @@ export function ProgresoPage() {
               role="button"
               tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && abrirFormularioCheckin()}
-              className="group p-5 rounded-3xl bg-gradient-to-br from-card to-cyan-500/10 border-2 border-cyan-500/30 hover:border-cyan-500/70 transition-all duration-200 cursor-pointer shadow-md hover:shadow-cyan-500/5 active:scale-[0.99]"
+              className="group p-5 rounded-3xl bg-gradient-to-br from-card to-info/10 border-2 border-info/30 hover:border-info/70 transition-all duration-200 cursor-pointer shadow-md hover:shadow-info/5 active:scale-[0.99]"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="p-3.5 rounded-2xl bg-cyan-500 text-cyan-950 shadow-md shadow-cyan-500/20">
+                  <div className="p-3.5 rounded-2xl bg-info text-info-foreground shadow-md shadow-info/20">
                     <Camera className="h-6 w-6" />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-foreground group-hover:text-cyan-400 transition-colors flex items-center gap-1.5">
+                    <h3 className="text-base font-bold text-foreground group-hover:text-info transition-colors flex items-center gap-1.5">
                       Actualizar mis medidas y fotos
-                      <ArrowUpRight className="h-4 w-4 text-cyan-400 opacity-80" />
+                      <ArrowUpRight className="h-4 w-4 text-info opacity-80" />
                     </h3>
                     <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">
                       Registra tu peso actual, perímetros de cintura o brazo y envía tu check-in al coach.
                     </p>
                   </div>
                 </div>
-                <div className="p-2 rounded-xl bg-secondary/80 text-foreground group-hover:text-cyan-400 group-hover:bg-cyan-500/15 transition-colors">
+                <div className="p-2 rounded-xl bg-secondary/80 text-foreground group-hover:text-info group-hover:bg-info/15 transition-colors">
                   <ChevronRight className="h-5 w-5 group-hover:translate-x-0.5 transition-transform" />
                 </div>
               </div>
@@ -427,7 +434,7 @@ export function ProgresoPage() {
 
             {submitSuccess ? (
               <div className="p-8 text-center space-y-3">
-                <CheckCircle2 className="h-12 w-12 text-emerald-400 mx-auto" />
+                <CheckCircle2 className="h-12 w-12 text-success mx-auto" />
                 <h4 className="font-bold text-base text-foreground">¡Mediciones Guardadas!</h4>
                 <p className="text-xs text-muted-foreground">
                   Tus datos fueron enviados a tu entrenador para auditoría y validación.
@@ -560,7 +567,7 @@ export function ProgresoPage() {
                           {formatFechaCalendario(item.fechaEvaluacion) ?? item.fechaEvaluacion}
                         </span>
                         <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase ${CLASES_BADGE_ESTADO_MEDICION[estadoMedicion.tono]}`}
+                          className={`text-[11px] font-bold px-2 py-0.5 rounded-full border uppercase ${CLASES_BADGE_ESTADO_MEDICION[estadoMedicion.tono]}`}
                         >
                           {estadoMedicion.texto}
                         </span>
@@ -572,7 +579,7 @@ export function ProgresoPage() {
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       <div className="p-2.5 rounded-xl bg-secondary/30">
-                        <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                        <span className="text-[11px] text-muted-foreground uppercase font-semibold">
                           Peso
                         </span>
                         <p className="font-mono font-bold text-sm text-foreground">
@@ -580,7 +587,7 @@ export function ProgresoPage() {
                         </p>
                       </div>
                       <div className="p-2.5 rounded-xl bg-secondary/30">
-                        <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                        <span className="text-[11px] text-muted-foreground uppercase font-semibold">
                           % Grasa
                         </span>
                         <p className="font-mono font-bold text-sm text-foreground">
@@ -588,7 +595,7 @@ export function ProgresoPage() {
                         </p>
                       </div>
                       <div className="p-2.5 rounded-xl bg-secondary/30">
-                        <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                        <span className="text-[11px] text-muted-foreground uppercase font-semibold">
                           Cintura
                         </span>
                         <p className="font-mono font-bold text-sm text-foreground">
@@ -596,7 +603,7 @@ export function ProgresoPage() {
                         </p>
                       </div>
                       <div className="p-2.5 rounded-xl bg-secondary/30">
-                        <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                        <span className="text-[11px] text-muted-foreground uppercase font-semibold">
                           Brazo
                         </span>
                         <p className="font-mono font-bold text-sm text-foreground">

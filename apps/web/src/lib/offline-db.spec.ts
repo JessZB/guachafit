@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EjercicioCatalogoDetalleDTO } from '@guachafit/shared';
 import {
   clearOfflineData,
+  contarMutacionesPendientes,
   discardMutation,
   getDueMutations,
   getFailedMutations,
@@ -153,6 +154,29 @@ describe('offline-db: cola outbox durable', () => {
     expect(recovered).toBe(1);
     expect((await offlineDb.outboxMutations.get(id))?.status).toBe('pending');
     expect(await getDueMutations()).toHaveLength(1);
+  });
+
+  it('contarMutacionesPendientes cuenta todo lo no sincronizado (pendiente, en vuelo, fallida y rechazada)', async () => {
+    expect(await contarMutacionesPendientes()).toBe(0);
+
+    await queueOfflineMutation('/a', 'POST', {}, 'M1');
+    const enVuelo = await queueOfflineMutation('/b', 'POST', {}, 'M2');
+    await markMutationSyncing(enVuelo);
+    const fallida = await queueOfflineMutation('/c', 'POST', {}, 'M3');
+    await markMutationFailed(fallida, '5xx', Date.now() + 1_000);
+    const rechazada = await queueOfflineMutation('/d', 'POST', {}, 'M4');
+    await markMutationRejected(rechazada, '400');
+    const lista = await queueOfflineMutation('/e', 'POST', {}, 'M5');
+    await markMutationSynced(lista);
+
+    // Las 4 no confirmadas se perderían al cerrar sesión; la sincronizada no cuenta.
+    expect(await contarMutacionesPendientes()).toBe(4);
+
+    await markMutationSynced(enVuelo);
+    expect(await contarMutacionesPendientes()).toBe(3);
+
+    await discardMutation(rechazada);
+    expect(await contarMutacionesPendientes()).toBe(2);
   });
 });
 

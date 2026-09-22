@@ -34,7 +34,7 @@ export function BottomNav() {
   const links = isSuperadmin ? adminLinks : isCoach ? coachLinks : athleteLinks;
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-lg border-t border-border/80 px-4 py-2 safe-area-pb">
+    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-lg border-t border-border/80 px-4 pt-2 safe-area-pb">
       <div className="flex items-center justify-around max-w-md mx-auto">
         {links.map(({ to, label, icon: Icon, isCenter }) => (
           <NavLink

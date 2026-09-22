@@ -32,6 +32,16 @@ export function generateIdempotencyKey(): string {
   return 'idem_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
 }
 
+/**
+ * U4: URL absoluta que `fetch` usa para un endpoint (misma construcción que `apiClientBase`).
+ * La UI de frescura la necesita para consultar en Cache Storage la copia guardada por el SW.
+ */
+export function resolverUrlApi(endpoint: string): string {
+  return endpoint.startsWith('http')
+    ? endpoint
+    : `${API_BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+}
+
 export interface RequestOptions extends RequestInit {
   idempotent?: boolean;
   idempotencyKey?: string;
@@ -70,9 +80,7 @@ async function apiClientBase<T>(endpoint: string, options: RequestOptions = {}):
     requestHeaders['X-Idempotency-Key'] = idempotencyKey || generateIdempotencyKey();
   }
 
-  const url = endpoint.startsWith('http')
-    ? endpoint
-    : `${API_BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  const url = resolverUrlApi(endpoint);
 
   const response = await fetch(url, {
     ...rest,

@@ -171,6 +171,9 @@ importers:
       tailwind-merge:
         specifier: ^2.5.4
         version: 2.6.1
+      workbox-window:
+        specifier: ^7.4.1
+        version: 7.4.1
       zod:
         specifier: ^3.23.8
         version: 3.25.76
