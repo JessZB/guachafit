@@ -2,9 +2,9 @@
 id: RF-004
 modulo: Antropometria
 prioridad: media
-estado: parcial
+estado: implementado
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-20
+fecha_verificacion: 2026-09-22
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0
@@ -73,7 +73,31 @@ Then el sistema debe presentar ambas imágenes alineadas lado a lado o con slide
 
 ## 7. Estado real de implementación
 
-- API de evolución y comparador implementada a nivel de backend.
-- UI real inexistente: no hay gráficos de tendencia ni comparador fotográfico en modo real.
-- El alumno nunca ve sus fotografías de progreso desde la app.
-- Sin implementar los flujos de RN-01 (gráficos multieje con filtros) y RN-02 (comparador slider/lado a lado) en interfaz.
+**Implementado y verificado en UI real (2026-09-22)** — commit `feat(web): graficos de evolucion y comparador fotografico real`. Suites en verde: **516 (web)** y **622 (API)**, con BDD de este RF.
+
+### RN-01 — Gráficos multieje con filtros
+
+- Componente SVG propio (sin dependencias nuevas) sobre la serie real de controles **aprobados**.
+- 8 métricas: peso, % grasa, cintura, brazo, pecho, muslo, cadera y cuello; hasta **3 activas** y **2 unidades** por gráfico (doble eje Y con la unidad rotulada en cada eje).
+- Filtros **1M / 3M / 6M / 1A / Todo**; tooltip del punto activo; deltas del rango por métrica activa (Escenario 1: cambio neto en kg y en puntos de grasa; con una sola medición muestra "sin delta", nunca un valor inventado).
+- Accesible: `role="img"` con resumen textual, tabla alternativa "Ver datos en tabla" y controles operables por teclado.
+- Alumno en `/app/progreso`; el mismo gráfico vive en el tab **Antropometría** de la ficha del coach.
+
+### RN-02 — Comparador fotográfico A/B
+
+- Coach en `/coach/antropometria` (pestaña Comparador): selector de alumno y de **dos controles** (A/B mutuamente excluyentes); las opciones muestran fecha y peso de cada toma (Escenario 2).
+- Perspectivas habilitadas solo si la foto existe en **ambas** fechas; la faltante queda deshabilitada con "Foto no disponible para esta fecha" (caso borde §6). Si ninguna perspectiva coincide, el panel lo declara y sugiere otras tomas.
+- Vistas **lado a lado** y **superposición** con slider (clic, arrastre y flechas del teclado); resumen de diferencias **B − A** de peso y grasa.
+- Endpoint real: `GET /antropometria/comparador/:alumnoId?controlIdA&controlIdB&angulo`; en modo demo la comparativa se arma con el fixture local.
+
+### RN-03 — Privacidad y experiencia del alumno
+
+- Galería de fotos propias por control en `/app/progreso`, con visor accesible (Escape cierra y devuelve el foco; trampa de Tab).
+- URLs presignadas de 15 minutos del endpoint real; si el enlace vence, la UI lo declara ("El enlace temporal venció") con botón **Reintentar** en vez de dejar una imagen rota.
+- Demo conservado estrictamente tras `isDemoMode` (fixture ampliado a 6 tomas).
+
+### Notas honestas (límites conocidos y deliberados)
+
+1. El filtrado de rango es **client-side** sobre la serie completa; el parámetro `?periodo=` del backend existe pero queda sin usar a propósito (el gráfico y los deltas usan la copia local filtrada).
+2. `fotoDisponible` no forma parte del tipo compartido (`packages/shared`); el cliente lo normaliza al construir la comparativa.
+3. El fixture demo se amplió a 6 tomas relativas a "ahora" para que todos los rangos tengan datos; solo se consume con `isDemoMode`.

@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** con pruebas automáticas en verde (465 de la web + 621 del API). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (516 de la web + 622 del API). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -118,17 +118,27 @@ tags:
 - [ ] **Resumen semanal del coach:** llega a la **campana in-app** (el digest se genera lunes 08:00 UTC; en modo demo se ve un ejemplo sin esperar). Opcional: si configuraste `BULL_BOARD_USER`/`BULL_BOARD_PASS`, entra a `http://localhost:4000/admin/queues` y busca la cola **`notificaciones-resumen-semanal`** (job repetible `notificaciones:resumen-semanal`) y su DLQ.
 - [ ] **Modo demo:** con "Modo Coach"/"Modo Alumno" la campana y las preferencias usan datos de ejemplo; al guardar preferencias dice "Preferencias guardadas en esta sesión de demostración" (no finge persistencia).
 
-## 11. ⛔ Lo que AÚN NO existe (no lo reportes como error)
+## 11. Evolución y fotos (RF-004)
+
+- [ ] **Alumno — gráfico (`/app/progreso` → "Ver mi antes y después"):** el panel "Evolución corporal" dibuja tus mediciones aprobadas. Cambia las métricas en los chips (hasta 3 a la vez; si intentas una cuarta o cruzar una tercera unidad, aparece el motivo) y cambia el rango **1M / 3M / 6M / 1A / Todo**: la curva, los deltas y la tabla se recalculan.
+- [ ] **Tooltip y estados honestos:** pásale el cursor o toca el gráfico y verás la fecha con el valor de cada serie activa; con menos de dos mediciones en el rango, el panel explica por qué no puede graficar (no inventa una línea) y "Ver datos en tabla" muestra la misma serie en tabla.
+- [ ] **Galería de fotos propias (alumno):** tus miniaturas por control se abren en un visor a pantalla completa; **Escape** lo cierra y devuelve el foco. Si el enlace temporal (15 min) venció, aparece "El enlace temporal venció" con **Reintentar**; al recargar la sección se piden enlaces nuevos.
+- [ ] **Coach — comparador (`/coach/antropometria` → pestaña "Comparador"):** elige alumno y **dos tomas (A y B)**; las perspectivas solo se habilitan si la foto existe en ambas fechas — la que falte queda deshabilitada con "Foto no disponible para esta fecha".
+- [ ] **Comparación real:** alterna **Lado a lado** y **Superposición**; en superposición arrastra el slider (también responde a clic y a las flechas del teclado) y verás el reparto "X% A / Y% B"; abajo, "Diferencias (B − A)" de peso y grasa (— si falta el dato, nunca un cero disfrazado). El panel recuerda que las fotos se sirven con enlaces firmados de 15 min.
+- [ ] **Ficha del alumno:** en el tab **Antropometría** de la ficha del coach aparece el mismo gráfico, sobre la serie completa del alumno.
+- [ ] **Modo demo:** con "Modo Coach"/"Modo Alumno" el gráfico y el comparador usan el fixture de 6 tomas; en sesión real salen de la API (solo controles aprobados).
+
+## 12. ⛔ Lo que AÚN NO existe (no lo reportes como error)
 
 - **Notificaciones**: proveedores reales de push/email (la entrega sigue **simulada por log**), cliente push del navegador (WebPush sin UI), recordatorio de check-in 06:00 por huso horario y alerta externa de colas/DLQ (Sentry/Datadog). La campana, las preferencias y el resumen semanal **ya existen** (sección 10).
 - **Nutrición**: metas del coach y diario fotográfico de platos pendientes; la tolerancia automática depende de esas metas.
-- **Antropometría**: ventana horaria del check-in y periodicidad pendientes; los gráficos/comparador visuales aún no tienen UI real (solo demo).
+- **Antropometría**: ventana horaria del check-in y periodicidad pendientes (los gráficos y el comparador fotográfico ya tienen UI real — sección 11).
 - **Admin**: deshabilitar entrenadores, licencias y correo automático pendientes.
 - **Listas**: los filtros de Conciliación/Evaluaciones/Pagos filtran solo la página visible (la UI lo dice); Plantillas no está paginada.
 - **Seguridad**: RLS activo solo en `rutinas`/`plantillas` (etapas 2-4 pendientes); push del navegador no implementado.
 - **Extras**: iconos provisionales (mancuerna generada) — si hay logo oficial, se reemplazan; instalación real en dispositivo físico pendiente de tu prueba.
 
-## 12. Cómo reportar un hallazgo
+## 13. Cómo reportar un hallazgo
 
 Copia esta plantilla en `00_Inbox/` (o al final de este documento):
 
