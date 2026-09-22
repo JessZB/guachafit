@@ -1335,8 +1335,13 @@ export class FinanzasService {
     }
 
     const resultado = await this.db.transaction(async (tx) => {
-      // Bloqueo Pesimista (SELECT ... FOR UPDATE) con RLS Tenant
-      await tx.execute(sql`SET LOCAL app.current_entrenador_id = ${entrenadorId}`);
+      // Bloqueo Pesimista (SELECT ... FOR UPDATE) con RLS Tenant.
+      // set_config(..., true) es la forma VÁLIDA de aplicar un SET LOCAL parametrizado:
+      // `SET LOCAL x = $1` no es sintaxis admitida por PostgreSQL (error 42601). Mismo patrón
+      // que withTenant() en packages/database (WU7).
+      await tx.execute(
+        sql`SELECT set_config('app.current_entrenador_id', ${entrenadorId}, true)`
+      );
       await tx.execute(sql`SELECT id FROM cuotas_membresia WHERE id = ${cuotaId} FOR UPDATE`);
 
       const [cuotaLock] = await tx
@@ -1498,8 +1503,10 @@ export class FinanzasService {
     }
 
     const resultado = await this.db.transaction(async (tx) => {
-      // 1. Contexto RLS
-      await tx.execute(sql`SET LOCAL app.current_entrenador_id = ${entrenadorId}`);
+      // 1. Contexto RLS (set_config parametrizado = SET LOCAL válido; ver withTenant()).
+      await tx.execute(
+        sql`SELECT set_config('app.current_entrenador_id', ${entrenadorId}, true)`
+      );
 
       // 2. Bloqueo Pesimista en la Transacción
       await tx.execute(sql`SELECT id FROM transacciones_pago WHERE id = ${transaccionId} FOR UPDATE`);
