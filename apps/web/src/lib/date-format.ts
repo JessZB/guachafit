@@ -109,3 +109,37 @@ export function obtenerTimezoneDispositivo(): string {
   }
 }
 
+/**
+ * Fecha de calendario LOCAL (no UTC) en formato YYYY-MM-DD para un instante dado.
+ *
+ * RN-05/RF-002: `toISOString()` desplaza el día en zonas como America/Caracas (UTC-4) durante
+ * la tarde/noche; el día local es el que rige la ventana horaria del check-in y su `fecha`.
+ */
+export function fechaCalendarioLocal(ahora: Date = new Date()): string {
+  const anio = ahora.getFullYear();
+  const mes = String(ahora.getMonth() + 1).padStart(2, '0');
+  const dia = String(ahora.getDate()).padStart(2, '0');
+  return `${anio}-${mes}-${dia}`;
+}
+
+/** Suma (o resta) días a una fecha YYYY-MM-DD con aritmética UTC, sin TZ del dispositivo. */
+export function sumarDiasCalendario(fechaYyyyMmDd: string, dias: number): string {
+  const [y, m, d] = fechaYyyyMmDd.split('-').map(Number);
+  const fecha = new Date(Date.UTC(y, m - 1, d));
+  fecha.setUTCDate(fecha.getUTCDate() + dias);
+  return fecha.toISOString().split('T')[0];
+}
+
+/**
+ * Fechas YYYY-MM-DD de los últimos `dias` días de calendario hasta `hasta` (inclusive),
+ * en orden descendente: [hasta, hasta-1, …]. `dias <= 0` o una fecha malformada devuelven [].
+ */
+export function ultimosDiasCalendario(hasta: string, dias: number): string[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(hasta) || !Number.isInteger(dias) || dias <= 0) return [];
+  const fechas: string[] = [];
+  for (let i = 0; i < dias; i++) {
+    fechas.push(sumarDiasCalendario(hasta, -i));
+  }
+  return fechas;
+}
+

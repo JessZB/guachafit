@@ -18,6 +18,7 @@ import {
   type EvolucionCorporalDTO,
 } from '@guachafit/shared';
 import { normalizarEntradaDecimal } from './weight-unit';
+import { fechaCalendarioLocal } from './date-format';
 
 /** Medidas tal como las escribe el usuario en los formularios (texto libre). */
 export interface MedidasCheckinAntropometrico {
@@ -35,12 +36,12 @@ export interface MedidasCheckinAntropometrico {
 /**
  * Fecha de calendario LOCAL (no UTC) en formato YYYY-MM-DD. Usar `toISOString()` desplazaría
  * el día en zonas como America/Caracas (UTC-4) durante la tarde/noche.
+ *
+ * `fechaCalendarioLocal` (date-format) es la única implementación; este alias conserva el
+ * nombre histórico que ya consumen los formularios de antropometría (RF-003).
  */
 export function fechaLocalHoy(ahora: Date = new Date()): string {
-  const anio = ahora.getFullYear();
-  const mes = String(ahora.getMonth() + 1).padStart(2, '0');
-  const dia = String(ahora.getDate()).padStart(2, '0');
-  return `${anio}-${mes}-${dia}`;
+  return fechaCalendarioLocal(ahora);
 }
 
 function textoOpcional(valor?: string): string | undefined {

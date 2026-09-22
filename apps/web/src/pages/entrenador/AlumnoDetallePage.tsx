@@ -55,6 +55,7 @@ import {
 import { CampoPesoPrescrito } from '../../components/entrenador/CampoPesoPrescrito';
 import { SelectorPlantillaAsignacion } from '../../components/entrenador/SelectorPlantillaAsignacion';
 import { DetalleSesionEntrenamiento } from '../../components/entrenador/DetalleSesionEntrenamiento';
+import { PanelNutricionAlumno } from '../../components/entrenador/PanelNutricionAlumno';
 import { Paginacion } from '../../components/common/Paginacion';
 import { GraficoEvolucion } from '../../components/common/GraficoEvolucion';
 import { crearEvolucionDemo } from '../../lib/demo-evolucion';
@@ -119,6 +120,7 @@ import {
   FolderPlus,
   History,
   ClipboardList,
+  Utensils,
 } from 'lucide-react';
 
 /** WU16: el tab activo vive en la URL (`?tab=…`); el tipo válido lo define el parser compartido. */
@@ -1973,6 +1975,19 @@ export function AlumnoDetallePage() {
         >
           <Dumbbell className="h-4 w-4" />
           <span>Entrenamiento & Rutinas</span>
+        </button>
+
+        <button
+          type="button"
+          {...tabsFicha.propsTab('nutricion')}
+          className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap focus-visible:outline-2 focus-visible:outline-primary ${
+            activeTab === 'nutricion'
+              ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
+              : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <Utensils className="h-4 w-4" />
+          <span>Nutrición & Check-ins</span>
         </button>
       </div>
 
@@ -4001,6 +4016,23 @@ export function AlumnoDetallePage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* TAB 5: NUTRICIÓN & CHECK-INS (RF-002: metas, calendario y diario)      */}
+      {/* ===================================================================== */}
+      {activeTab === 'nutricion' && alumno && (
+        <div
+          {...tabsFicha.propsPanel('nutricion')}
+          className="animate-in fade-in-50 duration-200 slide-in-from-bottom-1"
+        >
+          {/* El endpoint de check-ins usa `usuarios.id` (alumno.usuarioId), no el id del perfil. */}
+          <PanelNutricionAlumno
+            alumnoUsuarioId={alumno.usuarioId}
+            alumnoNombre={`${alumno.nombres} ${alumno.apellidos}`.trim()}
+            isDemoMode={isDemoMode}
+          />
         </div>
       )}
 

@@ -1,5 +1,5 @@
 /**
- * RF-004 RN-03: visor accesible de una foto de progreso.
+ * RF-004 RN-03 / RF-002 RN-03: visor accesible de una foto privada (progreso corporal o plato).
  *
  * Reutiliza el patrón de diálogo del repo (`useDialogoAccesible`: Escape, trampa de Tab y
  * restauración del foco). Solo consume la URL presignada del DTO; si el enlace temporal venció,
@@ -7,24 +7,47 @@
  */
 import React, { useState } from 'react';
 import { Camera, ImageOff, RefreshCw, ShieldCheck, X } from 'lucide-react';
-import type { FotoAntropometriaDetalleDTO } from '@guachafit/shared';
+import type { FotoAntropometriaDetalleDTO, FotoComidaDetalleDTO } from '@guachafit/shared';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import { formatFechaLargaCalendario } from '../../lib/date-format';
 import { etiquetaAngulo } from '../../lib/comparador-fotos';
+import { etiquetaTipoComida } from '../../lib/nutricion-metas';
+
+/** Cualquiera de las fotos privadas de la bóveda que el visor sabe mostrar. */
+export type FotoVisor = FotoAntropometriaDetalleDTO | FotoComidaDetalleDTO;
 
 export interface VisorFotoProps {
-  foto: FotoAntropometriaDetalleDTO;
-  /** Fecha calendario `YYYY-MM-DD` del control al que pertenece la foto. */
+  foto: FotoVisor;
+  /** Fecha calendario `YYYY-MM-DD` de la toma. */
   fecha: string;
   onCerrar: () => void;
+  /** Etiqueta de la toma; por defecto el ángulo (progreso) o la comida (plato). */
+  etiqueta?: string;
 }
 
-export function VisorFoto({ foto, fecha, onCerrar }: VisorFotoProps) {
+function esFotoCorporal(foto: FotoVisor): foto is FotoAntropometriaDetalleDTO {
+  return 'angulo' in foto;
+}
+
+/** URL firmada de la foto, según el contrato de cada origen. */
+function urlDeFoto(foto: FotoVisor): string | null {
+  return esFotoCorporal(foto) ? foto.presignedGetUrl ?? null : foto.fotoUrl ?? null;
+}
+
+function etiquetaDeFoto(foto: FotoVisor, etiqueta?: string): string {
+  if (etiqueta) return etiqueta;
+  return esFotoCorporal(foto) ? etiquetaAngulo(foto.angulo) : etiquetaTipoComida(foto.tipoComida);
+}
+
+export function VisorFoto({ foto, fecha, onCerrar, etiqueta }: VisorFotoProps) {
   const refDialogo = useDialogoAccesible({ onCerrar });
   const [fallo, setFallo] = useState(false);
   const [intento, setIntento] = useState(0);
-  const url = foto.presignedGetUrl ?? null;
+  const url = urlDeFoto(foto);
   const fechaLarga = formatFechaLargaCalendario(fecha) ?? fecha;
+  const corporal = esFotoCorporal(foto);
+  const descripcion = corporal ? 'Foto de progreso' : 'Foto del plato';
+  const tituloToma = etiquetaDeFoto(foto, etiqueta);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/85 backdrop-blur-sm animate-in fade-in duration-150">
@@ -32,14 +55,14 @@ export function VisorFoto({ foto, fecha, onCerrar }: VisorFotoProps) {
         ref={refDialogo}
         role="dialog"
         aria-modal="true"
-        aria-label={`Foto de progreso ${etiquetaAngulo(foto.angulo)} del ${fechaLarga}`}
+        aria-label={`${descripcion} ${tituloToma} del ${fechaLarga}`}
         tabIndex={-1}
         className="w-full max-w-md rounded-3xl bg-card border border-border shadow-2xl p-4 space-y-3 focus:outline-hidden"
       >
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="font-black text-base text-foreground">
-              Perspectiva {etiquetaAngulo(foto.angulo)}
+              {corporal ? `Perspectiva ${tituloToma}` : tituloToma}
             </h3>
             <p className="text-xs text-muted-foreground">{fechaLarga}</p>
           </div>
@@ -58,7 +81,7 @@ export function VisorFoto({ foto, fecha, onCerrar }: VisorFotoProps) {
             <img
               key={intento}
               src={url}
-              alt={`Foto de progreso ${etiquetaAngulo(foto.angulo)} del ${fechaLarga}`}
+              alt={`${descripcion} ${tituloToma} del ${fechaLarga}`}
               onError={() => setFallo(true)}
               className="absolute inset-0 h-full w-full object-contain"
             />

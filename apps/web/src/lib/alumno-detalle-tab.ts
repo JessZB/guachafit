@@ -11,6 +11,7 @@ export const TABS_FICHA_ALUMNO = [
   'finanzas',
   'antropometria',
   'entrenamiento',
+  'nutricion',
 ] as const;
 
 export type TabFichaAlumno = (typeof TABS_FICHA_ALUMNO)[number];

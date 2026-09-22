@@ -7,12 +7,13 @@ import {
 } from './alumno-detalle-tab';
 
 describe('parsearTabFichaAlumno (WU16: deep-link ?tab= de la ficha)', () => {
-  it('reconoce las cuatro pestañas válidas de la ficha', () => {
+  it('reconoce las cinco pestañas válidas de la ficha', () => {
     expect([...TABS_FICHA_ALUMNO]).toEqual([
       'resumen',
       'finanzas',
       'antropometria',
       'entrenamiento',
+      'nutricion',
     ]);
   });
 
