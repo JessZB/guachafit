@@ -4,7 +4,7 @@ modulo: Nutricion
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-20
+fecha_verificacion: 2026-09-22
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0
@@ -88,9 +88,44 @@ Then el sistema debe persistir los totales numéricos asociados a la fecha
 
 ## 7. Estado real de implementación
 
-- API parcial: el semáforo 1-Tap y los totales manuales existen a nivel de endpoint, pero el flujo no está completo end-to-end.
-- Metas del coach ausentes: no hay tabla ni UI para configurar calorías, macros y agua (RN-01).
-- Diario fotográfico inutilizable: la web envía `fotosPlatos: []` (no hay captura real de fotos).
-- Tolerancia ±10 % muerta en la ruta real: el controller no pasa las metas del coach a la comparación (Escenario 3).
-- Sin vista del coach (calendario nutricional); `No reportado` y alerta semanal ausentes.
-- Resuelto (2026-09-21): éxito fabricado al guardar eliminado. La UI solo confirma con 2xx; un 409 refresca el día ya registrado sin encolarlo; la cola offline queda solo para fallos no concluyentes (red/5xx) y "Actualizar" ya no promete una edición inexistente (`apps/web/src/lib/nutricion-checkin.ts`).
+**Implementado y verificado (2026-09-22)** — commits `feat(nutricion): metas reales, tolerancia, ventana y diario de platos (RF-002)` y `feat(web): nutricion visible (metas, tolerancia, diario de platos y vista del coach)`. Suites en verde: **551 (web)** y **648 (API)**; smoke runtime 23/23 (compresión real, reporte, tolerancia, galería, "No reportado" y editor de metas).
+
+> **Se mantiene `parcial`** aunque el flujo ya existe de punta a punta: dos comportamientos previstos en este documento no están implementados como se especifican (ver "Límites deliberados"). Todo el resto de §4, §5 y el primer caso borde de §6 está implementado.
+
+### RN-01 — Metas del coach
+
+- Persistidas por alumno (migración `0009`, tabla `metas_nutricionales`, una fila por alumno): calorías, proteína, carbohidratos, grasas y agua opcionales; `NULL` = "no configurado" (nunca un 0 fabricado).
+- Endpoints: `PUT /nutricion/alumnos/:alumnoId/metas` (coach; crea o reemplaza con validación de tenancy) y su `GET` para el coach; `GET /nutricion/metas` para el alumno. Sin metas → **204** honesto (ni inventa ni falla).
+- Recursos educativos: hasta 10 por alumno, persistidos como **enlace validado** (título + URL) y visibles para el alumno.
+- UI: editor de metas en la ficha del coach; tarjeta "Tus objetivos nutricionales" en la vista del alumno, con estado honesto cuando no hay metas.
+
+### RN-02 — Ventana del check-in (18:00–23:59 local)
+
+- La ventana se evalúa con la **zona IANA del alumno** (`timezoneCliente`, por defecto `America/Caracas`); fuera de ventana o con fecha distinta al día local → **400** con mensaje claro.
+- La UI evalúa la misma ventana con el reloj del dispositivo: muestra el banner "El check-in aún no está abierto" y no envía **ni encola** el reporte (el día quedará `No reportado`).
+
+### RN-03 — Diario fotográfico (1–4 platos)
+
+- Compresión **en el dispositivo** antes de pedir la URL: WebP 1920 px / calidad 0.85, con fallback JPEG si el navegador no lo soporta.
+- Subida con presign `modulo: 'comidas'`; las claves viajan en `fotosPlatos`. Una subida fallida **no registra el día**: error visible y fotos conservadas para reintento manual.
+- Lectura con `fotoUrl` firmado (TTL 900 s) tanto para el alumno como para el coach; galería con visor accesible (Escape cierra y devuelve el foco).
+
+### RN-04 / Escenario 3 — Totales y tolerancia ±10 %
+
+- Totales opcionales (calorías y proteína) comparados contra las **metas reales** del coach, con desvío por dimensión y clasificación verde / ámbar / rojo.
+- Sin metas del coach, o sin el total de una dimensión, el resultado queda **sin evaluar** ("Sin evaluar" / "Pendiente de reportar"): nunca un falso OK.
+
+### Escenario 1, §6 y vista del coach
+
+- Semáforo 1-Tap con sus 3 estados; el guardado solo confirma con **2xx**. Un 409 refresca el día ya registrado sin encolarlo; la cola offline queda solo para fallos no concluyentes de red/5xx (`apps/web/src/lib/nutricion-checkin.ts`).
+- `No reportado` **derivado** para los días cerrados sin check-in, presente en la vista del alumno y en el calendario del coach (30 días). La alerta semanal viaja en el resumen del coach solo si N > 0; como [[RF-015-matriz-preferencias-usuario-canales]] no tiene categoría NUTRICION, se usa la fila "Resumen Semanal" + la copia In-App universal.
+- Pestaña `nutricion` de la ficha del coach (`?tab=nutricion`): calendario de 30 días, totales vs metas, semáforo de tolerancia, fotos y editor de metas.
+
+### Límites deliberados y notas honestas
+
+Los puntos 1 y 2 son desviaciones frente al texto vigente del RF: por eso el estado se mantiene en `parcial`. Los puntos 3 y 4 son límites de alcance ya declarados en la implementación.
+
+1. **Encolado de fotos (§6, subida fallida):** el documento pide encolar las imágenes para reintento automático en segundo plano; la implementación **no encola reportes con fotos** (a propósito): prefiere declarar el error antes que perder evidencia en silencio. Los reportes **sin fotos** sí usan la cola offline existente.
+2. **Recursos educativos (RN-01):** son enlaces validados; no existe pipeline de subida de PDFs.
+3. **Listado de check-ins:** no es server-paginado; el calendario del coach usa la ventana de 30 días con paginación en cliente declarada.
+4. **Smoke de R2:** la subida real se probó en el smoke de demo con bóveda simulada; falta repetirla contra el bucket real (MinIO/bucket remoto).

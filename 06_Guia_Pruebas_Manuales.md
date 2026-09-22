@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** con pruebas automáticas en verde (516 de la web + 622 del API). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (551 de la web + 648 del API). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -128,17 +128,37 @@ tags:
 - [ ] **Ficha del alumno:** en el tab **Antropometría** de la ficha del coach aparece el mismo gráfico, sobre la serie completa del alumno.
 - [ ] **Modo demo:** con "Modo Coach"/"Modo Alumno" el gráfico y el comparador usan el fixture de 6 tomas; en sesión real salen de la API (solo controles aprobados).
 
-## 12. ⛔ Lo que AÚN NO existe (no lo reportes como error)
+## 12. Nutrición (RF-002)
+
+**Alumno (`/app/nutricion`, "Mi Comida")**
+
+- [ ] **Ventana del check-in:** abre la pantalla antes de las 18:00 (hora de tu dispositivo): verás el banner **"El check-in aún no está abierto"** y el formulario deshabilitado; no se envía ni se encola nada (el día quedará "No reportado"). Después de las 18:00 el reporte se puede guardar y se refleja en el calendario.
+- [ ] **Metas visibles:** la tarjeta "Tus objetivos nutricionales" muestra las metas reales del coach (kcal, proteína, carbohidratos, grasas, agua) y sus recursos por enlace; si el coach no configuró metas, lo declara de forma honesta y puedes reportar igual.
+- [ ] **Reporte con fotos:** adjunta de 1 a 4 fotos (JPG/PNG/WebP); se comprimen en el dispositivo (WebP 1920 px / 0.85, con fallback JPEG) antes de subirse. Tras guardar, abre una miniatura para ver el visor (**Escape** cierra y devuelve el foco).
+- [ ] **Tolerancia:** con metas y totales reportados (kcal/proteína) verás "Dentro del margen (±10 %)", "Parcialmente dentro" o "Fuera del margen"; sin metas o sin totales dice **"Sin evaluar"** (nunca un OK falso).
+- [ ] **Fallos honestos:** sin conexión con fotos seleccionadas, la app pide conectarte y **no** declara el día registrado; si ya lo habías registrado hoy (409), refresca el reporte real del servidor en vez de encolarlo.
+- [ ] **Modo demo:** con "Modo Alumno" la ventana horaria no bloquea la simulación y el reporte, las metas y la tolerancia usan el fixture local.
+
+**Coach (ficha del alumno → pestaña Nutrición, `?tab=nutricion`)**
+
+- [ ] **Calendario de 30 días:** los días cerrados sin check-in se muestran como **No reportado** (derivado, en gris); los reportados, con su semáforo real.
+- [ ] **Totales vs metas y semáforo:** el panel compara lo reportado contra las metas y clasifica la tolerancia; con datos faltantes dice "sin evaluar".
+- [ ] **Fotos del diario:** abre las miniaturas de cada día en el visor accesible (Escape cierra).
+- [ ] **Editor de metas:** define kcal, macros, agua y hasta 10 recursos por enlace; al guardar, el alumno ve las metas. Un alumno sin metas no muestra ceros fabricados (204 honesto).
+- [ ] **Paginación declarada:** el calendario trabaja sobre la ventana de 30 días con paginación en cliente (no es un listado server-paginado).
+- [ ] **Alerta semanal:** si hay días cerrados sin reporte, el resumen semanal del coach lo menciona (solo cuando el contador es mayor que 0; llega por la campana in-app — sección 10).
+
+## 13. ⛔ Lo que AÚN NO existe (no lo reportes como error)
 
 - **Notificaciones**: proveedores reales de push/email (la entrega sigue **simulada por log**), cliente push del navegador (WebPush sin UI), recordatorio de check-in 06:00 por huso horario y alerta externa de colas/DLQ (Sentry/Datadog). La campana, las preferencias y el resumen semanal **ya existen** (sección 10).
-- **Nutrición**: metas del coach y diario fotográfico de platos pendientes; la tolerancia automática depende de esas metas.
+- **Nutrición**: los recursos educativos del coach son **enlaces** (no hay subida de PDFs); los reportes **con fotos** no se encolan sin conexión (se declara el error para no perder evidencia en silencio: el día no se registra); la subida real a R2 está probada en smoke demo con bóveda simulada — falta validarla contra el bucket real (MinIO/R2).
 - **Antropometría**: ventana horaria del check-in y periodicidad pendientes (los gráficos y el comparador fotográfico ya tienen UI real — sección 11).
 - **Admin**: deshabilitar entrenadores, licencias y correo automático pendientes.
 - **Listas**: los filtros de Conciliación/Evaluaciones/Pagos filtran solo la página visible (la UI lo dice); Plantillas no está paginada.
 - **Seguridad**: RLS activo solo en `rutinas`/`plantillas` (etapas 2-4 pendientes); push del navegador no implementado.
 - **Extras**: iconos provisionales (mancuerna generada) — si hay logo oficial, se reemplazan; instalación real en dispositivo físico pendiente de tu prueba.
 
-## 13. Cómo reportar un hallazgo
+## 14. Cómo reportar un hallazgo
 
 Copia esta plantilla en `00_Inbox/` (o al final de este documento):
 

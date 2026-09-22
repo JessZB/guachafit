@@ -50,6 +50,7 @@ erDiagram
     %% Agregado Nutrición
     PERFIL_ALUMNO ||--o{ CHECKIN_NUTRICIONAL : "reporta_diario"
     CHECKIN_NUTRICIONAL ||--o{ FOTO_COMIDA : "adjunta_platos"
+    PERFIL_ALUMNO ||--o| METAS_NUTRICIONALES : "define_metas"
 
     %% Agregado Antropometría
     PERFIL_ALUMNO ||--o{ CONTROL_ANTROPOMETRICO : "posee_mediciones"
@@ -232,6 +233,19 @@ erDiagram
         enum_tipo_comida tipo_comida "desayuno, almuerzo, cena, snack"
         string storage_key
         timestamptz created_at_utc
+    }
+
+    METAS_NUTRICIONALES {
+        uuid id PK
+        uuid alumno_id FK, UK
+        int calorias_objetivo "NULL = no configurado"
+        int proteina_gramos_objetivo
+        int carbohidratos_gramos_objetivo
+        int grasas_gramos_objetivo
+        numeric agua_litros_objetivo "NUMERIC(4,2)"
+        jsonb recursos "RecursoNutricionalDTO[] (máx 10)"
+        timestamptz created_at_utc
+        timestamptz updated_at_utc
     }
 
     CONTROL_ANTROPOMETRICO {
@@ -769,6 +783,28 @@ CREATE TABLE fotos_comida (
 );
 
 -- =============================================================================
+-- TABLA: metas_nutricionales (Metas del coach por alumno - RF-002 RN-01, migración 0009)
+-- =============================================================================
+-- Una fila por alumno (UNIQUE alumno_id): objetivos opcionales anulables (NULL = "no configurado",
+-- nunca 0 fabricado) + recursos educativos por enlace (JSONB, máx 10). El estado "No reportado"
+-- del calendario nutricional es DERIVADO: no existe columna; se calcula por ausencia de fila en
+-- checkins_nutricionales para el día cerrado (RF-002 §6).
+CREATE TABLE metas_nutricionales (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    alumno_id UUID NOT NULL,
+    calorias_objetivo INT,
+    proteina_gramos_objetivo INT,
+    carbohidratos_gramos_objetivo INT,
+    grasas_gramos_objetivo INT,
+    agua_litros_objetivo NUMERIC(4, 2),
+    recursos JSONB NOT NULL DEFAULT '[]'::jsonb, -- RecursoNutricionalDTO[]: { titulo, url } (máx 10)
+    created_at_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
+    updated_at_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
+    CONSTRAINT uq_meta_nutricional_alumno UNIQUE (alumno_id),
+    CONSTRAINT fk_meta_nutricional_alumno FOREIGN KEY (alumno_id) REFERENCES usuarios(id) ON DELETE CASCADE
+);
+
+-- =============================================================================
 -- TABLA: controles_antropometricos & fotos_antropometria (RF-003, RNF-001)
 -- =============================================================================
 CREATE TABLE controles_antropometricos (
@@ -1055,6 +1091,8 @@ CREATE POLICY rls_transacciones_pago_self_select ON transacciones_pago
 | **ADR-002 (Gestión Temporal)** | Todos los instantes almacenados universalmente en meridiano 0 UTC. | Tipo `TIMESTAMP WITH TIME ZONE` con valores normalizados `AT TIME ZONE 'UTC'` y triggers `set_updated_at_utc()`. |
 | **ADR-003 (Deuda Maestra USD)** | Unidad de cuenta en USD y tasa de abonos congelada en el snapshot. | `transacciones_pago.tasa_cambio_fijada` y `transacciones_pago.monto_equivalente_usd` inmutables post-creación. |
 | **RF-015 / RF-016** | Unicidad de tokens de dispositivos y matriz 1 a 1 de preferencias. | `UNIQUE (device_token)` en `dispositivos_usuario` y `UNIQUE (usuario_id)` en `preferencias_notificacion`. |
+| **RF-002 (Metas Nutricionales)** | Una fila de metas por alumno: cada objetivo es anulable (`NULL` = no configurado, nunca `0` fabricado) y admite hasta 10 recursos educativos por enlace. | Tabla `metas_nutricionales` con `UNIQUE (alumno_id)` y FK `alumno_id → usuarios(id) ON DELETE CASCADE` (migración `0009`). |
+| **RF-002 (Calendario Nutricional)** | El estado `No reportado` del calendario es derivado, no un dato persistido. | Sin columna de estado: se calcula por la ausencia de fila en `checkins_nutricionales` para el día cerrado (RF-002 §6). |
 
 ### 3.1. Estado de Implementación RLS (2026-09-20)
 

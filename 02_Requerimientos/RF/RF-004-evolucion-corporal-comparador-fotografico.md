@@ -73,7 +73,7 @@ Then el sistema debe presentar ambas imágenes alineadas lado a lado o con slide
 
 ## 7. Estado real de implementación
 
-**Implementado y verificado en UI real (2026-09-22)** — commit `feat(web): graficos de evolucion y comparador fotografico real`. Suites en verde: **516 (web)** y **622 (API)**, con BDD de este RF.
+**Implementado y verificado en UI real (2026-09-22)** — commit `feat(web): graficos de evolucion y comparador fotografico real`. Suites en verde: **551 (web)** y **648 (API)**, con BDD de este RF.
 
 ### RN-01 — Gráficos multieje con filtros
 

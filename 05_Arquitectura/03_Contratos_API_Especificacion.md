@@ -2,7 +2,7 @@
 id: ARCH-003
 titulo: "Especificación de Contratos de API REST (Endpoints, DTOs y Seguridad)"
 fecha: 2026-09-06
-fecha_verificacion: 2026-09-21
+fecha_verificacion: 2026-09-22
 autor: "Tech Lead & Principal Software Architect"
 estado: aprobado
 modulo: Arquitectura
@@ -474,7 +474,28 @@ Permite almacenar la preferencia de visualización en la cuenta del usuario para
 
 ### 4.3. Nutrición (`RF-002`)
 
-- `POST /nutricion/checkin-diario`: Semáforo 1-Tap con fotos de comida y agua.
+- **Check-in 1-Tap del alumno:**
+  - `POST /nutricion/checkin-diario` (Rol `alumno`): registra el semáforo (`cumplido | parcial | no_cumplido`) con agua, notas (≤ 280 caracteres), calorías/proteína reportadas y hasta **4 fotos de platos** (`tipoComida` + `storageKey`); responde `201 Created` y `409 Conflict` si ya existe un check-in de esa fecha (unicidad diaria por alumno).
+  - **Ventana horaria (RN-02):** solo se habilita entre las **18:00 y las 23:59 hora local del alumno** (zona IANA en `timezoneCliente`; por defecto `America/Caracas`). Fuera de la ventana, o con una `fecha` distinta al día local en curso, responde `400 Bad Request` y el día queda como "No reportado" (estado derivado, RF-002 §6).
+  - **Tolerancia ±10% (Escenario 3):** el response agrega `dentroMargenTolerancia`, `desviacionCaloriasPct` y `desviacionProteinasPct` comparando lo reportado contra las **metas reales del coach**; sin metas configuradas (o sin dimensión evaluable) queda "sin evaluar" (campos ausentes), nunca un falso OK.
+  - `GET /nutricion/checkin/hoy?fecha={YYYY-MM-DD}&timezoneCliente={IANA}` (Rol `alumno`): reporte del día en curso (sin `fecha`, el día se resuelve en la zona local del alumno); `204 No Content` si aún no reportó.
+- **Historial de check-ins:** `GET /nutricion/alumnos/{alumnoId}/checkins?desde&hasta&semaforo` (Roles `entrenador`, `alumno` titular): lista cronológica descendente (sin paginación) con tenancy validada.
+- **Metas nutricionales (RN-01):**
+  - `PUT /nutricion/alumnos/{alumnoId}/metas` (Rol `entrenador`): reemplaza la fila completa del alumno; cada objetivo es opcional por separado, pero el cuerpo exige al menos uno. Un campo omitido queda en `NULL` ("no configurado", nunca 0 fabricado) y admite hasta **10 recursos** por enlace (`titulo` + `url` validada). `403` si el alumno no pertenece a la cartera del coach.
+    ```json
+    {
+      "caloriasObjetivo": 2200,
+      "proteinaGramosObjetivo": 160,
+      "carbohidratosGramosObjetivo": 240,
+      "grasasGramosObjetivo": 70,
+      "aguaLitrosObjetivo": "3.00",
+      "recursos": [ { "titulo": "Lista de compras", "url": "https://ejemplo.com/lista.pdf" } ]
+    }
+    ```
+  - `GET /nutricion/alumnos/{alumnoId}/metas` (Rol `entrenador`) y `GET /nutricion/metas` (Rol `alumno`): metas del alumno; `204 No Content` si el coach aún no las configuró.
+- **Fotos de platos (RN-03):** al leer (check-in de hoy o historial), cada foto expone `storageKey` y `fotoUrl` **firmada con TTL de 900 s**; si la firma falla o no hay bóveda configurada el campo queda `null` (la UI lo declara, nunca un enlace inventado).
+
+> **Nota de verificación (2026-09-22):** endpoints, ventana, tolerancia y límites contrastados contra el controlador/servicio de nutrición, los contratos Zod compartidos y la migración `0009`.
 
 ---
 
