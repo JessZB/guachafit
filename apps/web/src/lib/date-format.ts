@@ -31,16 +31,46 @@ export function formatFechaLocal(iso?: string | null): string | null {
 }
 
 /**
+ * Parsea 'YYYY-MM-DD' como fecha LOCAL validando rangos reales (rechaza 2026-13-40 o 2026-02-30,
+ * que `new Date` desplazaría en silencio al mes/día siguiente).
+ */
+function parseFechaCalendario(yyyyMmDd?: string | null): Date | null {
+  if (!yyyyMmDd) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(yyyyMmDd);
+  if (!match) return null;
+  const anio = Number(match[1]);
+  const mes = Number(match[2]);
+  const dia = Number(match[3]);
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
+  const fecha = new Date(anio, mes - 1, dia);
+  if (fecha.getFullYear() !== anio || fecha.getMonth() !== mes - 1 || fecha.getDate() !== dia) {
+    return null;
+  }
+  return fecha;
+}
+
+/**
  * Formatea una fecha calendario 'YYYY-MM-DD' como fecha local SIN desfase de zona horaria
  * (evita el clásico -1 día por parsear el string como UTC).
  */
 export function formatFechaCalendario(yyyyMmDd?: string | null): string | null {
-  if (!yyyyMmDd) return null;
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(yyyyMmDd);
-  if (!match) return null;
-  const fecha = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  if (Number.isNaN(fecha.getTime())) return null;
+  const fecha = parseFechaCalendario(yyyyMmDd);
+  if (!fecha) return null;
   return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }).format(fecha);
+}
+
+/**
+ * Fecha calendario 'YYYY-MM-DD' en formato largo local: '1 de julio de 2026'.
+ * Se usa en tooltips, resúmenes accesibles y leyendas del gráfico de evolución (RF-004).
+ */
+export function formatFechaLargaCalendario(yyyyMmDd?: string | null): string | null {
+  const fecha = parseFechaCalendario(yyyyMmDd);
+  if (!fecha) return null;
+  return new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(fecha);
 }
 
 /** Formato humano de duración: '1 h 12 min', '45 min', '2 h'. */

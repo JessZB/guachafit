@@ -5,7 +5,6 @@ import {
   ControlAntropometricoDetalleDTO,
   ColaPendientesAntropometricosDTO,
   AnguloFoto,
-  ComparativaAngularDTO,
 } from '@guachafit/shared';
 import {
   etiquetaAlumnoPendiente,
@@ -17,17 +16,12 @@ import { formatFechaCalendario } from '../../lib/date-format';
 import { rebanarPagina } from '../../lib/paginacion';
 import { usePaginacionServidor } from '../../lib/use-paginacion-servidor';
 import { Paginacion } from '../../components/common/Paginacion';
+import { ComparadorAntropometrico } from '../../components/entrenador/ComparadorAntropometrico';
 import {
   Camera,
   CheckCircle2,
-  XCircle,
-  TrendingUp,
-  Sliders,
-  Calendar,
   AlertCircle,
-  Eye,
   ShieldCheck,
-  Scale,
   RotateCcw,
   Search,
   SearchX,
@@ -82,8 +76,6 @@ export function AntropometriaPage() {
   const [busqueda, setBusqueda] = useState('');
 
   // Comparator State
-  const [angulo, setAngulo] = useState<AnguloFoto>(AnguloFoto.FRONTAL);
-  const [sliderPosition, setSliderPosition] = useState(50);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
   /**
@@ -399,98 +391,9 @@ export function AntropometriaPage() {
             ))
           )}
         </div>
-      ) : isDemoMode ? (
-        /* Photo Comparator (solo demo: las cifras de ejemplo viven tras isDemoMode) */
-        <div className="p-6 rounded-3xl bg-card border border-border shadow-md space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-4">
-            <div>
-              <h2 className="font-black text-lg text-foreground">
-                Comparativa Visual Lado a Lado
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                Analiza la recomposición corporal entre dos fechas de control.
-              </p>
-            </div>
-
-            {/* Angle Selector */}
-            <div className="flex items-center gap-1.5 bg-secondary/60 p-1 rounded-2xl border border-border">
-              {[AnguloFoto.FRONTAL, AnguloFoto.LATERAL, AnguloFoto.POSTERIOR].map((a) => (
-                <button
-                  key={a}
-                  onClick={() => setAngulo(a)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold capitalize transition-all ${
-                    angulo === a
-                      ? 'bg-primary text-primary-foreground shadow-xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {a}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Interactive Comparison Stage */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Control A (Before) */}
-            <div className="p-5 rounded-3xl bg-secondary/30 border border-border space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-muted-foreground uppercase">
-                  Toma A (01 Julio 2026)
-                </span>
-                <span className="font-mono font-bold text-xs text-foreground">77.70 kg</span>
-              </div>
-              <div className="aspect-3/4 rounded-2xl bg-background/60 border border-border flex flex-col items-center justify-center text-muted-foreground space-y-2 p-6 text-center">
-                <Camera className="h-10 w-10 text-primary/60" />
-                <span className="text-xs font-semibold">Perspectiva {angulo}</span>
-                <span className="text-[11px] text-muted-foreground">
-                  Grasa: 17.20% • Cintura: 85 cm
-                </span>
-              </div>
-            </div>
-
-            {/* Control B (After) */}
-            <div className="p-5 rounded-3xl bg-primary/5 border border-primary/20 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-primary uppercase">
-                  Toma B (01 Septiembre 2026)
-                </span>
-                <span className="font-mono font-bold text-xs text-foreground">74.50 kg</span>
-              </div>
-              <div className="aspect-3/4 rounded-2xl bg-background/60 border border-border flex flex-col items-center justify-center text-muted-foreground space-y-2 p-6 text-center">
-                <Camera className="h-10 w-10 text-primary" />
-                <span className="text-xs font-semibold text-foreground">Perspectiva {angulo}</span>
-                <span className="text-[11px] text-success font-bold">
-                  Grasa: 14.80% (-2.40%) • Cintura: 81 cm (-4 cm)
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Delta Summary Pill */}
-          <div className="p-4 rounded-2xl bg-secondary/50 border border-border flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Scale className="h-5 w-5 text-primary" />
-              <span className="text-xs font-bold text-foreground">
-                Cambio Neto Total en el Periodo:
-              </span>
-            </div>
-            <div className="flex items-center gap-4 text-xs font-mono font-bold">
-              <span className="text-success">Variación de peso: -3.20 kg</span>
-              <span className="text-success">Variación de grasa: -2.40%</span>
-            </div>
-          </div>
-        </div>
       ) : (
-        /* D2: en sesión real no se muestran cifras de comparación inventadas */
-        <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
-          <Camera className="h-10 w-10 text-muted-foreground mx-auto opacity-40" />
-          <h3 className="font-bold text-base text-foreground">Sin evaluaciones comparables</h3>
-          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-            Cuando existan al menos dos evaluaciones aprobadas podrás comparar la evolución
-            fotográfica lado a lado.
-          </p>
-        </div>
+        /* RF-004: comparador real A/B contra el endpoint (demo conservada vía fixture local). */
+        <ComparadorAntropometrico />
       )}
     </div>
   );

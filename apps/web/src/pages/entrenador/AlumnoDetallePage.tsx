@@ -56,6 +56,8 @@ import { CampoPesoPrescrito } from '../../components/entrenador/CampoPesoPrescri
 import { SelectorPlantillaAsignacion } from '../../components/entrenador/SelectorPlantillaAsignacion';
 import { DetalleSesionEntrenamiento } from '../../components/entrenador/DetalleSesionEntrenamiento';
 import { Paginacion } from '../../components/common/Paginacion';
+import { GraficoEvolucion } from '../../components/common/GraficoEvolucion';
+import { crearEvolucionDemo } from '../../lib/demo-evolucion';
 import {
   PerfilAlumnoDetalleDTO,
   ResumenFinancieroAlumnoDTO,
@@ -361,6 +363,11 @@ export function AlumnoDetallePage() {
     controlesDemoAlumno()
   );
   const [controlesTotal, setControlesTotal] = useState(0);
+  // RF-004: serie COMPLETA de controles aprobados para el gráfico del tab. La tabla pagina, pero
+  // el gráfico necesita la serie entera para no dibujar una tendencia recortada en silencio.
+  const [evaluacionesGrafico, setEvaluacionesGrafico] = useState<ControlAntropometricoDetalleDTO[]>([]);
+  const [isCargandoGrafico, setIsCargandoGrafico] = useState(false);
+  const [graficoErrorMsg, setGraficoErrorMsg] = useState<string | null>(null);
   const [paginaControles, setPaginaControles] = useState(1);
   const [tamanoControles, setTamanoControles] = useState(TAMANO_PAGINA_FICHA);
   const [isCargandoControles, setIsCargandoControles] = useState(false);
@@ -703,6 +710,43 @@ export function AlumnoDetallePage() {
   useEffect(() => {
     loadData();
   }, [id, isDemoMode]);
+
+  /**
+   * RF-004 RN-01: serie completa del gráfico del tab Antropometría (sin `controlesLimit`, el
+   * endpoint devuelve la serie entera). Solo se consulta al abrir el tab; un fallo se declara
+   * y la tabla paginada sigue disponible.
+   */
+  useEffect(() => {
+    if (activeTab !== 'antropometria' || !alumno?.usuarioId) return;
+    let cancelado = false;
+
+    const cargarSerieGrafico = async () => {
+      setIsCargandoGrafico(true);
+      setGraficoErrorMsg(null);
+      try {
+        const serie = isDemoMode
+          ? crearEvolucionDemo(alumno.usuarioId).evaluaciones
+          : (
+              await apiClient<EvolucionCorporalDTO>(
+                `/antropometria/evolucion/${alumno.usuarioId}`
+              )
+            ).evaluaciones;
+        if (!cancelado) setEvaluacionesGrafico(serie);
+      } catch {
+        if (!cancelado) {
+          setEvaluacionesGrafico([]);
+          setGraficoErrorMsg('No se pudo cargar la serie completa del gráfico.');
+        }
+      } finally {
+        if (!cancelado) setIsCargandoGrafico(false);
+      }
+    };
+
+    void cargarSerieGrafico();
+    return () => {
+      cancelado = true;
+    };
+  }, [activeTab, alumno?.usuarioId, isDemoMode]);
 
   /** WU-J (RF-005): override vigente (el más reciente) y plan elegido del catálogo. */
   const overrideVigente = overridesAlumno.length > 0 ? overridesAlumno[0] : null;
@@ -2632,6 +2676,23 @@ export function AlumnoDetallePage() {
               </div>
             );
           })()}
+
+          {/* RF-004 RN-01: gráfico multieje de la serie completa (la tabla de abajo pagina aparte). */}
+          {isCargandoGrafico ? (
+            <div className="p-6 rounded-3xl bg-card border border-border flex items-center justify-center">
+              <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            </div>
+          ) : graficoErrorMsg ? (
+            <div
+              role="alert"
+              className="p-4 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-bold flex items-center gap-2"
+            >
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{graficoErrorMsg}</span>
+            </div>
+          ) : (
+            <GraficoEvolucion evaluaciones={evaluacionesGrafico} />
+          )}
 
           {/* Historial Tabular */}
           <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4">

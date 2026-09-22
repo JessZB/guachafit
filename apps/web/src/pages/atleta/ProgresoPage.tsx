@@ -6,15 +6,19 @@ import { BloqueoAlumnoPanel } from '../../components/common/BloqueoAlumnoPanel';
 import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import { construirPayloadCheckinAntropometrico, obtenerUltimaMedicionReal } from '../../lib/antropometria-checkin';
 import { formatFechaCalendario } from '../../lib/date-format';
+import { crearEvolucionDemo } from '../../lib/demo-evolucion';
+import { etiquetaAngulo } from '../../lib/comparador-fotos';
 import {
   etiquetaEstadoMedicion,
   etiquetaOrigenAntropometria,
 } from '../../lib/etiquetas-dominio';
 import type { TonoSemaforo } from '../../lib/adherencia';
+import { GraficoEvolucion } from '../../components/common/GraficoEvolucion';
+import { VisorFoto } from '../../components/common/VisorFoto';
 import {
   EvolucionCorporalDTO,
   ControlAntropometricoDetalleDTO,
-  AnguloFoto,
+  FotoAntropometriaDetalleDTO,
 } from '@guachafit/shared';
 import {
   TrendingUp,
@@ -31,6 +35,9 @@ import {
   ArrowUpRight,
   AlertTriangle,
   Upload,
+  Eye,
+  Images,
+  ImageOff,
 } from 'lucide-react';
 
 /** Clases del badge de estado del control antropométrico por tono semántico (DESIGN.md). */
@@ -52,6 +59,13 @@ export function ProgresoPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   // RF-012: alumno pausado no puede enviar el check-in remoto; el panel informativo lo declara.
   const [bloqueo, setBloqueo] = useState<BloqueoAlumno | null>(null);
+  // RF-004: visor accesible de una foto de progreso (Escape y trampa de foco en `VisorFoto`).
+  const [fotoVisor, setFotoVisor] = useState<{
+    foto: FotoAntropometriaDetalleDTO;
+    fecha: string;
+  } | null>(null);
+  // Miniaturas cuyo enlace temporal falló: se rotulan en vez de dejar una imagen rota.
+  const [fotosConError, setFotosConError] = useState<string[]>([]);
 
   // U4: URL del GET de evolución, para datar la copia cacheada cuando no hay conexión.
   const urlEvolucion = user?.id ? resolverUrlApi(`/antropometria/evolucion/${user.id}`) : null;
@@ -89,85 +103,13 @@ export function ProgresoPage() {
   const cargarEvolucion = async () => {
     setIsLoading(true);
     setError(null);
+    // Al recargar la serie se obtienen enlaces presignados nuevos: las miniaturas que habían
+    // fallado vuelven a intentar (no quedan marcadas "Sin imagen" para siempre).
+    setFotosConError([]);
 
     // MODO DEMO EXPLÍCITO (isDemoMode): evolución de ejemplo solo con la bandera activa.
     if (isDemoMode) {
-      const demoEvolucion: EvolucionCorporalDTO = {
-        alumnoId: user?.id || 'demo-alumno',
-        totalEvaluaciones: 3,
-        // WU24b: total real de la serie; en el fixture coincide con las evaluaciones listadas.
-        controlesTotal: 3,
-        cambioNetoPesoKg: '-3.20',
-        cambioNetoGrasaPorcentaje: '-2.40',
-        rangoSeleccionado: '3M',
-        evaluaciones: [
-          {
-            id: 'eval-1',
-            alumnoId: user?.id || 'demo-alumno',
-            fechaEvaluacion: '2026-07-01',
-            pesoKg: '77.70',
-            alturaCm: '178.00',
-            porcentajeGrasa: '17.20',
-            perimetros: { cinturaCm: '85.00', brazoCm: '36.00', pechoCm: '100.00' },
-            modalidad: 'remoto' as any,
-            origen: 'remoto_autoreporte' as any,
-            registradoPor: user?.id || 'demo-alumno',
-            estado: 'aprobado' as any,
-            fotos: [
-              {
-                id: 'f-1',
-                controlId: 'eval-1',
-                angulo: AnguloFoto.FRONTAL,
-                storageKey: 'antropometria/demo/2026/f1.webp',
-                createdAtUtc: new Date().toISOString(),
-              },
-            ],
-            createdAtUtc: new Date().toISOString(),
-            updatedAtUtc: new Date().toISOString(),
-          },
-          {
-            id: 'eval-2',
-            alumnoId: user?.id || 'demo-alumno',
-            fechaEvaluacion: '2026-08-01',
-            pesoKg: '75.80',
-            alturaCm: '178.00',
-            porcentajeGrasa: '15.90',
-            perimetros: { cinturaCm: '83.00', brazoCm: '36.80', pechoCm: '101.00' },
-            modalidad: 'remoto' as any,
-            origen: 'remoto_autoreporte' as any,
-            registradoPor: user?.id || 'demo-alumno',
-            estado: 'aprobado' as any,
-            fotos: [],
-            createdAtUtc: new Date().toISOString(),
-            updatedAtUtc: new Date().toISOString(),
-          },
-          {
-            id: 'eval-3',
-            alumnoId: user?.id || 'demo-alumno',
-            fechaEvaluacion: '2026-09-01',
-            pesoKg: '74.50',
-            alturaCm: '178.00',
-            porcentajeGrasa: '14.80',
-            perimetros: { cinturaCm: '81.00', brazoCm: '37.50', pechoCm: '102.00' },
-            modalidad: 'remoto' as any,
-            origen: 'remoto_autoreporte' as any,
-            registradoPor: user?.id || 'demo-alumno',
-            estado: 'aprobado' as any,
-            fotos: [
-              {
-                id: 'f-2',
-                controlId: 'eval-3',
-                angulo: AnguloFoto.FRONTAL,
-                storageKey: 'antropometria/demo/2026/f2.webp',
-                createdAtUtc: new Date().toISOString(),
-              },
-            ],
-            createdAtUtc: new Date().toISOString(),
-            updatedAtUtc: new Date().toISOString(),
-          },
-        ],
-      };
-      setEvolucion(demoEvolucion);
+      setEvolucion(crearEvolucionDemo(user?.id || 'demo-alumno'));
       setIsLoading(false);
       return;
     }
@@ -547,6 +489,25 @@ export function ProgresoPage() {
             </button>
           </div>
 
+          {/* RF-004 RN-01: gráfico multieje con filtros de rango sobre la serie real. */}
+          {evolucion && evolucion.evaluaciones.length > 0 && (
+            <GraficoEvolucion evaluaciones={evolucion.evaluaciones} />
+          )}
+
+          {/* RF-004 RN-02/RN-03: sin fotos adjuntas todavía, vacío honesto (no se simula galería). */}
+          {evolucion &&
+            evolucion.evaluaciones.length > 0 &&
+            evolucion.evaluaciones.every((item) => item.fotos.length === 0) && (
+              <div className="p-6 rounded-3xl bg-card border border-dashed border-border text-center space-y-2">
+                <Images className="h-9 w-9 text-muted-foreground mx-auto opacity-40" />
+                <p className="text-xs font-bold text-foreground">Aún no tienes fotos de progreso</p>
+                <p className="text-[11px] text-muted-foreground max-w-sm mx-auto">
+                  Las fotos se adjuntan al registrar tu check-in (frontal, lateral o posterior) y
+                  quedan privadas con enlaces temporales.
+                </p>
+              </div>
+            )}
+
           <div className="space-y-3">
             <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground px-1">
               Registro Histórico Cronológico
@@ -611,6 +572,56 @@ export function ProgresoPage() {
                         </p>
                       </div>
                     </div>
+
+                    {/* RF-004 RN-02/RN-03: fotos propias de la toma, con visor accesible. */}
+                    {item.fotos.length > 0 && (
+                      <div className="space-y-2 pt-1">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Fotos de esta toma
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {item.fotos.map((foto) => {
+                            const fallo = fotosConError.includes(foto.id);
+                            const fechaCorta =
+                              formatFechaCalendario(item.fechaEvaluacion) ?? item.fechaEvaluacion;
+                            return (
+                              <button
+                                key={foto.id}
+                                type="button"
+                                onClick={() =>
+                                  setFotoVisor({ foto, fecha: item.fechaEvaluacion })
+                                }
+                                aria-label={`Ver foto ${etiquetaAngulo(foto.angulo)} del ${fechaCorta}`}
+                                className="relative w-20 sm:w-24 aspect-3/4 rounded-2xl overflow-hidden border border-border bg-secondary/40 hover:border-primary/60 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+                              >
+                                {foto.presignedGetUrl && !fallo ? (
+                                  <img
+                                    src={foto.presignedGetUrl}
+                                    alt=""
+                                    loading="lazy"
+                                    onError={() =>
+                                      setFotosConError((prev) =>
+                                        prev.includes(foto.id) ? prev : [...prev, foto.id]
+                                      )
+                                    }
+                                    className="absolute inset-0 h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <span className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-muted-foreground">
+                                    <ImageOff className="h-4 w-4" />
+                                    <span className="text-[11px] font-semibold">Sin imagen</span>
+                                  </span>
+                                )}
+                                <span className="absolute bottom-0 inset-x-0 bg-background/80 backdrop-blur px-1.5 py-1 text-[11px] font-bold text-foreground flex items-center justify-center gap-1">
+                                  <Eye className="h-3 w-3" />
+                                  {etiquetaAngulo(foto.angulo)}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -621,6 +632,15 @@ export function ProgresoPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* RF-004: visor de foto de progreso (solo montado con una foto elegida). */}
+      {fotoVisor && (
+        <VisorFoto
+          foto={fotoVisor.foto}
+          fecha={fotoVisor.fecha}
+          onCerrar={() => setFotoVisor(null)}
+        />
       )}
     </div>
   );
