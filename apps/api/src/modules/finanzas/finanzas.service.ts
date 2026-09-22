@@ -12,6 +12,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { R2StorageService } from '../antropometria/r2-storage.service';
 import { BillingSchedulerService } from './billing-scheduler.service';
 import {
+  CobroDirectoRegistradoEvent,
   PagoAprobadoEvent,
   PagoRechazadoEvent,
   PagoReportadoEvent,
@@ -1480,6 +1481,35 @@ export class FinanzasService {
     // recordatorios futuros pendientes.
     if (toCents(resultado.cuota.saldoPendienteUsd) === 0) {
       await this.cancelarRecordatoriosSiLiquidada(resultado.cuota.id);
+    }
+
+    if (this.eventEmitter) {
+      // RF-014 RN-01: aviso de dominio fire-and-forget al alumno dueño de la cuota; un fallo de
+      // colas NUNCA revierte el cobro ya confirmado.
+      void this.eventEmitter
+        .emitAsync(
+          CobroDirectoRegistradoEvent.NOMBRE,
+          new CobroDirectoRegistradoEvent({
+            tipoEvento: 'COBRO_DIRECTO_REGISTRADO',
+            destinatarioUserId: resultado.transaccion.clienteId,
+            entrenadorId,
+            categoria: 'FINANZAS',
+            titulo: 'Tu entrenador registró un cobro',
+            cuerpo: `Tu entrenador registró un cobro de ${resultado.transaccion.montoEquivalenteUsd} USD aplicado a tu cuota.`,
+            linkAccion: '/app/pagos',
+            datosAdicionales: {
+              transaccionId: resultado.transaccion.id,
+              cuotaId: resultado.cuota.id,
+              montoOriginal: resultado.transaccion.montoOriginal,
+              monedaOriginal: resultado.transaccion.monedaOriginal,
+              montoEquivalenteUsd: resultado.transaccion.montoEquivalenteUsd,
+            },
+            esCriticoSeguridad: false,
+            // RNF-004 §3: ref de origen del jobId determinista.
+            referenciaId: resultado.transaccion.id,
+          })
+        )
+        .catch(() => {});
     }
 
     return resultado;

@@ -579,7 +579,12 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
     alumnosService = new AlumnosService(mockDb, mockCryptoService);
     alumnosController = new AlumnosController(alumnosService);
 
-    const mockNotificaciones = { despacharEvento: vi.fn().mockResolvedValue(undefined) } as any;
+    // Doble del bus EventEmitter2 (RF-014): el servicio solo publica eventos de dominio; un
+    // EventEmitter2 real SIEMPRE expone `emitAsync` (antes este doble simulaba el despachador viejo).
+    const mockNotificaciones = {
+      despacharEvento: vi.fn().mockResolvedValue(undefined),
+      emitAsync: vi.fn().mockResolvedValue([]),
+    } as any;
     const mockR2 = { getPresignedGetUrl: vi.fn().mockResolvedValue('https://r2.mock.url') } as any;
     finanzasService = new FinanzasService(mockDb, mockNotificaciones, mockR2);
     finanzasController = new FinanzasController(finanzasService);

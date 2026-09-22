@@ -28,6 +28,7 @@ import {
 } from '@nestjs/common';
 import { getTableName } from '@guachafit/database';
 import {
+  CobroDirectoRegistradoEvent,
   PagoAprobadoEvent,
   PagoRechazadoEvent,
   PagoReportadoEvent,
@@ -922,6 +923,34 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
           }
         )
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('cobro directo emite el evento con destinatario y montos correctos', async () => {
+      const emitAsync = vi.fn().mockResolvedValue([]);
+      const serviceConNotif = new FinanzasService(mockDb, { emitAsync } as any);
+
+      const res = await serviceConNotif.cobroDirecto('cuota-cobro-directo', 'coach-uuid-1', {
+        montoOriginal: '30.00',
+        monedaOriginal: Moneda.USD,
+        metodoPago: MetodoPago.EFECTIVO_USD,
+        fechaOperacion: '2026-09-06',
+      });
+
+      expect(emitAsync).toHaveBeenCalledWith(
+        CobroDirectoRegistradoEvent.NOMBRE,
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            tipoEvento: 'COBRO_DIRECTO_REGISTRADO',
+            destinatarioUserId: 'alumno-uuid-1',
+            entrenadorId: 'coach-uuid-1',
+            categoria: 'FINANZAS',
+            linkAccion: '/app/pagos',
+            esCriticoSeguridad: false,
+            referenciaId: res.transaccion.id,
+            cuerpo: expect.stringContaining('30.00'),
+          }),
+        })
+      );
     });
   });
 

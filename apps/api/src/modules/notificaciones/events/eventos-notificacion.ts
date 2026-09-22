@@ -40,6 +40,11 @@ export class PagoRechazadoEvent extends EventoNotificacionDominio {
   static readonly NOMBRE = 'notificacion.pago-rechazado';
 }
 
+/** Finanzas: el coach registró un cobro directo en efectivo (destinatario: alumno). */
+export class CobroDirectoRegistradoEvent extends EventoNotificacionDominio {
+  static readonly NOMBRE = 'notificacion.cobro-directo-registrado';
+}
+
 /** Entrenamiento: el alumno finalizó una sesión (destinatario: coach). */
 export class SesionAlumnoFinalizadaEvent extends EventoNotificacionDominio {
   static readonly NOMBRE = 'notificacion.sesion-alumno-finalizada';
