@@ -3,8 +3,8 @@ id: RF-001
 modulo: Entrenamiento
 prioridad: alta
 estado: implementado
-version_implementada: v1.2.0
-fecha_verificacion: 2026-09-20
+version_implementada: v1.3.0
+fecha_verificacion: 2026-09-21
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0
@@ -113,7 +113,7 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
 
 ---
 
-## 7. Notas de Implementación (v1.2.0)
+## 7. Notas de Implementación (v1.3.0)
 
 > Registro de decisiones de implementación y límites conocidos de la entrega verificada el 2026-09-20. Los criterios de aceptación Gherkin de la sección 5 permanecen sin cambios.
 
@@ -153,3 +153,8 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
 
 ### 7.8. Listados server-side (WU24–WU26)
 - Monitor de adherencia con búsqueda (`q`), semáforo y orden (`riesgo | nombre`) server-side y paginación `{ items, total, limit, offset, resumen }` (`limit` default 25, techo 100); historial de sesiones del alumno paginado en `GET /sesiones/alumno/{alumnoId}/historial` (`limit` default 30, techo 100). El `total` del historial y el `resumen` del monitor son siempre reales (nunca del slice de página); el detalle de contrato vive en [[03_Contratos_API_Especificacion]] §1.1 y §4.1.
+
+### 7.9. Ergonomía móvil y honestidad offline (Ola 4)
+- **Ergonomía móvil del checklist (resuelto):** steppers y objetivos táctiles con área ≥44px, inputs de peso/reps legibles, labels desde 11px e `inputMode` (`decimal`/`numeric`) según el campo; contraste AA en ambos temas.
+- **Estado offline honesto (resuelto):** cuando la PWA sirve datos desde caché, la UI lo declara como tal en lugar de presentar la copia como si estuviera en vivo.
+- **Aviso de frescura (resuelto):** la vista indica la antigüedad de la copia cacheada ("hace X") y no inventa una edad cuando no puede afirmarla; decisión en [[ADR-014-actualizaciones-guiadas-sw-frescura-offline]].

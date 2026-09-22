@@ -2,6 +2,7 @@
 id: ARCH-001
 titulo: "Evaluación de Alternativas Tecnológicas (Trade-off Analysis) y Stack Recomendado"
 fecha: 2026-09-06
+fecha_verificacion: 2026-09-21
 autor: "Tech Lead & Principal Software Architect"
 estado: aprobado
 modulo: Arquitectura
@@ -92,20 +93,21 @@ flowchart TB
 
 ### 2.3. Decisión Técnica de Frontend
 Se adopta **Opción A: PWA Instalable de Alto Rendimiento**:
-- **Stack Base:** **React 19 + TypeScript + Vite**.
-- **Sistema de Diseño y Estilos:** **Tailwind CSS v4 + shadcn/ui** (basado en primitivas headless de **Radix UI** y **Lucide Icons**).
-- **Persistencia Offline y Cache:** **Dexie.js (IndexedDB wrapper)** para el almacenamiento local de sesiones de entrenamiento y cola de sincronización mutacional (`SyncQueue`), combinado con **TanStack Query v5** con `persistClient`.
-- **Service Worker:** **Workbox vía `vite-plugin-pwa`** con estrategia `Stale-While-Revalidate` para assets estáticos y `NetworkFirst` con fallback a IndexedDB para llamadas de consulta de rutinas.
+- **Stack Base:** **React 19 + TypeScript + Vite 6** con **React Router 7** para el enrutado de la SPA.
+- **Sistema de Diseño y Estilos (estado actual 2026-09-21):** **Tailwind CSS v4** con **tokens semánticos HSL** para tema claro/oscuro (contraste AA y piso tipográfico de 11px). **Primitivas Radix puntuales** montadas directamente en el código —`DropdownMenu` en paginación y filtros (`ADR-013`)— junto con **hooks propios** de accesibilidad para diálogos (`useDialogoAccesible`) y tabs (`useTabsAccesibles`) e iconografía **Lucide**. Se evaluó y **descartó** adoptar el registry de `shadcn/ui` como sistema (no existe `src/components/ui/`), al igual que los drawers `vaul` y los toasts `Sonner`; ver [[ADR-004-stack-frontend-pwa-offline-first]] §"Estado implementado".
+- **Persistencia Offline y Cache:** **Dexie.js v4 (IndexedDB)** para el ledger local —cola *outbox* de mutaciones (`outboxMutations` con estados `pending/syncing/synced/failed/rejected`), rutina del día y check-ins de nutrición—, combinado con **TanStack Query v5** para el estado de servidor de las listas paginadas (`ADR-013`), sin `persistClient`.
+- **Service Worker:** **Workbox vía `vite-plugin-pwa`** con `registerType: 'prompt'`: precache de assets del build, `NetworkFirst` con TTL de 24 h para los `GET` de API, actualización guiada por banner ("Nueva versión disponible") y frescura offline visible; decisión completa en [[ADR-014-actualizaciones-guiadas-sw-frescura-offline]].
+- **PWA Instalable:** `manifest` con iconos 192/512/maskable/apple y shortcuts ("Entrenar hoy", "Mi menú"), sin orientación forzada; safe-areas con `env()` + `dvh`, zoom habilitado (sin `user-scalable=no`) y `navigator.storage.persist()` best-effort para proteger IndexedDB y la caché (ver [[ADR-004-stack-frontend-pwa-offline-first]] §"Estado implementado").
 - **Compresión de Imágenes:** Módulo cliente en TypeScript utilizando `OffscreenCanvas` para generar blobs `image/webp` a resolución máx. de 1920px (lado mayor) y calidad 82-85% antes de invocar el upload directo a Cloudflare R2 (`ADR-004`).
 - **Ruta de Crecimiento Futuro:** Empaquetado en **Capacitor 6** para publicación en tiendas si el negocio requiere distribución en Google Play o Apple App Store, preservando el 85% del código.
 
-### 2.4. Arquitectura de UI/UX: shadcn/ui y Estrategia de Dark Mode Persistente
+### 2.4. Arquitectura de UI/UX: Tailwind CSS v4, Primitivas Radix y Estrategia de Dark Mode Persistente
 
-#### 2.4.1. Justificación de Tailwind CSS v4 + shadcn/ui frente a librerías monolíticas
+#### 2.4.1. Justificación de Tailwind CSS v4 + primitivas Radix frente a librerías monolíticas
 1. **Rendimiento de Compilación y Bundle:** Tailwind CSS v4 introduce un motor CSS-first ultra-rápido en Rust (Lightning CSS), configurando variables y temas directamente con directivas `@theme` nativas. Esto reduce los tiempos de recarga HMR en desarrollo a $< 10$ ms y genera hojas de estilo de producción $< 15$ KB.
-2. **Componentes shadcn/ui (Radix UI Primitives + CVA):** A diferencia de librerías con estilos cerrados (como Material UI o Ant Design), shadcn/ui es un sistema de componentes *copy-pasteable* que vive dentro del código fuente (`src/components/ui/`), garantizando control total sobre cada píxel, animación y comportamiento táctil:
-   - **Para el Entrenador (Dashboard de Comando `RF-013`):** Data Tables dinámicas (`@tanstack/react-table` + shadcn), filtros avanzados, Sheet (paneles laterales deslizables para detalles de cuota o alumno), Command Palette (`cmdk` para búsqueda global instantánea con `Cmd+K`) y Tooltips analíticos. *(Actualizado 2026-09-20: en la implementación, la paginación y búsqueda server-side de las listas se resolvieron con un componente propio + `TanStack Query` + `Radix DropdownMenu` — ver `ADR-013`; `@tanstack/react-table` no se adoptó.)*
-   - **Para el Alumno (Checklist y Gimnasio `RF-001`, `RF-002`):** Drawers móviles con arrastre táctil fluido (`vaul`), botones grandes de 1-Tap con retroalimentación inmediata, tarjetas de series con bordes de contraste y alertas toast discretas con **Sonner**.
+2. **Primitivas Radix puntuales + componentes propios (estado actual 2026-09-21):** Se evaluó y **descartó** adoptar `shadcn/ui` como sistema de componentes (registry *copy-pasteable* que viviría en `src/components/ui/`): esa carpeta no existe y cada componente vive junto a su pantalla. Las primitivas headless de **Radix UI** se montan directamente donde aportan accesibilidad probada (`DropdownMenu`), y el resto de los patrones se resolvió con **hooks propios y testeables**:
+   - **Para el Entrenador (Dashboard de Comando `RF-013`):** tablas propias + `TanStack Query` para paginación/búsqueda server-side y `Radix DropdownMenu` en los controles de página y filtros (`ADR-013`); diálogos modales accesibles vía `useDialogoAccesible` (Escape, trampa de foco y restore) y tabs con `useTabsAccesibles` (patrón ARIA APG). `@tanstack/react-table`, `cmdk` (Command Palette) y los paneles `Sheet` no se adoptaron.
+   - **Para el Alumno (Checklist y Gimnasio `RF-001`, `RF-002`):** botones grandes de 1-Tap con retroalimentación inmediata y tarjetas de series con bordes de contraste; los drawers táctiles `vaul` y los toasts `Sonner` se evaluaron y **descartaron** (los avisos usan componentes propios).
 
 #### 2.4.2. Estrategia de Dark Mode Persistente Multicapa
 El modo oscuro no es solo una preferencia estética; en el contexto de **GUACHAFIT** es un requerimiento ergonómico crítico:
@@ -129,7 +131,7 @@ flowchart TD
     ReactHydrate --> UserSwitch{Usuario cambia tema\nen ajustes de UI}
     UserSwitch --> SaveLocal[Actualiza localStorage]
     SaveLocal --> ToggleClass[Alterna documentElement.classList]
-    SaveLocal -.->|Si está autenticado| SyncAPI[PUT /api/v1/usuarios/me/preferencias { temaUi }]
+    SaveLocal -.->|Cross-device no implementado: solo localStorage por dispositivo| LocalOnly[Preferencia local]
 ```
 
 1. **Prevención de Parpadeo (Zero FOUC - Flash of Unstyled Content):**
@@ -154,16 +156,13 @@ flowchart TD
    - `system` (Sigue automáticamente el tema del sistema operativo / sensor de luz).
    - `dark` (Fuerza modo oscuro permanente).
    - `light` (Fuerza modo claro permanente).
-3. **Paleta de Colores de Alto Contraste (OLED-Optimized):**
-   - Fondo oscuro principal: `zinc-950` (`#09090b`) con tarjetas elevadas en `zinc-900` (`#18181b`) y bordes sutiles en `zinc-800` (`#27272a`).
-   - Acentos funcionales de alto contraste (WCAG AAA):
-     * **Éxito / Serie Completada:** Esmeralda vibrante (`#10b981`).
-     * **Advertencia / Pendiente de Pago:** Ámbar (`#f59e0b`).
-     * **Mora / Crítico:** Carmesí (`#ef4444`).
-     * **Activo / Selección:** Violeta / Índigo atlético (`#6366f1`).
-4. **Persistencia Híbrida (Local + Nube):**
-   - Inmediata en `localStorage` para disponibilidad instantánea offline.
-   - Sincronizada en el backend en la columna `usuarios.tema_ui` para que la preferencia se replique automáticamente si el coach o alumno abre la plataforma en una computadora nueva o tablet.
+3. **Tokens Semánticos HSL de Alto Contraste (estado actual 2026-09-21):**
+   - Se reemplazó la paleta fija (`zinc-950` y acentos *hardcodeados*) por **tokens semánticos en HSL** con variante clara (`:root`, "Athletic Slate" sobre lienzo suave, nunca blanco puro) y oscura (`.dark`, capas de elevación frías, nunca negro puro): `--background`, `--card`, `--popover`, `--primary`, `--success`, `--warning`, `--danger`, `--info`, `--border`, etc. (501 usos migrados).
+   - **Contraste AA medido en ambos temas** y **piso tipográfico de 11px**; prohibido usar paletas fijas sin variante de tema (ver [[ADR-004-stack-frontend-pwa-offline-first]] §"Estado implementado").
+   - Los estados funcionales se consumen por token, no por valor hex directo: relleno sólido con la variante `strong` y `-foreground` para el contenido sobre él —**Éxito / Serie Completada** (`success`), **Advertencia / Pendiente de Pago** (`warning`), **Mora / Crítico** (`danger`) e **Informativo** (`info`); el violeta queda como acento decorativo (`decor`), no como color de selección.
+4. **Persistencia Local (estado actual 2026-09-21):**
+   - La preferencia se guarda en `localStorage` (clave `guachafit-theme`) con selector tri-estado (`system`, `dark`, `light`) para disponibilidad instantánea offline.
+   - La columna `usuarios.tema_ui` y el endpoint `PATCH /api/v1/usuarios/me/preferencias` ([[03_Contratos_API_Especificacion]] §3.4) existen en el backend, pero la **sincronización cross-device no está implementada**: la PWA no invoca ese endpoint y el tema permanece local al dispositivo (ver [[ADR-004-stack-frontend-pwa-offline-first]] §"Estado implementado").
 
 ---
 
@@ -247,15 +246,16 @@ Los servicios de negocio nunca llaman a proveedores externos síncronamente:
 | Componente | Tecnología Seleccionada | Versión / Proveedor | Propósito Principal |
 | :--- | :--- | :--- | :--- |
 | **Lenguaje de Programación** | **TypeScript** | v5.5+ | Tipado estricto extremo compartido entre Frontend y Backend. |
-| **Frontend Framework** | **React** | v19.x (con Vite) | Renderizado reactivo, concurrencia y UI táctil móvil. |
-| **Estilos & UI Kit** | **Tailwind CSS v4 + shadcn/ui** | Tailwind v4.0+ / Radix UI / Lucide | Sistema de diseño accesible, modular, componentes headless de alta densidad y Dark Mode persistente nativo. |
-| **Estado y Cache Offline** | **TanStack Query + Dexie.js** | Query v5 / Dexie v4 | Sincronización de datos remotos y persistencia local en IndexedDB. |
-| **Service Worker / PWA** | **Workbox (vite-plugin-pwa)** | v0.20+ | Caché de assets, manifest PWA e instalación en pantalla de inicio. |
+| **Frontend Framework** | **React + Vite + React Router** | React v19.x / Vite v6 / React Router v7 | Renderizado reactivo, concurrencia, enrutado por rol y UI táctil móvil. |
+| **Estilos & UI Kit** | **Tailwind CSS v4 + tokens HSL semánticos** | Tailwind v4 / Radix puntual / Lucide | Primitivas Radix puntuales (`DropdownMenu`) + hooks propios; tema claro/oscuro con contraste AA; sin `shadcn/ui`, `vaul` ni `Sonner`. |
+| **Estado y Cache Offline** | **TanStack Query + Dexie.js** | Query v5 / Dexie v4 | Listas paginadas (ADR-013) y outbox offline en IndexedDB, sin `persistClient`. |
+| **Service Worker / PWA** | **Workbox (vite-plugin-pwa)** | v0.21+ | Precache de assets, manifest instalable, SW en modo `prompt` y frescura offline (ADR-014). |
 | **Backend Framework** | **NestJS** | v10.x / v11.x | Arquitectura modular DDD, inyección de dependencias y modularidad. |
 | **Base de Datos Relacional** | **PostgreSQL** | v16+ | Consistencia ACID, `NUMERIC(14,2)`, `TIMESTAMPTZ` y RLS Multi-Tenant. |
 | **ORM / Data Access** | **Drizzle ORM** | v0.33+ | Tipado SQL-first, transacciones interactivas y migraciones puras. |
 | **Almacenamiento Multimedia** | **Cloudflare R2** | S3-Compatible API | Cero costos de salida, buckets privados y URLs presignadas (TTL 15m). |
 | **Motor de Colas & Cache** | **Redis + BullMQ** | Redis 7+ / BullMQ v5+ | Delayed jobs de cobro (T-5..T+2), workers de Push/Email y deduplicación. |
+| **Observabilidad de Colas** | **@bull-board** | v9.x | Inspección de las colas BullMQ de finanzas y notificaciones (Basic Auth). |
 | **Validación de Datos** | **Zod** | v3.23+ | Validación de contratos de API y esquemas de entorno. |
 | **Monitoreo & Logs** | **Pino + OpenTelemetry** | - | Logs estructurados JSON y observabilidad de rendimiento. |
 
@@ -265,4 +265,4 @@ Los servicios de negocio nunca llaman a proveedores externos síncronamente:
 - **Problemas Operativos:** [[PROB-001-adherencia-trazabilidad]], [[PROB-002-cobranza-bimonetaria-fraccionada]], [[PROB-003-acceso-onboarding-dashboard-central]], [[PROB-004-orquestacion-preferencias-notificaciones]].
 - **Requerimientos Funcionales:** [[RF-001-checklist-entrenamiento-diario]] al [[RF-016-gestion-dispositivos-tokens-push-ciclo-vida]].
 - **Requerimientos No Funcionales:** [[RNF-001-almacenamiento-seguridad-fotos-progreso]] al [[RNF-004-resiliencia-notificaciones-idempotencia-fallbacks]].
-- **Decisiones de Arquitectura:** [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-010-arquitectura-event-driven-notificaciones-multicanal]].
+- **Decisiones de Arquitectura:** [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-010-arquitectura-event-driven-notificaciones-multicanal]]; [[ADR-013-paginacion-server-side-stack-listas]] (listados paginados) y [[ADR-014-actualizaciones-guiadas-sw-frescura-offline]] (SW en modo `prompt`, frescura offline y logout seguro). PWA offline-first verificada en [[ADR-004-stack-frontend-pwa-offline-first]] §"Estado implementado".

@@ -126,11 +126,11 @@ GUACHAFIT/
 │   ├── RF/                       # RF-001 al RF-017 (Gherkin)
 │   └── RNF/                      # RNF-001 al RNF-004 (Métricas y SLOs)
 ├── 03_Dominio/                   # Entidades y Agregados DDD
-├── 04_Decisiones/                # ADR-001 al ADR-013
+├── 04_Decisiones/                # ADR-001 al ADR-014
 ├── 05_Arquitectura/              # Especificación técnica, DDL y contratos API
 ├── apps/                         # Aplicaciones ejecutables
 │   ├── api/                      # Backend NestJS + Drizzle + BullMQ
-│   └── web/                      # Frontend PWA (React 19 + Vite + Tailwind v4 + shadcn/ui)
+│   └── web/                      # Frontend PWA (React 19 + Vite + Tailwind v4 + primitivas Radix)
 ├── packages/                     # Paquetes compartidos del monorepo
 │   ├── shared/                   # Contratos Zod, DTOs, Enums y Tipos comunes
 │   ├── database/                 # Esquemas Drizzle, DDL, migraciones y cliente Postgres
@@ -146,7 +146,7 @@ GUACHAFIT/
 ## 🔗 5. Trazabilidad
 - Ecosistema de Requerimientos: [[RF-001-checklist-entrenamiento-diario]] al [[RF-017-banco-plantillas-rutinas-entrenamiento]].
 - Atributos de Calidad: [[RNF-001-almacenamiento-seguridad-fotos-progreso]] al [[RNF-004-resiliencia-notificaciones-idempotencia-fallbacks]].
-- Decisiones Arquitecturales: [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-013-paginacion-server-side-stack-listas]] (incluye [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]] y [[ADR-012-modo-demo-explicito-datos-sinteticos]]).
+- Decisiones Arquitecturales: [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-014-actualizaciones-guiadas-sw-frescura-offline]] (incluye [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]], [[ADR-012-modo-demo-explicito-datos-sinteticos]] y [[ADR-013-paginacion-server-side-stack-listas]]).
 
 ---
 
@@ -161,3 +161,7 @@ Reglas transversales del frontend, vinculantes para toda vista nueva (se revisan
 5. **Datos demo solo con frontera explícita:** los datos sintéticos viven exclusivamente detrás de `isDemoMode` y se muestran con banner visible; en modo real está prohibido el fallback demo ([[ADR-012-modo-demo-explicito-datos-sinteticos]]).
 6. **Estados honestos:** toda vista de datos implementa carga, vacío explícito y error con acción de reintento; nunca un éxito fabricado. El copy de filtros parciales declara su alcance ("en esta página") cuando el filtro no es server-side.
 7. **Acceso por estado honesto (RF-012):** las superficies del alumno traducen el `403 ALUMNO_BLOQUEADO` a una pantalla informativa por estado (pausado, suspendido por pago, archivado) con la acción disponible; nunca un error genérico ni un bloqueo silencioso.
+8. **Táctil accesible en móvil:** todo control interactivo (botones, steppers, tabs, iconos de acción) expone un área táctil mínima de 44px en viewports móviles; los inputs numéricos declaran su `inputMode` y se mantienen legibles.
+9. **Piso tipográfico de 11px:** ningún texto visible baja de 11px, en ningún tema ni viewport.
+10. **Contraste AA en AMBOS temas:** el color se consume exclusivamente desde tokens semánticos con variante claro/oscuro (`:root` / `.dark`) y contraste AA verificado en ambos; prohibido hardcodear paletas fijas sin variante de tema (los estados usan sus variantes `-strong`/`-foreground`).
+11. **Actualizaciones y datos offline con control del usuario:** la app nunca aplica una actualización del Service Worker ni recarga sin acción explícita del usuario; los datos servidos desde caché se señalan como offline con su antigüedad ("hace X"). Decisión en [[ADR-014-actualizaciones-guiadas-sw-frescura-offline]].

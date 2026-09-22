@@ -2,6 +2,7 @@
 id: ARCH-003
 titulo: "Especificación de Contratos de API REST (Endpoints, DTOs y Seguridad)"
 fecha: 2026-09-06
+fecha_verificacion: 2026-09-21
 autor: "Tech Lead & Principal Software Architect"
 estado: aprobado
 modulo: Arquitectura
@@ -368,6 +369,8 @@ Listado principal de la cartera del coach con búsqueda, filtros y paginación s
 ### 3.4. Sincronización Cross-Device de Tema de Interfaz (Dark Mode Persistente)
 Permite almacenar la preferencia de visualización en la cuenta del usuario para que persista al cambiar de dispositivo, respetando la elección local inmediata en `localStorage`.
 
+> **Nota de implementación (2026-09-21):** el endpoint existe y actualiza `usuarios.tema_ui`, pero la PWA aún no lo invoca: el tema se persiste solo en `localStorage` (clave `guachafit-theme`) y la sincronización cross-device queda pendiente (ver [[ADR-004-stack-frontend-pwa-offline-first]] §"Estado implementado").
+
 - **Método y Ruta:** `PATCH /usuarios/me/preferencias`
 - **Permisos:** Autenticado (`superadmin`, `entrenador`, `alumno`).
 - **Cuerpo de Petición:**
@@ -534,5 +537,5 @@ Permite almacenar la preferencia de visualización en la cuenta del usuario para
 - **Problemas resueltos:** [[PROB-001-adherencia-trazabilidad]] al [[PROB-004-orquestacion-preferencias-notificaciones]].
 - **Requerimientos funcionales:** [[RF-001-checklist-entrenamiento-diario]] al [[RF-017-banco-plantillas-rutinas-entrenamiento]].
 - **Requerimientos no funcionales:** [[RNF-001-almacenamiento-seguridad-fotos-progreso]] al [[RNF-004-resiliencia-notificaciones-idempotencia-fallbacks]].
-- **Decisiones arquitecturales:** [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-010-arquitectura-event-driven-notificaciones-multicanal]]; borradores [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]], [[ADR-012-modo-demo-explicito-datos-sinteticos]] y [[ADR-013-paginacion-server-side-stack-listas]].
+- **Decisiones arquitecturales:** [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-010-arquitectura-event-driven-notificaciones-multicanal]]; borradores [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]], [[ADR-012-modo-demo-explicito-datos-sinteticos]], [[ADR-013-paginacion-server-side-stack-listas]] y [[ADR-014-actualizaciones-guiadas-sw-frescura-offline]].
 - **Documentos de diseño:** [[01_Evaluacion_Stack_Tecnologico]], [[02_Esquema_Base_de_Datos_PostgreSQL]].
