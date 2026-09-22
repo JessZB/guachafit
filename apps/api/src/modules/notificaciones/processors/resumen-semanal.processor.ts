@@ -8,6 +8,10 @@
  * Decisiones:
  * - Ventana: últimos 7 días UTC ([ahora - 7d, ahora]). Deliberadamente SIN huso por coach: el
  *   recordatorio antropométrico por huso IANA queda fuera del alcance de N1 (pendiente anotado).
+ * - RF-002 §6 (WU RF-002a): además de adherencia y cobros, el digest alerta los días CERRADOS
+ *   (hasta ayer) sin check-in nutricional de la cartera. La matriz RF-015 no define una categoría
+ *   NUTRICION: la alerta viaja por la fila "Resumen Semanal" (Email/Push según preferencia) y la
+ *   copia In-App universal del despachador, sin inventar categorías fuera del doc.
  * - Consultas en lote (una por métrica, no por coach) con agregación en memoria; mismo criterio
  *   de ruta de sistema que el barrido de cobranza (RLS aún no habilitado en estas tablas).
  * - Un fallo al despachar un coach NO cancela el digest de los demás.
@@ -28,6 +32,7 @@ import {
   isNull,
   lte,
   sum,
+  checkinsNutricionales,
   cuotasMembresia,
   perfilesAlumno,
   perfilesEntrenador,
@@ -43,6 +48,10 @@ import {
   EstadoSesion,
   EstadoUsuario,
 } from '@guachafit/shared';
+import { fechaAnteriorYyyyMmDd } from '../../../common/adherencia.util';
+// RF-002 §6: el cálculo de "no reportado" es puro y vive con el resto de reglas de nutrición
+// (misma semántica que usará la UI del calendario); no se re-implementa aquí.
+import { contarDiasNoReportados } from '../../nutricion/nutricion.service';
 import { ResumenSemanalCoachEvent } from '../events/eventos-notificacion';
 import { COLA_RESUMEN_SEMANAL, nombreColaDlq } from '../notificaciones.config';
 import { JOB_GENERAR_RESUMEN_SEMANAL } from '../resumen-semanal.scheduler';
@@ -58,6 +67,13 @@ export interface MetricasResumenSemanal {
   cobradoUsd: string;
   cuotasPorVencer: number;
   cuotasEnMora: number;
+  /**
+   * RF-002 §6 (WU RF-002a): días CERRADOS de la ventana sin check-in nutricional en toda la
+   * cartera del coach. La alerta viaja en el digest semanal (RF-015 §B "Resumen Semanal"; la
+   * matriz no tiene una categoría NUTRICION propia, así que se reutiliza la fila del digest
+   * — Email/Push según preferencia — y la copia In-App universal del despachador).
+   */
+  nutricionDiasNoReportados: number;
 }
 
 export interface ResultadoResumenSemanal {
@@ -74,10 +90,15 @@ export function construirCuerpoResumenSemanal(metricas: MetricasResumenSemanal):
         )}%)`
       : `${metricas.sesionesCompletadas} sesiones completadas (sin sesiones programadas esta semana)`;
 
+  const alertaNutricion =
+    metricas.nutricionDiasNoReportados > 0
+      ? ` Atención: ${metricas.nutricionDiasNoReportados} día(s) de tu alumnado quedaron sin reporte nutricional.`
+      : '';
+
   return (
     `Hola ${metricas.coachNombre}, tu semana en GUACHAFIT: ${adherencia}, ` +
     `$${metricas.cobradoUsd} USD cobrados, ${metricas.cuotasPorVencer} cuota(s) por vencer ` +
-    `y ${metricas.cuotasEnMora} en mora.`
+    `y ${metricas.cuotasEnMora} en mora.${alertaNutricion}`
   );
 }
 
@@ -160,6 +181,10 @@ export class ResumenSemanalProcessor extends WorkerHost {
     const completadasPorAlumno = new Map<string, number>();
     const programadasPorAlumno = new Map<string, number>();
 
+    // RF-002 §6: fechas con check-in por alumno para el cálculo de "no reportado".
+    const fechasReportadasPorAlumno = new Map<string, Set<string>>();
+    const ayerYmd = fechaAnteriorYyyyMmDd(hastaYmd, 1);
+
     if (alumnoIds.length > 0) {
       const completadas = await this.db
         .select({ alumnoId: sesionesEntrenamiento.alumnoId, total: count() })
@@ -193,6 +218,26 @@ export class ResumenSemanalProcessor extends WorkerHost {
       for (const fila of programadas) {
         programadasPorAlumno.set(fila.alumnoId, Number(fila.total));
       }
+
+      // RF-002 §6: check-ins de los días CERRADOS de la ventana. Hoy queda fuera del cálculo:
+      // su ventana de reporte (18:00–23:59 locales) todavía puede estar abierta.
+      const checkinsNutricionalesVentana = await this.db
+        .select({ alumnoId: checkinsNutricionales.alumnoId, fecha: checkinsNutricionales.fecha })
+        .from(checkinsNutricionales)
+        .where(
+          and(
+            inArray(checkinsNutricionales.alumnoId, alumnoIds),
+            gte(checkinsNutricionales.fecha, desdeYmd),
+            lte(checkinsNutricionales.fecha, ayerYmd)
+          )
+        );
+
+      for (const fila of checkinsNutricionalesVentana) {
+        if (!fechasReportadasPorAlumno.has(fila.alumnoId)) {
+          fechasReportadasPorAlumno.set(fila.alumnoId, new Set());
+        }
+        fechasReportadasPorAlumno.get(fila.alumnoId)!.add(fila.fecha);
+      }
     }
 
     const sesionesCompletadasPorCoach = new Map<string, number>();
@@ -206,6 +251,22 @@ export class ResumenSemanalProcessor extends WorkerHost {
         entrenadorId,
         (sesionesProgramadasPorCoach.get(entrenadorId) ?? 0) + (programadasPorAlumno.get(alumnoId) ?? 0)
       );
+    }
+
+    // RF-002 §6: días cerrados sin reporte por coach (alerta del resumen semanal).
+    const nutricionNoReportadosPorCoach = new Map<string, number>();
+    for (const [alumnoId, entrenadorId] of coachPorAlumno) {
+      const noReportados = contarDiasNoReportados(
+        desdeYmd,
+        ayerYmd,
+        fechasReportadasPorAlumno.get(alumnoId) ?? new Set()
+      );
+      if (noReportados > 0) {
+        nutricionNoReportadosPorCoach.set(
+          entrenadorId,
+          (nutricionNoReportadosPorCoach.get(entrenadorId) ?? 0) + noReportados
+        );
+      }
     }
 
     // Cobros de la ventana: pagos APROBADOS por fecha real de conciliación.
@@ -270,6 +331,7 @@ export class ResumenSemanalProcessor extends WorkerHost {
         cobradoUsd: cobradoPorCoach.get(coach.usuarioId) ?? '0.00',
         cuotasPorVencer: porVencerPorCoach.get(coach.usuarioId) ?? 0,
         cuotasEnMora: enMoraPorCoach.get(coach.usuarioId) ?? 0,
+        nutricionDiasNoReportados: nutricionNoReportadosPorCoach.get(coach.usuarioId) ?? 0,
       };
 
       try {
@@ -291,6 +353,7 @@ export class ResumenSemanalProcessor extends WorkerHost {
               cobradoUsd: metricas.cobradoUsd,
               cuotasPorVencer: metricas.cuotasPorVencer,
               cuotasEnMora: metricas.cuotasEnMora,
+              nutricionDiasNoReportados: metricas.nutricionDiasNoReportados,
             },
             esCriticoSeguridad: false,
             // RNF-004 §3: ref de origen del jobId determinista (semana del digest).

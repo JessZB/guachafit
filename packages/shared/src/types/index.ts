@@ -27,6 +27,8 @@ import {
   FinalizarSesionSchema,
   FotoComidaInputSchema,
   CheckinNutricionalSchema,
+  MetasNutricionalesSchema,
+  RecursoNutricionalSchema,
   FiltroSesionesAlumnoSchema,
   FiltroCheckinsNutricionalesSchema,
   FiltroMonitorAdherenciaSchema,
@@ -118,6 +120,8 @@ export type SincronizarSeriesBatchDTO = z.infer<typeof SincronizarSeriesBatchSch
 export type FinalizarSesionDTO = z.infer<typeof FinalizarSesionSchema>;
 export type FotoComidaInputDTO = z.infer<typeof FotoComidaInputSchema>;
 export type CheckinNutricionalDTO = z.infer<typeof CheckinNutricionalSchema>;
+export type MetasNutricionalesDTO = z.infer<typeof MetasNutricionalesSchema>;
+export type RecursoNutricionalDTO = z.infer<typeof RecursoNutricionalSchema>;
 export type FiltroSesionesAlumnoDTO = z.infer<typeof FiltroSesionesAlumnoSchema>;
 export type FiltroCheckinsNutricionalesDTO = z.infer<typeof FiltroCheckinsNutricionalesSchema>;
 /** WU25a: filtros server-side del monitor de adherencia (q + semáforo + orden). */
@@ -880,6 +884,34 @@ export interface CheckinNutricionalDetalleDTO {
   alumnoNombre?: string;
   createdAtUtc: string;
   updatedAtUtc: string;
+}
+
+/**
+ * RF-002 RN-01: metas nutricionales del coach para un alumno tal como las expone la API.
+ * `null` en un objetivo significa "no configurado" (nunca 0 fabricado).
+ */
+export interface MetasNutricionalesDetalleDTO {
+  id: string;
+  alumnoId: string;
+  caloriasObjetivo: number | null;
+  proteinaGramosObjetivo: number | null;
+  carbohidratosGramosObjetivo: number | null;
+  grasasGramosObjetivo: number | null;
+  aguaLitrosObjetivo: string | null;
+  recursos: RecursoNutricionalDTO[];
+  createdAtUtc: string;
+  updatedAtUtc: string;
+}
+
+/**
+ * RF-002 Escenario 3: comparación de los totales reportados contra las metas del coach (±10%).
+ * Si el alumno no tiene metas, o no reportó el total de una dimensión, esa dimensión no se
+ * evalúa y el resultado queda sin marcar (campos `undefined`): "sin evaluar", nunca un falso OK.
+ */
+export interface ToleranciaNutricionalDTO {
+  dentroMargenTolerancia?: boolean;
+  desviacionCaloriasPct?: number;
+  desviacionProteinasPct?: number;
 }
 
 export interface MonitorAdherenciaSemanalDTO {

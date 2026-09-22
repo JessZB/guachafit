@@ -37,6 +37,7 @@ import {
   TemaUi,
   BloqueDiaRutinaDTO,
   NivelObjetivoPlantilla,
+  RecursoNutricionalDTO,
 } from '@guachafit/shared';
 
 // =============================================================================
@@ -452,6 +453,37 @@ export const fotosComida = pgTable('fotos_comida', {
   storageKey: varchar('storage_key', { length: 255 }).notNull(),
   createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
 });
+
+/**
+ * RF-002 RN-01: metas nutricionales que el coach fija para UN alumno (una fila por alumno).
+ *
+ * - Los objetivos son opcionales ("no configurado" = NULL, nunca 0 fabricado). El coach puede
+ *   fijar solo calorías, solo macros, o una pauta general con recursos educativos.
+ * - `recursos` persiste los enlaces educativos del coach (PDFs de listas de compras / distribución
+ *   de comidas) tipados con el contrato compartido.
+ * - Decisión de asociación (RF §3 Precondición 1: "los objetivos nutricionales del cliente"):
+ *   por ALUMNO, no por plan de membresía; el plan es comercial y el RF no lo menciona.
+ */
+export const metasNutricionales = pgTable(
+  'metas_nutricionales',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    alumnoId: uuid('alumno_id')
+      .notNull()
+      .references(() => usuarios.id, { onDelete: 'cascade' }),
+    caloriasObjetivo: integer('calorias_objetivo'),
+    proteinaGramosObjetivo: integer('proteina_gramos_objetivo'),
+    carbohidratosGramosObjetivo: integer('carbohidratos_gramos_objetivo'),
+    grasasGramosObjetivo: integer('grasas_gramos_objetivo'),
+    aguaLitrosObjetivo: numeric('agua_litros_objetivo', { precision: 4, scale: 2 }),
+    recursos: jsonb('recursos').$type<RecursoNutricionalDTO[]>().default([]).notNull(),
+    createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
+    updatedAtUtc: timestamp('updated_at_utc', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    uniqueAlumno: uniqueIndex('uq_meta_nutricional_alumno').on(table.alumnoId),
+  })
+);
 
 // =============================================================================
 // TABLAS: antropometria

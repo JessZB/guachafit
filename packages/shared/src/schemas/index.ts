@@ -533,6 +533,17 @@ export const FotoComidaInputSchema = z.object({
   storageKey: z.string().min(5, 'La clave de almacenamiento no es válida'),
 });
 
+/**
+ * RF-002 RN-02: ventana local del check-in 1-Tap (18:00–23:59, hora del alumno).
+ * Fuera de esta ventana el día ya quedó cerrado: no se admite el reporte.
+ */
+export const HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL = 18;
+export const HORA_FIN_VENTANA_CHECKIN_NUTRICIONAL = 23;
+/** Zona por defecto del alumno cuando el cliente no informa la suya (RN-05/ADR-002). */
+export const TIMEZONE_NUTRICION_POR_DEFECTO = 'America/Caracas';
+/** RF-002 Escenario 3: margen de tolerancia (±%) de los totales reportados contra las metas. */
+export const TOLERANCIA_TOTALES_NUTRICIONAL_PCT = 10.0;
+
 export const CheckinNutricionalSchema = z.object({
   alumnoId: z.string().uuid('El ID del alumno debe ser un UUID válido').optional(),
   fecha: z.string().regex(FECHA_CALENDARIO_REGEX, 'El formato de fecha debe ser YYYY-MM-DD'),
@@ -545,7 +556,51 @@ export const CheckinNutricionalSchema = z.object({
     .array(FotoComidaInputSchema)
     .max(4, 'No se permiten más de 4 fotografías de platos por día')
     .optional(),
+  /**
+   * RN-05/ADR-002: zona IANA del cliente para resolver el día local y la ventana horaria.
+   * Si se omite o es inválida, el servidor asume `TIMEZONE_NUTRICION_POR_DEFECTO`.
+   */
+  timezoneCliente: z.string().min(2).max(64).optional(),
 });
+
+/**
+ * RF-002 RN-01: recurso educativo adjunto a las metas del coach (PDF de lista de compras,
+ * distribución de comidas, etc.).
+ *
+ * Persistencia honesta de esta unidad: enlace validado (`url`). La subida de PDFs exige un
+ * pipeline de almacenamiento propio (imágenes/webp no aplican) que no forma parte del alcance.
+ */
+export const RecursoNutricionalSchema = z.object({
+  titulo: z.string().min(2, 'El título del recurso debe tener al menos 2 caracteres').max(120),
+  url: z.string().url('La URL del recurso no es válida').max(500),
+});
+
+/**
+ * RF-002 RN-01: metas nutricionales que el coach fija para UN alumno (una fila por alumno).
+ *
+ * Todos los objetivos son opcionales por separado (el coach puede fijar solo calorías, solo
+ * macros o una pauta general con recursos), pero el cuerpo debe declarar al menos un campo.
+ * Un campo omitido en el PUT se guarda como nulo (reemplazo completo de la fila).
+ */
+export const MetasNutricionalesSchema = z
+  .object({
+    caloriasObjetivo: z.number().int().min(1).max(15000).optional(),
+    proteinaGramosObjetivo: z.number().int().min(1).max(1000).optional(),
+    carbohidratosGramosObjetivo: z.number().int().min(1).max(1500).optional(),
+    grasasGramosObjetivo: z.number().int().min(1).max(1000).optional(),
+    aguaLitrosObjetivo: z
+      .string()
+      .regex(DECIMAL_STRING_REGEX, 'La meta de agua debe tener formato decimal con hasta 2 decimales')
+      .optional(),
+    recursos: z
+      .array(RecursoNutricionalSchema)
+      .max(10, 'No se permiten más de 10 recursos educativos por alumno')
+      .optional(),
+  })
+  .refine(
+    (valor) => Object.values(valor).some((campo) => campo !== undefined),
+    'Debes definir al menos una meta nutricional o recurso educativo.'
+  );
 
 export const FiltroSesionesAlumnoSchema = z.object({
   desde: z.string().regex(FECHA_CALENDARIO_REGEX).optional(),

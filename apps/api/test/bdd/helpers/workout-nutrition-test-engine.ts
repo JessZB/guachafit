@@ -34,6 +34,19 @@ import {
   obtenerFechaLocalYyyyMmDd,
   fechaAnteriorYyyyMmDd,
 } from '../../../src/common/adherencia.util';
+// RF-002 (WU RF-002a): la tolerancia ±10% y la ventana horaria NO se re-implementan aquí; el
+// engine importa y re-exporta el código real de producción (mismo criterio D9 que RN-02/RN-03
+// de entrenamiento): si la semántica cambia en src, estos tests fallan en lugar de enmascararlo.
+import {
+  contarDiasNoReportados,
+  enumerarFechasCalendario,
+  evaluarToleranciaNutricional,
+  evaluarVentanaCheckinNutricional,
+  resolverTimezoneNutricion,
+  sumarDiasCalendario,
+  type MetasNutricionalesCoach,
+  type ResultadoVentanaCheckinNutricional,
+} from '../../../src/modules/nutricion/nutricion.service';
 
 export {
   evaluarCumplimientoRachaPorVolumen,
@@ -41,8 +54,14 @@ export {
   calcularRachaEfectiva,
   obtenerFechaLocalYyyyMmDd,
   fechaAnteriorYyyyMmDd,
+  evaluarToleranciaNutricional,
+  evaluarVentanaCheckinNutricional,
+  resolverTimezoneNutricion,
+  sumarDiasCalendario,
+  enumerarFechasCalendario,
+  contarDiasNoReportados,
 };
-export type { RachaEstado, EvaluacionRacha };
+export type { RachaEstado, EvaluacionRacha, MetasNutricionalesCoach, ResultadoVentanaCheckinNutricional };
 
 // =============================================================================
 // MODELOS DE ESTADO EN MEMORIA (INVARIANTE DE DOMINIO - MÓDULO 3)
@@ -356,12 +375,6 @@ export class WorkoutTestEngine {
 // MOTOR DE DOMINIO: CHECK-INS NUTRICIONALES (RF-002)
 // =============================================================================
 
-export interface MetasNutricionalesCoach {
-  caloriasObjetivo: number;
-  proteinaGramosObjetivo: number;
-  aguaLitrosObjetivo?: string;
-}
-
 export class NutricionTestEngine {
   // Almacén en memoria simulando índice único `uq_checkin_nutricional_diario(alumno_id, fecha)`
   private checkinsPorAlumnoYFecha = new Map<string, CheckinNutricionalState>();
@@ -429,35 +442,19 @@ export class NutricionTestEngine {
 
     this.checkinsPorAlumnoYFecha.set(key, checkinState);
 
-    // Comparación contra metas del coach si se configuraron (RF-002 Escenario 3: margen ±10%)
-    let dentroMargenTolerancia: boolean | undefined = undefined;
-    let desviacionCaloriasPct: number | undefined = undefined;
-    let desviacionProteinasPct: number | undefined = undefined;
-
-    if (
-      metasCoach &&
-      checkinState.caloriasReportadas !== null &&
-      checkinState.proteinaGramosReportada !== null
-    ) {
-      const calReport = checkinState.caloriasReportadas;
-      const calMeta = metasCoach.caloriasObjetivo;
-      desviacionCaloriasPct = Math.round(((calReport - calMeta) / calMeta) * 10000) / 100;
-
-      const protReport = checkinState.proteinaGramosReportada;
-      const protMeta = metasCoach.proteinaGramosObjetivo;
-      desviacionProteinasPct = Math.round(((protReport - protMeta) / protMeta) * 10000) / 100;
-
-      const calEnMargen = Math.abs(desviacionCaloriasPct) <= 10.0;
-      const protEnMargen = Math.abs(desviacionProteinasPct) <= 10.0;
-
-      dentroMargenTolerancia = calEnMargen && protEnMargen;
-    }
+    // RF-002 Escenario 3: comparación contra las metas reales (margen ±10%) con la MISMA función
+    // pura de producción; sin metas o sin totales no se evalúa (campos `undefined`).
+    const tolerancia = evaluarToleranciaNutricional(
+      checkinState.caloriasReportadas,
+      checkinState.proteinaGramosReportada,
+      metasCoach
+    );
 
     return {
       checkin: checkinState,
-      dentroMargenTolerancia,
-      desviacionCaloriasPct,
-      desviacionProteinasPct,
+      dentroMargenTolerancia: tolerancia.dentroMargenTolerancia,
+      desviacionCaloriasPct: tolerancia.desviacionCaloriasPct,
+      desviacionProteinasPct: tolerancia.desviacionProteinasPct,
     };
   }
 

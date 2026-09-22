@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
+  EstadoDiaNutricional,
   SemaforoNutricional,
   TipoComida,
   CheckinNutricionalSchema,
@@ -8,6 +9,9 @@ import {
 import {
   NutricionTestEngine,
   MetasNutricionalesCoach,
+  evaluarVentanaCheckinNutricional,
+  contarDiasNoReportados,
+  enumerarFechasCalendario,
 } from './helpers/workout-nutrition-test-engine';
 
 describe('RF-002: Módulo de Nutrición Ágil y Reporte Rápido', () => {
@@ -387,6 +391,66 @@ describe('RF-002: Módulo de Nutrición Ágil y Reporte Rápido', () => {
           fecha: '2026-09-06T18:00:00Z', // ISO datetime no permitido en fecha calendario
           semaforo: SemaforoNutricional.CUMPLIDO,
         }).success
+      ).toBe(false);
+    });
+  });
+
+  describe('Ventana horaria RN-02 y "No reportado" §6 (WU RF-002a)', () => {
+    it('el check-in 1-Tap se habilita entre las 18:00 y las 23:59 locales', () => {
+      // 18:00 en punto de Caracas (UTC-4) → habilitado.
+      expect(
+        evaluarVentanaCheckinNutricional(
+          fechaHoy,
+          'America/Caracas',
+          new Date('2026-09-06T22:00:00.000Z')
+        ).permitido
+      ).toBe(true);
+
+      // 23:59 locales → todavía habilitado (el día cierra a medianoche).
+      expect(
+        evaluarVentanaCheckinNutricional(
+          fechaHoy,
+          'America/Caracas',
+          new Date('2026-09-07T03:59:00.000Z')
+        ).permitido
+      ).toBe(true);
+
+      // 17:59 local → aún no se habilita.
+      expect(
+        evaluarVentanaCheckinNutricional(
+          fechaHoy,
+          'America/Caracas',
+          new Date('2026-09-06T21:59:00.000Z')
+        ).motivo
+      ).toBe('FUERA_DE_VENTANA');
+
+      // 00:00 del día siguiente → el día anterior ya cerró.
+      expect(
+        evaluarVentanaCheckinNutricional(
+          '2026-09-07',
+          'America/Caracas',
+          new Date('2026-09-07T04:00:00.000Z')
+        ).motivo
+      ).toBe('FUERA_DE_VENTANA');
+    });
+
+    it('sin semáforo registrado, el día cerrado queda como "No reportado" (gris) y no penaliza la racha', () => {
+      // Días cerrados de la semana (hasta ayer) con un único check-in el 2026-09-16.
+      const diasCerrados = enumerarFechasCalendario('2026-09-15', '2026-09-21');
+      expect(diasCerrados).toHaveLength(7);
+
+      const noReportados = contarDiasNoReportados(
+        '2026-09-15',
+        '2026-09-21',
+        new Set(['2026-09-16'])
+      );
+      expect(noReportados).toBe(6);
+
+      // El estado derivado vive en el enum compartido y es distinto de los tres semáforos
+      // persistidos: "no reportado" nunca se envía como check-in.
+      expect(EstadoDiaNutricional.NO_REPORTADO).toBe('no_reportado');
+      expect(
+        Object.values(SemaforoNutricional).includes(EstadoDiaNutricional.NO_REPORTADO as never)
       ).toBe(false);
     });
   });

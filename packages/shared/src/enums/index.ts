@@ -68,6 +68,20 @@ export enum SemaforoNutricional {
   NO_CUMPLIDO = 'no_cumplido',
 }
 
+/**
+ * RF-002 §6: estado DERIVADO del calendario nutricional de un día.
+ *
+ * Los tres primeros valores replican `SemaforoNutricional` (el estado PERSISTIDO del check-in);
+ * `NO_REPORTADO` nunca se persiste: se calcula cuando el día ya cerró (pasadas las 23:59 locales)
+ * y el alumno no registró el semáforo. El día no penaliza la racha de entrenamiento.
+ */
+export enum EstadoDiaNutricional {
+  CUMPLIDO = 'cumplido',
+  PARCIAL = 'parcial',
+  NO_CUMPLIDO = 'no_cumplido',
+  NO_REPORTADO = 'no_reportado',
+}
+
 export enum TipoComida {
   DESAYUNO = 'desayuno',
   ALMUERZO = 'almuerzo',

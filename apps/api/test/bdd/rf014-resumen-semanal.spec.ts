@@ -71,6 +71,7 @@ describe('Ola 3: resumen semanal del coach', () => {
         cobradoUsd: '120.00',
         cuotasPorVencer: 2,
         cuotasEnMora: 1,
+        nutricionDiasNoReportados: 0,
       });
 
       expect(cuerpo).toContain('Hola Studio Ana');
@@ -78,6 +79,8 @@ describe('Ola 3: resumen semanal del coach', () => {
       expect(cuerpo).toContain('$120.00 USD cobrados');
       expect(cuerpo).toContain('2 cuota(s) por vencer');
       expect(cuerpo).toContain('1 en mora');
+      // Sin días no reportados NO se inventa una alerta de nutrición.
+      expect(cuerpo).not.toContain('sin reporte nutricional');
     });
 
     it('sin sesiones programadas no divide por cero', () => {
@@ -89,9 +92,25 @@ describe('Ola 3: resumen semanal del coach', () => {
         cobradoUsd: '0.00',
         cuotasPorVencer: 0,
         cuotasEnMora: 0,
+        nutricionDiasNoReportados: 0,
       });
 
       expect(cuerpo).toContain('0 sesiones completadas (sin sesiones programadas esta semana)');
+    });
+
+    it('RF-002 §6: alerta los días sin reporte nutricional cuando existen', () => {
+      const cuerpo = construirCuerpoResumenSemanal({
+        coachNombre: 'Studio Ana',
+        alumnosActivos: 2,
+        sesionesCompletadas: 3,
+        sesionesProgramadas: 6,
+        cobradoUsd: '120.00',
+        cuotasPorVencer: 2,
+        cuotasEnMora: 1,
+        nutricionDiasNoReportados: 8,
+      });
+
+      expect(cuerpo).toContain('8 día(s) de tu alumnado quedaron sin reporte nutricional');
     });
   });
 
@@ -142,9 +161,19 @@ describe('Ola 3: resumen semanal del coach', () => {
           { alumnoId: 'alumno-1', total: 4 },
           { alumnoId: 'alumno-2', total: 2 },
         ],
-        // 5. Cobros aprobados de la ventana.
+        // 5. RF-002 §6: check-ins nutricionales de los días cerrados (hasta ayer).
+        //    alumno-1 reportó 6 días de 7 → 1 no reportado; alumno-2 ninguno → 7 no reportados.
+        [
+          { alumnoId: 'alumno-1', fecha: '2026-09-15' },
+          { alumnoId: 'alumno-1', fecha: '2026-09-16' },
+          { alumnoId: 'alumno-1', fecha: '2026-09-17' },
+          { alumnoId: 'alumno-1', fecha: '2026-09-18' },
+          { alumnoId: 'alumno-1', fecha: '2026-09-19' },
+          { alumnoId: 'alumno-1', fecha: '2026-09-20' },
+        ],
+        // 6. Cobros aprobados de la ventana.
         [{ entrenadorId: 'coach-1', total: '120.00' }],
-        // 6. Cartera por estado.
+        // 7. Cartera por estado.
         [
           { entrenadorId: 'coach-1', estado: EstadoCuota.POR_VENCER, total: 2 },
           { entrenadorId: 'coach-1', estado: EstadoCuota.VENCIDA, total: 1 },
@@ -177,6 +206,8 @@ describe('Ola 3: resumen semanal del coach', () => {
       expect(evento1.payload.cuerpo).toContain('Hola Studio Ana');
       expect(evento1.payload.cuerpo).toContain('3 de 6 sesiones completadas (50%)');
       expect(evento1.payload.cuerpo).toContain('$120.00 USD cobrados');
+      // RF-002 §6: 1 día no reportado de alumno-1 + 7 de alumno-2.
+      expect(evento1.payload.cuerpo).toContain('8 día(s) de tu alumnado quedaron sin reporte nutricional');
       expect(evento1.payload.datosAdicionales).toEqual(
         expect.objectContaining({
           alumnosActivos: 2,
@@ -185,6 +216,7 @@ describe('Ola 3: resumen semanal del coach', () => {
           cobradoUsd: '120.00',
           cuotasPorVencer: 2,
           cuotasEnMora: 1,
+          nutricionDiasNoReportados: 8,
         })
       );
 
@@ -192,8 +224,9 @@ describe('Ola 3: resumen semanal del coach', () => {
       expect(evento2.payload.destinatarioUserId).toBe('coach-2');
       expect(evento2.payload.cuerpo).toContain('Hola Luis Pérez');
       expect(evento2.payload.cuerpo).toContain('$0.00 USD cobrados');
+      expect(evento2.payload.cuerpo).not.toContain('sin reporte nutricional');
       expect(evento2.payload.datosAdicionales).toEqual(
-        expect.objectContaining({ alumnosActivos: 0, cuotasPorVencer: 0, cuotasEnMora: 0 })
+        expect.objectContaining({ alumnosActivos: 0, cuotasPorVencer: 0, cuotasEnMora: 0, nutricionDiasNoReportados: 0 })
       );
     });
 

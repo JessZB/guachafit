@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Body,
   Param,
   Query,
@@ -11,7 +12,9 @@ import {
   Inject,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
+import { ZodSchema } from 'zod';
 import { NutricionService } from './nutricion.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -23,7 +26,21 @@ import {
   EstadoAlumno,
   CheckinNutricionalSchema,
   FiltroCheckinsNutricionalesSchema,
+  MetasNutricionalesSchema,
 } from '@guachafit/shared';
+
+/**
+ * Valida un cuerpo con el contrato compartido y devuelve 400 con el primer mensaje del contrato.
+ * El servicio vuelve a validar (defensa en profundidad para sus otros llamadores); aquí se evita
+ * que un ZodError crudo termine en un 500 genérico.
+ */
+function parsearContrato<T>(schema: ZodSchema<T>, body: unknown): T {
+  const resultado = schema.safeParse(body);
+  if (!resultado.success) {
+    throw new BadRequestException(resultado.error.issues[0]?.message ?? 'Datos inválidos.');
+  }
+  return resultado.data;
+}
 
 @Controller('nutricion')
 export class NutricionController {
@@ -43,13 +60,14 @@ export class NutricionController {
   @Roles(Rol.ALUMNO)
   @HttpCode(HttpStatus.CREATED)
   async registrarCheckinDiario(@Req() req: any, @Body() body: unknown) {
-    const dto = CheckinNutricionalSchema.parse(body);
+    const dto = parsearContrato(CheckinNutricionalSchema, body);
     const alumnoId = req.user.sub;
     return this.nutricionService.registrarCheckinDiario(alumnoId, dto);
   }
 
   /**
    * Consultar el reporte nutricional del día en curso para el alumno autenticado.
+   * `timezoneCliente` (RN-05/ADR-002) resuelve el día local cuando no se envía `fecha`.
    * Rol: Alumno
    */
   @Get('checkin/hoy')
@@ -58,10 +76,11 @@ export class NutricionController {
   async obtenerCheckinHoy(
     @Req() req: any,
     @Query('fecha') fecha?: string,
+    @Query('timezoneCliente') timezoneCliente?: string,
     @Res({ passthrough: true }) res?: any
   ) {
     const alumnoId = req.user.sub;
-    const checkin = await this.nutricionService.obtenerCheckinHoy(alumnoId, fecha);
+    const checkin = await this.nutricionService.obtenerCheckinHoy(alumnoId, fecha, timezoneCliente);
     if (!checkin && res) {
       res.status(HttpStatus.NO_CONTENT);
       return null;
@@ -81,7 +100,7 @@ export class NutricionController {
     @Param('alumnoId') alumnoId: string,
     @Query() query: unknown
   ) {
-    const filtro = FiltroCheckinsNutricionalesSchema.parse(query || {});
+    const filtro = parsearContrato(FiltroCheckinsNutricionalesSchema, query || {});
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.nutricionService.listarCheckins(
       entrenadorId,
@@ -90,5 +109,62 @@ export class NutricionController {
       req.user.rol,
       req.user.sub
     );
+  }
+
+  /**
+   * Consultar las metas nutricionales del alumno autenticado (RN-01).
+   * 204 si el coach aún no configuró metas (estado honesto, no un vacío fabricado).
+   * Rol: Alumno
+   */
+  @Get('metas')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ALUMNO)
+  async obtenerMisMetas(@Req() req: any, @Res({ passthrough: true }) res?: any) {
+    const metas = await this.nutricionService.obtenerMetasNutricionales(req.user.sub);
+    if (!metas && res) {
+      res.status(HttpStatus.NO_CONTENT);
+      return null;
+    }
+    return metas;
+  }
+
+  /**
+   * Consultar las metas nutricionales de un alumno de la cartera del coach (RN-01).
+   * 204 si el alumno no tiene metas configuradas. Tenancy validada en el servicio.
+   * Rol: Entrenador
+   */
+  @Get('alumnos/:alumnoId/metas')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR)
+  async obtenerMetasAlumno(
+    @Req() req: any,
+    @Param('alumnoId') alumnoId: string,
+    @Res({ passthrough: true }) res?: any
+  ) {
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    const metas = await this.nutricionService.obtenerMetasDeAlumno(entrenadorId, alumnoId);
+    if (!metas && res) {
+      res.status(HttpStatus.NO_CONTENT);
+      return null;
+    }
+    return metas;
+  }
+
+  /**
+   * Definir (crear o reemplazar) las metas nutricionales de un alumno del coach (RN-01):
+   * calorías, macros, agua y recursos educativos. Tenancy validada en el servicio.
+   * Rol: Entrenador
+   */
+  @Put('alumnos/:alumnoId/metas')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR)
+  async definirMetasAlumno(
+    @Req() req: any,
+    @Param('alumnoId') alumnoId: string,
+    @Body() body: unknown
+  ) {
+    const dto = parsearContrato(MetasNutricionalesSchema, body);
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    return this.nutricionService.definirMetasNutricionales(entrenadorId, alumnoId, dto);
   }
 }
