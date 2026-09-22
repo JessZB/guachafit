@@ -17,6 +17,7 @@ import {
   JOB_SCHEDULER_BARRIDO_ID,
   construirJobIdCobranza,
 } from '../../src/modules/finanzas/cobranza-hitos';
+import { RecordatorioCuotaEvent } from '../../src/modules/notificaciones/events/eventos-notificacion';
 
 /**
  * WU-H (RF-008 §4.B / ADR-008): planificador BullMQ con cola MOCK.
@@ -178,7 +179,8 @@ describe('RF-008 WU-H: BillingReminderProcessor (DB y despachador mock)', () => 
   const clienteId = '11111111-1111-4111-8111-111111111111';
   const entrenadorId = '22222222-2222-4222-8222-222222222222';
 
-  let mockDispatcher: any;
+  let mockEventEmitter: any;
+  let mockDlq: any;
   let mockFinanzas: any;
 
   function cuotaBase(overrides: Record<string, any> = {}) {
@@ -220,7 +222,9 @@ describe('RF-008 WU-H: BillingReminderProcessor (DB y despachador mock)', () => 
   }
 
   beforeEach(() => {
-    mockDispatcher = { despacharEvento: vi.fn().mockResolvedValue({ inAppId: 'inapp-1' }) };
+    // RF-014 RN-01: el processor publica eventos de dominio (bus mock) y tiene su DLQ.
+    mockEventEmitter = { emitAsync: vi.fn().mockResolvedValue([{ inAppId: 'inapp-1' }]) };
+    mockDlq = { add: vi.fn().mockResolvedValue({ id: 'dlq-mock' }) };
     mockFinanzas = {
       obtenerTasaVigente: vi.fn().mockResolvedValue({ tasaEfectiva: '60.0000' }),
       proyectarVES: vi.fn((usd: string, tasa: string) =>
@@ -229,24 +233,32 @@ describe('RF-008 WU-H: BillingReminderProcessor (DB y despachador mock)', () => 
     };
   });
 
+  function crearProcessor(db: any): BillingReminderProcessor {
+    return new BillingReminderProcessor(db, mockEventEmitter, mockFinanzas, mockDlq);
+  }
+
   describe('recordatorios por hito', () => {
     it('despacha por FINANZAS cuando la cuota sigue con saldo, con saldo dual USD/Bs (T-1)', async () => {
       const { db } = crearDbMock([cuotaBase()]);
-      const processor = new BillingReminderProcessor(db, mockDispatcher, mockFinanzas);
+      const processor = crearProcessor(db);
 
       const resultado = await processor.process(
         crearJob(JOB_RECORDATORIO_CUOTA, { cuotaId, hito: 'T_MINUS_1' })
       );
 
       expect(resultado).toEqual({ enviado: true, motivo: 'despachado' });
-      expect(mockDispatcher.despacharEvento).toHaveBeenCalledWith(
+      expect(mockEventEmitter.emitAsync).toHaveBeenCalledWith(
+        RecordatorioCuotaEvent.NOMBRE,
         expect.objectContaining({
-          tipoEvento: 'CUOTA_POR_VENCER',
-          destinatarioUserId: clienteId,
-          entrenadorId,
-          categoria: 'FINANZAS',
-          linkAccion: '/app/pagos',
-          cuerpo: expect.stringContaining('$60.00 USD (o Bs. 3600.00)'),
+          payload: expect.objectContaining({
+            tipoEvento: 'CUOTA_POR_VENCER',
+            destinatarioUserId: clienteId,
+            entrenadorId,
+            categoria: 'FINANZAS',
+            linkAccion: '/app/pagos',
+            cuerpo: expect.stringContaining('$60.00 USD (o Bs. 3600.00)'),
+            referenciaId: `${cuotaId}_T_MINUS_1`,
+          }),
         })
       );
     });
@@ -255,42 +267,42 @@ describe('RF-008 WU-H: BillingReminderProcessor (DB y despachador mock)', () => 
       const { db } = crearDbMock([
         cuotaBase({ estado: EstadoCuota.AL_DIA, saldoPendienteUsd: '0.00' }),
       ]);
-      const processor = new BillingReminderProcessor(db, mockDispatcher, mockFinanzas);
+      const processor = crearProcessor(db);
 
       const resultado = await processor.process(
         crearJob(JOB_RECORDATORIO_CUOTA, { cuotaId, hito: 'T_ZERO' })
       );
 
       expect(resultado).toEqual({ enviado: false, motivo: 'cuota_saldada' });
-      expect(mockDispatcher.despacharEvento).not.toHaveBeenCalled();
+      expect(mockEventEmitter.emitAsync).not.toHaveBeenCalled();
     });
 
     it('PAUSA el envío en PENDIENTE_REVISION (RF-008 Gherkin 2)', async () => {
       const { db } = crearDbMock([cuotaBase({ estado: EstadoCuota.PENDIENTE_REVISION })]);
-      const processor = new BillingReminderProcessor(db, mockDispatcher, mockFinanzas);
+      const processor = crearProcessor(db);
 
       const resultado = await processor.process(
         crearJob(JOB_RECORDATORIO_CUOTA, { cuotaId, hito: 'T_PLUS_2' })
       );
 
       expect(resultado).toEqual({ enviado: false, motivo: 'pausa_revision' });
-      expect(mockDispatcher.despacharEvento).not.toHaveBeenCalled();
+      expect(mockEventEmitter.emitAsync).not.toHaveBeenCalled();
     });
 
     it('NO envía sobre cuotas anuladas ni inexistentes', async () => {
       const { db: dbAnulada } = crearDbMock([cuotaBase({ estado: EstadoCuota.ANULADA })]);
-      const processorAnulada = new BillingReminderProcessor(dbAnulada, mockDispatcher, mockFinanzas);
+      const processorAnulada = crearProcessor(dbAnulada);
       expect(
         await processorAnulada.process(crearJob(JOB_RECORDATORIO_CUOTA, { cuotaId, hito: 'T_ZERO' }))
       ).toEqual({ enviado: false, motivo: 'cuota_anulada' });
 
       const { db: dbVacia } = crearDbMock([]);
-      const processorVacia = new BillingReminderProcessor(dbVacia, mockDispatcher, mockFinanzas);
+      const processorVacia = crearProcessor(dbVacia);
       expect(
         await processorVacia.process(crearJob(JOB_RECORDATORIO_CUOTA, { cuotaId, hito: 'T_ZERO' }))
       ).toEqual({ enviado: false, motivo: 'cuota_no_encontrada' });
 
-      expect(mockDispatcher.despacharEvento).not.toHaveBeenCalled();
+      expect(mockEventEmitter.emitAsync).not.toHaveBeenCalled();
     });
 
     it('adapta el mensaje de T+2 cuando hubo abono parcial (RF-008 §6)', async () => {
@@ -301,14 +313,17 @@ describe('RF-008 WU-H: BillingReminderProcessor (DB y despachador mock)', () => 
           saldoPendienteUsd: '30.00',
         }),
       ]);
-      const processor = new BillingReminderProcessor(db, mockDispatcher, mockFinanzas);
+      const processor = crearProcessor(db);
 
       await processor.process(crearJob(JOB_RECORDATORIO_CUOTA, { cuotaId, hito: 'T_PLUS_2' }));
 
-      expect(mockDispatcher.despacharEvento).toHaveBeenCalledWith(
+      expect(mockEventEmitter.emitAsync).toHaveBeenCalledWith(
+        RecordatorioCuotaEvent.NOMBRE,
         expect.objectContaining({
-          tipoEvento: 'CUOTA_VENCIDA',
-          cuerpo: expect.stringContaining('parcialmente vencida con un saldo remanente de $30.00 USD'),
+          payload: expect.objectContaining({
+            tipoEvento: 'CUOTA_VENCIDA',
+            cuerpo: expect.stringContaining('parcialmente vencida con un saldo remanente de $30.00 USD'),
+          }),
         })
       );
     });
@@ -349,7 +364,7 @@ describe('RF-008 WU-H: BillingReminderProcessor (DB y despachador mock)', () => 
           fechaCorteUtc: new Date(ahora.getTime() - 24 * 60 * 60 * 1000),
         }),
       ]);
-      const processor = new BillingReminderProcessor(db, mockDispatcher, mockFinanzas);
+      const processor = crearProcessor(db);
 
       const resultado = await processor.process(crearJob(JOB_BARRIDO_ESTADOS, {}));
 
@@ -366,12 +381,12 @@ describe('RF-008 WU-H: BillingReminderProcessor (DB y despachador mock)', () => 
 
     it('ignora jobs desconocidos sin romper el worker', async () => {
       const { db } = crearDbMock([]);
-      const processor = new BillingReminderProcessor(db, mockDispatcher, mockFinanzas);
+      const processor = crearProcessor(db);
 
       const resultado = await processor.process(crearJob('job-raro', {}));
 
       expect(resultado).toEqual({ procesado: false });
-      expect(mockDispatcher.despacharEvento).not.toHaveBeenCalled();
+      expect(mockEventEmitter.emitAsync).not.toHaveBeenCalled();
     });
 
     it('la cola procesada es la cola de cobranza registrada', () => {

@@ -23,12 +23,13 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { getTableName } from '@guachafit/database';
+import { SesionAlumnoFinalizadaEvent } from '../../src/modules/notificaciones/events/eventos-notificacion';
 
 describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & EntrenamientoController)', () => {
   let entrenamientoService: EntrenamientoService;
   let entrenamientoController: EntrenamientoController;
   let mockDb: any;
-  let mockDispatcher: any;
+  let mockEventEmitter: any;
   /**
    * RNF-003/ADR-009: `rutinas` tiene RLS; el envoltorio transaccional se inyecta.
    * En tests es passthrough: ejecuta el callback con el mismo mock in-memory.
@@ -493,18 +494,21 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
     mockSeriesRegistro = [];
     mockRutinas = [];
 
-    mockDispatcher = {
-      despacharEvento: vi.fn().mockResolvedValue({
-        inAppId: 'inapp-test',
-        pushEnqueued: false,
-        emailEnqueued: false,
-        activeDeviceTokensCount: 0,
-      }),
+    // RF-014 RN-01: el servicio publica eventos de dominio; el bus se mockea con emitAsync.
+    mockEventEmitter = {
+      emitAsync: vi.fn().mockResolvedValue([
+        {
+          inAppId: 'inapp-test',
+          pushEnqueued: false,
+          emailEnqueued: false,
+          activeDeviceTokensCount: 0,
+        },
+      ]),
     };
 
     mockDb = createMockDb();
     withTenantMock = vi.fn(async (_ctx: any, fn: any) => fn(mockDb));
-    entrenamientoService = new EntrenamientoService(mockDb, withTenantMock, mockDispatcher);
+    entrenamientoService = new EntrenamientoService(mockDb, withTenantMock, mockEventEmitter);
     entrenamientoController = new EntrenamientoController(entrenamientoService);
   });
 
@@ -2233,7 +2237,7 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
       return sesion;
     }
 
-    it('emite SESION_ALUMNO_FINALIZADA al entrenador del alumno con resumen de RPE y nota', async () => {
+    it('publica SESION_ALUMNO_FINALIZADA al entrenador del alumno con resumen de RPE y nota', async () => {
       const sesion = await prepararSesionEnProgreso({ conRpe: true });
 
       const resultado = await entrenamientoService.finalizarSesion(sesion.id, alumnoId1, {
@@ -2242,21 +2246,24 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
       });
 
       expect(resultado.sesion.estado).toBe(EstadoSesion.COMPLETADA);
-      expect(mockDispatcher.despacharEvento).toHaveBeenCalledTimes(1);
+      expect(mockEventEmitter.emitAsync).toHaveBeenCalledTimes(1);
 
-      const evento = mockDispatcher.despacharEvento.mock.calls[0][0];
-      expect(evento.tipoEvento).toBe('SESION_ALUMNO_FINALIZADA');
-      expect(evento.categoria).toBe('ENTRENAMIENTO');
-      expect(evento.destinatarioUserId).toBe(coachId1);
-      expect(evento.titulo).toBe('Sesión finalizada por tu alumno');
-      expect(evento.cuerpo).toContain('Pedro Pérez');
-      expect(evento.cuerpo).toContain('RPE promedio: 8.5');
-      expect(evento.cuerpo).toContain('Dejó una nota');
-      expect(evento.linkAccion).toBe('/coach/alumnos/perfil-alumno-1');
-      expect(evento.datosAdicionales.sesionId).toBe(sesion.id);
-      expect(evento.datosAdicionales.alumnoId).toBe(alumnoId1);
-      expect(evento.datosAdicionales.rpePromedio).toBe('8.5');
-      expect(evento.datosAdicionales.dejoNota).toBe(true);
+      const [nombreEvento, evento] = mockEventEmitter.emitAsync.mock.calls[0];
+      expect(nombreEvento).toBe(SesionAlumnoFinalizadaEvent.NOMBRE);
+      expect(evento.payload.tipoEvento).toBe('SESION_ALUMNO_FINALIZADA');
+      expect(evento.payload.categoria).toBe('ENTRENAMIENTO');
+      expect(evento.payload.destinatarioUserId).toBe(coachId1);
+      expect(evento.payload.titulo).toBe('Sesión finalizada por tu alumno');
+      expect(evento.payload.cuerpo).toContain('Pedro Pérez');
+      expect(evento.payload.cuerpo).toContain('RPE promedio: 8.5');
+      expect(evento.payload.cuerpo).toContain('Dejó una nota');
+      expect(evento.payload.linkAccion).toBe('/coach/alumnos/perfil-alumno-1');
+      expect(evento.payload.datosAdicionales.sesionId).toBe(sesion.id);
+      expect(evento.payload.datosAdicionales.alumnoId).toBe(alumnoId1);
+      expect(evento.payload.datosAdicionales.rpePromedio).toBe('8.5');
+      expect(evento.payload.datosAdicionales.dejoNota).toBe(true);
+      // RNF-004 §3: el evento trae la referencia de origen para el jobId determinista.
+      expect(evento.payload.referenciaId).toBe(sesion.id);
     });
 
     it('no emite notificación cuando la sesión se cierra como OMITIDA (descanso/incompleta)', async () => {
@@ -2277,11 +2284,11 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
       });
 
       expect(resultado.sesion.estado).toBe(EstadoSesion.OMITIDA);
-      expect(mockDispatcher.despacharEvento).not.toHaveBeenCalled();
+      expect(mockEventEmitter.emitAsync).not.toHaveBeenCalled();
     });
 
     it('un fallo del despachador no rompe la finalización de la sesión (RNF-004)', async () => {
-      mockDispatcher.despacharEvento.mockRejectedValueOnce(new Error('Redis no disponible'));
+      mockEventEmitter.emitAsync.mockRejectedValueOnce(new Error('Redis no disponible'));
       const sesion = await prepararSesionEnProgreso();
 
       const resultado = await entrenamientoService.finalizarSesion(sesion.id, alumnoId1, {
@@ -2290,7 +2297,7 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
 
       expect(resultado.sesion.estado).toBe(EstadoSesion.COMPLETADA);
       expect(resultado.cumpleReglaRacha).toBe(true);
-      expect(mockDispatcher.despacharEvento).toHaveBeenCalledTimes(1);
+      expect(mockEventEmitter.emitAsync).toHaveBeenCalledTimes(1);
     });
 
     it('finaliza correctamente cuando el servicio de notificaciones no está inyectado', async () => {

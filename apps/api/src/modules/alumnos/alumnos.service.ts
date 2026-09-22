@@ -31,7 +31,8 @@ import {
   planesMembresia,
 } from '@guachafit/database';
 import { CryptoService } from '../../common/services/crypto.service';
-import { NotificationDispatcherService } from '../notificaciones/notification-dispatcher.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AlumnoRegistradoEvent } from '../notificaciones/events/eventos-notificacion';
 import {
   AltaManualAlumnoDTO,
   AltaManualAlumnoResultadoDTO,
@@ -82,9 +83,9 @@ export class AlumnosService {
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
     private readonly cryptoService: CryptoService,
-    // RF-014 / WU-E: notificación al coach del nuevo registro por deep link (RN-07.4).
-    // Opcional para no romper los consumidores que instancian el servicio sin el despachador.
-    @Optional() private readonly dispatcherService?: NotificationDispatcherService
+    // RF-014 / WU-E: el alta por deep link publica un evento de dominio para el coach (RN-07.4).
+    // Opcional para no romper los consumidores que instancian el servicio sin bus de eventos.
+    @Optional() private readonly eventEmitter?: EventEmitter2
   ) {}
 
   /**
@@ -340,7 +341,7 @@ export class AlumnosService {
   }
 
   /**
-   * WU-E (RF-011 RN-07.4): emite el evento de dominio "Nuevo alumno registrado" hacia el coach.
+   * WU-E (RF-011 RN-07.4): publica el evento de dominio "Nuevo alumno registrado" hacia el coach.
    * La categoría `ALUMNOS` ("Nuevos Registros" en RF-015 §B) se persiste siempre en la bandeja
    * In-App (RF-014 RN-04); los canales externos quedan deshabilitados hasta que RF-015 defina
    * sus columnas de preferencia (no se reutilizan las de otra categoría).
@@ -355,27 +356,33 @@ export class AlumnosService {
       apellidos: string;
     }
   ): void {
-    if (!this.dispatcherService) return;
+    if (!this.eventEmitter) return;
 
     const nombreCompleto = `${alumno.nombres} ${alumno.apellidos}`.trim();
 
-    this.dispatcherService
-      .despacharEvento({
-        tipoEvento: 'ALUMNO_REGISTRADO',
-        destinatarioUserId: coach.usuarioId,
-        entrenadorId: coach.usuarioId,
-        categoria: 'ALUMNOS',
-        titulo: 'Nuevo alumno registrado',
-        cuerpo: `${nombreCompleto} se registró con tu enlace de invitación.`,
-        linkAccion: `/coach/alumnos/${alumno.alumnoId}`,
-        datosAdicionales: {
-          alumnoId: alumno.alumnoId,
-          usuarioId: alumno.usuarioId,
-          email: alumno.email,
-          coachCode: coach.coachCode,
-        },
-        esCriticoSeguridad: false,
-      })
+    // RF-014 RN-01: fire-and-forget; un fallo del bus/colas NUNCA tumba el alta del alumno.
+    void this.eventEmitter
+      .emitAsync(
+        AlumnoRegistradoEvent.NOMBRE,
+        new AlumnoRegistradoEvent({
+          tipoEvento: 'ALUMNO_REGISTRADO',
+          destinatarioUserId: coach.usuarioId,
+          entrenadorId: coach.usuarioId,
+          categoria: 'ALUMNOS',
+          titulo: 'Nuevo alumno registrado',
+          cuerpo: `${nombreCompleto} se registró con tu enlace de invitación.`,
+          linkAccion: `/coach/alumnos/${alumno.alumnoId}`,
+          datosAdicionales: {
+            alumnoId: alumno.alumnoId,
+            usuarioId: alumno.usuarioId,
+            email: alumno.email,
+            coachCode: coach.coachCode,
+          },
+          esCriticoSeguridad: false,
+          // RNF-004 §3: ref de origen del jobId determinista.
+          referenciaId: alumno.alumnoId,
+        })
+      )
       .catch((error) => {
         this.logger.warn(
           `No se pudo notificar al coach ${coach.usuarioId} el registro del alumno ${alumno.alumnoId}: ${

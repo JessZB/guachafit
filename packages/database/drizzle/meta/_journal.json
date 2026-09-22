@@ -57,6 +57,13 @@
       "when": 1790017725997,
       "tag": "0007_fantastic_riptide",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790098041286,
+      "tag": "0008_thankful_mimic",
+      "breakpoints": true
     }
   ]
 }

@@ -9,7 +9,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
-import { NotificationDispatcherService } from '../notificaciones/notification-dispatcher.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { SesionAlumnoFinalizadaEvent } from '../notificaciones/events/eventos-notificacion';
 import {
   Database,
   WithTenantFn,
@@ -281,7 +282,8 @@ export class EntrenamientoService {
     // RNF-003/ADR-009: toda consulta a `rutinas` (tabla con RLS habilitado) corre
     // dentro de este envoltorio transaccional con el GUC del tenant aplicado.
     @Inject(WITH_TENANT) private readonly withTenant: WithTenantFn,
-    @Optional() private readonly dispatcherService?: NotificationDispatcherService
+    // RF-014 RN-01: el servicio de negocio SOLO publica eventos de dominio en el bus.
+    @Optional() private readonly eventEmitter?: EventEmitter2
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -1667,11 +1669,12 @@ export class EntrenamientoService {
   }
 
   /**
-   * RF-014 / ADR-010: emite el evento de dominio `SESION_ALUMNO_FINALIZADA` hacia el coach.
+   * RF-014 / ADR-010: emite el evento de dominio `SesionAlumnoFinalizadaEvent` hacia el coach.
    *
    * Decisiones de diseño:
-   * - Se reutiliza el `NotificationDispatcherService` (in-app universal + colas Push/Email según
-   *   preferencias del coach); ningún proveedor externo se invoca desde el servicio de negocio.
+   * - Se publica en el bus (`emitAsync`) y el `NotificationDispatcherService` (suscriptor)
+   *   persiste In-App + encola Push/Email según preferencias del coach; ningún proveedor externo
+   *   ni el despachador se invocan desde el servicio de negocio (RN-01).
    * - El despacho se espera dentro de try/catch: la persistencia In-App es obligatoria y barata,
    *   mientras que un fallo de infraestructura de colas JAMÁS debe romper la finalización (RNF-004).
    * - Idempotencia: la máquina de estados de la sesión (`en_progreso` -> `completada`) garantiza una
@@ -1688,7 +1691,7 @@ export class EntrenamientoService {
     series: any[];
     notasAlumno?: string | null;
   }): Promise<void> {
-    if (!this.dispatcherService || !params.perfilAlumno?.entrenadorId) return;
+    if (!this.eventEmitter || !params.perfilAlumno?.entrenadorId) return;
 
     const { sesion, perfilAlumno, sesionId } = params;
     const nombreAlumno = `${perfilAlumno.nombres} ${perfilAlumno.apellidos}`.trim();
@@ -1707,27 +1710,32 @@ export class EntrenamientoService {
     if (dejoNota) cuerpo += ' Dejó una nota en la sesión.';
 
     try {
-      await this.dispatcherService.despacharEvento({
-        tipoEvento: 'SESION_ALUMNO_FINALIZADA',
-        destinatarioUserId: perfilAlumno.entrenadorId,
-        entrenadorId: perfilAlumno.entrenadorId,
-        categoria: 'ENTRENAMIENTO',
-        titulo: 'Sesión finalizada por tu alumno',
-        cuerpo,
-        linkAccion: `/coach/alumnos/${perfilAlumno.id}`,
-        datosAdicionales: {
-          sesionId,
-          alumnoId: sesion.alumnoId,
-          perfilAlumnoId: perfilAlumno.id,
-          fechaProgramada: sesion.fechaProgramada,
-          bloqueId: sesion.bloqueId,
-          porcentajeCumplimiento: params.porcentajeCumplimiento,
-          volumenTotalKg: params.volumenTotalKg,
-          rpePromedio,
-          dejoNota,
-        },
-        esCriticoSeguridad: false,
-      });
+      await this.eventEmitter.emitAsync(
+        SesionAlumnoFinalizadaEvent.NOMBRE,
+        new SesionAlumnoFinalizadaEvent({
+          tipoEvento: 'SESION_ALUMNO_FINALIZADA',
+          destinatarioUserId: perfilAlumno.entrenadorId,
+          entrenadorId: perfilAlumno.entrenadorId,
+          categoria: 'ENTRENAMIENTO',
+          titulo: 'Sesión finalizada por tu alumno',
+          cuerpo,
+          linkAccion: `/coach/alumnos/${perfilAlumno.id}`,
+          datosAdicionales: {
+            sesionId,
+            alumnoId: sesion.alumnoId,
+            perfilAlumnoId: perfilAlumno.id,
+            fechaProgramada: sesion.fechaProgramada,
+            bloqueId: sesion.bloqueId,
+            porcentajeCumplimiento: params.porcentajeCumplimiento,
+            volumenTotalKg: params.volumenTotalKg,
+            rpePromedio,
+            dejoNota,
+          },
+          esCriticoSeguridad: false,
+          // RNF-004 §3: ref de origen del jobId determinista.
+          referenciaId: sesionId,
+        })
+      );
     } catch (error) {
       this.logger.warn(
         `No se pudo notificar al entrenador ${perfilAlumno.entrenadorId} la finalización de la sesión ${sesionId}: ${

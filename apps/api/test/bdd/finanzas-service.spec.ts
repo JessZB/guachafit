@@ -27,6 +27,11 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { getTableName } from '@guachafit/database';
+import {
+  PagoAprobadoEvent,
+  PagoRechazadoEvent,
+  PagoReportadoEvent,
+} from '../../src/modules/notificaciones/events/eventos-notificacion';
 
 describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & FinanzasController)', () => {
   let finanzasService: FinanzasService;
@@ -817,11 +822,9 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('debe disparar notificación PAGO_REPORTADO al entrenador si dispatcherService está configurado', async () => {
-      const mockDispatcher: any = {
-        despacharEvento: vi.fn().mockResolvedValue({ inAppId: 'inapp-1' }),
-      };
-      const serviceConNotif = new FinanzasService(mockDb, mockDispatcher);
+    it('debe publicar el evento de dominio PAGO_REPORTADO al entrenador si el bus está configurado', async () => {
+      const emitAsync = vi.fn().mockResolvedValue([]);
+      const serviceConNotif = new FinanzasService(mockDb, { emitAsync } as any);
 
       await serviceConNotif.reportarPago(
         'cuota-test-1',
@@ -834,12 +837,16 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
         }
       );
 
-      expect(mockDispatcher.despacharEvento).toHaveBeenCalledWith(
+      expect(emitAsync).toHaveBeenCalledWith(
+        PagoReportadoEvent.NOMBRE,
         expect.objectContaining({
-          tipoEvento: 'PAGO_REPORTADO',
-          destinatarioUserId: 'coach-uuid-1',
-          categoria: 'FINANZAS',
-          esCriticoSeguridad: false,
+          payload: expect.objectContaining({
+            tipoEvento: 'PAGO_REPORTADO',
+            destinatarioUserId: 'coach-uuid-1',
+            categoria: 'FINANZAS',
+            esCriticoSeguridad: false,
+            referenciaId: expect.any(String),
+          }),
         })
       );
     });
@@ -1001,11 +1008,9 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('debe despachar evento PAGO_APROBADO con esCriticoSeguridad=true al conciliar exitosamente', async () => {
-      const mockDispatcher: any = {
-        despacharEvento: vi.fn().mockResolvedValue({ inAppId: 'inapp-2' }),
-      };
-      const serviceConNotif = new FinanzasService(mockDb, mockDispatcher);
+    it('debe publicar el evento PAGO_APROBADO con esCriticoSeguridad=true al conciliar exitosamente', async () => {
+      const emitAsync = vi.fn().mockResolvedValue([]);
+      const serviceConNotif = new FinanzasService(mockDb, { emitAsync } as any);
 
       await serviceConNotif.conciliarTransaccion(
         'tx-conciliar-1',
@@ -1013,21 +1018,23 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
         { accion: 'aprobar' }
       );
 
-      expect(mockDispatcher.despacharEvento).toHaveBeenCalledWith(
+      expect(emitAsync).toHaveBeenCalledWith(
+        PagoAprobadoEvent.NOMBRE,
         expect.objectContaining({
-          tipoEvento: 'PAGO_APROBADO',
-          destinatarioUserId: 'alumno-uuid-1',
-          categoria: 'FINANZAS',
-          esCriticoSeguridad: true,
+          payload: expect.objectContaining({
+            tipoEvento: 'PAGO_APROBADO',
+            destinatarioUserId: 'alumno-uuid-1',
+            categoria: 'FINANZAS',
+            esCriticoSeguridad: true,
+            referenciaId: expect.any(String),
+          }),
         })
       );
     });
 
-    it('debe despachar evento PAGO_RECHAZADO al rechazar un pago', async () => {
-      const mockDispatcher: any = {
-        despacharEvento: vi.fn().mockResolvedValue({ inAppId: 'inapp-3' }),
-      };
-      const serviceConNotif = new FinanzasService(mockDb, mockDispatcher);
+    it('debe publicar el evento PAGO_RECHAZADO al rechazar un pago', async () => {
+      const emitAsync = vi.fn().mockResolvedValue([]);
+      const serviceConNotif = new FinanzasService(mockDb, { emitAsync } as any);
 
       await serviceConNotif.conciliarTransaccion(
         'tx-conciliar-1',
@@ -1035,12 +1042,15 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
         { accion: 'rechazar', motivoRechazo: 'Comprobante ilegible' }
       );
 
-      expect(mockDispatcher.despacharEvento).toHaveBeenCalledWith(
+      expect(emitAsync).toHaveBeenCalledWith(
+        PagoRechazadoEvent.NOMBRE,
         expect.objectContaining({
-          tipoEvento: 'PAGO_RECHAZADO',
-          destinatarioUserId: 'alumno-uuid-1',
-          categoria: 'FINANZAS',
-          esCriticoSeguridad: false,
+          payload: expect.objectContaining({
+            tipoEvento: 'PAGO_RECHAZADO',
+            destinatarioUserId: 'alumno-uuid-1',
+            categoria: 'FINANZAS',
+            esCriticoSeguridad: false,
+          }),
         })
       );
     });

@@ -17,6 +17,7 @@ import {
   type RecordatorioManualResultadoDTO,
 } from '@guachafit/shared';
 import { getTableName } from '@guachafit/database';
+import { RecordatorioManualCobroEvent } from '../../src/modules/notificaciones/events/eventos-notificacion';
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 const COACH_ID = 'coach-uuid-1';
@@ -515,14 +516,17 @@ describe('RF-009 WU-I: Tablero de control de cartera del coach', () => {
   });
 
   describe('RN-02: recordatorio manual', () => {
-    function crearDispatcherFake() {
-      const despacharEvento = vi.fn(async () => ({
-        inAppId: 'notif-1',
-        pushEnqueued: false,
-        emailEnqueued: false,
-        activeDeviceTokensCount: 0,
-      }));
-      return { dispatcher: { despacharEvento } as any, despacharEvento };
+    // RF-014 RN-01: el servicio publica el evento; el "despacho" se simula en el bus.
+    function crearEmisorFake(pushEnqueued = false) {
+      const emitAsync = vi.fn(async () => [
+        {
+          inAppId: 'notif-1',
+          pushEnqueued,
+          emailEnqueued: false,
+          activeDeviceTokensCount: pushEnqueued ? 1 : 0,
+        },
+      ]);
+      return { emisor: { emitAsync } as any, emitAsync };
     }
 
     function dbRecordatorio(opciones: {
@@ -550,8 +554,8 @@ describe('RF-009 WU-I: Tablero de control de cartera del coach', () => {
     it('despacha la notificación FINANZAS con el saldo exacto en USD y Bs', async () => {
       const { db } = dbRecordatorio({});
       const { finanzas } = crearFinanzasFake({ tasaEfectiva: '65.0000' });
-      const { dispatcher, despacharEvento } = crearDispatcherFake();
-      const servicio = new CarteraService(db, finanzas, dispatcher);
+      const { emisor, emitAsync } = crearEmisorFake();
+      const servicio = new CarteraService(db, finanzas, emisor);
 
       const resultado: RecordatorioManualResultadoDTO = await servicio.enviarRecordatorioManual(
         COACH_ID,
@@ -566,24 +570,40 @@ describe('RF-009 WU-I: Tablero de control de cartera del coach', () => {
       expect(resultado.mensajeSugerido).toContain('Bs. 1950.00');
       expect(resultado.proximoPermitidoUtc).not.toBeNull();
 
-      expect(despacharEvento).toHaveBeenCalledTimes(1);
-      expect(despacharEvento).toHaveBeenCalledWith(
+      expect(emitAsync).toHaveBeenCalledTimes(1);
+      expect(emitAsync).toHaveBeenCalledWith(
+        RecordatorioManualCobroEvent.NOMBRE,
         expect.objectContaining({
-          tipoEvento: TIPO_EVENTO_RECORDATORIO_MANUAL,
-          destinatarioUserId: 'user-a',
-          entrenadorId: COACH_ID,
-          categoria: 'FINANZAS',
-          linkAccion: '/app/pagos',
+          payload: expect.objectContaining({
+            tipoEvento: TIPO_EVENTO_RECORDATORIO_MANUAL,
+            destinatarioUserId: 'user-a',
+            entrenadorId: COACH_ID,
+            categoria: 'FINANZAS',
+            linkAccion: '/app/pagos',
+            referenciaId: 'cuota-a',
+          }),
         })
       );
+    });
+
+    it('menciona el push cuando el bus reporta que se encoló (resultado del emitAsync)', async () => {
+      const { db } = dbRecordatorio({});
+      const { finanzas } = crearFinanzasFake({ tasaEfectiva: '65.0000' });
+      const { emisor } = crearEmisorFake(true);
+      const servicio = new CarteraService(db, finanzas, emisor);
+
+      const resultado = await servicio.enviarRecordatorioManual(COACH_ID, 'user-a');
+
+      expect(resultado.enviado).toBe(true);
+      expect(resultado.mensaje).toContain('notificación in-app + push');
     });
 
     it('no duplica: cooldown activo tras un recordatorio manual reciente', async () => {
       const haceUnaHora = new Date(Date.now() - 60 * 60 * 1000);
       const { db } = dbRecordatorio({ ultimaGestion: [{ createdAtUtc: haceUnaHora }] });
       const { finanzas } = crearFinanzasFake({ tasaEfectiva: '65.0000' });
-      const { dispatcher, despacharEvento } = crearDispatcherFake();
-      const servicio = new CarteraService(db, finanzas, dispatcher);
+      const { emisor, emitAsync } = crearEmisorFake();
+      const servicio = new CarteraService(db, finanzas, emisor);
 
       const resultado = await servicio.enviarRecordatorioManual(COACH_ID, 'user-a');
 
@@ -593,7 +613,7 @@ describe('RF-009 WU-I: Tablero de control de cartera del coach', () => {
       expect(resultado.proximoPermitidoUtc).toBe(
         new Date(haceUnaHora.getTime() + HORAS_COOLDOWN_RECORDATORIO_MANUAL * 3600 * 1000).toISOString()
       );
-      expect(despacharEvento).not.toHaveBeenCalled();
+      expect(emitAsync).not.toHaveBeenCalled();
     });
 
     it('pausa el recordatorio si el pago está en revisión (RF-008)', async () => {
@@ -608,33 +628,33 @@ describe('RF-009 WU-I: Tablero de control de cartera del coach', () => {
         ],
       });
       const { finanzas } = crearFinanzasFake({ tasaEfectiva: '65.0000' });
-      const { dispatcher, despacharEvento } = crearDispatcherFake();
-      const servicio = new CarteraService(db, finanzas, dispatcher);
+      const { emisor, emitAsync } = crearEmisorFake();
+      const servicio = new CarteraService(db, finanzas, emisor);
 
       const resultado = await servicio.enviarRecordatorioManual(COACH_ID, 'user-a');
 
       expect(resultado.enviado).toBe(false);
       expect(resultado.motivo).toBe('pausa_revision');
-      expect(despacharEvento).not.toHaveBeenCalled();
+      expect(emitAsync).not.toHaveBeenCalled();
     });
 
     it('no envía nada si el alumno no tiene saldo pendiente', async () => {
       const { db } = dbRecordatorio({ cuota: [] });
       const { finanzas } = crearFinanzasFake();
-      const { dispatcher, despacharEvento } = crearDispatcherFake();
-      const servicio = new CarteraService(db, finanzas, dispatcher);
+      const { emisor, emitAsync } = crearEmisorFake();
+      const servicio = new CarteraService(db, finanzas, emisor);
 
       const resultado = await servicio.enviarRecordatorioManual(COACH_ID, 'user-a');
 
       expect(resultado.enviado).toBe(false);
       expect(resultado.motivo).toBe('sin_saldo_pendiente');
-      expect(despacharEvento).not.toHaveBeenCalled();
+      expect(emitAsync).not.toHaveBeenCalled();
     });
 
     it('rechaza alumnos fuera de la cartera del coach (404)', async () => {
       const { db } = dbRecordatorio({ perfil: [] });
       const { finanzas } = crearFinanzasFake();
-      const servicio = new CarteraService(db, finanzas, crearDispatcherFake().dispatcher);
+      const servicio = new CarteraService(db, finanzas, crearEmisorFake().emisor);
 
       await expect(servicio.enviarRecordatorioManual(COACH_ID, 'user-ajeno')).rejects.toThrow(
         /no existe o no pertenece a tu cartera/

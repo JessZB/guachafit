@@ -1,0 +1,322 @@
+/**
+ * Ola 3 (RF-014/RF-015 §B "Resumen Semanal"): worker de la cola `notificaciones-resumen-semanal`.
+ *
+ * Genera el digest semanal de CADA coach activo (adherencia de la ventana + cobros/por vencer) y
+ * publica un `ResumenSemanalCoachEvent` por coach; el despachador lo persiste In-App y lo encola
+ * a Email solo si `digest_weekly_email` está activo (matriz RF-015 §B).
+ *
+ * Decisiones:
+ * - Ventana: últimos 7 días UTC ([ahora - 7d, ahora]). Deliberadamente SIN huso por coach: el
+ *   recordatorio antropométrico por huso IANA queda fuera del alcance de N1 (pendiente anotado).
+ * - Consultas en lote (una por métrica, no por coach) con agregación en memoria; mismo criterio
+ *   de ruta de sistema que el barrido de cobranza (RLS aún no habilitado en estas tablas).
+ * - Un fallo al despachar un coach NO cancela el digest de los demás.
+ */
+import { Inject, Logger } from '@nestjs/common';
+import { InjectQueue, OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Job, Queue } from 'bullmq';
+import { DRIZZLE_DB } from '../../../database/database.module';
+import {
+  Database,
+  and,
+  count,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNull,
+  lte,
+  sum,
+  cuotasMembresia,
+  perfilesAlumno,
+  perfilesEntrenador,
+  sesionesEntrenamiento,
+  transaccionesPago,
+  usuarios,
+} from '@guachafit/database';
+import {
+  EstadoAlumno,
+  EstadoConciliacion,
+  EstadoCuota,
+  EstadoLicencia,
+  EstadoSesion,
+  EstadoUsuario,
+} from '@guachafit/shared';
+import { ResumenSemanalCoachEvent } from '../events/eventos-notificacion';
+import { COLA_RESUMEN_SEMANAL, nombreColaDlq } from '../notificaciones.config';
+import { JOB_GENERAR_RESUMEN_SEMANAL } from '../resumen-semanal.scheduler';
+import { moverJobADeadLetter } from '../dead-letter';
+
+export const MS_POR_DIA = 24 * 60 * 60 * 1000;
+
+export interface MetricasResumenSemanal {
+  coachNombre: string;
+  alumnosActivos: number;
+  sesionesCompletadas: number;
+  sesionesProgramadas: number;
+  cobradoUsd: string;
+  cuotasPorVencer: number;
+  cuotasEnMora: number;
+}
+
+export interface ResultadoResumenSemanal {
+  coaches: number;
+  despachados: number;
+}
+
+/** Compositor PURO del cuerpo del digest (testeable sin DB). */
+export function construirCuerpoResumenSemanal(metricas: MetricasResumenSemanal): string {
+  const adherencia =
+    metricas.sesionesProgramadas > 0
+      ? `${metricas.sesionesCompletadas} de ${metricas.sesionesProgramadas} sesiones completadas (${Math.round(
+          (metricas.sesionesCompletadas / metricas.sesionesProgramadas) * 100
+        )}%)`
+      : `${metricas.sesionesCompletadas} sesiones completadas (sin sesiones programadas esta semana)`;
+
+  return (
+    `Hola ${metricas.coachNombre}, tu semana en GUACHAFIT: ${adherencia}, ` +
+    `$${metricas.cobradoUsd} USD cobrados, ${metricas.cuotasPorVencer} cuota(s) por vencer ` +
+    `y ${metricas.cuotasEnMora} en mora.`
+  );
+}
+
+@Processor(COLA_RESUMEN_SEMANAL)
+export class ResumenSemanalProcessor extends WorkerHost {
+  private readonly logger = new Logger(ResumenSemanalProcessor.name);
+
+  constructor(
+    @Inject(DRIZZLE_DB) private readonly db: Database,
+    private readonly eventEmitter: EventEmitter2,
+    @InjectQueue(nombreColaDlq(COLA_RESUMEN_SEMANAL)) private readonly dlq: Queue
+  ) {
+    super();
+  }
+
+  async process(job: Job): Promise<ResultadoResumenSemanal | { procesado: false }> {
+    if (job.name !== JOB_GENERAR_RESUMEN_SEMANAL) {
+      this.logger.warn(`Job desconocido '${job.name}' en la cola ${COLA_RESUMEN_SEMANAL}; ignorado.`);
+      return { procesado: false };
+    }
+    return this.generarYDespachar();
+  }
+
+  /** Genera el digest de todos los coaches activos y emite un evento por coach. */
+  async generarYDespachar(ahora: Date = new Date()): Promise<ResultadoResumenSemanal> {
+    const desdeUtc = new Date(ahora.getTime() - 7 * MS_POR_DIA);
+
+    const coaches = await this.db
+      .select({
+        usuarioId: perfilesEntrenador.usuarioId,
+        nombres: perfilesEntrenador.nombres,
+        apellidos: perfilesEntrenador.apellidos,
+        nombreComercial: perfilesEntrenador.nombreComercial,
+      })
+      .from(perfilesEntrenador)
+      .innerJoin(usuarios, eq(usuarios.id, perfilesEntrenador.usuarioId))
+      .where(
+        and(
+          eq(usuarios.estado, EstadoUsuario.ACTIVO),
+          eq(perfilesEntrenador.estadoLicencia, EstadoLicencia.ACTIVA)
+        )
+      );
+
+    if (coaches.length === 0) {
+      return { coaches: 0, despachados: 0 };
+    }
+
+    const coachIds = coaches.map((c) => c.usuarioId);
+
+    // Alumnos ACTIVOS por coach (la cartera viva del digest).
+    const alumnos = await this.db
+      .select({
+        usuarioId: perfilesAlumno.usuarioId,
+        entrenadorId: perfilesAlumno.entrenadorId,
+      })
+      .from(perfilesAlumno)
+      .where(
+        and(
+          inArray(perfilesAlumno.entrenadorId, coachIds),
+          eq(perfilesAlumno.estadoActivacion, EstadoAlumno.ACTIVO),
+          isNull(perfilesAlumno.deletedAtUtc)
+        )
+      );
+
+    const coachPorAlumno = new Map<string, string>();
+    const alumnosActivosPorCoach = new Map<string, number>();
+    for (const alumno of alumnos) {
+      coachPorAlumno.set(alumno.usuarioId, alumno.entrenadorId);
+      alumnosActivosPorCoach.set(
+        alumno.entrenadorId,
+        (alumnosActivosPorCoach.get(alumno.entrenadorId) ?? 0) + 1
+      );
+    }
+
+    const alumnoIds = alumnos.map((a) => a.usuarioId);
+    const desdeYmd = desdeUtc.toISOString().slice(0, 10);
+    const hastaYmd = ahora.toISOString().slice(0, 10);
+
+    // Adherencia: sesiones COMPLETADAS en la ventana y sesiones PROGRAMADAS en la ventana.
+    const completadasPorAlumno = new Map<string, number>();
+    const programadasPorAlumno = new Map<string, number>();
+
+    if (alumnoIds.length > 0) {
+      const completadas = await this.db
+        .select({ alumnoId: sesionesEntrenamiento.alumnoId, total: count() })
+        .from(sesionesEntrenamiento)
+        .where(
+          and(
+            inArray(sesionesEntrenamiento.alumnoId, alumnoIds),
+            eq(sesionesEntrenamiento.estado, EstadoSesion.COMPLETADA),
+            gte(sesionesEntrenamiento.fechaFinUtc, desdeUtc),
+            lte(sesionesEntrenamiento.fechaFinUtc, ahora)
+          )
+        )
+        .groupBy(sesionesEntrenamiento.alumnoId);
+
+      for (const fila of completadas) {
+        completadasPorAlumno.set(fila.alumnoId, Number(fila.total));
+      }
+
+      const programadas = await this.db
+        .select({ alumnoId: sesionesEntrenamiento.alumnoId, total: count() })
+        .from(sesionesEntrenamiento)
+        .where(
+          and(
+            inArray(sesionesEntrenamiento.alumnoId, alumnoIds),
+            gte(sesionesEntrenamiento.fechaProgramada, desdeYmd),
+            lte(sesionesEntrenamiento.fechaProgramada, hastaYmd)
+          )
+        )
+        .groupBy(sesionesEntrenamiento.alumnoId);
+
+      for (const fila of programadas) {
+        programadasPorAlumno.set(fila.alumnoId, Number(fila.total));
+      }
+    }
+
+    const sesionesCompletadasPorCoach = new Map<string, number>();
+    const sesionesProgramadasPorCoach = new Map<string, number>();
+    for (const [alumnoId, entrenadorId] of coachPorAlumno) {
+      sesionesCompletadasPorCoach.set(
+        entrenadorId,
+        (sesionesCompletadasPorCoach.get(entrenadorId) ?? 0) + (completadasPorAlumno.get(alumnoId) ?? 0)
+      );
+      sesionesProgramadasPorCoach.set(
+        entrenadorId,
+        (sesionesProgramadasPorCoach.get(entrenadorId) ?? 0) + (programadasPorAlumno.get(alumnoId) ?? 0)
+      );
+    }
+
+    // Cobros de la ventana: pagos APROBADOS por fecha real de conciliación.
+    const cobros = await this.db
+      .select({
+        entrenadorId: transaccionesPago.entrenadorId,
+        total: sum(transaccionesPago.montoEquivalenteUsd),
+      })
+      .from(transaccionesPago)
+      .where(
+        and(
+          inArray(transaccionesPago.entrenadorId, coachIds),
+          eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.APROBADO),
+          gte(transaccionesPago.fechaConciliacionUtc, desdeUtc),
+          lte(transaccionesPago.fechaConciliacionUtc, ahora)
+        )
+      )
+      .groupBy(transaccionesPago.entrenadorId);
+
+    const cobradoPorCoach = new Map<string, string>();
+    for (const fila of cobros) {
+      cobradoPorCoach.set(fila.entrenadorId, fila.total ?? '0.00');
+    }
+
+    // Cartera: cuotas con saldo en POR_VENCER / VENCIDA por coach.
+    const cuotas = await this.db
+      .select({
+        entrenadorId: cuotasMembresia.entrenadorId,
+        estado: cuotasMembresia.estado,
+        total: count(),
+      })
+      .from(cuotasMembresia)
+      .where(
+        and(
+          inArray(cuotasMembresia.entrenadorId, coachIds),
+          gt(cuotasMembresia.saldoPendienteUsd, '0'),
+          inArray(cuotasMembresia.estado, [EstadoCuota.POR_VENCER, EstadoCuota.VENCIDA])
+        )
+      )
+      .groupBy(cuotasMembresia.entrenadorId, cuotasMembresia.estado);
+
+    const porVencerPorCoach = new Map<string, number>();
+    const enMoraPorCoach = new Map<string, number>();
+    for (const fila of cuotas) {
+      const destino = fila.estado === EstadoCuota.POR_VENCER ? porVencerPorCoach : enMoraPorCoach;
+      destino.set(fila.entrenadorId, (destino.get(fila.entrenadorId) ?? 0) + Number(fila.total));
+    }
+
+    // Emisión del evento por coach: un fallo puntual no cancela el resto del digest.
+    let despachados = 0;
+    const referenciaSemana = `semana_${hastaYmd}`;
+
+    for (const coach of coaches) {
+      const coachNombre =
+        coach.nombreComercial || `${coach.nombres} ${coach.apellidos}`.trim();
+
+      const metricas: MetricasResumenSemanal = {
+        coachNombre,
+        alumnosActivos: alumnosActivosPorCoach.get(coach.usuarioId) ?? 0,
+        sesionesCompletadas: sesionesCompletadasPorCoach.get(coach.usuarioId) ?? 0,
+        sesionesProgramadas: sesionesProgramadasPorCoach.get(coach.usuarioId) ?? 0,
+        cobradoUsd: cobradoPorCoach.get(coach.usuarioId) ?? '0.00',
+        cuotasPorVencer: porVencerPorCoach.get(coach.usuarioId) ?? 0,
+        cuotasEnMora: enMoraPorCoach.get(coach.usuarioId) ?? 0,
+      };
+
+      try {
+        await this.eventEmitter.emitAsync(
+          ResumenSemanalCoachEvent.NOMBRE,
+          new ResumenSemanalCoachEvent({
+            tipoEvento: 'RESUMEN_SEMANAL_COACH',
+            destinatarioUserId: coach.usuarioId,
+            entrenadorId: coach.usuarioId,
+            categoria: 'RESUMEN_SEMANAL',
+            titulo: 'Tu resumen semanal GUACHAFIT',
+            cuerpo: construirCuerpoResumenSemanal(metricas),
+            linkAccion: '/coach',
+            datosAdicionales: {
+              semana: hastaYmd,
+              alumnosActivos: metricas.alumnosActivos,
+              sesionesCompletadas: metricas.sesionesCompletadas,
+              sesionesProgramadas: metricas.sesionesProgramadas,
+              cobradoUsd: metricas.cobradoUsd,
+              cuotasPorVencer: metricas.cuotasPorVencer,
+              cuotasEnMora: metricas.cuotasEnMora,
+            },
+            esCriticoSeguridad: false,
+            // RNF-004 §3: ref de origen del jobId determinista (semana del digest).
+            referenciaId: referenciaSemana,
+          })
+        );
+        despachados += 1;
+      } catch (error) {
+        this.logger.warn(
+          `No se pudo despachar el resumen semanal del coach ${coach.usuarioId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+
+    this.logger.log(
+      `Resumen semanal generado: ${despachados}/${coaches.length} coaches despachados (ventana ${desdeYmd}..${hastaYmd}).`
+    );
+
+    return { coaches: coaches.length, despachados };
+  }
+
+  /** RNF-004 §4: al agotar intentos, el job se copia a la DLQ (visible en Bull-Board). */
+  @OnWorkerEvent('failed')
+  async alAgotarIntentos(job: Job, error: Error): Promise<void> {
+    await moverJobADeadLetter(this.dlq, COLA_RESUMEN_SEMANAL, job, error);
+  }
+}

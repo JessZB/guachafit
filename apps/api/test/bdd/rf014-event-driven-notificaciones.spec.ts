@@ -125,7 +125,7 @@ describe('RF-014: Arquitectura Event-Driven y Despachador de Notificaciones Mult
       expect(inAppStorage[0].titulo).toBe('Tu cuota vence mañana');
       expect(inAppStorage[0].leida).toBe(false);
 
-      // Verificación Push
+      // Verificación Push (RNF-004 §3: jobId determinista para deduplicar reintentos/re-emisiones)
       expect(resultado.pushEnqueued).toBe(true);
       expect(mockPushQueue.add).toHaveBeenCalledWith(
         'enviar-push',
@@ -134,7 +134,9 @@ describe('RF-014: Arquitectura Event-Driven y Despachador de Notificaciones Mult
           tokens: ['token_fcm_android_123'],
           titulo: 'Tu cuota vence mañana',
         }),
-        expect.any(Object)
+        expect.objectContaining({
+          jobId: expect.stringMatching(/^notif_FINANZAS_CUOTA_POR_VENCER_/),
+        })
       );
 
       // Verificación Email
@@ -146,7 +148,9 @@ describe('RF-014: Arquitectura Event-Driven y Despachador de Notificaciones Mult
           email: 'alumno@guachafit.com',
           asunto: 'Tu cuota vence mañana',
         }),
-        expect.any(Object)
+        expect.objectContaining({
+          jobId: expect.stringMatching(/^notif_FINANZAS_CUOTA_POR_VENCER_/),
+        })
       );
     });
   });
@@ -225,7 +229,9 @@ describe('RF-014: Arquitectura Event-Driven y Despachador de Notificaciones Mult
 
   describe('Escenario 4: Worker Push y Detección de Tokens Obsoletos (RF-016 RN-04)', () => {
     it('debe detectar token no registrado o app desinstalada y marcar el token inactivo', async () => {
-      const pushProcessor = new PushNotificationProcessor(mockDispositivosService);
+      const pushProcessor = new PushNotificationProcessor(mockDispositivosService, {
+        add: vi.fn(),
+      } as any);
 
       const mockJob: any = {
         id: 'job-1',
@@ -250,7 +256,7 @@ describe('RF-014: Arquitectura Event-Driven y Despachador de Notificaciones Mult
 
   describe('Escenario 5: Worker Email y Manejo de Errores con Reintentos (RF-014 RN-03)', () => {
     it('debe permitir reintento en BullMQ arrojando el error ante fallas 503 del proveedor sin colapsar', async () => {
-      const emailProcessor = new EmailNotificationProcessor();
+      const emailProcessor = new EmailNotificationProcessor({ add: vi.fn() } as any);
 
       const mockJobFail: any = {
         id: 'job-fail',

@@ -58,7 +58,8 @@ import {
   RecordatorioManualResultadoDTO,
   ResumenCarteraDTO,
 } from '@guachafit/shared';
-import { NotificationDispatcherService } from '../notificaciones/notification-dispatcher.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { RecordatorioManualCobroEvent } from '../notificaciones/events/eventos-notificacion';
 import { FinanzasService, toIsoSafe } from './finanzas.service';
 import {
   MS_POR_DIA,
@@ -126,7 +127,8 @@ export class CarteraService {
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
     private readonly finanzasService: FinanzasService,
-    @Optional() private readonly dispatcherService?: NotificationDispatcherService
+    // RF-014 RN-01: publica el evento de dominio; el despachador (suscriptor) resuelve canales.
+    @Optional() private readonly eventEmitter?: EventEmitter2
   ) {}
 
   /**
@@ -750,28 +752,37 @@ export class CarteraService {
       periodo: cuotaAbierta.periodo,
     });
 
-    if (!this.dispatcherService) {
+    if (!this.eventEmitter) {
       throw new ServiceUnavailableException(
         'El servicio de notificaciones no está disponible en este momento.'
       );
     }
 
-    const despacho = await this.dispatcherService.despacharEvento({
-      tipoEvento: TIPO_EVENTO_RECORDATORIO_MANUAL,
-      destinatarioUserId: clienteId,
-      entrenadorId,
-      categoria: 'FINANZAS',
-      titulo: mensaje.titulo,
-      cuerpo: mensaje.cuerpo,
-      linkAccion: '/app/pagos',
-      datosAdicionales: {
-        cuotaId: cuotaAbierta.id,
-        saldoPendienteUsd: cuotaAbierta.saldoPendienteUsd,
-        saldoPendienteBs,
-        origen: 'recordatorio_manual',
-      },
-      esCriticoSeguridad: false,
-    });
+    // RF-014 RN-01: se emite el evento y se ESPERA su resultado (emitAsync) porque la respuesta
+    // del endpoint describe si hubo push; el despachador sigue siendo el único que encola.
+    const resultados = await this.eventEmitter.emitAsync(
+      RecordatorioManualCobroEvent.NOMBRE,
+      new RecordatorioManualCobroEvent({
+        tipoEvento: TIPO_EVENTO_RECORDATORIO_MANUAL,
+        destinatarioUserId: clienteId,
+        entrenadorId,
+        categoria: 'FINANZAS',
+        titulo: mensaje.titulo,
+        cuerpo: mensaje.cuerpo,
+        linkAccion: '/app/pagos',
+        datosAdicionales: {
+          cuotaId: cuotaAbierta.id,
+          saldoPendienteUsd: cuotaAbierta.saldoPendienteUsd,
+          saldoPendienteBs,
+          origen: 'recordatorio_manual',
+        },
+        esCriticoSeguridad: false,
+        // RNF-004 §3: ref de origen del jobId determinista.
+        referenciaId: cuotaAbierta.id,
+      })
+    );
+
+    const despacho = (resultados?.[0] ?? null) as { pushEnqueued?: boolean } | null;
 
     this.logger.log(
       `Recordatorio manual despachado a ${clienteId} (cuota ${cuotaAbierta.id}) por coach ${entrenadorId}.`
@@ -780,7 +791,7 @@ export class CarteraService {
     return {
       enviado: true,
       motivo: 'despachado',
-      mensaje: despacho.pushEnqueued
+      mensaje: despacho?.pushEnqueued
         ? `Recordatorio enviado a ${nombreCompleto} (notificación in-app + push).`
         : `Recordatorio enviado a ${nombreCompleto} (notificación in-app).`,
       mensajeSugerido: mensaje.cuerpo,

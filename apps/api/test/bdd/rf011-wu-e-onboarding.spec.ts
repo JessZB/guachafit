@@ -25,6 +25,7 @@ import { AlumnosService } from '../../src/modules/alumnos/alumnos.service';
 import { AlumnosController } from '../../src/modules/alumnos/alumnos.controller';
 import { AuthService } from '../../src/modules/auth/auth.service';
 import { EntrenadorService } from '../../src/modules/entrenador/entrenador.service';
+import { AlumnoRegistradoEvent } from '../../src/modules/notificaciones/events/eventos-notificacion';
 
 const COACH_USUARIO_ID = '11111111-1111-4111-8111-111111111111';
 const COACH_PERFIL_ID = '22222222-2222-4222-8222-222222222222';
@@ -251,27 +252,31 @@ describe('WU-E (RF-011 RN-07): registro público valida licencia y notifica al c
     return { db, inserts };
   }
 
-  it('crea la cuenta vinculada y emite ALUMNO_REGISTRADO al coach por el despachador', async () => {
+  it('crea la cuenta vinculada y publica ALUMNO_REGISTRADO al coach por el bus de eventos', async () => {
     const { db, inserts } = crearDbRegistroPublico({ ...coachBase });
-    const despacharEvento = vi.fn().mockResolvedValue({ inAppId: 'n-1' });
-    const service = new AlumnosService(db, cryptoServiceMock, { despacharEvento } as any);
+    const emitAsync = vi.fn().mockResolvedValue([{ inAppId: 'n-1' }]);
+    const service = new AlumnosService(db, cryptoServiceMock, { emitAsync } as any);
 
     const resultado = await service.registroPublico(registroPublicoDto);
 
     expect(resultado.id).toBe(ALUMNO_PERFIL_ID);
     expect(inserts).toEqual(['usuarios', 'perfiles_alumno']);
-    expect(despacharEvento).toHaveBeenCalledTimes(1);
-    expect(despacharEvento).toHaveBeenCalledWith(
+    expect(emitAsync).toHaveBeenCalledTimes(1);
+    expect(emitAsync).toHaveBeenCalledWith(
+      AlumnoRegistradoEvent.NOMBRE,
       expect.objectContaining({
-        tipoEvento: 'ALUMNO_REGISTRADO',
-        categoria: 'ALUMNOS',
-        destinatarioUserId: COACH_USUARIO_ID,
-        entrenadorId: COACH_USUARIO_ID,
-        esCriticoSeguridad: false,
-        linkAccion: `/coach/alumnos/${ALUMNO_PERFIL_ID}`,
+        payload: expect.objectContaining({
+          tipoEvento: 'ALUMNO_REGISTRADO',
+          categoria: 'ALUMNOS',
+          destinatarioUserId: COACH_USUARIO_ID,
+          entrenadorId: COACH_USUARIO_ID,
+          esCriticoSeguridad: false,
+          linkAccion: `/coach/alumnos/${ALUMNO_PERFIL_ID}`,
+          referenciaId: ALUMNO_PERFIL_ID,
+        }),
       })
     );
-    const evento = despacharEvento.mock.calls[0][0];
+    const evento = emitAsync.mock.calls[0][1].payload;
     expect(evento.cuerpo).toContain('Valeria Castillo');
     expect(evento.titulo).toContain('Nuevo alumno registrado');
   });
@@ -281,14 +286,14 @@ describe('WU-E (RF-011 RN-07): registro público valida licencia y notifica al c
       ...coachBase,
       estadoLicencia: EstadoLicencia.SUSPENDIDA_SUPERADMIN,
     });
-    const despacharEvento = vi.fn();
-    const service = new AlumnosService(db, cryptoServiceMock, { despacharEvento } as any);
+    const emitAsync = vi.fn();
+    const service = new AlumnosService(db, cryptoServiceMock, { emitAsync } as any);
 
     await expect(service.registroPublico(registroPublicoDto)).rejects.toBeInstanceOf(
       NotFoundException
     );
     expect(inserts).toEqual([]);
-    expect(despacharEvento).not.toHaveBeenCalled();
+    expect(emitAsync).not.toHaveBeenCalled();
   });
 
   it('rechaza con 404 un coach inexistente', async () => {
@@ -300,17 +305,17 @@ describe('WU-E (RF-011 RN-07): registro público valida licencia y notifica al c
     );
   });
 
-  it('un fallo del despachador NUNCA tumba el registro del alumno (fire-and-forget)', async () => {
+  it('un fallo del bus de eventos NUNCA tumba el registro del alumno (fire-and-forget)', async () => {
     const { db } = crearDbRegistroPublico({ ...coachBase });
-    const despacharEvento = vi.fn().mockRejectedValue(new Error('cola caída'));
-    const service = new AlumnosService(db, cryptoServiceMock, { despacharEvento } as any);
+    const emitAsync = vi.fn().mockRejectedValue(new Error('cola caída'));
+    const service = new AlumnosService(db, cryptoServiceMock, { emitAsync } as any);
 
     await expect(service.registroPublico(registroPublicoDto)).resolves.toMatchObject({
       id: ALUMNO_PERFIL_ID,
     });
     // Deja que el `.catch()` del fire-and-forget consuma la promesa rechazada.
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(despacharEvento).toHaveBeenCalledTimes(1);
+    expect(emitAsync).toHaveBeenCalledTimes(1);
   });
 });
 

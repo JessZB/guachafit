@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { ExpressAdapter } from '@bull-board/express';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
@@ -24,6 +25,9 @@ import { crearBullBoardAuthMiddleware } from './common/bull-board-auth.middlewar
       isGlobal: true,
       envFilePath: ['.env.local', '.env', '../../.env', 'apps/api/.env'],
     }),
+    // RF-014 RN-01 (ADR-010): bus de eventos de dominio. `wildcard: true` habilita el patrón
+    // `notificacion.**` que escucha el despachador (global por defecto).
+    EventEmitterModule.forRoot({ wildcard: true }),
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

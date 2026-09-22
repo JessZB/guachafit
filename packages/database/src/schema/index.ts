@@ -12,8 +12,9 @@ import {
   jsonb,
   uniqueIndex,
   index,
+  check,
 } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import {
   Rol,
   EstadoUsuario,
@@ -222,21 +223,51 @@ export const perfilesAlumno = pgTable(
 // =============================================================================
 // TABLA: preferencias_notificacion
 // =============================================================================
-export const preferenciasNotificacion = pgTable('preferencias_notificacion', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  usuarioId: uuid('usuario_id')
-    .notNull()
-    .references(() => usuarios.id, { onDelete: 'cascade' })
-    .unique(),
-  notifyPaymentsPush: boolean('notify_payments_push').default(true).notNull(),
-  notifyPaymentsEmail: boolean('notify_payments_email').default(true).notNull(),
-  notifyWorkoutsPush: boolean('notify_workouts_push').default(true).notNull(),
-  notifyWorkoutsEmail: boolean('notify_workouts_email').default(false).notNull(),
-  notifyCheckinsPush: boolean('notify_checkins_push').default(true).notNull(),
-  notifyCheckinsEmail: boolean('notify_checkins_email').default(false).notNull(),
-  digestWeeklyEmail: boolean('digest_weekly_email').default(false).notNull(),
-  updatedAtUtc: timestamp('updated_at_utc', { withTimezone: true }).defaultNow().notNull(),
-});
+/**
+ * RF-015 (N2a): matriz de preferencias por rol y canal. Una fila por usuario con la matriz COMPLETA
+ * (los 16 booleanos); el rol (`usuarios.rol`) decide qué mitad gobierna cada usuario y el
+ * despachador enruta cada evento por la fila de su categoría.
+ *
+ * Defaults: replican `PREFERENCIAS_NOTIFICACION_POR_DEFECTO` de `@guachafit/shared` (RF-015 §A/§B).
+ * RN-01: `notify_seguridad_email` es obligatorio; el CHECK lo blinda también a nivel de base de datos.
+ */
+export const preferenciasNotificacion = pgTable(
+  'preferencias_notificacion',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    usuarioId: uuid('usuario_id')
+      .notNull()
+      .references(() => usuarios.id, { onDelete: 'cascade' })
+      .unique(),
+    // §A Alumno / Cliente
+    notifyPaymentsPush: boolean('notify_payments_push').default(true).notNull(),
+    notifyPaymentsEmail: boolean('notify_payments_email').default(true).notNull(),
+    notifyWorkoutsPush: boolean('notify_workouts_push').default(true).notNull(),
+    notifyWorkoutsEmail: boolean('notify_workouts_email').default(false).notNull(),
+    notifyCheckinsPush: boolean('notify_checkins_push').default(true).notNull(),
+    notifyCheckinsEmail: boolean('notify_checkins_email').default(false).notNull(),
+    // §A Seguridad de Cuenta (RN-01: el Email no puede desactivarse)
+    notifySeguridadPush: boolean('notify_seguridad_push').default(false).notNull(),
+    notifySeguridadEmail: boolean('notify_seguridad_email').default(true).notNull(),
+    // §B Entrenador
+    notifyCobranzasPush: boolean('notify_cobranzas_push').default(true).notNull(),
+    notifyCobranzasEmail: boolean('notify_cobranzas_email').default(true).notNull(),
+    notifyNuevosRegistrosPush: boolean('notify_nuevos_registros_push').default(true).notNull(),
+    notifyNuevosRegistrosEmail: boolean('notify_nuevos_registros_email').default(true).notNull(),
+    notifyReportesProgresoPush: boolean('notify_reportes_progreso_push').default(true).notNull(),
+    notifyReportesProgresoEmail: boolean('notify_reportes_progreso_email').default(false).notNull(),
+    digestWeeklyPush: boolean('digest_weekly_push').default(false).notNull(),
+    digestWeeklyEmail: boolean('digest_weekly_email').default(true).notNull(),
+    updatedAtUtc: timestamp('updated_at_utc', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    /** RN-01 (RF-015 §A): el correo de seguridad es inviolable, también a nivel de BD. */
+    seguridadEmailObligatorio: check(
+      'preferencias_notificacion_seguridad_email_obligatorio',
+      sql`${table.notifySeguridadEmail}`
+    ),
+  })
+);
 
 // =============================================================================
 // TABLA: dispositivos_usuario

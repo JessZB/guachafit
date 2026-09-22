@@ -13,6 +13,10 @@ import { AntropometriaModule } from '../antropometria/antropometria.module';
 import { BillingSchedulerService } from './billing-scheduler.service';
 import { BillingReminderProcessor } from './billing-reminder.processor';
 import { COBRANZA_QUEUE } from './cobranza-hitos';
+import { nombreColaDlq } from '../notificaciones/notificaciones.config';
+
+/** RNF-004 §4: DLQ de la cola de cobranza (sin worker; visible en Bull-Board). */
+const COLA_DLQ_COBRANZA = nombreColaDlq(COBRANZA_QUEUE);
 
 @Module({
   imports: [
@@ -28,11 +32,19 @@ import { COBRANZA_QUEUE } from './cobranza-hitos';
         removeOnFail: 500,
       },
     }),
-    // ADR-008 §4.4: la cola se expone en el dashboard Bull-Board (/admin/queues, protegido).
-    BullBoardModule.forFeature({
-      name: COBRANZA_QUEUE,
-      adapter: BullMQAdapter,
-    }),
+    // RNF-004 §4: DLQ de los jobs de cobranza que agotan intentos.
+    BullModule.registerQueue({ name: COLA_DLQ_COBRANZA }),
+    // ADR-008 §4.4: las colas se exponen en el dashboard Bull-Board (/admin/queues, protegido).
+    BullBoardModule.forFeature(
+      {
+        name: COBRANZA_QUEUE,
+        adapter: BullMQAdapter,
+      },
+      {
+        name: COLA_DLQ_COBRANZA,
+        adapter: BullMQAdapter,
+      }
+    ),
   ],
   controllers: [FinanzasController, CarteraController],
   providers: [FinanzasService, CarteraService, BillingSchedulerService, BillingReminderProcessor],

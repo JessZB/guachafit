@@ -8,9 +8,14 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { NotificationDispatcherService } from '../notificaciones/notification-dispatcher.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { R2StorageService } from '../antropometria/r2-storage.service';
 import { BillingSchedulerService } from './billing-scheduler.service';
+import {
+  PagoAprobadoEvent,
+  PagoRechazadoEvent,
+  PagoReportadoEvent,
+} from '../notificaciones/events/eventos-notificacion';
 import { DRIZZLE_DB } from '../../database/database.module';
 import {
   Database,
@@ -167,7 +172,8 @@ export class FinanzasService {
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
-    @Optional() private readonly dispatcherService?: NotificationDispatcherService,
+    // RF-014 RN-01 (ADR-010): finanzas publica eventos de dominio; jamás llama al despachador.
+    @Optional() private readonly eventEmitter?: EventEmitter2,
     @Optional() private readonly r2StorageService?: R2StorageService,
     @Optional() private readonly billingSchedulerService?: BillingSchedulerService
   ) {}
@@ -1268,26 +1274,32 @@ export class FinanzasService {
       });
     }
 
-    if (this.dispatcherService) {
-      this.dispatcherService
-        .despacharEvento({
-          tipoEvento: 'PAGO_REPORTADO',
-          destinatarioUserId: nuevaTx.entrenadorId,
-          entrenadorId: nuevaTx.entrenadorId,
-          categoria: 'FINANZAS',
-          titulo: 'Nuevo pago por verificar',
-          cuerpo: `Se ha reportado un pago de ${nuevaTx.montoOriginal} ${nuevaTx.monedaOriginal} pendiente por conciliar.`,
-          linkAccion: '/finanzas/conciliacion',
-          datosAdicionales: {
-            transaccionId: nuevaTx.id,
-            cuotaId: nuevaTx.cuotaId,
-            clienteId: nuevaTx.clienteId,
-            montoOriginal: nuevaTx.montoOriginal,
-            monedaOriginal: nuevaTx.monedaOriginal,
-            referenciaBancaria: nuevaTx.referenciaBancaria,
-          },
-          esCriticoSeguridad: false,
-        })
+    if (this.eventEmitter) {
+      // RF-014 RN-01: evento de dominio fire-and-forget; un fallo de colas NUNCA tumba el reporte.
+      void this.eventEmitter
+        .emitAsync(
+          PagoReportadoEvent.NOMBRE,
+          new PagoReportadoEvent({
+            tipoEvento: 'PAGO_REPORTADO',
+            destinatarioUserId: nuevaTx.entrenadorId,
+            entrenadorId: nuevaTx.entrenadorId,
+            categoria: 'FINANZAS',
+            titulo: 'Nuevo pago por verificar',
+            cuerpo: `Se ha reportado un pago de ${nuevaTx.montoOriginal} ${nuevaTx.monedaOriginal} pendiente por conciliar.`,
+            linkAccion: '/finanzas/conciliacion',
+            datosAdicionales: {
+              transaccionId: nuevaTx.id,
+              cuotaId: nuevaTx.cuotaId,
+              clienteId: nuevaTx.clienteId,
+              montoOriginal: nuevaTx.montoOriginal,
+              monedaOriginal: nuevaTx.monedaOriginal,
+              referenciaBancaria: nuevaTx.referenciaBancaria,
+            },
+            esCriticoSeguridad: false,
+            // RNF-004 §3: ref de origen del jobId determinista.
+            referenciaId: nuevaTx.id,
+          })
+        )
         .catch(() => {});
     }
 
@@ -1629,42 +1641,53 @@ export class FinanzasService {
       await this.cancelarRecordatoriosSiLiquidada(resultado.cuota.id);
     }
 
-    if (this.dispatcherService) {
+    if (this.eventEmitter) {
       if (dto.accion === 'aprobar') {
-        this.dispatcherService
-          .despacharEvento({
-            tipoEvento: 'PAGO_APROBADO',
-            destinatarioUserId: resultado.transaccion.clienteId,
-            entrenadorId,
-            categoria: 'FINANZAS',
-            titulo: '¡Pago verificado y aprobado!',
-            cuerpo: `Tu pago de ${resultado.transaccion.montoOriginal} ${resultado.transaccion.monedaOriginal} fue aprobado con éxito.`,
-            linkAccion: '/finanzas',
-            datosAdicionales: {
-              transaccionId: resultado.transaccion.id,
-              cuotaId: resultado.cuota.id,
-              montoEquivalenteUsd: resultado.transaccion.montoEquivalenteUsd,
-            },
-            esCriticoSeguridad: true, // Recibo financiero / comprobante crítico garantizado por Email (RF-015 RN-03)
-          })
+        // RF-014 RN-01: evento de dominio fire-and-forget (el recibo crítico lo garantiza Email).
+        void this.eventEmitter
+          .emitAsync(
+            PagoAprobadoEvent.NOMBRE,
+            new PagoAprobadoEvent({
+              tipoEvento: 'PAGO_APROBADO',
+              destinatarioUserId: resultado.transaccion.clienteId,
+              entrenadorId,
+              categoria: 'FINANZAS',
+              titulo: '¡Pago verificado y aprobado!',
+              cuerpo: `Tu pago de ${resultado.transaccion.montoOriginal} ${resultado.transaccion.monedaOriginal} fue aprobado con éxito.`,
+              linkAccion: '/finanzas',
+              datosAdicionales: {
+                transaccionId: resultado.transaccion.id,
+                cuotaId: resultado.cuota.id,
+                montoEquivalenteUsd: resultado.transaccion.montoEquivalenteUsd,
+              },
+              esCriticoSeguridad: true, // Recibo financiero / comprobante crítico garantizado por Email (RF-015 RN-03)
+              // RNF-004 §3: ref de origen del jobId determinista.
+              referenciaId: resultado.transaccion.id,
+            })
+          )
           .catch(() => {});
       } else {
-        this.dispatcherService
-          .despacharEvento({
-            tipoEvento: 'PAGO_RECHAZADO',
-            destinatarioUserId: resultado.transaccion.clienteId,
-            entrenadorId,
-            categoria: 'FINANZAS',
-            titulo: 'Pago no verificado',
-            cuerpo: `Tu pago fue rechazado. Motivo: ${resultado.transaccion.motivoRechazo || 'Rechazado por el entrenador'}.`,
-            linkAccion: '/finanzas',
-            datosAdicionales: {
-              transaccionId: resultado.transaccion.id,
-              cuotaId: resultado.cuota.id,
-              motivoRechazo: resultado.transaccion.motivoRechazo,
-            },
-            esCriticoSeguridad: false,
-          })
+        void this.eventEmitter
+          .emitAsync(
+            PagoRechazadoEvent.NOMBRE,
+            new PagoRechazadoEvent({
+              tipoEvento: 'PAGO_RECHAZADO',
+              destinatarioUserId: resultado.transaccion.clienteId,
+              entrenadorId,
+              categoria: 'FINANZAS',
+              titulo: 'Pago no verificado',
+              cuerpo: `Tu pago fue rechazado. Motivo: ${resultado.transaccion.motivoRechazo || 'Rechazado por el entrenador'}.`,
+              linkAccion: '/finanzas',
+              datosAdicionales: {
+                transaccionId: resultado.transaccion.id,
+                cuotaId: resultado.cuota.id,
+                motivoRechazo: resultado.transaccion.motivoRechazo,
+              },
+              esCriticoSeguridad: false,
+              // RNF-004 §3: ref de origen del jobId determinista.
+              referenciaId: resultado.transaccion.id,
+            })
+          )
           .catch(() => {});
       }
     }

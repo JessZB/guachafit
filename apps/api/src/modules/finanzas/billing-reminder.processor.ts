@@ -3,9 +3,10 @@
  *
  * Procesa dos tipos de job:
  * 1. `recordatorio-cuota` (delayed, agendado al emitir): re-verifica en PostgreSQL que la cuota
- *    SIGA con saldo pendiente y no esté pausada/en revisión; recién entonces despacha el
- *    recordatorio por `NotificationDispatcherService` (categoría FINANZAS de la matriz RF-015,
- *    con In-App universal garantizado). Si ya está saldada, termina sin enviar.
+ *    SIGA con saldo pendiente y no esté pausada/en revisión; recién entonces EMITE el evento de
+ *    dominio `RecordatorioCuotaEvent` (RF-014 RN-01) que el `NotificationDispatcherService`
+ *    escucha para persistir In-App y encolar Push/Email según la matriz RF-015. Si ya está
+ *    saldada, termina sin enviar.
  * 2. `barrido-estados` (repeatable diario): aplica la máquina de estados real
  *    (`calcularEstadoBarrido`) a TODAS las cuotas de TODOS los tenants.
  *
@@ -16,8 +17,9 @@
  * `entrenador_id` arbitrario.
  */
 import { Inject, Logger } from '@nestjs/common';
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { InjectQueue, OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Job, Queue } from 'bullmq';
 import { DRIZZLE_DB } from '../../database/database.module';
 import {
   Database,
@@ -28,7 +30,6 @@ import {
   cuotasMembresia,
 } from '@guachafit/database';
 import { EstadoCuota } from '@guachafit/shared';
-import { NotificationDispatcherService } from '../notificaciones/notification-dispatcher.service';
 import { FinanzasService, toCents } from './finanzas.service';
 import {
   COBRANZA_QUEUE,
@@ -37,6 +38,9 @@ import {
   JOB_RECORDATORIO_CUOTA,
 } from './cobranza-hitos';
 import { calcularEstadoBarrido } from './cuota-estado.helper';
+import { RecordatorioCuotaEvent } from '../notificaciones/events/eventos-notificacion';
+import { moverJobADeadLetter } from '../notificaciones/dead-letter';
+import { nombreColaDlq } from '../notificaciones/notificaciones.config';
 
 export interface ResultadoRecordatorio {
   enviado: boolean;
@@ -125,8 +129,11 @@ export class BillingReminderProcessor extends WorkerHost {
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
-    private readonly dispatcherService: NotificationDispatcherService,
-    private readonly finanzasService: FinanzasService
+    // RF-014 RN-01: la cobranza ya no conoce al despachador; publica eventos de dominio.
+    private readonly eventEmitter: EventEmitter2,
+    private readonly finanzasService: FinanzasService,
+    // RNF-004 §4: DLQ de la cola de cobranza (visible en Bull-Board).
+    @InjectQueue(nombreColaDlq(COBRANZA_QUEUE)) private readonly dlq: Queue
   ) {
     super();
   }
@@ -195,24 +202,35 @@ export class BillingReminderProcessor extends WorkerHost {
       ? construirMensajeMoraParcial(cuota.saldoPendienteUsd, saldoPendienteVes)
       : construirMensajeRecordatorio(hito, cuota.saldoPendienteUsd, saldoPendienteVes);
 
-    await this.dispatcherService.despacharEvento({
-      tipoEvento: mensaje.tipoEvento,
-      destinatarioUserId: cuota.clienteId,
-      entrenadorId: cuota.entrenadorId,
-      categoria: 'FINANZAS', // RF-015 §A "Finanzas y Pagos" (Push+Email configurables, In-App universal)
-      titulo: mensaje.titulo,
-      cuerpo: mensaje.cuerpo,
-      linkAccion: '/app/pagos',
-      datosAdicionales: {
-        cuotaId: cuota.id,
-        hito,
-        saldoPendienteUsd: cuota.saldoPendienteUsd,
-      },
-      esCriticoSeguridad: false,
-    });
+    await this.eventEmitter.emitAsync(
+      RecordatorioCuotaEvent.NOMBRE,
+      new RecordatorioCuotaEvent({
+        tipoEvento: mensaje.tipoEvento,
+        destinatarioUserId: cuota.clienteId,
+        entrenadorId: cuota.entrenadorId,
+        categoria: 'FINANZAS', // RF-015 §A "Finanzas y Pagos" (Push+Email configurables, In-App universal)
+        titulo: mensaje.titulo,
+        cuerpo: mensaje.cuerpo,
+        linkAccion: '/app/pagos',
+        datosAdicionales: {
+          cuotaId: cuota.id,
+          hito,
+          saldoPendienteUsd: cuota.saldoPendienteUsd,
+        },
+        esCriticoSeguridad: false,
+        // RNF-004 §3: ref de origen del jobId determinista (cuota + hito).
+        referenciaId: `${cuota.id}_${hito}`,
+      })
+    );
 
     this.logger.log(`Recordatorio ${hito} despachado para cuota ${cuota.id} (${cuota.clienteId}).`);
     return { enviado: true, motivo: 'despachado' };
+  }
+
+  /** RNF-004 §4: al agotar intentos, el job se copia a la DLQ (visible en Bull-Board). */
+  @OnWorkerEvent('failed')
+  async alAgotarIntentos(job: Job, error: Error): Promise<void> {
+    await moverJobADeadLetter(this.dlq, COBRANZA_QUEUE, job, error);
   }
 
   /**
