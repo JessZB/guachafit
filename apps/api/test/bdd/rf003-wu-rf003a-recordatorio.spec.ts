@@ -62,14 +62,14 @@ describe('WU RF-003a: recordatorio de check-in antropométrico (RN-01)', () => {
       scheduler = new AntropometriaRecordatorioSchedulerService(mockQueue);
     });
 
-    it('registra el job repetible cada hora en punto UTC con clave estable', async () => {
+    it('registra el job repetible cada 15 minutos UTC con clave estable', async () => {
       const cron = await scheduler.registrarRecordatorioHorario();
 
       expect(cron).toBe(CRON_RECORDATORIO_ANTROPOMETRIA_POR_DEFECTO);
-      expect(CRON_RECORDATORIO_ANTROPOMETRIA_POR_DEFECTO).toBe('0 * * * *');
+      expect(CRON_RECORDATORIO_ANTROPOMETRIA_POR_DEFECTO).toBe('*/15 * * * *');
       expect(mockQueue.upsertJobScheduler).toHaveBeenCalledWith(
         JOB_SCHEDULER_ANTROPOMETRIA_ID,
-        { pattern: '0 * * * *', tz: 'UTC' },
+        { pattern: '*/15 * * * *', tz: 'UTC' },
         {
           name: JOB_GENERAR_RECORDATORIO_ANTROPOMETRIA,
           data: {},
@@ -149,7 +149,7 @@ describe('WU RF-003a: recordatorio de check-in antropométrico (RN-01)', () => {
       );
     });
 
-    it('NO emite si el alumno ya registró su check-in en la ventana ±24 h', async () => {
+    it('NO emite si el alumno ya registró su check-in en la ventana de 48 h', async () => {
       const db = crearDbBarrido([
         [alumnoSemanal],
         [{ alumnoId, fechaEvaluacion: '2026-09-06' }],
@@ -198,7 +198,7 @@ describe('WU RF-003a: recordatorio de check-in antropométrico (RN-01)', () => {
     });
 
     it('no emite fuera de la hora local del recordatorio ni en días no programados', async () => {
-      // 07:00 en Caracas: la pasada horaria de las 07:00 no es la del recordatorio.
+      // 07:00 en Caracas: la hora local 7 queda fuera del recordatorio (06:00).
       const dbSiete = crearDbBarrido([[alumnoSemanal]]);
       const emitAsyncSiete = vi.fn();
       const processorSiete = new AntropometriaRecordatorioProcessor(dbSiete, {
@@ -223,6 +223,46 @@ describe('WU RF-003a: recordatorio de check-in antropométrico (RN-01)', () => {
       );
       expect(elMartes.despachados).toBe(0);
       expect(emitAsyncMartes).not.toHaveBeenCalled();
+    });
+
+    it('cubre offsets de 45 min (Asia/Kathmandu): la corrida de :15 emite y la siguiente no duplica', async () => {
+      const alumnoKathmandu = { ...alumnoSemanal, timezone: 'Asia/Kathmandu' };
+
+      // 2026-09-07 00:15 UTC = 06:00 del lunes programado en Kathmandu (UTC+5:45): con el cron
+      // horario anterior (00:00 UTC = 05:45 local) este alumno nunca caía dentro de su hora local 6.
+      const dbPrimera = crearDbBarrido([[alumnoKathmandu], [], []]);
+      const emitAsyncPrimera = vi.fn().mockResolvedValue([]);
+      const processorPrimera = new AntropometriaRecordatorioProcessor(dbPrimera, {
+        emitAsync: emitAsyncPrimera,
+      } as any);
+
+      const primera = await processorPrimera.generarYDespachar(
+        new Date('2026-09-07T00:15:00.000Z')
+      );
+
+      expect(primera.despachados).toBe(1);
+      const [, evento] = emitAsyncPrimera.mock.calls[0];
+      expect(evento.payload.referenciaId).toBe('antropometria_2026-09-07');
+
+      // 00:30 UTC = 06:15 en Kathmandu: la corrida siguiente del mismo día local encuentra el
+      // aviso de la corrida anterior en la bandeja (dedupe por referencia/fecha), así que no reemite.
+      const dbSegunda = crearDbBarrido([
+        [alumnoKathmandu],
+        [],
+        [{ usuarioId: alumnoId, createdAtUtc: new Date('2026-09-07T00:15:00.000Z') }],
+      ]);
+      const emitAsyncSegunda = vi.fn();
+      const processorSegunda = new AntropometriaRecordatorioProcessor(dbSegunda, {
+        emitAsync: emitAsyncSegunda,
+      } as any);
+
+      const segunda = await processorSegunda.generarYDespachar(
+        new Date('2026-09-07T00:30:00.000Z')
+      );
+
+      expect(segunda.despachados).toBe(0);
+      expect(segunda.omitidosPorAviso).toBe(1);
+      expect(emitAsyncSegunda).not.toHaveBeenCalled();
     });
 
     it('sin alumnos con calendario configurado no consulta nada más', async () => {

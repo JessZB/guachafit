@@ -6,12 +6,14 @@
  * dupliquen el barrido. Si Redis no está disponible el API NO cae al arrancar: se loguea y el
  * scheduler queda sin registrar hasta el próximo boot.
  *
- * Cron: cada hora en punto UTC por defecto (configurable con `ANTROPOMETRIA_RECORDATORIO_CRON`).
+ * Cron: cada 15 minutos por defecto (configurable con `ANTROPOMETRIA_RECORDATORIO_CRON`).
  *
- * Aproximación documentada: como el cron es único para todo el mundo, el processor corre cada hora
- * y solo emite para los alumnos cuya HORA LOCAL es la del recordatorio (06:00, RN-01). Es exacto
- * para zonas con offset de hora entera; una zona con offset de media hora (p. ej. Asia/Kolkata)
- * recibe el aviso a las 06:30 locales.
+ * Aproximación documentada: como el cron es único para todo el mundo, el processor corre cada
+ * 15 minutos y solo emite para los alumnos cuya HORA LOCAL es la del recordatorio (06:00, RN-01).
+ * La cadencia cubre offsets de hora entera, media hora (p. ej. Asia/Kolkata) y 45 min (p. ej.
+ * Asia/Kathmandu), que con el cron horario anterior nunca caían dentro de su hora local 6.
+ * Límite: si el worker está caído durante TODA la hora local 6, ese día no hay reemisión (no hay
+ * catch-up); el pre-chequeo por bandeja evita duplicados, pero no recupera barridos perdidos.
  */
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -27,8 +29,8 @@ export const JOB_SCHEDULER_ANTROPOMETRIA_ID = 'antropometria:recordatorio-checki
 /** Nombre del job que barre los alumnos y emite los recordatorios del día. */
 export const JOB_GENERAR_RECORDATORIO_ANTROPOMETRIA = 'generar-recordatorio-checkin-antropometrico';
 
-/** Cada hora en punto (UTC); el processor filtra por hora local del alumno (env opcional). */
-export const CRON_RECORDATORIO_ANTROPOMETRIA_POR_DEFECTO = '0 * * * *';
+/** Cada 15 minutos (UTC); el processor filtra por hora local del alumno (env opcional). */
+export const CRON_RECORDATORIO_ANTROPOMETRIA_POR_DEFECTO = '*/15 * * * *';
 
 export const ENV_RECORDATORIO_ANTROPOMETRIA_CRON = 'ANTROPOMETRIA_RECORDATORIO_CRON';
 
@@ -52,7 +54,7 @@ export class AntropometriaRecordatorioSchedulerService implements OnModuleInit {
     }
   }
 
-  /** Upsert idempotente del job repetible horario (cron UTC configurable por env). */
+  /** Upsert idempotente del job repetible cada 15 min (cron UTC configurable por env). */
   async registrarRecordatorioHorario(): Promise<string> {
     const cron =
       process.env[ENV_RECORDATORIO_ANTROPOMETRIA_CRON]?.trim() ||

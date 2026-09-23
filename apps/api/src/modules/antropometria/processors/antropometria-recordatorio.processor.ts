@@ -1,13 +1,14 @@
 /**
- * RF-003 RN-01 / §6 (WU RF-003a + cierre): barrido horario del check-in antropométrico.
+ * RF-003 RN-01 / §6 (WU RF-003a + cierre): barrido periódico del check-in antropométrico.
  *
  * Ejecuta el job repetible que registra `AntropometriaRecordatorioSchedulerService` y, para cada
  * alumno con calendario configurado por el coach:
  *
  * 1. Resuelve su día/hora LOCALES (zona IANA de `usuarios.timezone`).
  * 2. Solo actúa si hoy es una fecha programada por la periodicidad (RN-01) Y su hora local es la
- *    del recordatorio (06:00). Ese doble filtro es lo que permite un único cron horario en UTC.
- * 3. Descarta a quien ya registró un check-in dentro de la ventana ±24 h de su fecha programada.
+ *    del recordatorio (06:00). Ese doble filtro es lo que permite un único cron UTC de 15 min.
+ * 3. Descarta a quien ya registró un check-in dentro de la ventana de 48 h ([D-1 00:00, D+1 00:00)
+ *    local) de su fecha programada.
  * 4. Descarta a quien ya tiene el aviso persistido en su bandeja In-App desde su medianoche local:
  *    así una segunda ejecución del worker (reintento, doble proceso) NO duplica el aviso.
  * 5. Publica `RecordatorioCheckinAntropometricoEvent` en el bus: el despachador persiste el aviso
@@ -77,7 +78,7 @@ export const LINK_EXPIRACION_ANTROPOMETRIA = '/coach/antropometria';
 export interface ResultadoRecordatorioAntropometria {
   /** Alumnos con calendario configurado evaluados en esta pasada. */
   evaluados: number;
-  /** Alumnos descartados porque ya registraron su check-in en la ventana ±24 h. */
+  /** Alumnos descartados porque ya registraron su check-in en la ventana de 48 h ([D-1, D+1) local). */
   omitidosPorReporte: number;
   /** Alumnos descartados porque el aviso de hoy ya está en su bandeja (idempotencia). */
   omitidosPorAviso: number;
@@ -85,7 +86,7 @@ export interface ResultadoRecordatorioAntropometria {
   despachados: number;
 }
 
-/** Resultado combinado del barrido horario: recordatorio (RN-01) + expiraciones (§6). */
+/** Resultado combinado del barrido periódico: recordatorio (RN-01) + expiraciones (§6). */
 export interface ResultadoBarridoAntropometria extends ResultadoRecordatorioAntropometria {
   /** Avisos de ventana vencida emitidos al coach en esta pasada. */
   expiracionesDespachadas: number;
@@ -197,7 +198,7 @@ export class AntropometriaRecordatorioProcessor extends WorkerHost {
 
     const alumnoIds = candidatos.map(({ alumno }) => alumno.usuarioId);
 
-    // Rango global (inclusivo) de fechas de control a consultar: la ventana ±24 h de cada
+    // Rango global (inclusivo) de fechas de control a consultar: la ventana de 48 h de cada
     // candidato se resuelve después en memoria con su propio día local.
     const desdeGlobal = candidatos
       .map(({ recordatorio }) => fechaAnteriorYyyyMmDd(recordatorio.fechaProgramada!, 1))

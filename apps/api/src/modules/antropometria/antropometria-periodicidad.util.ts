@@ -479,10 +479,11 @@ export function evaluarExpiracionAntropometria(params: {
 }
 
 /**
- * RN-01 con job horario (documentado): el processor corre cada hora en punto en UTC y solo emite
+ * RN-01 con job de 15 min (documentado): el processor corre cada 15 minutos en UTC y solo emite
  * para los alumnos cuya HORA LOCAL es la del recordatorio (06:00) y cuyo día local es una fecha
- * programada. Es una aproximación fiel para zonas con offset de hora entera; una zona con offset
- * de media hora (p. ej. Asia/Kolkata) recibe el aviso a las 06:30 locales.
+ * programada. La cadencia cubre offsets de hora entera, media hora (p. ej. Asia/Kolkata) y 45 min
+ * (p. ej. Asia/Kathmandu) dentro de su hora local 6. Límite: si el worker está caído durante toda
+ * la hora local 6, ese día no hay reemisión (no hay catch-up).
  */
 export function evaluarRecordatorioAntropometria(params: {
   periodicidad?: PeriodicidadAntropometria | null;
