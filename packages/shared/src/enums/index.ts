@@ -114,6 +114,19 @@ export enum PeriodoEvolucion {
   TODO = 'todo',
 }
 
+/**
+ * RF-003 RN-01 (precondición 2): periodicidad configurable del check-in antropométrico por alumno.
+ *
+ * El entrenador la fija en la ficha del alumno; el calendario se ancla en una fecha de inicio y el
+ * recordatorio de las 06:00 locales se dispara en cada fecha programada (ver
+ * `antropometria-periodicidad.util.ts` del API).
+ */
+export enum PeriodicidadAntropometria {
+  SEMANAL = 'semanal',
+  QUINCENAL = 'quincenal',
+  MENSUAL = 'mensual',
+}
+
 export enum ModuloUpload {
   ANTROPOMETRIA = 'antropometria',
   COMIDAS = 'comidas',

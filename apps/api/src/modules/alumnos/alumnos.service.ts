@@ -6,6 +6,7 @@ import {
   ConflictException,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { DRIZZLE_DB } from '../../database/database.module';
 import {
@@ -133,6 +134,9 @@ export class AlumnosService {
       telefonoWhatsapp: perfil.telefonoWhatsapp,
       modalidad: perfil.modalidad,
       estadoActivacion: perfil.estadoActivacion,
+      // RF-003 RN-01 (WU RF-003a): calendario antropométrico legible también por el alumno.
+      periodicidadAntropometria: perfil.periodicidadAntropometria ?? null,
+      antropometriaInicio: perfil.antropometriaInicio ?? null,
       tasaFijadaOverride: perfil.tasaFijadaOverride,
       // RF-005: plan y tarifa hidratados (override vigente > plan de la última cuota). Nunca
       // se inventa un plan: si no hay dato real, quedan `null` y la UI muestra "Sin plan asignado".
@@ -452,6 +456,8 @@ export class AlumnosService {
         fichaSaludPrivada: perfilesAlumno.fichaSaludPrivada,
         estadoActivacion: perfilesAlumno.estadoActivacion,
         modalidad: perfilesAlumno.modalidad,
+        periodicidadAntropometria: perfilesAlumno.periodicidadAntropometria,
+        antropometriaInicio: perfilesAlumno.antropometriaInicio,
         tasaFijadaOverride: perfilesAlumno.tasaFijadaOverride,
         deletedAtUtc: perfilesAlumno.deletedAtUtc,
         createdAtUtc: perfilesAlumno.createdAtUtc,
@@ -505,6 +511,27 @@ export class AlumnosService {
     }
     if (dto.modalidad !== undefined) {
       valoresAActualizar.modalidad = dto.modalidad;
+    }
+    // RF-003 RN-01 (WU RF-003a): calendario antropométrico. Activar una periodicidad sin ancla
+    // dejaría un calendario inerte; se rechaza en vez de guardar una configuración muda.
+    const periodicidadEfectiva =
+      dto.periodicidadAntropometria !== undefined
+        ? dto.periodicidadAntropometria
+        : perfil.periodicidadAntropometria;
+    const inicioEfectivo =
+      dto.antropometriaInicio !== undefined ? dto.antropometriaInicio : perfil.antropometriaInicio;
+
+    if (periodicidadEfectiva && !inicioEfectivo) {
+      throw new BadRequestException(
+        'Para activar la periodicidad del check-in antropométrico debes indicar la fecha de inicio del calendario (antropometriaInicio, formato YYYY-MM-DD).'
+      );
+    }
+
+    if (dto.periodicidadAntropometria !== undefined) {
+      valoresAActualizar.periodicidadAntropometria = dto.periodicidadAntropometria;
+    }
+    if (dto.antropometriaInicio !== undefined) {
+      valoresAActualizar.antropometriaInicio = dto.antropometriaInicio || null;
     }
     if (dto.tasaFijadaOverride !== undefined) {
       valoresAActualizar.tasaFijadaOverride = dto.tasaFijadaOverride || null;
@@ -1110,6 +1137,8 @@ export class AlumnosService {
         fichaSaludPrivada: perfilesAlumno.fichaSaludPrivada,
         estadoActivacion: perfilesAlumno.estadoActivacion,
         modalidad: perfilesAlumno.modalidad,
+        periodicidadAntropometria: perfilesAlumno.periodicidadAntropometria,
+        antropometriaInicio: perfilesAlumno.antropometriaInicio,
         tasaFijadaOverride: perfilesAlumno.tasaFijadaOverride,
         deletedAtUtc: perfilesAlumno.deletedAtUtc,
         createdAtUtc: perfilesAlumno.createdAtUtc,

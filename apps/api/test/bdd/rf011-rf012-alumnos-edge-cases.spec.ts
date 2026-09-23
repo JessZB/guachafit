@@ -12,6 +12,7 @@ import {
   RestaurarAlumnoSchema,
   CobroDirectoInteligenteSchema,
   CobroDirectoSchema,
+  PeriodicidadAntropometria,
 } from '@guachafit/shared';
 import {
   BadRequestException,
@@ -1570,6 +1571,62 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
       expect(res.telefonoWhatsapp).toBe('+584129999999');
       expect(res.planActivoNombre).toBe('Plan Full Presencial');
       expect(res.precioAcordadoOverride).toBe('38.00');
+    });
+  });
+
+  /**
+   * WU RF-003a (RF-003 RN-01, precondición 2): periodicidad del check-in antropométrico.
+   *
+   * El coach la fija por el PATCH existente del expediente (decisión del WU: no se añade un
+   * endpoint dedicado) y el alumno la lee en su propio `GET /alumnos/:id`.
+   */
+  describe('WU RF-003a: periodicidad antropométrica configurable (RN-01)', () => {
+    const reqCoachA = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
+    const reqAlumnoA1 = { user: { sub: ALUMNO_A1_USER_ID, rol: Rol.ALUMNO } };
+
+    it('persiste periodicidad + ancla y las devuelve en la respuesta del PATCH', async () => {
+      const res = await alumnosController.actualizarAlumno(reqCoachA, ALUMNO_A1_PERFIL_ID, {
+        periodicidadAntropometria: PeriodicidadAntropometria.QUINCENAL,
+        antropometriaInicio: '2026-09-07',
+      });
+
+      expect(res.periodicidadAntropometria).toBe(PeriodicidadAntropometria.QUINCENAL);
+      expect(res.antropometriaInicio).toBe('2026-09-07');
+      expect(mockPerfilesAlumno[0].periodicidadAntropometria).toBe('quincenal');
+      expect(mockPerfilesAlumno[0].antropometriaInicio).toBe('2026-09-07');
+    });
+
+    it('rechaza activar una periodicidad sin ancla (calendario inerte)', async () => {
+      const error = await alumnosController
+        .actualizarAlumno(reqCoachA, ALUMNO_A1_PERFIL_ID, {
+          periodicidadAntropometria: PeriodicidadAntropometria.MENSUAL,
+        })
+        .catch((e) => e);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as Error).message).toMatch(/fecha de inicio del calendario/i);
+    });
+
+    it('permite desactivar la periodicidad (null) conservando el ancla para reactivar', async () => {
+      mockPerfilesAlumno[0].periodicidadAntropometria = 'semanal';
+      mockPerfilesAlumno[0].antropometriaInicio = '2026-09-07';
+
+      const res = await alumnosController.actualizarAlumno(reqCoachA, ALUMNO_A1_PERFIL_ID, {
+        periodicidadAntropometria: null,
+      });
+
+      expect(res.periodicidadAntropometria).toBeNull();
+      expect(res.antropometriaInicio).toBe('2026-09-07');
+    });
+
+    it('el alumno lee su calendario antropométrico en su propio expediente', async () => {
+      mockPerfilesAlumno[0].periodicidadAntropometria = 'mensual';
+      mockPerfilesAlumno[0].antropometriaInicio = '2026-09-01';
+
+      const res = await alumnosController.obtenerPorId(reqAlumnoA1, ALUMNO_A1_PERFIL_ID);
+
+      expect(res.periodicidadAntropometria).toBe('mensual');
+      expect(res.antropometriaInicio).toBe('2026-09-01');
     });
   });
 });

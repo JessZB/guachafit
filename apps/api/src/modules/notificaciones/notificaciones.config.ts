@@ -16,6 +16,8 @@ import { EventoNotificacionPayload } from '@guachafit/shared';
 export const COLA_PUSH = 'notificaciones-push';
 export const COLA_EMAIL = 'notificaciones-email';
 export const COLA_RESUMEN_SEMANAL = 'notificaciones-resumen-semanal';
+/** RF-003 RN-01 (WU RF-003a): barrido horario de recordatorios de check-in antropométrico. */
+export const COLA_ANTROPOMETRIA_RECORDATORIO = 'notificaciones-antropometria-recordatorio';
 
 /** Sufijo de la Dead-Letter Queue de cada cola de origen (RNF-004 §4). */
 export const SUFIJO_COLA_DLQ = '-dead-letter';
@@ -124,6 +126,20 @@ export const OPCIONES_JOB_RESUMEN_SEMANAL = {
   attempts: 4,
   backoff: { type: 'exponential' as const, delay: 5000 },
   removeOnComplete: { age: 30 * 24 * 60 * 60, count: 500 },
+  removeOnFail: RETENCION_FALLIDOS,
+};
+
+/**
+ * RF-003 RN-01 (WU RF-003a): barrido horario del recordatorio antropométrico.
+ *
+ * Es un job repetible (no un envío diferido): retiene los completados una semana para observarlo en
+ * Bull-Board sin que la cola crezca sin límite. La idempotencia real del aviso vive en la BD
+ * (persistencia In-App por día local + `jobId` determinista de push/email en el despachador).
+ */
+export const OPCIONES_JOB_ANTROPOMETRIA_RECORDATORIO = {
+  attempts: 4,
+  backoff: { type: 'exponential' as const, delay: 5000 },
+  removeOnComplete: { age: 7 * 24 * 60 * 60, count: 500 },
   removeOnFail: RETENCION_FALLIDOS,
 };
 

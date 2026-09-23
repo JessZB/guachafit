@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Rol, AuthUserDTO, AuthTokensResponseDTO, LoginUsuarioDTO } from '@guachafit/shared';
+import { Rol, Modalidad, AuthUserDTO, AuthTokensResponseDTO, LoginUsuarioDTO } from '@guachafit/shared';
 import { apiClient, setAuthToken, getAuthToken } from '../lib/api-client';
 import { queryClient } from '../lib/query-client';
 import { clearOfflineData } from '../lib/offline-db';
@@ -96,6 +96,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             email: 'alumno@guachafit.com',
             rol: Rol.ALUMNO,
             entrenadorId: '11111111-2222-3333-4444-555555555555',
+            // RF-003 RN-03 (WU RF-003b): el alumno demo es remoto por defecto; la página de
+            // progreso puede conmutar escenarios (remoto en ventana / fuera / presencial) con
+            // fixtures locales, siempre tras `isDemoMode`.
+            modalidad: Modalidad.REMOTO,
           };
 
     const mockToken = 'mock_jwt_token_' + rol + '_' + Date.now();

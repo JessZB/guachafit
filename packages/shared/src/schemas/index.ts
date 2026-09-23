@@ -18,6 +18,8 @@ import {
   TipoCierreSesion,
   NivelObjetivoPlantilla,
   ModoAsignacionPlantilla,
+  PeriodicidadAntropometria,
+  EstadoLicencia,
 } from '../enums';
 
 // Regex para formatos universales
@@ -61,6 +63,53 @@ export const EstablecerPasswordConTokenSchema = z.object({
   password: z.string().min(8).max(100),
 });
 
+/**
+ * RF-010 RN-01 (WU Admin): página por defecto y techo duro del listado de entrenadores del panel
+ * maestro (`GET /auth/entrenadores`). Mismo envelope paginado que el resto de listados del repo.
+ */
+export const LIMITE_ENTRENADORES_ADMIN_POR_DEFECTO = 25;
+export const LIMITE_ENTRENADORES_ADMIN_MAXIMO = 100;
+
+/** RF-010 RN-01: paginación estándar del listado de entrenadores del Superadmin. */
+export const ListarEntrenadoresAdminQuerySchema = z.object({
+  limit: z
+    .coerce
+    .number()
+    .int('El límite debe ser un número entero')
+    .min(1, 'El límite debe ser al menos 1')
+    .max(
+      LIMITE_ENTRENADORES_ADMIN_MAXIMO,
+      `El límite no puede exceder ${LIMITE_ENTRENADORES_ADMIN_MAXIMO}`
+    )
+    .optional()
+    .default(LIMITE_ENTRENADORES_ADMIN_POR_DEFECTO),
+  offset: z
+    .coerce
+    .number()
+    .int('El offset debe ser un número entero')
+    .min(0, 'El offset debe ser mayor o igual a 0')
+    .optional()
+    .default(0),
+});
+
+/**
+ * RF-010 RN-01 / §6: habilitar o deshabilitar la CUENTA de un entrenador.
+ * Idempotente: repetir el mismo estado no escribe y devuelve `cambioAplicado: false`.
+ */
+export const CambiarEstadoEntrenadorSchema = z.object({
+  activo: z.boolean({
+    required_error: 'El estado `activo` es obligatorio.',
+    invalid_type_error: 'El estado `activo` debe ser booleano.',
+  }),
+});
+
+/** RF-010 RN-01: activar o suspender la LICENCIA de un entrenador (idempotente). */
+export const CambiarLicenciaEntrenadorSchema = z.object({
+  estadoLicencia: z.nativeEnum(EstadoLicencia, {
+    errorMap: () => ({ message: 'La licencia debe ser `activa` o `suspendida_superadmin`.' }),
+  }),
+});
+
 export const AltaManualAlumnoSchema = z.object({
   nombres: z.string().min(2).max(100),
   apellidos: z.string().min(2).max(100),
@@ -102,6 +151,18 @@ export const ActualizarPerfilAlumnoSchema = z.object({
   modalidad: z.nativeEnum(Modalidad).optional(),
   tasaFijadaOverride: z.string().regex(TASA_STRING_REGEX).optional().nullable(),
   fichaSaludPrivada: z.string().max(2000).optional().nullable(),
+  /**
+   * RF-003 RN-01 (precondición 2): periodicidad configurable del control antropométrico del alumno.
+   * `null` la desactiva (sin calendario ni recordatorio de las 06:00). `antropometriaInicio` es el
+   * ancla del calendario (YYYY-MM-DD en el día local del alumno): sin ella la periodicidad no
+   * produce fechas programadas y la ventana remota de RN-04 no se aplica.
+   */
+  periodicidadAntropometria: z.nativeEnum(PeriodicidadAntropometria).optional().nullable(),
+  antropometriaInicio: z
+    .string()
+    .regex(FECHA_CALENDARIO_REGEX, 'El formato de fecha debe ser YYYY-MM-DD')
+    .optional()
+    .nullable(),
 });
 
 /**
@@ -641,13 +702,68 @@ export const FotoAntropometriaInputSchema = z.object({
   storageKey: z.string().min(5, 'La clave de almacenamiento no es válida'),
 });
 
+/**
+ * RF-003 §6: medida decimal con rango de saneamiento.
+ *
+ * Los rangos del doc están fijados para peso (30–300 kg) y % de grasa (2–70%). Los perímetros y
+ * pliegues del RN-02 usan cotas de coherencia antropométrica (ISAK) que atrapan el error de tipeo
+ * sin rechazar un valor real: el mensaje conserva el mismo formato del peso/grasa y la medida sigue
+ * siendo un string decimal de hasta 2 decimales (nunca un `number` flotante).
+ */
+function decimalEnRango(
+  minimo: number,
+  maximo: number,
+  etiqueta: string,
+  unidad: 'cm' | 'mm'
+): z.ZodEffects<z.ZodString, string, string> {
+  return z
+    .string()
+    .regex(DECIMAL_STRING_REGEX, `${etiqueta} debe tener formato decimal de hasta 2 decimales`)
+    .refine((val) => {
+      const num = Number(val);
+      return num >= minimo && num <= maximo;
+    }, `${etiqueta} debe estar entre ${minimo.toFixed(2)} ${unidad} y ${maximo.toFixed(2)} ${unidad}`);
+}
+
+/** Perímetros frecuentes del RN-02 (cm), reutilizables por cualquier variante del contrato. */
+const PERIMETRO_BRAZO = (etiqueta: string) => decimalEnRango(10, 80, etiqueta, 'cm');
+const PERIMETRO_MUSLO = (etiqueta: string) => decimalEnRango(20, 120, etiqueta, 'cm');
+
+/**
+ * RF-003 RN-02: perímetros corporales del control antropométrico.
+ *
+ * El doc lista: pecho, cintura, cadera, **brazo relajado/contraído**, **muslo medio** y cuello.
+ * `brazoCm`/`musloCm` se conservan como ALIAS LEGADOS del brazo relajado y del muslo medio
+ * (documentado en el WU RF-003a): no se rompe el contrato previo y el servicio resuelve la
+ * precedencia `brazoRelajadoCm ?? brazoCm` al persistir.
+ */
 export const PerimetrosCorporalesInputSchema = z.object({
-  cuelloCm: z.string().regex(DECIMAL_STRING_REGEX, 'El cuello debe tener formato decimal de hasta 2 decimales').optional(),
-  pechoCm: z.string().regex(DECIMAL_STRING_REGEX, 'El pecho debe tener formato decimal de hasta 2 decimales').optional(),
-  cinturaCm: z.string().regex(DECIMAL_STRING_REGEX, 'La cintura debe tener formato decimal de hasta 2 decimales').optional(),
-  caderaCm: z.string().regex(DECIMAL_STRING_REGEX, 'La cadera debe tener formato decimal de hasta 2 decimales').optional(),
-  brazoCm: z.string().regex(DECIMAL_STRING_REGEX, 'El brazo debe tener formato decimal de hasta 2 decimales').optional(),
-  musloCm: z.string().regex(DECIMAL_STRING_REGEX, 'El muslo debe tener formato decimal de hasta 2 decimales').optional(),
+  cuelloCm: decimalEnRango(20, 80, 'El cuello', 'cm').optional(),
+  pechoCm: decimalEnRango(40, 200, 'El pecho', 'cm').optional(),
+  cinturaCm: decimalEnRango(30, 250, 'La cintura', 'cm').optional(),
+  caderaCm: decimalEnRango(40, 250, 'La cadera', 'cm').optional(),
+  /** RN-02: brazo RELAJADO (dato nuevo; alias legado `brazoCm`). */
+  brazoRelajadoCm: PERIMETRO_BRAZO('El brazo relajado').optional(),
+  /** RN-02: brazo CONTRAÍDO (dato nuevo, independiente del relajado). */
+  brazoContraidoCm: PERIMETRO_BRAZO('El brazo contraído').optional(),
+  /** RN-02: muslo MEDIO (dato nuevo; alias legado `musloCm`). */
+  musloMedioCm: PERIMETRO_MUSLO('El muslo medio').optional(),
+  /** Alias legado del brazo relajado (WU previos). */
+  brazoCm: PERIMETRO_BRAZO('El brazo').optional(),
+  /** Alias legado del muslo medio (WU previos). */
+  musloCm: PERIMETRO_MUSLO('El muslo').optional(),
+});
+
+/**
+ * RF-003 RN-02: pliegues cutáneos (mm) para la composición corporal estimada.
+ * El doc lista tríceps, subescapular, suprailíaco y abdominal. Son opcionales y alternativos al
+ * `%` de grasa por bioimpedancia/fórmula (el servicio admite cualquiera de los dos o ambos).
+ */
+export const PlieguesCutaneosInputSchema = z.object({
+  tricepsMm: decimalEnRango(1, 100, 'El pliegue del tríceps', 'mm').optional(),
+  subescapularMm: decimalEnRango(1, 100, 'El pliegue subescapular', 'mm').optional(),
+  suprailiacoMm: decimalEnRango(1, 100, 'El pliegue suprailíaco', 'mm').optional(),
+  abdominalMm: decimalEnRango(1, 100, 'El pliegue abdominal', 'mm').optional(),
 });
 
 /** RF-002 RN-01: módulo de la bóveda que solo admite PDFs (recursos del coach). */
@@ -706,6 +822,8 @@ export const CheckinAntropometricoSchema = z.object({
     }, 'El porcentaje de grasa debe estar entre 2.00% y 70.00%')
     .optional(),
   perimetros: PerimetrosCorporalesInputSchema.optional(),
+  /** RN-02: composición por pliegues cutáneos (mm); alternativa/complemento del % de grasa. */
+  pliegues: PlieguesCutaneosInputSchema.optional(),
   fotos: z
     .array(FotoAntropometriaInputSchema)
     .max(3, 'No se permiten más de 3 fotografías corporales de progreso por evaluación')

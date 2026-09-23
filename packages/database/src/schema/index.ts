@@ -38,6 +38,7 @@ import {
   BloqueDiaRutinaDTO,
   NivelObjetivoPlantilla,
   RecursoNutricionalDTO,
+  PeriodicidadAntropometria,
 } from '@guachafit/shared';
 
 // =============================================================================
@@ -103,6 +104,12 @@ export const anguloFotoEnum = pgEnum('enum_angulo_foto', [
   AnguloFoto.FRONTAL,
   AnguloFoto.LATERAL,
   AnguloFoto.POSTERIOR,
+]);
+/** RF-003 RN-01 (precondición 2): periodicidad configurable del check-in antropométrico. */
+export const periodicidadAntropometriaEnum = pgEnum('enum_periodicidad_antropometria', [
+  PeriodicidadAntropometria.SEMANAL,
+  PeriodicidadAntropometria.QUINCENAL,
+  PeriodicidadAntropometria.MENSUAL,
 ]);
 export const estadoCuotaEnum = pgEnum('enum_estado_cuota', [
   EstadoCuota.EMITIDA,
@@ -202,6 +209,13 @@ export const perfilesAlumno = pgTable(
       .default(EstadoAlumno.ACTIVO)
       .notNull(),
     modalidad: modalidadEnum('modalidad').default(Modalidad.PRESENCIAL).notNull(),
+    /**
+     * RF-003 RN-01 (WU RF-003a): periodicidad configurable del check-in antropométrico del alumno.
+     * NULL = sin calendario (no hay fechas programadas ni recordatorio de las 06:00).
+     */
+    periodicidadAntropometria: periodicidadAntropometriaEnum('periodicidad_antropometria'),
+    /** Ancla (YYYY-MM-DD, día local del alumno) del calendario de periodicidad antropométrica. */
+    antropometriaInicio: date('antropometria_inicio'),
     tasaFijadaOverride: numeric('tasa_fijada_override', { precision: 12, scale: 4 }),
     /** RF-001 RN-02: racha de días consecutivos con cumplimiento >= 70% del volumen prescrito. */
     rachaDias: integer('racha_dias').default(0).notNull(),
@@ -501,8 +515,19 @@ export const controlesAntropometricos = pgTable('controles_antropometricos', {
   pechoCm: numeric('pecho_cm', { precision: 5, scale: 2 }),
   cinturaCm: numeric('cintura_cm', { precision: 5, scale: 2 }),
   caderaCm: numeric('cadera_cm', { precision: 5, scale: 2 }),
+  /** Alias legado del brazo relajado (WU previos al RF-003a); se conserva por compatibilidad. */
   brazoCm: numeric('brazo_cm', { precision: 5, scale: 2 }),
+  /** Alias legado del muslo medio (WU previos al RF-003a); se conserva por compatibilidad. */
   musloCm: numeric('muslo_cm', { precision: 5, scale: 2 }),
+  /** RF-003 RN-02 (WU RF-003a): perímetros completos del modelo de medidas. */
+  brazoRelajadoCm: numeric('brazo_relajado_cm', { precision: 5, scale: 2 }),
+  brazoContraidoCm: numeric('brazo_contraido_cm', { precision: 5, scale: 2 }),
+  musloMedioCm: numeric('muslo_medio_cm', { precision: 5, scale: 2 }),
+  /** RF-003 RN-02 (WU RF-003a): pliegues cutáneos en milímetros. */
+  pliegueTricepsMm: numeric('pliegue_triceps_mm', { precision: 5, scale: 2 }),
+  pliegueSubescapularMm: numeric('pliegue_subescapular_mm', { precision: 5, scale: 2 }),
+  pliegueSuprailiacoMm: numeric('pliegue_suprailiaco_mm', { precision: 5, scale: 2 }),
+  pliegueAbdominalMm: numeric('pliegue_abdominal_mm', { precision: 5, scale: 2 }),
   modalidad: modalidadEnum('modalidad').notNull(),
   origen: origenAntropometriaEnum('origen').notNull(),
   registradoPor: uuid('registrado_por')

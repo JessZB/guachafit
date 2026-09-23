@@ -4,19 +4,22 @@ import { useAuth } from '../../context/auth-context';
 import {
   ControlAntropometricoDetalleDTO,
   ColaPendientesAntropometricosDTO,
-  AnguloFoto,
 } from '@guachafit/shared';
 import {
   etiquetaAlumnoPendiente,
   filtrarPendientesAntropometria,
   hayBusquedaAntropometriaActiva,
 } from '../../lib/antropometria-filtros';
+import { crearPendientesDemoAntropometria } from '../../lib/demo-antropometria';
 import { pluralizar } from '../../lib/pluralizar';
 import { formatFechaCalendario } from '../../lib/date-format';
 import { rebanarPagina } from '../../lib/paginacion';
 import { usePaginacionServidor } from '../../lib/use-paginacion-servidor';
+import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import { Paginacion } from '../../components/common/Paginacion';
+import { VisorFoto } from '../../components/common/VisorFoto';
 import { ComparadorAntropometrico } from '../../components/entrenador/ComparadorAntropometrico';
+import { etiquetaAngulo } from '../../lib/comparador-fotos';
 import {
   Camera,
   CheckCircle2,
@@ -25,41 +28,10 @@ import {
   RotateCcw,
   Search,
   SearchX,
+  Eye,
+  ImageOff,
+  X,
 } from 'lucide-react';
-
-/**
- * WU25b: cola demo de evaluaciones pendientes (mismo fixture de WU20). Solo se usa con
- * `isDemoMode` activo; el slice de página se corta localmente con la misma aritmética del API.
- */
-function crearPendientesDemo(): ControlAntropometricoDetalleDTO[] {
-  return [
-    {
-      id: 'ctrl-p1',
-      alumnoId: 'al-002',
-      alumnoNombre: 'Mariana Pérez Gómez',
-      fechaEvaluacion: '2026-09-06',
-      pesoKg: '68.20',
-      alturaCm: '165.00',
-      porcentajeGrasa: '21.50',
-      perimetros: { cinturaCm: '72.00', caderaCm: '98.00', musloCm: '55.00' },
-      modalidad: 'remoto' as any,
-      origen: 'remoto_autoreporte' as any,
-      registradoPor: 'al-002',
-      estado: 'pendiente_aprobacion' as any,
-      fotos: [
-        {
-          id: 'fp-1',
-          controlId: 'ctrl-p1',
-          angulo: AnguloFoto.FRONTAL,
-          storageKey: 'antropometria/demo/2026/frontal.webp',
-          createdAtUtc: new Date().toISOString(),
-        },
-      ],
-      createdAtUtc: new Date().toISOString(),
-      updatedAtUtc: new Date().toISOString(),
-    },
-  ];
-}
 
 export function AntropometriaPage() {
   const { isDemoMode } = useAuth();
@@ -78,6 +50,30 @@ export function AntropometriaPage() {
   // Comparator State
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
+  // RF-003 RN-04 (WU RF-003b): auditoría de fotos con visor accesible y rechazo con motivo libre.
+  const [fotoVisor, setFotoVisor] = useState<{
+    foto: ControlAntropometricoDetalleDTO['fotos'][number];
+    fecha: string;
+  } | null>(null);
+  const [fotosConError, setFotosConError] = useState<string[]>([]);
+  const [controlARechazar, setControlARechazar] = useState<ControlAntropometricoDetalleDTO | null>(
+    null
+  );
+  const [motivoRechazo, setMotivoRechazo] = useState('');
+  const [errorMotivo, setErrorMotivo] = useState<string | null>(null);
+  const [isRechazando, setIsRechazando] = useState(false);
+
+  const refModalRechazo = useDialogoAccesible({
+    abierto: controlARechazar !== null,
+    onCerrar: () => cerrarModalRechazo(),
+  });
+
+  const cerrarModalRechazo = () => {
+    setControlARechazar(null);
+    setMotivoRechazo('');
+    setErrorMotivo(null);
+  };
+
   /**
    * WU25b: carga de UNA página de la cola de pendientes. En demo se filtra la cola local (ids
    * ya conciliados) y se corta con `rebanarPagina`; en real se consulta el envelope del servidor.
@@ -94,7 +90,9 @@ export function AntropometriaPage() {
     }): Promise<ColaPendientesAntropometricosDTO> => {
       const offset = (paginaSolicitada - 1) * tamanoSolicitado;
       if (isDemoMode) {
-        const cola = crearPendientesDemo().filter((ctrl) => !idsResueltosDemo.includes(ctrl.id));
+        const cola = crearPendientesDemoAntropometria().filter(
+          (ctrl) => !idsResueltosDemo.includes(ctrl.id)
+        );
         return {
           items: rebanarPagina(cola, paginaSolicitada, tamanoSolicitado),
           total: cola.length,
@@ -147,34 +145,55 @@ export function AntropometriaPage() {
 
   const limpiarBusqueda = () => setBusqueda('');
 
-  const handleConciliar = async (id: string, accion: 'aprobar' | 'rechazar') => {
+  /**
+   * RN-04: concilia un control pendiente.
+   * - `aprobar`: consolida sin observación prefabricada (la observación es opcional del coach).
+   * - `rechazar`: exige el motivo libre que verá/recibirá el alumno (validado antes de enviar).
+   * Solo se declara éxito con 2xx (o el cambio local en modo demo); si falla, la tarjeta sigue.
+   */
+  const handleConciliar = async (id: string, accion: 'aprobar' | 'rechazar', motivo?: string) => {
     setActionError(null);
 
-    try {
-      await apiClient(`/antropometria/${id}/conciliar`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          accion,
-          observacionesCoach: accion === 'aprobar' ? 'Progreso validado por coach' : 'Fotos borrosas',
-          motivoRechazo: accion === 'rechazar' ? 'Por favor repetir fotos con mejor luz' : undefined,
-        }),
-      });
-    } catch (err: any) {
-      // D5: sin éxito falso ni desaparición optimista; la evaluación sigue pendiente.
-      setActionError(
-        err?.message || 'No se pudo conciliar la evaluación. Revisa tu conexión e inténtalo de nuevo.'
-      );
+    const cuerpo =
+      accion === 'aprobar'
+        ? { accion }
+        : { accion, motivoRechazo: (motivo ?? '').trim() };
+
+    if (accion === 'rechazar' && !cuerpo.motivoRechazo) {
+      setErrorMotivo('Escribe el motivo del rechazo: el alumno lo recibirá como retroalimentación.');
       return;
+    }
+
+    // MODO DEMO EXPLÍCITO: la conciliación vive en estado local, sin llamadas reales (el banner
+    // demo visible lo declara). Nunca se declara éxito de un servidor que no respondió.
+    if (!isDemoMode) {
+      setIsRechazando(accion === 'rechazar');
+      try {
+        await apiClient(`/antropometria/${id}/conciliar`, {
+          method: 'PATCH',
+          body: JSON.stringify(cuerpo),
+        });
+      } catch (err: any) {
+        // D5: sin éxito falso ni desaparición optimista; la evaluación sigue pendiente.
+        const mensaje =
+          err?.message || 'No se pudo conciliar la evaluación. Revisa tu conexión e inténtalo de nuevo.';
+        if (accion === 'rechazar') setErrorMotivo(mensaje);
+        else setActionError(mensaje);
+        return;
+      } finally {
+        setIsRechazando(false);
+      }
     }
 
     // WU25b: el servidor manda; se recarga la página actual (el hook ajusta si el total encogió).
     // En demo se registra el id resuelto y el slice local se recalcula.
     if (isDemoMode) setIdsResueltosDemo((prev) => [...prev, id]);
     else recargar();
+    if (accion === 'rechazar') cerrarModalRechazo();
     setActionSuccess(
       accion === 'aprobar'
         ? 'Evaluación aprobada y consolidada en las curvas del alumno.'
-        : 'Evaluación rechazada.'
+        : 'Evaluación rechazada: el motivo quedó registrado en el control.'
     );
     setTimeout(() => setActionSuccess(null), 3000);
   };
@@ -361,10 +380,126 @@ export function AntropometriaPage() {
                       Fotos Adjuntas
                     </span>
                     <p className="font-mono font-bold text-base text-foreground">
-                      {ctrl.fotos.length === 1 ? '1 foto' : `${ctrl.fotos.length} fotos`}
+                      {pluralizar(ctrl.fotos.length, 'foto', 'fotos')}
                     </p>
                   </div>
                 </div>
+
+                {/* RN-02 (WU RF-003b): modelo ampliado para auditar antes de aprobar. */}
+                {(ctrl.perimetros?.brazoRelajadoCm ||
+                  ctrl.perimetros?.brazoContraidoCm ||
+                  ctrl.perimetros?.musloMedioCm ||
+                  ctrl.pliegues) && (
+                  <div className="p-3.5 rounded-2xl bg-secondary/20 border border-border/60 space-y-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Modelo ampliado (RN-02)
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">Brazo relajado</span>
+                        <span className="font-mono font-bold text-foreground">
+                          {ctrl.perimetros?.brazoRelajadoCm ?? ctrl.perimetros?.brazoCm
+                            ? `${ctrl.perimetros?.brazoRelajadoCm ?? ctrl.perimetros?.brazoCm} cm`
+                            : '—'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">Brazo contraído</span>
+                        <span className="font-mono font-bold text-foreground">
+                          {ctrl.perimetros?.brazoContraidoCm
+                            ? `${ctrl.perimetros.brazoContraidoCm} cm`
+                            : '—'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">Muslo medio</span>
+                        <span className="font-mono font-bold text-foreground">
+                          {ctrl.perimetros?.musloMedioCm ?? ctrl.perimetros?.musloCm
+                            ? `${ctrl.perimetros?.musloMedioCm ?? ctrl.perimetros?.musloCm} cm`
+                            : '—'}
+                        </span>
+                      </div>
+                      {ctrl.pliegues && (
+                        <>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-muted-foreground">Pliegue tríceps</span>
+                            <span className="font-mono font-bold text-foreground">
+                              {ctrl.pliegues.tricepsMm ? `${ctrl.pliegues.tricepsMm} mm` : '—'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-muted-foreground">Pliegue subescapular</span>
+                            <span className="font-mono font-bold text-foreground">
+                              {ctrl.pliegues.subescapularMm
+                                ? `${ctrl.pliegues.subescapularMm} mm`
+                                : '—'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-muted-foreground">Pliegue suprailíaco</span>
+                            <span className="font-mono font-bold text-foreground">
+                              {ctrl.pliegues.suprailiacoMm ? `${ctrl.pliegues.suprailiacoMm} mm` : '—'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-muted-foreground">Pliegue abdominal</span>
+                            <span className="font-mono font-bold text-foreground">
+                              {ctrl.pliegues.abdominalMm ? `${ctrl.pliegues.abdominalMm} mm` : '—'}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* RN-04: fotos del control pendiente para poder auditarlas (visor accesible). */}
+                {ctrl.fotos.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Fotos de la toma
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {ctrl.fotos.map((foto) => {
+                        const fallo = fotosConError.includes(foto.id);
+                        const fechaCorta =
+                          formatFechaCalendario(ctrl.fechaEvaluacion) ?? ctrl.fechaEvaluacion;
+                        return (
+                          <button
+                            key={foto.id}
+                            type="button"
+                            onClick={() => setFotoVisor({ foto, fecha: ctrl.fechaEvaluacion })}
+                            aria-label={`Ver foto ${etiquetaAngulo(foto.angulo)} de ${etiquetaAlumnoPendiente(ctrl)} del ${fechaCorta}`}
+                            className="relative w-20 sm:w-24 aspect-3/4 rounded-2xl overflow-hidden border border-border bg-secondary/40 hover:border-primary/60 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+                          >
+                            {foto.presignedGetUrl && !fallo ? (
+                              <img
+                                src={foto.presignedGetUrl}
+                                alt=""
+                                loading="lazy"
+                                onError={() =>
+                                  setFotosConError((prev) =>
+                                    prev.includes(foto.id) ? prev : [...prev, foto.id]
+                                  )
+                                }
+                                className="absolute inset-0 h-full w-full object-cover"
+                              />
+                            ) : (
+                              <span className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-muted-foreground">
+                                <ImageOff className="h-4 w-4" />
+                                <span className="text-[11px] font-semibold">Sin imagen</span>
+                              </span>
+                            )}
+                            <span className="absolute bottom-0 inset-x-0 bg-background/80 backdrop-blur px-1.5 py-1 text-[11px] font-bold text-foreground flex items-center justify-center gap-1">
+                              <Eye className="h-3 w-3" />
+                              {etiquetaAngulo(foto.angulo)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between gap-3 pt-2">
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -374,7 +509,12 @@ export function AntropometriaPage() {
 
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => handleConciliar(ctrl.id, 'rechazar')}
+                      onClick={() => {
+                        setActionError(null);
+                        setErrorMotivo(null);
+                        setMotivoRechazo('');
+                        setControlARechazar(ctrl);
+                      }}
                       className="py-2 px-4 rounded-xl border border-destructive/40 text-destructive hover:bg-destructive/10 font-bold text-xs transition-colors"
                     >
                       Rechazar
@@ -394,6 +534,104 @@ export function AntropometriaPage() {
       ) : (
         /* RF-004: comparador real A/B contra el endpoint (demo conservada vía fixture local). */
         <ComparadorAntropometrico />
+      )}
+
+      {/* RN-04 (WU RF-003b): rechazo con motivo libre (antes: textos fijos prefabricados). */}
+      {controlARechazar && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isRechazando) cerrarModalRechazo();
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+        >
+          <div
+            ref={refModalRechazo}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-rechazo-antro-title"
+            tabIndex={-1}
+            className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between border-b border-border/80 pb-3">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-destructive" />
+                <h3 id="modal-rechazo-antro-title" className="font-bold text-base text-foreground">
+                  Rechazar evaluación
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={cerrarModalRechazo}
+                disabled={isRechazando}
+                aria-label="Cerrar rechazo"
+                className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer disabled:opacity-50"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Escribe el motivo del rechazo para{' '}
+              <span className="font-bold text-foreground">
+                {etiquetaAlumnoPendiente(controlARechazar)}
+              </span>
+              . Quedará registrado en el control como retroalimentación (RN-04).
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground" htmlFor="motivo-rechazo-antro">
+                Motivo del rechazo
+              </label>
+              <textarea
+                id="motivo-rechazo-antro"
+                rows={4}
+                value={motivoRechazo}
+                onChange={(e) => {
+                  setMotivoRechazo(e.target.value);
+                  if (errorMotivo) setErrorMotivo(null);
+                }}
+                placeholder="Ej. Las fotos salieron borrosas y no permiten validar la postura; repite la toma con mejor luz."
+                aria-invalid={Boolean(errorMotivo)}
+                className={`w-full px-3 py-2 rounded-xl bg-background border text-sm text-foreground focus:outline-hidden focus:border-primary resize-none ${
+                  errorMotivo ? 'border-destructive' : 'border-border'
+                }`}
+              />
+              {errorMotivo && (
+                <p role="alert" className="text-[11px] font-semibold text-destructive">
+                  {errorMotivo}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={cerrarModalRechazo}
+                disabled={isRechazando}
+                className="min-h-11 py-2.5 px-4 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConciliar(controlARechazar.id, 'rechazar', motivoRechazo)}
+                disabled={isRechazando || motivoRechazo.trim().length === 0}
+                className="min-h-11 py-2.5 px-4 rounded-xl bg-destructive text-destructive-foreground font-bold text-xs shadow-md hover:brightness-110 active:scale-95 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isRechazando ? 'Rechazando...' : 'Confirmar rechazo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Visor accesible de la foto auditada (Escape, trampa de foco y enlace temporal). */}
+      {fotoVisor && (
+        <VisorFoto
+          foto={fotoVisor.foto}
+          fecha={fotoVisor.fecha}
+          onCerrar={() => setFotoVisor(null)}
+        />
       )}
     </div>
   );

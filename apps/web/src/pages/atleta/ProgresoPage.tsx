@@ -1,11 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../context/auth-context';
 import { apiClient, resolverUrlApi } from '../../lib/api-client';
 import { resolverBloqueoAlumno, type BloqueoAlumno } from '../../lib/acceso-alumno';
 import { BloqueoAlumnoPanel } from '../../components/common/BloqueoAlumnoPanel';
 import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
-import { construirPayloadCheckinAntropometrico, obtenerUltimaMedicionReal } from '../../lib/antropometria-checkin';
-import { formatFechaCalendario } from '../../lib/date-format';
+import {
+  construirPayloadCheckinAntropometrico,
+  obtenerUltimaMedicionReal,
+  validarMedidasCheckinAntropometrico,
+  type CampoMedidaCheckinAntropometrico,
+} from '../../lib/antropometria-checkin';
+import { calcularEstadoVentanaCheckinAntropometrico } from '../../lib/antropometria-ventana';
+import {
+  contextoDemoAntropometria,
+  ESCENARIOS_DEMO_ANTROPOMETRIA,
+  ETIQUETAS_ESCENARIO_DEMO_ANTROPOMETRIA,
+  type EscenarioDemoAntropometria,
+} from '../../lib/demo-antropometria';
+import { fechaCalendarioLocal, formatFechaCalendario } from '../../lib/date-format';
 import { crearEvolucionDemo } from '../../lib/demo-evolucion';
 import { etiquetaAngulo } from '../../lib/comparador-fotos';
 import {
@@ -16,16 +28,17 @@ import type { TonoSemaforo } from '../../lib/adherencia';
 import { GraficoEvolucion } from '../../components/common/GraficoEvolucion';
 import { VisorFoto } from '../../components/common/VisorFoto';
 import {
+  AuthUserDTO,
   EvolucionCorporalDTO,
   ControlAntropometricoDetalleDTO,
   FotoAntropometriaDetalleDTO,
+  Modalidad,
 } from '@guachafit/shared';
 import {
   TrendingUp,
   Camera,
   Scale,
   Calendar,
-  Sparkles,
   CheckCircle2,
   Lock,
   Plus,
@@ -34,10 +47,12 @@ import {
   ChevronRight,
   ArrowUpRight,
   AlertTriangle,
-  Upload,
   Eye,
   Images,
   ImageOff,
+  CalendarClock,
+  CalendarX,
+  ShieldCheck,
 } from 'lucide-react';
 
 /** Clases del badge de estado del control antropométrico por tono semántico (DESIGN.md). */
@@ -48,6 +63,10 @@ const CLASES_BADGE_ESTADO_MEDICION: Record<TonoSemaforo, string> = {
   info: 'bg-info/15 text-info border-info/20',
   neutral: 'bg-secondary text-muted-foreground border-border',
 };
+
+/** Clases base de los inputs de medida (foco y tipografía mono de datos, DESIGN.md). */
+const CLASES_INPUT_MEDIDA =
+  'w-full px-3.5 py-2.5 rounded-2xl bg-background border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary';
 
 export function ProgresoPage() {
   const { user, isDemoMode } = useAuth();
@@ -73,30 +92,160 @@ export function ProgresoPage() {
   // Progressive Disclosure: 'hub' (selector) | 'nuevo' | 'evolucion'
   const [vistaActiva, setVistaActiva] = useState<'hub' | 'nuevo' | 'evolucion'>('hub');
 
+  /**
+   * RF-003 RN-03/RN-04 (WU RF-003b): sesión fresca de `/auth/me`. La modalidad y el calendario
+   * antropométrico se re-resuelven del perfil para que un cambio del coach se refleje sin esperar
+   * la rotación del token. Si la consulta falla se conserva el snapshot del login (dato real) y
+   * sin calendario la ventana no aplica, igual que en el servidor.
+   */
+  const [sesionFresca, setSesionFresca] = useState<AuthUserDTO | null>(null);
+  // Escenario demo conmutable (solo con isDemoMode): remoto en ventana / fuera / presencial.
+  const [escenarioDemo, setEscenarioDemo] =
+    useState<EscenarioDemoAntropometria>('remoto-ventana');
+  // Mensaje real del 403 del servidor si la modalidad cambió y el formulario ya no es válido.
+  const [accesoPresencialServidor, setAccesoPresencialServidor] = useState<string | null>(null);
+
   // Form for remote athlete check-in.
   // D6: en sesión real los campos arrancan VACÍOS (los fixtures solo viven tras isDemoMode);
   // al abrir el formulario se precargan con la última medición real de la evolución cargada.
   const [pesoKg, setPesoKg] = useState(() => (isDemoMode ? '74.50' : ''));
   const [porcentajeGrasa, setPorcentajeGrasa] = useState(() => (isDemoMode ? '14.80' : ''));
   const [cinturaCm, setCinturaCm] = useState(() => (isDemoMode ? '81.00' : ''));
-  const [brazoCm, setBrazoCm] = useState(() => (isDemoMode ? '37.50' : ''));
+  // RN-02: brazo relajado (el alias legado `brazoCm` se resuelve en el helper del payload).
+  const [brazoRelajadoCm, setBrazoRelajadoCm] = useState(() => (isDemoMode ? '37.50' : ''));
+  const [brazoContraidoCm, setBrazoContraidoCm] = useState(() => (isDemoMode ? '40.10' : ''));
+  const [musloMedioCm, setMusloMedioCm] = useState(() => (isDemoMode ? '58.20' : ''));
+  const [tricepsMm, setTricepsMm] = useState(() => (isDemoMode ? '12.00' : ''));
+  const [subescapularMm, setSubescapularMm] = useState(() => (isDemoMode ? '11.50' : ''));
+  const [suprailiacoMm, setSuprailiacoMm] = useState(() => (isDemoMode ? '9.80' : ''));
+  const [abdominalMm, setAbdominalMm] = useState(() => (isDemoMode ? '14.20' : ''));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  // Validación inline: los mensajes por campo se muestran al escribir o tras intentar enviar.
+  const [intentoEnvio, setIntentoEnvio] = useState(false);
+
+  useEffect(() => {
+    if (isDemoMode || !user?.id) {
+      setSesionFresca(null);
+      return;
+    }
+    let cancelado = false;
+    apiClient<{ usuario: AuthUserDTO }>('/auth/me')
+      .then((respuesta) => {
+        if (!cancelado) setSesionFresca(respuesta?.usuario ?? null);
+      })
+      .catch(() => {
+        // Best-effort: el snapshot del login sigue siendo dato real y el servidor es la red de
+        // seguridad (403 presencial / 400 de ventana). No se fabrica estado.
+        if (!cancelado) setSesionFresca(null);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [isDemoMode, user?.id]);
+
+  /**
+   * Contexto antropométrico efectivo del alumno:
+   * - Demo: lo define el escenario conmutable (fixture relativo a hoy).
+   * - Real: `/auth/me` (perfil fresco) con el snapshot del login como respaldo.
+   */
+  const contextoAntropometrico = useMemo(() => {
+    if (isDemoMode) return contextoDemoAntropometria(escenarioDemo);
+    return {
+      modalidad: sesionFresca?.modalidad ?? user?.modalidad ?? null,
+      periodicidadAntropometria: sesionFresca?.periodicidadAntropometria ?? null,
+      antropometriaInicio: sesionFresca?.antropometriaInicio ?? null,
+    };
+  }, [isDemoMode, escenarioDemo, sesionFresca, user?.modalidad]);
+
+  /** RN-03: con modalidad presencial el alumno tiene solo lectura (el servidor responde 403). */
+  const esSoloLectura = contextoAntropometrico.modalidad === Modalidad.PRESENCIAL;
+
+  /** RN-04/§6: estado del calendario y de la ventana de check-in en el día local. */
+  const estadoVentana = useMemo(
+    () =>
+      calcularEstadoVentanaCheckinAntropometrico({
+        periodicidad: contextoAntropometrico.periodicidadAntropometria,
+        antropometriaInicio: contextoAntropometrico.antropometriaInicio,
+        hoyLocal: fechaCalendarioLocal(),
+      }),
+    [contextoAntropometrico]
+  );
+
+  /** Motivo por el que el registro remoto no está disponible ahora mismo (o null). */
+  const motivoRegistroBloqueado = esSoloLectura
+    ? 'Tus medidas las registra tu entrenador en sala.'
+    : estadoVentana.permiteRegistrar
+      ? null
+      : estadoVentana.motivoBloqueo;
+
+  const erroresMedidas = useMemo(
+    () =>
+      validarMedidasCheckinAntropometrico(user?.id ?? '', {
+        pesoKg,
+        porcentajeGrasa,
+        cinturaCm,
+        brazoRelajadoCm,
+        brazoContraidoCm,
+        musloMedioCm,
+        tricepsMm,
+        subescapularMm,
+        suprailiacoMm,
+        abdominalMm,
+      }),
+    [
+      user?.id,
+      pesoKg,
+      porcentajeGrasa,
+      cinturaCm,
+      brazoRelajadoCm,
+      brazoContraidoCm,
+      musloMedioCm,
+      tricepsMm,
+      subescapularMm,
+      suprailiacoMm,
+      abdominalMm,
+    ]
+  );
+
+  /**
+   * Error inline de un campo: se muestra si el campo ya tiene texto (el usuario está escribiendo)
+   * o si ya se intentó enviar. Nunca se pinta un error sobre un campo vacío opcional.
+   */
+  const errorInline = (campo: CampoMedidaCheckinAntropometrico, valor: string) => {
+    const mensaje = erroresMedidas[campo];
+    if (!mensaje) return null;
+    if (!intentoEnvio && valor.trim() === '') return null;
+    return (
+      <p role="alert" className="text-[11px] font-semibold text-destructive">
+        {mensaje}
+      </p>
+    );
+  };
 
   /**
    * Abre el formulario de check-in. En sesión real precarga la última medición real disponible
    * (sin pisar lo que el alumno ya haya escrito); sin evolución, los campos quedan vacíos.
+   * Con la ventana cerrada o en solo lectura no se abre: el botón queda deshabilitado con motivo.
    */
   const abrirFormularioCheckin = () => {
+    if (esSoloLectura || !estadoVentana.permiteRegistrar) return;
     if (!isDemoMode) {
       const ultima = obtenerUltimaMedicionReal(evolucion);
       if (ultima) {
         setPesoKg((prev) => prev || ultima.pesoKg);
         setPorcentajeGrasa((prev) => prev || ultima.porcentajeGrasa);
         setCinturaCm((prev) => prev || ultima.cinturaCm);
-        setBrazoCm((prev) => prev || ultima.brazoCm);
+        setBrazoRelajadoCm((prev) => prev || ultima.brazoRelajadoCm);
+        setBrazoContraidoCm((prev) => prev || ultima.brazoContraidoCm);
+        setMusloMedioCm((prev) => prev || ultima.musloMedioCm);
+        setTricepsMm((prev) => prev || ultima.tricepsMm);
+        setSubescapularMm((prev) => prev || ultima.subescapularMm);
+        setSuprailiacoMm((prev) => prev || ultima.suprailiacoMm);
+        setAbdominalMm((prev) => prev || ultima.abdominalMm);
       }
     }
+    setIntentoEnvio(false);
     setVistaActiva('nuevo');
   };
 
@@ -142,6 +291,23 @@ export function ProgresoPage() {
       setSubmitError('No se pudo identificar tu sesión. Vuelve a iniciar sesión e inténtalo de nuevo.');
       return;
     }
+    // Defensa en profundidad: la ventana y el solo lectura se validan antes de llamar a la API.
+    if (esSoloLectura) {
+      setSubmitError('Tus medidas las registra tu entrenador en sala: no puedes enviar el check-in.');
+      return;
+    }
+    if (!estadoVentana.permiteRegistrar) {
+      setSubmitError(
+        estadoVentana.motivoBloqueo ??
+          'Tu check-in está fuera de la ventana activa. Contacta a tu entrenador.'
+      );
+      return;
+    }
+    setIntentoEnvio(true);
+    if (Object.keys(erroresMedidas).length > 0) {
+      setSubmitError('Revisa los campos marcados antes de enviar tu check-in.');
+      return;
+    }
     setIsSubmitting(true);
     setSubmitError(null);
 
@@ -153,7 +319,13 @@ export function ProgresoPage() {
         pesoKg,
         porcentajeGrasa,
         cinturaCm,
-        brazoCm,
+        brazoRelajadoCm,
+        brazoContraidoCm,
+        musloMedioCm,
+        tricepsMm,
+        subescapularMm,
+        suprailiacoMm,
+        abdominalMm,
       });
       await apiClient<ControlAntropometricoDetalleDTO>('/antropometria/checkin', {
         method: 'POST',
@@ -181,6 +353,16 @@ export function ProgresoPage() {
         setSubmitError(null);
         return;
       }
+      // RN-03: si el perfil cambió a presencial después de cargar la página, el 403 del servidor
+      // se muestra tal cual y la vista pasa al estado de solo lectura (nunca un error genérico).
+      if (err?.status === 403) {
+        setAccesoPresencialServidor(
+          err?.message ||
+            'Los alumnos en modalidad presencial no registran sus propias medidas: las toma tu entrenador y quedan verificadas.'
+        );
+        setSubmitError(null);
+        return;
+      }
       // D5: sin éxito falso; el check-in solo queda enviado si el servidor lo aceptó (2xx).
       setSubmitError(
         err?.message || 'No se pudo enviar tu check-in. Revisa los datos e inténtalo de nuevo.'
@@ -197,6 +379,43 @@ export function ProgresoPage() {
       </div>
     );
   }
+
+  /** RN-03: panel de solo lectura del alumno presencial (con acceso a su historial/evolución). */
+  const panelSoloLectura = (mensajeServidor?: string | null) => (
+    <div className="p-6 rounded-3xl bg-card border border-primary/30 shadow-md space-y-3">
+      <div className="flex items-start gap-3">
+        <div className="p-3 rounded-2xl bg-primary/15 text-primary shrink-0">
+          <Lock className="h-5 w-5" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-base font-bold text-foreground">
+            Tus medidas las registra tu entrenador
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            En modalidad presencial tus medidas se toman en sala y quedan verificadas por tu
+            entrenador. Puedes consultar tu historial y tu evolución cuando quieras.
+          </p>
+          {mensajeServidor && (
+            <p
+              role="alert"
+              className="text-[11px] font-semibold text-warning flex items-start gap-1.5 pt-1"
+            >
+              <ShieldCheck className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>{mensajeServidor}</span>
+            </p>
+          )}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => setVistaActiva('evolucion')}
+        className="w-full min-h-11 py-3 px-4 rounded-2xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+      >
+        <TrendingUp className="h-4 w-4 text-primary" />
+        <span>Ver mi historial y evolución</span>
+      </button>
+    </div>
+  );
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto pb-24 lg:pb-12 animate-in fade-in duration-200">
@@ -218,6 +437,40 @@ export function ProgresoPage() {
 
       {/* U4: evolución servida desde la caché del SW (sin conexión), con su antigüedad. */}
       {!isDemoMode && evolucion && <AvisoDatosOffline url={urlEvolucion} />}
+
+      {/* DEMO (solo isDemoMode): escenarios conmutables para ejercitar RN-03/RN-04 sin red. */}
+      {isDemoMode && (
+        <div className="p-4 rounded-3xl bg-secondary/40 border border-border space-y-2">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+            Escenario demo (datos sintéticos)
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {ESCENARIOS_DEMO_ANTROPOMETRIA.map((escenario) => {
+              const activo = escenarioDemo === escenario;
+              return (
+                <button
+                  key={escenario}
+                  type="button"
+                  aria-pressed={activo}
+                  onClick={() => {
+                    setEscenarioDemo(escenario);
+                    setVistaActiva('hub');
+                    setSubmitError(null);
+                    setAccesoPresencialServidor(null);
+                  }}
+                  className={`min-h-11 px-3 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-primary ${
+                    activo
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background text-muted-foreground border-border hover:text-foreground'
+                  }`}
+                >
+                  {ETIQUETAS_ESCENARIO_DEMO_ANTROPOMETRIA[escenario]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* D2: error de carga honesto con reintento (sin evolución demo fuera del modo demo) */}
       {error && (
@@ -241,6 +494,27 @@ export function ProgresoPage() {
           onReintentar={() => setBloqueo(null)}
           className="max-w-none"
         />
+      )}
+
+      {/* RN-04/§6: estado visible de la ventana de check-in (solo alumnos remotos con calendario) */}
+      {!esSoloLectura && estadoVentana.aplica && (
+        <div
+          role="status"
+          className={`p-4 rounded-3xl border text-xs font-semibold flex items-start gap-2.5 ${
+            estadoVentana.estado === 'abierta'
+              ? 'bg-success/10 border-success/30 text-success'
+              : estadoVentana.estado === 'cerrada'
+                ? 'bg-warning/10 border-warning/30 text-warning'
+                : 'bg-info/10 border-info/30 text-info'
+          }`}
+        >
+          {estadoVentana.estado === 'abierta' ? (
+            <CalendarClock className="h-4 w-4 shrink-0 mt-0.5" />
+          ) : (
+            <CalendarX className="h-4 w-4 shrink-0 mt-0.5" />
+          )}
+          <span>{estadoVentana.mensaje}</span>
+        </div>
       )}
 
       {/* ========================================================================= */}
@@ -290,34 +564,63 @@ export function ProgresoPage() {
               Selecciona qué deseas hacer:
             </h2>
 
-            {/* Opción A: Actualizar Medidas */}
-            <div
-              onClick={abrirFormularioCheckin}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && abrirFormularioCheckin()}
-              className="group p-5 rounded-3xl bg-gradient-to-br from-card to-info/10 border-2 border-info/30 hover:border-info/70 transition-all duration-200 cursor-pointer shadow-md hover:shadow-info/5 active:scale-[0.99]"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="p-3.5 rounded-2xl bg-info text-info-foreground shadow-md shadow-info/20">
-                    <Camera className="h-6 w-6" />
+            {/* Opción A: Actualizar Medidas — solo lectura (presencial) o ventana cerrada */}
+            {esSoloLectura || accesoPresencialServidor ? (
+              panelSoloLectura(accesoPresencialServidor)
+            ) : estadoVentana.permiteRegistrar ? (
+              <div
+                onClick={abrirFormularioCheckin}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && abrirFormularioCheckin()}
+                className="group p-5 rounded-3xl bg-gradient-to-br from-card to-info/10 border-2 border-info/30 hover:border-info/70 transition-all duration-200 cursor-pointer shadow-md hover:shadow-info/5 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-primary"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3.5 rounded-2xl bg-info text-info-foreground shadow-md shadow-info/20">
+                      <Camera className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-foreground group-hover:text-info transition-colors flex items-center gap-1.5">
+                        Actualizar mis medidas y fotos
+                        <ArrowUpRight className="h-4 w-4 text-info opacity-80" />
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">
+                        Registra tu peso actual, perímetros de cintura o brazo y envía tu check-in al coach.
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-base font-bold text-foreground group-hover:text-info transition-colors flex items-center gap-1.5">
-                      Actualizar mis medidas y fotos
-                      <ArrowUpRight className="h-4 w-4 text-info opacity-80" />
-                    </h3>
-                    <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">
-                      Registra tu peso actual, perímetros de cintura o brazo y envía tu check-in al coach.
-                    </p>
+                  <div className="p-2 rounded-xl bg-secondary/80 text-foreground group-hover:text-info group-hover:bg-info/15 transition-colors">
+                    <ChevronRight className="h-5 w-5 group-hover:translate-x-0.5 transition-transform" />
                   </div>
-                </div>
-                <div className="p-2 rounded-xl bg-secondary/80 text-foreground group-hover:text-info group-hover:bg-info/15 transition-colors">
-                  <ChevronRight className="h-5 w-5 group-hover:translate-x-0.5 transition-transform" />
                 </div>
               </div>
-            </div>
+            ) : (
+              <div
+                aria-disabled="true"
+                className="p-5 rounded-3xl bg-card border border-border/60 opacity-80"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3.5 rounded-2xl bg-secondary text-muted-foreground">
+                      <CalendarX className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-foreground">
+                        Actualizar mis medidas y fotos
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">
+                        {estadoVentana.motivoBloqueo ??
+                          'Tu check-in está fuera de la ventana activa.'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-warning/15 text-warning border border-warning/25 uppercase shrink-0">
+                    Cerrada
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Opción B: Ver Evolución e Historial */}
             <div
@@ -325,7 +628,7 @@ export function ProgresoPage() {
               role="button"
               tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && setVistaActiva('evolucion')}
-              className="group p-5 rounded-3xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer shadow-xs active:scale-[0.99]"
+              className="group p-5 rounded-3xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer shadow-xs active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-primary"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -358,7 +661,7 @@ export function ProgresoPage() {
           <div className="flex items-center justify-between border-b border-border/80 pb-3">
             <button
               onClick={() => setVistaActiva('hub')}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline cursor-pointer"
+              className="inline-flex items-center gap-1.5 min-h-11 text-xs font-bold text-primary hover:underline cursor-pointer"
             >
               <ArrowLeft className="h-4 w-4" />
               <span>Volver a opciones de progreso</span>
@@ -366,104 +669,298 @@ export function ProgresoPage() {
             <span className="text-xs font-semibold text-muted-foreground">Registro de Check-in</span>
           </div>
 
-          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-4">
-            <div>
-              <h2 className="text-lg font-bold text-foreground">Registro de Medición Corporal</h2>
-              <p className="text-xs text-muted-foreground">
-                Tus datos quedarán guardados y asociados a tu historial de evolución.
-              </p>
-            </div>
-
-            {submitSuccess ? (
-              <div className="p-8 text-center space-y-3">
-                <CheckCircle2 className="h-12 w-12 text-success mx-auto" />
-                <h4 className="font-bold text-base text-foreground">¡Mediciones Guardadas!</h4>
+          {esSoloLectura || accesoPresencialServidor ? (
+            panelSoloLectura(accesoPresencialServidor)
+          ) : (
+            <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-4">
+              <div>
+                <h2 className="text-lg font-bold text-foreground">Registro de Medición Corporal</h2>
                 <p className="text-xs text-muted-foreground">
-                  Tus datos fueron enviados a tu entrenador para auditoría y validación.
+                  Tus datos quedarán guardados y asociados a tu historial de evolución.
                 </p>
               </div>
-            ) : (
-              <form onSubmit={handleSubmitCheckin} className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-muted-foreground">Peso (kg)</label>
-                    <input
-                      type="text"
-                      required
-                      value={pesoKg}
-                      onChange={(e) => setPesoKg(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-muted-foreground">
-                      % Grasa Estimado
-                    </label>
-                    <input
-                      type="text"
-                      value={porcentajeGrasa}
-                      onChange={(e) => setPorcentajeGrasa(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
-                    />
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-muted-foreground">
-                      Perímetro Cintura (cm)
-                    </label>
-                    <input
-                      type="text"
-                      value={cinturaCm}
-                      onChange={(e) => setCinturaCm(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-muted-foreground">
-                      Perímetro Brazo (cm)
-                    </label>
-                    <input
-                      type="text"
-                      value={brazoCm}
-                      onChange={(e) => setBrazoCm(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
-                    />
-                  </div>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border/80 text-xs text-muted-foreground space-y-1">
-                  <div className="flex items-center gap-1.5 font-bold text-foreground">
-                    <Lock className="h-3.5 w-3.5 text-primary" />
-                    <span>Revisión de tu coach</span>
-                  </div>
-                  <p className="text-[11px]">
-                    Si eres alumno online, tu reporte queda registrado como remoto y tu coach lo revisa en su bandeja. Si eres presencial, se consolida en sala.
+              {submitSuccess ? (
+                <div className="p-8 text-center space-y-3">
+                  <CheckCircle2 className="h-12 w-12 text-success mx-auto" />
+                  <h4 className="font-bold text-base text-foreground">¡Mediciones Guardadas!</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Tus datos fueron enviados a tu entrenador para auditoría y validación.
                   </p>
                 </div>
+              ) : (
+                <form onSubmit={handleSubmitCheckin} className="space-y-4" noValidate>
+                  {!estadoVentana.permiteRegistrar && (
+                    <div
+                      role="status"
+                      className="p-3.5 rounded-2xl bg-warning/10 border border-warning/30 text-warning text-xs font-bold flex items-start gap-2"
+                    >
+                      <CalendarX className="h-4 w-4 shrink-0 mt-0.5" />
+                      <span>
+                        {estadoVentana.mensaje ||
+                          'Tu check-in está fuera de la ventana activa. Contacta a tu entrenador.'}
+                      </span>
+                    </div>
+                  )}
 
-                {submitError && (
-                  <div
-                    role="alert"
-                    className="p-3.5 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-bold flex items-center gap-2"
-                  >
-                    <AlertTriangle className="h-4 w-4 shrink-0" />
-                    <span>{submitError}</span>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-muted-foreground" htmlFor="checkin-peso">
+                        Peso (kg)
+                      </label>
+                      <input
+                        id="checkin-peso"
+                        type="text"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        value={pesoKg}
+                        onChange={(e) => setPesoKg(e.target.value)}
+                        aria-invalid={Boolean(erroresMedidas.pesoKg)}
+                        className={`${CLASES_INPUT_MEDIDA} ${
+                          erroresMedidas.pesoKg ? 'border-destructive' : 'border-border'
+                        }`}
+                      />
+                      {errorInline('pesoKg', pesoKg)}
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-muted-foreground" htmlFor="checkin-grasa">
+                        % Grasa estimado
+                      </label>
+                      <input
+                        id="checkin-grasa"
+                        type="text"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        value={porcentajeGrasa}
+                        onChange={(e) => setPorcentajeGrasa(e.target.value)}
+                        aria-invalid={Boolean(erroresMedidas.porcentajeGrasa)}
+                        className={`${CLASES_INPUT_MEDIDA} ${
+                          erroresMedidas.porcentajeGrasa ? 'border-destructive' : 'border-border'
+                        }`}
+                      />
+                      {errorInline('porcentajeGrasa', porcentajeGrasa)}
+                    </div>
                   </div>
-                )}
 
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
-                >
-                  <span>{isSubmitting ? 'Enviando...' : 'Enviar Evaluación al Coach'}</span>
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              </form>
-            )}
-          </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-muted-foreground" htmlFor="checkin-cintura">
+                        Cintura (cm)
+                      </label>
+                      <input
+                        id="checkin-cintura"
+                        type="text"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        value={cinturaCm}
+                        onChange={(e) => setCinturaCm(e.target.value)}
+                        aria-invalid={Boolean(erroresMedidas.cinturaCm)}
+                        className={`${CLASES_INPUT_MEDIDA} ${
+                          erroresMedidas.cinturaCm ? 'border-destructive' : 'border-border'
+                        }`}
+                      />
+                      {errorInline('cinturaCm', cinturaCm)}
+                    </div>
+                    <div className="space-y-1.5">
+                      <label
+                        className="text-xs font-semibold text-muted-foreground"
+                        htmlFor="checkin-brazo-relajado"
+                      >
+                        Brazo relajado (cm)
+                      </label>
+                      <input
+                        id="checkin-brazo-relajado"
+                        type="text"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        value={brazoRelajadoCm}
+                        onChange={(e) => setBrazoRelajadoCm(e.target.value)}
+                        aria-invalid={Boolean(erroresMedidas.brazoRelajadoCm)}
+                        className={`${CLASES_INPUT_MEDIDA} ${
+                          erroresMedidas.brazoRelajadoCm ? 'border-destructive' : 'border-border'
+                        }`}
+                      />
+                      {errorInline('brazoRelajadoCm', brazoRelajadoCm)}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label
+                        className="text-xs font-semibold text-muted-foreground"
+                        htmlFor="checkin-brazo-contraido"
+                      >
+                        Brazo contraído (cm)
+                      </label>
+                      <input
+                        id="checkin-brazo-contraido"
+                        type="text"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        value={brazoContraidoCm}
+                        onChange={(e) => setBrazoContraidoCm(e.target.value)}
+                        aria-invalid={Boolean(erroresMedidas.brazoContraidoCm)}
+                        className={`${CLASES_INPUT_MEDIDA} ${
+                          erroresMedidas.brazoContraidoCm ? 'border-destructive' : 'border-border'
+                        }`}
+                      />
+                      {errorInline('brazoContraidoCm', brazoContraidoCm)}
+                    </div>
+                    <div className="space-y-1.5">
+                      <label
+                        className="text-xs font-semibold text-muted-foreground"
+                        htmlFor="checkin-muslo-medio"
+                      >
+                        Muslo medio (cm)
+                      </label>
+                      <input
+                        id="checkin-muslo-medio"
+                        type="text"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        value={musloMedioCm}
+                        onChange={(e) => setMusloMedioCm(e.target.value)}
+                        aria-invalid={Boolean(erroresMedidas.musloMedioCm)}
+                        className={`${CLASES_INPUT_MEDIDA} ${
+                          erroresMedidas.musloMedioCm ? 'border-destructive' : 'border-border'
+                        }`}
+                      />
+                      {errorInline('musloMedioCm', musloMedioCm)}
+                    </div>
+                  </div>
+
+                  {/* RN-02: pliegues cutáneos (mm), alternativa/complemento del % de grasa. */}
+                  <div className="p-4 rounded-2xl bg-secondary/30 border border-border/70 space-y-3">
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">
+                        Pliegues cutáneos (mm) — opcional
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">
+                        Si tu coach te los mide, regístralos junto al % de grasa estimado.
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-muted-foreground" htmlFor="checkin-pliegue-triceps">
+                          Tríceps (mm)
+                        </label>
+                        <input
+                          id="checkin-pliegue-triceps"
+                          type="text"
+                          inputMode="decimal"
+                          autoComplete="off"
+                          value={tricepsMm}
+                          onChange={(e) => setTricepsMm(e.target.value)}
+                          aria-invalid={Boolean(erroresMedidas.tricepsMm)}
+                          className={`${CLASES_INPUT_MEDIDA} ${
+                            erroresMedidas.tricepsMm ? 'border-destructive' : 'border-border'
+                          }`}
+                        />
+                        {errorInline('tricepsMm', tricepsMm)}
+                      </div>
+                      <div className="space-y-1.5">
+                        <label
+                          className="text-xs font-semibold text-muted-foreground"
+                          htmlFor="checkin-pliegue-subescapular"
+                        >
+                          Subescapular (mm)
+                        </label>
+                        <input
+                          id="checkin-pliegue-subescapular"
+                          type="text"
+                          inputMode="decimal"
+                          autoComplete="off"
+                          value={subescapularMm}
+                          onChange={(e) => setSubescapularMm(e.target.value)}
+                          aria-invalid={Boolean(erroresMedidas.subescapularMm)}
+                          className={`${CLASES_INPUT_MEDIDA} ${
+                            erroresMedidas.subescapularMm ? 'border-destructive' : 'border-border'
+                          }`}
+                        />
+                        {errorInline('subescapularMm', subescapularMm)}
+                      </div>
+                      <div className="space-y-1.5">
+                        <label
+                          className="text-xs font-semibold text-muted-foreground"
+                          htmlFor="checkin-pliegue-suprailiaco"
+                        >
+                          Suprailíaco (mm)
+                        </label>
+                        <input
+                          id="checkin-pliegue-suprailiaco"
+                          type="text"
+                          inputMode="decimal"
+                          autoComplete="off"
+                          value={suprailiacoMm}
+                          onChange={(e) => setSuprailiacoMm(e.target.value)}
+                          aria-invalid={Boolean(erroresMedidas.suprailiacoMm)}
+                          className={`${CLASES_INPUT_MEDIDA} ${
+                            erroresMedidas.suprailiacoMm ? 'border-destructive' : 'border-border'
+                          }`}
+                        />
+                        {errorInline('suprailiacoMm', suprailiacoMm)}
+                      </div>
+                      <div className="space-y-1.5">
+                        <label
+                          className="text-xs font-semibold text-muted-foreground"
+                          htmlFor="checkin-pliegue-abdominal"
+                        >
+                          Abdominal (mm)
+                        </label>
+                        <input
+                          id="checkin-pliegue-abdominal"
+                          type="text"
+                          inputMode="decimal"
+                          autoComplete="off"
+                          value={abdominalMm}
+                          onChange={(e) => setAbdominalMm(e.target.value)}
+                          aria-invalid={Boolean(erroresMedidas.abdominalMm)}
+                          className={`${CLASES_INPUT_MEDIDA} ${
+                            erroresMedidas.abdominalMm ? 'border-destructive' : 'border-border'
+                          }`}
+                        />
+                        {errorInline('abdominalMm', abdominalMm)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border/80 text-xs text-muted-foreground space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-foreground">
+                      <Lock className="h-3.5 w-3.5 text-primary" />
+                      <span>Revisión de tu coach</span>
+                    </div>
+                    <p className="text-[11px]">
+                      Tu reporte queda registrado como remoto y tu coach lo revisa en su bandeja antes de consolidarlo en tus curvas.
+                    </p>
+                  </div>
+
+                  {submitError && (
+                    <div
+                      role="alert"
+                      className="p-3.5 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-bold flex items-center gap-2"
+                    >
+                      <AlertTriangle className="h-4 w-4 shrink-0" />
+                      <span>{submitError}</span>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !estadoVentana.permiteRegistrar}
+                    className="w-full min-h-11 py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
+                  >
+                    <span>{isSubmitting ? 'Enviando...' : 'Enviar Evaluación al Coach'}</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                  {!estadoVentana.permiteRegistrar && (
+                    <p className="text-[11px] text-muted-foreground text-center">
+                      {estadoVentana.motivoBloqueo}
+                    </p>
+                  )}
+                </form>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -475,18 +972,22 @@ export function ProgresoPage() {
           <div className="flex items-center justify-between border-b border-border/80 pb-3">
             <button
               onClick={() => setVistaActiva('hub')}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline cursor-pointer"
+              className="inline-flex items-center gap-1.5 min-h-11 text-xs font-bold text-primary hover:underline cursor-pointer"
             >
               <ArrowLeft className="h-4 w-4" />
               <span>Volver a opciones de progreso</span>
             </button>
-            <button
-              onClick={abrirFormularioCheckin}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 text-xs font-bold transition-colors cursor-pointer"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              <span>Nuevo Check-in</span>
-            </button>
+            {!esSoloLectura && !accesoPresencialServidor && (
+              <button
+                onClick={abrirFormularioCheckin}
+                disabled={!estadoVentana.permiteRegistrar}
+                title={motivoRegistroBloqueado ?? undefined}
+                className="inline-flex items-center gap-1 min-h-11 px-3 py-1.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Nuevo Check-in</span>
+              </button>
+            )}
           </div>
 
           {/* RF-004 RN-01: gráfico multieje con filtros de rango sobre la serie real. */}
@@ -565,10 +1066,12 @@ export function ProgresoPage() {
                       </div>
                       <div className="p-2.5 rounded-xl bg-secondary/30">
                         <span className="text-[11px] text-muted-foreground uppercase font-semibold">
-                          Brazo
+                          Brazo relajado
                         </span>
                         <p className="font-mono font-bold text-sm text-foreground">
-                          {item.perimetros?.brazoCm ? `${item.perimetros.brazoCm} cm` : '—'}
+                          {item.perimetros?.brazoRelajadoCm ?? item.perimetros?.brazoCm
+                            ? `${item.perimetros?.brazoRelajadoCm ?? item.perimetros?.brazoCm} cm`
+                            : '—'}
                         </p>
                       </div>
                     </div>

@@ -4,6 +4,9 @@ import {
   RefreshTokenSchema,
   CrearEntrenadorSchema,
   EstablecerPasswordConTokenSchema,
+  ListarEntrenadoresAdminQuerySchema,
+  CambiarEstadoEntrenadorSchema,
+  CambiarLicenciaEntrenadorSchema,
   AltaManualAlumnoSchema,
   RegistroPublicoAlumnoSchema,
   CambioEstadoAlumnoSchema,
@@ -35,6 +38,7 @@ import {
   SemaforoFiltroMonitorSchema,
   FotoAntropometriaInputSchema,
   PerimetrosCorporalesInputSchema,
+  PlieguesCutaneosInputSchema,
   PresignedUploadUrlSchema,
   CheckinAntropometricoSchema,
   ConciliarAntropometriaSchema,
@@ -88,6 +92,7 @@ import {
   NivelObjetivoPlantilla,
   ModoAsignacionPlantilla,
   EstadoLicencia,
+  PeriodicidadAntropometria,
 } from '../enums';
 
 // Tipos inferidos de DTOs - IAM & Onboarding
@@ -95,6 +100,9 @@ export type LoginUsuarioDTO = z.infer<typeof LoginUsuarioSchema>;
 export type RefreshTokenDTO = z.infer<typeof RefreshTokenSchema>;
 export type CrearEntrenadorDTO = z.infer<typeof CrearEntrenadorSchema>;
 export type EstablecerPasswordConTokenDTO = z.infer<typeof EstablecerPasswordConTokenSchema>;
+export type ListarEntrenadoresAdminQueryDTO = z.infer<typeof ListarEntrenadoresAdminQuerySchema>;
+export type CambiarEstadoEntrenadorDTO = z.infer<typeof CambiarEstadoEntrenadorSchema>;
+export type CambiarLicenciaEntrenadorDTO = z.infer<typeof CambiarLicenciaEntrenadorSchema>;
 export type AltaManualAlumnoDTO = z.infer<typeof AltaManualAlumnoSchema>;
 export type RegistroPublicoAlumnoDTO = z.infer<typeof RegistroPublicoAlumnoSchema>;
 export type CambioEstadoAlumnoDTO = z.infer<typeof CambioEstadoAlumnoSchema>;
@@ -143,6 +151,7 @@ export type SemaforoFiltroMonitorDTO = z.infer<typeof SemaforoFiltroMonitorSchem
 // Tipos inferidos de DTOs - Antropometría & Bóveda R2 (Módulo 4)
 export type FotoAntropometriaInputDTO = z.infer<typeof FotoAntropometriaInputSchema>;
 export type PerimetrosCorporalesInputDTO = z.infer<typeof PerimetrosCorporalesInputSchema>;
+export type PlieguesCutaneosInputDTO = z.infer<typeof PlieguesCutaneosInputSchema>;
 export type PresignedUploadUrlDTO = z.infer<typeof PresignedUploadUrlSchema>;
 export type CheckinAntropometricoDTO = z.infer<typeof CheckinAntropometricoSchema>;
 export type ConciliarAntropometriaDTO = z.infer<typeof ConciliarAntropometriaSchema>;
@@ -207,6 +216,20 @@ export interface AuthUserDTO {
   email: string;
   rol: Rol;
   entrenadorId?: string;
+  /**
+   * RF-003 RN-03/RN-04 (WU RF-003a): modalidad del perfil del alumno para que la web pueda poner
+   * el formulario antropométrico en solo lectura sin una petición extra. Es `null` para los roles
+   * sin perfil de alumno (entrenador/superadmin).
+   */
+  modalidad?: Modalidad | null;
+  /**
+   * RF-003 RN-01/RN-04 (WU RF-003b): calendario antropométrico del alumno para que la web pueda
+   * mostrar su ventana de check-in (`GET /auth/me` lo re-resuelve del perfil, igual que la
+   * modalidad). `null` = sin calendario; también `null` para roles sin perfil de alumno.
+   */
+  periodicidadAntropometria?: PeriodicidadAntropometria | null;
+  /** Ancla (YYYY-MM-DD, día local del alumno) del calendario de periodicidad antropométrica. */
+  antropometriaInicio?: string | null;
 }
 
 export interface AuthTokensResponseDTO {
@@ -230,6 +253,13 @@ export interface PerfilAlumnoDetalleDTO {
   telefonoWhatsapp: string;
   modalidad: Modalidad;
   estadoActivacion: EstadoAlumno;
+  /**
+   * RF-003 RN-01 (WU RF-003a): periodicidad configurable del check-in antropométrico del alumno.
+   * `null` = sin calendario (no hay fechas programadas ni recordatorio de las 06:00).
+   */
+  periodicidadAntropometria?: PeriodicidadAntropometria | null;
+  /** Ancla (YYYY-MM-DD, día local del alumno) del calendario de periodicidad antropométrica. */
+  antropometriaInicio?: string | null;
   tasaFijadaOverride?: string | null;
   fichaSaludPrivada?: string | null; // Cifrado AES-256-GCM solo visible para el coach
   planActivoId?: string | null;
@@ -313,6 +343,48 @@ export interface EntrenadorCreadoDTO {
   email: string;
   coachCode: string;
   tokenInvitacion: string | null;
+  mensaje: string;
+}
+
+/**
+ * RF-010 RN-01 (WU Admin): fila del listado de entrenadores del panel maestro.
+ *
+ * `usuarioId` es el identificador de la CUENTA (`usuarios.id`) y la clave de las mutaciones
+ * `PATCH /auth/entrenadores/:id/...`; `perfilId` es el id de `perfiles_entrenador`.
+ */
+export interface EntrenadorAdminDTO {
+  usuarioId: string;
+  perfilId: string;
+  nombres: string;
+  apellidos: string;
+  nombreComercial: string | null;
+  email: string;
+  coachCode: string;
+  estadoLicencia: EstadoLicencia;
+  /** `usuarios.activo`: `false` = cuenta deshabilitada por el Superadmin. */
+  activo: boolean;
+  /** Fecha de alta de la cuenta (ISO 8601 UTC). */
+  fechaAltaUtc: string;
+}
+
+/** RF-010 RN-01: listado paginado de entrenadores para el panel maestro (envelope estándar). */
+export type ListadoEntrenadoresAdminDTO = PaginadoDTO<EntrenadorAdminDTO>;
+
+/** RF-010 RN-01/§6: resultado de habilitar o deshabilitar una cuenta de entrenador. */
+export interface CambioEstadoEntrenadorResultadoDTO {
+  usuarioId: string;
+  activo: boolean;
+  /** `true` cuando la mutación cambió el estado; `false` cuando ya estaba en ese estado. */
+  cambioAplicado: boolean;
+  mensaje: string;
+}
+
+/** RF-010 RN-01: resultado de activar o suspender la licencia de un entrenador. */
+export interface CambioLicenciaEntrenadorResultadoDTO {
+  usuarioId: string;
+  estadoLicencia: EstadoLicencia;
+  /** `true` cuando la mutación cambió el estado; `false` cuando ya estaba en ese estado. */
+  cambioAplicado: boolean;
   mensaje: string;
 }
 
@@ -1003,13 +1075,32 @@ export interface FotoAntropometriaDetalleDTO {
   createdAtUtc: string;
 }
 
+/**
+ * RF-003 RN-02 (WU RF-003a): perímetros corporales del control.
+ *
+ * `brazoRelajadoCm`/`musloMedioCm` son los campos del RN-02; `brazoCm`/`musloCm` se conservan como
+ * ALIAS LEGADOS (mismo valor) para no romper consumidores previos ni datos históricos.
+ */
 export interface PerimetrosCorporalesDTO {
   cuelloCm?: string | null;
   pechoCm?: string | null;
   cinturaCm?: string | null;
   caderaCm?: string | null;
+  brazoRelajadoCm?: string | null;
+  brazoContraidoCm?: string | null;
+  musloMedioCm?: string | null;
+  /** Alias legado de `brazoRelajadoCm`. */
   brazoCm?: string | null;
+  /** Alias legado de `musloMedioCm`. */
   musloCm?: string | null;
+}
+
+/** RF-003 RN-02 (WU RF-003a): pliegues cutáneos en milímetros (composición corporal estimada). */
+export interface PlieguesCutaneosDTO {
+  tricepsMm?: string | null;
+  subescapularMm?: string | null;
+  suprailiacoMm?: string | null;
+  abdominalMm?: string | null;
 }
 
 export interface ControlAntropometricoDetalleDTO {
@@ -1025,6 +1116,8 @@ export interface ControlAntropometricoDetalleDTO {
   alturaCm?: string | null; // Decimal string con hasta 2 decimales (ej. "178.00")
   porcentajeGrasa?: string | null; // Decimal string con hasta 2 decimales (ej. "15.50")
   perimetros?: PerimetrosCorporalesDTO | null;
+  /** RN-02: pliegues cutáneos (mm) cuando el control los registró. `null` si no aplica. */
+  pliegues?: PlieguesCutaneosDTO | null;
   modalidad: Modalidad;
   origen: OrigenAntropometria;
   registradoPor: string; // UUID del autor del registro

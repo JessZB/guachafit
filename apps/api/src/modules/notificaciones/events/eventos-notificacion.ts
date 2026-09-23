@@ -72,3 +72,14 @@ export class RecordatorioManualCobroEvent extends EventoNotificacionDominio {
 export class ResumenSemanalCoachEvent extends EventoNotificacionDominio {
   static readonly NOMBRE = 'notificacion.resumen-semanal-coach';
 }
+
+/**
+ * Antropometría (RF-003 RN-01 / WU RF-003a): recordatorio del día de check-in del alumno.
+ *
+ * El calendario lo fija la periodicidad que configura el coach; el aviso viaja por la categoría
+ * `ANTROPOMETRIA`, que para el alumno enruta por la fila "Check-in Antropométrico" de RF-015 §A
+ * (In-App universal + Push/Email según sus preferencias).
+ */
+export class RecordatorioCheckinAntropometricoEvent extends EventoNotificacionDominio {
+  static readonly NOMBRE = 'notificacion.recordatorio-checkin-antropometrico';
+}

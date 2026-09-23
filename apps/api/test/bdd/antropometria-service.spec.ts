@@ -17,6 +17,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { getTableName } from '@guachafit/database';
+import { obtenerFechaLocalYyyyMmDd } from '../../src/common/adherencia.util';
 
 describe('Módulo 4: Control Antropométrico & Bóveda R2 (AntropometriaService & AntropometriaController)', () => {
   let antropometriaService: AntropometriaService;
@@ -955,6 +956,137 @@ describe('Módulo 4: Control Antropométrico & Bóveda R2 (AntropometriaService 
           mimeType: 'application/pdf',
         })
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  /**
+   * WU RF-003a: el servicio REAL (con el doble de BD) aplica la ventana de RN-04/§6 sobre el
+   * calendario del alumno y persiste/hidrata el modelo de medidas del RN-02.
+   *
+   * `Ahora` es el instante real de ejecución, así que el ancla del calendario se calcula relativa
+   * al día local del alumno (Caracas): así el caso es determinista cualquier día del año.
+   */
+  describe('WU RF-003a: ventana del check-in remoto (RN-04/§6) y modelo RN-02', () => {
+    function hoyLocalCaracas(): string {
+      return obtenerFechaLocalYyyyMmDd(new Date(), 'America/Caracas');
+    }
+
+    function sumarDias(fecha: string, dias: number): string {
+      const [y, m, d] = fecha.split('-').map(Number);
+      const base = new Date(Date.UTC(y, m - 1, d));
+      base.setUTCDate(base.getUTCDate() + dias);
+      return base.toISOString().split('T')[0];
+    }
+
+    it('rechaza el autoreporte remoto fuera de la ventana con el detalle de la próxima ventana', async () => {
+      // El ancla está a 3 días: la ventana de esa fecha (-1 día) todavía no abre.
+      mockPerfilesAlumno[1].periodicidadAntropometria = 'semanal';
+      mockPerfilesAlumno[1].antropometriaInicio = sumarDias(hoyLocalCaracas(), 3);
+
+      const error = await antropometriaService
+        .registrarCheckin(
+          { id: alumnoRemotoId, rol: Rol.ALUMNO },
+          {
+            alumnoId: alumnoRemotoId,
+            fechaEvaluacion: hoyLocalCaracas(),
+            pesoKg: '65.00',
+          }
+        )
+        .catch((e) => e);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as Error).message).toMatch(/ventana de check-in/i);
+      expect((error as Error).message).toMatch(/48 horas|aún no está abierta/i);
+    });
+
+    it('permite el autoreporte cuando hoy es la fecha programada (dentro de ±24 h)', async () => {
+      mockPerfilesAlumno[1].periodicidadAntropometria = 'semanal';
+      mockPerfilesAlumno[1].antropometriaInicio = hoyLocalCaracas();
+
+      const registro = await antropometriaService.registrarCheckin(
+        { id: alumnoRemotoId, rol: Rol.ALUMNO },
+        {
+          alumnoId: alumnoRemotoId,
+          fechaEvaluacion: hoyLocalCaracas(),
+          pesoKg: '65.00',
+        }
+      );
+
+      expect(registro.origen).toBe(OrigenAntropometria.REMOTO_AUTOREPORTE);
+      expect(registro.estado).toBe(EstadoMedicion.PENDIENTE_APROBACION);
+    });
+
+    it('el registro del entrenador (presencial verificado) NO está sujeto a la ventana del alumno', async () => {
+      // Ancla a 3 días: la ventana del alumno está cerrada, pero el coach registra en consulta.
+      mockPerfilesAlumno[0].periodicidadAntropometria = 'semanal';
+      mockPerfilesAlumno[0].antropometriaInicio = sumarDias(hoyLocalCaracas(), 3);
+
+      const registro = await antropometriaService.registrarCheckin(
+        { id: coachId, rol: Rol.ENTRENADOR, entrenadorId: coachId },
+        {
+          alumnoId: alumnoPresencialId,
+          fechaEvaluacion: hoyLocalCaracas(),
+          pesoKg: '79.00',
+        }
+      );
+
+      expect(registro.origen).toBe(OrigenAntropometria.PRESENCIAL_VERIFICADO);
+      expect(registro.estado).toBe(EstadoMedicion.APROBADO);
+    });
+
+    it('persiste el modelo RN-02 completo (brazo relajado/contraído, muslo medio y pliegues)', async () => {
+      const registro = await antropometriaService.registrarCheckin(
+        { id: coachId, rol: Rol.ENTRENADOR, entrenadorId: coachId },
+        {
+          alumnoId: alumnoPresencialId,
+          fechaEvaluacion: '2026-09-07',
+          pesoKg: '78.50',
+          perimetros: {
+            cuelloCm: '39.00',
+            pechoCm: '102.50',
+            brazoRelajadoCm: '37.50',
+            brazoContraidoCm: '40.20',
+            musloMedioCm: '58.00',
+          },
+          pliegues: {
+            tricepsMm: '12.50',
+            subescapularMm: '14.00',
+            suprailiacoMm: '18.50',
+            abdominalMm: '22.00',
+          },
+        }
+      );
+
+      expect(registro.perimetros?.brazoRelajadoCm).toBe('37.50');
+      expect(registro.perimetros?.brazoContraidoCm).toBe('40.20');
+      expect(registro.perimetros?.musloMedioCm).toBe('58.00');
+      expect(registro.perimetros?.cuelloCm).toBe('39.00');
+      expect(registro.pliegues).toEqual({
+        tricepsMm: '12.50',
+        subescapularMm: '14.00',
+        suprailiacoMm: '18.50',
+        abdominalMm: '22.00',
+      });
+    });
+
+    it('resuelve los alias legados: `brazoCm`/`musloCm` alimentan y leen el modelo nuevo', async () => {
+      const registro = await antropometriaService.registrarCheckin(
+        { id: coachId, rol: Rol.ENTRENADOR, entrenadorId: coachId },
+        {
+          alumnoId: alumnoPresencialId,
+          fechaEvaluacion: '2026-09-08',
+          pesoKg: '78.00',
+          perimetros: { brazoCm: '36.00', musloCm: '57.00' },
+        }
+      );
+
+      // El payload legado alimenta los campos del RN-02 y viceversa (mismo dato en ambos alias).
+      expect(registro.perimetros?.brazoRelajadoCm).toBe('36.00');
+      expect(registro.perimetros?.brazoCm).toBe('36.00');
+      expect(registro.perimetros?.musloMedioCm).toBe('57.00');
+      expect(registro.perimetros?.musloCm).toBe('57.00');
+      // Sin pliegues el bloque queda nulo (no se inventan ceros).
+      expect(registro.pliegues).toBeNull();
     });
   });
 });

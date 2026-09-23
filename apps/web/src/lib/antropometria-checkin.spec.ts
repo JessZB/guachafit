@@ -3,6 +3,7 @@ import {
   construirPayloadCheckinAntropometrico,
   fechaLocalHoy,
   obtenerUltimaMedicionReal,
+  validarMedidasCheckinAntropometrico,
 } from './antropometria-checkin';
 
 const ALUMNO_ID = 'a3333333-3333-4333-8333-333333333333';
@@ -63,6 +64,91 @@ describe('construirPayloadCheckinAntropometrico (RF-003: contrato del check-in r
       construirPayloadCheckinAntropometrico('user-demo-1', { pesoKg: '70.00' }, '2026-09-20')
     ).toThrowError(/UUID válido/i);
   });
+
+  it('envía el modelo RN-02 completo: brazo relajado/contraído, muslo medio y pliegues', () => {
+    const payload = construirPayloadCheckinAntropometrico(
+      ALUMNO_ID,
+      {
+        pesoKg: '74.50',
+        cinturaCm: '81.00',
+        brazoRelajadoCm: '37.50',
+        brazoContraidoCm: '40.10',
+        musloMedioCm: '58.20',
+        tricepsMm: '12.00',
+        subescapularMm: '11.50',
+        suprailiacoMm: '9.80',
+        abdominalMm: '14.20',
+      },
+      '2026-09-20'
+    );
+
+    expect(payload.perimetros).toEqual({
+      cinturaCm: '81.00',
+      brazoRelajadoCm: '37.50',
+      brazoContraidoCm: '40.10',
+      musloMedioCm: '58.20',
+    });
+    expect(payload.pliegues).toEqual({
+      tricepsMm: '12.00',
+      subescapularMm: '11.50',
+      suprailiacoMm: '9.80',
+      abdominalMm: '14.20',
+    });
+  });
+
+  it('conserva los alias legados brazoCm/musloCm cuando el formulario los usa', () => {
+    const payload = construirPayloadCheckinAntropometrico(
+      ALUMNO_ID,
+      { pesoKg: '74.50', brazoCm: '37.00', musloCm: '58.00' },
+      '2026-09-20'
+    );
+
+    expect(payload.perimetros).toEqual({ brazoCm: '37.00', musloCm: '58.00' });
+    expect(payload.pliegues).toBeUndefined();
+  });
+
+  it('rechaza un pliegue fuera del rango biológico con su mensaje humano', () => {
+    expect(() =>
+      construirPayloadCheckinAntropometrico(
+        ALUMNO_ID,
+        { pesoKg: '74.50', tricepsMm: '150.00' },
+        '2026-09-20'
+      )
+    ).toThrowError(/pliegue del tríceps debe estar entre 1.00 mm y 100.00 mm/i);
+  });
+});
+
+describe('validarMedidasCheckinAntropometrico (RF-003: validación inline por campo)', () => {
+  it('devuelve el error bajo el campo que lo causa, no un mensaje global', () => {
+    const errores = validarMedidasCheckinAntropometrico(
+      ALUMNO_ID,
+      { pesoKg: '74.50', cinturaCm: '10.00', brazoRelajadoCm: '90.00' },
+      '2026-09-20'
+    );
+
+    expect(errores.cinturaCm).toMatch(/cintura debe estar entre 30.00 cm y 250.00 cm/i);
+    expect(errores.brazoRelajadoCm).toMatch(/brazo relajado debe estar entre 10.00 cm y 80.00 cm/i);
+    expect(errores.pesoKg).toBeUndefined();
+  });
+
+  it('sin errores devuelve un mapa vacío (campos vacíos = opcionales)', () => {
+    expect(
+      validarMedidasCheckinAntropometrico(
+        ALUMNO_ID,
+        { pesoKg: '74.50', tricepsMm: '', brazoContraidoCm: '  ' },
+        '2026-09-20'
+      )
+    ).toEqual({});
+  });
+
+  it('reporta el peso obligatorio cuando el campo está vacío', () => {
+    const errores = validarMedidasCheckinAntropometrico(
+      ALUMNO_ID,
+      { pesoKg: '' },
+      '2026-09-20'
+    );
+    expect(errores.pesoKg).toBeDefined();
+  });
 });
 
 describe('obtenerUltimaMedicionReal (RF-003/D6: prefill honesto del check-in)', () => {
@@ -87,7 +173,39 @@ describe('obtenerUltimaMedicionReal (RF-003/D6: prefill honesto del check-in)', 
       porcentajeGrasa: '14.80',
       cinturaCm: '81.00',
       brazoCm: '37.50',
+      brazoRelajadoCm: '37.50',
+      brazoContraidoCm: '',
+      musloMedioCm: '',
+      tricepsMm: '',
+      subescapularMm: '',
+      suprailiacoMm: '',
+      abdominalMm: '',
     });
+  });
+
+  it('precarga el modelo RN-02 y prefiere el campo nuevo sobre el alias legado', () => {
+    const medidas = obtenerUltimaMedicionReal({
+      evaluaciones: [
+        {
+          pesoKg: '74.50',
+          perimetros: {
+            brazoCm: '36.00',
+            brazoRelajadoCm: '37.50',
+            brazoContraidoCm: '40.10',
+            musloMedioCm: '58.20',
+          },
+          pliegues: { tricepsMm: '12.00', abdominalMm: '14.20' },
+        },
+      ],
+    } as any);
+
+    expect(medidas?.brazoRelajadoCm).toBe('37.50');
+    expect(medidas?.brazoCm).toBe('37.50');
+    expect(medidas?.brazoContraidoCm).toBe('40.10');
+    expect(medidas?.musloMedioCm).toBe('58.20');
+    expect(medidas?.tricepsMm).toBe('12.00');
+    expect(medidas?.abdominalMm).toBe('14.20');
+    expect(medidas?.subescapularMm).toBe('');
   });
 
   it('devuelve null sin evaluaciones: el formulario queda vacío, sin fixtures', () => {
@@ -97,7 +215,19 @@ describe('obtenerUltimaMedicionReal (RF-003/D6: prefill honesto del check-in)', 
 
   it('tolera campos opcionales ausentes sin inventar valores', () => {
     const medidas = obtenerUltimaMedicionReal({ evaluaciones: [{ pesoKg: '70.00' }] } as any);
-    expect(medidas).toEqual({ pesoKg: '70.00', porcentajeGrasa: '', cinturaCm: '', brazoCm: '' });
+    expect(medidas).toEqual({
+      pesoKg: '70.00',
+      porcentajeGrasa: '',
+      cinturaCm: '',
+      brazoCm: '',
+      brazoRelajadoCm: '',
+      brazoContraidoCm: '',
+      musloMedioCm: '',
+      tricepsMm: '',
+      subescapularMm: '',
+      suprailiacoMm: '',
+      abdominalMm: '',
+    });
   });
 });
 

@@ -19,6 +19,7 @@ import {
   controlesAntropometricos,
   fotosAntropometria,
   perfilesAlumno,
+  usuarios,
 } from '@guachafit/database';
 import {
   Rol,
@@ -42,10 +43,15 @@ import {
   ComparativaAngularDTO,
   FotoAntropometriaDetalleDTO,
   PerimetrosCorporalesDTO,
+  PlieguesCutaneosDTO,
   LIMITE_COLA_ANTROPOMETRIA_POR_DEFECTO,
   LIMITE_CONTROLES_EVOLUCION_POR_DEFECTO,
 } from '@guachafit/shared';
 import { R2StorageService } from './r2-storage.service';
+import {
+  construirMensajeFueraDeVentana,
+  evaluarVentanaCheckinAntropometrico,
+} from './antropometria-periodicidad.util';
 
 export interface ComparativaAngularResultadoDTO extends ComparativaAngularDTO {
   fotoDisponible: boolean;
@@ -109,6 +115,11 @@ export class AntropometriaService {
    * - Presencial (por Coach): origen presencial_verificado, estado aprobado, fechaAprobacionUtc inmediata.
    * - Remoto (por Alumno): origen remoto_autoreporte, estado pendiente_aprobacion, fechaAprobacionUtc nula.
    * - Presencial (por Alumno): 403 Forbidden (solo lectura).
+   * - Remoto (por Alumno) FUERA de la ventana de RN-04/§6: 400 con el detalle de la ventana real.
+   *
+   * WU RF-003a: la ventana se evalúa SOLO para el autoreporte del alumno y SOLO cuando el coach ya
+   * configuró periodicidad + ancla (sin calendario no hay ventana y se conserva el comportamiento
+   * previo). La zona horaria es la del usuario (`usuarios.timezone`).
    */
   async registrarCheckin(
     caller: { id: string; rol: Rol; entrenadorId?: string },
@@ -127,6 +138,14 @@ export class AntropometriaService {
       throw new NotFoundException(`Perfil del alumno '${validado.alumnoId}' no encontrado.`);
     }
 
+    // Zona IANA del alumno para el día local del calendario (RN-01/RN-04). Es una consulta
+    // independiente del perfil para no acoplar la hidratación al join.
+    const [usuarioAlumno] = await this.db
+      .select()
+      .from(usuarios)
+      .where(eq(usuarios.id, validado.alumnoId))
+      .limit(1);
+
     let origen: OrigenAntropometria;
     let estado: EstadoMedicion;
     let registradoPor: string;
@@ -142,6 +161,18 @@ export class AntropometriaService {
           'Los alumnos en modalidad presencial no registran sus propias medidas: las toma tu entrenador y quedan verificadas.'
         );
       }
+
+      // RN-04/§6: escritura remota habilitada SOLO dentro de la ventana activa del calendario.
+      const ventana = evaluarVentanaCheckinAntropometrico({
+        periodicidad: alumno.periodicidadAntropometria,
+        antropometriaInicio: alumno.antropometriaInicio,
+        timezone: usuarioAlumno?.timezone,
+        ahora: now,
+      });
+      if (!ventana.permitido) {
+        throw new BadRequestException(construirMensajeFueraDeVentana(ventana));
+      }
+
       origen = OrigenAntropometria.REMOTO_AUTOREPORTE;
       estado = EstadoMedicion.PENDIENTE_APROBACION;
       registradoPor = caller.id;
@@ -159,6 +190,12 @@ export class AntropometriaService {
       throw new ForbiddenException('Rol no autorizado para registrar evaluaciones antropométricas.');
     }
 
+    // RF-003 RN-02 (WU RF-003a): alias legados. `brazoCm` = brazo RELAJADO y `musloCm` = muslo
+    // MEDIO; el payload nuevo tiene precedencia y el legado sigue funcionando (nunca ambos vacíos).
+    const perimetro = validado.perimetros;
+    const brazoRelajadoCm = perimetro?.brazoRelajadoCm ?? perimetro?.brazoCm ?? null;
+    const musloMedioCm = perimetro?.musloMedioCm ?? perimetro?.musloCm ?? null;
+
     const controlId = await this.db.transaction(async (tx) => {
       const valuesToInsert: any = {
         alumnoId: validado.alumnoId,
@@ -166,12 +203,21 @@ export class AntropometriaService {
         pesoKg: validado.pesoKg,
         alturaCm: validado.alturaCm ?? null,
         porcentajeGrasa: validado.porcentajeGrasa ?? null,
-        cuelloCm: validado.perimetros?.cuelloCm ?? null,
-        pechoCm: validado.perimetros?.pechoCm ?? null,
-        cinturaCm: validado.perimetros?.cinturaCm ?? null,
-        caderaCm: validado.perimetros?.caderaCm ?? null,
-        brazoCm: validado.perimetros?.brazoCm ?? null,
-        musloCm: validado.perimetros?.musloCm ?? null,
+        cuelloCm: perimetro?.cuelloCm ?? null,
+        pechoCm: perimetro?.pechoCm ?? null,
+        cinturaCm: perimetro?.cinturaCm ?? null,
+        caderaCm: perimetro?.caderaCm ?? null,
+        // Alias legados (compatibilidad de datos previos al RF-003a).
+        brazoCm: brazoRelajadoCm,
+        musloCm: musloMedioCm,
+        // Modelo completo del RN-02.
+        brazoRelajadoCm,
+        brazoContraidoCm: perimetro?.brazoContraidoCm ?? null,
+        musloMedioCm,
+        pliegueTricepsMm: validado.pliegues?.tricepsMm ?? null,
+        pliegueSubescapularMm: validado.pliegues?.subescapularMm ?? null,
+        pliegueSuprailiacoMm: validado.pliegues?.suprailiacoMm ?? null,
+        pliegueAbdominalMm: validado.pliegues?.abdominalMm ?? null,
         modalidad: alumno.modalidad,
         origen,
         registradoPor,
@@ -698,20 +744,43 @@ export class AntropometriaService {
       );
     }
 
+    // RF-003 RN-02 (WU RF-003a): alias legados resueltos en lectura. `brazoCm`/`musloCm` conservan
+    // los datos históricos (controles previos a las columnas nuevas) y el modelo nuevo los expone
+    // también como `brazoRelajadoCm`/`musloMedioCm`; las columnas nuevas tienen precedencia.
+    const brazoRelajadoCm = control.brazoRelajadoCm ?? control.brazoCm ?? null;
+    const musloMedioCm = control.musloMedioCm ?? control.musloCm ?? null;
+
     const perimetros: PerimetrosCorporalesDTO | null =
       control.cuelloCm ||
       control.pechoCm ||
       control.cinturaCm ||
       control.caderaCm ||
-      control.brazoCm ||
-      control.musloCm
+      brazoRelajadoCm ||
+      control.brazoContraidoCm ||
+      musloMedioCm
         ? {
             cuelloCm: control.cuelloCm ?? undefined,
             pechoCm: control.pechoCm ?? undefined,
             cinturaCm: control.cinturaCm ?? undefined,
             caderaCm: control.caderaCm ?? undefined,
-            brazoCm: control.brazoCm ?? undefined,
-            musloCm: control.musloCm ?? undefined,
+            brazoRelajadoCm: brazoRelajadoCm ?? undefined,
+            brazoContraidoCm: control.brazoContraidoCm ?? undefined,
+            musloMedioCm: musloMedioCm ?? undefined,
+            brazoCm: brazoRelajadoCm ?? undefined,
+            musloCm: musloMedioCm ?? undefined,
+          }
+        : null;
+
+    const pliegues: PlieguesCutaneosDTO | null =
+      control.pliegueTricepsMm ||
+      control.pliegueSubescapularMm ||
+      control.pliegueSuprailiacoMm ||
+      control.pliegueAbdominalMm
+        ? {
+            tricepsMm: control.pliegueTricepsMm ?? undefined,
+            subescapularMm: control.pliegueSubescapularMm ?? undefined,
+            suprailiacoMm: control.pliegueSuprailiacoMm ?? undefined,
+            abdominalMm: control.pliegueAbdominalMm ?? undefined,
           }
         : null;
 
@@ -724,6 +793,7 @@ export class AntropometriaService {
       alturaCm: control.alturaCm ?? null,
       porcentajeGrasa: control.porcentajeGrasa ?? null,
       perimetros,
+      pliegues,
       modalidad: control.modalidad,
       origen: control.origen,
       registradoPor: control.registradoPor,

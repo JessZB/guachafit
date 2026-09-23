@@ -9,6 +9,8 @@ import {
   formatFechaHoraLocal,
   formatFechaLocal,
   formatRangoHorasLocal,
+  fechaCalendarioLocal,
+  sumarDiasCalendario,
 } from '../../lib/date-format';
 import {
   etiquetaEstadoSesion,
@@ -39,6 +41,7 @@ import {
   type TabFichaAlumno,
 } from '../../lib/alumno-detalle-tab';
 import { construirPayloadCheckinAntropometrico } from '../../lib/antropometria-checkin';
+import { calcularEstadoVentanaCheckinAntropometrico } from '../../lib/antropometria-ventana';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import { useTabsAccesibles } from '../../lib/use-tabs-accesibles';
 import {
@@ -79,6 +82,7 @@ import {
   ControlAntropometricoDetalleDTO,
   EvolucionCorporalDTO,
   UUID_REGEX,
+  PeriodicidadAntropometria,
 } from '@guachafit/shared';
 import {
   decidirGuardadoPlanTarifa,
@@ -92,6 +96,7 @@ import {
   Mail,
   Phone,
   Calendar,
+  CalendarClock,
   CreditCard,
   Scale,
   Dumbbell,
@@ -355,6 +360,17 @@ export function AlumnoDetallePage() {
   // N3: error honesto al re-consultar los controles reales del alumno (nunca lista "vaciada" en silencio).
   const [controlesErrorMsg, setControlesErrorMsg] = useState<string | null>(null);
 
+  // RF-003 RN-01 (WU RF-003b): calendario antropométrico configurable del alumno. Vive en el tab
+  // Antropometría (no en el formulario del expediente) porque es un ajuste del control de medidas;
+  // se persiste con un PATCH parcial a `/alumnos/:id` sin tocar el resto de la ficha.
+  const [periodicidadAntropometria, setPeriodicidadAntropometria] = useState<
+    PeriodicidadAntropometria | ''
+  >('');
+  const [antropometriaInicio, setAntropometriaInicio] = useState('');
+  const [isGuardandoCalendario, setIsGuardandoCalendario] = useState(false);
+  const [calendarioError, setCalendarioError] = useState<string | null>(null);
+  const [calendarioSuccess, setCalendarioSuccess] = useState<string | null>(null);
+
   // Controles antropométricos reales del alumno. En modo demo se cargan fixtures locales;
   // en sesión real, sin dato => lista vacía (nunca mediciones inventadas). Los campos
   // opcionales pueden venir nulos de la API y la UI los muestra como "—".
@@ -474,6 +490,10 @@ export function AlumnoDetallePage() {
         telefonoWhatsapp: '+584121234567',
         modalidad: Modalidad.PRESENCIAL,
         estadoActivacion: EstadoAlumno.ACTIVO,
+        // RF-003 RN-01 (WU RF-003b): calendario demo relativo a hoy (quincenal anclado 10 días
+        // atrás) para que la próxima fecha programada y la ventana tengan datos reales que ver.
+        periodicidadAntropometria: PeriodicidadAntropometria.QUINCENAL,
+        antropometriaInicio: sumarDiasCalendario(fechaCalendarioLocal(), -10),
         tasaFijadaOverride: null,
         fichaSaludPrivada:
           'Cirugía de rodilla en 2022. Rango controlado en prensa, evitar sentadilla libre pesada.',
@@ -492,6 +512,8 @@ export function AlumnoDetallePage() {
       setFechaNacimiento(demoPerfil.fechaNacimiento);
       setTelefonoWhatsapp(demoPerfil.telefonoWhatsapp);
       setModalidad(demoPerfil.modalidad);
+      setPeriodicidadAntropometria(demoPerfil.periodicidadAntropometria ?? '');
+      setAntropometriaInicio(demoPerfil.antropometriaInicio ?? '');
       setFichaSaludPrivada(demoPerfil.fichaSaludPrivada || '');
       setSelectedPlanId(demoPerfil.planActivoId || '');
       setPrecioOverride('35.00');
@@ -644,6 +666,8 @@ export function AlumnoDetallePage() {
       setFechaNacimiento(perfilRes.fechaNacimiento);
       setTelefonoWhatsapp(perfilRes.telefonoWhatsapp);
       setModalidad(perfilRes.modalidad);
+      setPeriodicidadAntropometria(perfilRes.periodicidadAntropometria ?? '');
+      setAntropometriaInicio(perfilRes.antropometriaInicio ?? '');
       setTasaFijadaOverride(perfilRes.tasaFijadaOverride || '');
       setFichaSaludPrivada(perfilRes.fichaSaludPrivada || '');
       setSelectedPlanId(perfilRes.planActivoId || '');
@@ -1103,6 +1127,64 @@ export function AlumnoDetallePage() {
     } finally {
       setIsGuardandoPlan(false);
       setIsSavingPerfil(false);
+    }
+  };
+
+  /**
+   * RF-003 RN-01 (WU RF-003b): guarda el calendario antropométrico del alumno con un PATCH parcial
+   * a `/alumnos/:id` (no toca el resto del expediente). Validación local explícita: activar una
+   * periodicidad sin ancla es un calendario inerte y la API lo rechaza con 400; aquí se avisa
+   * antes de enviar. Solo se declara éxito con 2xx (o el cambio local en modo demo).
+   */
+  const handleGuardarCalendarioAntropometrico = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id) return;
+    setCalendarioError(null);
+    setCalendarioSuccess(null);
+
+    const periodicidad = periodicidadAntropometria === '' ? null : periodicidadAntropometria;
+    const inicio = antropometriaInicio.trim() || null;
+
+    if (periodicidad && !inicio) {
+      setCalendarioError(
+        'Para activar la periodicidad del check-in antropométrico debes indicar la fecha de inicio del calendario.'
+      );
+      return;
+    }
+
+    setIsGuardandoCalendario(true);
+    try {
+      if (isDemoMode) {
+        setAlumno((prev) =>
+          prev
+            ? {
+                ...prev,
+                periodicidadAntropometria: periodicidad,
+                antropometriaInicio: inicio,
+              }
+            : prev
+        );
+      } else {
+        const res = await apiClient.patch<PerfilAlumnoDetalleDTO>(`/alumnos/${id}`, {
+          periodicidadAntropometria: periodicidad,
+          antropometriaInicio: inicio,
+        });
+        setAlumno((prev) => (prev ? { ...prev, ...res } : res));
+      }
+      setCalendarioSuccess(
+        periodicidad
+          ? 'Calendario antropométrico guardado: el alumno ya tiene fechas programadas.'
+          : 'Periodicidad desactivada: el alumno queda sin ventana de check-in.'
+      );
+      setTimeout(() => setCalendarioSuccess(null), 3000);
+    } catch (err: any) {
+      // D5: el calendario solo cambia con respuesta OK; nunca éxito falso ni mutación local.
+      setCalendarioError(
+        err?.message ||
+          'No se pudo guardar el calendario antropométrico. Revisa los datos e inténtalo de nuevo.'
+      );
+    } finally {
+      setIsGuardandoCalendario(false);
     }
   };
 
@@ -1694,6 +1776,14 @@ export function AlumnoDetallePage() {
       .getElementById(idSeccion)
       ?.scrollIntoView({ behavior: movimientoReducido ? 'auto' : 'smooth', block: 'start' });
   };
+
+  // RF-003 RN-01 (WU RF-003b): lectura del calendario GUARDADO del alumno (no del formulario sin
+  // guardar) para mostrar próxima fecha y estado de ventana sin afirmar nada que no esté en BD.
+  const estadoCalendarioAlumno = calcularEstadoVentanaCheckinAntropometrico({
+    periodicidad: alumno.periodicidadAntropometria ?? null,
+    antropometriaInicio: alumno.antropometriaInicio ?? null,
+    hoyLocal: fechaCalendarioLocal(),
+  });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-12">
@@ -2604,6 +2694,173 @@ export function AlumnoDetallePage() {
               <span>Registrar Control en Sala</span>
             </button>
           </div>
+
+          {/* RF-003 RN-01 (WU RF-003b): calendario de check-in del alumno (periodicidad + ancla).
+              Decisión del WU: vive en este tab porque es un ajuste del control antropométrico; el
+              formulario del expediente (Resumen) queda enfocado en datos personales y plan. */}
+          <form
+            onSubmit={handleGuardarCalendarioAntropometrico}
+            className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/80 pb-3">
+              <div className="flex items-center gap-2">
+                <CalendarClock className="h-4 w-4 text-primary" />
+                <div>
+                  <h3 className="font-extrabold text-sm text-foreground">
+                    Calendario de Check-in Antropométrico
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Fija cada cuánto toca control y desde qué fecha se cuenta el calendario.
+                  </p>
+                </div>
+              </div>
+              {estadoCalendarioAlumno.aplica && (
+                <span
+                  className={`text-[11px] font-bold px-2 py-0.5 rounded-full border uppercase shrink-0 ${
+                    estadoCalendarioAlumno.estado === 'abierta'
+                      ? 'bg-success/15 text-success border-success/20'
+                      : estadoCalendarioAlumno.estado === 'cerrada'
+                        ? 'bg-warning/15 text-warning border-warning/20'
+                        : 'bg-info/15 text-info border-info/20'
+                  }`}
+                >
+                  {estadoCalendarioAlumno.estado === 'abierta'
+                    ? 'Ventana abierta hoy'
+                    : estadoCalendarioAlumno.estado === 'cerrada'
+                      ? 'Ventana cerrada'
+                      : 'Aún no abre'}
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label
+                  className="text-xs font-semibold text-muted-foreground"
+                  htmlFor="periodicidad-antropometria"
+                >
+                  Periodicidad
+                </label>
+                <select
+                  id="periodicidad-antropometria"
+                  value={periodicidadAntropometria}
+                  onChange={(e) =>
+                    setPeriodicidadAntropometria(e.target.value as PeriodicidadAntropometria | '')
+                  }
+                  className="w-full min-h-11 px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary cursor-pointer"
+                >
+                  <option value="">Sin calendario</option>
+                  <option value={PeriodicidadAntropometria.SEMANAL}>Semanal</option>
+                  <option value={PeriodicidadAntropometria.QUINCENAL}>Quincenal</option>
+                  <option value={PeriodicidadAntropometria.MENSUAL}>Mensual</option>
+                </select>
+                <p className="text-[11px] text-muted-foreground">
+                  Sin calendario, el alumno remoto conserva el registro libre (sin ventana).
+                </p>
+              </div>
+              <div className="space-y-1">
+                <label
+                  className="text-xs font-semibold text-muted-foreground"
+                  htmlFor="antropometria-inicio"
+                >
+                  Fecha de inicio del calendario
+                </label>
+                <input
+                  id="antropometria-inicio"
+                  type="date"
+                  value={antropometriaInicio}
+                  onChange={(e) => setAntropometriaInicio(e.target.value)}
+                  className="w-full min-h-11 px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Día local del alumno desde el que se cuentan las fechas programadas.
+                </p>
+              </div>
+            </div>
+
+            {/* Lectura del calendario GUARDADO: próxima fecha y ventana vigente/próxima. */}
+            {estadoCalendarioAlumno.aplica ? (
+              <div className="p-3.5 rounded-2xl bg-secondary/30 border border-border/70 text-xs space-y-1">
+                <p className="text-muted-foreground">
+                  Próxima fecha programada:{' '}
+                  <span className="font-mono font-bold text-foreground">
+                    {estadoCalendarioAlumno.proximaFechaProgramada
+                      ? formatFechaCalendario(estadoCalendarioAlumno.proximaFechaProgramada) ??
+                        estadoCalendarioAlumno.proximaFechaProgramada
+                      : '—'}
+                  </span>
+                </p>
+                {estadoCalendarioAlumno.estado === 'abierta' &&
+                  estadoCalendarioAlumno.ventanaVigente && (
+                    <p className="text-success font-semibold">
+                      Ventana abierta hasta el{' '}
+                      {formatFechaCalendario(estadoCalendarioAlumno.ventanaVigente.hasta) ??
+                        estadoCalendarioAlumno.ventanaVigente.hasta}{' '}
+                      (fechas locales).
+                    </p>
+                  )}
+                {estadoCalendarioAlumno.proximaVentana && (
+                  <p className="text-muted-foreground">
+                    Próxima ventana:{' '}
+                    <span className="font-semibold text-foreground">
+                      del{' '}
+                      {formatFechaCalendario(estadoCalendarioAlumno.proximaVentana.desde) ??
+                        estadoCalendarioAlumno.proximaVentana.desde}{' '}
+                      al{' '}
+                      {formatFechaCalendario(estadoCalendarioAlumno.proximaVentana.hasta) ??
+                        estadoCalendarioAlumno.proximaVentana.hasta}
+                    </span>{' '}
+                    (fechas locales).
+                  </p>
+                )}
+                {estadoCalendarioAlumno.ultimaVentanaVencida && (
+                  <p className="text-muted-foreground">
+                    Última ventana:{' '}
+                    <span className="font-semibold text-foreground">
+                      del{' '}
+                      {formatFechaCalendario(estadoCalendarioAlumno.ultimaVentanaVencida.desde) ??
+                        estadoCalendarioAlumno.ultimaVentanaVencida.desde}{' '}
+                      al{' '}
+                      {formatFechaCalendario(estadoCalendarioAlumno.ultimaVentanaVencida.hasta) ??
+                        estadoCalendarioAlumno.ultimaVentanaVencida.hasta}
+                    </span>
+                    .
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                Sin calendario configurado: el alumno remoto no tiene ventana de check-in ni
+                recordatorio de las 06:00.
+              </p>
+            )}
+
+            {calendarioError && (
+              <p
+                role="alert"
+                className="text-xs font-bold text-destructive flex items-start gap-1.5"
+              >
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                {calendarioError}
+              </p>
+            )}
+            {calendarioSuccess && (
+              <p className="text-xs font-bold text-success flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4" />
+                {calendarioSuccess}
+              </p>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={isGuardandoCalendario}
+                className="min-h-11 py-2.5 px-5 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isGuardandoCalendario ? 'Guardando calendario...' : 'Guardar Calendario'}
+              </button>
+            </div>
+          </form>
 
           {/* Métricas Actuales con Deltas */}
           {controlesAntro.length > 0 && (() => {

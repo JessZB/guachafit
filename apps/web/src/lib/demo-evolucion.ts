@@ -144,6 +144,30 @@ function svgFotoDemo(angulo: AnguloFoto, fechaLarga: string, esUltima: boolean):
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
+/**
+ * Foto demo lista para el DTO (`presignedGetUrl` sintética con marca DEMO).
+ *
+ * Exportada para reutilizarla en otros fixtures demo (p. ej. la cola de pendientes del coach,
+ * WU RF-003b) sin duplicar el generador ni disparar tráfico a R2.
+ */
+export function crearFotoDemoAntropometria(
+  controlId: string,
+  fecha: string,
+  angulo: AnguloFoto,
+  esUltima = false,
+  createdAtUtc: string = new Date().toISOString()
+): FotoAntropometriaDetalleDTO {
+  const fechaLarga = formatFechaLargaCalendario(fecha) ?? fecha;
+  return {
+    id: `demo-foto-${controlId}-${angulo}`,
+    controlId,
+    angulo,
+    storageKey: `antropometria/demo/${controlId}/${angulo}.webp`,
+    presignedGetUrl: svgFotoDemo(angulo, fechaLarga, esUltima),
+    createdAtUtc,
+  };
+}
+
 function crearFotosDemo(
   controlId: string,
   fecha: string,
@@ -151,15 +175,9 @@ function crearFotosDemo(
   esUltima: boolean,
   createdAtUtc: string
 ): FotoAntropometriaDetalleDTO[] {
-  const fechaLarga = formatFechaLargaCalendario(fecha) ?? fecha;
-  return angulos.map((angulo) => ({
-    id: `demo-foto-${controlId}-${angulo}`,
-    controlId,
-    angulo,
-    storageKey: `antropometria/demo/${controlId}/${angulo}.webp`,
-    presignedGetUrl: svgFotoDemo(angulo, fechaLarga, esUltima),
-    createdAtUtc,
-  }));
+  return angulos.map((angulo) =>
+    crearFotoDemoAntropometria(controlId, fecha, angulo, esUltima, createdAtUtc)
+  );
 }
 
 /** Serie demo completa de controles aprobados, en orden cronológico ascendente. */
