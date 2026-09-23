@@ -4,7 +4,7 @@ modulo: Antropometria
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-20
+fecha_verificacion: 2026-09-23
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0
@@ -107,9 +107,23 @@ Then debe interceptar la solicitud mediante la política RBAC
 
 ## 7. Estado real de implementación
 
-- Núcleo RBAC híbrido implementado: presencial de solo lectura y remoto con aprobación del coach.
-- Ventana de check-in de ±24 h / 48 h (RN-04) no implementada.
-- Periodicidad configurable y recordatorio de las 06:00 (RN-01) ausentes.
-- Modelo de RN-02 incompleto: un solo brazo/muslo y sin pliegues cutáneos.
-- El alumno presencial no tiene vista de solo lectura en la UI.
-- El coach no puede ver las fotos que debe auditar (RN-04).
+> **Verificado el 2026-09-23.** Suites en verde: API **744/744** (41 archivos) · Web **612/612** (57 archivos); runtime 35/35 y smoke contra API/Postgres al cierre.
+
+### Implementado y verificado
+
+- **RN-02 — modelo completo (migración `0010`):** brazo relajado y contraído, muslo medio y los 4 pliegues cutáneos (tríceps, subescapular, suprailíaco y abdominal) con rangos de saneamiento; `brazoCm`/`musloCm` sobreviven como alias legados (brazo relajado y muslo medio) y el payload nuevo tiene precedencia. Fotos de control y validación de valores imposibles (§6) ya existentes.
+- **RN-04/§6 — ventana de check-in:** la fecha programada `D` (día local del alumno según su timezone IANA) habilita la ventana `[D-1 00:00, D+1 00:00)` local con fin exclusivo (48 h exactas). Sin periodicidad configurada la ventana no aplica (se conserva el registro libre previo). El registro del coach nunca se filtra por ventana. El 400 describe el rango exacto (última ventana vencida y próxima).
+- **RN-01 — periodicidad y ancla:** `periodicidadAntropometria` (semanal | quincenal | mensual) + `antropometriaInicio` por alumno, configurados por el coach vía `PATCH /alumnos/:id`; activar periodicidad sin ancla responde 400 (no se guarda un calendario inerte). El alumno ve ambos campos en `GET /auth/me`.
+- **RN-01 — recordatorio 06:00:** scheduler horario (`upsertJobScheduler` con id estable `antropometria:recordatorio-checkin`; cron `0 * * * *` UTC configurable con `ANTROPOMETRIA_RECORDATORIO_CRON`) que evalúa la hora local de cada alumno y emite el aviso solo en su día programado a las 06:00 locales. JobId determinista (`antropometria_YYYY-MM-DD`) y pre-chequeo del aviso del día: no duplica. **Aproximación documentada:** exacto para offsets de hora entera; un offset de media hora (p. ej. Asia/Kolkata) recibe el aviso a las 06:30 locales.
+- **RN-03 — presencial de solo lectura:** el alumno presencial ve sus medidas sin edición (UI) y cualquier mutación forzada responde 403 desde el servidor; el coach registra con `origen: presencial_verificado` y `estado: aprobado` de forma inmediata.
+- **RN-04 — cola y conciliación del coach:** cola de pendientes con las fotos del control en visor accesible y rechazo con **motivo libre obligatorio** (sin motivos prefabricados); aprobar consolida el registro y el motivo rechazado queda registrado.
+- **UI de apoyo:** banner de ventana (abierta / próxima / cerrada, con rango y motivo) en el check-in del alumno, y calendario del coach en el tab **Antropometría** de la ficha (próxima fecha programada + ventana vigente/próxima/vencida, leídas del calendario guardado).
+
+### Pendiente (honesto)
+
+- **Notificación al entrenador al recibir un check-in remoto** (Escenario 2): el pendiente aparece en la cola del coach, pero el evento de dominio no se publica desde antropometría (la categoría "Reportes de Progreso" de [[RF-015-matriz-preferencias-usuario-canales]] §7 ya lo registra como pendiente).
+- **Notificación al entrenador al expirar la ventana** (§6): no implementada; el formulario sí se deshabilita solo al cerrarse la ventana.
+- **Log de auditoría de intentos de mutación no autorizados** (Escenario 3): el 403 y el aislamiento se aplican, pero no se emite un evento dedicado en logs de auditoría.
+- **Presigned uploads sin gateo de ventana:** la ventana se valida en el check-in (y el presencial sigue bloqueado al subir fotos de antropometría), pero `POST /antropometria/presigned-upload-url` no evalúa la ventana.
+
+Por los puntos anteriores, el frontmatter conserva `estado: parcial` aunque el núcleo del flujo (modelo, ventana, periodicidad, recordatorio, RBAC y conciliación) está implementado y verificado.

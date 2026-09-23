@@ -1,7 +1,7 @@
 ---
 id: GUIA-PRUEBAS
 titulo: "Guía de Pruebas Manuales — GUACHAFIT"
-fecha: 2026-09-22
+fecha: 2026-09-23
 estado: activo
 tags:
   - pruebas
@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** con pruebas automáticas en verde (551 de la web + 648 del API). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (**612** de la web + **744** del API). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -92,7 +92,11 @@ tags:
 - [ ] **Link de inscripción del coach**: la web te muestra tu enlace real (`/onboarding?coach=TU-CODIGO`). Pruébalo con un código inventado (dice "no válido") y con el real (muestra tu nombre y permite registrarse). Al registrarse alguien, te llega una notificación.
 - [ ] **Alumno suspendido/pausado**: al entrar, ve la pantalla de bloqueo con el mensaje correspondiente y botón **"Reportar pago"** (sus pagos y cuenta siguen accesibles).
 - [ ] **Alumno dado de baja**: ya **no puede iniciar sesión** (mensaje claro).
-- [ ] **Admin** (`/admin`, solo superadmin): crear entrenador y ver el enlace de activación; ya no puede operar el negocio del coach (recibe "no autorizado").
+- [ ] **Admin** (`/admin`, solo superadmin): crear entrenador y ver el enlace de activación; abajo verás la **lista de entrenadores** con su cuenta (activa/deshabilitada), su licencia (activa/suspendida), su `coach_code` y su fecha de alta.
+- [ ] **Deshabilitar / Reactivar cuenta:** pulsa "Deshabilitar" en un coach de prueba → aparece una confirmación que explica el efecto; al confirmar, el aviso solo sale si el servidor aceptó. Luego entra con ese coach en una ventana de incógnito: verás **"Su cuenta se encuentra inactiva o bloqueada"**. Reactívalo desde el panel y podrá entrar de nuevo. Repite "Deshabilitar" dos veces: la segunda dice que ya estaba deshabilitado (sin error).
+- [ ] **Suspender / Activar licencia:** suspende la licencia de un coach → su login queda bloqueado con el mensaje de licencia y su enlace público (`/onboarding?coach=CODIGO`) deja de resolver. Actívala y ambos vuelven.
+- [ ] **Límite honesto de la sesión activa:** un coach que YA tenía sesión abierta sigue dentro hasta que la app vuelve a verificar (recarga o llamada a `/auth/me`); como máximo 15 minutos, porque el token de acceso es corto. No es un bug.
+- [ ] **El superadmin sigue sin poder operar el negocio del coach** (recibe "no autorizado").
 
 ## 8. PWA, instalación y actualizaciones
 
@@ -118,7 +122,17 @@ tags:
 - [ ] **Resumen semanal del coach:** llega a la **campana in-app** (el digest se genera lunes 08:00 UTC; en modo demo se ve un ejemplo sin esperar). Opcional: si configuraste `BULL_BOARD_USER`/`BULL_BOARD_PASS`, entra a `http://localhost:4000/admin/queues` y busca la cola **`notificaciones-resumen-semanal`** (job repetible `notificaciones:resumen-semanal`) y su DLQ.
 - [ ] **Modo demo:** con "Modo Coach"/"Modo Alumno" la campana y las preferencias usan datos de ejemplo; al guardar preferencias dice "Preferencias guardadas en esta sesión de demostración" (no finge persistencia).
 
-## 11. Evolución y fotos (RF-004)
+## 11. Antropometría: check-in, evolución y fotos (RF-003 / RF-004)
+
+**Check-in antropométrico (RF-003)**
+
+- [ ] **Alumno — campos nuevos (RN-02):** en `/app/progreso` el formulario incluye brazo relajado, brazo contraído, muslo medio y los 4 pliegues cutáneos (tríceps, subescapular, suprailíaco, abdominal), opcionales y con validación de rango; los controles viejos siguen viéndose (alias de brazo relajado y muslo medio).
+- [ ] **Alumno — banner de ventana:** con calendario configurado, el alumno remoto ve si la ventana está **abierta** ("puedes registrar tu check-in hasta el …"), **próxima** ("tu ventana abre …") o **cerrada** (con la próxima fecha); con la ventana cerrada el botón de registro queda deshabilitado y el motivo visible. Sin calendario no hay banner ni bloqueo (registro libre).
+- [ ] **Alumno — presencial en solo lectura:** con modalidad presencial, el formulario se muestra en modo lectura (sin edición); si se fuerza la mutación, el servidor responde 403 y la vista lo explica (nunca un error genérico). En modo demo, el selector "Escenario demo" permite alternar **Remoto en ventana / Remoto fuera de ventana / Presencial (solo lectura)**.
+- [ ] **Coach — calendario (ficha del alumno → tab Antropometría):** fija la periodicidad (semanal / quincenal / mensual) + la fecha de inicio; al guardar se muestra la **próxima fecha programada** y el estado de la ventana (vigente / próxima / vencida), leídos del calendario guardado. Activar una periodicidad sin fecha de inicio se rechaza con 400 (no guarda un calendario inerte); "Sin calendario" desactiva la ventana y el alumno remoto vuelve al registro libre.
+- [ ] **Coach — cola con fotos y rechazo con motivo (`/coach/antropometria`):** cada evaluación pendiente muestra sus fotos (visor a pantalla completa, **Escape** cierra); "Rechazar" exige un **motivo libre obligatorio** (sin motivo, el botón de confirmar no se habilita) y el alumno lo recibe como retroalimentación; "Aprobar" consolida el registro.
+
+**Evolución y fotos (RF-004)**
 
 - [ ] **Alumno — gráfico (`/app/progreso` → "Ver mi antes y después"):** el panel "Evolución corporal" dibuja tus mediciones aprobadas. Cambia las métricas en los chips (hasta 3 a la vez; si intentas una cuarta o cruzar una tercera unidad, aparece el motivo) y cambia el rango **1M / 3M / 6M / 1A / Todo**: la curva, los deltas y la tabla se recalculan.
 - [ ] **Tooltip y estados honestos:** pásale el cursor o toca el gráfico y verás la fecha con el valor de cada serie activa; con menos de dos mediciones en el rango, el panel explica por qué no puede graficar (no inventa una línea) y "Ver datos en tabla" muestra la misma serie en tabla.
@@ -151,10 +165,10 @@ tags:
 
 ## 13. ⛔ Lo que AÚN NO existe (no lo reportes como error)
 
-- **Notificaciones**: proveedores reales de push/email (la entrega sigue **simulada por log**), cliente push del navegador (WebPush sin UI), recordatorio de check-in 06:00 por huso horario y alerta externa de colas/DLQ (Sentry/Datadog). La campana, las preferencias y el resumen semanal **ya existen** (sección 10).
+- **Notificaciones**: proveedores reales de push/email (la entrega sigue **simulada por log**), cliente push del navegador (WebPush sin UI), recordatorio de check-in 06:00 exacto por huso horario (hoy corre por barrido horario UTC: exacto en offsets de hora entera; un offset de media hora recibe el aviso a las 06:30 locales) y alerta externa de colas/DLQ (Sentry/Datadog). La campana, las preferencias y el resumen semanal **ya existen** (sección 10).
 - **Nutrición**: los recursos educativos del coach pueden ser **enlaces o PDFs subidos** (validados por tipo, firma `%PDF-` y tamaño; se sirven con enlace firmado). Los reportes **con fotos** sin conexión se **encolan completos** (primero las fotos, después el check-in), con la evidencia visible, reintentable y descartable en el panel. La subida real está verificada contra MinIO; falta repetirla contra Cloudflare R2 con credenciales reales.
-- **Antropometría**: ventana horaria del check-in y periodicidad pendientes (los gráficos y el comparador fotográfico ya tienen UI real — sección 11).
-- **Admin**: deshabilitar entrenadores, licencias y correo automático pendientes.
+- **Antropometría**: la notificación al entrenador al expirar la ventana de check-in está pendiente (el formulario sí se deshabilita solo; los gráficos y el comparador fotográfico ya tienen UI real — sección 11).
+- **Admin**: planes/facturación de la plataforma y correo automático de bienvenida pendientes. La gestión de cuentas (deshabilitar/reactivar) y de licencias (suspender/activar) **ya existe** (sección 7).
 - **Listas**: los filtros de Conciliación/Evaluaciones/Pagos filtran solo la página visible (la UI lo dice); Plantillas no está paginada.
 - **Seguridad**: RLS activo solo en `rutinas`/`plantillas` (etapas 2-4 pendientes); push del navegador no implementado.
 - **Extras**: iconos provisionales (mancuerna generada) — si hay logo oficial, se reemplazan; instalación real en dispositivo físico pendiente de tu prueba.

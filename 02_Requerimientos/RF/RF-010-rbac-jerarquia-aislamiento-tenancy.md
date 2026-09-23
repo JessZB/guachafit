@@ -4,7 +4,7 @@ modulo: Acceso
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-20
+fecha_verificacion: 2026-09-23
 problema_origen: "[[PROB-003-acceso-onboarding-dashboard-central]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -100,5 +100,9 @@ Then solo debe poder visualizar sus rutinas asignadas, sus medidas y sus cuotas 
 
 - RBAC base y aislamiento de tenancy de alumnos implementados con tests reales.
 - Resuelto (2026-09-21): bypass total del SUPERADMIN eliminado. El guard aplica la matriz RN-01 sin jerarquía implícita (el negocio del coach/alumno le responde 403) y el front aterriza por rol: el superadmin solo accede a `/admin` (`apps/web/src/lib/rutas-rol.ts`).
-- Sin deshabilitar entrenadores ni gestión de licencias desde el panel maestro (el alta de entrenador ya está disponible).
-- Sin invalidación de tokens activos al desactivar una cuenta (caso borde).
+- Implementado (2026-09-23, WU Admin — gestión de entrenadores):
+  - Listado paginado real del panel (`GET /auth/entrenadores`, envelope `{ items, total, limit, offset }`).
+  - Deshabilitar/reactivar cuentas (`PATCH /auth/entrenadores/:id/estado`, idempotente, sin auto-deshabilitación y solo sobre entrenadores) y activar/suspender licencias (`PATCH /auth/entrenadores/:id/licencia`, idempotente). El panel web (`/admin`) expone ambas acciones con confirmación accesible y feedback solo con 2xx.
+  - **Invalidación de sesión (§6, ENTRENADOR) — mecanismo real:** el estado se re-verifica contra la BD en cada ciclo de sesión (login, refresh y `GET /auth/me`); no hay listas negras. Al deshabilitar la cuenta o suspender la licencia, login y refresh responden 401 con mensaje claro y `/auth/me` cierra la sesión de la web. Límite documentado y aceptado: un access token ya emitido es un JWT stateless sin consulta a BD en el guard, así que sigue siendo válido como máximo sus 15 minutos de TTL.
+  - Suspender la licencia también bloquea la resolución pública del `coach_code` (RF-011 RN-07.1) y excluye al coach del resumen semanal (RF-014).
+- Pendiente explícito: la cascada del §6 a los alumnos del entrenador deshabilitado no se implementa en este WU (un alumno del coach deshabilitado conserva su acceso hasta que su propio token rota). Se evita así añadir una verificación del estado del coach en cada petición de cada alumno; queda como decisión abierta si el negocio la exige.
