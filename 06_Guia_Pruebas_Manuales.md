@@ -152,7 +152,7 @@ tags:
 ## 13. ⛔ Lo que AÚN NO existe (no lo reportes como error)
 
 - **Notificaciones**: proveedores reales de push/email (la entrega sigue **simulada por log**), cliente push del navegador (WebPush sin UI), recordatorio de check-in 06:00 por huso horario y alerta externa de colas/DLQ (Sentry/Datadog). La campana, las preferencias y el resumen semanal **ya existen** (sección 10).
-- **Nutrición**: los recursos educativos del coach son **enlaces** (no hay subida de PDFs); los reportes **con fotos** sin conexión (o con fallo de red en la subida) se **encolan completos** en el dispositivo y se sincronizan solos al volver la red (primero las fotos, después el check-in), con la evidencia visible, reintentable y descartable en el panel de sincronización; la subida real a R2 está probada en smoke demo con bóveda simulada — falta validarla contra el bucket real (MinIO/R2).
+- **Nutrición**: los recursos educativos del coach pueden ser **enlaces o PDFs subidos** (validados por tipo, firma `%PDF-` y tamaño; se sirven con enlace firmado). Los reportes **con fotos** sin conexión se **encolan completos** (primero las fotos, después el check-in), con la evidencia visible, reintentable y descartable en el panel. La subida real está verificada contra MinIO; falta repetirla contra Cloudflare R2 con credenciales reales.
 - **Antropometría**: ventana horaria del check-in y periodicidad pendientes (los gráficos y el comparador fotográfico ya tienen UI real — sección 11).
 - **Admin**: deshabilitar entrenadores, licencias y correo automático pendientes.
 - **Listas**: los filtros de Conciliación/Evaluaciones/Pagos filtran solo la página visible (la UI lo dice); Plantillas no está paginada.

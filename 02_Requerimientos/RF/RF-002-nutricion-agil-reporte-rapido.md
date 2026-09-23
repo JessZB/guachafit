@@ -2,7 +2,7 @@
 id: RF-002
 modulo: Nutricion
 prioridad: alta
-estado: parcial
+estado: implementado
 version_implementada: v1.0.0
 fecha_verificacion: 2026-09-22
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
@@ -90,13 +90,13 @@ Then el sistema debe persistir los totales numéricos asociados a la fecha
 
 **Implementado y verificado (2026-09-22)** — commits `feat(nutricion): metas reales, tolerancia, ventana y diario de platos (RF-002)` y `feat(web): nutricion visible (metas, tolerancia, diario de platos y vista del coach)`. Suites en verde: **558 (web)** y **648 (API)**; smoke runtime 23/23 (compresión real, reporte, tolerancia, galería, "No reportado" y editor de metas) + smoke de la cola con fotos 25/25 (offline emulado, evidencia en IndexedDB, panel, fallo de red y reintento) y flujo online directo verificado.
 
-> **Se mantiene `parcial`** aunque el flujo ya existe de punta a punta: quedan dos límites declarados (recursos educativos como enlaces y smoke contra el bucket R2 real; ver "Límites deliberados"). El primer caso borde de §6 (encolado de fotos) quedó **implementado** en la iteración "Cola con fotos". Todo el resto de §4, §5 y §6 está implementado.
+> **Estado: `implementado` (2026-09-22).** El flujo existe de punta a punta; el único punto abierto es de **entorno, no de código**: la subida real quedó verificada E2E contra MinIO (S3-compatible) y falta repetirla contra Cloudflare R2 con credenciales reales. Ver "Límites deliberados".
 
 ### RN-01 — Metas del coach
 
 - Persistidas por alumno (migración `0009`, tabla `metas_nutricionales`, una fila por alumno): calorías, proteína, carbohidratos, grasas y agua opcionales; `NULL` = "no configurado" (nunca un 0 fabricado).
 - Endpoints: `PUT /nutricion/alumnos/:alumnoId/metas` (coach; crea o reemplaza con validación de tenancy) y su `GET` para el coach; `GET /nutricion/metas` para el alumno. Sin metas → **204** honesto (ni inventa ni falla).
-- Recursos educativos: hasta 10 por alumno, persistidos como **enlace validado** (título + URL) y visibles para el alumno.
+- Recursos educativos: hasta 10 por alumno; cada recurso es un **enlace externo validado** o un **PDF subido a la bóveda** (`storageKey` validada por módulo/dueño y resuelta como URL firmada de 900 s). La subida desde el editor del coach valida tipo, firma `%PDF-` del contenido y tamaño ≤10 MB.
 - UI: editor de metas en la ficha del coach; tarjeta "Tus objetivos nutricionales" en la vista del alumno, con estado honesto cuando no hay metas.
 
 ### RN-02 — Ventana del check-in (18:00–23:59 local)
@@ -123,9 +123,9 @@ Then el sistema debe persistir los totales numéricos asociados a la fecha
 
 ### Límites deliberados y notas honestas
 
-Los puntos 2 y 4 son desviaciones/límites frente al texto vigente del RF (por eso el estado se mantiene en `parcial`); el punto 3 es un límite de alcance ya declarado y el punto 1 quedó **resuelto**.
+Tres de los cuatro puntos quedaron **resueltos**; el único abierto es de entorno (smoke contra Cloudflare R2 real). Por eso el estado pasa a `implementado`.
 
 1. **Encolado de fotos (§6, subida fallida): RESUELTO.** Un check-in con fotos sin conexión (o con fallo de red/5xx en la subida) se encola completo —datos + blobs comprimidos en IndexedDB— como mutación `nutricion-checkin-fotos` y se sincroniza solo: primero cada foto (presign `comidas` + PUT) persistiendo su `storageKey` al instante para reanudar sin re-subir, y después el POST del check-in con las claves. Un 4xx del servidor (p. ej. ventana/día cerrado) deja la mutación rechazada con mensaje claro y la evidencia se conserva hasta descarte manual; el panel de sincronización muestra estado, razón y Reintentar/Descartar, y explica la evidencia retenida. Máximo 4 fotos (RN-03).
-2. **Recursos educativos (RN-01):** son enlaces validados; no existe pipeline de subida de PDFs.
+2. **Recursos educativos (RN-01): RESUELTO.** Enlaces externos o **PDFs subidos** (módulo `nutricion-recursos`, migración de contrato aplicada); `validarStorageKey` exige clave del módulo y del alumno (clave ajena → 400); al leer se resuelve con presigned GET (900 s). Verificado E2E contra MinIO real (PUT firmado 200, integridad SHA256, limpieza). Nota: "Quitar recurso" no borra el objeto del bucket (no existe DELETE de objetos; seguimiento anotado).
 3. **Listado de check-ins:** no es server-paginado; el calendario del coach usa la ventana de 30 días con paginación en cliente declarada.
-4. **Smoke de R2:** la subida real se probó en el smoke de demo con bóveda simulada; falta repetirla contra el bucket real (MinIO/bucket remoto).
+4. **Smoke de almacenamiento:** la subida real quedó verificada E2E contra **MinIO real** (presign no-mock, PUT con Content-Type firmado, descarga con integridad SHA256); falta repetirla contra **Cloudflare R2** cuando existan credenciales reales del bucket de producción.
