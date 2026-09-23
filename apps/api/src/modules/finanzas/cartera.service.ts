@@ -24,9 +24,11 @@ import {
   Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { DRIZZLE_DB } from '../../database/database.module';
+import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
 import {
   Database,
+  WithTenantFn,
+  withTenant as withTenantBase,
   and,
   asc,
   count,
@@ -124,12 +126,22 @@ interface ContextoTasa {
 export class CarteraService {
   private readonly logger = new Logger(CarteraService.name);
 
+  /**
+   * RNF-003/ADR-011 (etapa 2): `cuotas_membresia`, `transacciones_pago` y `planes_membresia`
+   * tienen RLS. Todas las lecturas financieras del tablero corren dentro de `withTenant`
+   * con el GUC del coach; se inyecta para que los tests puedan espiarlo.
+   */
+  private readonly withTenant: WithTenantFn;
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
     private readonly finanzasService: FinanzasService,
     // RF-014 RN-01: publica el evento de dominio; el despachador (suscriptor) resuelve canales.
-    @Optional() private readonly eventEmitter?: EventEmitter2
-  ) {}
+    @Optional() private readonly eventEmitter?: EventEmitter2,
+    @Optional() @Inject(WITH_TENANT) withTenant?: WithTenantFn
+  ) {
+    this.withTenant = withTenant ?? ((context, fn) => withTenantBase(context, fn, this.db));
+  }
 
   /**
    * Tablero de cartera: KPIs + pestaña activa (RF-009 §4.A y §4.B).
@@ -189,61 +201,60 @@ export class CarteraService {
   private async calcularResumen(entrenadorId: string, ahora: Date): Promise<ResumenCarteraDTO> {
     const { periodoActual, inicioMesUtc, inicioMesSiguienteUtc } = calcularVentanaMesUtc(ahora);
 
-    const [
-      recaudadoMesUsd,
-      [filaMora],
-      [filaPorVencer],
-      [filaRevision],
-      [filaAlDia],
-      tasa,
-    ] = await Promise.all([
-      calcularRecaudadoMesUsd(this.db, entrenadorId, { inicioMesUtc, inicioMesSiguienteUtc }),
-      this.db
-        .select({
-          total: sql<string>`coalesce(sum(${cuotasMembresia.saldoPendienteUsd}), 0)`,
-          alumnos: countDistinct(cuotasMembresia.clienteId),
-        })
-        .from(cuotasMembresia)
-        .where(
-          and(
-            eq(cuotasMembresia.entrenadorId, entrenadorId),
-            condicionCuotaEnMora(ahora)
-          )
-        ),
-      this.db
-        .select({
-          total: sql<string>`coalesce(sum(${cuotasMembresia.saldoPendienteUsd}), 0)`,
-          alumnos: countDistinct(cuotasMembresia.clienteId),
-        })
-        .from(cuotasMembresia)
-        .where(
-          and(
-            eq(cuotasMembresia.entrenadorId, entrenadorId),
-            condicionCuotaPorVencer(ahora)
-          )
-        ),
-      this.db
-        .select({ total: count() })
-        .from(transaccionesPago)
-        .where(
-          and(
-            eq(transaccionesPago.entrenadorId, entrenadorId),
-            eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.PENDIENTE)
-          )
-        ),
-      this.db
-        .select({ total: count() })
-        .from(cuotasMembresia)
-        .where(
-          and(
-            eq(cuotasMembresia.entrenadorId, entrenadorId),
-            eq(cuotasMembresia.periodo, periodoActual),
-            lte(cuotasMembresia.saldoPendienteUsd, '0'),
-            ne(cuotasMembresia.estado, EstadoCuota.ANULADA)
-          )
-        ),
-      this.finanzasService.obtenerTasaVigente(entrenadorId),
-    ]);
+    // RNF-003/ADR-011 (etapa 2): las 5 lecturas sobre tablas financieras con RLS corren en UNA
+    // transacción con el GUC del coach (la tasa vigente vive en tablas sin RLS: fuera del bloque).
+    const [recaudadoMesUsd, [filaMora], [filaPorVencer], [filaRevision], [filaAlDia]] =
+      await this.withTenant({ entrenadorId }, async (tx) =>
+        Promise.all([
+          calcularRecaudadoMesUsd(tx, entrenadorId, { inicioMesUtc, inicioMesSiguienteUtc }),
+          tx
+            .select({
+              total: sql<string>`coalesce(sum(${cuotasMembresia.saldoPendienteUsd}), 0)`,
+              alumnos: countDistinct(cuotasMembresia.clienteId),
+            })
+            .from(cuotasMembresia)
+            .where(
+              and(
+                eq(cuotasMembresia.entrenadorId, entrenadorId),
+                condicionCuotaEnMora(ahora)
+              )
+            ),
+          tx
+            .select({
+              total: sql<string>`coalesce(sum(${cuotasMembresia.saldoPendienteUsd}), 0)`,
+              alumnos: countDistinct(cuotasMembresia.clienteId),
+            })
+            .from(cuotasMembresia)
+            .where(
+              and(
+                eq(cuotasMembresia.entrenadorId, entrenadorId),
+                condicionCuotaPorVencer(ahora)
+              )
+            ),
+          tx
+            .select({ total: count() })
+            .from(transaccionesPago)
+            .where(
+              and(
+                eq(transaccionesPago.entrenadorId, entrenadorId),
+                eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.PENDIENTE)
+              )
+            ),
+          tx
+            .select({ total: count() })
+            .from(cuotasMembresia)
+            .where(
+              and(
+                eq(cuotasMembresia.entrenadorId, entrenadorId),
+                eq(cuotasMembresia.periodo, periodoActual),
+                lte(cuotasMembresia.saldoPendienteUsd, '0'),
+                ne(cuotasMembresia.estado, EstadoCuota.ANULADA)
+              )
+            ),
+        ])
+      );
+
+    const tasa = await this.finanzasService.obtenerTasaVigente(entrenadorId);
 
     const alumnosEnMora = Number(filaMora?.alumnos ?? 0);
     const proximosAVencer = Number(filaPorVencer?.alumnos ?? 0);
@@ -300,69 +311,74 @@ export class CarteraService {
       filtroNombre
     );
 
-    const [filaTotal, filas] = await Promise.all([
-      this.db
-        .select({ total: countDistinct(cuotasMembresia.clienteId) })
-        .from(cuotasMembresia)
-        .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId))
-        .where(whereLista),
-      this.db
-        .select({
-          clienteId: cuotasMembresia.clienteId,
-          perfilId: perfilesAlumno.id,
-          nombres: perfilesAlumno.nombres,
-          apellidos: perfilesAlumno.apellidos,
-          telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
-          tasaOverride: perfilesAlumno.tasaFijadaOverride,
-          saldoTotalUsd: sql<string>`sum(${cuotasMembresia.saldoPendienteUsd})`,
-          corteMasUrgente: min(cuotasMembresia.fechaCorteUtc),
-        })
-        .from(cuotasMembresia)
-        .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId))
-        .where(whereLista)
-        .groupBy(
-          cuotasMembresia.clienteId,
-          perfilesAlumno.id,
-          perfilesAlumno.nombres,
-          perfilesAlumno.apellidos,
-          perfilesAlumno.telefonoWhatsapp,
-          perfilesAlumno.tasaFijadaOverride
-        )
-        .orderBy(asc(min(cuotasMembresia.fechaCorteUtc)), asc(cuotasMembresia.clienteId))
-        .limit(limit)
-        .offset(offset),
-    ]);
-
-    // Detalle de la cuota más urgente de cada alumno de la página (una sola consulta en lote).
-    const idsPagina = filas.map((fila) => fila.clienteId);
-    const [cuotasPagina, gestiones] = await Promise.all([
-      idsPagina.length > 0
-        ? this.db
+    // RNF-003/ADR-011 (etapa 2): todas las lecturas de `cuotas_membresia` (+ join a perfiles)
+    // de esta pestaña corren en UNA transacción con el GUC del coach. Las gestiones manuales
+    // (`notificaciones_in_app`, sin RLS) quedan fuera.
+    const { filaTotal, filas, cuotasPagina } = await this.withTenant(
+      { entrenadorId },
+      async (tx) => {
+        const [filaTotal, filas] = await Promise.all([
+          tx
+            .select({ total: countDistinct(cuotasMembresia.clienteId) })
+            .from(cuotasMembresia)
+            .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId))
+            .where(whereLista),
+          tx
             .select({
-              id: cuotasMembresia.id,
               clienteId: cuotasMembresia.clienteId,
-              estado: cuotasMembresia.estado,
-              fechaCorteUtc: cuotasMembresia.fechaCorteUtc,
-              saldoPendienteUsd: cuotasMembresia.saldoPendienteUsd,
+              perfilId: perfilesAlumno.id,
+              nombres: perfilesAlumno.nombres,
+              apellidos: perfilesAlumno.apellidos,
+              telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
+              tasaOverride: perfilesAlumno.tasaFijadaOverride,
+              saldoTotalUsd: sql<string>`sum(${cuotasMembresia.saldoPendienteUsd})`,
+              corteMasUrgente: min(cuotasMembresia.fechaCorteUtc),
             })
             .from(cuotasMembresia)
-            .where(
-              and(
-                eq(cuotasMembresia.entrenadorId, entrenadorId),
-                condicion,
-                inArray(cuotasMembresia.clienteId, idsPagina)
-              )
+            .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId))
+            .where(whereLista)
+            .groupBy(
+              cuotasMembresia.clienteId,
+              perfilesAlumno.id,
+              perfilesAlumno.nombres,
+              perfilesAlumno.apellidos,
+              perfilesAlumno.telefonoWhatsapp,
+              perfilesAlumno.tasaFijadaOverride
             )
-            .orderBy(asc(cuotasMembresia.fechaCorteUtc))
-        : Promise.resolve([] as Array<{
-            id: string;
-            clienteId: string;
-            estado: EstadoCuota;
-            fechaCorteUtc: Date;
-            saldoPendienteUsd: string;
-          }>),
-      this.obtenerUltimasGestiones(idsPagina),
-    ]);
+            .orderBy(asc(min(cuotasMembresia.fechaCorteUtc)), asc(cuotasMembresia.clienteId))
+            .limit(limit)
+            .offset(offset),
+        ]);
+
+        // Detalle de la cuota más urgente de cada alumno de la página (una sola consulta en lote).
+        const idsPagina = filas.map((fila) => fila.clienteId);
+        const cuotasPagina =
+          idsPagina.length > 0
+            ? await tx
+                .select({
+                  id: cuotasMembresia.id,
+                  clienteId: cuotasMembresia.clienteId,
+                  estado: cuotasMembresia.estado,
+                  fechaCorteUtc: cuotasMembresia.fechaCorteUtc,
+                  saldoPendienteUsd: cuotasMembresia.saldoPendienteUsd,
+                })
+                .from(cuotasMembresia)
+                .where(
+                  and(
+                    eq(cuotasMembresia.entrenadorId, entrenadorId),
+                    condicion,
+                    inArray(cuotasMembresia.clienteId, idsPagina)
+                  )
+                )
+                .orderBy(asc(cuotasMembresia.fechaCorteUtc))
+            : [];
+
+        return { filaTotal, filas, cuotasPagina };
+      }
+    );
+
+    const idsPagina = filas.map((fila) => fila.clienteId);
+    const gestiones = await this.obtenerUltimasGestiones(idsPagina);
 
     const cuotaPorAlumno = new Map<string, (typeof cuotasPagina)[number]>();
     for (const cuota of cuotasPagina) {
@@ -451,27 +467,30 @@ export class CarteraService {
       filtroNombre
     );
 
-    const [filaTotal, registros] = await Promise.all([
-      this.db
-        .select({ total: count() })
-        .from(transaccionesPago)
-        .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, transaccionesPago.clienteId))
-        .where(whereLista),
-      this.db
-        .select({
-          tx: transaccionesPago,
-          perfilId: perfilesAlumno.id,
-          nombres: perfilesAlumno.nombres,
-          apellidos: perfilesAlumno.apellidos,
-          telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
-        })
-        .from(transaccionesPago)
-        .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, transaccionesPago.clienteId))
-        .where(whereLista)
-        .orderBy(asc(transaccionesPago.fechaReporteUtc), asc(transaccionesPago.id))
-        .limit(limit)
-        .offset(offset),
-    ]);
+    // RNF-003/ADR-011 (etapa 2): `transacciones_pago` (+ join a perfiles) con el GUC del coach.
+    const [filaTotal, registros] = await this.withTenant({ entrenadorId }, async (tx) =>
+      Promise.all([
+        tx
+          .select({ total: count() })
+          .from(transaccionesPago)
+          .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, transaccionesPago.clienteId))
+          .where(whereLista),
+        tx
+          .select({
+            tx: transaccionesPago,
+            perfilId: perfilesAlumno.id,
+            nombres: perfilesAlumno.nombres,
+            apellidos: perfilesAlumno.apellidos,
+            telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
+          })
+          .from(transaccionesPago)
+          .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, transaccionesPago.clienteId))
+          .where(whereLista)
+          .orderBy(asc(transaccionesPago.fechaReporteUtc), asc(transaccionesPago.id))
+          .limit(limit)
+          .offset(offset),
+      ])
+    );
 
     const items = await Promise.all(
       registros.map(async ({ tx, perfilId, nombres, apellidos, telefonoWhatsapp }) => {
@@ -553,38 +572,41 @@ export class CarteraService {
       filtroNombre
     );
 
-    const [filaTotal, filas] = await Promise.all([
-      this.db
-        .select({ total: count() })
-        .from(cuotasMembresia)
-        .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId))
-        .where(whereLista),
-      this.db
-        .select({
-          cuotaId: cuotasMembresia.id,
-          clienteId: cuotasMembresia.clienteId,
-          periodo: cuotasMembresia.periodo,
-          fechaCorteUtc: cuotasMembresia.fechaCorteUtc,
-          estado: cuotasMembresia.estado,
-          perfilId: perfilesAlumno.id,
-          nombres: perfilesAlumno.nombres,
-          apellidos: perfilesAlumno.apellidos,
-          telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
-          tasaOverride: perfilesAlumno.tasaFijadaOverride,
-          planNombre: planesMembresia.nombre,
-        })
-        .from(cuotasMembresia)
-        .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId))
-        .innerJoin(planesMembresia, eq(planesMembresia.id, cuotasMembresia.planId))
-        .where(whereLista)
-        .orderBy(
-          asc(perfilesAlumno.apellidos),
-          asc(perfilesAlumno.nombres),
-          asc(cuotasMembresia.id)
-        )
-        .limit(limit)
-        .offset(offset),
-    ]);
+    // RNF-003/ADR-011 (etapa 2): `cuotas_membresia` + join a `planes_membresia` con el GUC del coach.
+    const [filaTotal, filas] = await this.withTenant({ entrenadorId }, async (tx) =>
+      Promise.all([
+        tx
+          .select({ total: count() })
+          .from(cuotasMembresia)
+          .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId))
+          .where(whereLista),
+        tx
+          .select({
+            cuotaId: cuotasMembresia.id,
+            clienteId: cuotasMembresia.clienteId,
+            periodo: cuotasMembresia.periodo,
+            fechaCorteUtc: cuotasMembresia.fechaCorteUtc,
+            estado: cuotasMembresia.estado,
+            perfilId: perfilesAlumno.id,
+            nombres: perfilesAlumno.nombres,
+            apellidos: perfilesAlumno.apellidos,
+            telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
+            tasaOverride: perfilesAlumno.tasaFijadaOverride,
+            planNombre: planesMembresia.nombre,
+          })
+          .from(cuotasMembresia)
+          .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId))
+          .innerJoin(planesMembresia, eq(planesMembresia.id, cuotasMembresia.planId))
+          .where(whereLista)
+          .orderBy(
+            asc(perfilesAlumno.apellidos),
+            asc(perfilesAlumno.nombres),
+            asc(cuotasMembresia.id)
+          )
+          .limit(limit)
+          .offset(offset),
+      ])
+    );
 
     const items = filas.map((fila) => {
       // La cuota está cubierta: su proyección en Bs es 0 solo si existe tasa real; sin tasa el
@@ -638,19 +660,49 @@ export class CarteraService {
     entrenadorId: string,
     clienteId: string
   ): Promise<RecordatorioManualResultadoDTO> {
-    const [perfil] = await this.db
-      .select({
-        id: perfilesAlumno.id,
-        nombres: perfilesAlumno.nombres,
-        apellidos: perfilesAlumno.apellidos,
-      })
-      .from(perfilesAlumno)
-      .where(
-        and(
-          eq(perfilesAlumno.usuarioId, clienteId),
-          eq(perfilesAlumno.entrenadorId, entrenadorId)
+    // RNF-003/ADR-011 (etapa 2): perfil + cuota abierta del alumno en UNA transacción con el
+    // GUC del coach (`cuotas_membresia` tiene RLS; el join implícito por tenancy es explícito).
+    const { perfil, cuotaAbierta } = await this.withTenant({ entrenadorId }, async (tx) => {
+      const [perfil] = await tx
+        .select({
+          id: perfilesAlumno.id,
+          nombres: perfilesAlumno.nombres,
+          apellidos: perfilesAlumno.apellidos,
+        })
+        .from(perfilesAlumno)
+        .where(
+          and(
+            eq(perfilesAlumno.usuarioId, clienteId),
+            eq(perfilesAlumno.entrenadorId, entrenadorId)
+          )
+        );
+
+      if (!perfil) {
+        return { perfil: undefined, cuotaAbierta: undefined };
+      }
+
+      // Cuota abierta más urgente: la que primero debería pagarse.
+      const [cuotaAbierta] = await tx
+        .select({
+          id: cuotasMembresia.id,
+          periodo: cuotasMembresia.periodo,
+          estado: cuotasMembresia.estado,
+          saldoPendienteUsd: cuotasMembresia.saldoPendienteUsd,
+        })
+        .from(cuotasMembresia)
+        .where(
+          and(
+            eq(cuotasMembresia.clienteId, clienteId),
+            eq(cuotasMembresia.entrenadorId, entrenadorId),
+            ne(cuotasMembresia.estado, EstadoCuota.ANULADA),
+            gt(cuotasMembresia.saldoPendienteUsd, '0')
+          )
         )
-      );
+        .orderBy(asc(cuotasMembresia.fechaCorteUtc))
+        .limit(1);
+
+      return { perfil, cuotaAbierta };
+    });
 
     if (!perfil) {
       throw new NotFoundException('El alumno no existe o no pertenece a tu cartera.');
@@ -658,26 +710,6 @@ export class CarteraService {
 
     const nombreCompleto = `${perfil.nombres} ${perfil.apellidos}`.trim();
     const ahora = new Date();
-
-    // Cuota abierta más urgente: la que primero debería pagarse.
-    const [cuotaAbierta] = await this.db
-      .select({
-        id: cuotasMembresia.id,
-        periodo: cuotasMembresia.periodo,
-        estado: cuotasMembresia.estado,
-        saldoPendienteUsd: cuotasMembresia.saldoPendienteUsd,
-      })
-      .from(cuotasMembresia)
-      .where(
-        and(
-          eq(cuotasMembresia.clienteId, clienteId),
-          eq(cuotasMembresia.entrenadorId, entrenadorId),
-          ne(cuotasMembresia.estado, EstadoCuota.ANULADA),
-          gt(cuotasMembresia.saldoPendienteUsd, '0')
-        )
-      )
-      .orderBy(asc(cuotasMembresia.fechaCorteUtc))
-      .limit(1);
 
     if (!cuotaAbierta) {
       return {

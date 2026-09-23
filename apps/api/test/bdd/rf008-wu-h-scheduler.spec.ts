@@ -213,6 +213,10 @@ describe('RF-008 WU-H: BillingReminderProcessor (DB y despachador mock)', () => 
           }),
         })),
       })),
+      // RNF-003/ADR-011 (etapa 2): el worker es ruta de sistema y lee dentro de withTenant
+      // (bypass explícito is_superadmin): superficie transaccional mínima del mock.
+      transaction: vi.fn(async (cb: any) => cb(db)),
+      execute: vi.fn(async () => undefined),
     };
     return { db, updates };
   }

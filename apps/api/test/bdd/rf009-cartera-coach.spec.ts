@@ -72,6 +72,8 @@ function crearMockDb(respuestas: Record<string, RespuestaTabla>) {
       }),
     })),
     transaction: vi.fn(async (fn: any) => fn(db)),
+    // RNF-003/ADR-011 (etapa 2): withTenant() aplica el GUC con set_config sobre el tx.
+    execute: vi.fn(async () => undefined),
   };
 
   return { db, contadores, predicados, ordenes, limites, offsets };

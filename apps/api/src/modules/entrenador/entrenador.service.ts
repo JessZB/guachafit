@@ -135,20 +135,56 @@ export class EntrenadorService {
     //    "Cobros del Mes" = SOLO pagos aprobados del mes en curso (UTC), con la fecha real de
     //    entrada del dinero. La suma vive en `common/cartera.util` para que el tablero de
     //    cartera (RF-009 KPI-01) y este dashboard no divergan.
+    //
+    //    RNF-003/ADR-011 (etapa 2): `transacciones_pago` y `cuotas_membresia` tienen RLS; las
+    //    cuatro lecturas financieras del dashboard se agrupan en UNA transacción con el GUC del
+    //    coach (no se multiplican transacciones por consulta).
     const ventanaMes = { inicioMesUtc, inicioMesSiguienteUtc };
-    const cobranzaMesUsd = await calcularRecaudadoMesUsd(this.db, coachId, ventanaMes);
+    const { cobranzaMesUsd, cuotasPeriodo, pagosPorConciliar, cuotasMora } =
+      await this.withTenant({ entrenadorId: coachId }, async (tx) => {
+        const [cobranzaMesUsd, cuotasPeriodo, pagosPendientes, cuotasMora] = await Promise.all([
+          calcularRecaudadoMesUsd(tx, coachId, ventanaMes),
+          tx
+            .select({
+              montoTotalUsd: cuotasMembresia.montoTotalUsd,
+            })
+            .from(cuotasMembresia)
+            .where(
+              and(
+                eq(cuotasMembresia.entrenadorId, coachId),
+                eq(cuotasMembresia.periodo, periodoActual)
+              )
+            ),
+          tx
+            .select({ id: transaccionesPago.id })
+            .from(transaccionesPago)
+            .where(
+              and(
+                eq(transaccionesPago.entrenadorId, coachId),
+                eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.PENDIENTE)
+              )
+            ),
+          tx
+            .select({
+              id: cuotasMembresia.id,
+              clienteId: cuotasMembresia.clienteId,
+              saldoPendienteUsd: cuotasMembresia.saldoPendienteUsd,
+              fechaCorteUtc: cuotasMembresia.fechaCorteUtc,
+              estado: cuotasMembresia.estado,
+            })
+            .from(cuotasMembresia)
+            .where(
+              and(eq(cuotasMembresia.entrenadorId, coachId), condicionCuotaEnMora(now))
+            ),
+        ]);
 
-    const cuotasPeriodo = await this.db
-      .select({
-        montoTotalUsd: cuotasMembresia.montoTotalUsd,
-      })
-      .from(cuotasMembresia)
-      .where(
-        and(
-          eq(cuotasMembresia.entrenadorId, coachId),
-          eq(cuotasMembresia.periodo, periodoActual)
-        )
-      );
+        return {
+          cobranzaMesUsd,
+          cuotasPeriodo,
+          pagosPorConciliar: pagosPendientes.length,
+          cuotasMora,
+        };
+      });
 
     const totalMetaUsd = cuotasPeriodo.reduce(
       (acc, c) => acc + Number(c.montoTotalUsd || 0),
@@ -253,17 +289,8 @@ export class EntrenadorService {
     let totalCompletadas = 0;
 
     // 5. Bandejas Rápidas
-    // 5.1 Pagos por conciliar
-    const pagosPendientes = await this.db
-      .select({ id: transaccionesPago.id })
-      .from(transaccionesPago)
-      .where(
-        and(
-          eq(transaccionesPago.entrenadorId, coachId),
-          eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.PENDIENTE)
-        )
-      );
-    const pagosPorConciliar = pagosPendientes.length;
+    // 5.1 Pagos por conciliar y 5.3 Alumnos en mora se leyeron arriba, dentro del bloque
+    //     `withTenant` del dashboard (tablas financieras con RLS, etapa 2).
 
     // 5.2 Checkins antropométricos pendientes
     let checkinsAntropometricosPendientes = 0;
@@ -286,22 +313,6 @@ export class EntrenadorService {
     // 5.3 Alumnos en Mora
     //     WU-I: regla ÚNICA compartida (`condicionCuotaEnMora`). POR_VENCER es preventivo (ámbar),
     //     nunca mora, y PENDIENTE_REVISION pausa la mora mientras el comprobante está en revisión.
-    const cuotasMora = await this.db
-      .select({
-        id: cuotasMembresia.id,
-        clienteId: cuotasMembresia.clienteId,
-        saldoPendienteUsd: cuotasMembresia.saldoPendienteUsd,
-        fechaCorteUtc: cuotasMembresia.fechaCorteUtc,
-        estado: cuotasMembresia.estado,
-      })
-      .from(cuotasMembresia)
-      .where(
-        and(
-          eq(cuotasMembresia.entrenadorId, coachId),
-          condicionCuotaEnMora(now)
-        )
-      );
-
     const alumnosEnMora = cuotasMora.map((c) => {
       const al = alumnos.find((a) => a.usuarioId === c.clienteId);
       const diasVencido = calcularDiasAtraso(new Date(c.fechaCorteUtc), now);

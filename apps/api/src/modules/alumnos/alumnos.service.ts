@@ -8,9 +8,12 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { DRIZZLE_DB } from '../../database/database.module';
+import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
 import {
   Database,
+  TenantTransaction,
+  WithTenantFn,
+  withTenant as withTenantBase,
   eq,
   and,
   or,
@@ -81,13 +84,23 @@ const ETIQUETA_ESTADO_ACTIVACION: Record<EstadoAlumno, string> = {
 export class AlumnosService {
   private readonly logger = new Logger(AlumnosService.name);
 
+  /**
+   * RNF-003/ADR-011 (etapa 2): el directorio hidrata mora/semáforo/plan desde
+   * `cuotas_membresia`/`planes_membresia` (RLS habilitado); todo el flujo corre dentro de
+   * `withTenant` con el GUC del coach. Se inyecta para que los tests puedan espiarlo.
+   */
+  private readonly withTenant: WithTenantFn;
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
     private readonly cryptoService: CryptoService,
     // RF-014 / WU-E: el alta por deep link publica un evento de dominio para el coach (RN-07.4).
     // Opcional para no romper los consumidores que instancian el servicio sin bus de eventos.
-    @Optional() private readonly eventEmitter?: EventEmitter2
-  ) {}
+    @Optional() private readonly eventEmitter?: EventEmitter2,
+    @Optional() @Inject(WITH_TENANT) withTenant?: WithTenantFn
+  ) {
+    this.withTenant = withTenant ?? ((context, fn) => withTenantBase(context, fn, this.db));
+  }
 
   /**
    * Cálculo dinámico de edad según fecha de nacimiento (RF-011, RN-02)
@@ -556,8 +569,11 @@ export class AlumnosService {
 
     // RF-005: la respuesta del PATCH conserva plan activo y precio acordado reales (la UI fusiona
     // la respuesta en su estado; sin esto el expediente perdería el plan hasta recargar).
+    // RNF-003/ADR-011 (etapa 2): la hidratación lee tablas financieras con RLS; contexto del coach.
     const planActivo = (
-      await this.hidratarPlanActivo(actualizado.entrenadorId, [actualizado.usuarioId])
+      await this.withTenant({ entrenadorId: actualizado.entrenadorId }, (tx) =>
+        this.hidratarPlanActivo(tx, actualizado.entrenadorId, [actualizado.usuarioId])
+      )
     ).get(actualizado.usuarioId);
 
     return this.sanitizarPerfilParaRol(
@@ -696,92 +712,108 @@ export class AlumnosService {
     // WU24: `q` es el parámetro canónico; `busqueda` (WU19) se mantiene como alias legado.
     const busqueda = (filtro?.q ?? filtro?.busqueda ?? '').trim();
 
-    const conditions = [eq(perfilesAlumno.entrenadorId, entrenadorId)];
+    // RNF-003/ADR-011 (etapa 2): el directorio hidrata mora/semáforo/plan desde tablas con RLS
+    // (`cuotas_membresia`, `planes_membresia`). TODO el flujo corre en UNA transacción con el GUC
+    // del coach; no se multiplican transacciones por helper ni se lee el pool raíz.
+    const { filaTotal, records, resumen, semaforosPago, planesActivos } = await this.withTenant(
+      { entrenadorId },
+      async (tx) => {
+        const conditions = [eq(perfilesAlumno.entrenadorId, entrenadorId)];
 
-    if (filtro?.soloArchivados) {
-      // WU25a: pestaña "Archivados" (RF-012 RN-05): SOLO dados de baja lógica.
-      conditions.push(isNotNull(perfilesAlumno.deletedAtUtc));
-    } else if (!filtro?.incluirArchivados) {
-      conditions.push(isNull(perfilesAlumno.deletedAtUtc));
-    }
+        if (filtro?.soloArchivados) {
+          // WU25a: pestaña "Archivados" (RF-012 RN-05): SOLO dados de baja lógica.
+          conditions.push(isNotNull(perfilesAlumno.deletedAtUtc));
+        } else if (!filtro?.incluirArchivados) {
+          conditions.push(isNull(perfilesAlumno.deletedAtUtc));
+        }
 
-    if (filtro?.estado) {
-      conditions.push(eq(perfilesAlumno.estadoActivacion, filtro.estado));
-    }
+        if (filtro?.estado) {
+          conditions.push(eq(perfilesAlumno.estadoActivacion, filtro.estado));
+        }
 
-    if (filtro?.modalidad) {
-      conditions.push(eq(perfilesAlumno.modalidad, filtro.modalidad));
-    }
+        if (filtro?.modalidad) {
+          conditions.push(eq(perfilesAlumno.modalidad, filtro.modalidad));
+        }
 
-    if (filtro?.semaforoPago) {
-      // WU25a: filtro por semáforo de pago server-side, para que la pestaña "En Mora" pagine
-      // de verdad (antes se filtraba en memoria sobre la página cargada).
-      const condicionPago = await this.condicionSemaforoPago(entrenadorId, filtro.semaforoPago);
-      if (condicionPago) conditions.push(condicionPago);
-    }
+        if (filtro?.semaforoPago) {
+          // WU25a: filtro por semáforo de pago server-side, para que la pestaña "En Mora" pagine
+          // de verdad (antes se filtraba en memoria sobre la página cargada).
+          const condicionPago = await this.condicionSemaforoPago(
+            tx,
+            entrenadorId,
+            filtro.semaforoPago
+          );
+          if (condicionPago) conditions.push(condicionPago);
+        }
 
-    if (busqueda.length > 0) {
-      // Paridad con la búsqueda previa en memoria (case-insensitive por nombre/apellido/correo/
-      // documento) pero resuelta en SQL para poder paginar y contar de verdad. El patrón escapa
-      // `%`, `_` y `\` para que el texto del usuario se trate como literal.
-      const patron = `%${escaparPatronLike(busqueda)}%`;
-      conditions.push(
-        or(
-          ilike(perfilesAlumno.nombres, patron),
-          ilike(perfilesAlumno.apellidos, patron),
-          ilike(usuarios.email, patron),
-          ilike(perfilesAlumno.numeroDocumento, patron)
-        )!
-      );
-    }
+        if (busqueda.length > 0) {
+          // Paridad con la búsqueda previa en memoria (case-insensitive por nombre/apellido/correo/
+          // documento) pero resuelta en SQL para poder paginar y contar de verdad. El patrón escapa
+          // `%`, `_` y `\` para que el texto del usuario se trate como literal.
+          const patron = `%${escaparPatronLike(busqueda)}%`;
+          conditions.push(
+            or(
+              ilike(perfilesAlumno.nombres, patron),
+              ilike(perfilesAlumno.apellidos, patron),
+              ilike(usuarios.email, patron),
+              ilike(perfilesAlumno.numeroDocumento, patron)
+            )!
+          );
+        }
 
-    const whereDirectorio = and(...conditions);
+        const whereDirectorio = and(...conditions);
 
-    const [filaTotal, records, resumen] = await Promise.all([
-      this.db
-        .select({ total: count() })
-        .from(perfilesAlumno)
-        .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
-        .where(whereDirectorio),
-      this.db
-        .select({
-          id: perfilesAlumno.id,
-          usuarioId: perfilesAlumno.usuarioId,
-          entrenadorId: perfilesAlumno.entrenadorId,
-          tipoDocumento: perfilesAlumno.tipoDocumento,
-          numeroDocumento: perfilesAlumno.numeroDocumento,
-          nombres: perfilesAlumno.nombres,
-          apellidos: perfilesAlumno.apellidos,
-          email: usuarios.email,
-          fechaNacimiento: perfilesAlumno.fechaNacimiento,
-          telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
-          fichaSaludPrivada: perfilesAlumno.fichaSaludPrivada,
-          estadoActivacion: perfilesAlumno.estadoActivacion,
-          modalidad: perfilesAlumno.modalidad,
-          tasaFijadaOverride: perfilesAlumno.tasaFijadaOverride,
-          deletedAtUtc: perfilesAlumno.deletedAtUtc,
-          createdAtUtc: perfilesAlumno.createdAtUtc,
-        })
-        .from(perfilesAlumno)
-        .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
-        .where(whereDirectorio)
-        .orderBy(desc(perfilesAlumno.createdAtUtc), asc(perfilesAlumno.id))
-        .limit(limit)
-        .offset(offset),
-      this.calcularResumenDirectorio(entrenadorId),
-    ]);
+        const [filaTotal, records, resumen] = await Promise.all([
+          tx
+            .select({ total: count() })
+            .from(perfilesAlumno)
+            .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
+            .where(whereDirectorio),
+          tx
+            .select({
+              id: perfilesAlumno.id,
+              usuarioId: perfilesAlumno.usuarioId,
+              entrenadorId: perfilesAlumno.entrenadorId,
+              tipoDocumento: perfilesAlumno.tipoDocumento,
+              numeroDocumento: perfilesAlumno.numeroDocumento,
+              nombres: perfilesAlumno.nombres,
+              apellidos: perfilesAlumno.apellidos,
+              email: usuarios.email,
+              fechaNacimiento: perfilesAlumno.fechaNacimiento,
+              telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
+              fichaSaludPrivada: perfilesAlumno.fichaSaludPrivada,
+              estadoActivacion: perfilesAlumno.estadoActivacion,
+              modalidad: perfilesAlumno.modalidad,
+              tasaFijadaOverride: perfilesAlumno.tasaFijadaOverride,
+              deletedAtUtc: perfilesAlumno.deletedAtUtc,
+              createdAtUtc: perfilesAlumno.createdAtUtc,
+            })
+            .from(perfilesAlumno)
+            .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
+            .where(whereDirectorio)
+            .orderBy(desc(perfilesAlumno.createdAtUtc), asc(perfilesAlumno.id))
+            .limit(limit)
+            .offset(offset),
+          this.calcularResumenDirectorio(tx, entrenadorId),
+        ]);
 
-    // WU23: semáforo de pago real por fila (misma regla de mora que `resumen.morosos`) para que
-    // la pestaña "En Mora" y los badges de fila coincidan con el KPI del servidor.
-    const semaforosPago = await this.hidratarSemaforoPago(
-      entrenadorId,
-      records.map((perfil) => perfil.usuarioId)
-    );
+        // WU23: semáforo de pago real por fila (misma regla de mora que `resumen.morosos`) para que
+        // la pestaña "En Mora" y los badges de fila coincidan con el KPI del servidor.
+        const semaforosPago = await this.hidratarSemaforoPago(
+          tx,
+          entrenadorId,
+          records.map((perfil) => perfil.usuarioId)
+        );
 
-    // RF-005: plan activo y precio acordado por fila (una consulta en lote, sin N+1).
-    const planesActivos = await this.hidratarPlanActivo(
-      entrenadorId,
-      records.map((perfil) => perfil.usuarioId)
+        // RF-005: plan activo y precio acordado por fila (una consulta en lote, sin N+1).
+        const planesActivos = await this.hidratarPlanActivo(
+          tx,
+          entrenadorId,
+          records.map((perfil) => perfil.usuarioId)
+        );
+
+        return { filaTotal, records, resumen, semaforosPago, planesActivos };
+      }
     );
 
     const items = records.map((perfil) => {
@@ -815,12 +847,13 @@ export class AlumnosService {
    *    de la bandeja "Alumnos en Mora" del dashboard (`entrenador.service.ts`) para no divergir.
    */
   private async calcularResumenDirectorio(
+    tx: TenantTransaction,
     entrenadorId: string
   ): Promise<ResumenDirectorioAlumnosDTO> {
     const ahora = new Date();
 
     const [grupos, filaArchivados, filaMorosos] = await Promise.all([
-      this.db
+      tx
         .select({
           estadoActivacion: perfilesAlumno.estadoActivacion,
           modalidad: perfilesAlumno.modalidad,
@@ -834,7 +867,7 @@ export class AlumnosService {
           )
         )
         .groupBy(perfilesAlumno.estadoActivacion, perfilesAlumno.modalidad),
-      this.db
+      tx
         .select({ total: count() })
         .from(perfilesAlumno)
         .where(
@@ -843,7 +876,7 @@ export class AlumnosService {
             isNotNull(perfilesAlumno.deletedAtUtc)
           )
         ),
-      this.db
+      tx
         .select({ total: countDistinct(cuotasMembresia.clienteId) })
         .from(cuotasMembresia)
         .innerJoin(
@@ -897,10 +930,11 @@ export class AlumnosService {
    * `NOT IN` sobre los alumnos con cuota; si nadie tiene cuota, no se agrega condición.
    */
   private async condicionSemaforoPago(
+    tx: TenantTransaction,
     entrenadorId: string,
     semaforo: 'moroso' | 'al_dia' | 'sin_cuota'
   ) {
-    const { enMora, conCuota } = await this.calcularConjuntosSemaforoPago(entrenadorId);
+    const { enMora, conCuota } = await this.calcularConjuntosSemaforoPago(tx, entrenadorId);
 
     if (semaforo === 'sin_cuota') {
       const conCuotaLista = [...conCuota];
@@ -927,6 +961,7 @@ export class AlumnosService {
    * lista de la página, solo esos alumnos (hidratación por fila, sin N+1).
    */
   private async calcularConjuntosSemaforoPago(
+    tx: TenantTransaction,
     entrenadorId: string,
     alumnoUsuarioIds?: string[]
   ): Promise<{ enMora: Set<string>; porVencer: Set<string>; conCuota: Set<string> }> {
@@ -937,7 +972,7 @@ export class AlumnosService {
         : undefined;
 
     const [filasMorosas, filasPorVencer, filasConCuota] = await Promise.all([
-      this.db
+      tx
         .select({ clienteId: cuotasMembresia.clienteId })
         .from(cuotasMembresia)
         .where(
@@ -947,7 +982,7 @@ export class AlumnosService {
             condicionCuotaEnMora(ahora)
           )
         ),
-      this.db
+      tx
         .select({ clienteId: cuotasMembresia.clienteId })
         .from(cuotasMembresia)
         .where(
@@ -957,7 +992,7 @@ export class AlumnosService {
             condicionCuotaPorVencer(ahora)
           )
         ),
-      this.db
+      tx
         .select({ clienteId: cuotasMembresia.clienteId })
         .from(cuotasMembresia)
         .where(
@@ -991,6 +1026,7 @@ export class AlumnosService {
    * 4. `sin_cuota`: no tiene ninguna cuota registrada (ni vigente ni vencida).
    */
   private async hidratarSemaforoPago(
+    tx: TenantTransaction,
     entrenadorId: string,
     alumnoUsuarioIds: string[]
   ): Promise<Map<string, 'al_dia' | 'por_vencer' | 'moroso' | 'sin_cuota'>> {
@@ -998,6 +1034,7 @@ export class AlumnosService {
     if (alumnoUsuarioIds.length === 0) return semaforos;
 
     const { enMora, porVencer, conCuota } = await this.calcularConjuntosSemaforoPago(
+      tx,
       entrenadorId,
       alumnoUsuarioIds
     );
@@ -1034,6 +1071,7 @@ export class AlumnosService {
    * `planes_membresia` y `cuotas_membresia`.
    */
   private async hidratarPlanActivo(
+    tx: TenantTransaction,
     entrenadorId: string,
     alumnoUsuarioIds: string[]
   ): Promise<
@@ -1049,7 +1087,7 @@ export class AlumnosService {
     const ids = [...new Set(alumnoUsuarioIds)].filter(Boolean);
     if (ids.length === 0) return planesActivos;
 
-    const planes = await this.db
+    const planes = await tx
       .select({
         id: planesMembresia.id,
         nombre: planesMembresia.nombre,
@@ -1063,7 +1101,7 @@ export class AlumnosService {
     const idsPlanes = planes.map((plan) => plan.id);
 
     // 1. Overrides del lote (más recientes primero) — solo de planes del coach.
-    const overrides = await this.db
+    const overrides = await tx
       .select()
       .from(overridesClientePlan)
       .where(
@@ -1088,7 +1126,7 @@ export class AlumnosService {
     // 2. Sin override: plan de la última cuota emitida por el coach (una consulta en lote).
     const sinOverride = ids.filter((usuarioId) => !planesActivos.has(usuarioId));
     if (sinOverride.length > 0) {
-      const cuotas = await this.db
+      const cuotas = await tx
         .select({
           clienteId: cuotasMembresia.clienteId,
           planId: cuotasMembresia.planId,
@@ -1162,8 +1200,12 @@ export class AlumnosService {
     }
 
     // RF-005: plan activo + precio acordado reales del expediente (override o última cuota).
+    // RNF-003/ADR-011 (etapa 2): la hidratación lee `planes_membresia`/`cuotas_membresia` (RLS)
+    // con el GUC del entrenador dueño del perfil (la lectura del perfil ya validó el acceso).
     const planActivo = (
-      await this.hidratarPlanActivo(perfil.entrenadorId, [perfil.usuarioId])
+      await this.withTenant({ entrenadorId: perfil.entrenadorId }, (tx) =>
+        this.hidratarPlanActivo(tx, perfil.entrenadorId, [perfil.usuarioId])
+      )
     ).get(perfil.usuarioId);
 
     return this.sanitizarPerfilParaRol(

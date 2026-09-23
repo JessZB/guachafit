@@ -105,9 +105,13 @@ async function seed() {
       await tx.delete(plantillasRutina);
     });
     await db.delete(ejerciciosCatalogo);
-    await db.delete(transaccionesPago);
-    await db.delete(cuotasMembresia);
-    await db.delete(planesMembresia);
+    // RNF-003/ADR-011 (etapa 2): `planes_membresia`, `cuotas_membresia` y `transacciones_pago`
+    // tienen RLS; el seed es ruta de sistema y usa el mismo bypass explícito de superadmin.
+    await withTenant({ isSuperadmin: true }, async (tx) => {
+      await tx.delete(transaccionesPago);
+      await tx.delete(cuotasMembresia);
+      await tx.delete(planesMembresia);
+    });
     await db.delete(tasasCambioReferencia);
     await db.delete(preferenciasNotificacion);
     await db.delete(perfilesAlumno);
@@ -345,40 +349,45 @@ async function seed() {
     // 4. Planes de Membresía del Entrenador
     // -------------------------------------------------------------------------
     console.log('📋 Creando planes de membresía estándar y premium...');
-    const [planEstandar] = await db
-      .insert(planesMembresia)
-      .values({
-        entrenadorId: coachUser.id,
-        nombre: 'Plan Básico - Entrenamiento Presencial',
-        descripcion: 'Acceso a rutinas personalizadas y seguimiento quincenal.',
-        beneficios: ['Rutina guiada en app', 'Soporte vía chat', '1 evaluación al mes'],
-        precioBaseUsd: '35.00',
-        duracionMeses: 1,
-        activo: true,
-        createdAtUtc: nowUtc,
-        updatedAtUtc: nowUtc,
-      })
-      .returning();
+    // RNF-003/ADR-011 (etapa 2): `planes_membresia` tiene RLS; escritura con bypass de sistema.
+    const [planEstandar] = await withTenant({ isSuperadmin: true }, (tx) =>
+      tx
+        .insert(planesMembresia)
+        .values({
+          entrenadorId: coachUser.id,
+          nombre: 'Plan Básico - Entrenamiento Presencial',
+          descripcion: 'Acceso a rutinas personalizadas y seguimiento quincenal.',
+          beneficios: ['Rutina guiada en app', 'Soporte vía chat', '1 evaluación al mes'],
+          precioBaseUsd: '35.00',
+          duracionMeses: 1,
+          activo: true,
+          createdAtUtc: nowUtc,
+          updatedAtUtc: nowUtc,
+        })
+        .returning()
+    );
 
-    const [planPremium] = await db
-      .insert(planesMembresia)
-      .values({
-        entrenadorId: coachUser.id,
-        nombre: 'Plan Integral Élite - Fuerza & Nutrición',
-        descripcion: 'Monitoreo diario de nutrición, 3 entrenamientos semanales y antropometría mensual.',
-        beneficios: [
-          'Rutina PPL adaptativa',
-          'Check-ins nutricionales diarios',
-          'Controles antropométricos con fotos',
-          'Soporte prioritario 24/7',
-        ],
-        precioBaseUsd: '40.00',
-        duracionMeses: 1,
-        activo: true,
-        createdAtUtc: nowUtc,
-        updatedAtUtc: nowUtc,
-      })
-      .returning();
+    const [planPremium] = await withTenant({ isSuperadmin: true }, (tx) =>
+      tx
+        .insert(planesMembresia)
+        .values({
+          entrenadorId: coachUser.id,
+          nombre: 'Plan Integral Élite - Fuerza & Nutrición',
+          descripcion: 'Monitoreo diario de nutrición, 3 entrenamientos semanales y antropometría mensual.',
+          beneficios: [
+            'Rutina PPL adaptativa',
+            'Check-ins nutricionales diarios',
+            'Controles antropométricos con fotos',
+            'Soporte prioritario 24/7',
+          ],
+          precioBaseUsd: '40.00',
+          duracionMeses: 1,
+          activo: true,
+          createdAtUtc: nowUtc,
+          updatedAtUtc: nowUtc,
+        })
+        .returning()
+    );
 
     // -------------------------------------------------------------------------
     // 5. Los 5 Alumnos Demo con Diversidad de Estados
@@ -444,43 +453,47 @@ async function seed() {
     const fechaEmision = new Date(Date.UTC(nowUtc.getUTCFullYear(), nowUtc.getUTCMonth(), 1));
     const fechaCorte = new Date(Date.UTC(nowUtc.getUTCFullYear(), nowUtc.getUTCMonth() + 1, 5));
 
-    const [cuota1] = await db
-      .insert(cuotasMembresia)
-      .values({
+    const [cuota1] = await withTenant({ isSuperadmin: true }, (tx) =>
+      tx
+        .insert(cuotasMembresia)
+        .values({
+          clienteId: user1.id,
+          entrenadorId: coachUser.id,
+          planId: planEstandar.id,
+          periodo: periodoActual,
+          montoTotalUsd: '35.00',
+          montoAbonadoUsd: '35.00',
+          saldoPendienteUsd: '0.00',
+          fechaEmisionUtc: fechaEmision,
+          fechaCorteUtc: fechaCorte,
+          estado: EstadoCuota.AL_DIA,
+          notas: 'Cuota mensual pagada y conciliada vía Zelle',
+          createdAtUtc: nowUtc,
+          updatedAtUtc: nowUtc,
+        })
+        .returning()
+    );
+
+    await withTenant({ isSuperadmin: true }, (tx) =>
+      tx.insert(transaccionesPago).values({
+        cuotaId: cuota1.id,
         clienteId: user1.id,
         entrenadorId: coachUser.id,
-        planId: planEstandar.id,
-        periodo: periodoActual,
-        montoTotalUsd: '35.00',
-        montoAbonadoUsd: '35.00',
-        saldoPendienteUsd: '0.00',
-        fechaEmisionUtc: fechaEmision,
-        fechaCorteUtc: fechaCorte,
-        estado: EstadoCuota.AL_DIA,
-        notas: 'Cuota mensual pagada y conciliada vía Zelle',
+        registradoPor: user1.id,
+        montoOriginal: '35.00',
+        monedaOriginal: Moneda.USD,
+        tasaCambioFijada: '1.0000',
+        montoEquivalenteUsd: '35.00',
+        metodoPago: MetodoPago.ZELLE,
+        referenciaBancaria: 'ZELLE-CONF-88910',
+        fechaOperacion: nowUtc.toISOString().split('T')[0],
+        estadoConciliacion: EstadoConciliacion.APROBADO,
+        fechaReporteUtc: nowUtc,
+        fechaConciliacionUtc: nowUtc,
         createdAtUtc: nowUtc,
         updatedAtUtc: nowUtc,
       })
-      .returning();
-
-    await db.insert(transaccionesPago).values({
-      cuotaId: cuota1.id,
-      clienteId: user1.id,
-      entrenadorId: coachUser.id,
-      registradoPor: user1.id,
-      montoOriginal: '35.00',
-      monedaOriginal: Moneda.USD,
-      tasaCambioFijada: '1.0000',
-      montoEquivalenteUsd: '35.00',
-      metodoPago: MetodoPago.ZELLE,
-      referenciaBancaria: 'ZELLE-CONF-88910',
-      fechaOperacion: nowUtc.toISOString().split('T')[0],
-      estadoConciliacion: EstadoConciliacion.APROBADO,
-      fechaReporteUtc: nowUtc,
-      fechaConciliacionUtc: nowUtc,
-      createdAtUtc: nowUtc,
-      updatedAtUtc: nowUtc,
-    });
+    );
 
     // Check-in de Nutrición Alumno 1 (100% verde)
     await db.insert(checkinsNutricionales).values({
@@ -528,43 +541,47 @@ async function seed() {
       updatedAtUtc: nowUtc,
     });
 
-    const [cuota2] = await db
-      .insert(cuotasMembresia)
-      .values({
+    const [cuota2] = await withTenant({ isSuperadmin: true }, (tx) =>
+      tx
+        .insert(cuotasMembresia)
+        .values({
+          clienteId: user2.id,
+          entrenadorId: coachUser.id,
+          planId: planEstandar.id,
+          periodo: periodoActual,
+          montoTotalUsd: '35.00',
+          montoAbonadoUsd: '0.00',
+          saldoPendienteUsd: '35.00',
+          fechaEmisionUtc: fechaEmision,
+          fechaCorteUtc: fechaCorte,
+          estado: EstadoCuota.PENDIENTE_REVISION,
+          notas: 'Transferencia bancaria en VES pendiente de validación por el entrenador',
+          createdAtUtc: nowUtc,
+          updatedAtUtc: nowUtc,
+        })
+        .returning()
+    );
+
+    await withTenant({ isSuperadmin: true }, (tx) =>
+      tx.insert(transaccionesPago).values({
+        cuotaId: cuota2.id,
         clienteId: user2.id,
         entrenadorId: coachUser.id,
-        planId: planEstandar.id,
-        periodo: periodoActual,
-        montoTotalUsd: '35.00',
-        montoAbonadoUsd: '0.00',
-        saldoPendienteUsd: '35.00',
-        fechaEmisionUtc: fechaEmision,
-        fechaCorteUtc: fechaCorte,
-        estado: EstadoCuota.PENDIENTE_REVISION,
-        notas: 'Transferencia bancaria en VES pendiente de validación por el entrenador',
+        registradoPor: user2.id,
+        montoOriginal: '1295.00',
+        monedaOriginal: Moneda.VES,
+        tasaCambioFijada: '37.0000',
+        montoEquivalenteUsd: '35.00',
+        metodoPago: MetodoPago.TRANSFERENCIA_BANCARIA,
+        referenciaBancaria: 'TRANSF-BANESCO-771239',
+        fechaOperacion: nowUtc.toISOString().split('T')[0],
+        comprobanteStorageKey: 'comprobantes/2026-09/transferencia-1295-ves.jpg',
+        estadoConciliacion: EstadoConciliacion.PENDIENTE,
+        fechaReporteUtc: nowUtc,
         createdAtUtc: nowUtc,
         updatedAtUtc: nowUtc,
       })
-      .returning();
-
-    await db.insert(transaccionesPago).values({
-      cuotaId: cuota2.id,
-      clienteId: user2.id,
-      entrenadorId: coachUser.id,
-      registradoPor: user2.id,
-      montoOriginal: '1295.00',
-      monedaOriginal: Moneda.VES,
-      tasaCambioFijada: '37.0000',
-      montoEquivalenteUsd: '35.00',
-      metodoPago: MetodoPago.TRANSFERENCIA_BANCARIA,
-      referenciaBancaria: 'TRANSF-BANESCO-771239',
-      fechaOperacion: nowUtc.toISOString().split('T')[0],
-      comprobanteStorageKey: 'comprobantes/2026-09/transferencia-1295-ves.jpg',
-      estadoConciliacion: EstadoConciliacion.PENDIENTE,
-      fechaReporteUtc: nowUtc,
-      createdAtUtc: nowUtc,
-      updatedAtUtc: nowUtc,
-    });
+    );
 
     // --- ALUMNO 3: Moroso / Cuota vencida ($40 USD vencida hace 5 días) ---
     console.log('  -> Alumno 3: Roberto Mendoza (Moroso / Cuota vencida)');
@@ -605,21 +622,23 @@ async function seed() {
     const mesAnterior = fechaCorteVencida.getUTCMonth() + 1;
     const periodoVencido = `${fechaCorteVencida.getUTCFullYear()}-${String(mesAnterior).padStart(2, '0')}`;
 
-    await db.insert(cuotasMembresia).values({
-      clienteId: user3.id,
-      entrenadorId: coachUser.id,
-      planId: planPremium.id,
-      periodo: periodoVencido,
-      montoTotalUsd: '40.00',
-      montoAbonadoUsd: '0.00',
-      saldoPendienteUsd: '40.00',
-      fechaEmisionUtc: fechaEmisionVencida,
-      fechaCorteUtc: fechaCorteVencida,
-      estado: EstadoCuota.VENCIDA,
-      notas: 'Cuota vencida hace 5 días sin reporte de pago',
-      createdAtUtc: fechaEmisionVencida,
-      updatedAtUtc: nowUtc,
-    });
+    await withTenant({ isSuperadmin: true }, (tx) =>
+      tx.insert(cuotasMembresia).values({
+        clienteId: user3.id,
+        entrenadorId: coachUser.id,
+        planId: planPremium.id,
+        periodo: periodoVencido,
+        montoTotalUsd: '40.00',
+        montoAbonadoUsd: '0.00',
+        saldoPendienteUsd: '40.00',
+        fechaEmisionUtc: fechaEmisionVencida,
+        fechaCorteUtc: fechaCorteVencida,
+        estado: EstadoCuota.VENCIDA,
+        notas: 'Cuota vencida hace 5 días sin reporte de pago',
+        createdAtUtc: fechaEmisionVencida,
+        updatedAtUtc: nowUtc,
+      })
+    );
 
     // --- ALUMNO 4: Nuevo en Onboarding (Código pendiente GUACHA-8821) ---
     console.log('  -> Alumno 4: Valeria Castillo (En Onboarding con código GUACHA-8821)');

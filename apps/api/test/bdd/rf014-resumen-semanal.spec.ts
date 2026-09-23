@@ -133,6 +133,10 @@ describe('Ola 3: resumen semanal del coach', () => {
           };
           return consulta;
         }),
+        // RNF-003/ADR-011 (etapa 2): el digest lee cobros/cuotas (RLS) dentro de withTenant con
+        // el bypass de sistema; el mock transaccional conserva el orden secuencial de select().
+        transaction: vi.fn(async (cb: any) => cb(db)),
+        execute: vi.fn(async () => undefined),
       };
       return db;
     }

@@ -17,9 +17,13 @@ import {
   PagoRechazadoEvent,
   PagoReportadoEvent,
 } from '../notificaciones/events/eventos-notificacion';
-import { DRIZZLE_DB } from '../../database/database.module';
+import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
 import {
   Database,
+  TenantRlsContext,
+  TenantTransaction,
+  WithTenantFn,
+  withTenant as withTenantBase,
   eq,
   and,
   or,
@@ -176,8 +180,15 @@ export class FinanzasService {
     // RF-014 RN-01 (ADR-010): finanzas publica eventos de dominio; jamás llama al despachador.
     @Optional() private readonly eventEmitter?: EventEmitter2,
     @Optional() private readonly r2StorageService?: R2StorageService,
-    @Optional() private readonly billingSchedulerService?: BillingSchedulerService
-  ) {}
+    @Optional() private readonly billingSchedulerService?: BillingSchedulerService,
+    // RNF-003/ADR-011 (etapa 2): `planes_membresia`, `cuotas_membresia` y `transacciones_pago`
+    // tienen RLS; toda consulta corre dentro de `withTenant` con el contexto del actor.
+    @Optional() @Inject(WITH_TENANT) withTenant?: WithTenantFn
+  ) {
+    this.withTenant = withTenant ?? ((context, fn) => withTenantBase(context, fn, this.db));
+  }
+
+  private readonly withTenant: WithTenantFn;
 
   private readonly logger = new Logger(FinanzasService.name);
 
@@ -452,18 +463,21 @@ export class FinanzasService {
     entrenadorId: string,
     dto: CrearPlanMembresiaDTO
   ): Promise<PlanMembresiaDetalleDTO> {
-    const [plan] = await this.db
-      .insert(planesMembresia)
-      .values({
-        entrenadorId,
-        nombre: dto.nombre.trim(),
-        descripcion: dto.descripcion?.trim() || null,
-        beneficios: dto.beneficios,
-        precioBaseUsd: dto.precioBaseUsd,
-        duracionMeses: dto.duracionMeses ?? 1,
-        activo: dto.activo ?? true,
-      })
-      .returning();
+    // RNF-003/ADR-011 (etapa 2): `planes_membresia` tiene RLS; alta tenant-scoped.
+    const [plan] = await this.withTenant({ entrenadorId }, async (tx) =>
+      tx
+        .insert(planesMembresia)
+        .values({
+          entrenadorId,
+          nombre: dto.nombre.trim(),
+          descripcion: dto.descripcion?.trim() || null,
+          beneficios: dto.beneficios,
+          precioBaseUsd: dto.precioBaseUsd,
+          duracionMeses: dto.duracionMeses ?? 1,
+          activo: dto.activo ?? true,
+        })
+        .returning()
+    );
 
     return {
       id: plan.id,
@@ -480,11 +494,13 @@ export class FinanzasService {
   }
 
   async listarPlanesPorEntrenador(entrenadorId: string): Promise<PlanMembresiaDetalleDTO[]> {
-    const planes = await this.db
-      .select()
-      .from(planesMembresia)
-      .where(eq(planesMembresia.entrenadorId, entrenadorId))
-      .orderBy(desc(planesMembresia.createdAtUtc));
+    const planes = await this.withTenant({ entrenadorId }, async (tx) =>
+      tx
+        .select()
+        .from(planesMembresia)
+        .where(eq(planesMembresia.entrenadorId, entrenadorId))
+        .orderBy(desc(planesMembresia.createdAtUtc))
+    );
 
     return planes.map((plan) => ({
       id: plan.id,
@@ -505,20 +521,6 @@ export class FinanzasService {
     planId: string,
     dto: ActualizarPlanMembresiaDTO
   ): Promise<PlanMembresiaDetalleDTO> {
-    const [plan] = await this.db
-      .select()
-      .from(planesMembresia)
-      .where(eq(planesMembresia.id, planId))
-      .limit(1);
-
-    if (!plan) {
-      throw new NotFoundException(`Plan con ID '${planId}' no encontrado.`);
-    }
-
-    if (plan.entrenadorId !== entrenadorId) {
-      throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a planes de otro entrenador.');
-    }
-
     const updates: Partial<typeof planesMembresia.$inferInsert> = {
       updatedAtUtc: new Date(),
     };
@@ -530,11 +532,33 @@ export class FinanzasService {
     if (dto.duracionMeses !== undefined) updates.duracionMeses = dto.duracionMeses;
     if (dto.activo !== undefined) updates.activo = dto.activo;
 
-    const [actualizado] = await this.db
-      .update(planesMembresia)
-      .set(updates)
-      .where(eq(planesMembresia.id, planId))
-      .returning();
+    // RNF-003/ADR-011 (etapa 2): lectura + escritura de `planes_membresia` en UNA transacción
+    // con el GUC del coach (además del chequeo de tenancy explícito de negocio).
+    const actualizado = await this.withTenant({ entrenadorId }, async (tx) => {
+      const [plan] = await tx
+        .select()
+        .from(planesMembresia)
+        .where(eq(planesMembresia.id, planId))
+        .limit(1);
+
+      if (!plan) {
+        throw new NotFoundException(`Plan con ID '${planId}' no encontrado.`);
+      }
+
+      if (plan.entrenadorId !== entrenadorId) {
+        throw new ForbiddenException(
+          'Aislamiento de Tenant: Acceso denegado a planes de otro entrenador.'
+        );
+      }
+
+      const [fila] = await tx
+        .update(planesMembresia)
+        .set(updates)
+        .where(eq(planesMembresia.id, planId))
+        .returning();
+
+      return fila;
+    });
 
     return {
       id: actualizado.id,
@@ -554,120 +578,125 @@ export class FinanzasService {
     entrenadorId: string,
     dto: CrearOverridePlanDTO
   ): Promise<OverridePlanDetalleDTO> {
-    // 1. Validar que el plan pertenezca al entrenador
-    const [plan] = await this.db
-      .select()
-      .from(planesMembresia)
-      .where(
-        and(eq(planesMembresia.id, dto.planId), eq(planesMembresia.entrenadorId, entrenadorId))
-      );
+    // RNF-003/ADR-011 (etapa 2): plan (RLS) + alumno + override + tasa del alumno en UNA
+    // transacción con el GUC del coach. `overrides_cliente_plan` y `perfiles_alumno` aún no
+    // tienen RLS (etapa 3), pero comparten el contexto para no fragmentar el flujo.
+    return this.withTenant({ entrenadorId }, async (tx) => {
+      // 1. Validar que el plan pertenezca al entrenador
+      const [plan] = await tx
+        .select()
+        .from(planesMembresia)
+        .where(
+          and(eq(planesMembresia.id, dto.planId), eq(planesMembresia.entrenadorId, entrenadorId))
+        );
 
-    if (!plan) {
-      throw new NotFoundException('El plan especificado no existe o no pertenece a su catálogo.');
-    }
+      if (!plan) {
+        throw new NotFoundException('El plan especificado no existe o no pertenece a su catálogo.');
+      }
 
-    // 2. Validar que el alumno pertenezca al entrenador
-    const clienteUsuarioId = await this.resolveClienteUsuarioId(dto.clienteId);
-    const [alumno] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(
-        and(
-          eq(perfilesAlumno.usuarioId, clienteUsuarioId),
-          eq(perfilesAlumno.entrenadorId, entrenadorId)
-        )
-      );
-
-    if (!alumno) {
-      throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
-    }
-
-    // 3. Upsert en tabla overridesClientePlan
-    const [existente] = await this.db
-      .select()
-      .from(overridesClientePlan)
-      .where(
-        and(
-          eq(overridesClientePlan.planId, dto.planId),
-          eq(overridesClientePlan.clienteId, clienteUsuarioId)
-        )
-      );
-
-    let override;
-    const nowUtc = new Date();
-
-    if (existente) {
-      // Semántica de upsert (RF-005 RN-02): `undefined` conserva el valor vigente; `null`
-      // explícito lo limpia (p. ej. quitar el precio acordado para volver al precio del plan).
-      [override] = await this.db
-        .update(overridesClientePlan)
-        .set({
-          precioAcordadoUsd:
-            dto.precioAcordadoUsd !== undefined
-              ? dto.precioAcordadoUsd
-              : existente.precioAcordadoUsd,
-          tasaFijadaOverride:
-            dto.tasaFijadaOverride !== undefined
-              ? dto.tasaFijadaOverride
-              : existente.tasaFijadaOverride,
-          beneficiosPersonalizados:
-            dto.beneficiosPersonalizados !== undefined
-              ? dto.beneficiosPersonalizados
-              : existente.beneficiosPersonalizados,
-          motivoOverride:
-            dto.motivoOverride !== undefined ? dto.motivoOverride : existente.motivoOverride,
-          updatedAtUtc: nowUtc,
-        })
-        .where(eq(overridesClientePlan.id, existente.id))
-        .returning();
-    } else {
-      [override] = await this.db
-        .insert(overridesClientePlan)
-        .values({
-          planId: dto.planId,
-          clienteId: clienteUsuarioId,
-          precioAcordadoUsd: dto.precioAcordadoUsd ?? null,
-          tasaFijadaOverride: dto.tasaFijadaOverride ?? null,
-          beneficiosPersonalizados: dto.beneficiosPersonalizados ?? null,
-          motivoOverride: dto.motivoOverride ?? null,
-          createdAtUtc: nowUtc,
-          updatedAtUtc: nowUtc,
-        })
-        .returning();
-    }
-
-    // ADR-003 §3.2 / RF-005 RN-02: la tasa especial del alumno vive en `perfiles_alumno`
-    // (`tasa_fijada_override`) para que TODAS las operaciones bimonetarias la usen. El override
-    // del plan la sincroniza; un `null` explícito la limpia y el alumno vuelve a la tasa global.
-    if (dto.tasaFijadaOverride !== undefined) {
-      await this.db
-        .update(perfilesAlumno)
-        .set({
-          tasaFijadaOverride: dto.tasaFijadaOverride,
-          updatedAtUtc: nowUtc,
-        })
+      // 2. Validar que el alumno pertenezca al entrenador
+      const clienteUsuarioId = await this.resolveClienteUsuarioId(dto.clienteId, tx);
+      const [alumno] = await tx
+        .select()
+        .from(perfilesAlumno)
         .where(
           and(
             eq(perfilesAlumno.usuarioId, clienteUsuarioId),
             eq(perfilesAlumno.entrenadorId, entrenadorId)
           )
         );
-    }
 
-    return {
-      id: override.id,
-      planId: override.planId,
-      clienteId: override.clienteId,
-      precioAcordadoUsd: override.precioAcordadoUsd,
-      tasaFijadaOverride: override.tasaFijadaOverride,
-      beneficiosPersonalizados: (override.beneficiosPersonalizados as string[]) || null,
-      motivoOverride: override.motivoOverride,
-      planNombre: plan.nombre,
-      planPrecioBaseUsd: plan.precioBaseUsd,
-      clienteNombre: `${alumno.nombres} ${alumno.apellidos}`.trim(),
-      createdAtUtc: override.createdAtUtc.toISOString(),
-      updatedAtUtc: override.updatedAtUtc.toISOString(),
-    };
+      if (!alumno) {
+        throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
+      }
+
+      // 3. Upsert en tabla overridesClientePlan
+      const [existente] = await tx
+        .select()
+        .from(overridesClientePlan)
+        .where(
+          and(
+            eq(overridesClientePlan.planId, dto.planId),
+            eq(overridesClientePlan.clienteId, clienteUsuarioId)
+          )
+        );
+
+      let override;
+      const nowUtc = new Date();
+
+      if (existente) {
+        // Semántica de upsert (RF-005 RN-02): `undefined` conserva el valor vigente; `null`
+        // explícito lo limpia (p. ej. quitar el precio acordado para volver al precio del plan).
+        [override] = await tx
+          .update(overridesClientePlan)
+          .set({
+            precioAcordadoUsd:
+              dto.precioAcordadoUsd !== undefined
+                ? dto.precioAcordadoUsd
+                : existente.precioAcordadoUsd,
+            tasaFijadaOverride:
+              dto.tasaFijadaOverride !== undefined
+                ? dto.tasaFijadaOverride
+                : existente.tasaFijadaOverride,
+            beneficiosPersonalizados:
+              dto.beneficiosPersonalizados !== undefined
+                ? dto.beneficiosPersonalizados
+                : existente.beneficiosPersonalizados,
+            motivoOverride:
+              dto.motivoOverride !== undefined ? dto.motivoOverride : existente.motivoOverride,
+            updatedAtUtc: nowUtc,
+          })
+          .where(eq(overridesClientePlan.id, existente.id))
+          .returning();
+      } else {
+        [override] = await tx
+          .insert(overridesClientePlan)
+          .values({
+            planId: dto.planId,
+            clienteId: clienteUsuarioId,
+            precioAcordadoUsd: dto.precioAcordadoUsd ?? null,
+            tasaFijadaOverride: dto.tasaFijadaOverride ?? null,
+            beneficiosPersonalizados: dto.beneficiosPersonalizados ?? null,
+            motivoOverride: dto.motivoOverride ?? null,
+            createdAtUtc: nowUtc,
+            updatedAtUtc: nowUtc,
+          })
+          .returning();
+      }
+
+      // ADR-003 §3.2 / RF-005 RN-02: la tasa especial del alumno vive en `perfiles_alumno`
+      // (`tasa_fijada_override`) para que TODAS las operaciones bimonetarias la usen. El override
+      // del plan la sincroniza; un `null` explícito la limpia y el alumno vuelve a la tasa global.
+      if (dto.tasaFijadaOverride !== undefined) {
+        await tx
+          .update(perfilesAlumno)
+          .set({
+            tasaFijadaOverride: dto.tasaFijadaOverride,
+            updatedAtUtc: nowUtc,
+          })
+          .where(
+            and(
+              eq(perfilesAlumno.usuarioId, clienteUsuarioId),
+              eq(perfilesAlumno.entrenadorId, entrenadorId)
+            )
+          );
+      }
+
+      return {
+        id: override.id,
+        planId: override.planId,
+        clienteId: override.clienteId,
+        precioAcordadoUsd: override.precioAcordadoUsd,
+        tasaFijadaOverride: override.tasaFijadaOverride,
+        beneficiosPersonalizados: (override.beneficiosPersonalizados as string[]) || null,
+        motivoOverride: override.motivoOverride,
+        planNombre: plan.nombre,
+        planPrecioBaseUsd: plan.precioBaseUsd,
+        clienteNombre: `${alumno.nombres} ${alumno.apellidos}`.trim(),
+        createdAtUtc: override.createdAtUtc.toISOString(),
+        updatedAtUtc: override.updatedAtUtc.toISOString(),
+      };
+    });
   }
 
   /**
@@ -682,94 +711,98 @@ export class FinanzasService {
    * solo existe si su plan es del catálogo del coach autenticado.
    */
   async listarOverrides(entrenadorId: string, clienteId?: string): Promise<OverridePlanDetalleDTO[]> {
-    const planes = await this.db
-      .select({
-        id: planesMembresia.id,
-        nombre: planesMembresia.nombre,
-        precioBaseUsd: planesMembresia.precioBaseUsd,
-      })
-      .from(planesMembresia)
-      .where(eq(planesMembresia.entrenadorId, entrenadorId));
+    // RNF-003/ADR-011 (etapa 2): el catálogo (`planes_membresia`) tiene RLS; el flujo completo
+    // (planes + alumno + overrides + nombres) corre en UNA transacción con el GUC del coach.
+    return this.withTenant({ entrenadorId }, async (tx) => {
+      const planes = await tx
+        .select({
+          id: planesMembresia.id,
+          nombre: planesMembresia.nombre,
+          precioBaseUsd: planesMembresia.precioBaseUsd,
+        })
+        .from(planesMembresia)
+        .where(eq(planesMembresia.entrenadorId, entrenadorId));
 
-    if (planes.length === 0) return [];
-    const planesPorId = new Map(planes.map((plan) => [plan.id, plan]));
+      if (planes.length === 0) return [];
+      const planesPorId = new Map(planes.map((plan) => [plan.id, plan]));
 
-    let clienteUsuarioId: string | undefined;
-    if (clienteId) {
-      clienteUsuarioId = await this.resolveClienteUsuarioId(clienteId);
-      const [alumno] = await this.db
-        .select({ id: perfilesAlumno.id })
+      let clienteUsuarioId: string | undefined;
+      if (clienteId) {
+        clienteUsuarioId = await this.resolveClienteUsuarioId(clienteId, tx);
+        const [alumno] = await tx
+          .select({ id: perfilesAlumno.id })
+          .from(perfilesAlumno)
+          .where(
+            and(
+              eq(perfilesAlumno.usuarioId, clienteUsuarioId),
+              eq(perfilesAlumno.entrenadorId, entrenadorId)
+            )
+          );
+
+        if (!alumno) {
+          throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
+        }
+      }
+
+      const whereOverrides = clienteUsuarioId
+        ? and(
+            inArray(
+              overridesClientePlan.planId,
+              planes.map((plan) => plan.id)
+            ),
+            eq(overridesClientePlan.clienteId, clienteUsuarioId)
+          )
+        : inArray(
+            overridesClientePlan.planId,
+            planes.map((plan) => plan.id)
+          );
+
+      const overrides = await tx
+        .select()
+        .from(overridesClientePlan)
+        .where(whereOverrides)
+        .orderBy(desc(overridesClientePlan.updatedAtUtc), desc(overridesClientePlan.id));
+
+      if (overrides.length === 0) return [];
+
+      const clienteIds = [...new Set(overrides.map((o) => o.clienteId))];
+      const alumnos = await tx
+        .select({
+          usuarioId: perfilesAlumno.usuarioId,
+          nombres: perfilesAlumno.nombres,
+          apellidos: perfilesAlumno.apellidos,
+        })
         .from(perfilesAlumno)
         .where(
           and(
-            eq(perfilesAlumno.usuarioId, clienteUsuarioId),
+            inArray(perfilesAlumno.usuarioId, clienteIds),
             eq(perfilesAlumno.entrenadorId, entrenadorId)
           )
         );
-
-      if (!alumno) {
-        throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
-      }
-    }
-
-    const whereOverrides = clienteUsuarioId
-      ? and(
-          inArray(
-            overridesClientePlan.planId,
-            planes.map((plan) => plan.id)
-          ),
-          eq(overridesClientePlan.clienteId, clienteUsuarioId)
-        )
-      : inArray(
-          overridesClientePlan.planId,
-          planes.map((plan) => plan.id)
-        );
-
-    const overrides = await this.db
-      .select()
-      .from(overridesClientePlan)
-      .where(whereOverrides)
-      .orderBy(desc(overridesClientePlan.updatedAtUtc), desc(overridesClientePlan.id));
-
-    if (overrides.length === 0) return [];
-
-    const clienteIds = [...new Set(overrides.map((o) => o.clienteId))];
-    const alumnos = await this.db
-      .select({
-        usuarioId: perfilesAlumno.usuarioId,
-        nombres: perfilesAlumno.nombres,
-        apellidos: perfilesAlumno.apellidos,
-      })
-      .from(perfilesAlumno)
-      .where(
-        and(
-          inArray(perfilesAlumno.usuarioId, clienteIds),
-          eq(perfilesAlumno.entrenadorId, entrenadorId)
-        )
+      const nombresPorUsuario = new Map(
+        alumnos.map((alumno) => [
+          alumno.usuarioId,
+          `${alumno.nombres} ${alumno.apellidos}`.trim(),
+        ])
       );
-    const nombresPorUsuario = new Map(
-      alumnos.map((alumno) => [
-        alumno.usuarioId,
-        `${alumno.nombres} ${alumno.apellidos}`.trim(),
-      ])
-    );
 
-    return overrides.map((o) => {
-      const plan = planesPorId.get(o.planId);
-      return {
-        id: o.id,
-        planId: o.planId,
-        clienteId: o.clienteId,
-        precioAcordadoUsd: o.precioAcordadoUsd,
-        tasaFijadaOverride: o.tasaFijadaOverride,
-        beneficiosPersonalizados: (o.beneficiosPersonalizados as string[]) || null,
-        motivoOverride: o.motivoOverride,
-        planNombre: plan?.nombre ?? null,
-        planPrecioBaseUsd: plan?.precioBaseUsd ?? null,
-        clienteNombre: nombresPorUsuario.get(o.clienteId) ?? null,
-        createdAtUtc: toIsoSafe(o.createdAtUtc),
-        updatedAtUtc: toIsoSafe(o.updatedAtUtc),
-      };
+      return overrides.map((o) => {
+        const plan = planesPorId.get(o.planId);
+        return {
+          id: o.id,
+          planId: o.planId,
+          clienteId: o.clienteId,
+          precioAcordadoUsd: o.precioAcordadoUsd,
+          tasaFijadaOverride: o.tasaFijadaOverride,
+          beneficiosPersonalizados: (o.beneficiosPersonalizados as string[]) || null,
+          motivoOverride: o.motivoOverride,
+          planNombre: plan?.nombre ?? null,
+          planPrecioBaseUsd: plan?.precioBaseUsd ?? null,
+          clienteNombre: nombresPorUsuario.get(o.clienteId) ?? null,
+          createdAtUtc: toIsoSafe(o.createdAtUtc),
+          updatedAtUtc: toIsoSafe(o.updatedAtUtc),
+        };
+      });
     });
   }
 
@@ -785,50 +818,52 @@ export class FinanzasService {
     entrenadorId: string,
     overrideId: string
   ): Promise<EliminarOverridePlanResultadoDTO> {
-    const [override] = await this.db
-      .select()
-      .from(overridesClientePlan)
-      .where(eq(overridesClientePlan.id, overrideId))
-      .limit(1);
+    // RNF-003/ADR-011 (etapa 2): plan (RLS) + override + limpieza de tasa en UNA transacción
+    // con el GUC del coach (la verificación de tenancy de negocio se conserva).
+    return this.withTenant({ entrenadorId }, async (tx) => {
+      const [override] = await tx
+        .select()
+        .from(overridesClientePlan)
+        .where(eq(overridesClientePlan.id, overrideId))
+        .limit(1);
 
-    if (!override) {
-      throw new NotFoundException('Override no encontrado.');
-    }
+      if (!override) {
+        throw new NotFoundException('Override no encontrado.');
+      }
 
-    const [plan] = await this.db
-      .select()
-      .from(planesMembresia)
-      .where(eq(planesMembresia.id, override.planId))
-      .limit(1);
+      const [plan] = await tx
+        .select()
+        .from(planesMembresia)
+        .where(eq(planesMembresia.id, override.planId))
+        .limit(1);
 
-    if (!plan || plan.entrenadorId !== entrenadorId) {
-      throw new ForbiddenException(
-        'Aislamiento de Tenant: Acceso denegado a overrides de otro entrenador.'
-      );
-    }
-
-    await this.db
-      .delete(overridesClientePlan)
-      .where(eq(overridesClientePlan.id, overrideId));
-
-    if (override.tasaFijadaOverride) {
-      await this.db
-        .update(perfilesAlumno)
-        .set({ tasaFijadaOverride: null, updatedAtUtc: new Date() })
-        .where(
-          and(
-            eq(perfilesAlumno.usuarioId, override.clienteId),
-            eq(perfilesAlumno.entrenadorId, entrenadorId),
-            eq(perfilesAlumno.tasaFijadaOverride, override.tasaFijadaOverride)
-          )
+      if (!plan || plan.entrenadorId !== entrenadorId) {
+        throw new ForbiddenException(
+          'Aislamiento de Tenant: Acceso denegado a overrides de otro entrenador.'
         );
-    }
+      }
 
-    return {
-      id: overrideId,
-      eliminado: true,
-      mensaje: `Override de ${plan.nombre} eliminado: el alumno vuelve a los valores del catálogo.`,
-    };
+      await tx.delete(overridesClientePlan).where(eq(overridesClientePlan.id, overrideId));
+
+      if (override.tasaFijadaOverride) {
+        await tx
+          .update(perfilesAlumno)
+          .set({ tasaFijadaOverride: null, updatedAtUtc: new Date() })
+          .where(
+            and(
+              eq(perfilesAlumno.usuarioId, override.clienteId),
+              eq(perfilesAlumno.entrenadorId, entrenadorId),
+              eq(perfilesAlumno.tasaFijadaOverride, override.tasaFijadaOverride)
+            )
+          );
+      }
+
+      return {
+        id: overrideId,
+        eliminado: true,
+        mensaje: `Override de ${plan.nombre} eliminado: el alumno vuelve a los valores del catálogo.`,
+      };
+    });
   }
 
   // ===========================================================================
@@ -842,122 +877,131 @@ export class FinanzasService {
       throw new BadRequestException('El monto total de la cuota debe ser estrictamente mayor a 0.00 USD.');
     }
 
-    const clienteUsuarioId = await this.resolveClienteUsuarioId(dto.clienteId);
+    // RNF-003/ADR-011 (etapa 2): validaciones + alta de `cuotas_membresia` (RLS) en UNA
+    // transacción con el GUC del coach. Los recordatorios (Redis) se agendan DESPUÉS del commit.
+    const { cuota, plan, alumno, esBecado } = await this.withTenant(
+      { entrenadorId },
+      async (tx) => {
+        const clienteUsuarioId = await this.resolveClienteUsuarioId(dto.clienteId, tx);
 
-    // Validar alumno
-    const [alumno] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(
-        and(
-          eq(perfilesAlumno.usuarioId, clienteUsuarioId),
-          eq(perfilesAlumno.entrenadorId, entrenadorId)
-        )
-      );
+        // Validar alumno
+        const [alumno] = await tx
+          .select()
+          .from(perfilesAlumno)
+          .where(
+            and(
+              eq(perfilesAlumno.usuarioId, clienteUsuarioId),
+              eq(perfilesAlumno.entrenadorId, entrenadorId)
+            )
+          );
 
-    if (!alumno) {
-      throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
-    }
+        if (!alumno) {
+          throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
+        }
 
-    // Validar plan
-    const [plan] = await this.db
-      .select()
-      .from(planesMembresia)
-      .where(
-        and(eq(planesMembresia.id, dto.planId), eq(planesMembresia.entrenadorId, entrenadorId))
-      );
+        // Validar plan
+        const [plan] = await tx
+          .select()
+          .from(planesMembresia)
+          .where(
+            and(eq(planesMembresia.id, dto.planId), eq(planesMembresia.entrenadorId, entrenadorId))
+          );
 
-    if (!plan) {
-      throw new NotFoundException('El plan especificado no pertenece a su catálogo.');
-    }
+        if (!plan) {
+          throw new NotFoundException('El plan especificado no pertenece a su catálogo.');
+        }
 
-    // Validar unicidad (clienteId, planId, periodo)
-    const [existente] = await this.db
-      .select()
-      .from(cuotasMembresia)
-      .where(
-        and(
-          eq(cuotasMembresia.clienteId, clienteUsuarioId),
-          eq(cuotasMembresia.planId, dto.planId),
-          eq(cuotasMembresia.periodo, dto.periodo)
-        )
-      );
+        // Validar unicidad (clienteId, planId, periodo)
+        const [existente] = await tx
+          .select()
+          .from(cuotasMembresia)
+          .where(
+            and(
+              eq(cuotasMembresia.clienteId, clienteUsuarioId),
+              eq(cuotasMembresia.planId, dto.planId),
+              eq(cuotasMembresia.periodo, dto.periodo)
+            )
+          );
 
-    if (existente) {
-      throw new ConflictException(
-        `Ya existe una cuota emitida para este alumno y plan en el periodo ${dto.periodo}.`
-      );
-    }
+        if (existente) {
+          throw new ConflictException(
+            `Ya existe una cuota emitida para este alumno y plan en el periodo ${dto.periodo}.`
+          );
+        }
 
-    // -------------------------------------------------------------------------
-    // RF-005 RN-03 (Precedencia de Valores) — corazón de este requerimiento:
-    // "Al generarse una nueva cuota para un cliente, el sistema evalúa: si existe un Override
-    //  activo para ese cliente, toma sus valores; en caso contrario, toma los valores por
-    //  defecto del plan estándar del catálogo."
-    // Orden exacto aplicado:
-    //   1. `precio_acordado_usd` del override del alumno para ESTE plan (si existe y no es null).
-    //      Un override de 0.00 es legítimo: becado/intercambio (RF-005 §6) y la cuota nace
-    //      saldada en estado `al_dia` (sin recordatorios de cobro).
-    //   2. `precio_base_usd` del plan del catálogo (RN-01: mayor a 0.00).
-    // Un plan sin precio base y sin override de precio no emite cuota: jamás se inventa un monto.
-    // -------------------------------------------------------------------------
-    const [override] = await this.db
-      .select()
-      .from(overridesClientePlan)
-      .where(
-        and(
-          eq(overridesClientePlan.planId, dto.planId),
-          eq(overridesClientePlan.clienteId, clienteUsuarioId)
-        )
-      );
+        // ---------------------------------------------------------------------
+        // RF-005 RN-03 (Precedencia de Valores) — corazón de este requerimiento:
+        // "Al generarse una nueva cuota para un cliente, el sistema evalúa: si existe un Override
+        //  activo para ese cliente, toma sus valores; en caso contrario, toma los valores por
+        //  defecto del plan estándar del catálogo."
+        // Orden exacto aplicado:
+        //   1. `precio_acordado_usd` del override del alumno para ESTE plan (si existe y no es null).
+        //      Un override de 0.00 es legítimo: becado/intercambio (RF-005 §6) y la cuota nace
+        //      saldada en estado `al_dia` (sin recordatorios de cobro).
+        //   2. `precio_base_usd` del plan del catálogo (RN-01: mayor a 0.00).
+        // Un plan sin precio base y sin override de precio no emite cuota: jamás se inventa un monto.
+        // ---------------------------------------------------------------------
+        const [override] = await tx
+          .select()
+          .from(overridesClientePlan)
+          .where(
+            and(
+              eq(overridesClientePlan.planId, dto.planId),
+              eq(overridesClientePlan.clienteId, clienteUsuarioId)
+            )
+          );
 
-    const precioAcordado = override?.precioAcordadoUsd ?? null;
-    if (precioAcordado !== null && toCents(precioAcordado) < 0) {
-      throw new BadRequestException('El precio acordado del alumno no puede ser negativo.');
-    }
+        const precioAcordado = override?.precioAcordadoUsd ?? null;
+        if (precioAcordado !== null && toCents(precioAcordado) < 0) {
+          throw new BadRequestException('El precio acordado del alumno no puede ser negativo.');
+        }
 
-    let montoTotal: string;
-    let esBecado = false;
-    if (precioAcordado !== null) {
-      // El override del alumno SIEMPRE gana sobre el precio del catálogo (RN-03), incluso en 0.00.
-      montoTotal = precioAcordado;
-      esBecado = toCents(precioAcordado) === 0;
-    } else if (toCents(plan.precioBaseUsd) > 0) {
-      montoTotal = plan.precioBaseUsd;
-    } else {
-      throw new BadRequestException(
-        'El plan no tiene un precio base mayor a 0.00. Para un alumno becado o un acuerdo de intercambio, define un override con precio acordado 0.00 (RF-005 §6).'
-      );
-    }
+        let montoTotal: string;
+        let esBecado = false;
+        if (precioAcordado !== null) {
+          // El override del alumno SIEMPRE gana sobre el precio del catálogo (RN-03), incluso en 0.00.
+          montoTotal = precioAcordado;
+          esBecado = toCents(precioAcordado) === 0;
+        } else if (toCents(plan.precioBaseUsd) > 0) {
+          montoTotal = plan.precioBaseUsd;
+        } else {
+          throw new BadRequestException(
+            'El plan no tiene un precio base mayor a 0.00. Para un alumno becado o un acuerdo de intercambio, define un override con precio acordado 0.00 (RF-005 §6).'
+          );
+        }
 
-    const montoAbonado = '0.00';
-    const saldoPendiente = montoTotal;
+        const montoAbonado = '0.00';
+        const saldoPendiente = montoTotal;
 
-    assertBalanceInvariant(montoTotal, montoAbonado, saldoPendiente);
+        assertBalanceInvariant(montoTotal, montoAbonado, saldoPendiente);
 
-    const nowUtc = new Date();
-    const fechaEmision = dto.fechaEmisionUtc ? new Date(dto.fechaEmisionUtc) : nowUtc;
-    const fechaCorte = new Date(dto.fechaCorteUtc);
+        const nowUtc = new Date();
+        const fechaEmision = dto.fechaEmisionUtc ? new Date(dto.fechaEmisionUtc) : nowUtc;
+        const fechaCorte = new Date(dto.fechaCorteUtc);
 
-    const [cuota] = await this.db
-      .insert(cuotasMembresia)
-      .values({
-        clienteId: clienteUsuarioId,
-        entrenadorId,
-        planId: dto.planId,
-        periodo: dto.periodo,
-        montoTotalUsd: montoTotal,
-        montoAbonadoUsd: montoAbonado,
-        saldoPendienteUsd: saldoPendiente,
-        fechaEmisionUtc: fechaEmision,
-        fechaCorteUtc: fechaCorte,
-        // RF-005 §6: la cuota del becado nace Al Día (no hay deuda que cobrar).
-        estado: esBecado ? EstadoCuota.AL_DIA : EstadoCuota.EMITIDA,
-        notas: dto.notas || null,
-        createdAtUtc: nowUtc,
-        updatedAtUtc: nowUtc,
-      })
-      .returning();
+        const [cuota] = await tx
+          .insert(cuotasMembresia)
+          .values({
+            clienteId: clienteUsuarioId,
+            entrenadorId,
+            planId: dto.planId,
+            periodo: dto.periodo,
+            montoTotalUsd: montoTotal,
+            montoAbonadoUsd: montoAbonado,
+            saldoPendienteUsd: saldoPendiente,
+            fechaEmisionUtc: fechaEmision,
+            fechaCorteUtc: fechaCorte,
+            // RF-005 §6: la cuota del becado nace Al Día (no hay deuda que cobrar).
+            estado: esBecado ? EstadoCuota.AL_DIA : EstadoCuota.EMITIDA,
+            notas: dto.notas || null,
+            createdAtUtc: nowUtc,
+            updatedAtUtc: nowUtc,
+          })
+          .returning();
+
+        return { cuota, plan, alumno, esBecado };
+      }
+    );
 
     // WU-H (RF-008 §4.B / ADR-008): agenda los recordatorios T-5, T-1, T (corte) y T+2 contra
     // `fecha_corte_utc`. La cuota YA quedó emitida: un fallo de Redis no revierte la emisión.
@@ -979,7 +1023,7 @@ export class FinanzasService {
 
     // Calcular proyección en Bs solo con tasa real: sin tasa configurada se omite el dato
     // en vez de inventar un valor (la emisión en USD no requiere tasa).
-    const tasa = await this.obtenerTasaVigente(entrenadorId, clienteUsuarioId);
+    const tasa = await this.obtenerTasaVigente(entrenadorId, cuota.clienteId);
     const saldoPendienteVes = tasa.tasaEfectiva
       ? this.proyectarVES(cuota.saldoPendienteUsd, tasa.tasaEfectiva)
       : undefined;
@@ -1014,101 +1058,126 @@ export class FinanzasService {
     actorRole: Rol,
     actorEntrenadorId?: string
   ): Promise<CuotaDetalleDTO> {
-    const [cuota] = await this.db
-      .select()
-      .from(cuotasMembresia)
-      .where(eq(cuotasMembresia.id, cuotaId));
+    // RNF-003/ADR-011 (etapa 2): `cuotas_membresia`, `planes_membresia` y `transacciones_pago`
+    // tienen RLS. Contexto según actor:
+    // - ALUMNO  -> self-select (`cliente_id = current_usuario_id`).
+    // - COACH   -> tenant del entrenador dueño.
+    // - SUPERADMIN -> bypass explícito (defensivo; la ruta solo admite coach/alumno).
+    const contexto = this.contextoRlsDeActor(actorUserId, actorRole, actorEntrenadorId);
 
-    if (!cuota) {
-      throw new NotFoundException('Cuota no encontrada.');
-    }
+    return this.withTenant(contexto, async (tx) => {
+      const [cuota] = await tx
+        .select()
+        .from(cuotasMembresia)
+        .where(eq(cuotasMembresia.id, cuotaId));
 
-    // Aislamiento de Tenancy / Autorización
-    if (actorRole === Rol.ALUMNO && cuota.clienteId !== actorUserId) {
-      throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a cuota de otro alumno.');
-    }
+      if (!cuota) {
+        throw new NotFoundException('Cuota no encontrada.');
+      }
 
-    if (
-      actorRole === Rol.ENTRENADOR &&
-      cuota.entrenadorId !== actorUserId &&
-      cuota.entrenadorId !== actorEntrenadorId
-    ) {
-      throw new ForbiddenException(
-        'Aislamiento de Tenant: Acceso denegado a cuota de otro entrenador.'
+      // Aislamiento de Tenancy / Autorización
+      if (actorRole === Rol.ALUMNO && cuota.clienteId !== actorUserId) {
+        throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a cuota de otro alumno.');
+      }
+
+      if (
+        actorRole === Rol.ENTRENADOR &&
+        cuota.entrenadorId !== actorUserId &&
+        cuota.entrenadorId !== actorEntrenadorId
+      ) {
+        throw new ForbiddenException(
+          'Aislamiento de Tenant: Acceso denegado a cuota de otro entrenador.'
+        );
+      }
+
+      // Cargar información adicional
+      const [plan] = await tx
+        .select()
+        .from(planesMembresia)
+        .where(eq(planesMembresia.id, cuota.planId));
+
+      const [alumno] = await tx
+        .select()
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.usuarioId, cuota.clienteId));
+
+      const txRecords = await tx
+        .select()
+        .from(transaccionesPago)
+        .where(eq(transaccionesPago.cuotaId, cuotaId))
+        .orderBy(asc(transaccionesPago.fechaReporteUtc));
+
+      const transacciones: TransaccionPagoDetalleDTO[] = await Promise.all(
+        txRecords.map(async (t) => ({
+          id: t.id,
+          cuotaId: t.cuotaId,
+          clienteId: t.clienteId,
+          entrenadorId: t.entrenadorId,
+          registradoPor: t.registradoPor,
+          montoOriginal: t.montoOriginal,
+          monedaOriginal: t.monedaOriginal,
+          tasaCambioFijada: t.tasaCambioFijada,
+          montoEquivalenteUsd: t.montoEquivalenteUsd,
+          metodoPago: t.metodoPago,
+          referenciaBancaria: t.referenciaBancaria,
+          fechaOperacion: t.fechaOperacion,
+          comprobanteStorageKey: t.comprobanteStorageKey,
+          comprobanteUrl: await this.resolverComprobanteUrl(t.comprobanteStorageKey),
+          estadoConciliacion: t.estadoConciliacion,
+          motivoRechazo: t.motivoRechazo,
+          fechaReporteUtc: t.fechaReporteUtc.toISOString(),
+          fechaConciliacionUtc: t.fechaConciliacionUtc?.toISOString() || null,
+          createdAtUtc: t.createdAtUtc.toISOString(),
+          updatedAtUtc: t.updatedAtUtc.toISOString(),
+        }))
       );
-    }
 
-    // Cargar información adicional
-    const [plan] = await this.db
-      .select()
-      .from(planesMembresia)
-      .where(eq(planesMembresia.id, cuota.planId));
+      // Proyección en Bs solo con tasa real (misma regla que la emisión: sin tasa, se omite).
+      const tasa = await this.obtenerTasaVigente(cuota.entrenadorId, cuota.clienteId);
+      const saldoPendienteVes = tasa.tasaEfectiva
+        ? this.proyectarVES(cuota.saldoPendienteUsd, tasa.tasaEfectiva)
+        : undefined;
 
-    const [alumno] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(eq(perfilesAlumno.usuarioId, cuota.clienteId));
+      return {
+        id: cuota.id,
+        clienteId: cuota.clienteId,
+        entrenadorId: cuota.entrenadorId,
+        planId: cuota.planId,
+        periodo: cuota.periodo,
+        montoTotalUsd: cuota.montoTotalUsd,
+        montoAbonadoUsd: cuota.montoAbonadoUsd,
+        saldoPendienteUsd: cuota.saldoPendienteUsd,
+        saldoPendienteVes,
+        tasaAplicada: tasa.tasaEfectiva ?? undefined,
+        fechaEmisionUtc: toIsoSafe(cuota.fechaEmisionUtc),
+        fechaCorteUtc: toIsoSafe(cuota.fechaCorteUtc),
+        estado: cuota.estado,
+        notas: cuota.notas,
+        // RF-005 §6: reconocible en cualquier lectura de la cuota (becado = emitida en 0.00).
+        esBecado: toCents(cuota.montoTotalUsd) === 0,
+        planNombre: plan?.nombre,
+        clienteNombre: alumno ? `${alumno.nombres} ${alumno.apellidos}` : undefined,
+        transacciones,
+        createdAtUtc: toIsoSafe(cuota.createdAtUtc),
+        updatedAtUtc: toIsoSafe(cuota.updatedAtUtc),
+      };
+    });
+  }
 
-    const txRecords = await this.db
-      .select()
-      .from(transaccionesPago)
-      .where(eq(transaccionesPago.cuotaId, cuotaId))
-      .orderBy(asc(transaccionesPago.fechaReporteUtc));
-
-    const transacciones: TransaccionPagoDetalleDTO[] = await Promise.all(
-      txRecords.map(async (t) => ({
-        id: t.id,
-        cuotaId: t.cuotaId,
-        clienteId: t.clienteId,
-        entrenadorId: t.entrenadorId,
-        registradoPor: t.registradoPor,
-        montoOriginal: t.montoOriginal,
-        monedaOriginal: t.monedaOriginal,
-        tasaCambioFijada: t.tasaCambioFijada,
-        montoEquivalenteUsd: t.montoEquivalenteUsd,
-        metodoPago: t.metodoPago,
-        referenciaBancaria: t.referenciaBancaria,
-        fechaOperacion: t.fechaOperacion,
-        comprobanteStorageKey: t.comprobanteStorageKey,
-        comprobanteUrl: await this.resolverComprobanteUrl(t.comprobanteStorageKey),
-        estadoConciliacion: t.estadoConciliacion,
-        motivoRechazo: t.motivoRechazo,
-        fechaReporteUtc: t.fechaReporteUtc.toISOString(),
-        fechaConciliacionUtc: t.fechaConciliacionUtc?.toISOString() || null,
-        createdAtUtc: t.createdAtUtc.toISOString(),
-        updatedAtUtc: t.updatedAtUtc.toISOString(),
-      }))
-    );
-
-    // Proyección en Bs solo con tasa real (misma regla que la emisión: sin tasa, se omite).
-    const tasa = await this.obtenerTasaVigente(cuota.entrenadorId, cuota.clienteId);
-    const saldoPendienteVes = tasa.tasaEfectiva
-      ? this.proyectarVES(cuota.saldoPendienteUsd, tasa.tasaEfectiva)
-      : undefined;
-
-    return {
-      id: cuota.id,
-      clienteId: cuota.clienteId,
-      entrenadorId: cuota.entrenadorId,
-      planId: cuota.planId,
-      periodo: cuota.periodo,
-      montoTotalUsd: cuota.montoTotalUsd,
-      montoAbonadoUsd: cuota.montoAbonadoUsd,
-      saldoPendienteUsd: cuota.saldoPendienteUsd,
-      saldoPendienteVes,
-      tasaAplicada: tasa.tasaEfectiva ?? undefined,
-      fechaEmisionUtc: toIsoSafe(cuota.fechaEmisionUtc),
-      fechaCorteUtc: toIsoSafe(cuota.fechaCorteUtc),
-      estado: cuota.estado,
-      notas: cuota.notas,
-      // RF-005 §6: reconocible en cualquier lectura de la cuota (becado = emitida en 0.00).
-      esBecado: toCents(cuota.montoTotalUsd) === 0,
-      planNombre: plan?.nombre,
-      clienteNombre: alumno ? `${alumno.nombres} ${alumno.apellidos}` : undefined,
-      transacciones,
-      createdAtUtc: toIsoSafe(cuota.createdAtUtc),
-      updatedAtUtc: toIsoSafe(cuota.updatedAtUtc),
-    };
+  /**
+   * RNF-003/ADR-011 (etapa 2): contexto RLS para rutas que atienden a más de un rol.
+   * - ALUMNO -> self-select (`current_usuario_id`).
+   * - ENTRENADOR -> tenant del coach (su `usuarioId` es el `entrenadorId` del tenant).
+   * - SUPERADMIN -> bypass explícito `is_superadmin`.
+   */
+  private contextoRlsDeActor(
+    actorUserId: string,
+    actorRole: Rol,
+    actorEntrenadorId?: string
+  ): TenantRlsContext {
+    if (actorRole === Rol.ALUMNO) return { usuarioId: actorUserId };
+    if (actorRole === Rol.SUPERADMIN) return { isSuperadmin: true };
+    return { entrenadorId: actorEntrenadorId ?? actorUserId };
   }
 
   // ===========================================================================
@@ -1143,105 +1212,112 @@ export class FinanzasService {
       };
     }
 
-    // 2. Validar cuota y permisos del alumno titular
-    const [cuota] = await this.db
-      .select()
-      .from(cuotasMembresia)
-      .where(eq(cuotasMembresia.id, cuotaId));
-
-    if (!cuota) {
-      throw new NotFoundException('Cuota no encontrada.');
-    }
-
-    if (cuota.clienteId !== alumnoUserId) {
-      throw new ForbiddenException('Aislamiento de Tenant: No tiene permisos para reportar pagos en esta cuota.');
-    }
-
-    if (cuota.estado === EstadoCuota.ANULADA) {
-      throw new BadRequestException('No se pueden reportar pagos sobre una cuota anulada.');
-    }
-
-    if (cuota.estado === EstadoCuota.AL_DIA && toCents(cuota.saldoPendienteUsd) === 0) {
-      throw new BadRequestException('La cuota ya se encuentra totalmente saldada.');
-    }
-
-    // 3. Verificar unicidad por índice compuesto en transacciones_pago:
-    // UNIQUE(metodo_pago, referencia_bancaria, fecha_operacion)
-    if (dto.referenciaBancaria) {
-      const [txDuplicada] = await this.db
+    // 2-5. RNF-003/ADR-011 (etapa 2): el alumno reporta con contexto self (`current_usuario_id`).
+    // Validación de titularidad, transacción y transición de la cuota en UNA transacción; las
+    // políticas `self_select`/`self_insert`/`self_update` de 0012 cubren exactamente este flujo.
+    const nuevaTx = await this.withTenant({ usuarioId: alumnoUserId }, async (tx) => {
+      // 2. Validar cuota y permisos del alumno titular
+      const [cuota] = await tx
         .select()
-        .from(transaccionesPago)
-        .where(
-          and(
-            eq(transaccionesPago.metodoPago, dto.metodoPago),
-            eq(transaccionesPago.referenciaBancaria, dto.referenciaBancaria),
-            eq(transaccionesPago.fechaOperacion, dto.fechaOperacion)
-          )
-        );
+        .from(cuotasMembresia)
+        .where(eq(cuotasMembresia.id, cuotaId));
 
-      if (txDuplicada) {
-        throw new ConflictException(
-          'Esta referencia ya ha sido registrada previamente para este método y fecha de operación.'
-        );
+      if (!cuota) {
+        throw new NotFoundException('Cuota no encontrada.');
       }
-    }
 
-    // 4. Congelar la tasa de cambio vigente (ADR-003 rate snapshot).
-    //    Un pago en VES exige tasa real: sin ella no se puede calcular el contravalor USD y
-    //    se devuelve un error de negocio claro en vez de inventar un equivalente.
-    const tasa = await this.obtenerTasaVigente(cuota.entrenadorId, alumnoUserId);
-    let tasaCambioFijada = '1.0000';
-    let montoEquivalenteUsd = dto.montoOriginal;
-
-    if (dto.monedaOriginal === Moneda.VES) {
-      const tasaEfectiva = tasa.tasaEfectiva;
-      if (!tasaEfectiva || parseFloat(tasaEfectiva) <= 0) {
-        throw new BadRequestException(
-          'El entrenador aún no ha configurado la tasa de cambio. No es posible calcular el equivalente en USD de un pago en bolívares.'
-        );
+      if (cuota.clienteId !== alumnoUserId) {
+        throw new ForbiddenException('Aislamiento de Tenant: No tiene permisos para reportar pagos en esta cuota.');
       }
-      tasaCambioFijada = tasaEfectiva;
-      montoEquivalenteUsd = this.calcularContravalorUSD(dto.montoOriginal, tasaEfectiva);
-    }
 
-    const nowUtc = new Date();
+      if (cuota.estado === EstadoCuota.ANULADA) {
+        throw new BadRequestException('No se pueden reportar pagos sobre una cuota anulada.');
+      }
 
-    // 5. Inserción de transacción y transición de cuota a 'pendiente_revision'
-    const [nuevaTx] = await this.db
-      .insert(transaccionesPago)
-      .values({
-        cuotaId: cuota.id,
-        clienteId: alumnoUserId,
-        entrenadorId: cuota.entrenadorId,
-        registradoPor: alumnoUserId,
-        montoOriginal: dto.montoOriginal,
-        monedaOriginal: dto.monedaOriginal,
-        tasaCambioFijada,
-        montoEquivalenteUsd,
-        metodoPago: dto.metodoPago,
-        referenciaBancaria: dto.referenciaBancaria || null,
-        fechaOperacion: dto.fechaOperacion,
-        comprobanteStorageKey: dto.comprobanteStorageKey || null,
-        estadoConciliacion: EstadoConciliacion.PENDIENTE,
-        fechaReporteUtc: nowUtc,
-        createdAtUtc: nowUtc,
-        updatedAtUtc: nowUtc,
-      })
-      .returning();
+      if (cuota.estado === EstadoCuota.AL_DIA && toCents(cuota.saldoPendienteUsd) === 0) {
+        throw new BadRequestException('La cuota ya se encuentra totalmente saldada.');
+      }
 
-    // Transicionar cuota a PENDIENTE_REVISION
-    const [cuotaActualizada] = await this.db
-      .update(cuotasMembresia)
-      .set({
-        estado: EstadoCuota.PENDIENTE_REVISION,
-        updatedAtUtc: nowUtc,
-      })
-      .where(eq(cuotasMembresia.id, cuota.id))
-      .returning();
+      // 3. Verificar unicidad por índice compuesto en transacciones_pago:
+      // UNIQUE(metodo_pago, referencia_bancaria, fecha_operacion)
+      if (dto.referenciaBancaria) {
+        const [txDuplicada] = await tx
+          .select()
+          .from(transaccionesPago)
+          .where(
+            and(
+              eq(transaccionesPago.metodoPago, dto.metodoPago),
+              eq(transaccionesPago.referenciaBancaria, dto.referenciaBancaria),
+              eq(transaccionesPago.fechaOperacion, dto.fechaOperacion)
+            )
+          );
 
+        if (txDuplicada) {
+          throw new ConflictException(
+            'Esta referencia ya ha sido registrada previamente para este método y fecha de operación.'
+          );
+        }
+      }
+
+      // 4. Congelar la tasa de cambio vigente (ADR-003 rate snapshot).
+      //    Un pago en VES exige tasa real: sin ella no se puede calcular el contravalor USD y
+      //    se devuelve un error de negocio claro en vez de inventar un equivalente.
+      const tasa = await this.obtenerTasaVigente(cuota.entrenadorId, alumnoUserId);
+      let tasaCambioFijada = '1.0000';
+      let montoEquivalenteUsd = dto.montoOriginal;
+
+      if (dto.monedaOriginal === Moneda.VES) {
+        const tasaEfectiva = tasa.tasaEfectiva;
+        if (!tasaEfectiva || parseFloat(tasaEfectiva) <= 0) {
+          throw new BadRequestException(
+            'El entrenador aún no ha configurado la tasa de cambio. No es posible calcular el equivalente en USD de un pago en bolívares.'
+          );
+        }
+        tasaCambioFijada = tasaEfectiva;
+        montoEquivalenteUsd = this.calcularContravalorUSD(dto.montoOriginal, tasaEfectiva);
+      }
+
+      const nowUtc = new Date();
+
+      // 5. Inserción de transacción y transición de cuota a 'pendiente_revision'
+      const [nuevaTx] = await tx
+        .insert(transaccionesPago)
+        .values({
+          cuotaId: cuota.id,
+          clienteId: alumnoUserId,
+          entrenadorId: cuota.entrenadorId,
+          registradoPor: alumnoUserId,
+          montoOriginal: dto.montoOriginal,
+          monedaOriginal: dto.monedaOriginal,
+          tasaCambioFijada,
+          montoEquivalenteUsd,
+          metodoPago: dto.metodoPago,
+          referenciaBancaria: dto.referenciaBancaria || null,
+          fechaOperacion: dto.fechaOperacion,
+          comprobanteStorageKey: dto.comprobanteStorageKey || null,
+          estadoConciliacion: EstadoConciliacion.PENDIENTE,
+          fechaReporteUtc: nowUtc,
+          createdAtUtc: nowUtc,
+          updatedAtUtc: nowUtc,
+        })
+        .returning();
+
+      // Transicionar cuota a PENDIENTE_REVISION
+      await tx
+        .update(cuotasMembresia)
+        .set({
+          estado: EstadoCuota.PENDIENTE_REVISION,
+          updatedAtUtc: nowUtc,
+        })
+        .where(eq(cuotasMembresia.id, cuota.id));
+
+      return nuevaTx;
+    });
+
+    // Lectura del detalle ya con la transacción confirmada (contexto del entrenador dueño).
     const cuotaDto = await this.obtenerCuotaPorId(
-      cuota.id,
-      cuota.entrenadorId,
+      nuevaTx.cuotaId,
+      nuevaTx.entrenadorId,
       Rol.ENTRENADOR
     );
 
@@ -1340,6 +1416,10 @@ export class FinanzasService {
       // set_config(..., true) es la forma VÁLIDA de aplicar un SET LOCAL parametrizado:
       // `SET LOCAL x = $1` no es sintaxis admitida por PostgreSQL (error 42601). Mismo patrón
       // que withTenant() en packages/database (WU7).
+      //
+      // RNF-003/ADR-011 (etapa 2): se conserva la transacción PROPIA (FOR UPDATE + set_config
+      // manual) porque `withTenant` no anida limpio sobre `db.transaction`; es EQUIVALENTE al
+      // helper (misma GUC transaccional, mismo alcance). No se duplica contexto.
       await tx.execute(
         sql`SELECT set_config('app.current_entrenador_id', ${entrenadorId}, true)`
       );
@@ -1534,6 +1614,8 @@ export class FinanzasService {
 
     const resultado = await this.db.transaction(async (tx) => {
       // 1. Contexto RLS (set_config parametrizado = SET LOCAL válido; ver withTenant()).
+      //    RNF-003/ADR-011 (etapa 2): transacción propia con FOR UPDATE + GUC manual,
+      //    EQUIVALENTE a withTenant (no se anida el helper sobre db.transaction).
       await tx.execute(
         sql`SELECT set_config('app.current_entrenador_id', ${entrenadorId}, true)`
       );
@@ -1752,23 +1834,29 @@ export class FinanzasService {
     );
 
     // WU24b: COUNT real en SQL para el `total` del envelope.
-    const [filaTotal] = await this.db
-      .select({ total: count() })
-      .from(transaccionesPago)
-      .where(whereBandeja);
+    // RNF-003/ADR-011 (etapa 2): `transacciones_pago` tiene RLS; ambas lecturas en UNA
+    // transacción con el GUC del coach.
+    const { filaTotal, records } = await this.withTenant({ entrenadorId }, async (tx) => {
+      const [filaTotal] = await tx
+        .select({ total: count() })
+        .from(transaccionesPago)
+        .where(whereBandeja);
 
-    const records = await this.db
-      .select({
-        tx: transaccionesPago,
-        alumno: perfilesAlumno,
-      })
-      .from(transaccionesPago)
-      .leftJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, transaccionesPago.clienteId))
-      .where(whereBandeja)
-      // FIFO por fecha de reporte; desempate estable para paginar sin repetidos.
-      .orderBy(asc(transaccionesPago.fechaReporteUtc), asc(transaccionesPago.id))
-      .limit(limit)
-      .offset(offset);
+      const records = await tx
+        .select({
+          tx: transaccionesPago,
+          alumno: perfilesAlumno,
+        })
+        .from(transaccionesPago)
+        .leftJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, transaccionesPago.clienteId))
+        .where(whereBandeja)
+        // FIFO por fecha de reporte; desempate estable para paginar sin repetidos.
+        .orderBy(asc(transaccionesPago.fechaReporteUtc), asc(transaccionesPago.id))
+        .limit(limit)
+        .offset(offset);
+
+      return { filaTotal, records };
+    });
 
     const items = await Promise.all(
       records.map(async ({ tx, alumno }) => ({
@@ -1808,9 +1896,19 @@ export class FinanzasService {
   // HELPERS PRIVADOS
   // ===========================================================================
 
-  private async resolveClienteUsuarioId(idOrPerfilId: string): Promise<string> {
+  /**
+   * Resuelve un `usuarioId` a partir de un id que puede ser de `usuarios` o de `perfiles_alumno`.
+   * RNF-003/ADR-011: acepta el `tx` de `withTenant` para que la lectura corra en la MISMA
+   * transacción con contexto cuando el llamador ya abrió una (etapa 3 envolverá `perfiles_alumno`).
+   */
+  private async resolveClienteUsuarioId(
+    idOrPerfilId: string,
+    tx?: TenantTransaction
+  ): Promise<string> {
+    const conn = tx ?? (this.db as unknown as TenantTransaction);
+
     // Si ya es un usuarioId en la tabla usuarios
-    const [user] = await this.db
+    const [user] = await conn
       .select({ id: usuarios.id })
       .from(usuarios)
       .where(eq(usuarios.id, idOrPerfilId));
@@ -1818,7 +1916,7 @@ export class FinanzasService {
     if (user) return user.id;
 
     // Si es un perfilId en perfilesAlumno
-    const [perfil] = await this.db
+    const [perfil] = await conn
       .select({ usuarioId: perfilesAlumno.usuarioId })
       .from(perfilesAlumno)
       .where(eq(perfilesAlumno.id, idOrPerfilId));
@@ -1887,140 +1985,148 @@ export class FinanzasService {
     txLimit?: number,
     txOffset = 0
   ): Promise<ResumenFinancieroAlumnoDTO> {
-    // 1. Validar existencia del alumno y aislamiento de tenant
-    let [perfil] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(eq(perfilesAlumno.id, clienteId));
+    // RNF-003/ADR-011 (etapa 2): `cuotas_membresia`/`transacciones_pago` tienen RLS. El flujo
+    // completo (perfil + cuotas + transacciones + agregados) corre en UNA transacción con el
+    // contexto del actor: ALUMNO -> self; COACH -> tenant.
+    return this.withTenant(
+      this.contextoRlsDeActor(actorUserId, actorRole, entrenadorId),
+      async (tx) => {
+        // 1. Validar existencia del alumno y aislamiento de tenant
+        let [perfil] = await tx
+          .select()
+          .from(perfilesAlumno)
+          .where(eq(perfilesAlumno.id, clienteId));
 
-    if (!perfil) {
-      [perfil] = await this.db
-        .select()
-        .from(perfilesAlumno)
-        .where(eq(perfilesAlumno.usuarioId, clienteId));
-    }
+        if (!perfil) {
+          [perfil] = await tx
+            .select()
+            .from(perfilesAlumno)
+            .where(eq(perfilesAlumno.usuarioId, clienteId));
+        }
 
-    if (!perfil) {
-      throw new NotFoundException('El alumno especificado no existe.');
-    }
+        if (!perfil) {
+          throw new NotFoundException('El alumno especificado no existe.');
+        }
 
-    if (actorRole === Rol.ALUMNO && perfil.usuarioId !== actorUserId) {
-      throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a finanzas de otro alumno.');
-    }
+        if (actorRole === Rol.ALUMNO && perfil.usuarioId !== actorUserId) {
+          throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a finanzas de otro alumno.');
+        }
 
-    if (
-      actorRole === Rol.ENTRENADOR &&
-      perfil.entrenadorId !== entrenadorId &&
-      perfil.entrenadorId !== actorUserId
-    ) {
-      throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a finanzas de un alumno de otro entrenador.');
-    }
+        if (
+          actorRole === Rol.ENTRENADOR &&
+          perfil.entrenadorId !== entrenadorId &&
+          perfil.entrenadorId !== actorUserId
+        ) {
+          throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a finanzas de un alumno de otro entrenador.');
+        }
 
-    const clienteUsuarioId = perfil.usuarioId;
+        const clienteUsuarioId = perfil.usuarioId;
 
-    const cuotas = await this.db
-      .select()
-      .from(cuotasMembresia)
-      .where(
-        and(
-          eq(cuotasMembresia.clienteId, clienteUsuarioId),
-          eq(cuotasMembresia.entrenadorId, entrenadorId)
-        )
-      )
-      .orderBy(desc(cuotasMembresia.createdAtUtc));
+        const cuotas = await tx
+          .select()
+          .from(cuotasMembresia)
+          .where(
+            and(
+              eq(cuotasMembresia.clienteId, clienteUsuarioId),
+              eq(cuotasMembresia.entrenadorId, entrenadorId)
+            )
+          )
+          .orderBy(desc(cuotasMembresia.createdAtUtc));
 
-    const whereTransacciones = and(
-      eq(transaccionesPago.clienteId, clienteUsuarioId),
-      eq(transaccionesPago.entrenadorId, entrenadorId)
-    );
+        const whereTransacciones = and(
+          eq(transaccionesPago.clienteId, clienteUsuarioId),
+          eq(transaccionesPago.entrenadorId, entrenadorId)
+        );
 
-    // WU24b: COUNT real del total (independiente de la página solicitada).
-    const [filaTotalTx] = await this.db
-      .select({ total: count() })
-      .from(transaccionesPago)
-      .where(whereTransacciones);
+        // WU24b: COUNT real del total (independiente de la página solicitada).
+        const [filaTotalTx] = await tx
+          .select({ total: count() })
+          .from(transaccionesPago)
+          .where(whereTransacciones);
 
-    const txQuery = this.db
-      .select()
-      .from(transaccionesPago)
-      .where(whereTransacciones)
-      // Desempate estable por `id` para que `txOffset` no repita ni salte filas.
-      .orderBy(desc(transaccionesPago.createdAtUtc), desc(transaccionesPago.id));
+        const txQuery = tx
+          .select()
+          .from(transaccionesPago)
+          .where(whereTransacciones)
+          // Desempate estable por `id` para que `txOffset` no repita ni salte filas.
+          .orderBy(desc(transaccionesPago.createdAtUtc), desc(transaccionesPago.id));
 
-    // WU24b: LIMIT/OFFSET en SQL solo cuando el consumidor pide explícitamente una página.
-    const txs = await (txLimit !== undefined
-      ? txQuery.limit(txLimit).offset(txOffset)
-      : txQuery);
+        // WU24b: LIMIT/OFFSET en SQL solo cuando el consumidor pide explícitamente una página.
+        const txs = await (txLimit !== undefined
+          ? txQuery.limit(txLimit).offset(txOffset)
+          : txQuery);
 
-    let saldoTotalCents = 0;
-    for (const c of cuotas) {
-      if (c.estado !== EstadoCuota.AL_DIA) {
-        saldoTotalCents += toCents(c.saldoPendienteUsd);
-      }
-    }
-
-    const hoy = new Date();
-    const currentYear = hoy.getFullYear();
-    const currentMonth = hoy.getMonth();
-    const inicioMesActual = new Date(currentYear, currentMonth, 1);
-    const inicioMesSiguiente = new Date(currentYear, currentMonth + 1, 1);
-
-    // WU24b: agregados del resumen en SQL sobre TODAS las transacciones aprobadas del alumno
-    // (no solo la página), preservando la semántica de `totalPagadoHistoricoUsd`/`totalPagadoMesActualUsd`.
-    const [filaTotalesHistoricos] = await this.db
-      .select({ totalUsd: sum(transaccionesPago.montoEquivalenteUsd) })
-      .from(transaccionesPago)
-      .where(
-        and(whereTransacciones, eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.APROBADO))
-      );
-
-    const [filaTotalesMes] = await this.db
-      .select({ totalUsd: sum(transaccionesPago.montoEquivalenteUsd) })
-      .from(transaccionesPago)
-      .where(
-        and(
-          whereTransacciones,
-          eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.APROBADO),
-          gte(transaccionesPago.createdAtUtc, inicioMesActual),
-          lt(transaccionesPago.createdAtUtc, inicioMesSiguiente)
-        )
-      );
-
-    const totalPagadoHistCents = toCents(filaTotalesHistoricos?.totalUsd ?? '0');
-    const totalPagadoMesCents = toCents(filaTotalesMes?.totalUsd ?? '0');
-
-    const currentPeriod = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
-    const cuotaMes = cuotas.find((c) => c.periodo === currentPeriod) || cuotas[0] || null;
-
-    return {
-      alumnoId: perfil.id,
-      usuarioId: clienteUsuarioId,
-      saldoPendienteTotalUsd: fromCents(saldoTotalCents),
-      totalPagadoHistoricoUsd: fromCents(totalPagadoHistCents),
-      totalPagadoMesActualUsd: fromCents(totalPagadoMesCents),
-      cuotaMesActual: cuotaMes
-        ? {
-            id: cuotaMes.id,
-            periodo: cuotaMes.periodo,
-            montoTotalUsd: cuotaMes.montoTotalUsd,
-            montoPagadoUsd: cuotaMes.montoAbonadoUsd,
-            saldoPendienteUsd: cuotaMes.saldoPendienteUsd,
-            estado: cuotaMes.estado,
-            fechaVencimiento: toIsoSafe(cuotaMes.fechaCorteUtc),
+        let saldoTotalCents = 0;
+        for (const c of cuotas) {
+          if (c.estado !== EstadoCuota.AL_DIA) {
+            saldoTotalCents += toCents(c.saldoPendienteUsd);
           }
-        : null,
-      transaccionesTotal: Number(filaTotalTx?.total ?? 0),
-      transacciones: txs.map((t) => ({
-        id: t.id,
-        cuotaId: t.cuotaId,
-        montoUsd: t.montoEquivalenteUsd,
-        montoBs: t.monedaOriginal === Moneda.VES ? t.montoOriginal : undefined,
-        metodoPago: t.metodoPago,
-        referencia: t.referenciaBancaria || undefined,
-        estado: t.estadoConciliacion,
-        createdAtUtc: toIsoSafe(t.createdAtUtc),
-      })),
-    };
+        }
+
+        const hoy = new Date();
+        const currentYear = hoy.getFullYear();
+        const currentMonth = hoy.getMonth();
+        const inicioMesActual = new Date(currentYear, currentMonth, 1);
+        const inicioMesSiguiente = new Date(currentYear, currentMonth + 1, 1);
+
+        // WU24b: agregados del resumen en SQL sobre TODAS las transacciones aprobadas del alumno
+        // (no solo la página), preservando la semántica de `totalPagadoHistoricoUsd`/`totalPagadoMesActualUsd`.
+        const [filaTotalesHistoricos] = await tx
+          .select({ totalUsd: sum(transaccionesPago.montoEquivalenteUsd) })
+          .from(transaccionesPago)
+          .where(
+            and(whereTransacciones, eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.APROBADO))
+          );
+
+        const [filaTotalesMes] = await tx
+          .select({ totalUsd: sum(transaccionesPago.montoEquivalenteUsd) })
+          .from(transaccionesPago)
+          .where(
+            and(
+              whereTransacciones,
+              eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.APROBADO),
+              gte(transaccionesPago.createdAtUtc, inicioMesActual),
+              lt(transaccionesPago.createdAtUtc, inicioMesSiguiente)
+            )
+          );
+
+        const totalPagadoHistCents = toCents(filaTotalesHistoricos?.totalUsd ?? '0');
+        const totalPagadoMesCents = toCents(filaTotalesMes?.totalUsd ?? '0');
+
+        const currentPeriod = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+        const cuotaMes = cuotas.find((c) => c.periodo === currentPeriod) || cuotas[0] || null;
+
+        return {
+          alumnoId: perfil.id,
+          usuarioId: clienteUsuarioId,
+          saldoPendienteTotalUsd: fromCents(saldoTotalCents),
+          totalPagadoHistoricoUsd: fromCents(totalPagadoHistCents),
+          totalPagadoMesActualUsd: fromCents(totalPagadoMesCents),
+          cuotaMesActual: cuotaMes
+            ? {
+                id: cuotaMes.id,
+                periodo: cuotaMes.periodo,
+                montoTotalUsd: cuotaMes.montoTotalUsd,
+                montoPagadoUsd: cuotaMes.montoAbonadoUsd,
+                saldoPendienteUsd: cuotaMes.saldoPendienteUsd,
+                estado: cuotaMes.estado,
+                fechaVencimiento: toIsoSafe(cuotaMes.fechaCorteUtc),
+              }
+            : null,
+          transaccionesTotal: Number(filaTotalTx?.total ?? 0),
+          transacciones: txs.map((t) => ({
+            id: t.id,
+            cuotaId: t.cuotaId,
+            montoUsd: t.montoEquivalenteUsd,
+            montoBs: t.monedaOriginal === Moneda.VES ? t.montoOriginal : undefined,
+            metodoPago: t.metodoPago,
+            referencia: t.referenciaBancaria || undefined,
+            estado: t.estadoConciliacion,
+            createdAtUtc: toIsoSafe(t.createdAtUtc),
+          })),
+        };
+      }
+    );
   }
 
   /**
@@ -2031,126 +2137,142 @@ export class FinanzasService {
     clienteId: string,
     dto: CobroDirectoInteligenteDTO | CobroDirectoDTO
   ) {
-    // 1. Validar existencia del alumno y aislamiento de tenant
-    let [perfil] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(eq(perfilesAlumno.id, clienteId));
+    // RNF-003/ADR-011 (etapa 2): la resolución (alumno + cuota abierta + plan) lee tablas con
+    // RLS; corre en UNA transacción con el GUC del coach. `emitirCuota`/`cobroDirecto` abren
+    // después sus propias transacciones (secuenciales, nunca anidadas).
+    const { clienteUsuarioId, targetCuotaId, emision } = await this.withTenant(
+      { entrenadorId },
+      async (tx) => {
+        // 1. Validar existencia del alumno y aislamiento de tenant
+        let [perfil] = await tx
+          .select()
+          .from(perfilesAlumno)
+          .where(eq(perfilesAlumno.id, clienteId));
 
-    if (!perfil) {
-      [perfil] = await this.db
-        .select()
-        .from(perfilesAlumno)
-        .where(eq(perfilesAlumno.usuarioId, clienteId));
-    }
+        if (!perfil) {
+          [perfil] = await tx
+            .select()
+            .from(perfilesAlumno)
+            .where(eq(perfilesAlumno.usuarioId, clienteId));
+        }
 
-    if (!perfil) {
-      throw new NotFoundException('El alumno especificado no existe.');
-    }
+        if (!perfil) {
+          throw new NotFoundException('El alumno especificado no existe.');
+        }
 
-    if (perfil.entrenadorId !== entrenadorId) {
-      throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a operaciones de un alumno de otro entrenador.');
-    }
+        if (perfil.entrenadorId !== entrenadorId) {
+          throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a operaciones de un alumno de otro entrenador.');
+        }
 
-    const clienteUsuarioId = perfil.usuarioId;
+        const clienteUsuarioId = perfil.usuarioId;
 
-    // 2. Un cobro en VES exige tasa configurada ANTES de emitir cualquier cuota: así la
-    //    operación falla entera y no deja una cuota emitida como efecto colateral.
-    if (dto.monedaOriginal === Moneda.VES) {
-      const tasa = await this.obtenerTasaVigente(entrenadorId, clienteUsuarioId);
-      if (!tasa.tasaEfectiva || parseFloat(tasa.tasaEfectiva) <= 0) {
-        throw new BadRequestException(
-          'Aún no has configurado la tasa de cambio. Configura tu tasa activa en Ajustes → Tasas para cobrar en bolívares.'
-        );
-      }
-    }
+        // 2. Un cobro en VES exige tasa configurada ANTES de emitir cualquier cuota: así la
+        //    operación falla entera y no deja una cuota emitida como efecto colateral.
+        if (dto.monedaOriginal === Moneda.VES) {
+          const tasa = await this.obtenerTasaVigente(entrenadorId, clienteUsuarioId);
+          if (!tasa.tasaEfectiva || parseFloat(tasa.tasaEfectiva) <= 0) {
+            throw new BadRequestException(
+              'Aún no has configurado la tasa de cambio. Configura tu tasa activa en Ajustes → Tasas para cobrar en bolívares.'
+            );
+          }
+        }
 
-    // 3. Buscar si hay una cuota abierta
-    const [cuotaAbierta] = await this.db
-      .select()
-      .from(cuotasMembresia)
-      .where(
-        and(
-          eq(cuotasMembresia.clienteId, clienteUsuarioId),
-          eq(cuotasMembresia.entrenadorId, entrenadorId),
-          ne(cuotasMembresia.estado, EstadoCuota.AL_DIA)
-        )
-      )
-      .orderBy(desc(cuotasMembresia.createdAtUtc));
-
-    let targetCuotaId = cuotaAbierta?.id;
-
-    // 4. Si no hay cuota abierta, buscar plan asignado
-    if (!targetCuotaId) {
-      // Buscar el override vigente de plan para este alumno (el más reciente si hubiera más de
-      // uno; la unicidad real es por plan+cliente). El monto YA no se decide aquí: `emitirCuota`
-      // aplica RF-005 RN-03 (override del alumno > precio base del plan).
-      const [override] = await this.db
-        .select()
-        .from(overridesClientePlan)
-        .where(eq(overridesClientePlan.clienteId, clienteUsuarioId))
-        .orderBy(desc(overridesClientePlan.updatedAtUtc))
-        .limit(1);
-
-      let planIdToUse = override?.planId;
-
-      if (!planIdToUse) {
-        // Buscar si tiene alguna cuota previa para identificar su plan habitual
-        const [ultimaCuota] = await this.db
-          .select({ planId: cuotasMembresia.planId })
+        // 3. Buscar si hay una cuota abierta
+        const [cuotaAbierta] = await tx
+          .select()
           .from(cuotasMembresia)
           .where(
             and(
               eq(cuotasMembresia.clienteId, clienteUsuarioId),
-              eq(cuotasMembresia.entrenadorId, entrenadorId)
+              eq(cuotasMembresia.entrenadorId, entrenadorId),
+              ne(cuotasMembresia.estado, EstadoCuota.AL_DIA)
             )
           )
-          .orderBy(desc(cuotasMembresia.createdAtUtc))
+          .orderBy(desc(cuotasMembresia.createdAtUtc));
+
+        if (cuotaAbierta?.id) {
+          return { clienteUsuarioId, targetCuotaId: cuotaAbierta.id, emision: null };
+        }
+
+        // 4. Sin cuota abierta: buscar plan asignado
+        // Buscar el override vigente de plan para este alumno (el más reciente si hubiera más de
+        // uno; la unicidad real es por plan+cliente). El monto YA no se decide aquí: `emitirCuota`
+        // aplica RF-005 RN-03 (override del alumno > precio base del plan).
+        const [override] = await tx
+          .select()
+          .from(overridesClientePlan)
+          .where(eq(overridesClientePlan.clienteId, clienteUsuarioId))
+          .orderBy(desc(overridesClientePlan.updatedAtUtc))
           .limit(1);
 
-        if (ultimaCuota) {
-          planIdToUse = ultimaCuota.planId;
+        let planIdToUse = override?.planId;
+
+        if (!planIdToUse) {
+          // Buscar si tiene alguna cuota previa para identificar su plan habitual
+          const [ultimaCuota] = await tx
+            .select({ planId: cuotasMembresia.planId })
+            .from(cuotasMembresia)
+            .where(
+              and(
+                eq(cuotasMembresia.clienteId, clienteUsuarioId),
+                eq(cuotasMembresia.entrenadorId, entrenadorId)
+              )
+            )
+            .orderBy(desc(cuotasMembresia.createdAtUtc))
+            .limit(1);
+
+          if (ultimaCuota) {
+            planIdToUse = ultimaCuota.planId;
+          }
         }
+
+        if (!planIdToUse) {
+          throw new BadRequestException(
+            'No se puede procesar el cobro directo inteligente: El alumno no tiene un plan asignado ni una cuota abierta previa.'
+          );
+        }
+
+        // Validar que el plan asignado exista y pertenezca al entrenador
+        const [plan] = await tx
+          .select()
+          .from(planesMembresia)
+          .where(
+            and(
+              eq(planesMembresia.id, planIdToUse),
+              eq(planesMembresia.entrenadorId, entrenadorId)
+            )
+          );
+
+        if (!plan) {
+          throw new BadRequestException(
+            'El plan asignado al alumno no existe o no pertenece a su catálogo de planes.'
+          );
+        }
+
+        const hoy = new Date();
+        const periodo = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
+        const fechaCorte = new Date(hoy.getTime() + 30 * 24 * 3600 * 1000).toISOString();
+
+        return {
+          clienteUsuarioId,
+          targetCuotaId: null as string | null,
+          emision: { planId: plan.id, periodo, fechaCorteUtc: fechaCorte },
+        };
       }
+    );
 
-      if (!planIdToUse) {
-        throw new BadRequestException(
-          'No se puede procesar el cobro directo inteligente: El alumno no tiene un plan asignado ni una cuota abierta previa.'
-        );
-      }
-
-      // Validar que el plan asignado exista y pertenezca al entrenador
-      const [plan] = await this.db
-        .select()
-        .from(planesMembresia)
-        .where(
-          and(
-            eq(planesMembresia.id, planIdToUse),
-            eq(planesMembresia.entrenadorId, entrenadorId)
-          )
-        );
-
-      if (!plan) {
-        throw new BadRequestException(
-          'El plan asignado al alumno no existe o no pertenece a su catálogo de planes.'
-        );
-      }
-
-      const hoy = new Date();
-      const periodo = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
-      const fechaCorte = new Date(hoy.getTime() + 30 * 24 * 3600 * 1000).toISOString();
-
+    // 5. Si no había cuota abierta, emitirla y ejecutar el cobro directo sobre ella.
+    let cuotaIdFinal = targetCuotaId;
+    if (!cuotaIdFinal && emision) {
       const cuotaEmitida = await this.emitirCuota(entrenadorId, {
         clienteId: clienteUsuarioId,
-        planId: plan.id,
-        periodo,
-        fechaCorteUtc: fechaCorte,
+        planId: emision.planId,
+        periodo: emision.periodo,
+        fechaCorteUtc: emision.fechaCorteUtc,
       });
-
-      targetCuotaId = cuotaEmitida.id;
+      cuotaIdFinal = cuotaEmitida.id;
     }
 
-    // 5. Ejecutar el cobro directo sobre la cuota
-    return this.cobroDirecto(targetCuotaId, entrenadorId, dto);
+    return this.cobroDirecto(cuotaIdFinal!, entrenadorId, dto);
   }
 }

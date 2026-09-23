@@ -9,7 +9,7 @@
  * - `calcularDiasAtraso`: días transcurridos desde una fecha de corte.
  */
 import {
-  Database,
+  TenantTransaction,
   and,
   eq,
   gt,
@@ -71,9 +71,12 @@ export function calcularVentanaMesUtc(ahora: Date): {
  * identidad (`transparentParser`), así que postgres-js intentaría escribir el Date como texto y
  * falla con `ERR_INVALID_ARG_TYPE`. Los límites se envían como ISO string con cast explícito a
  * `timestamptz` (mismo instante, cero ambigüedad de tipos).
+ *
+ * RNF-003/ADR-011: `transacciones_pago` tiene RLS (etapa 2); la conexión debe ser el `tx` de
+ * `withTenant` (coach con su `entrenadorId`), nunca el pool raíz.
  */
 export async function calcularRecaudadoMesUsd(
-  db: Database,
+  db: TenantTransaction,
   entrenadorId: string,
   ventana: { inicioMesUtc: Date; inicioMesSiguienteUtc: Date }
 ): Promise<string> {

@@ -95,7 +95,7 @@ describe('RF-011: Onboarding Híbrido de Alumnos (Registro Manual y Enlace Deep 
     };
 
     function createMockDbForUpdate(initialRecord: any) {
-      return {
+      const db: any = {
         select: () => ({
           from: () => {
             // WU-J (RF-005): la hidratación del plan activo consulta planes/overrides/cuotas en
@@ -120,7 +120,11 @@ describe('RF-011: Onboarding Híbrido de Alumnos (Registro Manual y Enlace Deep 
             }),
           }),
         }),
+        // RNF-003/ADR-011 (etapa 2): superficie transaccional que usa withTenant (RLS financiero).
+        transaction: async (cb: any) => cb(db),
+        execute: async () => undefined,
       } as any;
+      return db;
     }
 
     it('debe actualizar los campos del perfil y recalcular la edad dinámicamente', async () => {

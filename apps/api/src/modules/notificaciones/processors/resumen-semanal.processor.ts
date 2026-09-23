@@ -12,17 +12,20 @@
  *   (hasta ayer) sin check-in nutricional de la cartera. La matriz RF-015 no define una categoría
  *   NUTRICION: la alerta viaja por la fila "Resumen Semanal" (Email/Push según preferencia) y la
  *   copia In-App universal del despachador, sin inventar categorías fuera del doc.
- * - Consultas en lote (una por métrica, no por coach) con agregación en memoria; mismo criterio
- *   de ruta de sistema que el barrido de cobranza (RLS aún no habilitado en estas tablas).
+ * - Consultas en lote (una por métrica, no por coach) con agregación en memoria; las tablas
+ *   financieras ya tienen RLS (etapa 2) y se leen con el bypass explícito `is_superadmin`, el
+ *   mismo criterio de ruta de sistema que el barrido de cobranza.
  * - Un fallo al despachar un coach NO cancela el digest de los demás.
  */
-import { Inject, Logger } from '@nestjs/common';
+import { Inject, Logger, Optional } from '@nestjs/common';
 import { InjectQueue, OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Job, Queue } from 'bullmq';
-import { DRIZZLE_DB } from '../../../database/database.module';
+import { DRIZZLE_DB, WITH_TENANT } from '../../../database/database.module';
 import {
   Database,
+  WithTenantFn,
+  withTenant as withTenantBase,
   and,
   count,
   eq,
@@ -106,12 +109,20 @@ export function construirCuerpoResumenSemanal(metricas: MetricasResumenSemanal):
 export class ResumenSemanalProcessor extends WorkerHost {
   private readonly logger = new Logger(ResumenSemanalProcessor.name);
 
+  /**
+   * RNF-003/ADR-011 (etapa 2): RUTA DE SISTEMA. El digest agrega cobros/cuotas de TODOS los
+   * tenants; las lecturas sobre tablas con RLS corren con el bypass explícito `is_superadmin`.
+   */
+  private readonly withTenant: WithTenantFn;
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
     private readonly eventEmitter: EventEmitter2,
-    @InjectQueue(nombreColaDlq(COLA_RESUMEN_SEMANAL)) private readonly dlq: Queue
+    @InjectQueue(nombreColaDlq(COLA_RESUMEN_SEMANAL)) private readonly dlq: Queue,
+    @Optional() @Inject(WITH_TENANT) withTenant?: WithTenantFn
   ) {
     super();
+    this.withTenant = withTenant ?? ((context, fn) => withTenantBase(context, fn, this.db));
   }
 
   async process(job: Job): Promise<ResultadoResumenSemanal | { procesado: false }> {
@@ -269,44 +280,50 @@ export class ResumenSemanalProcessor extends WorkerHost {
       }
     }
 
-    // Cobros de la ventana: pagos APROBADOS por fecha real de conciliación.
-    const cobros = await this.db
-      .select({
-        entrenadorId: transaccionesPago.entrenadorId,
-        total: sum(transaccionesPago.montoEquivalenteUsd),
-      })
-      .from(transaccionesPago)
-      .where(
-        and(
-          inArray(transaccionesPago.entrenadorId, coachIds),
-          eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.APROBADO),
-          gte(transaccionesPago.fechaConciliacionUtc, desdeUtc),
-          lte(transaccionesPago.fechaConciliacionUtc, ahora)
+    // RNF-003/ADR-011 (etapa 2): cobros (transacciones_pago) y cartera (cuotas_membresia) tienen
+    // RLS; ambas lecturas transversales van en UNA transacción con el bypass explícito de sistema.
+    const { cobros, cuotas } = await this.withTenant({ isSuperadmin: true }, async (tx) => {
+      // Cobros de la ventana: pagos APROBADOS por fecha real de conciliación.
+      const cobros = await tx
+        .select({
+          entrenadorId: transaccionesPago.entrenadorId,
+          total: sum(transaccionesPago.montoEquivalenteUsd),
+        })
+        .from(transaccionesPago)
+        .where(
+          and(
+            inArray(transaccionesPago.entrenadorId, coachIds),
+            eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.APROBADO),
+            gte(transaccionesPago.fechaConciliacionUtc, desdeUtc),
+            lte(transaccionesPago.fechaConciliacionUtc, ahora)
+          )
         )
-      )
-      .groupBy(transaccionesPago.entrenadorId);
+        .groupBy(transaccionesPago.entrenadorId);
+
+      // Cartera: cuotas con saldo en POR_VENCER / VENCIDA por coach.
+      const cuotas = await tx
+        .select({
+          entrenadorId: cuotasMembresia.entrenadorId,
+          estado: cuotasMembresia.estado,
+          total: count(),
+        })
+        .from(cuotasMembresia)
+        .where(
+          and(
+            inArray(cuotasMembresia.entrenadorId, coachIds),
+            gt(cuotasMembresia.saldoPendienteUsd, '0'),
+            inArray(cuotasMembresia.estado, [EstadoCuota.POR_VENCER, EstadoCuota.VENCIDA])
+          )
+        )
+        .groupBy(cuotasMembresia.entrenadorId, cuotasMembresia.estado);
+
+      return { cobros, cuotas };
+    });
 
     const cobradoPorCoach = new Map<string, string>();
     for (const fila of cobros) {
       cobradoPorCoach.set(fila.entrenadorId, fila.total ?? '0.00');
     }
-
-    // Cartera: cuotas con saldo en POR_VENCER / VENCIDA por coach.
-    const cuotas = await this.db
-      .select({
-        entrenadorId: cuotasMembresia.entrenadorId,
-        estado: cuotasMembresia.estado,
-        total: count(),
-      })
-      .from(cuotasMembresia)
-      .where(
-        and(
-          inArray(cuotasMembresia.entrenadorId, coachIds),
-          gt(cuotasMembresia.saldoPendienteUsd, '0'),
-          inArray(cuotasMembresia.estado, [EstadoCuota.POR_VENCER, EstadoCuota.VENCIDA])
-        )
-      )
-      .groupBy(cuotasMembresia.entrenadorId, cuotasMembresia.estado);
 
     const porVencerPorCoach = new Map<string, number>();
     const enMoraPorCoach = new Map<string, number>();

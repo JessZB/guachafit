@@ -10,19 +10,19 @@
  * 2. `barrido-estados` (repeatable diario): aplica la máquina de estados real
  *    (`calcularEstadoBarrido`) a TODAS las cuotas de TODOS los tenants.
  *
- * RUTA DE SISTEMA (tenancy): `cuotas_membresia` tiene sus políticas RLS creadas pero RLS NO
- * está habilitado todavía (migración 0004, etapa 2 pendiente), por lo que esta consulta
- * transversal no necesita contexto de tenant. Cuando RLS se habilite, este worker deberá correr
- * con el bypass explícito `is_superadmin` (ADR-009) o un rol de sistema, nunca con un
- * `entrenador_id` arbitrario.
+ * RUTA DE SISTEMA (tenancy): `cuotas_membresia` tiene RLS habilitado (migración 0012, etapa 2).
+ * Este worker barre las cuotas de TODOS los tenants, así que corre con el bypass explícito
+ * `app.is_superadmin` vía withTenant() (ADR-009/ADR-011), nunca con un `entrenador_id` arbitrario.
  */
-import { Inject, Logger } from '@nestjs/common';
+import { Inject, Logger, Optional } from '@nestjs/common';
 import { InjectQueue, OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Job, Queue } from 'bullmq';
-import { DRIZZLE_DB } from '../../database/database.module';
+import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
 import {
   Database,
+  WithTenantFn,
+  withTenant as withTenantBase,
   and,
   eq,
   gt,
@@ -127,15 +127,23 @@ export function construirMensajeMoraParcial(
 export class BillingReminderProcessor extends WorkerHost {
   private readonly logger = new Logger(BillingReminderProcessor.name);
 
+  /**
+   * RNF-003/ADR-011 (etapa 2): RUTA DE SISTEMA. `cuotas_membresia` tiene RLS habilitado; este
+   * worker barre TODOS los tenants, así que corre con el bypass explícito `is_superadmin`.
+   */
+  private readonly withTenant: WithTenantFn;
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
     // RF-014 RN-01: la cobranza ya no conoce al despachador; publica eventos de dominio.
     private readonly eventEmitter: EventEmitter2,
     private readonly finanzasService: FinanzasService,
     // RNF-004 §4: DLQ de la cola de cobranza (visible en Bull-Board).
-    @InjectQueue(nombreColaDlq(COBRANZA_QUEUE)) private readonly dlq: Queue
+    @InjectQueue(nombreColaDlq(COBRANZA_QUEUE)) private readonly dlq: Queue,
+    @Optional() @Inject(WITH_TENANT) withTenant?: WithTenantFn
   ) {
     super();
+    this.withTenant = withTenant ?? ((context, fn) => withTenantBase(context, fn, this.db));
   }
 
   async process(job: Job): Promise<ResultadoRecordatorio | ResultadoBarrido | { procesado: false }> {
@@ -157,10 +165,11 @@ export class BillingReminderProcessor extends WorkerHost {
   async procesarRecordatorio(job: Job<DatosRecordatorio>): Promise<ResultadoRecordatorio> {
     const { cuotaId, hito } = job.data;
 
-    const [cuota] = await this.db
-      .select()
-      .from(cuotasMembresia)
-      .where(eq(cuotasMembresia.id, cuotaId));
+    // RUTA DE SISTEMA (RNF-003/ADR-011): bypass explícito de superadmin; la emisión de eventos
+    // (Redis) queda fuera de la transacción, después del commit de lectura.
+    const [cuota] = await this.withTenant({ isSuperadmin: true }, async (tx) =>
+      tx.select().from(cuotasMembresia).where(eq(cuotasMembresia.id, cuotaId))
+    );
 
     if (!cuota) {
       this.logger.warn(`Recordatorio ${hito}: cuota ${cuotaId} no existe; sin envío.`);
@@ -240,50 +249,56 @@ export class BillingReminderProcessor extends WorkerHost {
    * máquina pura y solo se persiste el cambio real de estado.
    */
   async procesarBarridoDiario(ahora: Date = new Date()): Promise<ResultadoBarrido> {
-    const filas = await this.db
-      .select({
-        id: cuotasMembresia.id,
-        estado: cuotasMembresia.estado,
-        saldoPendienteUsd: cuotasMembresia.saldoPendienteUsd,
-        fechaCorteUtc: cuotasMembresia.fechaCorteUtc,
-      })
-      .from(cuotasMembresia)
-      .where(
-        and(
-          notInArray(cuotasMembresia.estado, [EstadoCuota.ANULADA, EstadoCuota.AL_DIA]),
-          gt(cuotasMembresia.saldoPendienteUsd, '0')
-        )
-      );
+    // RUTA DE SISTEMA (RNF-003/ADR-011): barrido transversal de TODOS los tenants con el bypass
+    // explícito `is_superadmin`. Lectura + actualizaciones en UNA transacción (no N transacciones).
+    const resumen = await this.withTenant({ isSuperadmin: true }, async (tx) => {
+      const filas = await tx
+        .select({
+          id: cuotasMembresia.id,
+          estado: cuotasMembresia.estado,
+          saldoPendienteUsd: cuotasMembresia.saldoPendienteUsd,
+          fechaCorteUtc: cuotasMembresia.fechaCorteUtc,
+        })
+        .from(cuotasMembresia)
+        .where(
+          and(
+            notInArray(cuotasMembresia.estado, [EstadoCuota.ANULADA, EstadoCuota.AL_DIA]),
+            gt(cuotasMembresia.saldoPendienteUsd, '0')
+          )
+        );
 
-    const resumen: ResultadoBarrido = {
-      evaluadas: filas.length,
-      actualizadas: 0,
-      porVencer: 0,
-      vencidas: 0,
-    };
+      const resumen: ResultadoBarrido = {
+        evaluadas: filas.length,
+        actualizadas: 0,
+        porVencer: 0,
+        vencidas: 0,
+      };
 
-    for (const fila of filas) {
-      const resultado = calcularEstadoBarrido(
-        {
-          estado: fila.estado,
-          saldoPendienteUsd: fila.saldoPendienteUsd,
-          fechaCorteUtc: fila.fechaCorteUtc,
-        },
-        ahora
-      );
+      for (const fila of filas) {
+        const resultado = calcularEstadoBarrido(
+          {
+            estado: fila.estado,
+            saldoPendienteUsd: fila.saldoPendienteUsd,
+            fechaCorteUtc: fila.fechaCorteUtc,
+          },
+          ahora
+        );
 
-      if (resultado.estado === EstadoCuota.POR_VENCER) resumen.porVencer += 1;
-      if (resultado.estado === EstadoCuota.VENCIDA) resumen.vencidas += 1;
+        if (resultado.estado === EstadoCuota.POR_VENCER) resumen.porVencer += 1;
+        if (resultado.estado === EstadoCuota.VENCIDA) resumen.vencidas += 1;
 
-      if (!resultado.cambio) continue;
+        if (!resultado.cambio) continue;
 
-      await this.db
-        .update(cuotasMembresia)
-        .set({ estado: resultado.estado, updatedAtUtc: ahora })
-        .where(eq(cuotasMembresia.id, fila.id));
+        await tx
+          .update(cuotasMembresia)
+          .set({ estado: resultado.estado, updatedAtUtc: ahora })
+          .where(eq(cuotasMembresia.id, fila.id));
 
-      resumen.actualizadas += 1;
-    }
+        resumen.actualizadas += 1;
+      }
+
+      return resumen;
+    });
 
     this.logger.log(
       `Barrido diario de cuotas: ${resumen.evaluadas} evaluadas, ${resumen.actualizadas} actualizadas ` +
