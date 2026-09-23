@@ -2,7 +2,7 @@
 id: ADR-011
 titulo: "ADR-011: Aislamiento Multi-Tenant por Etapas — RLS Progresivo con withTenant"
 fecha: 2026-09-20
-estado: propuesto
+estado: aceptado
 decisores:
   - "Tech Lead"
   - "Principal Architect"
@@ -20,7 +20,7 @@ tags:
 # ADR-011: Aislamiento Multi-Tenant por Etapas — RLS Progresivo con withTenant
 
 ## 1. Estado
-`propuesto`
+`aceptado`
 
 ---
 
@@ -55,16 +55,16 @@ Elegimos la **Opción B (RLS progresivo por etapas con `withTenant`)** porque pe
 - **Etapa 1 (entregada en dos unidades):** `ENABLE ROW LEVEL SECURITY` en las tablas cuyos caminos quedaron 100% envueltos en `withTenant`:
   - **`rutinas` (WU7, migración `0004_rls_multitenant.sql`):** 11 sitios envueltos (entrenamiento, plantillas y dashboard del coach) + seed con bypass de sistema.
   - **`plantillas_rutina` (WU11, migración `0005_rls_plantillas.sql`):** banco de plantillas del coach (RF-017); todos los accesos de `PlantillasService` (listar, obtener, crear, actualizar, desactivar y lecturas del flujo de asignación) corren en `withTenant`; sin política "self" (es herramienta del entrenador, no del alumno).
-  Las otras cuatro tablas (`perfiles_alumno`, `planes_membresia`, `cuotas_membresia`, `transacciones_pago`) tienen políticas creadas y `ENABLE` pendiente (comentado de forma explícita en la migración `0004`).
+- **Etapa 2 — finanzas (entregada, migración `0012_rls_finanzas.sql`):** `ENABLE ROW LEVEL SECURITY` en `planes_membresia`, `cuotas_membresia` y `transacciones_pago`. Migración aditiva sobre `0004` (no reescribe las políticas base): completa las políticas self de los caminos reales del alumno — self-select del plan que respalda su cuota (subconsulta a `cuotas_membresia`, sin ciclo), self-update de su propia cuota al reportar pago (RF-007) y self-insert de su transacción. El 100% de los accesos de finanzas corre en `withTenant` (coach `{entrenadorId}`, alumno self `{usuarioId}`, rutas de sistema `{isSuperadmin:true}`); `cobroDirecto` y `conciliar` conservan su transacción propia con `set_config` equivalente (documentado en `finanzas.service.ts`). Verificada E2E con el rol no-dueño `guachafit_app` (30/30: aislamiento cross-tenant, flujos de pago completos y bypass de sistema) + batería psql independiente; rollback documentado en la propia migración.
+- **Pendiente:** `perfiles_alumno` (etapa 3) mantiene sus políticas creadas y `ENABLE` pendiente (previsto en `0013`).
 - **Criterio de graduación por etapa:** una tabla solo se habilita cuando (1) el 100% de sus consultas de tenant corren dentro de `withTenant`, (2) la suite de tenancy lo verifica, y (3) existe verificación real contra PostgreSQL con rol no-dueño.
-- **Requisito de efectividad:** `FORCE ROW LEVEL SECURITY` solo somete al rol dueño de la tabla; los superusers y los roles con `BYPASSRLS` la ignoran siempre (comportamiento nativo de PostgreSQL, comprobado empíricamente). Por tanto, la vía obligatoria es conectar la API con un rol no-dueño `NOSUPERUSER NOBYPASSRLS` (p. ej. `guachafit_app` con `GRANT` sobre las tablas; SQL en el apéndice §6). Mientras eso no ocurra, RLS es una capa preparada, no una garantía efectiva.
+- **Requisito de efectividad:** `FORCE ROW LEVEL SECURITY` solo somete al rol dueño de la tabla; los superusers y los roles con `BYPASSRLS` la ignoran siempre (comportamiento nativo de PostgreSQL, comprobado empíricamente). Por tanto, la vía obligatoria es conectar la API con un rol no-dueño `NOSUPERUSER NOBYPASSRLS` (p. ej. `guachafit_app` con `GRANT` sobre las tablas; SQL en el apéndice §6). El rol `guachafit_app` ya existe como **infraestructura de dev** en el PostgreSQL local y se usó para la verificación E2E de la etapa 2. **D2 (deuda operativa):** el `.env` de dev sigue apuntando `DATABASE_URL` al rol dueño (`postgres`), que ignora RLS; el cambio al rol de conexión no-dueño está documentado pero pendiente, así que en dev el aislamiento aún no es efectivo aunque las políticas estén activas.
 
-### Plan de Activación por Etapas (borrador)
+### Plan de Activación por Etapas (actualizado 2026-09-23)
 1. **Etapa 1 — `rutinas` + `plantillas_rutina` (entregada):** 100% de caminos envueltos; `ENABLE` activo (migraciones `0004_rls_multitenant.sql` y `0005_rls_plantillas.sql`). Verificada contra PostgreSQL real con rol no-dueño.
-2. **Etapa 2 — `perfiles_alumno`:** envolver directorio, expediente, antropometría, nutrición, dashboard y seeds; verificar y habilitar.
-3. **Etapa 3 — `cuotas_membresia` y `transacciones_pago`:** finanzas y conciliación con transacciones ACID ya existentes; verificar y habilitar.
-4. **Etapa 4 — `planes_membresia`:** catálogo de planes; verificar y habilitar.
-5. **Transversal:** provisionar el rol de conexión no-dueño (o `FORCE RLS`) antes de declarar el aislamiento efectivo; ejecutar la batería de penetración de tenancy contra PostgreSQL real.
+2. **Etapa 2 — finanzas: `planes_membresia`, `cuotas_membresia` y `transacciones_pago` (entregada):** `ENABLE` activo (migración `0012_rls_finanzas.sql`); 100% de caminos en `withTenant`, incluidas las rutas de sistema con bypass explícito. Verificada E2E con el rol no-dueño `guachafit_app` (30/30) + batería psql independiente; rollback documentado.
+3. **Etapa 3 — `perfiles_alumno` (pendiente):** `ENABLE` previsto en `0013` + envolver ~12 superficies (alumnos, auth/guards, entrenamiento, antropometría, nutrición, dashboard, processors y las lecturas por pool raíz dentro de transacción en finanzas — `obtenerTasaVigente`/`resolveClienteUsuarioId`); verificar y habilitar.
+4. **Transversal — D2 (pendiente):** apuntar `DATABASE_URL` al rol de conexión no-dueño `guachafit_app` para que el aislamiento sea efectivo (hoy dev conecta como dueño `postgres`); ejecutar la batería de penetración de tenancy contra PostgreSQL real antes de cada etapa.
 
 ---
 
@@ -76,13 +76,13 @@ Elegimos la **Opción B (RLS progresivo por etapas con `withTenant`)** porque pe
 - **C3:** El contrato `withTenant`/GUC elimina el interceptor muerto y hace explícito el contexto de tenant en cada transacción.
 
 ### Consecuencias Negativas (Costos y Trade-offs)
-- **T1:** Aislamiento incompleto transitorio: las cuatro tablas restantes siguen dependiendo de filtros de aplicación hasta su etapa.
+- **T1:** Aislamiento incompleto transitorio: `perfiles_alumno` (etapa 3) sigue dependiendo de filtros de aplicación hasta su etapa; las otras cinco tablas ya tienen RLS habilitado.
 - **T2:** Disciplina de desarrollo: toda consulta nueva sobre una tabla con RLS habilitado debe correr dentro de `withTenant` o falla por `deny-by-default`.
-- **T3:** Deuda de verificación: la suite unitaria usa mocks; la etapa 1 (`rutinas`, `plantillas_rutina`) ya se verificó contra PostgreSQL real con rol no-dueño, pero la batería debe repetirse antes de habilitar cada etapa restante.
+- **T3:** Deuda de verificación: la suite unitaria usa mocks; las etapas 1 y 2 (`rutinas`, `plantillas_rutina` y las 3 tablas de finanzas) ya se verificaron contra PostgreSQL real con rol no-dueño (E2E 30/30 en etapa 2 + batería psql), pero la batería debe repetirse antes de habilitar la etapa 3 (`perfiles_alumno`).
 
 ### Riesgos Mitigados y Residuales
 - **Riesgo Mitigado:** regresión masiva por `ENABLE` prematuro; políticas inertes por falta de contexto de sesión.
-- **Riesgo Residual (alto):** el rol de conexión actual es dueño y superuser de las tablas; `FORCE RLS` no cubre a superusers ni a roles `BYPASSRLS`, así que las políticas de `rutinas` y `plantillas_rutina` tampoco aíslan efectivamente en ese escenario. Debe resolverse provisionando el rol de aplicación `NOSUPERUSER NOBYPASSRLS` (apéndice §6) antes de declarar RNF-003 implementado.
+- **Riesgo Residual (alto):** el rol de conexión de dev es dueño y superuser de las tablas (`postgres`); `FORCE RLS` no cubre a superusers ni a roles `BYPASSRLS`, así que las políticas de las cinco tablas habilitadas (`rutinas`, `plantillas_rutina`, `planes_membresia`, `cuotas_membresia`, `transacciones_pago`) tampoco aíslan efectivamente en ese escenario. Debe resolverse apuntando `DATABASE_URL` al rol de aplicación `guachafit_app` (ya creado como infraestructura de dev; apéndice §6) antes de declarar RNF-003 implementado — deuda D2.
 - **Riesgo Residual:** drift futuro si una consulta nueva sobre una tabla habilitada se escribe fuera de `withTenant`; se mitiga con revisión de conformidad y tests.
 
 ---
@@ -90,14 +90,14 @@ Elegimos la **Opción B (RLS progresivo por etapas con `withTenant`)** porque pe
 ## 5. Trazabilidad y Referencias
 - Requerimientos asociados: [[RNF-003-aislamiento-multitenant-seguridad-datos-salud]], [[RF-010-rbac-jerarquia-aislamiento-tenancy]]
 - Decisiones relacionadas: [[ADR-009-modelo-multitenancy-aislamiento-entrenadores]]
-- Implementación: `packages/database/drizzle/0004_rls_multitenant.sql`, `packages/database/drizzle/0005_rls_plantillas.sql`, `packages/database/src/client.ts` (`withTenant`, `setTenantSession`), `apps/api/src/modules/entrenamiento/plantillas.service.ts` (WU11: accesos de `plantillas_rutina` envueltos)
+- Implementación: `packages/database/drizzle/0004_rls_multitenant.sql`, `packages/database/drizzle/0005_rls_plantillas.sql`, `packages/database/drizzle/0012_rls_finanzas.sql` (etapa 2: `ENABLE` de las 3 tablas de finanzas + políticas self completadas + rollback documentado), `packages/database/src/client.ts` (`withTenant`, `setTenantSession`), `apps/api/src/modules/finanzas/finanzas.service.ts` (transacción propia con `set_config` en `cobroDirecto`/`conciliar`), `apps/api/src/modules/entrenamiento/plantillas.service.ts` (WU11: accesos de `plantillas_rutina` envueltos), `apps/api/test/bdd/rnf003-rls-multitenant.spec.ts` (contrato de tenancy por etapas)
 - Documentación de arquitectura: [[02_Esquema_Base_de_Datos_PostgreSQL]]
 
 ---
 
 ## 6. Apéndice: rol de aplicación en producción (SQL de referencia)
 
-El enforcement real de RLS exige que la API se conecte con un rol **no-dueño, `NOSUPERUSER NOBYPASSRLS`**. `FORCE ROW LEVEL SECURITY` no es sustituto: solo somete al rol dueño y los superusers/`BYPASSRLS` la ignoran siempre. Pasos de referencia (ejecutar como rol administrador; ajustar tablas según las etapas habilitadas):
+El enforcement real de RLS exige que la API se conecte con un rol **no-dueño, `NOSUPERUSER NOBYPASSRLS`**. `FORCE ROW LEVEL SECURITY` no es sustituto: solo somete al rol dueño y los superusers/`BYPASSRLS` la ignoran siempre. El rol `guachafit_app` ya está creado en el PostgreSQL de dev como **infraestructura de dev** y fue el rol usado en la verificación E2E de la etapa 2; el SQL de abajo queda como referencia (dev/producción). **D2 (pendiente):** en dev, `DATABASE_URL` sigue apuntando al rol dueño (`postgres`). Pasos de referencia (ejecutar como rol administrador; ajustar tablas según las etapas habilitadas):
 
 ```sql
 -- 1. Rol de aplicación: sin privilegios de superusuario ni bypass de RLS.
@@ -128,4 +128,4 @@ SELECT set_config('app.is_superadmin',         'true',               true); -- s
 COMMIT;
 ```
 
-Verificación mínima post-provisión (repetir antes de cada etapa): con el rol de aplicación, sin GUC la tabla habilitada devuelve 0 filas; con `app.current_entrenador_id = A` solo las filas de A; con `app.is_superadmin = 'true'` todas; INSERT con `entrenador_id = B` bajo el GUC de A falla por `WITH CHECK`.
+Verificación mínima post-provisión (repetir antes de cada etapa; ejecutada en etapa 2 con `guachafit_app`: 30/30 E2E + batería psql independiente): con el rol de aplicación, sin GUC la tabla habilitada devuelve 0 filas; con `app.current_entrenador_id = A` solo las filas de A; con `app.is_superadmin = 'true'` todas; INSERT con `entrenador_id = B` bajo el GUC de A falla por `WITH CHECK`.

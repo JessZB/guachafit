@@ -2,7 +2,7 @@
 id: ADR-013
 titulo: "ADR-013: Paginación Server-Side y Stack de Listas — Envelopes + TanStack Query + Radix"
 fecha: 2026-09-20
-estado: propuesto
+estado: aceptado
 decisores:
   - "Tech Lead"
   - "Principal Architect"
@@ -20,7 +20,7 @@ tags:
 # ADR-013: Paginación Server-Side y Stack de Listas — Envelopes + TanStack Query + Radix
 
 ## 1. Estado
-`propuesto`
+`aceptado`
 
 ---
 

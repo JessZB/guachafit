@@ -2,7 +2,7 @@
 id: ADR-012
 titulo: "ADR-012: Modo Demo Explícito — Prohibido Presentar Datos Sintéticos como Reales"
 fecha: 2026-09-20
-estado: propuesto
+estado: aceptado
 decisores:
   - "Tech Lead"
   - "Principal Architect"
@@ -19,7 +19,7 @@ tags:
 # ADR-012: Modo Demo Explícito — Prohibido Presentar Datos Sintéticos como Reales
 
 ## 1. Estado
-`propuesto`
+`aceptado`
 
 ---
 

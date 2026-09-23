@@ -980,12 +980,17 @@ CREATE TABLE tasas_cambio_referencia (
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
--- ENTREGA POR ETAPAS (migraciones 0004_rls_multitenant.sql y 0005_rls_plantillas.sql):
+-- ENTREGA POR ETAPAS (migraciones 0004_rls_multitenant.sql, 0005_rls_plantillas.sql y
+-- 0012_rls_finanzas.sql):
 --   * Políticas creadas para las 6 tablas de RNF-003 + RF-017 (se sumó plantillas_rutina).
---   * ENABLE ROW LEVEL SECURITY aplicado SOLO en `rutinas` (0004) y
---     `plantillas_rutina` (0005) — etapa 1.
---   * Las 4 tablas restantes quedan PREPARADAS (políticas creadas, ENABLE
---     comentado) hasta que el 100% de sus caminos corran dentro de withTenant().
+--   * ENABLE ROW LEVEL SECURITY aplicado en:
+--       - etapa 1: `rutinas` (0004) y `plantillas_rutina` (0005);
+--       - etapa 2 (finanzas): `planes_membresia`, `cuotas_membresia` y
+--         `transacciones_pago` (0012, migración aditiva que completa las políticas
+--         self del alumno para los caminos reales: self-select del plan de su cuota,
+--         self-update de la cuota al reportar pago y self-insert de la transacción).
+--   * `perfiles_alumno` queda PREPARADA (políticas creadas, ENABLE pendiente:
+--     etapa 3) hasta que el 100% de sus caminos corran dentro de withTenant().
 -- -----------------------------------------------------------------------------
 
 -- Funciones de sesión (STABLE, sin SECURITY DEFINER: current_setting no requiere privilegios)
@@ -1025,7 +1030,7 @@ CREATE POLICY rls_plantillas_rutina ON plantillas_rutina
 
 ALTER TABLE plantillas_rutina ENABLE ROW LEVEL SECURITY;
 
--- perfiles_alumno — PREPARADA (ENABLE pendiente)
+-- perfiles_alumno — PREPARADA (ENABLE pendiente: etapa 3)
 CREATE POLICY rls_perfiles_alumno ON perfiles_alumno
   FOR ALL
   USING (is_superadmin() OR entrenador_id = current_entrenador_id())
@@ -1035,13 +1040,26 @@ CREATE POLICY rls_perfiles_alumno_self_select ON perfiles_alumno
   FOR SELECT
   USING (usuario_id = current_usuario_id());
 
--- planes_membresia — PREPARADA (ENABLE pendiente)
+-- planes_membresia — ETAPA 2: RLS habilitado (0012_rls_finanzas.sql)
 CREATE POLICY rls_planes_membresia ON planes_membresia
   FOR ALL
   USING (is_superadmin() OR entrenador_id = current_entrenador_id())
   WITH CHECK (is_superadmin() OR entrenador_id = current_entrenador_id());
 
--- cuotas_membresia — PREPARADA (ENABLE pendiente)
+-- self-select del alumno (0012): solo los planes que respaldan SUS cuotas.
+CREATE POLICY rls_planes_membresia_self_select ON planes_membresia
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM cuotas_membresia c
+      WHERE c.plan_id = planes_membresia.id
+        AND c.cliente_id = current_usuario_id()
+    )
+  );
+
+ALTER TABLE planes_membresia ENABLE ROW LEVEL SECURITY;
+
+-- cuotas_membresia — ETAPA 2: RLS habilitado (0012_rls_finanzas.sql)
 CREATE POLICY rls_cuotas_membresia ON cuotas_membresia
   FOR ALL
   USING (is_superadmin() OR entrenador_id = current_entrenador_id())
@@ -1051,7 +1069,16 @@ CREATE POLICY rls_cuotas_membresia_self_select ON cuotas_membresia
   FOR SELECT
   USING (cliente_id = current_usuario_id());
 
--- transacciones_pago — PREPARADA (ENABLE pendiente)
+-- self-update del alumno al reportar su pago (0012): solo su propia fila;
+-- la máquina de estados y los montos los valida la aplicación.
+CREATE POLICY rls_cuotas_membresia_self_update ON cuotas_membresia
+  FOR UPDATE
+  USING (cliente_id = current_usuario_id())
+  WITH CHECK (cliente_id = current_usuario_id());
+
+ALTER TABLE cuotas_membresia ENABLE ROW LEVEL SECURITY;
+
+-- transacciones_pago — ETAPA 2: RLS habilitado (0012_rls_finanzas.sql)
 CREATE POLICY rls_transacciones_pago ON transacciones_pago
   FOR ALL
   USING (is_superadmin() OR entrenador_id = current_entrenador_id())
@@ -1061,12 +1088,16 @@ CREATE POLICY rls_transacciones_pago_self_select ON transacciones_pago
   FOR SELECT
   USING (cliente_id = current_usuario_id());
 
--- ETAPA 2 (PENDIENTE): descomentar por tabla únicamente cuando TODAS sus consultas
--- de tenant corran dentro de withTenant() y la suite lo verifique.
+-- self-insert del alumno al reportar su pago (0012).
+CREATE POLICY rls_transacciones_pago_self_insert ON transacciones_pago
+  FOR INSERT
+  WITH CHECK (cliente_id = current_usuario_id());
+
+ALTER TABLE transacciones_pago ENABLE ROW LEVEL SECURITY;
+
+-- ETAPA 3 (PENDIENTE — `perfiles_alumno`): descomentar únicamente cuando TODAS
+-- sus consultas de tenant corran dentro de withTenant() y la suite lo verifique.
 -- ALTER TABLE perfiles_alumno ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE planes_membresia ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE cuotas_membresia ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE transacciones_pago ENABLE ROW LEVEL SECURITY;
 
 -- REQUISITO DE EFECTIVIDAD: el rol dueño de las tablas ignora RLS y
 -- FORCE ROW LEVEL SECURITY solo somete al dueño; los superusers y los roles con
@@ -1082,7 +1113,7 @@ CREATE POLICY rls_transacciones_pago_self_select ON transacciones_pago
 
 | Requerimiento / ADR | Invariante de Negocio | Implementación en PostgreSQL |
 | :--- | :--- | :--- |
-| **RNF-003 / ADR-009 / [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]]** | Aislamiento multi-tenant entre carteras de entrenadores (entrega por etapas). | Row-Level Security con funciones `current_entrenador_id()` / `current_usuario_id()` / `is_superadmin()`: `ENABLE` operativo en `rutinas` y `plantillas_rutina` (etapa 1, migraciones `0004`/`0005`); las otras 4 tablas tienen políticas creadas y `ENABLE` pendiente. Efectividad condicionada a rol de conexión no-dueño `NOSUPERUSER NOBYPASSRLS` (`FORCE RLS` no cubre a superusers/`BYPASSRLS`). |
+| **RNF-003 / ADR-009 / [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]]** | Aislamiento multi-tenant entre carteras de entrenadores (entrega por etapas). | Row-Level Security con funciones `current_entrenador_id()` / `current_usuario_id()` / `is_superadmin()`: `ENABLE` operativo en `rutinas` y `plantillas_rutina` (etapa 1, migraciones `0004`/`0005`) y en las 3 tablas de finanzas `planes_membresia`, `cuotas_membresia` y `transacciones_pago` (etapa 2, migración `0012`); `perfiles_alumno` tiene políticas creadas y `ENABLE` pendiente (etapa 3). Efectividad condicionada a rol de conexión no-dueño `NOSUPERUSER NOBYPASSRLS` (D2: dev aún conecta como dueño; `FORCE RLS` no cubre a superusers/`BYPASSRLS`). |
 | **RF-011 / RNF-003** | Ficha de salud privada confidencial (exclusiva del coach). | Columna `ficha_salud_privada TEXT` cifrada con `AES-256-GCM` y excluida de los DTOs de alumnos. |
 | **RF-012 (Soft Delete)** | Preservación del histórico deportivo y contable al dar de baja un cliente. | Columna `deleted_at_utc` con índice parcial `WHERE deleted_at_utc IS NULL`. |
 | **RNF-002 (Precisión Decimal)** | Cero error binario de redondeo (prohibido IEEE 754 `float`/`double`). | Columnas `NUMERIC(14,2)` para dinero y `NUMERIC(12,4)` para tasas cambiarias. |
@@ -1094,18 +1125,18 @@ CREATE POLICY rls_transacciones_pago_self_select ON transacciones_pago
 | **RF-002 (Metas Nutricionales)** | Una fila de metas por alumno: cada objetivo es anulable (`NULL` = no configurado, nunca `0` fabricado) y admite hasta 10 recursos educativos por enlace. | Tabla `metas_nutricionales` con `UNIQUE (alumno_id)` y FK `alumno_id → usuarios(id) ON DELETE CASCADE` (migración `0009`). |
 | **RF-002 (Calendario Nutricional)** | El estado `No reportado` del calendario es derivado, no un dato persistido. | Sin columna de estado: se calcula por la ausencia de fila en `checkins_nutricionales` para el día cerrado (RF-002 §6). |
 
-### 3.1. Estado de Implementación RLS (2026-09-20)
+### 3.1. Estado de Implementación RLS (2026-09-23)
 
 | Tabla | Políticas creadas | `ENABLE RLS` | Caminos de tenant envueltos en `withTenant` |
 | :--- | :---: | :---: | :--- |
 | `rutinas` | ✅ | ✅ (etapa 1, WU7) | 100% |
 | `plantillas_rutina` | ✅ | ✅ (etapa 1, WU11 — migración `0005`) | 100% |
-| `perfiles_alumno` | ✅ | ⏳ pendiente | parcial |
-| `planes_membresia` | ✅ | ⏳ pendiente | parcial |
-| `cuotas_membresia` | ✅ | ⏳ pendiente | parcial |
-| `transacciones_pago` | ✅ | ⏳ pendiente | parcial |
+| `planes_membresia` | ✅ (+ self-select, 0012) | ✅ (etapa 2 — migración `0012`) | 100% |
+| `cuotas_membresia` | ✅ (+ self-update, 0012) | ✅ (etapa 2 — migración `0012`) | 100% |
+| `transacciones_pago` | ✅ (+ self-insert, 0012) | ✅ (etapa 2 — migración `0012`) | 100% |
+| `perfiles_alumno` | ✅ | ⏳ pendiente (etapa 3, prevista en `0013`) | parcial |
 
-> **Verificación real de etapa 1 ejecutada:** la suite `rnf003-rls-multitenant.spec.ts` valida mecanismo/contrato con mocks y la batería real contra PostgreSQL con rol no-dueño `NOSUPERUSER NOBYPASSRLS` confirmó `deny-by-default` sin GUC, aislamiento por GUC, bypass superadmin explícito y bloqueo de escrituras cross-tenant en `rutinas` y `plantillas_rutina`. `FORCE ROW LEVEL SECURITY` no sustituye al rol no-dueño (superusers/`BYPASSRLS` la ignoran); las etapas restantes deben repetir la batería. Ver [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]].
+> **Verificación real de etapas 1 y 2 ejecutada:** la suite `rnf003-rls-multitenant.spec.ts` valida mecanismo/contrato con mocks y la batería real contra PostgreSQL con rol no-dueño `NOSUPERUSER NOBYPASSRLS` confirmó `deny-by-default` sin GUC, aislamiento por GUC, bypass superadmin explícito y bloqueo de escrituras cross-tenant en `rutinas` y `plantillas_rutina` (etapa 1, rol `guachafit_rls_test`) y en las 3 tablas de finanzas (etapa 2, E2E 30/30 con rol `guachafit_app` + batería psql independiente). **D2:** el `.env` de dev sigue conectando como rol dueño (`postgres`), por lo que el enforcement real exige apuntar `DATABASE_URL` a `guachafit_app`; **nota:** las políticas self acotan fila, no columnas/montos (la app valida transiciones y montos). `FORCE ROW LEVEL SECURITY` no sustituye al rol no-dueño (superusers/`BYPASSRLS` la ignoran); la etapa 3 (`perfiles_alumno`) debe repetir la batería. Ver [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]].
 
 ---
 

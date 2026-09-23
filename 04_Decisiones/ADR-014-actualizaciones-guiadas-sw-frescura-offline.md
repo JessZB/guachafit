@@ -2,7 +2,7 @@
 id: ADR-014
 titulo: "ADR-014: Actualizaciones Guiadas del Service Worker, Frescura Offline y Logout Seguro"
 fecha: 2026-09-21
-estado: propuesto
+estado: aceptado
 decisores:
   - "Tech Lead"
   - "Principal Architect"
@@ -20,7 +20,7 @@ tags:
 # ADR-014: Actualizaciones Guiadas del Service Worker, Frescura Offline y Logout Seguro
 
 ## 1. Estado
-`propuesto`
+`aceptado`
 
 ---
 
