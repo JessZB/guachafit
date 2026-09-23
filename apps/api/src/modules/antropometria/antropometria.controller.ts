@@ -10,6 +10,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { AntropometriaService } from './antropometria.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -35,6 +36,8 @@ export class AntropometriaController {
 
   /**
    * Generar Presigned Upload URL PUT directa a Cloudflare R2 (ADR-007, RNF-001).
+   * El contrato se valida aquí con 400 (mensaje del contrato) antes de tocar el servicio:
+   * un MIME no permitido (p. ej. PDF fuera de `nutricion-recursos`) nunca debe ser un 500.
    * Roles: Entrenador, Alumno
    */
   @Post('presigned-upload-url')
@@ -42,13 +45,18 @@ export class AntropometriaController {
   @Roles(Rol.ENTRENADOR, Rol.ALUMNO)
   @HttpCode(HttpStatus.OK)
   async solicitarPresignedUploadUrl(@Req() req: any, @Body() body: unknown) {
-    const dto = PresignedUploadUrlSchema.parse(body);
+    const validacion = PresignedUploadUrlSchema.safeParse(body);
+    if (!validacion.success) {
+      throw new BadRequestException(
+        validacion.error.issues[0]?.message ?? 'Datos de subida inválidos.'
+      );
+    }
     const caller = {
       id: req.user.sub,
       rol: req.user.rol,
       entrenadorId: req.user.entrenadorId,
     };
-    return this.antropometriaService.solicitarPresignedUploadUrl(caller, dto);
+    return this.antropometriaService.solicitarPresignedUploadUrl(caller, validacion.data);
   }
 
   /**

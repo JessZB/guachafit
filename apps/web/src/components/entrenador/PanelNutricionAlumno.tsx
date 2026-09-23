@@ -2,8 +2,10 @@
  * RF-002 · vista del coach dentro del expediente del alumno (pestaña "Nutrición").
  *
  * Muestra:
- * - RN-01: metas del alumno (calorías, macros, agua y recursos educativos por enlace) con editor
- *   y estado honesto "Sin metas configuradas" (204 real, nunca un 0 fabricado).
+ * - RN-01: metas del alumno (calorías, macros, agua y recursos educativos: enlace externo o
+ *   PDF subido a la bóveda con presign+PUT reales, con estado de subida y previsualización por
+ *   el enlace firmado) con editor y estado honesto "Sin metas configuradas" (204 real, nunca un
+ *   0 fabricado).
  * - Escenario 2/3 + §6: calendario de check-ins de los últimos 30 días con estado
  *   (`cumplido`/`parcial`/`no_cumplido`/`No reportado` derivado), totales vs metas, semáforo de
  *   tolerancia ±10 % y galería de fotos de platos con el visor accesible compartido.
@@ -31,6 +33,15 @@ import {
   resumenMetas,
   type DiaCalendarioNutricional,
 } from '../../lib/nutricion-metas';
+import {
+  construirRecursosParaGuardar,
+  esFilaRecursoVacia,
+  filaRecursoVacia,
+  LIMITE_RECURSOS_EDUCATIVOS,
+  tieneFirmaPdf,
+  validarArchivoPdf,
+  type FilaRecursoFormulario,
+} from '../../lib/recursos-pdf';
 import { checkinsNutricionalesDemo, crearMetasNutricionalesDemo } from '../../lib/demo-nutricion';
 import { fechaCalendarioLocal, formatFechaLargaCalendario, sumarDiasCalendario, ultimosDiasCalendario } from '../../lib/date-format';
 import { pluralizar } from '../../lib/pluralizar';
@@ -40,12 +51,16 @@ import {
   type CheckinNutricionalDetalleDTO,
   type FotoComidaDetalleDTO,
   type MetasNutricionalesDetalleDTO,
-  type RecursoNutricionalDTO,
+  type PresignedUploadUrlResponseDTO,
+  type RecursoNutricionalDetalleDTO,
 } from '@guachafit/shared';
 import {
   Activity,
+  AlertTriangle,
   Camera,
   ExternalLink,
+  FileText,
+  FileUp,
   Gauge,
   Loader2,
   Pencil,
@@ -76,11 +91,6 @@ const CLASES_TONO: Record<string, string> = {
 
 const tonoDe = (tono: string): string => CLASES_TONO[tono] ?? CLASES_TONO.neutral;
 
-interface FormularioRecurso {
-  titulo: string;
-  url: string;
-}
-
 export function PanelNutricionAlumno({
   alumnoUsuarioId,
   alumnoNombre,
@@ -105,7 +115,7 @@ export function PanelNutricionAlumno({
   const [carbohidratos, setCarbohidratos] = useState('');
   const [grasas, setGrasas] = useState('');
   const [agua, setAgua] = useState('');
-  const [recursos, setRecursos] = useState<FormularioRecurso[]>([]);
+  const [recursos, setRecursos] = useState<FilaRecursoFormulario[]>([]);
   const [isGuardandoMetas, setIsGuardandoMetas] = useState(false);
   const [metasFormError, setMetasFormError] = useState<string | null>(null);
   const [metasFormExito, setMetasFormExito] = useState<string | null>(null);
@@ -194,7 +204,16 @@ export function PanelNutricionAlumno({
     );
     setGrasas(metas?.grasasGramosObjetivo !== null && metas ? String(metas.grasasGramosObjetivo) : '');
     setAgua(metas?.aguaLitrosObjetivo ?? '');
-    setRecursos((metas?.recursos ?? []).map((recurso) => ({ titulo: recurso.titulo, url: recurso.url })));
+    // Un recurso subido se reabre con su `storageKey` y SIN la URL firmada (caduca): la URL
+    // externa solo se precarga cuando el recurso no es un archivo de la bóveda.
+    setRecursos(
+      (metas?.recursos ?? []).map((recurso) => ({
+        ...filaRecursoVacia(),
+        titulo: recurso.titulo,
+        url: recurso.storageKey ? '' : recurso.url ?? '',
+        storageKey: recurso.storageKey ?? '',
+      }))
+    );
     setMetasFormError(null);
     setMetasFormExito(null);
     setIsModalMetasOpen(true);
@@ -213,13 +232,12 @@ export function PanelNutricionAlumno({
     setMetasFormError(null);
     setMetasFormExito(null);
 
-    const recursosValidos: RecursoNutricionalDTO[] = [];
-    for (const recurso of recursos) {
-      const titulo = recurso.titulo.trim();
-      const url = recurso.url.trim();
-      if (titulo === '' && url === '') continue;
-      recursosValidos.push({ titulo, url });
+    if (recursos.some((recurso) => recurso.subiendo)) {
+      setMetasFormError('Espera a que termine la subida del PDF antes de guardar.');
+      return;
     }
+
+    const recursosValidos = construirRecursosParaGuardar(recursos);
 
     const candidato = {
       caloriasObjetivo: aEntero(calorias),
@@ -236,8 +254,23 @@ export function PanelNutricionAlumno({
       return;
     }
 
-    // MODO DEMO EXPLÍCITO: la edición se simula localmente y se declara como tal.
+    // MODO DEMO EXPLÍCITO: la edición se simula localmente y se declara como tal. Un PDF subido
+    // en demo conserva su previsualización local (blob URL), nunca viaja a la API.
     if (isDemoMode) {
+      const recursosDemo: RecursoNutricionalDetalleDTO[] = (validacion.data.recursos ?? []).map(
+        (recurso) => {
+          if (recurso.storageKey) {
+            const fila = recursos.find((item) => item.storageKey === recurso.storageKey);
+            return {
+              titulo: recurso.titulo,
+              url: fila?.url || null,
+              storageKey: recurso.storageKey,
+            };
+          }
+          return { titulo: recurso.titulo, url: recurso.url ?? null, storageKey: null };
+        }
+      );
+
       setMetas({
         id: metas?.id ?? 'demo-metas-nutricion',
         alumnoId: alumnoUsuarioId,
@@ -246,7 +279,7 @@ export function PanelNutricionAlumno({
         carbohidratosGramosObjetivo: validacion.data.carbohidratosGramosObjetivo ?? null,
         grasasGramosObjetivo: validacion.data.grasasGramosObjetivo ?? null,
         aguaLitrosObjetivo: validacion.data.aguaLitrosObjetivo ?? null,
-        recursos: validacion.data.recursos ?? [],
+        recursos: recursosDemo,
         createdAtUtc: metas?.createdAtUtc ?? new Date().toISOString(),
         updatedAtUtc: new Date().toISOString(),
       });
@@ -270,6 +303,89 @@ export function PanelNutricionAlumno({
       setIsGuardandoMetas(false);
     }
   };
+
+  /** Actualiza una fila del editor sin tocar las demás. */
+  const actualizarFilaRecurso = (indice: number, cambios: Partial<FilaRecursoFormulario>) => {
+    setRecursos((previos) =>
+      previos.map((item, i) => (i === indice ? { ...item, ...cambios } : item))
+    );
+  };
+
+  /**
+   * RF-002 RN-01 / RNF-001: sube el PDF elegido con presign + PUT reales. La validación es
+   * real (MIME/extensión, tamaño y firma `%PDF-` del contenido) antes de pedir la URL firmada.
+   */
+  const subirPdf = async (indice: number, archivo: File | null | undefined) => {
+    if (!archivo) return;
+
+    const errorFormato = validarArchivoPdf(archivo);
+    if (errorFormato) {
+      actualizarFilaRecurso(indice, { errorSubida: errorFormato });
+      return;
+    }
+    if (!(await tieneFirmaPdf(archivo))) {
+      actualizarFilaRecurso(indice, {
+        errorSubida: 'El archivo no parece un PDF válido (no encontramos su firma). Elige otro archivo.',
+      });
+      return;
+    }
+
+    actualizarFilaRecurso(indice, { subiendo: true, errorSubida: null });
+
+    // MODO DEMO: la subida se simula localmente y se declara; nunca viaja a la API.
+    if (isDemoMode) {
+      const previewUrl = URL.createObjectURL(archivo);
+      actualizarFilaRecurso(indice, {
+        subiendo: false,
+        storageKey: `nutricion-recursos/${alumnoUsuarioId}/2026/${crypto.randomUUID()}.pdf`,
+        nombreArchivo: archivo.name,
+        url: previewUrl,
+      });
+      return;
+    }
+
+    try {
+      const presigned = await apiClient<PresignedUploadUrlResponseDTO>(
+        '/antropometria/presigned-upload-url',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            modulo: 'nutricion-recursos',
+            alumnoId: alumnoUsuarioId,
+            mimeType: 'application/pdf',
+          }),
+        }
+      );
+
+      const respuesta = await fetch(presigned.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/pdf' },
+        body: archivo,
+      });
+      if (!respuesta.ok) {
+        throw new Error(
+          `No se pudo subir el PDF (${respuesta.status}). Revisa tu conexión e inténtalo de nuevo.`
+        );
+      }
+
+      actualizarFilaRecurso(indice, {
+        subiendo: false,
+        errorSubida: null,
+        storageKey: presigned.storageKey,
+        nombreArchivo: archivo.name,
+        url: '',
+      });
+    } catch (err: any) {
+      actualizarFilaRecurso(indice, {
+        subiendo: false,
+        errorSubida: err?.message || 'No se pudo subir el PDF. Inténtalo de nuevo.',
+      });
+    }
+  };
+
+  /** Quita el recurso de la lista. El objeto ya subido queda huérfano en la bóveda (sin DELETE). */
+  const quitarRecurso = (indice: number) =>
+    setRecursos((previos) => previos.filter((_, i) => i !== indice));
 
   const recursosVisibles = metas?.recursos ?? [];
   const objetivos = resumenMetas(metas);
@@ -344,16 +460,30 @@ export function PanelNutricionAlumno({
             </span>
             <ul className="space-y-1.5">
               {recursosVisibles.map((recurso) => (
-                <li key={`${recurso.url}-${recurso.titulo}`}>
-                  <a
-                    href={recurso.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 min-h-11 text-xs font-bold text-primary hover:underline"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                    <span>{recurso.titulo}</span>
-                  </a>
+                <li key={recurso.storageKey ?? recurso.url ?? recurso.titulo}>
+                  {recurso.url ? (
+                    <a
+                      href={recurso.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 min-h-11 text-xs font-bold text-primary hover:underline"
+                    >
+                      {recurso.storageKey ? (
+                        <FileText className="h-3.5 w-3.5 shrink-0" />
+                      ) : (
+                        <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                      )}
+                      <span>{recurso.titulo}</span>
+                      {recurso.storageKey && (
+                        <span className="text-[10px] font-bold uppercase text-muted-foreground">PDF</span>
+                      )}
+                    </a>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 min-h-11 text-xs font-semibold text-muted-foreground">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning" />
+                      <span>{recurso.titulo} · no pudimos generar el enlace del archivo</span>
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -487,50 +617,131 @@ export function PanelNutricionAlumno({
                   <span className="text-xs font-bold text-foreground">Recursos educativos</span>
                   <button
                     type="button"
-                    disabled={recursos.length >= 10}
-                    onClick={() => setRecursos((previos) => [...previos, { titulo: '', url: '' }])}
+                    disabled={
+                      recursos.length >= LIMITE_RECURSOS_EDUCATIVOS ||
+                      recursos.some((recurso) => esFilaRecursoVacia(recurso))
+                    }
+                    onClick={() => setRecursos((previos) => [...previos, filaRecursoVacia()])}
                     className="min-h-11 px-3 rounded-xl bg-secondary border border-border text-foreground text-xs font-bold hover:bg-secondary/70 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    <span>Añadir enlace</span>
+                    <span>Añadir recurso</span>
                   </button>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  Enlaces a listas de compras o distribución de comidas (máx. 10).
+                  Pega un enlace externo o sube un PDF (lista de compras, distribución de comidas).
+                  Los PDFs se guardan en la bóveda privada del alumno (máx. 10 recursos).
                 </p>
 
                 {recursos.map((recurso, indice) => (
-                  <div key={indice} className="grid grid-cols-1 sm:grid-cols-[1fr_1.2fr_auto] gap-2">
-                    <input
-                      type="text"
-                      value={recurso.titulo}
-                      onChange={(e) =>
-                        setRecursos((previos) =>
-                          previos.map((item, i) => (i === indice ? { ...item, titulo: e.target.value } : item))
-                        )
-                      }
-                      placeholder="Título (ej. Lista de compras)"
-                      className="w-full min-h-11 px-3 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-hidden focus:border-primary"
-                    />
-                    <input
-                      type="url"
-                      value={recurso.url}
-                      onChange={(e) =>
-                        setRecursos((previos) =>
-                          previos.map((item, i) => (i === indice ? { ...item, url: e.target.value } : item))
-                        )
-                      }
-                      placeholder="https://…"
-                      className="w-full min-h-11 px-3 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-hidden focus:border-primary"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setRecursos((previos) => previos.filter((_, i) => i !== indice))}
-                      aria-label={`Quitar recurso ${indice + 1}`}
-                      className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                  <div
+                    key={indice}
+                    className="rounded-2xl border border-border bg-secondary/20 p-2.5 space-y-2"
+                  >
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={recurso.titulo}
+                        onChange={(e) => actualizarFilaRecurso(indice, { titulo: e.target.value })}
+                        placeholder="Título (ej. Lista de compras)"
+                        className="w-full min-h-11 px-3 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-hidden focus:border-primary"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => quitarRecurso(indice)}
+                        aria-label={`Quitar recurso ${indice + 1}`}
+                        className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    {recurso.storageKey ? (
+                      <div className="flex flex-wrap items-center gap-2 min-h-11">
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-success bg-success/10 border border-success/25 rounded-full px-2.5 py-1">
+                          <FileText className="h-3.5 w-3.5" />
+                          {recurso.nombreArchivo ?? 'PDF subido a la bóveda'}
+                        </span>
+                        {recurso.url ? (
+                          <a
+                            href={recurso.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 min-h-11 text-xs font-bold text-primary hover:underline"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            <span>Ver PDF</span>
+                          </a>
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground">
+                            Vista previa disponible al guardar
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            actualizarFilaRecurso(indice, {
+                              storageKey: '',
+                              nombreArchivo: null,
+                              url: '',
+                              errorSubida: null,
+                            })
+                          }
+                          className="min-h-11 px-3 rounded-xl border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          Quitar archivo
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input
+                          type="url"
+                          value={recurso.url}
+                          onChange={(e) => actualizarFilaRecurso(indice, { url: e.target.value })}
+                          placeholder="https://… (enlace externo)"
+                          className="w-full min-h-11 px-3 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-hidden focus:border-primary"
+                        />
+                        <label
+                          className={`shrink-0 min-h-11 px-3 rounded-xl border border-border text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                            recurso.subiendo
+                              ? 'opacity-60 cursor-wait bg-secondary'
+                              : 'bg-secondary hover:bg-secondary/70 text-foreground'
+                          }`}
+                        >
+                          <input
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            className="sr-only"
+                            disabled={recurso.subiendo}
+                            onChange={(e) => {
+                              const archivo = e.target.files?.[0];
+                              e.target.value = '';
+                              void subirPdf(indice, archivo);
+                            }}
+                          />
+                          {recurso.subiendo ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <FileUp className="h-3.5 w-3.5" />
+                          )}
+                          <span>{recurso.subiendo ? 'Subiendo…' : 'Subir PDF'}</span>
+                        </label>
+                      </div>
+                    )}
+
+                    {recurso.subiendo && (
+                      <p role="status" className="text-[11px] font-semibold text-muted-foreground">
+                        Subiendo el PDF a la bóveda privada…
+                      </p>
+                    )}
+                    {recurso.errorSubida && (
+                      <p
+                        role="alert"
+                        className="text-[11px] font-semibold text-destructive bg-destructive/10 border border-destructive/25 rounded-xl px-2.5 py-1.5"
+                      >
+                        {recurso.errorSubida}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>

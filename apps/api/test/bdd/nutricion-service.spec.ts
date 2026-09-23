@@ -518,6 +518,36 @@ describe('Módulo 3: Check-ins Nutricionales (NutricionService & NutricionContro
       ).rejects.toThrow();
     });
 
+    it('RNF-001: rechaza un recurso con storageKey de OTRO alumno o de otro módulo (400)', async () => {
+      const keyAjena = `nutricion-recursos/${alumnoId2}/2026/aaaaaaaa-1111-4111-8111-111111111111.pdf`;
+      await expect(
+        nutricionService.definirMetasNutricionales(coachId1, alumnoId1, {
+          recursos: [{ titulo: 'PDF ajeno', storageKey: keyAjena }],
+        })
+      ).rejects.toThrow(BadRequestException);
+
+      const keyDeOtroModulo = `comidas/${alumnoId1}/2026-09-06/aaaaaaaa-1111-4111-8111-111111111111.webp`;
+      await expect(
+        nutricionService.definirMetasNutricionales(coachId1, alumnoId1, {
+          recursos: [{ titulo: 'Foto como recurso', storageKey: keyDeOtroModulo }],
+        })
+      ).rejects.toThrow(BadRequestException);
+
+      // El rechazo no persiste medias metas: la fila del alumno sigue sin existir.
+      await expect(nutricionService.obtenerMetasNutricionales(alumnoId1)).resolves.toBeNull();
+    });
+
+    it('RNF-001: acepta un storageKey del alumno dueño y sin bóveda lo degrada con honestidad', async () => {
+      const keyPropia = `nutricion-recursos/${alumnoId1}/2026/aaaaaaaa-1111-4111-8111-111111111111.pdf`;
+      const guardadas = await nutricionService.definirMetasNutricionales(coachId1, alumnoId1, {
+        recursos: [{ titulo: 'Guía PDF', storageKey: keyPropia }],
+      });
+
+      expect(guardadas.recursos).toEqual([
+        { titulo: 'Guía PDF', url: null, storageKey: keyPropia },
+      ]);
+    });
+
     it('el controller valida el cuerpo con 400 (no un 500 de ZodError crudo)', async () => {
       const req = { user: { sub: coachId1, rol: Rol.ENTRENADOR, entrenadorId: coachId1 } };
 
@@ -879,6 +909,63 @@ describe('Módulo 3: Check-ins Nutricionales (NutricionService & NutricionContro
 
       expect(res.checkin.fotosPlatos[0].storageKey).toBe(storageKeyComida);
       expect(res.checkin.fotosPlatos[0].fotoUrl).toBeNull();
+    });
+  });
+
+  describe('10. Recursos educativos con PDF subido (RF-002 RN-01, RNF-001)', () => {
+    const keyPdfPropia = `nutricion-recursos/${alumnoId1}/2026/aaaaaaaa-1111-4111-8111-111111111111.pdf`;
+    const urlExterna = 'https://r2.guachafit.test/lista-de-compras.pdf';
+
+    it('resuelve el presigned GET del archivo subido y deja la URL externa tal cual (shape mixto)', async () => {
+      const r2Fake = {
+        generarPresignedGetUrl: vi.fn(
+          async (storageKey: string) => `https://r2.example/${storageKey}?firma=temporal`
+        ),
+      };
+      const servicio = new NutricionService(createMockDb(), r2Fake as any);
+
+      const guardadas = await servicio.definirMetasNutricionales(coachId1, alumnoId1, {
+        recursos: [
+          { titulo: 'Lista externa', url: urlExterna },
+          { titulo: 'Guía PDF', storageKey: keyPdfPropia },
+        ],
+      });
+
+      expect(guardadas.recursos).toEqual([
+        { titulo: 'Lista externa', url: urlExterna, storageKey: null },
+        {
+          titulo: 'Guía PDF',
+          url: `https://r2.example/${keyPdfPropia}?firma=temporal`,
+          storageKey: keyPdfPropia,
+        },
+      ]);
+      expect(r2Fake.generarPresignedGetUrl).toHaveBeenCalledWith(keyPdfPropia, 900);
+
+      // Alumno (sus metas) y coach (cartera) pasan por el mismo resolutor de lectura.
+      const consultadas = await servicio.obtenerMetasNutricionales(alumnoId1);
+      expect(consultadas?.recursos[1].url).toContain('firma=temporal');
+
+      const delCoach = await servicio.obtenerMetasDeAlumno(coachId1, alumnoId1);
+      expect(delCoach?.recursos[1].url).toContain('firma=temporal');
+      expect(delCoach?.recursos[0].url).toBe(urlExterna);
+    });
+
+    it('si la firma falla, el recurso queda con `url` null y la clave conservada (no rompe la lectura)', async () => {
+      const r2Caido = {
+        generarPresignedGetUrl: vi.fn().mockRejectedValue(new Error('bóveda caída')),
+      };
+      const servicio = new NutricionService(createMockDb(), r2Caido as any);
+
+      await servicio.definirMetasNutricionales(coachId1, alumnoId1, {
+        recursos: [{ titulo: 'Guía PDF', storageKey: keyPdfPropia }],
+      });
+
+      const consultadas = await servicio.obtenerMetasNutricionales(alumnoId1);
+      expect(consultadas?.recursos[0]).toEqual({
+        titulo: 'Guía PDF',
+        url: null,
+        storageKey: keyPdfPropia,
+      });
     });
   });
 });

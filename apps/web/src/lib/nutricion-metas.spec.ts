@@ -143,7 +143,23 @@ describe('metas del coach y totales reportados', () => {
     expect(metasConfiguradas(null)).toBe(false);
     expect(metasConfiguradas(metas({ grasasGramosObjetivo: 70 }))).toBe(true);
     expect(
-      metasConfiguradas(metas({ recursos: [{ titulo: 'Lista', url: 'https://demo.test/l.pdf' }] }))
+      metasConfiguradas(
+        metas({ recursos: [{ titulo: 'Lista', url: 'https://demo.test/l.pdf', storageKey: null }] })
+      )
+    ).toBe(true);
+    // Un PDF subido (aún sin URL firmada legible) también cuenta como recurso configurado.
+    expect(
+      metasConfiguradas(
+        metas({
+          recursos: [
+            {
+              titulo: 'Guía PDF',
+              url: null,
+              storageKey: 'nutricion-recursos/a1/2026/b2222222-2222-4222-8222-222222222222.pdf',
+            },
+          ],
+        })
+      )
     ).toBe(true);
   });
 

@@ -118,6 +118,8 @@ export enum ModuloUpload {
   ANTROPOMETRIA = 'antropometria',
   COMIDAS = 'comidas',
   COMPROBANTES = 'comprobantes',
+  /** RF-002 RN-01: PDFs de recursos educativos del coach (una clave por alumno). */
+  NUTRICION_RECURSOS = 'nutricion-recursos',
 }
 
 export enum EstadoCuota {

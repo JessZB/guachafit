@@ -122,6 +122,18 @@ export type FotoComidaInputDTO = z.infer<typeof FotoComidaInputSchema>;
 export type CheckinNutricionalDTO = z.infer<typeof CheckinNutricionalSchema>;
 export type MetasNutricionalesDTO = z.infer<typeof MetasNutricionalesSchema>;
 export type RecursoNutricionalDTO = z.infer<typeof RecursoNutricionalSchema>;
+
+/**
+ * RF-002 RN-01: recurso educativo ya resuelto para lectura. `url` es la URL externa tal cual o
+ * la URL firmada de la bóveda (presigned GET, TTL del proyecto) del archivo subido; queda `null`
+ * si la firma falla o no hay bóveda configurada (degradación honesta, nunca un enlace fabricado).
+ * `storageKey` solo está presente cuando el recurso es un archivo subido.
+ */
+export interface RecursoNutricionalDetalleDTO {
+  titulo: string;
+  url: string | null;
+  storageKey: string | null;
+}
 export type FiltroSesionesAlumnoDTO = z.infer<typeof FiltroSesionesAlumnoSchema>;
 export type FiltroCheckinsNutricionalesDTO = z.infer<typeof FiltroCheckinsNutricionalesSchema>;
 /** WU25a: filtros server-side del monitor de adherencia (q + semáforo + orden). */
@@ -898,7 +910,7 @@ export interface MetasNutricionalesDetalleDTO {
   carbohidratosGramosObjetivo: number | null;
   grasasGramosObjetivo: number | null;
   aguaLitrosObjetivo: string | null;
-  recursos: RecursoNutricionalDTO[];
+  recursos: RecursoNutricionalDetalleDTO[];
   createdAtUtc: string;
   updatedAtUtc: string;
 }

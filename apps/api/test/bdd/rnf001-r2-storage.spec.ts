@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { Test } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import {
   AnguloFoto,
   PresignedUploadUrlSchema,
@@ -113,6 +115,50 @@ describe('RNF-001: Almacenamiento Seguro, Privacidad y Bóveda Cloudflare R2', (
       expect(mimeGif.success).toBe(false);
     });
 
+    it('RF-002 RN-01: acepta PDF SOLO para el módulo de recursos nutricionales', () => {
+      const pdfRecursos = PresignedUploadUrlSchema.safeParse({
+        modulo: 'nutricion-recursos',
+        alumnoId,
+        mimeType: 'application/pdf',
+      });
+      expect(pdfRecursos.success).toBe(true);
+
+      // El módulo de recursos es documental: una imagen no es un recurso válido.
+      const imagenEnRecursos = PresignedUploadUrlSchema.safeParse({
+        modulo: 'nutricion-recursos',
+        alumnoId,
+        mimeType: 'image/webp',
+      });
+      expect(imagenEnRecursos.success).toBe(false);
+
+      // Y el PDF sigue vetado en los módulos de imágenes (comidas/comprobantes/antropometría).
+      const pdfEnComidas = PresignedUploadUrlSchema.safeParse({
+        modulo: 'comidas',
+        alumnoId,
+        mimeType: 'application/pdf',
+      });
+      expect(pdfEnComidas.success).toBe(false);
+    });
+
+    it('RF-002 RN-01: genera storageKey .pdf del módulo de recursos y la valida estructuralmente', async () => {
+      const resultado = await r2Storage.generarPresignedUploadUrl(
+        { modulo: 'nutricion-recursos', alumnoId, mimeType: 'application/pdf' },
+        customUuid
+      );
+
+      expect(resultado.storageKey).toBe(`nutricion-recursos/${alumnoId}/2026/${customUuid}.pdf`);
+      expect(resultado.expiresInSeconds).toBe(900);
+      expect(r2Storage.validarStorageKey(resultado.storageKey)).toBe(true);
+      // El Content-Type autorizado viaja firmado: el PUT debe declararlo exactamente.
+      expect(decodeURIComponent(resultado.uploadUrl)).toContain('X-Amz-SignedHeaders=content-type');
+
+      // Una clave de otro módulo (o con extensión no documental) no es una clave de recurso.
+      expect(r2Storage.validarStorageKey(`antropometria/${alumnoId}/2026/${customUuid}.webp`)).toBe(true);
+      expect(
+        r2Storage.validarStorageKey(`nutricion-recursos/${alumnoId}/2026/${customUuid}.exe`)
+      ).toBe(false);
+    });
+
     it('debe rechazar solicitudes con UUID de alumno inválido', () => {
       const uuidInvalido = PresignedUploadUrlSchema.safeParse({
         modulo: 'antropometria',
@@ -123,6 +169,63 @@ describe('RNF-001: Almacenamiento Seguro, Privacidad y Bóveda Cloudflare R2', (
       if (!uuidInvalido.success) {
         expect(uuidInvalido.error.errors[0].message).toMatch(/UUID válido/i);
       }
+    });
+  });
+
+  describe('Escenario 5: Inyección real de la configuración del entorno (regresión RNF-001)', () => {
+    const alumnoIdPresign = 'a5555555-5555-4555-8555-555555555555';
+
+    async function bovedaInyectada(valores: Record<string, string | undefined>) {
+      const modulo = await Test.createTestingModule({
+        providers: [
+          R2StorageService,
+          {
+            provide: ConfigService,
+            useValue: { get: (clave: string) => valores[clave] },
+          },
+        ],
+      }).compile();
+      return modulo.get(R2StorageService);
+    }
+
+    it('la bóveda inyectada por el contenedor Nest lee STORAGE_* y NO cae al endpoint mock', async () => {
+      const boveda = await bovedaInyectada({
+        STORAGE_ENDPOINT: 'http://localhost:9000',
+        STORAGE_BUCKET: 'guachafit-r2-local',
+        STORAGE_REGION: 'us-east-1',
+        STORAGE_ACCESS_KEY_ID: 'minioadmin',
+        STORAGE_SECRET_ACCESS_KEY: 'minioadmin',
+      });
+
+      expect(boveda.obtenerEndpoint()).toBe('http://localhost:9000');
+      expect(boveda.estaEnModoMock()).toBe(false);
+
+      const resultado = await boveda.generarPresignedUploadUrl(
+        { modulo: 'antropometria', alumnoId: alumnoIdPresign, mimeType: 'image/webp' },
+        customUuid
+      );
+      expect(resultado.uploadUrl).toContain('localhost:9000');
+      expect(resultado.uploadUrl).toContain('guachafit-r2-local');
+      expect(resultado.uploadUrl).not.toContain('mock-account');
+    });
+
+    it('acepta también la familia histórica R2_* del entorno', async () => {
+      const boveda = await bovedaInyectada({
+        R2_ENDPOINT: 'https://cuenta-real.r2.cloudflarestorage.com',
+        R2_BUCKET_NAME: 'guachafit-biometric-vault',
+        R2_ACCESS_KEY_ID: 'clave-real',
+        R2_SECRET_ACCESS_KEY: 'secreto-real',
+      });
+
+      expect(boveda.obtenerEndpoint()).toBe('https://cuenta-real.r2.cloudflarestorage.com');
+      expect(boveda.estaEnModoMock()).toBe(false);
+    });
+
+    it('sin configuración de bóveda queda el modo mock documentado (NUNCA en producción)', async () => {
+      const boveda = await bovedaInyectada({});
+
+      expect(boveda.estaEnModoMock()).toBe(true);
+      expect(boveda.obtenerEndpoint()).toContain('mock-account.r2.cloudflarestorage.com');
     });
   });
 });

@@ -470,6 +470,21 @@ describe('Módulo 4: Control Antropométrico & Bóveda R2 (AntropometriaService 
         antropometriaService.solicitarPresignedUploadUrl(caller, dto)
       ).rejects.toThrow(ForbiddenException);
     });
+
+    it('RF-002 RN-01: el coach firma la subida de un PDF de recursos de su alumno (módulo nutricion-recursos)', async () => {
+      const caller = { id: coachId, rol: Rol.ENTRENADOR, entrenadorId: coachId };
+      const dto = {
+        modulo: 'nutricion-recursos' as const,
+        alumnoId: alumnoRemotoId,
+        mimeType: 'application/pdf' as const,
+      };
+
+      const res = await antropometriaService.solicitarPresignedUploadUrl(caller, dto);
+      expect(res.expiresInSeconds).toBe(900);
+      expect(res.storageKey).toMatch(
+        new RegExp(`^nutricion-recursos/${alumnoRemotoId}/\\d{4}/[0-9a-f-]{36}\\.pdf$`)
+      );
+    });
   });
 
   describe('registrarCheckin', () => {
@@ -916,6 +931,30 @@ describe('Módulo 4: Control Antropométrico & Bóveda R2 (AntropometriaService 
       // 5. obtenerEvolucion
       const evol = await antropometriaController.obtenerEvolucion(reqCoach, alumnoRemotoId, {});
       expect(evol.alumnoId).toBe(alumnoRemotoId);
+    });
+
+    it('RF-002 RN-01/RNF-001: un MIME no permitido responde 400 (no el 500 crudo del ZodError)', async () => {
+      const reqCoach = {
+        user: { sub: coachId, rol: Rol.ENTRENADOR, entrenadorId: coachId },
+      };
+
+      // Una imagen no es un recurso documental del módulo de PDFs.
+      await expect(
+        antropometriaController.solicitarPresignedUploadUrl(reqCoach, {
+          modulo: 'nutricion-recursos',
+          alumnoId: alumnoRemotoId,
+          mimeType: 'image/webp',
+        })
+      ).rejects.toThrow(BadRequestException);
+
+      // Y un PDF sigue vetado en los módulos de imágenes.
+      await expect(
+        antropometriaController.solicitarPresignedUploadUrl(reqCoach, {
+          modulo: 'antropometria',
+          alumnoId: alumnoRemotoId,
+          mimeType: 'application/pdf',
+        })
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });

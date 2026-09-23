@@ -64,7 +64,14 @@ function crearFotoDemo(
   };
 }
 
-/** Metas demo del coach (RN-01): objetivos cuantitativos + un recurso educativo por enlace. */
+/**
+ * PDF mínimo válido embebido (base64, ~600 B) para el recurso SUBIDO de la demo: se abre
+ * sin red y sin depender de la bóveda. Generado con estructura xref correcta.
+ */
+const PDF_DEMO_DATA_URI =
+  'data:application/pdf;base64,JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAzMDAgMTIwXSAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAwIFIgPj4gPj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA3NiA+PgpzdHJlYW0KQlQgL0YxIDE2IFRmIDI0IDcwIFRkIChSZWN1cnNvIGRlbW8gR1VBQ0hBRklUKSBUaiBFVAplbmRzdHJlYW0KZW5kb2JqCjUgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1OCAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4gCjAwMDAwMDAyNDEgMDAwMDAgbiAKMDAwMDAwMDM0MyAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjQxMwolJUVPRgo=';
+
+/** Metas demo del coach (RN-01): objetivos cuantitativos + recursos externos y un PDF subido. */
 export function crearMetasNutricionalesDemo(
   alumnoId = 'demo-alumno',
   ahora: Date = new Date()
@@ -82,10 +89,12 @@ export function crearMetasNutricionalesDemo(
       {
         titulo: 'Lista de compras semanal',
         url: 'https://demo.guachafit.com/recursos/lista-de-compras.pdf',
+        storageKey: null,
       },
       {
-        titulo: 'Distribución de comidas por bloque',
-        url: 'https://demo.guachafit.com/recursos/distribucion-comidas.pdf',
+        titulo: 'Guía de porciones (PDF subido)',
+        url: PDF_DEMO_DATA_URI,
+        storageKey: `nutricion-recursos/${alumnoId}/2026/b2222222-2222-4222-8222-222222222222.pdf`,
       },
     ],
     createdAtUtc: iso,

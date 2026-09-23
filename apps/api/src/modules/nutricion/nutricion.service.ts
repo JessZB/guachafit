@@ -38,6 +38,8 @@ import {
   MetasNutricionalesDTO,
   MetasNutricionalesDetalleDTO,
   MetasNutricionalesSchema,
+  RecursoNutricionalDTO,
+  RecursoNutricionalDetalleDTO,
   TIMEZONE_NUTRICION_POR_DEFECTO,
   TOLERANCIA_TOTALES_NUTRICIONAL_PCT,
   ToleranciaNutricionalDTO,
@@ -377,7 +379,7 @@ export class NutricionService {
       .where(eq(metasNutricionales.alumnoId, alumnoId))
       .limit(1);
 
-    return fila ? this.mapearMetas(fila) : null;
+    return fila ? await this.mapearMetas(fila) : null;
   }
 
   /**
@@ -407,13 +409,16 @@ export class NutricionService {
 
     await this.validarAlumnoDelCoach(coachId, alumnoId);
 
+    const recursos = validado.recursos ?? [];
+    this.validarStorageKeysDeRecursos(recursos, alumnoId);
+
     const valores = {
       caloriasObjetivo: validado.caloriasObjetivo ?? null,
       proteinaGramosObjetivo: validado.proteinaGramosObjetivo ?? null,
       carbohidratosGramosObjetivo: validado.carbohidratosGramosObjetivo ?? null,
       grasasGramosObjetivo: validado.grasasGramosObjetivo ?? null,
       aguaLitrosObjetivo: validado.aguaLitrosObjetivo ?? null,
-      recursos: validado.recursos ?? [],
+      recursos,
     };
     const now = new Date();
 
@@ -430,7 +435,7 @@ export class NutricionService {
         .where(eq(metasNutricionales.id, existente.id))
         .returning();
 
-      return this.mapearMetas(actualizado);
+      return await this.mapearMetas(actualizado);
     }
 
     const [creado] = await this.db
@@ -438,7 +443,26 @@ export class NutricionService {
       .values({ alumnoId, ...valores, createdAtUtc: now, updatedAtUtc: now })
       .returning();
 
-    return this.mapearMetas(creado);
+    return await this.mapearMetas(creado);
+  }
+
+  /**
+   * RNF-001 (pendiente): cada `storageKey` de recurso debe ser estructuralmente válido y
+   * pertenecer al módulo `nutricion-recursos` del MISMO alumno dueño de las metas. Una clave
+   * ajena (otro alumno u otro módulo) es un 400, nunca un recurso guardado que apunte a datos
+   * de terceros.
+   */
+  private validarStorageKeysDeRecursos(recursos: RecursoNutricionalDTO[], alumnoId: string): void {
+    const prefijoDelAlumno = `nutricion-recursos/${alumnoId}/`;
+    for (const recurso of recursos) {
+      if (!recurso.storageKey) continue;
+      const estructuraValida = R2StorageService.validarStorageKeyEstructura(recurso.storageKey);
+      if (!estructuraValida || !recurso.storageKey.startsWith(prefijoDelAlumno)) {
+        throw new BadRequestException(
+          'El archivo del recurso no pertenece a este alumno o no es una clave válida. Súbelo de nuevo desde el editor de metas.'
+        );
+      }
+    }
   }
 
   /** Tenancy: el alumno debe pertenecer a la cartera del coach autenticado. */
@@ -461,7 +485,15 @@ export class NutricionService {
     }
   }
 
-  private mapearMetas(fila: typeof metasNutricionales.$inferSelect): MetasNutricionalesDetalleDTO {
+  /**
+   * RF-002 RN-01: los recursos persistidos se exponen resueltos para lectura. Los enlaces
+   * externos viajan tal cual; los archivos subidos se firman con presigned GET (TTL 900s). Si
+   * la firma falla (o no hay bóveda inyectada) el recurso queda con `url: null` — la UI lo
+   * declara en vez de ofrecer un enlace muerto o inventado.
+   */
+  private async mapearMetas(
+    fila: typeof metasNutricionales.$inferSelect
+  ): Promise<MetasNutricionalesDetalleDTO> {
     return {
       id: fila.id,
       alumnoId: fila.alumnoId,
@@ -470,7 +502,22 @@ export class NutricionService {
       carbohidratosGramosObjetivo: fila.carbohidratosGramosObjetivo,
       grasasGramosObjetivo: fila.grasasGramosObjetivo,
       aguaLitrosObjetivo: fila.aguaLitrosObjetivo,
-      recursos: fila.recursos ?? [],
+      recursos: await Promise.all(
+        (fila.recursos ?? []).map(async (recurso): Promise<RecursoNutricionalDetalleDTO> => {
+          if (recurso.storageKey) {
+            return {
+              titulo: recurso.titulo,
+              url: await this.resolverUrlFirmada(recurso.storageKey),
+              storageKey: recurso.storageKey,
+            };
+          }
+          return {
+            titulo: recurso.titulo,
+            url: recurso.url ?? null,
+            storageKey: null,
+          };
+        })
+      ),
       createdAtUtc: toIsoUtcString(fila.createdAtUtc)!,
       updatedAtUtc: toIsoUtcString(fila.updatedAtUtc)!,
     };
@@ -578,7 +625,7 @@ export class NutricionService {
           checkinId: f.checkinId,
           tipoComida: f.tipoComida,
           storageKey: f.storageKey,
-          fotoUrl: await this.resolverFotoUrl(f.storageKey),
+          fotoUrl: await this.resolverUrlFirmada(f.storageKey),
           createdAtUtc: toIsoUtcString(f.createdAtUtc)!,
         }))
       );
@@ -611,10 +658,10 @@ export class NutricionService {
   // ---------------------------------------------------------------------------
 
   /**
-   * RN-03: URL firmada de lectura de una foto del diario (TTL 900s). `null` honesto cuando no
-   * hay bóveda inyectada o la firma falla: el llamador nunca recibe un enlace inventado.
+   * RN-03/RN-01: URL firmada de lectura (TTL 900s) de un archivo de la bóveda. `null` honesto
+   * cuando no hay bóveda inyectada o la firma falla: el llamador nunca recibe un enlace inventado.
    */
-  private async resolverFotoUrl(storageKey: string): Promise<string | null> {
+  private async resolverUrlFirmada(storageKey: string): Promise<string | null> {
     if (!this.r2StorageService) return null;
     try {
       return await this.r2StorageService.generarPresignedGetUrl(storageKey, 900);
@@ -656,7 +703,7 @@ export class NutricionService {
           checkinId: f.checkinId,
           tipoComida: f.tipoComida,
           storageKey: f.storageKey,
-          fotoUrl: await this.resolverFotoUrl(f.storageKey),
+          fotoUrl: await this.resolverUrlFirmada(f.storageKey),
           createdAtUtc: toIsoUtcString(f.createdAtUtc)!,
         }))
       ),

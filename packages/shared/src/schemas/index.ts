@@ -567,13 +567,27 @@ export const CheckinNutricionalSchema = z.object({
  * RF-002 RN-01: recurso educativo adjunto a las metas del coach (PDF de lista de compras,
  * distribución de comidas, etc.).
  *
- * Persistencia honesta de esta unidad: enlace validado (`url`). La subida de PDFs exige un
- * pipeline de almacenamiento propio (imágenes/webp no aplican) que no forma parte del alcance.
+ * El recurso declara EXACTAMENTE una fuente: un enlace externo validado (`url`) o un archivo
+ * subido a la bóveda (`storageKey` con el prefijo `nutricion-recursos/{alumnoId}/…`). El módulo
+ * de la API valida además que la clave pertenezca al alumno dueño de las metas (RNF-001).
  */
-export const RecursoNutricionalSchema = z.object({
-  titulo: z.string().min(2, 'El título del recurso debe tener al menos 2 caracteres').max(120),
-  url: z.string().url('La URL del recurso no es válida').max(500),
-});
+export const RecursoNutricionalSchema = z
+  .object({
+    titulo: z.string().min(2, 'El título del recurso debe tener al menos 2 caracteres').max(120),
+    url: z.string().url('La URL del recurso no es válida').max(500).optional(),
+    storageKey: z
+      .string()
+      .min(5, 'La clave de almacenamiento no es válida')
+      .max(300)
+      .regex(
+        /^(antropometria|comidas|comprobantes|nutricion-recursos)\//,
+        'La clave de almacenamiento no es válida'
+      )
+      .optional(),
+  })
+  .refine((valor) => (valor.url ? !valor.storageKey : !!valor.storageKey), {
+    message: 'Cada recurso debe indicar una URL externa o un archivo PDF subido (y no ambos).',
+  });
 
 /**
  * RF-002 RN-01: metas nutricionales que el coach fija para UN alumno (una fila por alumno).
@@ -636,12 +650,34 @@ export const PerimetrosCorporalesInputSchema = z.object({
   musloCm: z.string().regex(DECIMAL_STRING_REGEX, 'El muslo debe tener formato decimal de hasta 2 decimales').optional(),
 });
 
-export const PresignedUploadUrlSchema = z.object({
-  modulo: z.enum(['antropometria', 'comidas', 'comprobantes']),
-  alumnoId: z.string().uuid('El ID del alumno debe ser un UUID válido'),
-  angulo: z.nativeEnum(AnguloFoto).optional(),
-  mimeType: z.enum(['image/webp', 'image/jpeg']),
-});
+/** RF-002 RN-01: módulo de la bóveda que solo admite PDFs (recursos del coach). */
+export const MODULO_UPLOAD_PDF = 'nutricion-recursos' as const;
+
+export const PresignedUploadUrlSchema = z
+  .object({
+    modulo: z.enum(['antropometria', 'comidas', 'comprobantes', MODULO_UPLOAD_PDF]),
+    alumnoId: z.string().uuid('El ID del alumno debe ser un UUID válido'),
+    angulo: z.nativeEnum(AnguloFoto).optional(),
+    mimeType: z.enum(['image/webp', 'image/jpeg', 'application/pdf']),
+  })
+  .superRefine((valor, ctx) => {
+    // RNF-001 §2: cada módulo tiene su familia de MIME. Los recursos nutricionales son PDFs
+    // (documentos); las fotos de antropometría y comidas siguen siendo WebP/JPEG optimizados.
+    if (valor.modulo === MODULO_UPLOAD_PDF && valor.mimeType !== 'application/pdf') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['mimeType'],
+        message: 'El módulo de recursos nutricionales solo admite archivos PDF (application/pdf).',
+      });
+    }
+    if (valor.modulo !== MODULO_UPLOAD_PDF && valor.mimeType === 'application/pdf') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['mimeType'],
+        message: 'Solo los recursos nutricionales admiten PDF; aquí se permiten imágenes WebP o JPEG.',
+      });
+    }
+  });
 
 export const CheckinAntropometricoSchema = z.object({
   alumnoId: z.string().uuid('El ID del alumno debe ser un UUID válido'),
