@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** con pruebas automáticas en verde (**612** de la web + **744** del API). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (**612** de la web + **771** del API). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -131,6 +131,8 @@ tags:
 - [ ] **Alumno — presencial en solo lectura:** con modalidad presencial, el formulario se muestra en modo lectura (sin edición); si se fuerza la mutación, el servidor responde 403 y la vista lo explica (nunca un error genérico). En modo demo, el selector "Escenario demo" permite alternar **Remoto en ventana / Remoto fuera de ventana / Presencial (solo lectura)**.
 - [ ] **Coach — calendario (ficha del alumno → tab Antropometría):** fija la periodicidad (semanal / quincenal / mensual) + la fecha de inicio; al guardar se muestra la **próxima fecha programada** y el estado de la ventana (vigente / próxima / vencida), leídos del calendario guardado. Activar una periodicidad sin fecha de inicio se rechaza con 400 (no guarda un calendario inerte); "Sin calendario" desactiva la ventana y el alumno remoto vuelve al registro libre.
 - [ ] **Coach — cola con fotos y rechazo con motivo (`/coach/antropometria`):** cada evaluación pendiente muestra sus fotos (visor a pantalla completa, **Escape** cierra); "Rechazar" exige un **motivo libre obligatorio** (sin motivo, el botón de confirmar no se habilita) y el alumno lo recibe como retroalimentación; "Aprobar" consolida el registro.
+- [ ] **Coach — aviso al recibir un check-in remoto:** con el alumno remoto en ventana, envía su check-in; en la **campana del coach** debe llegar "Nuevo check-in pendiente de validación" con el cuerpo "{alumno} envió su check-in antropométrico; revísalo." y, al pulsarla, abrir la cola `/coach/antropometria`. El registro presencial del coach no genera este aviso.
+- [ ] **Coach — aviso al expirar la ventana:** con un alumno remoto que no completó su medición en la ventana (última fecha programada ya vencida), en la campana del coach llega "Check-in antropométrico vencido" con "{alumno} no completó su medición del {fecha}; considera reprogramar." El aviso llega **una sola vez por fecha** aunque el barrido horario corra varias veces; si el alumno registró su medición (o el coach la tomó) en/después de la ventana, no llega.
 
 **Evolución y fotos (RF-004)**
 
@@ -167,7 +169,7 @@ tags:
 
 - **Notificaciones**: proveedores reales de push/email (la entrega sigue **simulada por log**), cliente push del navegador (WebPush sin UI), recordatorio de check-in 06:00 exacto por huso horario (hoy corre por barrido horario UTC: exacto en offsets de hora entera; un offset de media hora recibe el aviso a las 06:30 locales) y alerta externa de colas/DLQ (Sentry/Datadog). La campana, las preferencias y el resumen semanal **ya existen** (sección 10).
 - **Nutrición**: los recursos educativos del coach pueden ser **enlaces o PDFs subidos** (validados por tipo, firma `%PDF-` y tamaño; se sirven con enlace firmado). Los reportes **con fotos** sin conexión se **encolan completos** (primero las fotos, después el check-in), con la evidencia visible, reintentable y descartable en el panel. La subida real está verificada contra MinIO; falta repetirla contra Cloudflare R2 con credenciales reales.
-- **Antropometría**: la notificación al entrenador al expirar la ventana de check-in está pendiente (el formulario sí se deshabilita solo; los gráficos y el comparador fotográfico ya tienen UI real — sección 11).
+- **Antropometría**: los avisos al coach (check-in remoto recibido y ventana vencida) **ya existen** (sección 11); el único punto documentado es que `POST /antropometria/presigned-upload-url` no evalúa la ventana (la ventana se valida al registrar el check-in; el presencial sigue bloqueado al subir fotos).
 - **Admin**: planes/facturación de la plataforma y correo automático de bienvenida pendientes. La gestión de cuentas (deshabilitar/reactivar) y de licencias (suspender/activar) **ya existe** (sección 7).
 - **Listas**: los filtros de Conciliación/Evaluaciones/Pagos filtran solo la página visible (la UI lo dice); Plantillas no está paginada.
 - **Seguridad**: RLS activo solo en `rutinas`/`plantillas` (etapas 2-4 pendientes); push del navegador no implementado.

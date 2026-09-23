@@ -143,8 +143,15 @@ Then el sistema debe generar el reporte consolidado de ingresos de la semana y c
   rol correspondiente (detalle en [[RF-014-arquitectura-event-driven-despachador-notificaciones]] §7).
 - Suites en verde: web 465 · API 621.
 
+### Cierre RF-003 (Ola 3) — emisor de "Reportes de Progreso"
+- **Emisor implementado:** antropometría publica en el bus `CHECKIN_ANTROPOMETRICO_RECIBIDO`
+  (autoreporte remoto del alumno → coach) y `CHECKIN_ANTROPOMETRICO_EXPIRADO` (ventana cerrada sin
+  medición, §6 de [[RF-003-checkin-antropometrico-rbac-hibrido]]). Ambos viajan por la categoría
+  `ANTROPOMETRIA` y el despachador los enruta por la fila **Reportes de Progreso** del coach
+  (In-App universal + Push/Email según preferencias) con `jobId` determinista; el aviso de
+  expiración además se pre-chequea en la bandeja In-App por referencia `alumno + fecha programada`.
+- Suites en verde tras el cierre: API **771/771** · Web **612/612**.
+
 ### Pendiente (siguientes)
-- **Emisor de "Reportes de Progreso" por check-in/fotos del alumno:** la fila de la matriz y su ruteo
-  ya existen, pero aún no se publica el evento de dominio desde antropometría.
 - **Entrega real por Email:** el job de Email se encola con la preferencia del usuario; la entrega
   sigue simulada por log (proveedor real pendiente).

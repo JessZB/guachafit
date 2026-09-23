@@ -2,7 +2,7 @@
 id: RF-003
 modulo: Antropometria
 prioridad: alta
-estado: parcial
+estado: implementado
 version_implementada: v1.0.0
 fecha_verificacion: 2026-09-23
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
@@ -107,7 +107,7 @@ Then debe interceptar la solicitud mediante la política RBAC
 
 ## 7. Estado real de implementación
 
-> **Verificado el 2026-09-23.** Suites en verde: API **744/744** (41 archivos) · Web **612/612** (57 archivos); runtime 35/35 y smoke contra API/Postgres al cierre.
+> **Verificado el 2026-09-23.** Suites en verde: API **771/771** (42 archivos) · Web **612/612** (57 archivos); smoke real contra API/Postgres/Redis al cierre (check-in remoto → aviso al coach, barrido de expiración sin duplicar, 403 → fila de auditoría).
 
 ### Implementado y verificado
 
@@ -117,13 +117,13 @@ Then debe interceptar la solicitud mediante la política RBAC
 - **RN-01 — recordatorio 06:00:** scheduler horario (`upsertJobScheduler` con id estable `antropometria:recordatorio-checkin`; cron `0 * * * *` UTC configurable con `ANTROPOMETRIA_RECORDATORIO_CRON`) que evalúa la hora local de cada alumno y emite el aviso solo en su día programado a las 06:00 locales. JobId determinista (`antropometria_YYYY-MM-DD`) y pre-chequeo del aviso del día: no duplica. **Aproximación documentada:** exacto para offsets de hora entera; un offset de media hora (p. ej. Asia/Kolkata) recibe el aviso a las 06:30 locales.
 - **RN-03 — presencial de solo lectura:** el alumno presencial ve sus medidas sin edición (UI) y cualquier mutación forzada responde 403 desde el servidor; el coach registra con `origen: presencial_verificado` y `estado: aprobado` de forma inmediata.
 - **RN-04 — cola y conciliación del coach:** cola de pendientes con las fotos del control en visor accesible y rechazo con **motivo libre obligatorio** (sin motivos prefabricados); aprobar consolida el registro y el motivo rechazado queda registrado.
+- **Escenario 2 — aviso al entrenador al recibir un check-in remoto:** al persistir el autoreporte (`pendiente_aprobacion`) el servicio publica `CheckinAntropometricoRecibidoEvent` en el bus (fire-and-forget, un fallo del bus no revierte el registro). Tipo `CHECKIN_ANTROPOMETRICO_RECIBIDO`, categoría `ANTROPOMETRIA` (fila "Reportes de Progreso" del coach en [[RF-015-matriz-preferencias-usuario-canales]] §B), copy "{alumno} envió su check-in antropométrico; revísalo." y enlace real a la cola `/coach/antropometria`; `referenciaId` determinista por control para el `jobId` de push/email. El registro presencial del coach NO emite (no hay nada que aprobar).
+- **§6 — aviso al entrenador al expirar la ventana:** el barrido horario existente detecta la fecha programada más reciente ya vencida de cada alumno **remoto** con periodicidad sin medición desde la apertura de su ventana y emite `CheckinAntropometricoExpiradoEvent` al coach (`CHECKIN_ANTROPOMETRICO_EXPIRADO`, "…no completó su medición del {fecha}; considera reprogramar.") con enlace a `/coach/antropometria`. La referencia es determinista (`antropometria_expirado_<alumno>_<fecha>`) y se pre-chequea en la bandeja In-App del coach (migración `0011`: `notificaciones_in_app.referencia_id`), así que se avisa **una vez por fecha programada** sin duplicar entre corridas; una medición posterior al inicio de la ventana silencia el aviso.
+- **Escenario 3 — log de auditoría de mutaciones no autorizadas:** migración `0011` con la tabla `auditoria_accesos_denegados` (`usuario_id` nullable, `rol`, `ruta`, `metodo`, `motivo`, `fecha_utc`; sin payloads ni PII extra). `RolesGuard` (rol no autorizado / sin autenticación) y `AlumnoHabilitadoGuard` (estado de activación / cuenta archivada) escriben de forma **best-effort**: un fallo de auditoría nunca cambia la respuesta 403. Una petición anónima deja fila con `usuario_id` nulo.
 - **UI de apoyo:** banner de ventana (abierta / próxima / cerrada, con rango y motivo) en el check-in del alumno, y calendario del coach en el tab **Antropometría** de la ficha (próxima fecha programada + ventana vigente/próxima/vencida, leídas del calendario guardado).
 
-### Pendiente (honesto)
+### Decisión documentada (no bloquea el cierre)
 
-- **Notificación al entrenador al recibir un check-in remoto** (Escenario 2): el pendiente aparece en la cola del coach, pero el evento de dominio no se publica desde antropometría (la categoría "Reportes de Progreso" de [[RF-015-matriz-preferencias-usuario-canales]] §7 ya lo registra como pendiente).
-- **Notificación al entrenador al expirar la ventana** (§6): no implementada; el formulario sí se deshabilita solo al cerrarse la ventana.
-- **Log de auditoría de intentos de mutación no autorizados** (Escenario 3): el 403 y el aislamiento se aplican, pero no se emite un evento dedicado en logs de auditoría.
-- **Presigned uploads sin gateo de ventana:** la ventana se valida en el check-in (y el presencial sigue bloqueado al subir fotos de antropometría), pero `POST /antropometria/presigned-upload-url` no evalúa la ventana.
+- **Presigned uploads sin gateo de ventana:** la ventana se valida al registrar el check-in (y el presencial sigue bloqueado al subir fotos de antropometría), pero `POST /antropometria/presigned-upload-url` no evalúa la ventana. Es una decisión de UX: la subida de fotos ocurre antes de completar el formulario y el check-in fuera de ventana sigue rechazándose con 400.
 
-Por los puntos anteriores, el frontmatter conserva `estado: parcial` aunque el núcleo del flujo (modelo, ventana, periodicidad, recordatorio, RBAC y conciliación) está implementado y verificado.
+Con los tres criterios pendientes cerrados (Escenario 2, §6 y Escenario 3), el frontmatter pasa a `estado: implementado`; el núcleo del flujo (modelo, ventana, periodicidad, recordatorio, RBAC, conciliación y avisos al coach) queda implementado y verificado.
