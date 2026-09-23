@@ -1,13 +1,34 @@
-import React, { useState } from 'react';
-import { EntrenadorCreadoDTO } from '@guachafit/shared';
+import React, { useCallback, useState } from 'react';
+import {
+  CambioEstadoEntrenadorResultadoDTO,
+  CambioLicenciaEntrenadorResultadoDTO,
+  EntrenadorAdminDTO,
+  EntrenadorCreadoDTO,
+  EstadoLicencia,
+  ListadoEntrenadoresAdminDTO,
+} from '@guachafit/shared';
 import { ApiError, apiClient } from '../../lib/api-client';
 import { construirLinkActivacion, normalizarCoachCode } from '../../lib/onboarding-links';
 import { useLogoutSeguro } from '../../lib/use-logout-seguro';
+import { useAuth } from '../../context/auth-context';
+import { usePaginacionServidor, type ParametrosCargaPagina } from '../../lib/use-paginacion-servidor';
+import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
+import {
+  TAMANO_PAGINA_ENTRENADORES_ADMIN,
+  endpointEstadoEntrenador,
+  endpointLicenciaEntrenador,
+  endpointListadoEntrenadores,
+  listarEntrenadoresDemo,
+  type CambioDemoEntrenador,
+} from '../../lib/admin-entrenadores';
 import { DialogoLogoutPendientes } from '../../components/common/DialogoLogoutPendientes';
+import { Paginacion } from '../../components/common/Paginacion';
+import { TablaEntrenadoresAdmin } from '../../components/admin/TablaEntrenadoresAdmin';
 import {
   Check,
   ClipboardCopy,
   Clock,
+  Loader2,
   Lock,
   LogOut,
   ShieldCheck,
@@ -15,14 +36,13 @@ import {
 } from 'lucide-react';
 
 /**
- * RF-010 RN-01: el superadmin solo administra la plataforma. Hoy la única capacidad real es el
- * alta de entrenadores (Escenario 1); el resto se declara "en construcción" para no fabricar
+ * RF-010 RN-01: el superadmin solo administra la plataforma. Hoy las capacidades reales son el
+ * alta de entrenadores (Escenario 1), el listado del panel, la habilitación/deshabilitación de
+ * cuentas y la gestión de licencias; el resto se declara "en construcción" para no fabricar
  * pantallas ni datos que aún no existen.
  */
 const CAPACIDADES_PENDIENTES = [
-  'Deshabilitar y reactivar entrenadores',
-  'Gestión de licencias y planes de la plataforma',
-  'Invalidación de sesiones al desactivar una cuenta (caso borde del RF-010)',
+  'Planes y facturación de la plataforma (la licencia hoy solo se activa o suspende)',
   'Envío automático del correo de bienvenida con el enlace de activación',
 ];
 
@@ -35,14 +55,65 @@ const FORMULARIO_INICIAL = {
   nombreComercial: '',
 };
 
+/** Acción pendiente de confirmación sobre un entrenador (nunca se ejecuta sin confirmar). */
+type AccionEntrenador =
+  | { tipo: 'estado'; entrenador: EntrenadorAdminDTO; activo: boolean }
+  | { tipo: 'licencia'; entrenador: EntrenadorAdminDTO; estadoLicencia: EstadoLicencia };
+
 export function AdminPage() {
   // U4 (Ola 4): logout con confirmación si hay cambios sin sincronizar.
   const logoutSeguro = useLogoutSeguro();
+  const { user, isDemoMode } = useAuth();
+
   const [formulario, setFormulario] = useState(FORMULARIO_INICIAL);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [creado, setCreado] = useState<EntrenadorCreadoDTO | null>(null);
   const [copiado, setCopiado] = useState(false);
+
+  // Listado paginado del panel (RF-010 RN-01).
+  const [pagina, setPagina] = useState(1);
+  const [tamano, setTamano] = useState(TAMANO_PAGINA_ENTRENADORES_ADMIN);
+
+  // Modo demo (solo con la bandera explícita): cambios de la sesión sin tocar la red.
+  const [cambiosDemo, setCambiosDemo] = useState<Record<string, CambioDemoEntrenador>>({});
+  const [versionDemo, setVersionDemo] = useState(0);
+
+  // Confirmación accesible y feedback honesto (solo se anuncia éxito con un 2xx real).
+  const [confirmacion, setConfirmacion] = useState<AccionEntrenador | null>(null);
+  const [procesandoUsuarioId, setProcesandoUsuarioId] = useState<string | null>(null);
+  const [accionError, setAccionError] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  const cargarEntrenadores = useCallback(
+    async ({ pagina: paginaPedida, tamano: tamanoPedido }: ParametrosCargaPagina) => {
+      if (isDemoMode) {
+        return listarEntrenadoresDemo(paginaPedida, tamanoPedido, cambiosDemo);
+      }
+      return apiClient.get<ListadoEntrenadoresAdminDTO>(
+        endpointListadoEntrenadores(paginaPedida, tamanoPedido)
+      );
+    },
+    [isDemoMode, cambiosDemo]
+  );
+
+  const { items, total, cargando, error: errorListado, recargar } = usePaginacionServidor<
+    EntrenadorAdminDTO,
+    ListadoEntrenadoresAdminDTO
+  >({
+    clave: isDemoMode ? ['admin-entrenadores-demo', versionDemo] : 'admin-entrenadores',
+    pagina,
+    tamano,
+    cargar: cargarEntrenadores,
+    onAjustarPagina: setPagina,
+  });
+
+  const refDialogoConfirmacion = useDialogoAccesible({
+    abierto: confirmacion !== null,
+    onCerrar: () => {
+      if (!procesandoUsuarioId) setConfirmacion(null);
+    },
+  });
 
   const actualizarCampo =
     (campo: keyof typeof FORMULARIO_INICIAL) => (evento: React.ChangeEvent<HTMLInputElement>) => {
@@ -66,6 +137,8 @@ export function AdminPage() {
       });
       setCreado(respuesta);
       setFormulario(FORMULARIO_INICIAL);
+      // El alta nueva aparece en la lista del panel sin recargar la página.
+      recargar();
     } catch (err) {
       // Mensaje honesto: el detalle real de la API (correo duplicado, código en uso o formato).
       setError(
@@ -92,6 +165,100 @@ export function AdminPage() {
     }
   };
 
+  const solicitarCambioEstado = (entrenador: EntrenadorAdminDTO, activo: boolean) => {
+    setAccionError(null);
+    setAviso(null);
+    setConfirmacion({ tipo: 'estado', entrenador, activo });
+  };
+
+  const solicitarCambioLicencia = (
+    entrenador: EntrenadorAdminDTO,
+    estadoLicencia: EstadoLicencia
+  ) => {
+    setAccionError(null);
+    setAviso(null);
+    setConfirmacion({ tipo: 'licencia', entrenador, estadoLicencia });
+  };
+
+  /**
+   * Ejecuta la acción confirmada. El aviso de éxito SOLO se muestra cuando la API responde 2xx
+   * (en demo, cuando el cambio se aplica al fixture local); cualquier fallo cae en `accionError`.
+   */
+  const confirmarAccion = async () => {
+    if (!confirmacion) return;
+    const { entrenador } = confirmacion;
+    setProcesandoUsuarioId(entrenador.usuarioId);
+    setAccionError(null);
+    try {
+      if (isDemoMode) {
+        const cambio: CambioDemoEntrenador =
+          confirmacion.tipo === 'estado'
+            ? { activo: confirmacion.activo }
+            : { estadoLicencia: confirmacion.estadoLicencia };
+        setCambiosDemo((actual) => ({
+          ...actual,
+          [entrenador.usuarioId]: { ...actual[entrenador.usuarioId], ...cambio },
+        }));
+        setVersionDemo((version) => version + 1);
+        setAviso('Cambio aplicado en esta sesión de demostración (no se guardó en el servidor).');
+        setConfirmacion(null);
+        return;
+      }
+
+      if (confirmacion.tipo === 'estado') {
+        const respuesta = await apiClient.patch<CambioEstadoEntrenadorResultadoDTO>(
+          endpointEstadoEntrenador(entrenador.usuarioId),
+          { activo: confirmacion.activo }
+        );
+        setAviso(respuesta.mensaje);
+      } else {
+        const respuesta = await apiClient.patch<CambioLicenciaEntrenadorResultadoDTO>(
+          endpointLicenciaEntrenador(entrenador.usuarioId),
+          { estadoLicencia: confirmacion.estadoLicencia }
+        );
+        setAviso(respuesta.mensaje);
+      }
+      setConfirmacion(null);
+      recargar();
+    } catch (err) {
+      setAccionError(
+        err instanceof ApiError
+          ? err.problem?.detail || err.message
+          : 'No se pudo aplicar el cambio. Intenta de nuevo.'
+      );
+    } finally {
+      setProcesandoUsuarioId(null);
+    }
+  };
+
+  const textoConfirmacion = confirmacion
+    ? {
+        titulo:
+          confirmacion.tipo === 'estado'
+            ? confirmacion.activo
+              ? `¿Reactivar a ${confirmacion.entrenador.nombres} ${confirmacion.entrenador.apellidos}?`
+              : `¿Deshabilitar a ${confirmacion.entrenador.nombres} ${confirmacion.entrenador.apellidos}?`
+            : confirmacion.estadoLicencia === EstadoLicencia.ACTIVA
+              ? `¿Activar la licencia de ${confirmacion.entrenador.nombres} ${confirmacion.entrenador.apellidos}?`
+              : `¿Suspender la licencia de ${confirmacion.entrenador.nombres} ${confirmacion.entrenador.apellidos}?`,
+        detalle:
+          confirmacion.tipo === 'estado'
+            ? confirmacion.activo
+              ? 'La cuenta podrá iniciar sesión y renovar tokens de nuevo.'
+              : 'No podrá iniciar sesión ni renovar tokens. Su sesión actual se cierra en el próximo ciclo de verificación (máximo 15 minutos).'
+            : confirmacion.estadoLicencia === EstadoLicencia.ACTIVA
+              ? 'El entrenador recupera su acceso y su enlace público de captación vuelve a resolver.'
+              : 'No podrá iniciar sesión ni renovar tokens, y su enlace público de captación deja de resolver. Los alumnos ya vinculados no se ven afectados.',
+        boton: confirmacion.tipo === 'estado'
+          ? confirmacion.activo
+            ? 'Reactivar cuenta'
+            : 'Deshabilitar cuenta'
+          : confirmacion.estadoLicencia === EstadoLicencia.ACTIVA
+            ? 'Activar licencia'
+            : 'Suspender licencia',
+      }
+    : null;
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-24 lg:pb-12 animate-in fade-in duration-200">
       <div className="flex items-start justify-between gap-4">
@@ -104,7 +271,8 @@ export function AdminPage() {
             Panel de administración
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Crea la cuenta de un entrenador y comparte su enlace de activación.
+            Administra las cuentas y licencias de los entrenadores, y comparte sus enlaces de
+            activación.
           </p>
         </div>
 
@@ -118,6 +286,67 @@ export function AdminPage() {
           <span className="hidden sm:inline">Cerrar sesión</span>
         </button>
       </div>
+
+      {aviso && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="p-3 rounded-xl bg-success/10 border border-success/30 text-success text-xs font-semibold flex items-center gap-2"
+        >
+          <Check className="h-4 w-4 shrink-0" />
+          <span>{aviso}</span>
+        </div>
+      )}
+
+      {accionError && (
+        <div
+          role="alert"
+          className="p-3 rounded-xl bg-destructive/15 border border-destructive/30 text-destructive text-xs font-semibold"
+        >
+          {accionError}
+        </div>
+      )}
+
+      {/* Listado y gestión de entrenadores (RF-010 RN-01 / §6) */}
+      <section className="p-5 sm:p-6 rounded-2xl bg-card border border-border/80 space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="p-2 rounded-xl bg-primary/15 text-primary">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-foreground">Entrenadores de la plataforma</h2>
+            <p className="text-xs text-muted-foreground">
+              Deshabilita cuentas o suspende licencias: el acceso del entrenador se revoca en el
+              siguiente ciclo de verificación (login, refresh y sesión activa).
+            </p>
+          </div>
+        </div>
+
+        <TablaEntrenadoresAdmin
+          items={items}
+          cargando={cargando}
+          error={errorListado ? (errorListado.message || 'No se pudo cargar el listado.') : null}
+          usuarioActualId={user?.id}
+          procesandoUsuarioId={procesandoUsuarioId}
+          onReintentar={recargar}
+          onCambiarEstado={solicitarCambioEstado}
+          onCambiarLicencia={solicitarCambioLicencia}
+        />
+
+        {total > 0 && (
+          <Paginacion
+            pagina={pagina}
+            tamano={tamano}
+            total={total}
+            onCambiarPagina={setPagina}
+            onCambiarTamano={(nuevoTamano) => {
+              setTamano(nuevoTamano);
+              setPagina(1);
+            }}
+            cargando={cargando}
+          />
+        )}
+      </section>
 
       {/* Alta de entrenadores (RF-010 Escenario 1) */}
       <section className="p-5 sm:p-6 rounded-2xl bg-card border border-border/80 space-y-4">
@@ -306,7 +535,7 @@ export function AdminPage() {
         </form>
       </section>
 
-      {/* Capacidades administrativas pendientes (Ola 3) — copy honesto, sin datos inventados */}
+      {/* Capacidades administrativas pendientes — copy honesto, sin datos inventados */}
       <section className="p-5 rounded-2xl bg-card/60 border border-border/70 space-y-3">
         <div className="flex items-center gap-2">
           <Clock className="h-4 w-4 text-warning" />
@@ -324,6 +553,51 @@ export function AdminPage() {
           ))}
         </ul>
       </section>
+
+      {/* Confirmación accesible de las acciones de cuenta/licencia */}
+      {confirmacion && textoConfirmacion && (
+        <div
+          onClick={(evento) => {
+            if (evento.target === evento.currentTarget && !procesandoUsuarioId) {
+              setConfirmacion(null);
+            }
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+        >
+          <div
+            ref={refDialogoConfirmacion}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-confirmacion-titulo"
+            tabIndex={-1}
+            className="w-full max-w-md rounded-2xl bg-card border border-border shadow-2xl p-5 space-y-4"
+          >
+            <h2 id="admin-confirmacion-titulo" className="text-base font-bold text-foreground">
+              {textoConfirmacion.titulo}
+            </h2>
+            <p className="text-xs text-muted-foreground">{textoConfirmacion.detalle}</p>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmacion(null)}
+                disabled={!!procesandoUsuarioId}
+                className="px-3 py-2 rounded-xl border border-border text-muted-foreground text-xs font-semibold hover:text-foreground transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmarAccion()}
+                disabled={!!procesandoUsuarioId}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {procesandoUsuarioId && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {textoConfirmacion.boton}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <DialogoLogoutPendientes
         abierto={logoutSeguro.dialogoAbierto}

@@ -13,6 +13,9 @@ import {
   eq,
   and,
   gt,
+  count,
+  desc,
+  asc,
   usuarios,
   perfilesEntrenador,
   perfilesAlumno,
@@ -22,10 +25,19 @@ import {
   LoginUsuarioDTO,
   EstablecerPasswordConTokenDTO,
   CrearEntrenadorDTO,
+  AuthUserDTO,
   JwtPayload,
   Rol,
+  Modalidad,
   EstadoUsuario,
   EstadoLicencia,
+  PeriodicidadAntropometria,
+  ListarEntrenadoresAdminQueryDTO,
+  ListadoEntrenadoresAdminDTO,
+  CambiarEstadoEntrenadorDTO,
+  CambioEstadoEntrenadorResultadoDTO,
+  CambiarLicenciaEntrenadorDTO,
+  CambioLicenciaEntrenadorResultadoDTO,
 } from '@guachafit/shared';
 
 @Injectable()
@@ -55,6 +67,29 @@ export class AuthService {
   }
 
   /**
+   * RF-010 §6 (WU Admin): una cuenta de entrenador SOLO opera con licencia `ACTIVA`.
+   *
+   * Mecanismo de revocación real (sin listas negras): el estado se verifica contra la BD en cada
+   * ciclo de sesión — login, refresh y `GET /auth/me` —, así que deshabilitar la cuenta o
+   * suspender la licencia bloquea de inmediato el refresh y cierra la sesión de la web en el
+   * siguiente `/auth/me`. El ÚNICO límite es el access token ya emitido: al ser JWT stateless sin
+   * consulta a BD en el guard, vive como máximo sus 15 minutos de TTL.
+   */
+  private async verificarLicenciaEntrenadorActiva(usuarioId: string): Promise<void> {
+    const [perfil] = await this.db
+      .select({ estadoLicencia: perfilesEntrenador.estadoLicencia })
+      .from(perfilesEntrenador)
+      .where(eq(perfilesEntrenador.usuarioId, usuarioId))
+      .limit(1);
+
+    if (!perfil || perfil.estadoLicencia !== EstadoLicencia.ACTIVA) {
+      throw new UnauthorizedException(
+        'La licencia de esta cuenta no está activa. Contacta al administrador de la plataforma.'
+      );
+    }
+  }
+
+  /**
    * Inicio de Sesión de Usuario (SuperAdmin, Entrenador o Alumno)
    */
   async login(dto: LoginUsuarioDTO) {
@@ -78,9 +113,15 @@ export class AuthService {
 
     // Resolver el entrenador_id de pertenencia para el claim de Tenancy
     let entrenadorId: string | undefined;
+    // RF-003 RN-03/RN-04 (WU RF-003a): la modalidad del alumno viaja en la sesión para que la web
+    // bloquee el formulario antropométrico sin una petición extra.
+    let modalidad: Modalidad | null = null;
 
     if (usuario.rol === Rol.ENTRENADOR) {
       entrenadorId = usuario.id;
+      // RF-010 §6: una licencia suspendida bloquea el inicio de sesión del coach (mismo 401 claro
+      // que la cuenta deshabilitada, sin revelar si la cuenta existe).
+      await this.verificarLicenciaEntrenadorActiva(usuario.id);
     } else if (usuario.rol === Rol.ALUMNO) {
       const [perfil] = await this.db
         .select()
@@ -97,6 +138,7 @@ export class AuthService {
       }
 
       entrenadorId = perfil?.entrenadorId;
+      modalidad = perfil?.modalidad ?? null;
     }
 
     const payload: JwtPayload = {
@@ -123,7 +165,76 @@ export class AuthService {
         email: usuario.email,
         rol: usuario.rol as Rol,
         entrenadorId,
+        modalidad,
       },
+    };
+  }
+
+  /**
+   * RF-003 RN-03/RN-04 (WU RF-003a/b): sesión fresca del usuario autenticado para `GET /auth/me`.
+   *
+   * A diferencia de leer el claim del JWT (15 min de vida), aquí se resuelve la modalidad y el
+   * calendario antropométrico del perfil en el momento: un coach que cambia la modalidad o la
+   * periodicidad del alumno se refleja de inmediato y el formulario de la web pasa a solo lectura
+   * (o avisa de su ventana) sin esperar la rotación del token.
+   */
+  async obtenerSesion(usuarioId: string): Promise<AuthUserDTO> {
+    const [usuario] = await this.db
+      .select()
+      .from(usuarios)
+      .where(eq(usuarios.id, usuarioId))
+      .limit(1);
+
+    if (!usuario || !usuario.activo || usuario.estado === EstadoUsuario.BLOQUEADO) {
+      throw new UnauthorizedException('Usuario no válido o inactivo.');
+    }
+
+    let entrenadorId: string | undefined;
+    let modalidad: Modalidad | null = null;
+    let periodicidadAntropometria: PeriodicidadAntropometria | null = null;
+    let antropometriaInicio: string | null = null;
+
+    if (usuario.rol === Rol.ENTRENADOR) {
+      entrenadorId = usuario.id;
+      // RF-010 §6: `/auth/me` es el ciclo de verificación de la web. Una licencia suspendida (o
+      // una cuenta deshabilitada, ya rechazada arriba) cierra la sesión sin esperar al TTL del
+      // access token.
+      await this.verificarLicenciaEntrenadorActiva(usuario.id);
+    } else if (usuario.rol === Rol.ALUMNO) {
+      const [perfil] = await this.db
+        .select({
+          entrenadorId: perfilesAlumno.entrenadorId,
+          modalidad: perfilesAlumno.modalidad,
+          periodicidadAntropometria: perfilesAlumno.periodicidadAntropometria,
+          antropometriaInicio: perfilesAlumno.antropometriaInicio,
+          deletedAtUtc: perfilesAlumno.deletedAtUtc,
+        })
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.usuarioId, usuario.id))
+        .limit(1);
+
+      if (perfil?.deletedAtUtc) {
+        throw new UnauthorizedException(
+          'Tu cuenta fue dada de baja por tu entrenador. Contacta con tu entrenador para restaurar tu acceso.'
+        );
+      }
+
+      entrenadorId = perfil?.entrenadorId;
+      modalidad = perfil?.modalidad ?? null;
+      // RF-003 RN-01 (WU RF-003b): el calendario viaja con la sesión para que la web del alumno
+      // pueda avisar de su ventana de check-in sin necesitar el UUID de `perfiles_alumno`.
+      periodicidadAntropometria = perfil?.periodicidadAntropometria ?? null;
+      antropometriaInicio = perfil?.antropometriaInicio ?? null;
+    }
+
+    return {
+      id: usuario.id,
+      email: usuario.email,
+      rol: usuario.rol as Rol,
+      entrenadorId,
+      modalidad,
+      periodicidadAntropometria,
+      antropometriaInicio,
     };
   }
 
@@ -159,7 +270,12 @@ export class AuthService {
 
     // La resolución del perfil ocurre ANTES de escribir: un alumno archivado no activa su cuenta.
     let entrenadorId: string | undefined;
-    if (usuario.rol === Rol.ALUMNO) {
+    let modalidad: Modalidad | null = null;
+    if (usuario.rol === Rol.ENTRENADOR) {
+      // RF-010 §6: una licencia suspendida tampoco puede canjear la invitación (el canje emite
+      // tokens; sería una tercera vía de sesión sin el ciclo de verificación).
+      await this.verificarLicenciaEntrenadorActiva(usuario.id);
+    } else if (usuario.rol === Rol.ALUMNO) {
       const [perfil] = await this.db
         .select()
         .from(perfilesAlumno)
@@ -173,6 +289,7 @@ export class AuthService {
       }
 
       entrenadorId = perfil?.entrenadorId;
+      modalidad = perfil?.modalidad ?? null;
     }
 
     const passwordHash = await this.cryptoService.hashPassword(dto.password);
@@ -206,6 +323,7 @@ export class AuthService {
         email: usuario.email,
         rol: usuario.rol as Rol,
         entrenadorId,
+        modalidad,
       },
     };
   }
@@ -234,6 +352,8 @@ export class AuthService {
     let entrenadorId: string | undefined;
     if (usuario.rol === Rol.ENTRENADOR) {
       entrenadorId = usuario.id;
+      // RF-010 §6: la licencia se re-verifica en cada refresh; una cuenta suspendida no renueva.
+      await this.verificarLicenciaEntrenadorActiva(usuario.id);
     } else if (usuario.rol === Rol.ALUMNO) {
       const [perfil] = await this.db
         .select()
@@ -342,6 +462,163 @@ export class AuthService {
       coachCode: nuevoCoach.coachCode,
       tokenInvitacion: rawToken,
       mensaje: 'Entrenador registrado exitosamente.',
+    };
+  }
+
+  /**
+   * RF-010 RN-01 (WU Admin): listado de entrenadores para el panel maestro del Superadmin.
+   *
+   * Solo cuentas con rol ENTRENADOR y su perfil (inner join): un usuario sin perfil de entrenador
+   * no es un entrenador operable y no aparece. Devuelve el envelope paginado estándar del repo,
+   * con `total` como COUNT real (no el tamaño de la página). Orden: alta más reciente primero.
+   */
+  async listarEntrenadores(
+    query: ListarEntrenadoresAdminQueryDTO
+  ): Promise<ListadoEntrenadoresAdminDTO> {
+    const { limit, offset } = query;
+    const soloEntrenadores = eq(usuarios.rol, Rol.ENTRENADOR);
+
+    const [[filaTotal], filas] = await Promise.all([
+      this.db
+        .select({ total: count() })
+        .from(usuarios)
+        .innerJoin(perfilesEntrenador, eq(perfilesEntrenador.usuarioId, usuarios.id))
+        .where(soloEntrenadores),
+      this.db
+        .select({
+          usuarioId: usuarios.id,
+          perfilId: perfilesEntrenador.id,
+          nombres: perfilesEntrenador.nombres,
+          apellidos: perfilesEntrenador.apellidos,
+          nombreComercial: perfilesEntrenador.nombreComercial,
+          email: usuarios.email,
+          coachCode: perfilesEntrenador.coachCode,
+          estadoLicencia: perfilesEntrenador.estadoLicencia,
+          activo: usuarios.activo,
+          fechaAltaUtc: usuarios.createdAtUtc,
+        })
+        .from(usuarios)
+        .innerJoin(perfilesEntrenador, eq(perfilesEntrenador.usuarioId, usuarios.id))
+        .where(soloEntrenadores)
+        .orderBy(desc(usuarios.createdAtUtc), asc(usuarios.id))
+        .limit(limit)
+        .offset(offset),
+    ]);
+
+    return {
+      items: filas.map((fila) => ({
+        ...fila,
+        fechaAltaUtc: new Date(fila.fechaAltaUtc).toISOString(),
+      })),
+      total: Number(filaTotal?.total ?? 0),
+      limit,
+      offset,
+    };
+  }
+
+  /**
+   * RF-010 RN-01 / §6 (WU Admin): habilita o deshabilita la CUENTA de un entrenador.
+   *
+   * Reglas:
+   * - La colección es de entrenadores: un id de alumno (o inexistente) responde 404.
+   * - El Superadmin no puede deshabilitarse a sí mismo (400).
+   * - Idempotente: repetir el mismo estado no escribe y devuelve `cambioAplicado: false`.
+   *
+   * La deshabilitación revoca la sesión en el siguiente ciclo de verificación: login y refresh
+   * la rechazan de inmediato y `/auth/me` cierra la sesión de la web; el access token ya emitido
+   * expira como máximo en 15 minutos (ver `verificarLicenciaEntrenadorActiva`).
+   */
+  async cambiarEstadoEntrenador(
+    usuarioId: string,
+    dto: CambiarEstadoEntrenadorDTO,
+    solicitanteId: string
+  ): Promise<CambioEstadoEntrenadorResultadoDTO> {
+    const [usuario] = await this.db
+      .select()
+      .from(usuarios)
+      .where(eq(usuarios.id, usuarioId))
+      .limit(1);
+
+    if (!usuario || usuario.rol !== Rol.ENTRENADOR) {
+      throw new NotFoundException('Entrenador no encontrado.');
+    }
+
+    if (!dto.activo && usuarioId === solicitanteId) {
+      throw new BadRequestException('No puedes deshabilitar tu propia cuenta.');
+    }
+
+    if (usuario.activo === dto.activo) {
+      return {
+        usuarioId,
+        activo: usuario.activo,
+        cambioAplicado: false,
+        mensaje: dto.activo
+          ? 'La cuenta del entrenador ya estaba activa.'
+          : 'La cuenta del entrenador ya estaba deshabilitada.',
+      };
+    }
+
+    await this.db
+      .update(usuarios)
+      .set({ activo: dto.activo, updatedAtUtc: new Date() })
+      .where(eq(usuarios.id, usuarioId));
+
+    return {
+      usuarioId,
+      activo: dto.activo,
+      cambioAplicado: true,
+      mensaje: dto.activo
+        ? 'Entrenador reactivado. Ya puede iniciar sesión y renovar tokens.'
+        : 'Entrenador deshabilitado. Su login y su refresh quedan bloqueados; su access token actual expira en 15 minutos como máximo.',
+    };
+  }
+
+  /**
+   * RF-010 RN-01 (WU Admin): activa o suspende la LICENCIA de un entrenador.
+   *
+   * Efectos reales del estado `SUSPENDIDA_SUPERADMIN` (los mismos que la cuenta deshabilitada):
+   * la resolución pública del `coach_code` deja de resolver (RF-011 RN-07.1), el login y el
+   * refresh del coach se rechazan y `/auth/me` cierra su sesión. Idempotente.
+   */
+  async cambiarLicenciaEntrenador(
+    usuarioId: string,
+    dto: CambiarLicenciaEntrenadorDTO
+  ): Promise<CambioLicenciaEntrenadorResultadoDTO> {
+    const [coach] = await this.db
+      .select()
+      .from(perfilesEntrenador)
+      .where(eq(perfilesEntrenador.usuarioId, usuarioId))
+      .limit(1);
+
+    if (!coach) {
+      throw new NotFoundException('Entrenador no encontrado.');
+    }
+
+    if (coach.estadoLicencia === dto.estadoLicencia) {
+      return {
+        usuarioId,
+        estadoLicencia: coach.estadoLicencia,
+        cambioAplicado: false,
+        mensaje:
+          dto.estadoLicencia === EstadoLicencia.ACTIVA
+            ? 'La licencia del entrenador ya estaba activa.'
+            : 'La licencia del entrenador ya estaba suspendida.',
+      };
+    }
+
+    await this.db
+      .update(perfilesEntrenador)
+      .set({ estadoLicencia: dto.estadoLicencia, updatedAtUtc: new Date() })
+      .where(eq(perfilesEntrenador.usuarioId, usuarioId));
+
+    return {
+      usuarioId,
+      estadoLicencia: dto.estadoLicencia,
+      cambioAplicado: true,
+      mensaje:
+        dto.estadoLicencia === EstadoLicencia.ACTIVA
+          ? 'Licencia activada. El entrenador recupera su acceso y su enlace de captación vuelve a resolver.'
+          : 'Licencia suspendida. El entrenador no puede iniciar sesión ni renovar tokens y su enlace público deja de resolver.',
     };
   }
 }

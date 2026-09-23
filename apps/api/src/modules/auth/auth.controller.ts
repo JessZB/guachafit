@@ -1,25 +1,48 @@
 import {
   Controller,
   Post,
+  Patch,
   Get,
   Body,
+  Param,
+  Query,
   UseGuards,
   Req,
   Inject,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
+import { ZodType } from 'zod';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import {
   Rol,
+  UUID_REGEX,
   LoginUsuarioSchema,
   EstablecerPasswordConTokenSchema,
   RefreshTokenSchema,
   CrearEntrenadorSchema,
+  ListarEntrenadoresAdminQuerySchema,
+  CambiarEstadoEntrenadorSchema,
+  CambiarLicenciaEntrenadorSchema,
 } from '@guachafit/shared';
+
+/**
+ * Valida con el contrato compartido y devuelve 400 con el primer mensaje del contrato (mismo
+ * patrón que `nutricion.controller`): evita que un ZodError crudo termine en un 500 genérico.
+ * Se usa `ZodType<T, any, any>` (no `ZodSchema<T>`) para que T sea el tipo de SALIDA: los
+ * contratos con `.default()` (paginación) resuelven `limit`/`offset` en el parseo.
+ */
+function parsearContrato<T>(schema: ZodType<T, any, any>, body: unknown): T {
+  const resultado = schema.safeParse(body);
+  if (!resultado.success) {
+    throw new BadRequestException(resultado.error.issues[0]?.message ?? 'Datos inválidos.');
+  }
+  return resultado.data;
+}
 
 @Controller('auth')
 export class AuthController {
@@ -70,13 +93,71 @@ export class AuthController {
   }
 
   /**
-   * Consulta de la sesión activa
+   * Listado de entrenadores del panel maestro (RF-010 RN-01: "Crear / Deshabilitar Entrenadores"
+   * y "Gestionar Licencias" ✅ Superadmin). Envelope paginado estándar `{ items, total, limit,
+   * offset }`. Solo el superadmin lo consume; el negocio del coach queda fuera de la matriz.
+   */
+  @Get('entrenadores')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.SUPERADMIN)
+  async listarEntrenadores(@Query() query: unknown) {
+    const dto = parsearContrato(ListarEntrenadoresAdminQuerySchema, query ?? {});
+    return this.authService.listarEntrenadores(dto);
+  }
+
+  /**
+   * Deshabilitar/reactivar la CUENTA de un entrenador (RF-010 RN-01/§6).
+   *
+   * `:id` es el `usuarioId` de la cuenta (el mismo que expone `GET /auth/entrenadores`). La
+   * deshabilitación es idempotente y revoca login/refresh en el siguiente ciclo de verificación.
+   */
+  @Patch('entrenadores/:id/estado')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.SUPERADMIN)
+  async cambiarEstadoEntrenador(
+    @Req() req: any,
+    @Param('id') usuarioId: string,
+    @Body() body: unknown
+  ) {
+    if (!UUID_REGEX.test(usuarioId)) {
+      throw new BadRequestException('El ID del entrenador debe ser un UUID válido.');
+    }
+    const dto = parsearContrato(CambiarEstadoEntrenadorSchema, body);
+    return this.authService.cambiarEstadoEntrenador(usuarioId, dto, req.user.sub);
+  }
+
+  /**
+   * Activar/suspender la LICENCIA de un entrenador (RF-010 RN-01).
+   *
+   * `:id` es el `usuarioId` de la cuenta. Suspender bloquea login/refresh del coach y su enlace
+   * público de captación (RF-011 RN-07.1); activar restaura ambos. Idempotente.
+   */
+  @Patch('entrenadores/:id/licencia')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.SUPERADMIN)
+  async cambiarLicenciaEntrenador(
+    @Req() req: any,
+    @Param('id') usuarioId: string,
+    @Body() body: unknown
+  ) {
+    if (!UUID_REGEX.test(usuarioId)) {
+      throw new BadRequestException('El ID del entrenador debe ser un UUID válido.');
+    }
+    const dto = parsearContrato(CambiarLicenciaEntrenadorSchema, body);
+    return this.authService.cambiarLicenciaEntrenador(usuarioId, dto);
+  }
+
+  /**
+   * Consulta de la sesión activa.
+   *
+   * WU RF-003a: la sesión se resuelve contra el perfil actual (no contra el claim del JWT) para
+   * exponer `modalidad` del alumno al instante. Mismo envelope `{ usuario }` de siempre.
    */
   @Get('me')
   @UseGuards(JwtAuthGuard)
   async me(@Req() req: any) {
     return {
-      usuario: req.user,
+      usuario: await this.authService.obtenerSesion(req.user.sub),
     };
   }
 }
