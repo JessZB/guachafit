@@ -1,4 +1,5 @@
 import { apiClient, generateIdempotencyKey } from './api-client';
+import type { PresignedUploadUrlResponseDTO } from '@guachafit/shared';
 import {
   getDueMutations,
   getOutboxSummary,
@@ -7,10 +8,18 @@ import {
   markMutationSyncing,
   markMutationSynced,
   pruneSyncedMutations,
+  purgeMutationPhotos,
   recoverStuckMutations,
   subscribeToOutboxChanges,
+  updateMutationPhotos,
+  type FotoCheckinEnCola,
+  type OutboxMutation,
   type OutboxSummary,
 } from './offline-db';
+import {
+  esRechazoVentanaCheckin,
+  MENSAJE_DIA_CERRADO_REPORTE_CON_FOTOS,
+} from './nutricion-checkin';
 import { queryClient } from './query-client';
 
 // ---------------------------------------------------------------------------
@@ -98,6 +107,94 @@ function getErrorMessage(err: unknown): string {
   return 'Error de red al sincronizar';
 }
 
+/**
+ * RF-002 §6/RN-03 — check-in nutricional CON fotos: sube primero los blobs pendientes
+ * (presign del módulo `comidas` + PUT a R2) persistiendo cada storageKey al instante y, con
+ * todas las claves, registra el check-in con el MISMO contrato que el flujo online.
+ *
+ * Semántica de errores (la clasifica el bucle de `processOutboxQueue`):
+ * - presign 4xx (contrato/datos) → `rejected` visible con la razón del servidor.
+ * - PUT fallido o error de red → reintentable (`failed` con backoff): el reintento pide una
+ *   presign nueva (por si la URL expiró) y salta las fotos que ya tienen storageKey.
+ * - POST 400 por ventana/día cerrado → `rejected` con un mensaje claro; la evidencia local
+ *   NO se toca hasta que el usuario la descarte desde el panel.
+ */
+async function processCheckinNutricionalConFotos(item: OutboxMutation): Promise<void> {
+  const fotos: FotoCheckinEnCola[] = [...(item.fotos ?? [])];
+  if (!item.alumnoId) {
+    throw new Error(
+      'El reporte con fotos no tiene alumno asociado: descártalo y vuelve a guardarlo.'
+    );
+  }
+
+  for (let indice = 0; indice < fotos.length; indice++) {
+    const foto = fotos[indice];
+    // Reanudable: una foto ya subida en un intento previo no se vuelve a subir.
+    if (foto.storageKey) continue;
+
+    const presigned = await apiClient<PresignedUploadUrlResponseDTO>(
+      '/antropometria/presigned-upload-url',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          modulo: 'comidas',
+          alumnoId: item.alumnoId,
+          mimeType: foto.contentType,
+        }),
+      }
+    );
+
+    const respuesta = await fetch(presigned.uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': foto.contentType },
+      body: foto.blob,
+    });
+    if (!respuesta.ok) {
+      // URL expirada o fallo de la bóveda: reintentable con una presign nueva (no es un rechazo).
+      throw new Error(
+        `No se pudo subir la foto ${indice + 1}/${fotos.length} a la bóveda (${respuesta.status}).`
+      );
+    }
+
+    foto.storageKey = presigned.storageKey;
+    if (item.id !== undefined) {
+      // Persistencia inmediata: un cierre a mitad de la subida no repite estas fotos.
+      await updateMutationPhotos(item.id, fotos);
+    }
+  }
+
+  const fotosPlatos = fotos
+    .filter((foto): foto is FotoCheckinEnCola & { storageKey: string } => Boolean(foto.storageKey))
+    .map((foto) => ({ tipoComida: foto.tipoComida, storageKey: foto.storageKey }));
+
+  try {
+    await apiClient(item.endpoint, {
+      method: item.method,
+      body: JSON.stringify({
+        ...item.payload,
+        ...(fotosPlatos.length > 0 ? { fotosPlatos } : {}),
+      }),
+      idempotencyKey: item.idempotencyKey || generateIdempotencyKey(),
+    });
+  } catch (err) {
+    // RN-02: la ventana/día local cerró mientras la evidencia esperaba en la cola. Se marca
+    // como rechazo definitivo con un mensaje claro (sin el tecnicismo del servidor).
+    if (getErrorStatus(err) === 400 && esRechazoVentanaCheckin(getErrorMessage(err))) {
+      const rechazo = new Error(MENSAJE_DIA_CERRADO_REPORTE_CON_FOTOS) as Error & {
+        status: number;
+      };
+      rechazo.status = 400;
+      throw rechazo;
+    }
+    throw err;
+  }
+
+  if (item.id !== undefined) {
+    // El servidor ya tiene el reporte y las fotos: se liberan los blobs locales (queda auditoría).
+    await purgeMutationPhotos(item.id);
+  }
+}
+
 export async function processOutboxQueue(): Promise<ProcessOutboxResult> {
   if (isSyncing) {
     return { processed: 0, failed: 0, rejected: 0, skipped: true };
@@ -124,13 +221,18 @@ export async function processOutboxQueue(): Promise<ProcessOutboxResult> {
       await markMutationSyncing(item.id);
 
       try {
-        await apiClient(item.endpoint, {
-          method: item.method,
-          body: JSON.stringify(item.payload),
-          // La MISMA key en cada reintento: el servidor puede deduplicar aunque el
-          // intento anterior haya llegado y la respuesta se haya perdido.
-          idempotencyKey: item.idempotencyKey || generateIdempotencyKey(),
-        });
+        if (item.tipo === 'nutricion-checkin-fotos') {
+          // Rama con evidencia fotográfica: sube los blobs y luego registra el check-in.
+          await processCheckinNutricionalConFotos(item);
+        } else {
+          await apiClient(item.endpoint, {
+            method: item.method,
+            body: JSON.stringify(item.payload),
+            // La MISMA key en cada reintento: el servidor puede deduplicar aunque el
+            // intento anterior haya llegado y la respuesta se haya perdido.
+            idempotencyKey: item.idempotencyKey || generateIdempotencyKey(),
+          });
+        }
         await markMutationSynced(item.id);
         processed++;
       } catch (err) {

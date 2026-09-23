@@ -1,5 +1,11 @@
 import Dexie, { Table } from 'dexie';
-import { SesionEntrenamientoDetalleDTO, CheckinNutricionalDetalleDTO, EjercicioCatalogoDetalleDTO } from '@guachafit/shared';
+import {
+  SesionEntrenamientoDetalleDTO,
+  CheckinNutricionalDetalleDTO,
+  EjercicioCatalogoDetalleDTO,
+  type CheckinNutricionalDTO,
+  type TipoComida,
+} from '@guachafit/shared';
 import { generateIdempotencyKey } from './api-client';
 
 /**
@@ -11,6 +17,25 @@ import { generateIdempotencyKey } from './api-client';
  * - `rejected`: error 4xx del servidor; NUNCA se reintenta en automático ni se borra en silencio.
  */
 export type OutboxStatus = 'pending' | 'syncing' | 'synced' | 'failed' | 'rejected';
+
+/** Máximo de fotografías de platos por reporte (RF-002 RN-03), espejo del contrato compartido. */
+export const MAX_FOTOS_CHECKIN_NUTRICIONAL = 4;
+
+/** Tipo discriminado de las mutaciones con procesamiento especial en `offline-sync`. */
+export type TipoMutacionCola = 'nutricion-checkin-fotos';
+
+/**
+ * Foto de plato que viaja dentro de la cola (RF-002 §6/RN-03): el blob comprimido en el
+ * dispositivo vive en IndexedDB y `storageKey` registra el progreso de subida.
+ * `storageKey` no nulo = ya está en la bóveda: el reintento NO la vuelve a subir.
+ */
+export interface FotoCheckinEnCola {
+  tipoComida: TipoComida;
+  nombre: string;
+  contentType: string;
+  blob: Blob;
+  storageKey: string | null;
+}
 
 export interface OutboxMutation {
   id?: number;
@@ -28,6 +53,12 @@ export interface OutboxMutation {
   lastError?: string | null;
   /** Instante (epoch ms) a partir del cual un `failed` puede reintentarse. */
   nextRetryAt?: number | null;
+  /** Discriminador de procesamiento especial (p. ej. check-in con fotos). */
+  tipo?: TipoMutacionCola;
+  /** Dueño de los blobs; necesario para pedir el presign de cada foto al sincronizar. */
+  alumnoId?: string;
+  /** Evidencia fotográfica del check-in: blobs locales + progreso de subida por foto. */
+  fotos?: FotoCheckinEnCola[];
 }
 
 export interface OutboxSummary {
@@ -123,6 +154,71 @@ export async function queueOfflineMutation(
   return mutationId;
 }
 
+/**
+ * RF-002 §6/RN-03: encola un check-in nutricional CON fotos comprimidas.
+ *
+ * A diferencia del POST directo (que sube las fotos y luego registra), aquí la evidencia
+ * completa —datos + blobs— vive en IndexedDB y el procesador de `offline-sync` la sube en
+ * segundo plano: primero cada foto (presign `comidas` + PUT) guardando su storageKey al
+ * instante para reanudar sin re-subir, y después el check-in con las claves.
+ *
+ * @param payload cuerpo del check-in SIN `fotosPlatos`: las claves las compone el sincronizador.
+ * @param fotos entre 1 y 4 fotografías comprimidas (RN-03) con su blob local.
+ * @param alumnoId dueño de la evidencia; viaja para pedir el presign en el reintento.
+ */
+export async function queueCheckinNutricionalConFotos(
+  payload: CheckinNutricionalDTO,
+  fotos: FotoCheckinEnCola[],
+  alumnoId: string
+): Promise<number> {
+  if (fotos.length === 0 || fotos.length > MAX_FOTOS_CHECKIN_NUTRICIONAL) {
+    throw new Error(
+      `Un reporte con fotos requiere entre 1 y ${MAX_FOTOS_CHECKIN_NUTRICIONAL} fotografías (RN-03).`
+    );
+  }
+
+  const descripcion = `Reporte nutricional con ${fotos.length} foto${
+    fotos.length === 1 ? '' : 's'
+  } · ${payload.fecha}`;
+
+  const mutationId = await offlineDb.outboxMutations.add({
+    endpoint: '/nutricion/checkin-diario',
+    method: 'POST',
+    payload,
+    idempotencyKey: generateIdempotencyKey(),
+    description: descripcion,
+    status: 'pending',
+    createdAt: Date.now(),
+    attempts: 0,
+    lastAttemptAt: null,
+    lastError: null,
+    nextRetryAt: null,
+    tipo: 'nutricion-checkin-fotos',
+    alumnoId,
+    fotos,
+  });
+  notifyOutboxChanged();
+  return mutationId;
+}
+
+/**
+ * Persiste el progreso de subida de las fotos tal cual quedó (storageKeys ya subidas).
+ * Se llama tras CADA foto subida: si la app se cierra a mitad, el reintento reanuda aquí.
+ */
+export async function updateMutationPhotos(id: number, fotos: FotoCheckinEnCola[]): Promise<void> {
+  await offlineDb.outboxMutations.update(id, { fotos });
+  notifyOutboxChanged();
+}
+
+/**
+ * Purga los blobs de una mutación con fotos ya confirmada por el servidor: la evidencia vive
+ * en la bóveda (R2) y la fila `synced` se conserva sin cargar megabytes en el dispositivo.
+ */
+export async function purgeMutationPhotos(id: number): Promise<void> {
+  await offlineDb.outboxMutations.update(id, { fotos: [] });
+  notifyOutboxChanged();
+}
+
 export async function markMutationSyncing(id: number): Promise<void> {
   const item = await offlineDb.outboxMutations.get(id);
   if (!item) return;
@@ -177,7 +273,11 @@ export async function retryMutation(id: number): Promise<void> {
   notifyOutboxChanged();
 }
 
-/** Descarte manual y explícito de una mutación (el usuario decide perderla). */
+/**
+ * Descarte manual y explícito de una mutación (el usuario decide perderla).
+ * Para un check-in con fotos, borrar la fila libera también sus blobs de IndexedDB: la
+ * evidencia local desaparece solo con esta decisión (nunca en silencio).
+ */
 export async function discardMutation(id: number): Promise<void> {
   await offlineDb.outboxMutations.delete(id);
   notifyOutboxChanged();

@@ -32,6 +32,21 @@ export const MENSAJE_COLA_SERVIDOR =
 
 export const MENSAJE_YA_REGISTRADO_HOY = 'Ya registraste tu reporte de hoy.';
 
+/**
+ * RF-002 §6/RN-02: mensaje claro cuando la ventana (o el día local) cerró antes de que la cola
+ * alcanzara a subir las fotos y registrar el reporte.
+ */
+export const MENSAJE_DIA_CERRADO_REPORTE_CON_FOTOS =
+  'El día ya cerró: el reporte con fotos no pudo registrarse. Las fotos y los datos siguen guardados en tu dispositivo hasta que decidas descartarlos desde el panel de sincronización.';
+
+/**
+ * Detecta el rechazo de ventana/día local del servidor (RN-02) por su texto: es el único 400
+ * del check-in que merece una explicación humana en vez del detalle crudo de la API.
+ */
+export function esRechazoVentanaCheckin(detalle: string): boolean {
+  return /18:00|23:59|ventana|día local/i.test(detalle);
+}
+
 export const MENSAJE_ERROR_GENERICO =
   'No se pudo guardar tu reporte. Revisa los datos e inténtalo de nuevo.';
 

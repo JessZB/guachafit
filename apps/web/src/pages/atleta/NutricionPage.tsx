@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useAuth } from '../../context/auth-context';
 import { apiClient, resolverUrlApi } from '../../lib/api-client';
 import { resolverBloqueoAlumno, type BloqueoAlumno } from '../../lib/acceso-alumno';
-import { queueOfflineMutation } from '../../lib/offline-db';
+import { queueOfflineMutation, queueCheckinNutricionalConFotos, type FotoCheckinEnCola } from '../../lib/offline-db';
 import { BloqueoAlumnoPanel } from '../../components/common/BloqueoAlumnoPanel';
 import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import { VisorFoto } from '../../components/common/VisorFoto';
@@ -11,6 +11,7 @@ import {
   construirPayloadCheckinNutricional,
   decidirAccionErrorCheckinNutricional,
   evaluarVentanaCheckinLocal,
+  obtenerStatusError,
   MENSAJE_ANTES_DE_VENTANA,
 } from '../../lib/nutricion-checkin';
 import { comprimirImagenAWebp } from '../../lib/imagen-comprimida';
@@ -60,12 +61,14 @@ import {
   ExternalLink,
   Loader2,
   Gauge,
+  AlertTriangle,
 } from 'lucide-react';
 
 /**
  * Estado del guardado del reporte nutricional (RF-002).
  * - `saved`: 2xx del servidor (o reporte de hoy ya existente); único estado con "éxito".
- * - `queued`: encolado offline legítimo (sin conexión / error de red o 5xx, sin fotos).
+ * - `queued`: encolado offline legítimo (sin conexión / error de red o 5xx); con fotos, la
+ *   evidencia completa espera en la cola durable hasta que el servidor la confirme.
  * - `error`: rechazo de negocio (4xx distinto de 409), fallo de subida de fotos o de validación.
  */
 type EstadoReporteNutricional = 'idle' | 'saved' | 'queued' | 'error';
@@ -122,6 +125,8 @@ export function NutricionPage() {
     tono: 'info' | 'error';
     texto: string;
   } | null>(null);
+  // RF-002 §6: fotos que quedaron en la cola durable con el reporte encolado (0 = sin fotos).
+  const [fotosEncoladas, setFotosEncoladas] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [existingCheckin, setExistingCheckin] = useState<CheckinNutricionalDetalleDTO | null>(null);
   // RF-012: alumno pausado no puede enviar reportes; la pantalla informativa reemplaza al formulario.
@@ -307,13 +312,19 @@ export function NutricionPage() {
     });
   };
 
-  /** Sube cada foto comprimida a la bóveda y devuelve las claves del contrato `fotosPlatos`. */
-  const subirFotosDePlatos = async (): Promise<FotoComidaInputDTO[]> => {
+  /**
+   * Sube cada foto comprimida a la bóveda y devuelve el mapa foto→storageKey. `claves` se
+   * actualiza tras CADA subida: si una foto posterior falla por red, el progreso ya conseguido
+   * viaja a la cola (el reintento no vuelve a subir esas fotos).
+   */
+  const subirFotosDePlatos = async (
+    fotos: FotoPlatoSeleccionada[],
+    claves: Map<string, string> = new Map()
+  ): Promise<Map<string, string>> => {
     if (!user?.id) {
       throw new Error('No se pudo identificar tu sesión. Vuelve a iniciar sesión e inténtalo de nuevo.');
     }
-    const subidas: FotoComidaInputDTO[] = [];
-    for (const foto of fotosPlatos) {
+    for (const foto of fotos) {
       const presigned = await apiClient<PresignedUploadUrlResponseDTO>(
         '/antropometria/presigned-upload-url',
         {
@@ -336,9 +347,9 @@ export function NutricionPage() {
             `(${respuesta.status}). Revisa tu conexión e inténtalo de nuevo.`
         );
       }
-      subidas.push({ tipoComida: foto.tipoComida, storageKey: presigned.storageKey });
+      claves.set(foto.id, presigned.storageKey);
     }
-    return subidas;
+    return claves;
   };
 
   /** Galería local del día en modo demo: las vistas previas elegidas son la evidencia visible. */
@@ -406,53 +417,105 @@ export function NutricionPage() {
       return;
     }
 
-    // RN-03: las fotos se suben ANTES del check-in. Un fallo de subida no registra el día:
-    // el alumno ve el error y puede reintentar sin perder las fotos seleccionadas.
-    let fotosPlatosSubidas: FotoComidaInputDTO[] = [];
-    if (fotosPlatos.length > 0) {
-      if (!navigator.onLine) {
-        setIsLoading(false);
-        setFotosError(
-          'Sin conexión: no podemos subir tus fotos. Conéctate e inténtalo de nuevo; no se envió nada.'
-        );
-        return;
-      }
-      try {
-        fotosPlatosSubidas = await subirFotosDePlatos();
-      } catch (err: any) {
-        setIsLoading(false);
-        setFotosError(err?.message || 'No se pudieron subir las fotos. Inténtalo de nuevo.');
-        return;
-      }
-    }
+    // RF-002 §6/RN-03: la evidencia con fotos NUNCA se pierde. Si no hay red (o la subida falla
+    // por red/5xx), el reporte completo —datos + blobs comprimidos— entra a la cola durable y se
+    // sincroniza solo: primero las fotos (presign + PUT) y después el check-in con sus claves.
+    const clavesSubidas = new Map<string, string>();
 
-    const payloadConFotos =
-      fotosPlatosSubidas.length > 0 ? { ...payload, fotosPlatos: fotosPlatosSubidas } : payload;
+    const construirFotosEnCola = (): FotoCheckinEnCola[] =>
+      fotosPlatos.map((foto) => ({
+        tipoComida: foto.tipoComida,
+        nombre: foto.archivo.name,
+        contentType: foto.archivo.type,
+        blob: foto.archivo,
+        storageKey: clavesSubidas.get(foto.id) ?? null,
+      }));
+
+    /** La evidencia ya está a salvo en la cola: se limpia el formulario y su memoria de previews. */
+    const limpiarFormularioEncolado = () => {
+      fotosRef.current.forEach((foto) => URL.revokeObjectURL(foto.previewUrl));
+      setFotosPlatos([]);
+      setFotosError(null);
+      setAguaLitros('');
+      setCalorias('');
+      setProteina('');
+      setNotas('');
+    };
 
     const encolar = async () => {
-      await queueOfflineMutation(
-        '/nutricion/checkin-diario',
-        'POST',
-        payloadConFotos,
-        'Check-in nutricional diario'
-      );
+      if (fotosPlatos.length > 0) {
+        if (!user?.id) {
+          throw new Error('No se pudo identificar tu sesión. Vuelve a iniciar sesión e inténtalo de nuevo.');
+        }
+        await queueCheckinNutricionalConFotos(payload, construirFotosEnCola(), user.id);
+        setFotosEncoladas(fotosPlatos.length);
+        limpiarFormularioEncolado();
+      } else {
+        await queueOfflineMutation(
+          '/nutricion/checkin-diario',
+          'POST',
+          payload,
+          'Check-in nutricional diario'
+        );
+      }
       setEstadoReporte('queued');
     };
 
+    // Sin conexión: el reporte (con o sin fotos) va directo a la cola; nada toca la red.
     if (!navigator.onLine) {
       try {
         await encolar();
-      } catch {
+      } catch (err: any) {
         setEstadoReporte('error');
         setAvisoReporte({
           tono: 'error',
-          texto: 'No se pudo guardar el reporte en el dispositivo. Inténtalo de nuevo.',
+          texto:
+            err?.message ||
+            'No se pudo guardar el reporte en el dispositivo. Inténtalo de nuevo.',
         });
       } finally {
         setIsLoading(false);
       }
       return;
     }
+
+    // RN-03: con conexión, las fotos se suben ANTES del check-in.
+    if (fotosPlatos.length > 0) {
+      try {
+        await subirFotosDePlatos(fotosPlatos, clavesSubidas);
+      } catch (err: any) {
+        const status = obtenerStatusError(err);
+        if (status >= 400 && status < 500) {
+          // Rechazo de contrato del presign: reintentar no ayuda y encolar sería mentir.
+          setIsLoading(false);
+          setFotosError(err?.message || 'No se pudieron subir las fotos. Inténtalo de nuevo.');
+          return;
+        }
+        // Fallo de red/5xx: la evidencia (con el progreso ya subido) se encola para reintento.
+        try {
+          await encolar();
+        } catch {
+          setEstadoReporte('error');
+          setAvisoReporte({
+            tono: 'error',
+            texto: 'No se pudo guardar el reporte en el dispositivo. Inténtalo de nuevo.',
+          });
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+    }
+
+    const fotosPlatosSubidas: FotoComidaInputDTO[] = fotosPlatos
+      .map((foto) => {
+        const storageKey = clavesSubidas.get(foto.id);
+        return storageKey ? { tipoComida: foto.tipoComida, storageKey } : null;
+      })
+      .filter((foto): foto is FotoComidaInputDTO => foto !== null);
+
+    const payloadConFotos =
+      fotosPlatosSubidas.length > 0 ? { ...payload, fotosPlatos: fotosPlatosSubidas } : payload;
 
     try {
       // 2xx es el ÚNICO resultado que cuenta como éxito (RF-002: sin éxito fabricado).
@@ -609,16 +672,26 @@ export function NutricionPage() {
             </span>
             <ul className="space-y-1.5">
               {metas!.recursos.map((recurso) => (
-                <li key={recurso.url}>
-                  <a
-                    href={recurso.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 min-h-11 text-xs font-bold text-primary hover:underline"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                    <span>{recurso.titulo}</span>
-                  </a>
+                <li key={recurso.storageKey ?? recurso.url ?? recurso.titulo}>
+                  {recurso.url ? (
+                    <a
+                      href={recurso.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 min-h-11 text-xs font-bold text-primary hover:underline"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                      <span>{recurso.titulo}</span>
+                    </a>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 min-h-11 text-xs font-semibold text-muted-foreground">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning" />
+                      <span>
+                        {recurso.titulo} · el enlace no está disponible; pídele a tu coach que lo
+                        vuelva a subir
+                      </span>
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -936,7 +1009,9 @@ export function NutricionPage() {
               : reporteRegistradoHoy
               ? 'Reporte de hoy ya registrado'
               : reporteEncolado
-              ? 'Guardado sin conexión · pendiente de envío'
+              ? fotosEncoladas > 0
+                ? 'Guardado sin conexión · pendiente de envío (con fotos)'
+                : 'Guardado sin conexión · pendiente de envío'
               : !puedeReportar
               ? 'Disponible a partir de las 18:00'
               : 'Guardar Check-in Nutricional'}
@@ -952,7 +1027,12 @@ export function NutricionPage() {
 
         {reporteEncolado && (
           <p className="text-center text-xs text-warning font-semibold">
-            ⏳ Guardado en tu dispositivo. Se enviará automáticamente al recuperar la conexión.
+            ⏳ Guardado en tu dispositivo
+            {fotosEncoladas > 0
+              ? ` con ${fotosEncoladas} foto${fotosEncoladas === 1 ? '' : 's'}`
+              : ''}
+            . Se enviará automáticamente al recuperar la conexión; el día quedará registrado solo
+            cuando el servidor lo confirme.
           </p>
         )}
 
@@ -1015,7 +1095,12 @@ export function NutricionPage() {
           </div>
           <ul className="grid grid-cols-7 gap-1.5">
             {[...calendarioSemana].reverse().map((dia) => {
-              const etiqueta = etiquetaEstadoDia(dia.estado);
+              // RF-002 §6: el día con reporte encolado no declara éxito ni "No reportado":
+              // queda pendiente de sincronizar hasta que el servidor lo confirme.
+              const etiqueta =
+                reporteEncolado && dia.fecha === hoyLocal
+                  ? { texto: 'Pendiente de sincronizar', tono: 'warning' as const }
+                  : etiquetaEstadoDia(dia.estado);
               return (
                 <li key={dia.fecha} className="text-center">
                   <span

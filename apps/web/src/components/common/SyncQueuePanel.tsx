@@ -196,6 +196,7 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
             const meta = STATUS_META[item.status];
             const isBusy = busyId === item.id;
             const isDiscarding = confirmDiscardId === item.id;
+            const fotosEnCola = item.fotos?.length ?? 0;
             return (
               <div
                 key={item.id}
@@ -238,6 +239,14 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
                     {item.status === 'rejected'
                       ? `El servidor rechazó este cambio: ${item.lastError}. No se reintentará automáticamente.`
                       : `Último error: ${item.lastError}. Se reintentará automáticamente.`}
+                  </p>
+                )}
+
+                {fotosEnCola > 0 && (item.status === 'rejected' || item.status === 'failed') && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Este reporte conserva {fotosEnCola} foto{fotosEnCola === 1 ? '' : 's'} en tu
+                    dispositivo. Si reintentas se subirá solo lo pendiente; si lo descartas, la
+                    evidencia se eliminará del dispositivo.
                   </p>
                 )}
 
