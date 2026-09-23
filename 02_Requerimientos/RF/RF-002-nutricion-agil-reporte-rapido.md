@@ -88,9 +88,9 @@ Then el sistema debe persistir los totales numéricos asociados a la fecha
 
 ## 7. Estado real de implementación
 
-**Implementado y verificado (2026-09-22)** — commits `feat(nutricion): metas reales, tolerancia, ventana y diario de platos (RF-002)` y `feat(web): nutricion visible (metas, tolerancia, diario de platos y vista del coach)`. Suites en verde: **551 (web)** y **648 (API)**; smoke runtime 23/23 (compresión real, reporte, tolerancia, galería, "No reportado" y editor de metas).
+**Implementado y verificado (2026-09-22)** — commits `feat(nutricion): metas reales, tolerancia, ventana y diario de platos (RF-002)` y `feat(web): nutricion visible (metas, tolerancia, diario de platos y vista del coach)`. Suites en verde: **558 (web)** y **648 (API)**; smoke runtime 23/23 (compresión real, reporte, tolerancia, galería, "No reportado" y editor de metas) + smoke de la cola con fotos 25/25 (offline emulado, evidencia en IndexedDB, panel, fallo de red y reintento) y flujo online directo verificado.
 
-> **Se mantiene `parcial`** aunque el flujo ya existe de punta a punta: dos comportamientos previstos en este documento no están implementados como se especifican (ver "Límites deliberados"). Todo el resto de §4, §5 y el primer caso borde de §6 está implementado.
+> **Se mantiene `parcial`** aunque el flujo ya existe de punta a punta: quedan dos límites declarados (recursos educativos como enlaces y smoke contra el bucket R2 real; ver "Límites deliberados"). El primer caso borde de §6 (encolado de fotos) quedó **implementado** en la iteración "Cola con fotos". Todo el resto de §4, §5 y §6 está implementado.
 
 ### RN-01 — Metas del coach
 
@@ -107,7 +107,7 @@ Then el sistema debe persistir los totales numéricos asociados a la fecha
 ### RN-03 — Diario fotográfico (1–4 platos)
 
 - Compresión **en el dispositivo** antes de pedir la URL: WebP 1920 px / calidad 0.85, con fallback JPEG si el navegador no lo soporta.
-- Subida con presign `modulo: 'comidas'`; las claves viajan en `fotosPlatos`. Una subida fallida **no registra el día**: error visible y fotos conservadas para reintento manual.
+- Subida con presign `modulo: 'comidas'`; las claves viajan en `fotosPlatos`. Con conexión, una subida fallida **no registra el día** y conserva las fotos en el formulario; si el fallo es de red/5xx (o no hay conexión), el reporte **se encola completo** (datos + blobs comprimidos) y el sincronizador sube primero las fotos y después registra el check-in.
 - Lectura con `fotoUrl` firmado (TTL 900 s) tanto para el alumno como para el coach; galería con visor accesible (Escape cierra y devuelve el foco).
 
 ### RN-04 / Escenario 3 — Totales y tolerancia ±10 %
@@ -123,9 +123,9 @@ Then el sistema debe persistir los totales numéricos asociados a la fecha
 
 ### Límites deliberados y notas honestas
 
-Los puntos 1 y 2 son desviaciones frente al texto vigente del RF: por eso el estado se mantiene en `parcial`. Los puntos 3 y 4 son límites de alcance ya declarados en la implementación.
+Los puntos 2 y 4 son desviaciones/límites frente al texto vigente del RF (por eso el estado se mantiene en `parcial`); el punto 3 es un límite de alcance ya declarado y el punto 1 quedó **resuelto**.
 
-1. **Encolado de fotos (§6, subida fallida):** el documento pide encolar las imágenes para reintento automático en segundo plano; la implementación **no encola reportes con fotos** (a propósito): prefiere declarar el error antes que perder evidencia en silencio. Los reportes **sin fotos** sí usan la cola offline existente.
+1. **Encolado de fotos (§6, subida fallida): RESUELTO.** Un check-in con fotos sin conexión (o con fallo de red/5xx en la subida) se encola completo —datos + blobs comprimidos en IndexedDB— como mutación `nutricion-checkin-fotos` y se sincroniza solo: primero cada foto (presign `comidas` + PUT) persistiendo su `storageKey` al instante para reanudar sin re-subir, y después el POST del check-in con las claves. Un 4xx del servidor (p. ej. ventana/día cerrado) deja la mutación rechazada con mensaje claro y la evidencia se conserva hasta descarte manual; el panel de sincronización muestra estado, razón y Reintentar/Descartar, y explica la evidencia retenida. Máximo 4 fotos (RN-03).
 2. **Recursos educativos (RN-01):** son enlaces validados; no existe pipeline de subida de PDFs.
 3. **Listado de check-ins:** no es server-paginado; el calendario del coach usa la ventana de 30 días con paginación en cliente declarada.
 4. **Smoke de R2:** la subida real se probó en el smoke de demo con bóveda simulada; falta repetirla contra el bucket real (MinIO/bucket remoto).
