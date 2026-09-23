@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { AntropometriaService } from '../../src/modules/antropometria/antropometria.service';
+import {
+  AntropometriaService,
+  LINK_COLA_ANTROPOMETRIA_COACH,
+  TIPO_EVENTO_CHECKIN_RECIBIDO,
+} from '../../src/modules/antropometria/antropometria.service';
 import { AntropometriaController } from '../../src/modules/antropometria/antropometria.controller';
 import { R2StorageService } from '../../src/modules/antropometria/r2-storage.service';
+import { CheckinAntropometricoRecibidoEvent } from '../../src/modules/notificaciones/events/eventos-notificacion';
 import {
   Rol,
   Modalidad,
@@ -23,6 +28,7 @@ describe('Módulo 4: Control Antropométrico & Bóveda R2 (AntropometriaService 
   let antropometriaService: AntropometriaService;
   let antropometriaController: AntropometriaController;
   let r2StorageService: R2StorageService;
+  let mockEventEmitter: { emitAsync: ReturnType<typeof vi.fn> };
 
   let mockUsuarios: any[];
   let mockPerfilesAlumno: any[];
@@ -392,7 +398,12 @@ describe('Módulo 4: Control Antropométrico & Bóveda R2 (AntropometriaService 
       'guachafit-biometric-vault',
       'https://mock-account.r2.cloudflarestorage.com'
     );
-    antropometriaService = new AntropometriaService(mockDb, r2StorageService);
+    mockEventEmitter = { emitAsync: vi.fn().mockResolvedValue([]) };
+    antropometriaService = new AntropometriaService(
+      mockDb,
+      r2StorageService,
+      mockEventEmitter as any
+    );
     antropometriaController = new AntropometriaController(antropometriaService);
   });
 
@@ -566,6 +577,82 @@ describe('Módulo 4: Control Antropométrico & Bóveda R2 (AntropometriaService 
       expect(registro.perimetros?.cinturaCm).toBe('81.00');
       expect(registro.perimetros?.brazoCm).toBe('37.50');
       expect(registro.fotos.length).toBe(0);
+    });
+
+    it('RF-003 Escenario 2 (cierre): el autoreporte remoto avisa al coach por el bus de eventos', async () => {
+      const caller = { id: alumnoRemotoId, rol: Rol.ALUMNO };
+      const dto = {
+        alumnoId: alumnoRemotoId,
+        fechaEvaluacion: '2026-09-20',
+        pesoKg: '64.50',
+        porcentajeGrasa: '22.50',
+      };
+
+      const registro = await antropometriaService.registrarCheckin(
+        caller,
+        dto,
+        'ctrl-remoto-aviso-1'
+      );
+
+      expect(registro.estado).toBe(EstadoMedicion.PENDIENTE_APROBACION);
+      expect(mockEventEmitter.emitAsync).toHaveBeenCalledTimes(1);
+
+      const [nombre, evento] = mockEventEmitter.emitAsync.mock.calls[0];
+      expect(nombre).toBe(CheckinAntropometricoRecibidoEvent.NOMBRE);
+      expect(evento.payload).toEqual(
+        expect.objectContaining({
+          tipoEvento: TIPO_EVENTO_CHECKIN_RECIBIDO,
+          destinatarioUserId: coachId,
+          entrenadorId: coachId,
+          categoria: 'ANTROPOMETRIA',
+          titulo: 'Nuevo check-in pendiente de validación',
+          cuerpo: 'Laura Remota envió su check-in antropométrico; revísalo.',
+          linkAccion: LINK_COLA_ANTROPOMETRIA_COACH,
+          referenciaId: 'checkin_antropometrico_ctrl-remoto-aviso-1',
+          esCriticoSeguridad: false,
+        })
+      );
+      expect(evento.payload.datosAdicionales).toEqual(
+        expect.objectContaining({
+          controlId: 'ctrl-remoto-aviso-1',
+          alumnoId: alumnoRemotoId,
+          fechaEvaluacion: '2026-09-20',
+        })
+      );
+    });
+
+    it('el registro presencial del coach NO emite aviso (no hay nada que aprobar)', async () => {
+      const caller = { id: coachId, rol: Rol.ENTRENADOR, entrenadorId: coachId };
+      const dto = {
+        alumnoId: alumnoPresencialId,
+        fechaEvaluacion: '2026-09-20',
+        pesoKg: '80.00',
+      };
+
+      const registro = await antropometriaService.registrarCheckin(caller, dto);
+
+      expect(registro.estado).toBe(EstadoMedicion.APROBADO);
+      expect(mockEventEmitter.emitAsync).not.toHaveBeenCalled();
+    });
+
+    it('un fallo del bus no revierte el check-in remoto ya persistido (fire-and-forget)', async () => {
+      mockEventEmitter.emitAsync.mockRejectedValueOnce(new Error('bus caído'));
+
+      const registro = await antropometriaService.registrarCheckin(
+        { id: alumnoRemotoId, rol: Rol.ALUMNO },
+        {
+          alumnoId: alumnoRemotoId,
+          fechaEvaluacion: '2026-09-20',
+          pesoKg: '64.00',
+        },
+        'ctrl-remoto-aviso-2'
+      );
+
+      // El registro quedó persistido y la promesa del bus se consume con catch (sin unhandled).
+      expect(registro.id).toBe('ctrl-remoto-aviso-2');
+      expect(registro.estado).toBe(EstadoMedicion.PENDIENTE_APROBACION);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(mockEventEmitter.emitAsync).toHaveBeenCalledTimes(1);
     });
 
     it('rechaza el body legacy del check-in remoto sin alumnoId ni fechaEvaluacion (regresión del 400)', () => {

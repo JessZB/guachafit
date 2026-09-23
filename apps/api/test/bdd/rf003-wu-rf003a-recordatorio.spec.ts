@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { Job } from 'bullmq';
-import { PeriodicidadAntropometria, Rol } from '@guachafit/shared';
+import { Modalidad, PeriodicidadAntropometria, Rol } from '@guachafit/shared';
 import {
   CRON_RECORDATORIO_ANTROPOMETRIA_POR_DEFECTO,
   ENV_RECORDATORIO_ANTROPOMETRIA_CRON,
@@ -9,11 +9,16 @@ import {
   AntropometriaRecordatorioSchedulerService,
 } from '../../src/modules/antropometria/antropometria-recordatorio.scheduler';
 import {
+  LINK_EXPIRACION_ANTROPOMETRIA,
+  TIPO_EVENTO_EXPIRACION_ANTROPOMETRIA,
   TIPO_EVENTO_RECORDATORIO_ANTROPOMETRIA,
   LINK_RECORDATORIO_ANTROPOMETRIA,
   AntropometriaRecordatorioProcessor,
 } from '../../src/modules/antropometria/processors/antropometria-recordatorio.processor';
-import { RecordatorioCheckinAntropometricoEvent } from '../../src/modules/notificaciones/events/eventos-notificacion';
+import {
+  CheckinAntropometricoExpiradoEvent,
+  RecordatorioCheckinAntropometricoEvent,
+} from '../../src/modules/notificaciones/events/eventos-notificacion';
 import { decidirCanalesNotificacion } from '../../src/modules/notificaciones/matriz-preferencias';
 import { construirJobIdNotificacion } from '../../src/modules/notificaciones/notificaciones.config';
 import { MENSAJE_RECORDATORIO_ANTROPOMETRIA } from '../../src/modules/antropometria/antropometria-periodicidad.util';
@@ -44,6 +49,9 @@ describe('WU RF-003a: recordatorio de check-in antropométrico (RN-01)', () => {
     inicio: '2026-09-07',
     timezone: 'America/Caracas',
   };
+
+  /** Mismo alumno con modalidad: el aviso de expiración (§6) solo aplica a remotos. */
+  const alumnoRemoto = { ...alumnoSemanal, modalidad: Modalidad.REMOTO };
 
   describe('scheduler (upsert idempotente)', () => {
     let mockQueue: any;
@@ -111,6 +119,9 @@ describe('WU RF-003a: recordatorio de check-in antropométrico (RN-01)', () => {
         omitidosPorReporte: 0,
         omitidosPorAviso: 0,
         despachados: 1,
+        expiracionesDespachadas: 0,
+        expiracionesOmitidasPorMedicion: 0,
+        expiracionesOmitidasPorAviso: 0,
       });
       expect(emitAsync).toHaveBeenCalledTimes(1);
 
@@ -226,6 +237,9 @@ describe('WU RF-003a: recordatorio de check-in antropométrico (RN-01)', () => {
         omitidosPorReporte: 0,
         omitidosPorAviso: 0,
         despachados: 0,
+        expiracionesDespachadas: 0,
+        expiracionesOmitidasPorMedicion: 0,
+        expiracionesOmitidasPorAviso: 0,
       });
       expect(db.select).toHaveBeenCalledTimes(1);
       expect(emitAsync).not.toHaveBeenCalled();
@@ -248,6 +262,144 @@ describe('WU RF-003a: recordatorio de check-in antropométrico (RN-01)', () => {
       expect(resultado.evaluados).toBe(2);
       expect(resultado.despachados).toBe(1);
       expect(emitAsync).toHaveBeenCalledTimes(2);
+    });
+
+    /**
+     * WU "RF-003 · cierre" (§6): el barrido también detecta alumnos REMOTOS con la última fecha
+     * programada vencida sin medición y avisa al coach una vez por fecha (referencia determinista).
+     */
+    describe('§6: aviso de ventana vencida al coach', () => {
+      it('la ventana abierta (día programado) NO emite expiración', async () => {
+        // 07:00 Caracas del lunes programado: fuera de la hora del recordatorio y sin ventana vencida.
+        const db = crearDbBarrido([[alumnoRemoto]]);
+        const emitAsync = vi.fn();
+        const processor = new AntropometriaRecordatorioProcessor(db, { emitAsync } as any);
+
+        const resultado = await processor.generarYDespachar(
+          new Date('2026-09-07T11:00:00.000Z')
+        );
+
+        expect(resultado.expiracionesDespachadas).toBe(0);
+        expect(emitAsync).not.toHaveBeenCalled();
+        // Sin candidatos de expiración solo se consultó el calendario de alumnos.
+        expect(db.select).toHaveBeenCalledTimes(1);
+      });
+
+      it('emite el aviso al coach cuando la ventana cerró sin check-in', async () => {
+        const db = crearDbBarrido([[alumnoRemoto], [], []]);
+        const emitAsync = vi.fn().mockResolvedValue([]);
+        const processor = new AntropometriaRecordatorioProcessor(db, { emitAsync } as any);
+
+        // Martes 06:00 Caracas: la ventana del lunes 2026-09-07 ya cerró (00:00 local del martes).
+        const resultado = await processor.generarYDespachar(
+          new Date('2026-09-08T10:00:00.000Z')
+        );
+
+        expect(resultado.expiracionesDespachadas).toBe(1);
+        expect(resultado.expiracionesOmitidasPorMedicion).toBe(0);
+        expect(resultado.expiracionesOmitidasPorAviso).toBe(0);
+        expect(emitAsync).toHaveBeenCalledTimes(1);
+
+        const [nombre, evento] = emitAsync.mock.calls[0];
+        expect(nombre).toBe(CheckinAntropometricoExpiradoEvent.NOMBRE);
+        expect(evento.payload).toEqual(
+          expect.objectContaining({
+            tipoEvento: TIPO_EVENTO_EXPIRACION_ANTROPOMETRIA,
+            destinatarioUserId: coachId,
+            entrenadorId: coachId,
+            categoria: 'ANTROPOMETRIA',
+            titulo: 'Check-in antropométrico vencido',
+            cuerpo: 'Laura Remota no completó su medición del 2026-09-07; considera reprogramar.',
+            linkAccion: LINK_EXPIRACION_ANTROPOMETRIA,
+            referenciaId: `antropometria_expirado_${alumnoId}_2026-09-07`,
+            esCriticoSeguridad: false,
+          })
+        );
+        expect(evento.payload.datosAdicionales).toEqual(
+          expect.objectContaining({
+            alumnoId,
+            fechaProgramada: '2026-09-07',
+            periodicidad: PeriodicidadAntropometria.SEMANAL,
+          })
+        );
+      });
+
+      it('NO emite si hubo una medición desde que abrió la ventana', async () => {
+        const db = crearDbBarrido([
+          [alumnoRemoto],
+          [{ alumnoId, fechaEvaluacion: '2026-09-07' }],
+          [],
+        ]);
+        const emitAsync = vi.fn();
+        const processor = new AntropometriaRecordatorioProcessor(db, { emitAsync } as any);
+
+        const resultado = await processor.generarYDespachar(
+          new Date('2026-09-08T10:00:00.000Z')
+        );
+
+        expect(resultado.expiracionesDespachadas).toBe(0);
+        expect(resultado.expiracionesOmitidasPorMedicion).toBe(1);
+        expect(emitAsync).not.toHaveBeenCalled();
+      });
+
+      it('el worker repetido NO duplica: la referencia de esa fecha ya está en la bandeja del coach', async () => {
+        const db = crearDbBarrido([
+          [alumnoRemoto],
+          [],
+          [
+            {
+              usuarioId: coachId,
+              referenciaId: `antropometria_expirado_${alumnoId}_2026-09-07`,
+            },
+          ],
+        ]);
+        const emitAsync = vi.fn();
+        const processor = new AntropometriaRecordatorioProcessor(db, { emitAsync } as any);
+
+        const resultado = await processor.generarYDespachar(
+          new Date('2026-09-08T10:00:00.000Z')
+        );
+
+        expect(resultado.expiracionesDespachadas).toBe(0);
+        expect(resultado.expiracionesOmitidasPorAviso).toBe(1);
+        expect(emitAsync).not.toHaveBeenCalled();
+      });
+
+      it('NO expira para alumnos presenciales (solo remotos con periodicidad)', async () => {
+        const alumnoPresencial = { ...alumnoRemoto, modalidad: Modalidad.PRESENCIAL };
+        const db = crearDbBarrido([[alumnoPresencial]]);
+        const emitAsync = vi.fn();
+        const processor = new AntropometriaRecordatorioProcessor(db, { emitAsync } as any);
+
+        const resultado = await processor.generarYDespachar(
+          new Date('2026-09-08T10:00:00.000Z')
+        );
+
+        expect(resultado.expiracionesDespachadas).toBe(0);
+        expect(emitAsync).not.toHaveBeenCalled();
+        expect(db.select).toHaveBeenCalledTimes(1);
+      });
+
+      it('el jobId de push/email es determinista por coach + alumno + fecha programada', () => {
+        const payload = {
+          tipoEvento: TIPO_EVENTO_EXPIRACION_ANTROPOMETRIA,
+          destinatarioUserId: coachId,
+          categoria: 'ANTROPOMETRIA' as const,
+          titulo: 'Check-in antropométrico vencido',
+          cuerpo: 'Laura Remota no completó su medición del 2026-09-07; considera reprogramar.',
+          referenciaId: `antropometria_expirado_${alumnoId}_2026-09-07`,
+        };
+
+        const jobId = construirJobIdNotificacion(
+          payload,
+          new Date('2026-09-08T10:00:00.000Z')
+        );
+
+        expect(jobId).toBe(
+          `notif_ANTROPOMETRIA_${TIPO_EVENTO_EXPIRACION_ANTROPOMETRIA}_${coachId}_` +
+            `antropometria_expirado_${alumnoId}_2026-09-07_20260908`
+        );
+      });
     });
 
     it('ignora jobs desconocidos de la cola', async () => {

@@ -1,10 +1,12 @@
 import {
   Injectable,
   Inject,
+  Logger,
   NotFoundException,
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DRIZZLE_DB } from '../../database/database.module';
 import {
   Database,
@@ -52,10 +54,17 @@ import {
   construirMensajeFueraDeVentana,
   evaluarVentanaCheckinAntropometrico,
 } from './antropometria-periodicidad.util';
+import { CheckinAntropometricoRecibidoEvent } from '../notificaciones/events/eventos-notificacion';
 
 export interface ComparativaAngularResultadoDTO extends ComparativaAngularDTO {
   fotoDisponible: boolean;
 }
+
+/** RF-003 Escenario 2 (cierre): aviso al coach del check-in remoto pendiente de validación. */
+export const TIPO_EVENTO_CHECKIN_RECIBIDO = 'CHECKIN_ANTROPOMETRICO_RECIBIDO' as const;
+
+/** Ruta real de la cola de revisión antropométrica del coach (router web). */
+export const LINK_COLA_ANTROPOMETRIA_COACH = '/coach/antropometria';
 
 function toIsoUtcString(date: Date | string | null | undefined): string | null {
   if (!date) return null;
@@ -65,9 +74,12 @@ function toIsoUtcString(date: Date | string | null | undefined): string | null {
 
 @Injectable()
 export class AntropometriaService {
+  private readonly logger = new Logger(AntropometriaService.name);
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
-    public readonly r2StorageService: R2StorageService
+    public readonly r2StorageService: R2StorageService,
+    private readonly eventEmitter: EventEmitter2
   ) {}
 
   /**
@@ -251,6 +263,42 @@ export class AntropometriaService {
 
       return inserted.id;
     });
+
+    // RF-003 Escenario 2 (WU "RF-003 · cierre"): el autoreporte remoto queda `pendiente_aprobacion`
+    // y el coach debe enterarse para revisarlo. Fire-and-forget (patrón de los emisores existentes:
+    // `void emitAsync(...).catch(...)`): un fallo del bus no revierte un check-in ya persistido.
+    // El registro presencial del coach NO emite: no hay nada que aprobar.
+    if (origen === OrigenAntropometria.REMOTO_AUTOREPORTE) {
+      const nombreAlumno = `${alumno.nombres} ${alumno.apellidos}`.trim();
+      void this.eventEmitter
+        .emitAsync(
+          CheckinAntropometricoRecibidoEvent.NOMBRE,
+          new CheckinAntropometricoRecibidoEvent({
+            tipoEvento: TIPO_EVENTO_CHECKIN_RECIBIDO,
+            destinatarioUserId: alumno.entrenadorId,
+            entrenadorId: alumno.entrenadorId,
+            categoria: 'ANTROPOMETRIA',
+            titulo: 'Nuevo check-in pendiente de validación',
+            cuerpo: `${nombreAlumno} envió su check-in antropométrico; revísalo.`,
+            linkAccion: LINK_COLA_ANTROPOMETRIA_COACH,
+            // RNF-004 §3: referencia determinista del control (jobId de push/email sin duplicados).
+            referenciaId: `checkin_antropometrico_${controlId}`,
+            datosAdicionales: {
+              controlId,
+              alumnoId: alumno.usuarioId,
+              fechaEvaluacion: validado.fechaEvaluacion,
+            },
+            esCriticoSeguridad: false,
+          })
+        )
+        .catch((error) =>
+          this.logger.warn(
+            `No se pudo avisar al coach del check-in remoto ${controlId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          )
+        );
+    }
 
     return this.obtenerControlPorIdInterno(controlId);
   }

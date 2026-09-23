@@ -92,6 +92,9 @@ export class NotificationDispatcherService {
         cuerpo: evento.cuerpo,
         tipoEvento: evento.tipoEvento,
         linkAccion: evento.linkAccion || null,
+        // RF-003 §6 / RNF-004 §3: la referencia de origen también viaja al In-App para que un
+        // barrido idempotente pueda pre-chequear su propio aviso (p. ej. expiración por alumno+fecha).
+        referenciaId: evento.referenciaId?.trim() || null,
         leida: false,
         createdAtUtc: nowUtc,
       })

@@ -7,9 +7,11 @@ import {
 } from '@guachafit/shared';
 import {
   construirMensajeFueraDeVentana,
+  construirReferenciaExpiracionAntropometria,
   construirReferenciaRecordatorioAntropometria,
   desplazarMesesCalendario,
   esDiaProgramadoAntropometria,
+  evaluarExpiracionAntropometria,
   evaluarRecordatorioAntropometria,
   evaluarVentanaCheckinAntropometrico,
   fechasProgramadasAntropometria,
@@ -377,6 +379,104 @@ describe('WU RF-003a: modelo antropométrico RN-02, periodicidad RN-01 y ventana
       expect(MENSAJE_RECORDATORIO_ANTROPOMETRIA).toBe(
         'Hoy es día de check-in: registra tus métricas en ayunas.'
       );
+    });
+  });
+
+  /**
+   * WU "RF-003 · cierre" (§6): detección PURA de la ventana cerrada sin check-in. La fecha vencida
+   * es la programada más reciente ANTERIOR al día local (la de hoy tiene la ventana abierta).
+   */
+  describe('§6: expiración de la ventana de check-in (cierre)', () => {
+    const alumnoId = 'a3333333-3333-4333-8333-333333333333';
+    const semanal = {
+      alumnoId,
+      periodicidad: PeriodicidadAntropometria.SEMANAL,
+      antropometriaInicio: '2026-09-07',
+      timezone: 'America/Caracas',
+    };
+
+    it('no expira el día programado (la ventana de hoy sigue abierta)', () => {
+      const resultado = evaluarExpiracionAntropometria({
+        ...semanal,
+        ahora: new Date('2026-09-07T10:00:00.000Z'), // lunes programado, 06:00 Caracas
+      });
+
+      expect(resultado.expirado).toBe(false);
+      expect(resultado.fechaProgramada).toBeNull();
+      expect(resultado.referenciaId).toBeNull();
+    });
+
+    it('expira al día siguiente del día programado con la fecha vencida y referencia determinista', () => {
+      const resultado = evaluarExpiracionAntropometria({
+        ...semanal,
+        ahora: new Date('2026-09-08T10:00:00.000Z'), // martes 06:00 Caracas
+      });
+
+      expect(resultado.expirado).toBe(true);
+      expect(resultado.hoyLocal).toBe('2026-09-08');
+      expect(resultado.fechaProgramada).toBe('2026-09-07');
+      expect(resultado.referenciaId).toBe(
+        `antropometria_expirado_${alumnoId}_2026-09-07`
+      );
+      expect(construirReferenciaExpiracionAntropometria(alumnoId, '2026-09-07')).toBe(
+        `antropometria_expirado_${alumnoId}_2026-09-07`
+      );
+    });
+
+    it('en los días intermedios sigue apuntando a la MISMA fecha vencida (una vez por fecha)', () => {
+      const miercoles = evaluarExpiracionAntropometria({
+        ...semanal,
+        ahora: new Date('2026-09-09T14:00:00.000Z'),
+      });
+      const sabado = evaluarExpiracionAntropometria({
+        ...semanal,
+        ahora: new Date('2026-09-12T14:00:00.000Z'),
+      });
+
+      expect(miercoles.fechaProgramada).toBe('2026-09-07');
+      expect(sabado.fechaProgramada).toBe('2026-09-07');
+      expect(sabado.referenciaId).toBe(miercoles.referenciaId);
+    });
+
+    it('vuelve a expirar con la siguiente fecha programada cuando esa también vence', () => {
+      const proximoLunes = evaluarExpiracionAntropometria({
+        ...semanal,
+        ahora: new Date('2026-09-15T14:00:00.000Z'), // martes tras el 2º lunes
+      });
+
+      expect(proximoLunes.expirado).toBe(true);
+      expect(proximoLunes.fechaProgramada).toBe('2026-09-14');
+      expect(proximoLunes.referenciaId).toBe(
+        `antropometria_expirado_${alumnoId}_2026-09-14`
+      );
+    });
+
+    it('la medianoche local cierra la ventana: 03:59 UTC del día D+1 en Caracas es 23:59 del día D', () => {
+      // 2026-09-08T03:59Z = 2026-09-07 23:59 en Caracas: la ventana de D=2026-09-07 sigue ABIERTA.
+      const antesDelCierre = evaluarExpiracionAntropometria({
+        ...semanal,
+        ahora: new Date('2026-09-08T03:59:00.000Z'),
+      });
+      expect(antesDelCierre.expirado).toBe(false);
+
+      // 2026-09-08T04:00Z = 2026-09-08 00:00 en Caracas: la ventana ya cerró.
+      const alCierre = evaluarExpiracionAntropometria({
+        ...semanal,
+        ahora: new Date('2026-09-08T04:00:00.000Z'),
+      });
+      expect(alCierre.expirado).toBe(true);
+      expect(alCierre.fechaProgramada).toBe('2026-09-07');
+    });
+
+    it('sin calendario configurado nunca expira', () => {
+      const resultado = evaluarExpiracionAntropometria({
+        alumnoId,
+        timezone: 'America/Caracas',
+        ahora: new Date('2026-09-14T10:00:00.000Z'),
+      });
+
+      expect(resultado.expirado).toBe(false);
+      expect(resultado.referenciaId).toBeNull();
     });
   });
 });

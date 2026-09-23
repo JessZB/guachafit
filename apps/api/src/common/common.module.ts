@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { CryptoService } from './services/crypto.service';
 import { RolesGuard } from './guards/roles.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { AuditoriaAccesosDenegadosService } from './auditoria/auditoria-accesos-denegados.service';
 
 // NOTA (WU7 / RNF-003 / ADR-009): aquí vivía `TenantRlsInterceptor`. Se retiró porque
 // su diseño era inviable e inseguro:
@@ -16,7 +17,13 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 // con RLS habilitado.
 @Global()
 @Module({
-  providers: [CryptoService, RolesGuard, JwtAuthGuard],
-  exports: [CryptoService, RolesGuard, JwtAuthGuard],
+  providers: [
+    CryptoService,
+    RolesGuard,
+    JwtAuthGuard,
+    // RF-003 Escenario 3: log de accesos denegados compartido por los guards (global).
+    AuditoriaAccesosDenegadosService,
+  ],
+  exports: [CryptoService, RolesGuard, JwtAuthGuard, AuditoriaAccesosDenegadosService],
 })
 export class CommonModule {}

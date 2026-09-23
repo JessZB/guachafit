@@ -1,9 +1,13 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Inject, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, ForbiddenException, Inject, Injectable, Optional } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { DRIZZLE_DB } from '../../database/database.module';
 import { Database, eq, perfilesAlumno } from '@guachafit/database';
 import { EstadoAlumno, Rol } from '@guachafit/shared';
 import { ESTADOS_BLOQUEADOS_ALUMNO_KEY } from '../decorators/bloqueo-alumno.decorator';
+import {
+  AuditoriaAccesosDenegadosService,
+  contextoPeticionHttp,
+} from '../auditoria/auditoria-accesos-denegados.service';
 
 /**
  * Estado reportado en el cuerpo 403: el estado de activación real o `archivado` cuando la baja
@@ -50,7 +54,12 @@ export class AlumnoHabilitadoGuard implements CanActivate {
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
     // Token explícito: el DI no depende de la metadata de tipos (que esbuild no emite en tests).
-    @Inject(Reflector) private readonly reflector: Reflector
+    @Inject(Reflector) private readonly reflector: Reflector,
+    // RF-003 Escenario 3: auditoría best-effort (opcional para las construcciones directas de los
+    // tests; en producción `CommonModule` global la provee).
+    @Optional()
+    @Inject(AuditoriaAccesosDenegadosService)
+    private readonly auditoria?: AuditoriaAccesosDenegadosService
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -83,14 +92,34 @@ export class AlumnoHabilitadoGuard implements CanActivate {
     }
 
     if (perfil.deletedAtUtc) {
+      this.auditar(request, user, 'CUENTA_ARCHIVADA');
       throw this.construirBloqueo('archivado', 'CUENTA_ARCHIVADA');
     }
 
     if (estadosBloqueados.includes(perfil.estadoActivacion)) {
+      this.auditar(request, user, 'ESTADO_ACTIVACION');
       throw this.construirBloqueo(perfil.estadoActivacion, 'ESTADO_ACTIVACION');
     }
 
     return true;
+  }
+
+  /**
+   * RF-003 Escenario 3: log de auditoría best-effort. Fire-and-forget: el servicio captura sus
+   * propios fallos; el `catch` final es la última red para que nada tumbe la respuesta 403.
+   */
+  private auditar(request: any, user: any, motivo: string): void {
+    if (!this.auditoria) return;
+    const { ruta, metodo } = contextoPeticionHttp(request);
+    void this.auditoria
+      .registrar({
+        usuarioId: user?.sub ?? null,
+        rol: user?.rol ?? null,
+        ruta,
+        metodo,
+        motivo,
+      })
+      .catch(() => {});
   }
 
   private construirBloqueo(

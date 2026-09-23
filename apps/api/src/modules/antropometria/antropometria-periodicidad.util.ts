@@ -418,6 +418,66 @@ export function construirReferenciaRecordatorioAntropometria(fechaLocal: string)
   return `antropometria_${fechaLocal}`;
 }
 
+/** Resultado de la detección de ventana vencida sin check-in (RF-003 §6). */
+export interface ResultadoExpiracionAntropometria {
+  /** `true` si la última fecha programada cumplida ya cerró su ventana de 48 h. */
+  expirado: boolean;
+  hoyLocal: string;
+  /** Fecha programada `D` cuya ventana `[D-1, D+1)` ya cerró (la más reciente). */
+  fechaProgramada: string | null;
+  /** Referencia determinista alumno + fecha programada (dedupe del aviso entre corridas). */
+  referenciaId: string | null;
+}
+
+/** Referencia determinista de la expiración (alimenta el `jobId` de RNF-004 §3). */
+export function construirReferenciaExpiracionAntropometria(
+  alumnoId: string,
+  fechaProgramada: string
+): string {
+  return `antropometria_expirado_${alumnoId}_${fechaProgramada}`;
+}
+
+/**
+ * RF-003 §6: ¿el calendario del alumno tiene una fecha programada cuya ventana ya cerró?
+ *
+ * La ventana de `D` cierra al comenzar `D+1` local, así que la fecha vencida es la programada MÁS
+ * RECIENTE anterior al día local de hoy (`anterior < hoyLocal`). La de hoy (`anterior === hoyLocal`)
+ * tiene la ventana abierta y NO cuenta como expirada. El aviso es uno por fecha programada: la
+ * referencia determinista `alumno + fecha` permite al barrido deduplicarlo entre corridas.
+ */
+export function evaluarExpiracionAntropometria(params: {
+  alumnoId: string;
+  periodicidad?: PeriodicidadAntropometria | null;
+  antropometriaInicio?: string | null;
+  timezone?: string | null;
+  ahora?: Date;
+}): ResultadoExpiracionAntropometria {
+  const ahora = params.ahora ?? new Date();
+  const timezone = resolverTimezoneAntropometria(params.timezone);
+  const hoyLocal = obtenerFechaLocalYyyyMmDd(ahora, timezone);
+
+  if (!params.periodicidad || !params.antropometriaInicio) {
+    return { expirado: false, hoyLocal, fechaProgramada: null, referenciaId: null };
+  }
+
+  const { anterior } = fechasProgramadasAntropometria(
+    params.antropometriaInicio,
+    params.periodicidad,
+    hoyLocal
+  );
+
+  if (!anterior || anterior >= hoyLocal) {
+    return { expirado: false, hoyLocal, fechaProgramada: null, referenciaId: null };
+  }
+
+  return {
+    expirado: true,
+    hoyLocal,
+    fechaProgramada: anterior,
+    referenciaId: construirReferenciaExpiracionAntropometria(params.alumnoId, anterior),
+  };
+}
+
 /**
  * RN-01 con job horario (documentado): el processor corre cada hora en punto en UTC y solo emite
  * para los alumnos cuya HORA LOCAL es la del recordatorio (06:00) y cuyo día local es una fecha

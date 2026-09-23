@@ -311,7 +311,34 @@ export const notificacionesInApp = pgTable('notificaciones_in_app', {
   tipoEvento: varchar('tipo_evento', { length: 50 }).notNull(),
   leida: boolean('leida').default(false).notNull(),
   linkAccion: varchar('link_accion', { length: 255 }),
+  /**
+   * RF-003 §6 / RNF-004 §3: referencia de origen del evento (`referenciaId` del payload).
+   * Permite a los barridos idempotentes pre-chequear su propio aviso (p. ej. la expiración de la
+   * ventana antropométrica deduplica por `alumno + fecha programada`). No se expone en la API.
+   */
+  referenciaId: varchar('referencia_id', { length: 255 }),
   createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// =============================================================================
+// TABLA: auditoria_accesos_denegados (RF-003 Escenario 3)
+// =============================================================================
+/**
+ * RF-003 Escenario 3: log mínimo de intentos de mutación no autorizados.
+ *
+ * Lo escriben los guards (`RolesGuard` y `AlumnoHabilitadoGuard`) de forma best-effort cuando
+ * deniegan una petición: un fallo al auditar NUNCA cambia la respuesta 403. Solo guarda metadatos
+ * mínimos de la petición — sin payloads, cuerpos ni PII adicional.
+ */
+export const auditoriaAccesosDenegados = pgTable('auditoria_accesos_denegados', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  /** Usuario autenticado que intentó la operación; `null` si la petición era anónima. */
+  usuarioId: uuid('usuario_id').references(() => usuarios.id, { onDelete: 'set null' }),
+  rol: varchar('rol', { length: 30 }),
+  ruta: varchar('ruta', { length: 255 }).notNull(),
+  metodo: varchar('metodo', { length: 10 }).notNull(),
+  motivo: varchar('motivo', { length: 100 }).notNull(),
+  fechaUtc: timestamp('fecha_utc', { withTimezone: true }).defaultNow().notNull(),
 });
 
 // =============================================================================

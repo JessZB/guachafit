@@ -83,3 +83,25 @@ export class ResumenSemanalCoachEvent extends EventoNotificacionDominio {
 export class RecordatorioCheckinAntropometricoEvent extends EventoNotificacionDominio {
   static readonly NOMBRE = 'notificacion.recordatorio-checkin-antropometrico';
 }
+
+/**
+ * Antropometría (RF-003 Escenario 2 / WU "RF-003 · cierre"): el alumno remoto envió un check-in
+ * pendiente de validación (destinatario: coach).
+ *
+ * Viaja por la categoría `ANTROPOMETRIA`, que para el entrenador enruta por la fila "Reportes de
+ * Progreso" de RF-015 §B (In-App universal + Push/Email según sus preferencias).
+ */
+export class CheckinAntropometricoRecibidoEvent extends EventoNotificacionDominio {
+  static readonly NOMBRE = 'notificacion.checkin-antropometrico-recibido';
+}
+
+/**
+ * Antropometría (RF-003 §6 / WU "RF-003 · cierre"): la ventana de check-in de una fecha programada
+ * cerró sin medición (destinatario: coach, para reprogramar).
+ *
+ * `referenciaId` determinista por alumno + fecha programada: el barrido horario puede repetirse sin
+ * duplicar la entrega.
+ */
+export class CheckinAntropometricoExpiradoEvent extends EventoNotificacionDominio {
+  static readonly NOMBRE = 'notificacion.checkin-antropometrico-expirado';
+}
