@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 import {
   AnguloFoto,
   PresignedUploadUrlSchema,
@@ -226,6 +227,65 @@ describe('RNF-001: Almacenamiento Seguro, Privacidad y Bóveda Cloudflare R2', (
 
       expect(boveda.estaEnModoMock()).toBe(true);
       expect(boveda.obtenerEndpoint()).toContain('mock-account.r2.cloudflarestorage.com');
+    });
+  });
+
+  describe('Escenario 6: Eliminación de objetos huérfanos (RF-002, RNF-001)', () => {
+    const clavePdf = `nutricion-recursos/${alumnoId}/2026/${customUuid}.pdf`;
+
+    function conClienteS3Falso(servicio: R2StorageService) {
+      const send = vi.fn().mockResolvedValue({});
+      (servicio as any).s3Client = { send };
+      return send;
+    }
+
+    it('eliminarObjeto envía DeleteObjectCommand con { Bucket, Key } del service', async () => {
+      const boveda = new R2StorageService(
+        'guachafit-biometric-vault',
+        'https://mock-account.r2.cloudflarestorage.com'
+      );
+      const send = conClienteS3Falso(boveda);
+
+      await boveda.eliminarObjeto(clavePdf);
+
+      expect(send).toHaveBeenCalledTimes(1);
+      const command = send.mock.calls[0][0];
+      expect(command).toBeInstanceOf(DeleteObjectCommand);
+      expect(command.input).toEqual({ Bucket: 'guachafit-biometric-vault', Key: clavePdf });
+    });
+
+    it('en modo mock NO toca la red (el endpoint de marcador no tiene bucket real)', async () => {
+      const bovedaMock = new R2StorageService();
+      expect(bovedaMock.estaEnModoMock()).toBe(true);
+      const send = conClienteS3Falso(bovedaMock);
+
+      await bovedaMock.eliminarObjeto(clavePdf);
+
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it('una clave con estructura inválida no llega al almacenamiento (warning y retorno)', async () => {
+      const boveda = new R2StorageService(
+        'guachafit-biometric-vault',
+        'https://mock-account.r2.cloudflarestorage.com'
+      );
+      const send = conClienteS3Falso(boveda);
+
+      await boveda.eliminarObjeto('uploads/foto.png');
+      await boveda.eliminarObjeto(`nutricion-recursos/${alumnoId}/2026/${customUuid}.exe`);
+
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it('un fallo de red al borrar se propaga: el llamador best-effort lo contiene', async () => {
+      const boveda = new R2StorageService(
+        'guachafit-biometric-vault',
+        'https://mock-account.r2.cloudflarestorage.com'
+      );
+      const send = vi.fn().mockRejectedValue(new Error('bóveda caída'));
+      (boveda as any).s3Client = { send };
+
+      await expect(boveda.eliminarObjeto(clavePdf)).rejects.toThrow('bóveda caída');
     });
   });
 });

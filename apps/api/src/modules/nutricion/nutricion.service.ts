@@ -2,6 +2,7 @@ import {
   Injectable,
   Inject,
   Optional,
+  Logger,
   NotFoundException,
   ConflictException,
   ForbiddenException,
@@ -248,6 +249,8 @@ function toIsoUtcString(date: Date | string | null | undefined): string | null {
 
 @Injectable()
 export class NutricionService {
+  private readonly logger = new Logger(NutricionService.name);
+
   // Bóveda R2 opcional (RF-002 RN-03): sirve las URLs firmadas de lectura de las fotos de platos.
   // Sin servicio inyectado (p. ej. tests unitarios que construyen el service con solo la DB) las
   // fotos quedan sin `fotoUrl` — nunca se fabrica un enlace.
@@ -411,6 +414,12 @@ export class NutricionService {
    *
    * Semántica PUT: la fila se reemplaza completa; un campo omitido queda en NULL ("no
    * configurado"), nunca en 0 fabricado. Valida tenancy contra `perfiles_alumno`.
+   *
+   * PUT-replace de recursos (RNF-001): si el reemplazo deja de referenciar un PDF subido, el
+   * objeto se elimina de la bóveda DESPUÉS del write y fuera de su transacción, best-effort:
+   * un fallo del almacenamiento (o de la relectura de verificación) se registra pero no cambia
+   * la respuesta (sigue 200).
+   * `recursos` omitido o `[]` ⇒ se borran TODOS los PDFs previos.
    */
   async definirMetasNutricionales(
     coachId: string,
@@ -440,6 +449,10 @@ export class NutricionService {
       .where(eq(metasNutricionales.alumnoId, alumnoId))
       .limit(1);
 
+    // Claves previas capturadas ANTES del write: son las candidatas a borrado del PUT-replace.
+    const clavesPrevias = this.storageKeysDeRecursos(existente?.recursos ?? []);
+
+    let filaGuardada: typeof metasNutricionales.$inferSelect;
     if (existente) {
       const [actualizado] = await this.db
         .update(metasNutricionales)
@@ -447,15 +460,105 @@ export class NutricionService {
         .where(eq(metasNutricionales.id, existente.id))
         .returning();
 
-      return await this.mapearMetas(actualizado);
+      filaGuardada = actualizado;
+    } else {
+      const [creado] = await this.db
+        .insert(metasNutricionales)
+        .values({ alumnoId, ...valores, createdAtUtc: now, updatedAtUtc: now })
+        .returning();
+
+      filaGuardada = creado;
     }
 
-    const [creado] = await this.db
-      .insert(metasNutricionales)
-      .values({ alumnoId, ...valores, createdAtUtc: now, updatedAtUtc: now })
-      .returning();
+    const detalle = await this.mapearMetas(filaGuardada);
 
-    return await this.mapearMetas(creado);
+    // Borrado post-commit y best-effort: la respuesta ya está decidida. Nunca se borra dentro de
+    // la transacción del write ni antes de persistir la nueva referencia.
+    await this.eliminarRecursosHuerfanos(alumnoId, clavesPrevias, recursos);
+
+    return detalle;
+  }
+
+  /** Claves de bóveda no vacías de una lista de recursos (los enlaces externos no tienen). */
+  private storageKeysDeRecursos(recursos: RecursoNutricionalDTO[]): string[] {
+    return recursos
+      .map((recurso) => recurso.storageKey)
+      .filter((storageKey): storageKey is string => Boolean(storageKey));
+  }
+
+  /**
+   * RNF-001: guard de tenancy por alumno de una clave de recurso: estructuralmente válida y
+   * dentro del prefijo `nutricion-recursos/{alumnoId}/`. Compartido por el validador del PUT y
+   * por el borrado post-replace (la tabla no tiene RLS; este guard es la frontera).
+   */
+  private esClaveDeRecursoDelAlumno(storageKey: string, alumnoId: string): boolean {
+    return (
+      storageKey.startsWith(`nutricion-recursos/${alumnoId}/`) &&
+      R2StorageService.validarStorageKeyEstructura(storageKey)
+    );
+  }
+
+  /**
+   * RNF-001/RF-002: borra de la bóveda los PDFs que el PUT-replace dejó sin referencia.
+   *
+   * - Best-effort post-commit: corre después del write y fuera de su transacción, y NINGUNA ruta
+   *   de esta función lanza hacia el llamador: un fallo de la relectura de verificación y un
+   *   fallo por clave se registran y se abandonan (la respuesta del PUT ya está decidida, sigue
+   *   200; el huérfano se reconcilia aparte).
+   * - Solo se borran claves propias del alumno y con estructura válida.
+   * - Anti-race: la relectura de la fila recién guardada REDUCE (no elimina) la ventana en la que
+   *   un PUT concurrente re-referencia una clave que este PUT quitó: dos PUTs pueden intercalarse
+   *   (A relee antes de que B re-referencie) y el borrado dejaría un enlace colgado. Cerrarla del
+   *   todo exige serialización por alumno (p. ej. advisory lock transaccional); queda como
+   *   follow-up.
+   */
+  private async eliminarRecursosHuerfanos(
+    alumnoId: string,
+    clavesPrevias: string[],
+    recursosNuevos: RecursoNutricionalDTO[]
+  ): Promise<void> {
+    const boveda = this.r2StorageService;
+    if (!boveda || clavesPrevias.length === 0) return;
+
+    const clavesNuevas = new Set(this.storageKeysDeRecursos(recursosNuevos));
+    const candidatas = new Set(clavesPrevias.filter((clave) => !clavesNuevas.has(clave)));
+    if (candidatas.size === 0) return;
+
+    // Si no se puede verificar la fila actual, no se borra nada: el write ya persistió y propagar
+    // el fallo de lectura convertiría el PUT en un 500 pese a haber guardado.
+    let filaActual: typeof metasNutricionales.$inferSelect | undefined;
+    try {
+      [filaActual] = await this.db
+        .select()
+        .from(metasNutricionales)
+        .where(eq(metasNutricionales.alumnoId, alumnoId))
+        .limit(1);
+    } catch (error) {
+      this.logger.warn(
+        `No se verificó la fila de metas del alumno '${alumnoId}' tras el PUT; no se borra ningún recurso: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return;
+    }
+
+    const clavesReferenciadas = new Set(this.storageKeysDeRecursos(filaActual?.recursos ?? []));
+
+    const aBorrar = [...candidatas].filter(
+      (clave) => !clavesReferenciadas.has(clave) && this.esClaveDeRecursoDelAlumno(clave, alumnoId)
+    );
+    if (aBorrar.length === 0) return;
+
+    // Un fallo por clave no cancela el resto ni altera la respuesta ya emitida.
+    await Promise.allSettled(
+      aBorrar.map(async (clave) => {
+        try {
+          await boveda.eliminarObjeto(clave);
+        } catch (error) {
+          this.logger.warn(
+            `No se pudo eliminar el objeto '${clave}' de la bóveda: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      })
+    );
   }
 
   /**
@@ -465,11 +568,9 @@ export class NutricionService {
    * de terceros.
    */
   private validarStorageKeysDeRecursos(recursos: RecursoNutricionalDTO[], alumnoId: string): void {
-    const prefijoDelAlumno = `nutricion-recursos/${alumnoId}/`;
     for (const recurso of recursos) {
       if (!recurso.storageKey) continue;
-      const estructuraValida = R2StorageService.validarStorageKeyEstructura(recurso.storageKey);
-      if (!estructuraValida || !recurso.storageKey.startsWith(prefijoDelAlumno)) {
+      if (!this.esClaveDeRecursoDelAlumno(recurso.storageKey, alumnoId)) {
         throw new BadRequestException(
           'El archivo del recurso no pertenece a este alumno o no es una clave válida. Súbelo de nuevo desde el editor de metas.'
         );

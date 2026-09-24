@@ -1,6 +1,6 @@
 import { Injectable, Optional, Inject, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'node:crypto';
 import {
@@ -273,5 +273,39 @@ export class R2StorageService {
     });
 
     return await getSignedUrl(this.s3Client, command, { expiresIn: expiresInSeconds });
+  }
+
+  /**
+   * Elimina un objeto de la bóveda (RF-002, RNF-001). Lo usa el ciclo de vida de las metas de
+   * nutrición cuando un PUT deja de referenciar un PDF: sin borrado, el objeto queda huérfano.
+   *
+   * Flujo best-effort: los casos que este método puede descartar sin red NO lanzan — una clave
+   * que no cumple la estructura ADR-007 (podría apuntar fuera del namespace de la aplicación) y
+   * el modo mock (el endpoint de marcador no tiene bucket real: un `send()` intentaría red
+   * contra él). Ambos se avisan con warning y retornan. Un fallo de red sí se propaga: el
+   * llamador best-effort (`NutricionService`) lo contiene para no tumbar la respuesta de negocio.
+   * `DeleteObject` es idempotente: borrar una clave ya inexistente también responde 204.
+   */
+  async eliminarObjeto(storageKey: string): Promise<void> {
+    if (!R2StorageService.validarStorageKeyEstructura(storageKey)) {
+      this.logger.warn(
+        `No se elimina '${storageKey}': la clave no cumple la estructura de almacenamiento esperada (ADR-007).`
+      );
+      return;
+    }
+
+    if (this.modoMock) {
+      this.logger.warn(
+        `No se elimina '${storageKey}': la bóveda está en modo mock (${ENV_ENDPOINT[0]}/${ENV_ENDPOINT[1]} sin configurar).`
+      );
+      return;
+    }
+
+    const command = new DeleteObjectCommand({
+      Bucket: this.bucketName,
+      Key: storageKey,
+    });
+
+    await this.s3Client.send(command);
   }
 }

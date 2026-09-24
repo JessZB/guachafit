@@ -969,5 +969,150 @@ describe('Módulo 3: Check-ins Nutricionales (NutricionService & NutricionContro
         storageKey: keyPdfPropia,
       });
     });
+
+    function bovedaConBorrado() {
+      return {
+        generarPresignedGetUrl: vi.fn(
+          async (storageKey: string) => `https://r2.example/${storageKey}?firma=temporal`
+        ),
+        eliminarObjeto: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    it('RNF-001: el PUT-replace borra el PDF que dejó de estar referenciado y jamás el conservado', async () => {
+      const r2Fake = bovedaConBorrado();
+      const servicio = new NutricionService(createMockDb(), r2Fake as any);
+      const keyRemovida = `nutricion-recursos/${alumnoId1}/2026/bbbbbbbb-2222-4222-8222-222222222222.pdf`;
+
+      await servicio.definirMetasNutricionales(coachId1, alumnoId1, {
+        recursos: [
+          { titulo: 'Guía conservada', storageKey: keyPdfPropia },
+          { titulo: 'PDF que se quita', storageKey: keyRemovida },
+        ],
+      });
+
+      const reemplazadas = await servicio.definirMetasNutricionales(coachId1, alumnoId1, {
+        recursos: [{ titulo: 'Guía conservada', storageKey: keyPdfPropia }],
+      });
+
+      expect(reemplazadas.recursos).toHaveLength(1);
+      expect(r2Fake.eliminarObjeto).toHaveBeenCalledTimes(1);
+      expect(r2Fake.eliminarObjeto).toHaveBeenCalledWith(keyRemovida);
+      expect(r2Fake.eliminarObjeto).not.toHaveBeenCalledWith(keyPdfPropia);
+    });
+
+    it('RNF-001: `recursos` omitido en el PUT borra TODOS los PDFs previos (PUT-replace)', async () => {
+      const r2Fake = bovedaConBorrado();
+      const servicio = new NutricionService(createMockDb(), r2Fake as any);
+      const keySegunda = `nutricion-recursos/${alumnoId1}/2026/bbbbbbbb-2222-4222-8222-222222222222.pdf`;
+
+      await servicio.definirMetasNutricionales(coachId1, alumnoId1, {
+        recursos: [
+          { titulo: 'Guía uno', storageKey: keyPdfPropia },
+          { titulo: 'Guía dos', storageKey: keySegunda },
+        ],
+      });
+
+      const reemplazadas = await servicio.definirMetasNutricionales(coachId1, alumnoId1, {
+        caloriasObjetivo: 2200,
+      });
+
+      expect(reemplazadas.recursos).toEqual([]);
+      expect(r2Fake.eliminarObjeto).toHaveBeenCalledTimes(2);
+      expect(r2Fake.eliminarObjeto).toHaveBeenCalledWith(keyPdfPropia);
+      expect(r2Fake.eliminarObjeto).toHaveBeenCalledWith(keySegunda);
+    });
+
+    it('RNF-001: si el borrado falla, el PUT responde igual (best-effort, sin lanzar)', async () => {
+      const r2Fake = {
+        generarPresignedGetUrl: vi.fn(
+          async (storageKey: string) => `https://r2.example/${storageKey}?firma=temporal`
+        ),
+        eliminarObjeto: vi.fn().mockRejectedValue(new Error('bóveda caída')),
+      };
+      const servicio = new NutricionService(createMockDb(), r2Fake as any);
+
+      await servicio.definirMetasNutricionales(coachId1, alumnoId1, {
+        recursos: [{ titulo: 'Guía PDF', storageKey: keyPdfPropia }],
+      });
+
+      await expect(
+        servicio.definirMetasNutricionales(coachId1, alumnoId1, { caloriasObjetivo: 2100 })
+      ).resolves.toEqual(expect.objectContaining({ caloriasObjetivo: 2100, recursos: [] }));
+
+      expect(r2Fake.eliminarObjeto).toHaveBeenCalledWith(keyPdfPropia);
+    });
+
+    it('RNF-001: una clave ajena al prefijo del alumno nunca llega al borrado (tenancy)', async () => {
+      const r2Fake = bovedaConBorrado();
+      const servicio = new NutricionService(createMockDb(), r2Fake as any);
+      const keyAjena = `nutricion-recursos/${alumnoId2}/2026/cccccccc-3333-4333-8333-333333333333.pdf`;
+
+      // Fila previa simulada con una clave ajena (dato legado/corrupto): el guard de servicio
+      // debe ignorarla aunque ya no esté referenciada por el PUT.
+      mockMetasNutricionales.push({
+        id: 'metas-previas',
+        alumnoId: alumnoId1,
+        caloriasObjetivo: 2000,
+        proteinaGramosObjetivo: null,
+        carbohidratosGramosObjetivo: null,
+        grasasGramosObjetivo: null,
+        aguaLitrosObjetivo: null,
+        recursos: [
+          { titulo: 'Propia', storageKey: keyPdfPropia },
+          { titulo: 'Ajena', storageKey: keyAjena },
+        ],
+        createdAtUtc: new Date(),
+        updatedAtUtc: new Date(),
+      });
+
+      await servicio.definirMetasNutricionales(coachId1, alumnoId1, { caloriasObjetivo: 2100 });
+
+      expect(r2Fake.eliminarObjeto).toHaveBeenCalledTimes(1);
+      expect(r2Fake.eliminarObjeto).toHaveBeenCalledWith(keyPdfPropia);
+      expect(r2Fake.eliminarObjeto).not.toHaveBeenCalledWith(keyAjena);
+    });
+
+    it('RNF-001: si la relectura anti-race falla, el PUT sigue OK y no se borra nada (best-effort)', async () => {
+      // Mock con una avería inyectada SOLO en la relectura de verificación post-commit: la
+      // primera lectura de metas (fila previa) pasa; la segunda (relectura) revienta.
+      const db = createMockDb();
+      const selectOriginal = db.select;
+      let fallarLecturaDeMetas = false;
+      let lecturasDeMetas = 0;
+      db.select = vi.fn((...args: any[]) => {
+        const query = selectOriginal(...args);
+        const fromOriginal = query.from;
+        query.from = vi.fn((table: any) => {
+          const builder = fromOriginal(table);
+          if (fallarLecturaDeMetas && getTableName(table) === 'metas_nutricionales') {
+            lecturasDeMetas += 1;
+            if (lecturasDeMetas >= 2) {
+              builder.limit = vi.fn(() => {
+                throw new Error('lectura de metas caída tras el commit');
+              });
+            }
+          }
+          return builder;
+        });
+        return query;
+      });
+
+      const r2Fake = bovedaConBorrado();
+      const servicio = new NutricionService(db, r2Fake as any);
+
+      await servicio.definirMetasNutricionales(coachId1, alumnoId1, {
+        recursos: [{ titulo: 'Guía PDF', storageKey: keyPdfPropia }],
+      });
+
+      fallarLecturaDeMetas = true;
+
+      await expect(
+        servicio.definirMetasNutricionales(coachId1, alumnoId1, { caloriasObjetivo: 2100 })
+      ).resolves.toEqual(expect.objectContaining({ caloriasObjetivo: 2100, recursos: [] }));
+
+      // Sin verificación de la fila actual no se borra a ciegas.
+      expect(r2Fake.eliminarObjeto).not.toHaveBeenCalled();
+    });
   });
 });
