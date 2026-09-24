@@ -3,6 +3,7 @@ import { useAuth } from '../../context/auth-context';
 import { apiClient, resolverUrlApi } from '../../lib/api-client';
 import { pluralizar } from '../../lib/pluralizar';
 import { calcularTotalPaginas, rebanarPagina } from '../../lib/paginacion';
+import { prepararComprobanteParaSubida, subirComprobantePago } from '../../lib/comprobante-pago';
 import { Paginacion } from '../../components/common/Paginacion';
 import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import {
@@ -12,7 +13,6 @@ import {
   EstadoConciliacion,
   CuotaDetalleDTO,
   TasaCambioVigenteDTO,
-  PresignedUploadUrlResponseDTO,
   ResumenFinancieroAlumnoDTO,
   TransaccionPagoDetalleDTO,
   AuthUserDTO,
@@ -442,29 +442,21 @@ export function PagosPage() {
     let finalStorageKey: string | undefined = undefined;
 
     if (selectedFile) {
-      try {
-        const presignedData = await apiClient<PresignedUploadUrlResponseDTO>(
-          '/antropometria/presigned-upload-url',
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              modulo: 'comprobantes',
-              alumnoId: user?.id,
-              mimeType: selectedFile.type === 'image/jpeg' ? 'image/jpeg' : 'image/webp',
-            }),
-          }
+      if (!user?.id) {
+        setFormError(
+          'No se pudo identificar tu sesión. Vuelve a iniciar sesión e inténtalo de nuevo.'
         );
-
-        if (presignedData.uploadUrl) {
-          await fetch(presignedData.uploadUrl, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': selectedFile.type,
-            },
-            body: selectedFile,
-          });
-          finalStorageKey = presignedData.storageKey;
-        }
+        setIsSubmitting(false);
+        return;
+      }
+      try {
+        // D2/ADR-007: la imagen se prepara (WebP/JPEG) ANTES de firmar; la presign y el PUT llevan
+        // el MISMO MIME y la subida solo se da por buena con `respuesta.ok`. Sin clave no hay reporte.
+        const archivoPreparado = await prepararComprobanteParaSubida(selectedFile);
+        finalStorageKey = await subirComprobantePago(archivoPreparado, user.id, {
+          apiClient,
+          fetchFn: fetch,
+        });
       } catch (err: any) {
         // D2: sin storageKey fabricado; si el comprobante no se pudo subir, el reporte no se envía.
         setFormError(
