@@ -11,6 +11,7 @@ import {
 import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
 import {
   Database,
+  TenantRlsContext,
   TenantTransaction,
   WithTenantFn,
   withTenant as withTenantBase,
@@ -206,24 +207,28 @@ export class AlumnosService {
       })
       .returning();
 
-    // 5. Crear perfil de alumno
-    const [nuevoPerfil] = await this.db
-      .insert(perfilesAlumno)
-      .values({
-        usuarioId: nuevoUsuario.id,
-        entrenadorId: entrenadorId,
-        tipoDocumento: dto.tipoDocumento,
-        numeroDocumento: dto.numeroDocumento.trim(),
-        nombres: dto.nombres.trim(),
-        apellidos: dto.apellidos.trim(),
-        fechaNacimiento: dto.fechaNacimiento,
-        telefonoWhatsapp: dto.telefonoWhatsapp.trim(),
-        fichaSaludPrivada: fichaCifrada,
-        modalidad: dto.modalidad,
-        tasaFijadaOverride: dto.tasaFijadaOverride || null,
-        estadoActivacion: EstadoAlumno.ACTIVO,
-      })
-      .returning();
+    // 5. Crear perfil de alumno.
+    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; el alta corre con el GUC del coach
+    // creador (política tenant con WITH CHECK sobre `entrenador_id`).
+    const [nuevoPerfil] = await this.withTenant({ entrenadorId }, (tx) =>
+      tx
+        .insert(perfilesAlumno)
+        .values({
+          usuarioId: nuevoUsuario.id,
+          entrenadorId: entrenadorId,
+          tipoDocumento: dto.tipoDocumento,
+          numeroDocumento: dto.numeroDocumento.trim(),
+          nombres: dto.nombres.trim(),
+          apellidos: dto.apellidos.trim(),
+          fechaNacimiento: dto.fechaNacimiento,
+          telefonoWhatsapp: dto.telefonoWhatsapp.trim(),
+          fichaSaludPrivada: fichaCifrada,
+          modalidad: dto.modalidad,
+          tasaFijadaOverride: dto.tasaFijadaOverride || null,
+          estadoActivacion: EstadoAlumno.ACTIVO,
+        })
+        .returning()
+    );
 
     return {
       id: nuevoPerfil.id,
@@ -321,22 +326,27 @@ export class AlumnosService {
       })
       .returning();
 
-    // 5. Vincular alumno al tenant del coach
-    const [nuevoPerfil] = await this.db
-      .insert(perfilesAlumno)
-      .values({
-        usuarioId: nuevoUsuario.id,
-        entrenadorId: coach.usuarioId,
-        tipoDocumento: dto.tipoDocumento,
-        numeroDocumento: dto.numeroDocumento.trim(),
-        nombres: dto.nombres.trim(),
-        apellidos: dto.apellidos.trim(),
-        fechaNacimiento: dto.fechaNacimiento,
-        telefonoWhatsapp: dto.telefonoWhatsapp.trim(),
-        modalidad: dto.modalidad,
-        estadoActivacion: EstadoAlumno.ACTIVO,
-      })
-      .returning();
+    // 5. Vincular alumno al tenant del coach.
+    // RF-011 (registro público): el INSERT es anónimo pero actúa para un coach concreto ya
+    // resuelto; RNF-003/ADR-011 (etapa 3) exige el contexto `{ entrenadorId: coachResuelto }`
+    // para que la política tenant acepte la fila (WITH CHECK sobre `entrenador_id`).
+    const [nuevoPerfil] = await this.withTenant({ entrenadorId: coach.usuarioId }, (tx) =>
+      tx
+        .insert(perfilesAlumno)
+        .values({
+          usuarioId: nuevoUsuario.id,
+          entrenadorId: coach.usuarioId,
+          tipoDocumento: dto.tipoDocumento,
+          numeroDocumento: dto.numeroDocumento.trim(),
+          nombres: dto.nombres.trim(),
+          apellidos: dto.apellidos.trim(),
+          fechaNacimiento: dto.fechaNacimiento,
+          telefonoWhatsapp: dto.telefonoWhatsapp.trim(),
+          modalidad: dto.modalidad,
+          estadoActivacion: EstadoAlumno.ACTIVO,
+        })
+        .returning()
+    );
 
     // 6. RN-07.4: notificar al coach del nuevo registro por la infraestructura existente
     //    (RF-014). Fire-and-forget: un fallo de la bandeja/colas NUNCA tumba el alta del alumno.
@@ -413,29 +423,35 @@ export class AlumnosService {
    * Cambio de estado de activación del alumno (RF-012)
    */
   async cambiarEstado(entrenadorId: string, alumnoId: string, dto: CambioEstadoAlumnoDTO) {
-    const [perfil] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(
-        and(
-          eq(perfilesAlumno.id, alumnoId),
-          eq(perfilesAlumno.entrenadorId, entrenadorId),
-          isNull(perfilesAlumno.deletedAtUtc)
-        )
-      );
+    // RNF-003/ADR-011 (etapa 3): lectura + escritura del perfil en UNA transacción con el GUC
+    // del coach (la política tenant cubre ambas y el chequeo de negocio se conserva).
+    const actualizado = await this.withTenant({ entrenadorId }, async (tx) => {
+      const [perfil] = await tx
+        .select()
+        .from(perfilesAlumno)
+        .where(
+          and(
+            eq(perfilesAlumno.id, alumnoId),
+            eq(perfilesAlumno.entrenadorId, entrenadorId),
+            isNull(perfilesAlumno.deletedAtUtc)
+          )
+        );
 
-    if (!perfil) {
-      throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
-    }
+      if (!perfil) {
+        throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
+      }
 
-    const [actualizado] = await this.db
-      .update(perfilesAlumno)
-      .set({
-        estadoActivacion: dto.nuevoEstado,
-        updatedAtUtc: new Date(),
-      })
-      .where(eq(perfilesAlumno.id, alumnoId))
-      .returning();
+      const [fila] = await tx
+        .update(perfilesAlumno)
+        .set({
+          estadoActivacion: dto.nuevoEstado,
+          updatedAtUtc: new Date(),
+        })
+        .where(eq(perfilesAlumno.id, alumnoId))
+        .returning();
+
+      return fila;
+    });
 
     return {
       id: actualizado.id,
@@ -454,113 +470,119 @@ export class AlumnosService {
     alumnoId: string,
     dto: ActualizarPerfilAlumnoDTO
   ): Promise<PerfilAlumnoDetalleDTO> {
-    const [perfil] = await this.db
-      .select({
-        id: perfilesAlumno.id,
-        usuarioId: perfilesAlumno.usuarioId,
-        entrenadorId: perfilesAlumno.entrenadorId,
-        tipoDocumento: perfilesAlumno.tipoDocumento,
-        numeroDocumento: perfilesAlumno.numeroDocumento,
-        nombres: perfilesAlumno.nombres,
-        apellidos: perfilesAlumno.apellidos,
-        email: usuarios.email,
-        fechaNacimiento: perfilesAlumno.fechaNacimiento,
-        telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
-        fichaSaludPrivada: perfilesAlumno.fichaSaludPrivada,
-        estadoActivacion: perfilesAlumno.estadoActivacion,
-        modalidad: perfilesAlumno.modalidad,
-        periodicidadAntropometria: perfilesAlumno.periodicidadAntropometria,
-        antropometriaInicio: perfilesAlumno.antropometriaInicio,
-        tasaFijadaOverride: perfilesAlumno.tasaFijadaOverride,
-        deletedAtUtc: perfilesAlumno.deletedAtUtc,
-        createdAtUtc: perfilesAlumno.createdAtUtc,
-      })
-      .from(perfilesAlumno)
-      .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
-      .where(
-        or(
-          eq(perfilesAlumno.id, alumnoId),
-          eq(perfilesAlumno.usuarioId, alumnoId)
-        )
-      );
+    // RNF-003/ADR-011 (etapa 3): lectura + escritura del expediente en UNA transacción con el
+    // GUC del coach; las validaciones de tenancy/ciclo de vida se conservan.
+    const { perfil, actualizado } = await this.withTenant({ entrenadorId }, async (tx) => {
+      const [perfil] = await tx
+        .select({
+          id: perfilesAlumno.id,
+          usuarioId: perfilesAlumno.usuarioId,
+          entrenadorId: perfilesAlumno.entrenadorId,
+          tipoDocumento: perfilesAlumno.tipoDocumento,
+          numeroDocumento: perfilesAlumno.numeroDocumento,
+          nombres: perfilesAlumno.nombres,
+          apellidos: perfilesAlumno.apellidos,
+          email: usuarios.email,
+          fechaNacimiento: perfilesAlumno.fechaNacimiento,
+          telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
+          fichaSaludPrivada: perfilesAlumno.fichaSaludPrivada,
+          estadoActivacion: perfilesAlumno.estadoActivacion,
+          modalidad: perfilesAlumno.modalidad,
+          periodicidadAntropometria: perfilesAlumno.periodicidadAntropometria,
+          antropometriaInicio: perfilesAlumno.antropometriaInicio,
+          tasaFijadaOverride: perfilesAlumno.tasaFijadaOverride,
+          deletedAtUtc: perfilesAlumno.deletedAtUtc,
+          createdAtUtc: perfilesAlumno.createdAtUtc,
+        })
+        .from(perfilesAlumno)
+        .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
+        .where(
+          or(
+            eq(perfilesAlumno.id, alumnoId),
+            eq(perfilesAlumno.usuarioId, alumnoId)
+          )
+        );
 
-    if (!perfil) {
-      throw new NotFoundException('Alumno no encontrado');
-    }
+      if (!perfil) {
+        throw new NotFoundException('Alumno no encontrado');
+      }
 
-    if (perfil.entrenadorId !== entrenadorId) {
-      throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');
-    }
+      if (perfil.entrenadorId !== entrenadorId) {
+        throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');
+      }
 
-    // RF-012 RN-02/RN-04: un alumno archivado sólo admite la restauración; editar su expediente
-    // mientras está de baja sería operar sobre una cuenta sin acceso operativo.
-    if (perfil.deletedAtUtc) {
-      throw new ConflictException(
-        'El alumno está dado de baja. Restáuralo para volver a operar sobre su expediente.'
-      );
-    }
+      // RF-012 RN-02/RN-04: un alumno archivado sólo admite la restauración; editar su expediente
+      // mientras está de baja sería operar sobre una cuenta sin acceso operativo.
+      if (perfil.deletedAtUtc) {
+        throw new ConflictException(
+          'El alumno está dado de baja. Restáuralo para volver a operar sobre su expediente.'
+        );
+      }
 
-    const valoresAActualizar: Record<string, any> = {
-      updatedAtUtc: new Date(),
-    };
+      const valoresAActualizar: Record<string, any> = {
+        updatedAtUtc: new Date(),
+      };
 
-    if (dto.nombres !== undefined) {
-      valoresAActualizar.nombres = dto.nombres.trim();
-    }
-    if (dto.apellidos !== undefined) {
-      valoresAActualizar.apellidos = dto.apellidos.trim();
-    }
-    if (dto.tipoDocumento !== undefined) {
-      valoresAActualizar.tipoDocumento = dto.tipoDocumento;
-    }
-    if (dto.numeroDocumento !== undefined) {
-      valoresAActualizar.numeroDocumento = dto.numeroDocumento.trim();
-    }
-    if (dto.fechaNacimiento !== undefined) {
-      valoresAActualizar.fechaNacimiento = dto.fechaNacimiento;
-    }
-    if (dto.telefonoWhatsapp !== undefined) {
-      valoresAActualizar.telefonoWhatsapp = dto.telefonoWhatsapp.trim();
-    }
-    if (dto.modalidad !== undefined) {
-      valoresAActualizar.modalidad = dto.modalidad;
-    }
-    // RF-003 RN-01 (WU RF-003a): calendario antropométrico. Activar una periodicidad sin ancla
-    // dejaría un calendario inerte; se rechaza en vez de guardar una configuración muda.
-    const periodicidadEfectiva =
-      dto.periodicidadAntropometria !== undefined
-        ? dto.periodicidadAntropometria
-        : perfil.periodicidadAntropometria;
-    const inicioEfectivo =
-      dto.antropometriaInicio !== undefined ? dto.antropometriaInicio : perfil.antropometriaInicio;
+      if (dto.nombres !== undefined) {
+        valoresAActualizar.nombres = dto.nombres.trim();
+      }
+      if (dto.apellidos !== undefined) {
+        valoresAActualizar.apellidos = dto.apellidos.trim();
+      }
+      if (dto.tipoDocumento !== undefined) {
+        valoresAActualizar.tipoDocumento = dto.tipoDocumento;
+      }
+      if (dto.numeroDocumento !== undefined) {
+        valoresAActualizar.numeroDocumento = dto.numeroDocumento.trim();
+      }
+      if (dto.fechaNacimiento !== undefined) {
+        valoresAActualizar.fechaNacimiento = dto.fechaNacimiento;
+      }
+      if (dto.telefonoWhatsapp !== undefined) {
+        valoresAActualizar.telefonoWhatsapp = dto.telefonoWhatsapp.trim();
+      }
+      if (dto.modalidad !== undefined) {
+        valoresAActualizar.modalidad = dto.modalidad;
+      }
+      // RF-003 RN-01 (WU RF-003a): calendario antropométrico. Activar una periodicidad sin ancla
+      // dejaría un calendario inerte; se rechaza en vez de guardar una configuración muda.
+      const periodicidadEfectiva =
+        dto.periodicidadAntropometria !== undefined
+          ? dto.periodicidadAntropometria
+          : perfil.periodicidadAntropometria;
+      const inicioEfectivo =
+        dto.antropometriaInicio !== undefined ? dto.antropometriaInicio : perfil.antropometriaInicio;
 
-    if (periodicidadEfectiva && !inicioEfectivo) {
-      throw new BadRequestException(
-        'Para activar la periodicidad del check-in antropométrico debes indicar la fecha de inicio del calendario (antropometriaInicio, formato YYYY-MM-DD).'
-      );
-    }
+      if (periodicidadEfectiva && !inicioEfectivo) {
+        throw new BadRequestException(
+          'Para activar la periodicidad del check-in antropométrico debes indicar la fecha de inicio del calendario (antropometriaInicio, formato YYYY-MM-DD).'
+        );
+      }
 
-    if (dto.periodicidadAntropometria !== undefined) {
-      valoresAActualizar.periodicidadAntropometria = dto.periodicidadAntropometria;
-    }
-    if (dto.antropometriaInicio !== undefined) {
-      valoresAActualizar.antropometriaInicio = dto.antropometriaInicio || null;
-    }
-    if (dto.tasaFijadaOverride !== undefined) {
-      valoresAActualizar.tasaFijadaOverride = dto.tasaFijadaOverride || null;
-    }
-    if (dto.fichaSaludPrivada !== undefined) {
-      valoresAActualizar.fichaSaludPrivada =
-        dto.fichaSaludPrivada && dto.fichaSaludPrivada.trim().length > 0
-          ? this.cryptoService.encryptHealthRecord(dto.fichaSaludPrivada)
-          : null;
-    }
+      if (dto.periodicidadAntropometria !== undefined) {
+        valoresAActualizar.periodicidadAntropometria = dto.periodicidadAntropometria;
+      }
+      if (dto.antropometriaInicio !== undefined) {
+        valoresAActualizar.antropometriaInicio = dto.antropometriaInicio || null;
+      }
+      if (dto.tasaFijadaOverride !== undefined) {
+        valoresAActualizar.tasaFijadaOverride = dto.tasaFijadaOverride || null;
+      }
+      if (dto.fichaSaludPrivada !== undefined) {
+        valoresAActualizar.fichaSaludPrivada =
+          dto.fichaSaludPrivada && dto.fichaSaludPrivada.trim().length > 0
+            ? this.cryptoService.encryptHealthRecord(dto.fichaSaludPrivada)
+            : null;
+      }
 
-    const [actualizado] = await this.db
-      .update(perfilesAlumno)
-      .set(valoresAActualizar)
-      .where(eq(perfilesAlumno.id, perfil.id))
-      .returning();
+      const [fila] = await tx
+        .update(perfilesAlumno)
+        .set(valoresAActualizar)
+        .where(eq(perfilesAlumno.id, perfil.id))
+        .returning();
+
+      return { perfil, actualizado: fila };
+    });
 
     const perfilActualizadoConEmail = {
       ...actualizado,
@@ -587,29 +609,34 @@ export class AlumnosService {
    * Prohibición absoluta de sentencias DELETE físicas
    */
   async softDelete(entrenadorId: string, alumnoId: string) {
-    const [perfil] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(
-        and(
-          eq(perfilesAlumno.id, alumnoId),
-          eq(perfilesAlumno.entrenadorId, entrenadorId),
-          isNull(perfilesAlumno.deletedAtUtc)
-        )
-      );
+    // RNF-003/ADR-011 (etapa 3): lectura + sellado de baja en UNA transacción con el GUC del coach.
+    const nowUtc = await this.withTenant({ entrenadorId }, async (tx) => {
+      const [perfil] = await tx
+        .select()
+        .from(perfilesAlumno)
+        .where(
+          and(
+            eq(perfilesAlumno.id, alumnoId),
+            eq(perfilesAlumno.entrenadorId, entrenadorId),
+            isNull(perfilesAlumno.deletedAtUtc)
+          )
+        );
 
-    if (!perfil) {
-      throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
-    }
+      if (!perfil) {
+        throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
+      }
 
-    const nowUtc = new Date();
-    await this.db
-      .update(perfilesAlumno)
-      .set({
-        deletedAtUtc: nowUtc,
-        updatedAtUtc: nowUtc,
-      })
-      .where(eq(perfilesAlumno.id, alumnoId));
+      const ahora = new Date();
+      await tx
+        .update(perfilesAlumno)
+        .set({
+          deletedAtUtc: ahora,
+          updatedAtUtc: ahora,
+        })
+        .where(eq(perfilesAlumno.id, alumnoId));
+
+      return ahora;
+    });
 
     return {
       id: alumnoId,
@@ -622,32 +649,62 @@ export class AlumnosService {
    * Restauración de Alumno Dado de Baja Lógica (RF-012, RN-04)
    */
   async restaurarAlumno(entrenadorId: string, alumnoId: string, _dto?: RestaurarAlumnoDTO) {
-    const [perfil] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(
-        and(
-          eq(perfilesAlumno.id, alumnoId),
-          eq(perfilesAlumno.entrenadorId, entrenadorId)
-        )
-      );
-
-    if (!perfil) {
-      // Verificar si el alumno existe pero pertenece a otro entrenador
-      const [perfilOtroCoach] = await this.db
+    // RNF-003/ADR-011 (etapa 3): lectura + restauración en UNA transacción con el GUC del coach.
+    // Con RLS activo, un perfil de otro tenant ni siquiera es visible: la rama 403 "existe pero es
+    // de otro coach" queda cubierta por el 404 uniforme (no se filtra la existencia del recurso).
+    const resultado = await this.withTenant({ entrenadorId }, async (tx) => {
+      const [perfil] = await tx
         .select()
         .from(perfilesAlumno)
-        .where(eq(perfilesAlumno.id, alumnoId));
+        .where(
+          and(
+            eq(perfilesAlumno.id, alumnoId),
+            eq(perfilesAlumno.entrenadorId, entrenadorId)
+          )
+        );
 
-      if (perfilOtroCoach) {
-        throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a restaurar alumno de otro entrenador.');
+      if (!perfil) {
+        // Verificar si el alumno existe pero pertenece a otro entrenador
+        const [perfilOtroCoach] = await tx
+          .select()
+          .from(perfilesAlumno)
+          .where(eq(perfilesAlumno.id, alumnoId));
+
+        if (perfilOtroCoach) {
+          throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a restaurar alumno de otro entrenador.');
+        }
+
+        throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
       }
 
-      throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
-    }
+      // Idempotencia: si ya está activo
+      if (!perfil.deletedAtUtc && perfil.estadoActivacion === EstadoAlumno.ACTIVO) {
+        return { yaActivo: true, perfil };
+      }
 
-    // Idempotencia: si ya está activo
-    if (!perfil.deletedAtUtc && perfil.estadoActivacion === EstadoAlumno.ACTIVO) {
+      const nowUtc = new Date();
+      await tx
+        .update(perfilesAlumno)
+        .set({
+          deletedAtUtc: null,
+          estadoActivacion: EstadoAlumno.ACTIVO,
+          updatedAtUtc: nowUtc,
+        })
+        .where(eq(perfilesAlumno.id, alumnoId));
+
+      await tx
+        .update(usuarios)
+        .set({
+          activo: true,
+          estado: EstadoUsuario.ACTIVO,
+          updatedAtUtc: nowUtc,
+        })
+        .where(eq(usuarios.id, perfil.usuarioId));
+
+      return { yaActivo: false, perfil };
+    });
+
+    if (resultado.yaActivo) {
       return {
         id: alumnoId,
         estadoActivacion: EstadoAlumno.ACTIVO,
@@ -655,25 +712,6 @@ export class AlumnosService {
         mensaje: 'El alumno ya se encuentra activo en su cartera.',
       };
     }
-
-    const nowUtc = new Date();
-    await this.db
-      .update(perfilesAlumno)
-      .set({
-        deletedAtUtc: null,
-        estadoActivacion: EstadoAlumno.ACTIVO,
-        updatedAtUtc: nowUtc,
-      })
-      .where(eq(perfilesAlumno.id, alumnoId));
-
-    await this.db
-      .update(usuarios)
-      .set({
-        activo: true,
-        estado: EstadoUsuario.ACTIVO,
-        updatedAtUtc: nowUtc,
-      })
-      .where(eq(usuarios.id, perfil.usuarioId));
 
     return {
       id: alumnoId,
@@ -1157,33 +1195,55 @@ export class AlumnosService {
   }
 
   /**
+   * RNF-003/ADR-011 (etapa 3): contexto RLS para rutas que atienden a más de un rol.
+   * - ALUMNO -> self-select (`current_usuario_id`).
+   * - ENTRENADOR -> tenant del coach (su `usuarioId` es el `entrenadorId` del tenant).
+   * - SUPERADMIN -> bypass explícito `is_superadmin`.
+   */
+  private contextoRlsDeActor(
+    actorUserId: string,
+    actorRole: Rol,
+    actorEntrenadorId?: string
+  ): TenantRlsContext {
+    if (actorRole === Rol.ALUMNO) return { usuarioId: actorUserId };
+    if (actorRole === Rol.SUPERADMIN) return { isSuperadmin: true };
+    return { entrenadorId: actorEntrenadorId ?? actorUserId };
+  }
+
+  /**
    * Obtener perfil por ID con aislamiento de Tenancy
    */
   async obtenerPorId(alumnoId: string, actorUserId: string, actorRole: Rol, actorEntrenadorId?: string) {
-    const [perfil] = await this.db
-      .select({
-        id: perfilesAlumno.id,
-        usuarioId: perfilesAlumno.usuarioId,
-        entrenadorId: perfilesAlumno.entrenadorId,
-        tipoDocumento: perfilesAlumno.tipoDocumento,
-        numeroDocumento: perfilesAlumno.numeroDocumento,
-        nombres: perfilesAlumno.nombres,
-        apellidos: perfilesAlumno.apellidos,
-        email: usuarios.email,
-        fechaNacimiento: perfilesAlumno.fechaNacimiento,
-        telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
-        fichaSaludPrivada: perfilesAlumno.fichaSaludPrivada,
-        estadoActivacion: perfilesAlumno.estadoActivacion,
-        modalidad: perfilesAlumno.modalidad,
-        periodicidadAntropometria: perfilesAlumno.periodicidadAntropometria,
-        antropometriaInicio: perfilesAlumno.antropometriaInicio,
-        tasaFijadaOverride: perfilesAlumno.tasaFijadaOverride,
-        deletedAtUtc: perfilesAlumno.deletedAtUtc,
-        createdAtUtc: perfilesAlumno.createdAtUtc,
-      })
-      .from(perfilesAlumno)
-      .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
-      .where(eq(perfilesAlumno.id, alumnoId));
+    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; la lectura corre con el contexto
+    // del actor (self para el alumno, tenant para el coach, bypass para el superadmin).
+    const [perfil] = await this.withTenant(
+      this.contextoRlsDeActor(actorUserId, actorRole, actorEntrenadorId),
+      (tx) =>
+        tx
+          .select({
+            id: perfilesAlumno.id,
+            usuarioId: perfilesAlumno.usuarioId,
+            entrenadorId: perfilesAlumno.entrenadorId,
+            tipoDocumento: perfilesAlumno.tipoDocumento,
+            numeroDocumento: perfilesAlumno.numeroDocumento,
+            nombres: perfilesAlumno.nombres,
+            apellidos: perfilesAlumno.apellidos,
+            email: usuarios.email,
+            fechaNacimiento: perfilesAlumno.fechaNacimiento,
+            telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
+            fichaSaludPrivada: perfilesAlumno.fichaSaludPrivada,
+            estadoActivacion: perfilesAlumno.estadoActivacion,
+            modalidad: perfilesAlumno.modalidad,
+            periodicidadAntropometria: perfilesAlumno.periodicidadAntropometria,
+            antropometriaInicio: perfilesAlumno.antropometriaInicio,
+            tasaFijadaOverride: perfilesAlumno.tasaFijadaOverride,
+            deletedAtUtc: perfilesAlumno.deletedAtUtc,
+            createdAtUtc: perfilesAlumno.createdAtUtc,
+          })
+          .from(perfilesAlumno)
+          .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
+          .where(eq(perfilesAlumno.id, alumnoId))
+    );
 
     if (!perfil) {
       throw new NotFoundException('Alumno no encontrado');

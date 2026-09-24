@@ -274,7 +274,7 @@ describe('RF-010 RN-01: verificación HTTP real (Nest + supertest)', () => {
 
   /** Mock mínimo de Drizzle para el SELECT del AlumnoHabilitadoGuard (select → from → where → limit). */
   function dbConPerfilActivo() {
-    return {
+    const db: any = {
       select: () => ({
         from: () => ({
           where: () => ({
@@ -282,7 +282,11 @@ describe('RF-010 RN-01: verificación HTTP real (Nest + supertest)', () => {
           }),
         }),
       }),
-    } as any;
+      // RNF-003/ADR-011 (etapa 3): el guard lee el perfil (RLS) dentro de withTenant.
+      execute: async () => undefined,
+    };
+    db.transaction = async (cb: any) => cb(db);
+    return db;
   }
 
   function bodyEntrenador() {

@@ -114,7 +114,11 @@ async function seed() {
     });
     await db.delete(tasasCambioReferencia);
     await db.delete(preferenciasNotificacion);
-    await db.delete(perfilesAlumno);
+    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; el seed es ruta de sistema y usa
+    // el bypass explícito de superadmin (mismo precedente que rutinas/plantillas/finanzas).
+    await withTenant({ isSuperadmin: true }, async (tx) => {
+      await tx.delete(perfilesAlumno);
+    });
     await db.delete(perfilesEntrenador);
     await db.delete(usuarios);
 
@@ -416,26 +420,29 @@ async function seed() {
       'Sin antecedentes cardiovasculares ni lesiones articulares activas. Apto para entrenamiento de alta intensidad con sobrecarga progresiva.'
     );
 
-    const [perfil1] = await db
-      .insert(perfilesAlumno)
-      .values({
-        usuarioId: user1.id,
-        entrenadorId: coachUser.id,
-        tipoDocumento: TipoDocumento.V,
-        numeroDocumento: '20111221',
-        nombres: 'Andrés',
-        apellidos: 'Pérez',
-        fechaNacimiento: '1996-03-14',
-        telefonoWhatsapp: '+584149876541',
-        fichaSaludPrivada: fichaSaludCifrada1,
-        estadoActivacion: EstadoAlumno.ACTIVO,
-        modalidad: Modalidad.PRESENCIAL,
-        rachaDias: 4,
-        rachaUltimaFecha: nowUtc.toISOString().split('T')[0],
-        createdAtUtc: nowUtc,
-        updatedAtUtc: nowUtc,
-      })
-      .returning();
+    // RNF-003/ADR-011 (etapa 3): escritura de sistema con bypass superadmin (RLS activo).
+    const [perfil1] = await withTenant({ isSuperadmin: true }, (tx) =>
+      tx
+        .insert(perfilesAlumno)
+        .values({
+          usuarioId: user1.id,
+          entrenadorId: coachUser.id,
+          tipoDocumento: TipoDocumento.V,
+          numeroDocumento: '20111221',
+          nombres: 'Andrés',
+          apellidos: 'Pérez',
+          fechaNacimiento: '1996-03-14',
+          telefonoWhatsapp: '+584149876541',
+          fichaSaludPrivada: fichaSaludCifrada1,
+          estadoActivacion: EstadoAlumno.ACTIVO,
+          modalidad: Modalidad.PRESENCIAL,
+          rachaDias: 4,
+          rachaUltimaFecha: nowUtc.toISOString().split('T')[0],
+          createdAtUtc: nowUtc,
+          updatedAtUtc: nowUtc,
+        })
+        .returning()
+    );
 
     await db.insert(preferenciasNotificacion).values({
       usuarioId: user1.id,
@@ -525,21 +532,24 @@ async function seed() {
       })
       .returning();
 
-    await db.insert(perfilesAlumno).values({
-      usuarioId: user2.id,
-      entrenadorId: coachUser.id,
-      tipoDocumento: TipoDocumento.V,
-      numeroDocumento: '20111222',
-      nombres: 'Mariana',
-      apellidos: 'Gómez',
-      fechaNacimiento: '1998-07-22',
-      telefonoWhatsapp: '+584241112233',
-      fichaSaludPrivada: encryptHealthRecord('Condromalacia rotuliana grado 1 rodilla derecha. Evitar sobrecarga en sentadilla profunda.'),
-      estadoActivacion: EstadoAlumno.ACTIVO,
-      modalidad: Modalidad.REMOTO,
-      createdAtUtc: nowUtc,
-      updatedAtUtc: nowUtc,
-    });
+    // RNF-003/ADR-011 (etapa 3): escritura de sistema con bypass superadmin (RLS activo).
+    await withTenant({ isSuperadmin: true }, (tx) =>
+      tx.insert(perfilesAlumno).values({
+        usuarioId: user2.id,
+        entrenadorId: coachUser.id,
+        tipoDocumento: TipoDocumento.V,
+        numeroDocumento: '20111222',
+        nombres: 'Mariana',
+        apellidos: 'Gómez',
+        fechaNacimiento: '1998-07-22',
+        telefonoWhatsapp: '+584241112233',
+        fichaSaludPrivada: encryptHealthRecord('Condromalacia rotuliana grado 1 rodilla derecha. Evitar sobrecarga en sentadilla profunda.'),
+        estadoActivacion: EstadoAlumno.ACTIVO,
+        modalidad: Modalidad.REMOTO,
+        createdAtUtc: nowUtc,
+        updatedAtUtc: nowUtc,
+      })
+    );
 
     const [cuota2] = await withTenant({ isSuperadmin: true }, (tx) =>
       tx
@@ -600,21 +610,24 @@ async function seed() {
       })
       .returning();
 
-    await db.insert(perfilesAlumno).values({
-      usuarioId: user3.id,
-      entrenadorId: coachUser.id,
-      tipoDocumento: TipoDocumento.V,
-      numeroDocumento: '20111223',
-      nombres: 'Roberto',
-      apellidos: 'Mendoza',
-      fechaNacimiento: '1992-11-05',
-      telefonoWhatsapp: '+584125556677',
-      fichaSaludPrivada: encryptHealthRecord('Sin lesiones previas. Fumador social en proceso de cese.'),
-      estadoActivacion: EstadoAlumno.ACTIVO,
-      modalidad: Modalidad.PRESENCIAL,
-      createdAtUtc: nowUtc,
-      updatedAtUtc: nowUtc,
-    });
+    // RNF-003/ADR-011 (etapa 3): escritura de sistema con bypass superadmin (RLS activo).
+    await withTenant({ isSuperadmin: true }, (tx) =>
+      tx.insert(perfilesAlumno).values({
+        usuarioId: user3.id,
+        entrenadorId: coachUser.id,
+        tipoDocumento: TipoDocumento.V,
+        numeroDocumento: '20111223',
+        nombres: 'Roberto',
+        apellidos: 'Mendoza',
+        fechaNacimiento: '1992-11-05',
+        telefonoWhatsapp: '+584125556677',
+        fichaSaludPrivada: encryptHealthRecord('Sin lesiones previas. Fumador social en proceso de cese.'),
+        estadoActivacion: EstadoAlumno.ACTIVO,
+        modalidad: Modalidad.PRESENCIAL,
+        createdAtUtc: nowUtc,
+        updatedAtUtc: nowUtc,
+      })
+    );
 
     // Periodo anterior vencido hace 5 días
     const fechaCorteVencida = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
@@ -663,21 +676,24 @@ async function seed() {
       })
       .returning();
 
-    await db.insert(perfilesAlumno).values({
-      usuarioId: user4.id,
-      entrenadorId: coachUser.id,
-      tipoDocumento: TipoDocumento.V,
-      numeroDocumento: '20111224',
-      nombres: 'Valeria',
-      apellidos: 'Castillo',
-      fechaNacimiento: '2001-09-18',
-      telefonoWhatsapp: '+584163334455',
-      fichaSaludPrivada: encryptHealthRecord('Evaluación inicial en curso. Sin contraindicaciones detectadas.'),
-      estadoActivacion: EstadoAlumno.ACTIVO,
-      modalidad: Modalidad.PRESENCIAL,
-      createdAtUtc: nowUtc,
-      updatedAtUtc: nowUtc,
-    });
+    // RNF-003/ADR-011 (etapa 3): escritura de sistema con bypass superadmin (RLS activo).
+    await withTenant({ isSuperadmin: true }, (tx) =>
+      tx.insert(perfilesAlumno).values({
+        usuarioId: user4.id,
+        entrenadorId: coachUser.id,
+        tipoDocumento: TipoDocumento.V,
+        numeroDocumento: '20111224',
+        nombres: 'Valeria',
+        apellidos: 'Castillo',
+        fechaNacimiento: '2001-09-18',
+        telefonoWhatsapp: '+584163334455',
+        fichaSaludPrivada: encryptHealthRecord('Evaluación inicial en curso. Sin contraindicaciones detectadas.'),
+        estadoActivacion: EstadoAlumno.ACTIVO,
+        modalidad: Modalidad.PRESENCIAL,
+        createdAtUtc: nowUtc,
+        updatedAtUtc: nowUtc,
+      })
+    );
 
     // --- ALUMNO 5: Inactivo / Pausado con historial de mediciones pasadas ---
     console.log('  -> Alumno 5: Diego Morales (Inactivo / Pausado con historial)');
@@ -696,21 +712,24 @@ async function seed() {
       })
       .returning();
 
-    await db.insert(perfilesAlumno).values({
-      usuarioId: user5.id,
-      entrenadorId: coachUser.id,
-      tipoDocumento: TipoDocumento.V,
-      numeroDocumento: '20111225',
-      nombres: 'Diego',
-      apellidos: 'Morales',
-      fechaNacimiento: '1989-12-30',
-      telefonoWhatsapp: '+584249998877',
-      fichaSaludPrivada: encryptHealthRecord('Cirugía de menisco rodilla izquierda en 2021 (totalmente recuperado).'),
-      estadoActivacion: EstadoAlumno.INACTIVO_PAUSADO,
-      modalidad: Modalidad.PRESENCIAL,
-      createdAtUtc: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
-      updatedAtUtc: nowUtc,
-    });
+    // RNF-003/ADR-011 (etapa 3): escritura de sistema con bypass superadmin (RLS activo).
+    await withTenant({ isSuperadmin: true }, (tx) =>
+      tx.insert(perfilesAlumno).values({
+        usuarioId: user5.id,
+        entrenadorId: coachUser.id,
+        tipoDocumento: TipoDocumento.V,
+        numeroDocumento: '20111225',
+        nombres: 'Diego',
+        apellidos: 'Morales',
+        fechaNacimiento: '1989-12-30',
+        telefonoWhatsapp: '+584249998877',
+        fichaSaludPrivada: encryptHealthRecord('Cirugía de menisco rodilla izquierda en 2021 (totalmente recuperado).'),
+        estadoActivacion: EstadoAlumno.INACTIVO_PAUSADO,
+        modalidad: Modalidad.PRESENCIAL,
+        createdAtUtc: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
+        updatedAtUtc: nowUtc,
+      })
+    );
 
     // Medición histórica de Alumno 5 (hace 90 días)
     const fechaMedicionHistorica = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);

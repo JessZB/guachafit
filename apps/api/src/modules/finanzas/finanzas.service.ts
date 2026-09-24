@@ -281,7 +281,18 @@ export class FinanzasService {
     const targetClienteId =
       dto.clienteId || (actorRole === Rol.ALUMNO ? actorUserId : undefined);
 
-    const tasaVigente = await this.obtenerTasaVigente(entrenadorId, targetClienteId);
+    // RNF-003/ADR-011 (etapa 3): si hay cliente, la tasa override sale del perfil (RLS); el
+    // contexto es el del actor (self del alumno o tenant del coach).
+    const contextoTasa: TenantRlsContext =
+      actorUserId && actorRole
+        ? this.contextoRlsDeActor(actorUserId, actorRole, entrenadorId)
+        : { entrenadorId };
+    const tasaVigente = await this.obtenerTasaVigente(
+      entrenadorId,
+      targetClienteId,
+      undefined,
+      contextoTasa
+    );
     const { tasaEfectiva, esTasaOverride, fuente } = tasaVigente;
 
     let montoConvertido: string;
@@ -377,12 +388,41 @@ export class FinanzasService {
     };
   }
 
+  /**
+   * RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS. Con `clienteId` la tasa acordada se
+   * lee del perfil, así que:
+   * - Con `tx` (llamador dentro de una transacción con contexto) la lectura corre en ESA conexión.
+   * - Sin `tx`, el flujo abre su propia transacción con el contexto del actor (`contexto`), nunca
+   *   desde el pool raíz (que bajo RLS no vería el perfil y silenciaría el override).
+   */
   async obtenerTasaVigente(
     entrenadorId: string,
-    clienteId?: string
+    clienteId?: string,
+    tx?: TenantTransaction,
+    contexto?: TenantRlsContext
+  ): Promise<TasaCambioVigenteDTO & { esTasaOverride: boolean }> {
+    if (tx) {
+      return this.obtenerTasaVigenteEn(entrenadorId, clienteId, tx);
+    }
+    if (clienteId) {
+      return this.withTenant(contexto ?? { entrenadorId }, (conexion) =>
+        this.obtenerTasaVigenteEn(entrenadorId, clienteId, conexion)
+      );
+    }
+    return this.obtenerTasaVigenteEn(
+      entrenadorId,
+      undefined,
+      this.db as unknown as TenantTransaction
+    );
+  }
+
+  private async obtenerTasaVigenteEn(
+    entrenadorId: string,
+    clienteId: string | undefined,
+    conn: TenantTransaction
   ): Promise<TasaCambioVigenteDTO & { esTasaOverride: boolean }> {
     // 1. Obtener última tasa registrada del entrenador
-    const [tasaRef] = await this.db
+    const [tasaRef] = await conn
       .select()
       .from(tasasCambioReferencia)
       .where(eq(tasasCambioReferencia.entrenadorId, entrenadorId))
@@ -404,7 +444,7 @@ export class FinanzasService {
       fuente = tasaRef.fuente;
       fechaActualizacionUtc = tasaRef.fechaActualizacionUtc.toISOString();
     } else {
-      const [coachPerfil] = await this.db
+      const [coachPerfil] = await conn
         .select()
         .from(perfilesEntrenador)
         .where(eq(perfilesEntrenador.usuarioId, entrenadorId));
@@ -419,9 +459,10 @@ export class FinanzasService {
     // 2. Si se solicitó para un cliente, verificar si tiene override activo
     let tasaAcordadaCliente: string | null = null;
     if (clienteId) {
-      const clienteUsuarioId = await this.resolveClienteUsuarioId(clienteId);
+      const clienteUsuarioId = await this.resolveClienteUsuarioId(clienteId, conn);
 
-      const [alumno] = await this.db
+      // RNF-003/ADR-011 (etapa 3): perfil del alumno (RLS) en la MISMA conexión con contexto.
+      const [alumno] = await conn
         .select()
         .from(perfilesAlumno)
         .where(
@@ -1023,7 +1064,11 @@ export class FinanzasService {
 
     // Calcular proyección en Bs solo con tasa real: sin tasa configurada se omite el dato
     // en vez de inventar un valor (la emisión en USD no requiere tasa).
-    const tasa = await this.obtenerTasaVigente(entrenadorId, cuota.clienteId);
+    // RNF-003/ADR-011 (etapa 3): la tasa override lee `perfiles_alumno` (RLS); transacción con
+    // el GUC del coach.
+    const tasa = await this.withTenant({ entrenadorId }, (tx) =>
+      this.obtenerTasaVigente(entrenadorId, cuota.clienteId, tx)
+    );
     const saldoPendienteVes = tasa.tasaEfectiva
       ? this.proyectarVES(cuota.saldoPendienteUsd, tasa.tasaEfectiva)
       : undefined;
@@ -1133,7 +1178,8 @@ export class FinanzasService {
       );
 
       // Proyección en Bs solo con tasa real (misma regla que la emisión: sin tasa, se omite).
-      const tasa = await this.obtenerTasaVigente(cuota.entrenadorId, cuota.clienteId);
+      // RNF-003/ADR-011 (etapa 3): la tasa override se lee en la MISMA transacción con contexto.
+      const tasa = await this.obtenerTasaVigente(cuota.entrenadorId, cuota.clienteId, tx);
       const saldoPendienteVes = tasa.tasaEfectiva
         ? this.proyectarVES(cuota.saldoPendienteUsd, tasa.tasaEfectiva)
         : undefined;
@@ -1262,7 +1308,8 @@ export class FinanzasService {
       // 4. Congelar la tasa de cambio vigente (ADR-003 rate snapshot).
       //    Un pago en VES exige tasa real: sin ella no se puede calcular el contravalor USD y
       //    se devuelve un error de negocio claro en vez de inventar un equivalente.
-      const tasa = await this.obtenerTasaVigente(cuota.entrenadorId, alumnoUserId);
+      //    RNF-003/ADR-011 (etapa 3): tasa override leída en la MISMA tx (contexto self del alumno).
+      const tasa = await this.obtenerTasaVigente(cuota.entrenadorId, alumnoUserId, tx);
       let tasaCambioFijada = '1.0000';
       let montoEquivalenteUsd = dto.montoOriginal;
 
@@ -1446,7 +1493,9 @@ export class FinanzasService {
       let montoEquivalenteUsd = dto.montoOriginal;
 
       if (dto.monedaOriginal === Moneda.VES) {
-        const tasa = await this.obtenerTasaVigente(entrenadorId, cuotaLock.clienteId);
+        // RNF-003/ADR-011 (etapa 3): la tasa override lee el perfil (RLS) en la MISMA tx manual
+        // con el GUC del coach (set_config arriba).
+        const tasa = await this.obtenerTasaVigente(entrenadorId, cuotaLock.clienteId, tx);
         if (!tasa.tasaEfectiva || parseFloat(tasa.tasaEfectiva) <= 0) {
           throw new BadRequestException(
             'Aún no has configurado la tasa de cambio. Configura tu tasa activa en Ajustes → Tasas para cobrar en bolívares.'
@@ -1524,7 +1573,8 @@ export class FinanzasService {
       };
 
       // Proyección informativa en Bs: solo con tasa real (sin tasa, se omite el dato).
-      const tasa = await this.obtenerTasaVigente(entrenadorId, cuotaActualizada.clienteId);
+      // RNF-003/ADR-011 (etapa 3): misma tx manual con contexto del coach.
+      const tasa = await this.obtenerTasaVigente(entrenadorId, cuotaActualizada.clienteId, tx);
       const saldoPendienteVes = tasa.tasaEfectiva
         ? this.proyectarVES(cuotaActualizada.saldoPendienteUsd, tasa.tasaEfectiva)
         : undefined;
@@ -1898,14 +1948,15 @@ export class FinanzasService {
 
   /**
    * Resuelve un `usuarioId` a partir de un id que puede ser de `usuarios` o de `perfiles_alumno`.
-   * RNF-003/ADR-011: acepta el `tx` de `withTenant` para que la lectura corra en la MISMA
-   * transacción con contexto cuando el llamador ya abrió una (etapa 3 envolverá `perfiles_alumno`).
+   * RNF-003/ADR-011 (etapa 3 completada): `perfiles_alumno` está bajo RLS, así que la lectura
+   * SIEMPRE debe correr en una transacción con contexto (`withTenant` o tx con `set_config`).
+   * El `tx` es OBLIGATORIO a propósito: sin él, un futuro llamador leería 0 filas en silencio.
    */
   private async resolveClienteUsuarioId(
     idOrPerfilId: string,
-    tx?: TenantTransaction
+    tx: TenantTransaction
   ): Promise<string> {
-    const conn = tx ?? (this.db as unknown as TenantTransaction);
+    const conn = tx;
 
     // Si ya es un usuarioId en la tabla usuarios
     const [user] = await conn
@@ -2169,7 +2220,8 @@ export class FinanzasService {
         // 2. Un cobro en VES exige tasa configurada ANTES de emitir cualquier cuota: así la
         //    operación falla entera y no deja una cuota emitida como efecto colateral.
         if (dto.monedaOriginal === Moneda.VES) {
-          const tasa = await this.obtenerTasaVigente(entrenadorId, clienteUsuarioId);
+          // RNF-003/ADR-011 (etapa 3): tasa override en la MISMA tx con el GUC del coach.
+          const tasa = await this.obtenerTasaVigente(entrenadorId, clienteUsuarioId, tx);
           if (!tasa.tasaEfectiva || parseFloat(tasa.tasaEfectiva) <= 0) {
             throw new BadRequestException(
               'Aún no has configurado la tasa de cambio. Configura tu tasa activa en Ajustes → Tasas para cobrar en bolívares.'

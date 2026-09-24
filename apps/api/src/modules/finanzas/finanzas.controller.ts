@@ -66,7 +66,14 @@ export class FinanzasController {
       throw new BadRequestException('No se pudo determinar el contexto del entrenador para la tasa.');
     }
 
-    return this.finanzasService.obtenerTasaVigente(entrenadorId, targetClienteId);
+    // RNF-003/ADR-011 (etapa 3): la tasa override lee `perfiles_alumno` (RLS); el contexto RLS
+    // es el del actor (self del alumno, tenant del coach).
+    return this.finanzasService.obtenerTasaVigente(
+      entrenadorId,
+      targetClienteId,
+      undefined,
+      req.user.rol === Rol.ALUMNO ? { usuarioId: req.user.sub } : { entrenadorId }
+    );
   }
 
   /**

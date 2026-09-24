@@ -772,7 +772,11 @@ export class CarteraService {
       };
     }
 
-    const tasa = await this.finanzasService.obtenerTasaVigente(entrenadorId, clienteId);
+    // RNF-003/ADR-011 (etapa 3): la tasa override lee `perfiles_alumno` (RLS); transacción con
+    // el GUC del coach.
+    const tasa = await this.withTenant({ entrenadorId }, (tx) =>
+      this.finanzasService.obtenerTasaVigente(entrenadorId, clienteId, tx)
+    );
     const saldoPendienteBs = tasa.tasaEfectiva
       ? this.finanzasService.proyectarVES(cuotaAbierta.saldoPendienteUsd, tasa.tasaEfectiva)
       : null;

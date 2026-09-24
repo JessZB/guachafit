@@ -13,6 +13,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SesionAlumnoFinalizadaEvent } from '../notificaciones/events/eventos-notificacion';
 import {
   Database,
+  TenantRlsContext,
   WithTenantFn,
   eq,
   and,
@@ -286,6 +287,22 @@ export class EntrenamientoService {
     @Optional() private readonly eventEmitter?: EventEmitter2
   ) {}
 
+  /**
+   * RNF-003/ADR-011 (etapa 3): contexto RLS del perfil del alumno para rutas multi-rol.
+   * - ALUMNO -> self-select (`current_usuario_id`).
+   * - ENTRENADOR -> tenant del coach.
+   * - SUPERADMIN -> bypass explícito.
+   */
+  private contextoPerfilDeActor(
+    rol: Rol,
+    actorUserId: string,
+    entrenadorId?: string
+  ): TenantRlsContext {
+    if (rol === Rol.ALUMNO) return { usuarioId: actorUserId };
+    if (rol === Rol.SUPERADMIN) return { isSuperadmin: true };
+    return { entrenadorId: entrenadorId ?? actorUserId };
+  }
+
   // ---------------------------------------------------------------------------
   // 1. CATÁLOGO DE EJERCICIOS
   // ---------------------------------------------------------------------------
@@ -374,17 +391,20 @@ export class EntrenamientoService {
   ): Promise<SesionEntrenamientoDetalleDTO> {
     const validado = CrearSesionEntrenamientoSchema.parse(input);
 
-    // Validar Tenancy: El alumno debe pertenecer a este entrenador
-    const [perfilAlumno] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(
-        and(
-          eq(perfilesAlumno.usuarioId, validado.alumnoId),
-          eq(perfilesAlumno.entrenadorId, entrenadorId)
+    // Validar Tenancy: El alumno debe pertenecer a este entrenador.
+    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura con el GUC del coach.
+    const [perfilAlumno] = await this.withTenant({ entrenadorId }, (tx) =>
+      tx
+        .select()
+        .from(perfilesAlumno)
+        .where(
+          and(
+            eq(perfilesAlumno.usuarioId, validado.alumnoId),
+            eq(perfilesAlumno.entrenadorId, entrenadorId)
+          )
         )
-      )
-      .limit(1);
+        .limit(1)
+    );
 
     if (!perfilAlumno) {
       throw new ForbiddenException(
@@ -468,17 +488,22 @@ export class EntrenamientoService {
   ): Promise<RutinaSemanalDetalleDTO> {
     const validado = GuardarRutinaSemanalSchema.parse(input);
 
-    let [perfil] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(eq(perfilesAlumno.id, alumnoId));
-
-    if (!perfil) {
-      [perfil] = await this.db
+    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura con el GUC del coach.
+    const perfil = await this.withTenant({ entrenadorId }, async (tx) => {
+      let [perfil] = await tx
         .select()
         .from(perfilesAlumno)
-        .where(eq(perfilesAlumno.usuarioId, alumnoId));
-    }
+        .where(eq(perfilesAlumno.id, alumnoId));
+
+      if (!perfil) {
+        [perfil] = await tx
+          .select()
+          .from(perfilesAlumno)
+          .where(eq(perfilesAlumno.usuarioId, alumnoId));
+      }
+
+      return perfil;
+    });
 
     if (!perfil) {
       throw new NotFoundException('El alumno especificado no existe.');
@@ -551,17 +576,26 @@ export class EntrenamientoService {
     rol: Rol,
     currentUserId?: string
   ): Promise<RutinaSemanalDetalleDTO | null> {
-    let [perfil] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(eq(perfilesAlumno.id, alumnoId));
+    // RNF-003/ADR-011 (etapa 3): lectura del perfil con el contexto del actor (self del alumno,
+    // tenant del coach o bypass del superadmin).
+    const perfil = await this.withTenant(
+      this.contextoPerfilDeActor(rol, currentUserId ?? alumnoId, entrenadorId),
+      async (tx) => {
+        let [perfil] = await tx
+          .select()
+          .from(perfilesAlumno)
+          .where(eq(perfilesAlumno.id, alumnoId));
 
-    if (!perfil) {
-      [perfil] = await this.db
-        .select()
-        .from(perfilesAlumno)
-        .where(eq(perfilesAlumno.usuarioId, alumnoId));
-    }
+        if (!perfil) {
+          [perfil] = await tx
+            .select()
+            .from(perfilesAlumno)
+            .where(eq(perfilesAlumno.usuarioId, alumnoId));
+        }
+
+        return perfil;
+      }
+    );
 
     if (!perfil) {
       throw new NotFoundException('El alumno especificado no existe.');
@@ -639,11 +673,14 @@ export class EntrenamientoService {
     const { semanaIso, inicioSemana, finSemana, isoDay } = calcularRangoSemanaIso(hoyStr);
 
     // RN-02: racha efectiva del alumno (no depende de tener rutina activa).
-    const [perfilAlumno] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(eq(perfilesAlumno.usuarioId, alumnoId))
-      .limit(1);
+    // RNF-003/ADR-011 (etapa 3): lectura self del perfil con RLS (`current_usuario_id`).
+    const [perfilAlumno] = await this.withTenant({ usuarioId: alumnoId }, (tx) =>
+      tx
+        .select()
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.usuarioId, alumnoId))
+        .limit(1)
+    );
     const rachaDias = calcularRachaEfectiva(
       perfilAlumno?.rachaDias ?? 0,
       perfilAlumno?.rachaUltimaFecha ?? null,
@@ -799,7 +836,10 @@ export class EntrenamientoService {
       ? sesionesHoy.find((s) => s.bloqueId === bloqueId)
       : sesionesHoy[0];
 
-    return sesionHoy ? this.hidratarSesion(sesionHoy) : null;
+    // RNF-003/ADR-011 (etapa 3): hidratación del nombre con el contexto self del alumno.
+    return sesionHoy
+      ? this.hidratarSesion(sesionHoy, { usuarioId: sesionHoy.alumnoId })
+      : null;
   }
 
   /**
@@ -912,7 +952,8 @@ export class EntrenamientoService {
       if (input.iniciarInmediato && sesionViva.estado === EstadoSesion.PLANIFICADA) {
         return this.iniciarSesion(sesionViva.id, alumnoId, { timezoneCliente: tz });
       }
-      return this.hidratarSesion(sesionViva);
+      // RNF-003/ADR-011 (etapa 3): contexto self del alumno para el perfil (RLS).
+      return this.hidratarSesion(sesionViva, { usuarioId: sesionViva.alumnoId });
     }
 
     // Sin sesión viva: crear una nueva (repetición de COMPLETADA/OMITIDA o primer acceso del bloque).
@@ -1040,7 +1081,8 @@ export class EntrenamientoService {
       }
     }
 
-    return this.hidratarSesion(nuevaSesion);
+    // RNF-003/ADR-011 (etapa 3): contexto self del alumno para el perfil (RLS).
+    return this.hidratarSesion(nuevaSesion, { usuarioId: nuevaSesion.alumnoId });
   }
 
   /**
@@ -1061,18 +1103,28 @@ export class EntrenamientoService {
     offset = 0,
     currentUserId?: string
   ): Promise<HistorialSesionesAlumnoDTO> {
-    // 1. Validar si alumnoId es perfilesAlumno.id o perfilesAlumno.usuarioId
-    let [perfil] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(eq(perfilesAlumno.id, alumnoId));
-
-    if (!perfil) {
-      [perfil] = await this.db
+    // 1. Validar si alumnoId es perfilesAlumno.id o perfilesAlumno.usuarioId.
+    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; contexto según el actor.
+    const contextoPerfil = this.contextoPerfilDeActor(
+      rol,
+      currentUserId ?? alumnoId,
+      entrenadorId
+    );
+    const perfil = await this.withTenant(contextoPerfil, async (tx) => {
+      let [perfil] = await tx
         .select()
         .from(perfilesAlumno)
-        .where(eq(perfilesAlumno.usuarioId, alumnoId));
-    }
+        .where(eq(perfilesAlumno.id, alumnoId));
+
+      if (!perfil) {
+        [perfil] = await tx
+          .select()
+          .from(perfilesAlumno)
+          .where(eq(perfilesAlumno.usuarioId, alumnoId));
+      }
+
+      return perfil;
+    });
 
     if (!perfil) {
       throw new NotFoundException('El alumno especificado no existe.');
@@ -1117,7 +1169,7 @@ export class EntrenamientoService {
 
     const items: SesionEntrenamientoDetalleDTO[] = [];
     for (const s of sesiones) {
-      items.push(await this.hidratarSesion(s));
+      items.push(await this.hidratarSesion(s, contextoPerfil));
     }
 
     return {
@@ -1152,18 +1204,23 @@ export class EntrenamientoService {
       throw new ForbiddenException('No tienes permiso para acceder a esta sesión de entrenamiento.');
     }
 
+    // RNF-003/ADR-011 (etapa 3): contexto RLS del actor para el perfil del alumno.
+    const contextoPerfil = this.contextoPerfilDeActor(rol, usuarioId, entrenadorId);
+
     if (rol === Rol.ENTRENADOR) {
       const coachId = entrenadorId || usuarioId;
-      const [perfil] = await this.db
-        .select()
-        .from(perfilesAlumno)
-        .where(
-          and(
-            eq(perfilesAlumno.usuarioId, sesion.alumnoId),
-            eq(perfilesAlumno.entrenadorId, coachId)
+      const [perfil] = await this.withTenant({ entrenadorId: coachId }, (tx) =>
+        tx
+          .select()
+          .from(perfilesAlumno)
+          .where(
+            and(
+              eq(perfilesAlumno.usuarioId, sesion.alumnoId),
+              eq(perfilesAlumno.entrenadorId, coachId)
+            )
           )
-        )
-        .limit(1);
+          .limit(1)
+      );
 
       if (!perfil) {
         throw new ForbiddenException(
@@ -1172,7 +1229,7 @@ export class EntrenamientoService {
       }
     }
 
-    return this.hidratarSesion(sesion);
+    return this.hidratarSesion(sesion, contextoPerfil);
   }
 
   /**
@@ -1198,23 +1255,34 @@ export class EntrenamientoService {
 
     let targetUsuarioId = alumnoId;
 
+    // RNF-003/ADR-011 (etapa 3): contexto RLS del actor para el perfil del alumno.
+    const contextoPerfil = this.contextoPerfilDeActor(
+      rol,
+      currentUserId ?? alumnoId,
+      entrenadorId
+    );
+
     if (rol !== Rol.SUPERADMIN) {
       // Acepta `perfiles_alumno.id` o `usuarios.id`: consultas secuenciales (id primero), el mismo
       // patrón que `obtenerHistorialSesionesAlumno`; un `or(...)` entre columnas distintas no es
       // representable por el mock de Drizzle de los tests BDD.
-      let [perfil] = await this.db
-        .select()
-        .from(perfilesAlumno)
-        .where(and(eq(perfilesAlumno.id, alumnoId), isNull(perfilesAlumno.deletedAtUtc)))
-        .limit(1);
-
-      if (!perfil) {
-        [perfil] = await this.db
+      const perfil = await this.withTenant(contextoPerfil, async (tx) => {
+        let [perfil] = await tx
           .select()
           .from(perfilesAlumno)
-          .where(and(eq(perfilesAlumno.usuarioId, alumnoId), isNull(perfilesAlumno.deletedAtUtc)))
+          .where(and(eq(perfilesAlumno.id, alumnoId), isNull(perfilesAlumno.deletedAtUtc)))
           .limit(1);
-      }
+
+        if (!perfil) {
+          [perfil] = await tx
+            .select()
+            .from(perfilesAlumno)
+            .where(and(eq(perfilesAlumno.usuarioId, alumnoId), isNull(perfilesAlumno.deletedAtUtc)))
+            .limit(1);
+        }
+
+        return perfil;
+      });
 
       if (!perfil) {
         throw new NotFoundException(`Alumno con ID '${alumnoId}' no encontrado.`);
@@ -1233,19 +1301,23 @@ export class EntrenamientoService {
 
       targetUsuarioId = perfil.usuarioId;
     } else {
-      let [perfil] = await this.db
-        .select()
-        .from(perfilesAlumno)
-        .where(eq(perfilesAlumno.id, alumnoId))
-        .limit(1);
-
-      if (!perfil) {
-        [perfil] = await this.db
+      const perfil = await this.withTenant({ isSuperadmin: true }, async (tx) => {
+        let [perfil] = await tx
           .select()
           .from(perfilesAlumno)
-          .where(eq(perfilesAlumno.usuarioId, alumnoId))
+          .where(eq(perfilesAlumno.id, alumnoId))
           .limit(1);
-      }
+
+        if (!perfil) {
+          [perfil] = await tx
+            .select()
+            .from(perfilesAlumno)
+            .where(eq(perfilesAlumno.usuarioId, alumnoId))
+            .limit(1);
+        }
+
+        return perfil;
+      });
 
       if (perfil) {
         targetUsuarioId = perfil.usuarioId;
@@ -1275,7 +1347,7 @@ export class EntrenamientoService {
       return null;
     }
 
-    return this.hidratarSesion(sesion);
+    return this.hidratarSesion(sesion, contextoPerfil);
   }
 
   // ---------------------------------------------------------------------------
@@ -1590,37 +1662,46 @@ export class EntrenamientoService {
     const cumpleReglaRacha = !esOmision && evaluacion.cumple;
 
     // Racha persistida del alumno (antes se pasaba 0 fijo desde el controller).
-    const [perfilRacha] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(eq(perfilesAlumno.usuarioId, alumnoId))
-      .limit(1);
+    // RNF-003/ADR-011 (etapa 3): lectura + escritura de la racha en UNA transacción con el
+    // contexto self del alumno (`perfiles_alumno` tiene RLS).
+    const { perfilRacha, nuevaRacha } = await this.withTenant(
+      { usuarioId: alumnoId },
+      async (tx) => {
+        const [perfilRacha] = await tx
+          .select()
+          .from(perfilesAlumno)
+          .where(eq(perfilesAlumno.usuarioId, alumnoId))
+          .limit(1);
 
-    const rachaEstado: RachaEstado = {
-      rachaDias: perfilRacha?.rachaDias ?? 0,
-      rachaUltimaFecha: perfilRacha?.rachaUltimaFecha ?? null,
-    };
+        const rachaEstado: RachaEstado = {
+          rachaDias: perfilRacha?.rachaDias ?? 0,
+          rachaUltimaFecha: perfilRacha?.rachaUltimaFecha ?? null,
+        };
 
-    // RN-05: la fecha de la racha es la fecha LOCAL del alumno (timezone capturada al iniciar).
-    const fechaLocal = obtenerFechaLocalYyyyMmDd(fechaFinUtc, sesion.timezoneCliente);
-    const rachaActualizada = actualizarRacha(rachaEstado, fechaLocal, cumpleReglaRacha);
-    const nuevaRacha = calcularRachaEfectiva(
-      rachaActualizada.rachaDias,
-      rachaActualizada.rachaUltimaFecha,
-      fechaLocal
+        // RN-05: la fecha de la racha es la fecha LOCAL del alumno (timezone capturada al iniciar).
+        const fechaLocal = obtenerFechaLocalYyyyMmDd(fechaFinUtc, sesion.timezoneCliente);
+        const rachaActualizada = actualizarRacha(rachaEstado, fechaLocal, cumpleReglaRacha);
+        const nuevaRacha = calcularRachaEfectiva(
+          rachaActualizada.rachaDias,
+          rachaActualizada.rachaUltimaFecha,
+          fechaLocal
+        );
+
+        // cumple=false (o mismo día) NO modifica la racha almacenada.
+        if (perfilRacha && rachaActualizada.incrementada) {
+          await tx
+            .update(perfilesAlumno)
+            .set({
+              rachaDias: rachaActualizada.rachaDias,
+              rachaUltimaFecha: rachaActualizada.rachaUltimaFecha,
+              updatedAtUtc: new Date(),
+            })
+            .where(eq(perfilesAlumno.id, perfilRacha.id));
+        }
+
+        return { perfilRacha, nuevaRacha };
+      }
     );
-
-    // cumple=false (o mismo día) NO modifica la racha almacenada.
-    if (perfilRacha && rachaActualizada.incrementada) {
-      await this.db
-        .update(perfilesAlumno)
-        .set({
-          rachaDias: rachaActualizada.rachaDias,
-          rachaUltimaFecha: rachaActualizada.rachaUltimaFecha,
-          updatedAtUtc: new Date(),
-        })
-        .where(eq(perfilesAlumno.id, perfilRacha.id));
-    }
 
     const notasFinales =
       validado.notasAlumno !== undefined ? validado.notasAlumno : sesion.notasAlumno;
@@ -1787,16 +1868,19 @@ export class EntrenamientoService {
     // 1. Obtener alumnos activos del entrenador.
     // D10: "activos" es literal: se excluyen los perfiles pausados/suspendidos, no solo los
     // soft-deleted. Un alumno pausado no debe aparecer en el monitor de adherencia.
-    const alumnos = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(
-        and(
-          eq(perfilesAlumno.entrenadorId, entrenadorId),
-          eq(perfilesAlumno.estadoActivacion, EstadoAlumno.ACTIVO),
-          isNull(perfilesAlumno.deletedAtUtc)
+    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura con el GUC del coach.
+    const alumnos = await this.withTenant({ entrenadorId }, (tx) =>
+      tx
+        .select()
+        .from(perfilesAlumno)
+        .where(
+          and(
+            eq(perfilesAlumno.entrenadorId, entrenadorId),
+            eq(perfilesAlumno.estadoActivacion, EstadoAlumno.ACTIVO),
+            isNull(perfilesAlumno.deletedAtUtc)
+          )
         )
-      );
+    );
 
     if (alumnos.length === 0) {
       return {
@@ -1970,7 +2054,10 @@ export class EntrenamientoService {
   // HELPER: HIDRATACIÓN DE SESIÓN CON EJERCICIOS Y SERIES
   // ---------------------------------------------------------------------------
 
-  private async hidratarSesion(sesion: any): Promise<SesionEntrenamientoDetalleDTO> {
+  private async hidratarSesion(
+    sesion: any,
+    contextoPerfil: TenantRlsContext
+  ): Promise<SesionEntrenamientoDetalleDTO> {
     const ejSesiones = await this.db
       .select()
       .from(ejerciciosSesion)
@@ -2023,13 +2110,16 @@ export class EntrenamientoService {
       }
     }
 
-    // Nombre del alumno si está disponible
+    // Nombre del alumno si está disponible.
+    // RNF-003/ADR-011 (etapa 3): lectura del perfil con RLS usando el contexto del actor.
     let alumnoNombre: string | undefined;
-    const [perfilAlumno] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(eq(perfilesAlumno.usuarioId, sesion.alumnoId))
-      .limit(1);
+    const [perfilAlumno] = await this.withTenant(contextoPerfil, (tx) =>
+      tx
+        .select()
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.usuarioId, sesion.alumnoId))
+        .limit(1)
+    );
 
     if (perfilAlumno) {
       alumnoNombre = `${perfilAlumno.nombres} ${perfilAlumno.apellidos}`.trim();

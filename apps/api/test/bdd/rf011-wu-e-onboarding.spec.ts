@@ -100,7 +100,7 @@ describe('WU-E (RF-011 RN-05): Alta manual entrega el enlace de activación', ()
       estadoActivacion: EstadoAlumno.ACTIVO,
     };
 
-    return {
+    const db: any = {
       select: () => ({
         from: () => ({
           where: () =>
@@ -115,7 +115,11 @@ describe('WU-E (RF-011 RN-05): Alta manual entrega el enlace de activación', ()
             ]),
         }),
       }),
-    } as any;
+      // RNF-003/ADR-011 (etapa 3): el INSERT del perfil corre dentro de withTenant (RLS).
+      execute: async () => undefined,
+    };
+    db.transaction = async (cb: any) => cb(db);
+    return db;
   }
 
   it('devuelve el token de invitación con un mensaje honesto (sin afirmar envío de correo)', async () => {
@@ -247,7 +251,10 @@ describe('WU-E (RF-011 RN-07): registro público valida licencia y notifica al c
           },
         }),
       }),
+      // RNF-003/ADR-011 (etapa 3): el INSERT del perfil corre dentro de withTenant (RLS).
+      execute: async () => undefined,
     };
+    db.transaction = async (cb: any) => cb(db);
 
     return { db, inserts };
   }
@@ -353,7 +360,10 @@ describe('WU-E (RF-011 RN-05 / RF-012): establecerPasswordConToken', () => {
           },
         }),
       }),
+      // RNF-003/ADR-011 (etapa 3): el canje lee el perfil (RLS) dentro de withTenant.
+      execute: async () => undefined,
     };
+    db.transaction = async (cb: any) => cb(db);
     return { db, store };
   }
 

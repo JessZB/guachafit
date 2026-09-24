@@ -192,9 +192,10 @@ export class BillingReminderProcessor extends WorkerHost {
     // Proyección informativa en Bs solo con tasa real (misma regla que emisión/historial).
     let saldoPendienteVes: string | undefined;
     try {
-      const tasa = await this.finanzasService.obtenerTasaVigente(
-        cuota.entrenadorId,
-        cuota.clienteId
+      // RNF-003/ADR-011 (etapa 3): la tasa override lee `perfiles_alumno` (RLS); ruta de sistema
+      // con el bypass explícito `is_superadmin` (barrido multi-tenant).
+      const tasa = await this.withTenant({ isSuperadmin: true }, (tx) =>
+        this.finanzasService.obtenerTasaVigente(cuota.entrenadorId, cuota.clienteId, tx)
       );
       if (tasa.tasaEfectiva) {
         saldoPendienteVes = this.finanzasService.proyectarVES(

@@ -78,7 +78,7 @@ describe('RF-012: Ciclo de Vida del Alumno y Preservación Soft Delete', () => {
         activo: false,
       };
 
-      const mockDb = {
+      const mockDb: any = {
         select: () => ({
           from: () => ({
             where: () => Promise.resolve([{ ...alumnoDb }]),
@@ -96,7 +96,10 @@ describe('RF-012: Ciclo de Vida del Alumno y Preservación Soft Delete', () => {
             },
           }),
         }),
-      } as any;
+        // RNF-003/ADR-011 (etapa 3): restaurar lee/escribe el perfil (RLS) dentro de withTenant.
+        execute: async () => undefined,
+      };
+      mockDb.transaction = async (cb: any) => cb(mockDb);
 
       const service = new AlumnosService(mockDb, mockCrypto);
       const resultado = await service.restaurarAlumno('coach-1', 'alumno-archivado-1');
@@ -118,13 +121,16 @@ describe('RF-012: Ciclo de Vida del Alumno y Preservación Soft Delete', () => {
         deletedAtUtc: null,
       };
 
-      const mockDb = {
+      const mockDb: any = {
         select: () => ({
           from: () => ({
             where: () => Promise.resolve([{ ...alumnoActivo }]),
           }),
         }),
-      } as any;
+        // RNF-003/ADR-011 (etapa 3): restaurar lee el perfil (RLS) dentro de withTenant.
+        execute: async () => undefined,
+      };
+      mockDb.transaction = async (cb: any) => cb(mockDb);
 
       const service = new AlumnosService(mockDb, mockCrypto);
       const resultado = await service.restaurarAlumno('coach-1', 'alumno-activo-1');
@@ -135,13 +141,16 @@ describe('RF-012: Ciclo de Vida del Alumno y Preservación Soft Delete', () => {
     });
 
     it('debe arrojar NotFoundException si el alumno no pertenece al entrenador', async () => {
-      const mockDb = {
+      const mockDb: any = {
         select: () => ({
           from: () => ({
             where: () => Promise.resolve([]),
           }),
         }),
-      } as any;
+        // RNF-003/ADR-011 (etapa 3): restaurar lee el perfil (RLS) dentro de withTenant.
+        execute: async () => undefined,
+      };
+      mockDb.transaction = async (cb: any) => cb(mockDb);
 
       const service = new AlumnosService(mockDb, mockCrypto);
       await expect(

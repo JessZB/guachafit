@@ -44,7 +44,10 @@ describe('WU RF-003a: modalidad del alumno en el DTO de sesión', () => {
           })),
         })),
       })),
+      // RNF-003/ADR-011 (etapa 3): withTenant() lee el perfil (RLS) con set_config sobre el tx.
+      execute: vi.fn(async () => undefined),
     };
+    db.transaction = vi.fn(async (cb: any) => cb(db));
     return db;
   }
 

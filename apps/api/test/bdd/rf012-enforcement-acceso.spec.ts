@@ -75,7 +75,7 @@ function crearContexto(
 
 /** Mock mínimo de Drizzle para el SELECT del perfil del guard (select → from → where → limit). */
 function crearDbConPerfil(perfil: any | null) {
-  return {
+  const db: any = {
     select: () => ({
       from: () => ({
         where: () => ({
@@ -83,7 +83,11 @@ function crearDbConPerfil(perfil: any | null) {
         }),
       }),
     }),
-  } as any;
+    // RNF-003/ADR-011 (etapa 3): el guard lee el perfil (RLS) dentro de withTenant.
+    execute: async () => undefined,
+  };
+  db.transaction = async (cb: any) => cb(db);
+  return db;
 }
 
 function guardsDelHandler(handler: (...args: any[]) => any): any[] {
@@ -401,7 +405,10 @@ describe('RF-012 / WU-D: Enforcement de acceso por estado de activación (Alumno
             where: () => Promise.resolve([]),
           }),
         }),
+        // RNF-003/ADR-011 (etapa 3): login/refresh leen el perfil (RLS) dentro de withTenant.
+        execute: async () => undefined,
       };
+      db.transaction = async (cb: any) => cb(db);
       return db;
     }
 
@@ -544,7 +551,10 @@ describe('RF-012 / WU-D: Enforcement de acceso por estado de activación (Alumno
             },
           }),
         }),
+        // RNF-003/ADR-011 (etapa 3): restaurar/login leen el perfil (RLS) dentro de withTenant.
+        execute: async () => undefined,
       };
+      db.transaction = async (cb: any) => cb(db);
 
       const alumnosService = new AlumnosService(db, crypto);
       await alumnosService.restaurarAlumno(COACH_ID, ALUMNO_PERFIL_ID);
@@ -582,7 +592,10 @@ describe('RF-012 / WU-D: Enforcement de acceso por estado de activación (Alumno
             }),
           }),
         }),
+        // RNF-003/ADR-011 (etapa 3): cambiarEstado lee/escribe el perfil (RLS) dentro de withTenant.
+        execute: async () => undefined,
       };
+      db.transaction = async (cb: any) => cb(db);
 
       const service = new AlumnosService(db, crypto);
       const res = await service.cambiarEstado(COACH_ID, ALUMNO_PERFIL_ID, {
@@ -608,7 +621,10 @@ describe('RF-012 / WU-D: Enforcement de acceso por estado de activación (Alumno
             }),
           }),
         }),
+        // RNF-003/ADR-011 (etapa 3): actualizarAlumno lee el perfil (RLS) dentro de withTenant.
+        execute: async () => undefined,
       };
+      db.transaction = async (cb: any) => cb(db);
 
       const service = new AlumnosService(db, crypto);
       await expect(

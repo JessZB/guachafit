@@ -104,23 +104,26 @@ export class EntrenadorService {
 
     const capacidadMaxima = coachProfile?.capacidadMaxima ?? 50;
 
-    // 2. Alumnos de su cartera
-    const alumnos = await this.db
-      .select({
-        id: perfilesAlumno.id,
-        usuarioId: perfilesAlumno.usuarioId,
-        nombres: perfilesAlumno.nombres,
-        apellidos: perfilesAlumno.apellidos,
-        estadoActivacion: perfilesAlumno.estadoActivacion,
-        createdAtUtc: perfilesAlumno.createdAtUtc,
-      })
-      .from(perfilesAlumno)
-      .where(
-        and(
-          eq(perfilesAlumno.entrenadorId, coachId),
-          isNull(perfilesAlumno.deletedAtUtc)
+    // 2. Alumnos de su cartera.
+    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura con el GUC del coach.
+    const alumnos = await this.withTenant({ entrenadorId: coachId }, (tx) =>
+      tx
+        .select({
+          id: perfilesAlumno.id,
+          usuarioId: perfilesAlumno.usuarioId,
+          nombres: perfilesAlumno.nombres,
+          apellidos: perfilesAlumno.apellidos,
+          estadoActivacion: perfilesAlumno.estadoActivacion,
+          createdAtUtc: perfilesAlumno.createdAtUtc,
+        })
+        .from(perfilesAlumno)
+        .where(
+          and(
+            eq(perfilesAlumno.entrenadorId, coachId),
+            isNull(perfilesAlumno.deletedAtUtc)
+          )
         )
-      );
+    );
 
     const alumnosActivos = alumnos.filter(
       (a) => a.estadoActivacion === EstadoAlumno.ACTIVO

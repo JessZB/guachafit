@@ -7,9 +7,12 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { DRIZZLE_DB } from '../../database/database.module';
+import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
 import {
   Database,
+  TenantRlsContext,
+  WithTenantFn,
+  withTenant as withTenantBase,
   eq,
   and,
   or,
@@ -248,10 +251,19 @@ export class NutricionService {
   // Bóveda R2 opcional (RF-002 RN-03): sirve las URLs firmadas de lectura de las fotos de platos.
   // Sin servicio inyectado (p. ej. tests unitarios que construyen el service con solo la DB) las
   // fotos quedan sin `fotoUrl` — nunca se fabrica un enlace.
+  /**
+   * RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; la tenancy y la hidratación del
+   * nombre leen el perfil dentro de `withTenant` con el contexto del actor.
+   */
+  private readonly withTenant: WithTenantFn;
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
-    @Optional() @Inject(R2StorageService) private readonly r2StorageService?: R2StorageService
-  ) {}
+    @Optional() @Inject(R2StorageService) private readonly r2StorageService?: R2StorageService,
+    @Optional() @Inject(WITH_TENANT) withTenant?: WithTenantFn
+  ) {
+    this.withTenant = withTenant ?? ((context, fn) => withTenantBase(context, fn, this.db));
+  }
 
   /**
    * Registrar check-in nutricional diario 1-Tap.
@@ -467,16 +479,19 @@ export class NutricionService {
 
   /** Tenancy: el alumno debe pertenecer a la cartera del coach autenticado. */
   private async validarAlumnoDelCoach(coachId: string, alumnoId: string): Promise<void> {
-    const [perfil] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(
-        and(
-          eq(perfilesAlumno.usuarioId, alumnoId),
-          eq(perfilesAlumno.entrenadorId, coachId)
+    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura con el GUC del coach.
+    const [perfil] = await this.withTenant({ entrenadorId: coachId }, (tx) =>
+      tx
+        .select()
+        .from(perfilesAlumno)
+        .where(
+          and(
+            eq(perfilesAlumno.usuarioId, alumnoId),
+            eq(perfilesAlumno.entrenadorId, coachId)
+          )
         )
-      )
-      .limit(1);
+        .limit(1)
+    );
 
     if (!perfil) {
       throw new ForbiddenException(
@@ -550,7 +565,8 @@ export class NutricionService {
       return null;
     }
 
-    return this.hidratarCheckin(checkin);
+    // RNF-003/ADR-011 (etapa 3): hidratación del nombre con el contexto self del alumno (RLS).
+    return this.hidratarCheckin(checkin, { usuarioId: alumnoId });
   }
 
   /**
@@ -567,7 +583,9 @@ export class NutricionService {
       throw new NotFoundException(`Check-in nutricional con ID '${checkinId}' no encontrado.`);
     }
 
-    return this.hidratarCheckin(checkin);
+    // RNF-003/ADR-011 (etapa 3): único llamador = el propio alumno (registrarCheckinDiario);
+    // el contexto self sale del dueño real de la fila.
+    return this.hidratarCheckin(checkin, { usuarioId: checkin.alumnoId });
   }
 
   /**
@@ -670,19 +688,25 @@ export class NutricionService {
     }
   }
 
-  private async hidratarCheckin(checkin: any): Promise<CheckinNutricionalDetalleDTO> {
+  private async hidratarCheckin(
+    checkin: any,
+    contextoPerfil: TenantRlsContext
+  ): Promise<CheckinNutricionalDetalleDTO> {
     const fotos = await this.db
       .select()
       .from(fotosComida)
       .where(eq(fotosComida.checkinId, checkin.id))
       .orderBy(asc(fotosComida.createdAtUtc));
 
+    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura con el contexto del actor.
     let alumnoNombre: string | undefined;
-    const [perfilAlumno] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(eq(perfilesAlumno.usuarioId, checkin.alumnoId))
-      .limit(1);
+    const [perfilAlumno] = await this.withTenant(contextoPerfil, (tx) =>
+      tx
+        .select()
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.usuarioId, checkin.alumnoId))
+        .limit(1)
+    );
 
     if (perfilAlumno) {
       alumnoNombre = `${perfilAlumno.nombres} ${perfilAlumno.apellidos}`.trim();

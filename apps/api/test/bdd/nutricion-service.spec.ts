@@ -221,6 +221,8 @@ describe('Módulo 3: Check-ins Nutricionales (NutricionService & NutricionContro
         })),
       })),
       transaction: vi.fn(async (cb: any) => cb(db)),
+      // RNF-003/ADR-011 (etapa 3): withTenant() aplica el GUC con set_config sobre el tx.
+      execute: vi.fn(async () => undefined),
     };
     return db;
   }

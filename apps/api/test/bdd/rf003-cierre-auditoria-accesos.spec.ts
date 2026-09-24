@@ -67,7 +67,7 @@ function perfilAlumno(overrides: Record<string, any> = {}) {
 
 /** Mock mínimo de Drizzle para el SELECT del perfil del guard (select → from → where → limit). */
 function crearDbConPerfil(perfil: any | null) {
-  return {
+  const db: any = {
     select: () => ({
       from: () => ({
         where: () => ({
@@ -75,7 +75,11 @@ function crearDbConPerfil(perfil: any | null) {
         }),
       }),
     }),
-  } as any;
+    // RNF-003/ADR-011 (etapa 3): el guard lee el perfil (RLS) dentro de withTenant.
+    execute: async () => undefined,
+  };
+  db.transaction = async (cb: any) => cb(db);
+  return db;
 }
 
 /** Doble de la auditoría: registra las llamadas sin tocar la BD. */

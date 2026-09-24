@@ -1,7 +1,13 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Inject, Injectable, Optional } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { DRIZZLE_DB } from '../../database/database.module';
-import { Database, eq, perfilesAlumno } from '@guachafit/database';
+import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
+import {
+  Database,
+  WithTenantFn,
+  withTenant as withTenantBase,
+  eq,
+  perfilesAlumno,
+} from '@guachafit/database';
 import { EstadoAlumno, Rol } from '@guachafit/shared';
 import { ESTADOS_BLOQUEADOS_ALUMNO_KEY } from '../decorators/bloqueo-alumno.decorator';
 import {
@@ -51,6 +57,12 @@ const MENSAJE_POR_ESTADO: Record<EstadoBloqueoAlumno, string> = {
  */
 @Injectable()
 export class AlumnoHabilitadoGuard implements CanActivate {
+  /**
+   * RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; el perfil se lee con el contexto self
+   * (`current_usuario_id`) del alumno autenticado. Se inyecta para que los tests puedan espiarlo.
+   */
+  private readonly withTenant: WithTenantFn;
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
     // Token explícito: el DI no depende de la metadata de tipos (que esbuild no emite en tests).
@@ -59,8 +71,11 @@ export class AlumnoHabilitadoGuard implements CanActivate {
     // tests; en producción `CommonModule` global la provee).
     @Optional()
     @Inject(AuditoriaAccesosDenegadosService)
-    private readonly auditoria?: AuditoriaAccesosDenegadosService
-  ) {}
+    private readonly auditoria?: AuditoriaAccesosDenegadosService,
+    @Optional() @Inject(WITH_TENANT) withTenant?: WithTenantFn
+  ) {
+    this.withTenant = withTenant ?? ((context, fn) => withTenantBase(context, fn, this.db));
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
@@ -77,14 +92,17 @@ export class AlumnoHabilitadoGuard implements CanActivate {
         context.getClass(),
       ]) ?? [];
 
-    const [perfil] = await this.db
-      .select({
-        estadoActivacion: perfilesAlumno.estadoActivacion,
-        deletedAtUtc: perfilesAlumno.deletedAtUtc,
-      })
-      .from(perfilesAlumno)
-      .where(eq(perfilesAlumno.usuarioId, user.sub))
-      .limit(1);
+    // RNF-003/ADR-011 (etapa 3): lectura self del perfil con RLS (`current_usuario_id`).
+    const [perfil] = await this.withTenant({ usuarioId: user.sub }, (tx) =>
+      tx
+        .select({
+          estadoActivacion: perfilesAlumno.estadoActivacion,
+          deletedAtUtc: perfilesAlumno.deletedAtUtc,
+        })
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.usuarioId, user.sub))
+        .limit(1)
+    );
 
     // Un alumno sin perfil no tiene ciclo de vida que evaluar; los servicios aplican su tenancy.
     if (!perfil) {

@@ -21,11 +21,13 @@
  */
 import { Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Inject } from '@nestjs/common';
+import { Inject, Optional } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   Database,
+  WithTenantFn,
+  withTenant as withTenantBase,
   and,
   eq,
   gte,
@@ -41,7 +43,7 @@ import {
 import {
   COLA_ANTROPOMETRIA_RECORDATORIO,
 } from '../../notificaciones/notificaciones.config';
-import { DRIZZLE_DB } from '../../../database/database.module';
+import { DRIZZLE_DB, WITH_TENANT } from '../../../database/database.module';
 import { EstadoAlumno, Modalidad, PeriodicidadAntropometria } from '@guachafit/shared';
 import {
   fechaAnteriorYyyyMmDd,
@@ -111,11 +113,20 @@ interface AlumnoConCalendario {
 export class AntropometriaRecordatorioProcessor extends WorkerHost {
   private readonly logger = new Logger(AntropometriaRecordatorioProcessor.name);
 
+  /**
+   * RNF-003/ADR-011 (etapa 3): RUTA DE SISTEMA. El barrido cubre TODOS los tenants; la lectura
+   * de `perfiles_alumno` (RLS) corre con el bypass explícito `is_superadmin`, nunca con un
+   * `entrenador_id` arbitrario.
+   */
+  private readonly withTenant: WithTenantFn;
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
-    private readonly eventEmitter: EventEmitter2
+    private readonly eventEmitter: EventEmitter2,
+    @Optional() @Inject(WITH_TENANT) withTenant?: WithTenantFn
   ) {
     super();
+    this.withTenant = withTenant ?? ((context, fn) => withTenantBase(context, fn, this.db));
   }
 
   async process(
@@ -142,27 +153,31 @@ export class AntropometriaRecordatorioProcessor extends WorkerHost {
 
   /** Alumnos con calendario configurado (modalidad incluida: §6 solo avisa a remotos). */
   private async cargarAlumnosConCalendario(): Promise<AlumnoConCalendario[]> {
-    return (await this.db
-      .select({
-        usuarioId: perfilesAlumno.usuarioId,
-        entrenadorId: perfilesAlumno.entrenadorId,
-        nombres: perfilesAlumno.nombres,
-        apellidos: perfilesAlumno.apellidos,
-        modalidad: perfilesAlumno.modalidad,
-        periodicidad: perfilesAlumno.periodicidadAntropometria,
-        inicio: perfilesAlumno.antropometriaInicio,
-        timezone: usuarios.timezone,
-      })
-      .from(perfilesAlumno)
-      .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
-      .where(
-        and(
-          eq(perfilesAlumno.estadoActivacion, EstadoAlumno.ACTIVO),
-          isNull(perfilesAlumno.deletedAtUtc),
-          isNotNull(perfilesAlumno.periodicidadAntropometria),
-          isNotNull(perfilesAlumno.antropometriaInicio)
+    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; barrido transversal de sistema con
+    // el bypass explícito `is_superadmin`.
+    return (await this.withTenant({ isSuperadmin: true }, (tx) =>
+      tx
+        .select({
+          usuarioId: perfilesAlumno.usuarioId,
+          entrenadorId: perfilesAlumno.entrenadorId,
+          nombres: perfilesAlumno.nombres,
+          apellidos: perfilesAlumno.apellidos,
+          modalidad: perfilesAlumno.modalidad,
+          periodicidad: perfilesAlumno.periodicidadAntropometria,
+          inicio: perfilesAlumno.antropometriaInicio,
+          timezone: usuarios.timezone,
+        })
+        .from(perfilesAlumno)
+        .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
+        .where(
+          and(
+            eq(perfilesAlumno.estadoActivacion, EstadoAlumno.ACTIVO),
+            isNull(perfilesAlumno.deletedAtUtc),
+            isNotNull(perfilesAlumno.periodicidadAntropometria),
+            isNotNull(perfilesAlumno.antropometriaInicio)
+          )
         )
-      )) as AlumnoConCalendario[];
+    )) as AlumnoConCalendario[];
   }
 
   /** RN-01: recordatorio del día programado a la hora local del alumno (06:00). */

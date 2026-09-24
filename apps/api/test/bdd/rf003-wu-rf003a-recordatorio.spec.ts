@@ -103,7 +103,10 @@ describe('WU RF-003a: recordatorio de check-in antropométrico (RN-01)', () => {
           };
           return consulta;
         }),
+        // RNF-003/ADR-011 (etapa 3): withTenant() barre perfiles_alumno (RLS) con set_config.
+        execute: vi.fn(async () => undefined),
       };
+      db.transaction = vi.fn(async (cb: any) => cb(db));
       return db;
     }
 

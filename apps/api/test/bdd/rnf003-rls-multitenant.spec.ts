@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import * as jwt from 'jsonwebtoken';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,12 +12,15 @@ import {
   cuotasMembresia,
   transaccionesPago,
   planesMembresia,
+  perfilesAlumno,
   setTenantSession,
   withTenant,
 } from '@guachafit/database';
 import {
+  EstadoAlumno,
   EstadoConciliacion,
   EstadoCuota,
+  EstadoSesion,
   MetodoPago,
   ModoAsignacionPlantilla,
   Moneda,
@@ -28,6 +33,11 @@ import { EntrenadorService } from '../../src/modules/entrenador/entrenador.servi
 import { FinanzasService } from '../../src/modules/finanzas/finanzas.service';
 import { CarteraService } from '../../src/modules/finanzas/cartera.service';
 import { AlumnosService } from '../../src/modules/alumnos/alumnos.service';
+import { AuthService } from '../../src/modules/auth/auth.service';
+import { AlumnoHabilitadoGuard } from '../../src/common/guards/alumno-habilitado.guard';
+import { AntropometriaService } from '../../src/modules/antropometria/antropometria.service';
+import { NutricionService } from '../../src/modules/nutricion/nutricion.service';
+import { AntropometriaRecordatorioProcessor } from '../../src/modules/antropometria/processors/antropometria-recordatorio.processor';
 import { BillingReminderProcessor } from '../../src/modules/finanzas/billing-reminder.processor';
 import { ResumenSemanalProcessor } from '../../src/modules/notificaciones/processors/resumen-semanal.processor';
 
@@ -89,6 +99,7 @@ function sqlDebugText(sqlObj: any): string {
 // el equivalente de test al deny-by-default de RLS sin contexto de sesión.
 // Etapa 1 (WU7 + WU11): `rutinas` y `plantillas_rutina`.
 // Etapa 2 (ADR-011 finanzas): `planes_membresia`, `cuotas_membresia` y `transacciones_pago`.
+// Etapa 3 (ADR-011 alumnos): `perfiles_alumno` (última tabla de RNF-003).
 // -----------------------------------------------------------------------------
 const TABLAS_RLS: string[] = [
   getTableName(rutinas),
@@ -96,6 +107,7 @@ const TABLAS_RLS: string[] = [
   getTableName(planesMembresia),
   getTableName(cuotasMembresia),
   getTableName(transaccionesPago),
+  getTableName(perfilesAlumno),
 ];
 
 interface SuperficieRls {
@@ -796,6 +808,9 @@ describe('RNF-003/ADR-011 (etapa 2): tablas financieras siempre dentro de withTe
     expect(superficie.llamadasTx).toContain('transacciones_pago');
     expect(superficie.llamadasDb).not.toContain('cuotas_membresia');
     expect(superficie.llamadasDb).not.toContain('transacciones_pago');
+    // RNF-003/ADR-011 (etapa 3): la cartera de alumnos (`perfiles_alumno`) va con el GUC del coach.
+    expect(superficie.llamadasTx).toContain('perfiles_alumno');
+    expect(superficie.llamadasDb).not.toContain('perfiles_alumno');
   });
 
   it('crearPlan, listarPlanes y emitirCuota usan { entrenadorId } en UNA transacción cada uno', async () => {
@@ -1065,6 +1080,528 @@ describe('RNF-003/ADR-011 (etapa 2): tablas financieras siempre dentro de withTe
   });
 });
 
+// =============================================================================
+// RNF-003/ADR-011 (etapa 3): `perfiles_alumno` — la última tabla de RNF-003.
+// Mismo contrato de test que las etapas 1-2: el pool raíz (`db`) revienta si
+// toca la tabla con RLS; todo acceso debe pasar por `withTenant` con el contexto
+// correcto (coach `{ entrenadorId }`, alumno `{ usuarioId }`, sistema
+// `{ isSuperadmin: true }`).
+// =============================================================================
+
+const SESION_ENTRENAMIENTO_ID = '5e511111-1111-4111-8111-111111111111';
+const CONTROL_ANTROPOMETRICO_ID = 'c0111111-1111-4111-8111-111111111111';
+
+const cryptoAuthFake = {
+  comparePassword: vi.fn(async () => true),
+  hashPassword: vi.fn(async (p: string) => `hash-${p}`),
+  hashSha256: vi.fn((v: string) => `sha-${v}`),
+  encryptHealthRecord: vi.fn((t: string) => `enc:${t}`),
+  decryptHealthRecord: vi.fn((t: string) => t.replace('enc:', '')),
+  generateInvitationToken: vi.fn(() => ({
+    rawToken: 'raw-token-etapa-3',
+    tokenHash: 'hash-token-etapa-3',
+    expiresAt: new Date(Date.now() + 48 * 3600 * 1000),
+  })),
+} as any;
+
+const usuarioAlumnoLogin = {
+  id: ALUMNO_USER_ID,
+  email: 'alumno@guachafit.com',
+  rol: Rol.ALUMNO,
+  estado: 'activo',
+  activo: true,
+  passwordHash: 'hash-de-prueba',
+};
+
+const perfilAlumnoEtapa3 = {
+  id: ALUMNO_PERFIL_ID,
+  usuarioId: ALUMNO_USER_ID,
+  entrenadorId: COACH_ID,
+  tipoDocumento: 'V_',
+  numeroDocumento: '24123456',
+  nombres: 'Pedro',
+  apellidos: 'Pérez',
+  fechaNacimiento: '1998-05-14',
+  telefonoWhatsapp: '+584121111111',
+  fichaSaludPrivada: null,
+  estadoActivacion: EstadoAlumno.ACTIVO,
+  modalidad: 'presencial',
+  periodicidadAntropometria: null,
+  antropometriaInicio: null,
+  tasaFijadaOverride: null,
+  rachaDias: 0,
+  rachaUltimaFecha: null,
+  deletedAtUtc: null,
+  createdAtUtc: new Date('2026-09-01T10:00:00Z'),
+  updatedAtUtc: new Date('2026-09-01T10:00:00Z'),
+};
+
+const sesionEnProgresoEtapa3 = {
+  id: SESION_ENTRENAMIENTO_ID,
+  alumnoId: ALUMNO_USER_ID,
+  rutinaId: null,
+  bloqueId: null,
+  fechaProgramada: '2026-09-20',
+  fechaInicioUtc: new Date('2026-09-20T10:00:00Z'),
+  fechaFinUtc: null,
+  timezoneCliente: 'America/Caracas',
+  estado: EstadoSesion.EN_PROGRESO,
+  porcentajeCumplimiento: '0.00',
+  notasAlumno: null,
+  createdAtUtc: new Date('2026-09-20T10:00:00Z'),
+  updatedAtUtc: new Date('2026-09-20T10:00:00Z'),
+};
+
+function filasEtapa3(extra: Record<string, any[]> = {}): Record<string, any[]> {
+  return {
+    usuarios: [usuarioAlumnoLogin],
+    perfiles_alumno: [perfilAlumnoEtapa3],
+    perfiles_entrenador: [coachPerfilFinanzas],
+    ...extra,
+  };
+}
+
+describe('RNF-003/ADR-011 (etapa 3): perfiles_alumno siempre dentro de withTenant', () => {
+  it('login del alumno lee el perfil con { usuarioId } (self-select) y nunca por el pool raíz', async () => {
+    const superficie = crearSuperficieFinanciera(filasEtapa3());
+    const servicio = new AuthService(superficie.db, cryptoAuthFake, superficie.withTenant);
+
+    const res = await servicio.login({ email: 'alumno@guachafit.com', password: 'x' } as any);
+
+    expect(res.usuario.entrenadorId).toBe(COACH_ID);
+    expect(superficie.withTenant).toHaveBeenCalledWith(
+      { usuarioId: ALUMNO_USER_ID },
+      expect.any(Function)
+    );
+    expect(superficie.llamadasDb).not.toContain('perfiles_alumno');
+  });
+
+  it('refresh y /auth/me del alumno leen el perfil con { usuarioId } (self-select)', async () => {
+    const superficie = crearSuperficieFinanciera(filasEtapa3());
+    const servicio = new AuthService(superficie.db, cryptoAuthFake, superficie.withTenant);
+
+    const refreshToken = jwt.sign(
+      { sub: ALUMNO_USER_ID, email: 'alumno@guachafit.com', rol: Rol.ALUMNO },
+      process.env.JWT_REFRESH_SECRET || 'guachafit_jwt_refresh_super_secret_key_2026',
+      { expiresIn: '7d' }
+    );
+    await servicio.refresh(refreshToken);
+    await servicio.obtenerSesion(ALUMNO_USER_ID);
+
+    expect(superficie.withTenant).toHaveBeenCalledWith(
+      { usuarioId: ALUMNO_USER_ID },
+      expect.any(Function)
+    );
+    expect(superficie.withTenant).toHaveBeenCalledTimes(2);
+    expect(superficie.llamadasDb).not.toContain('perfiles_alumno');
+  });
+
+  it('el canje de invitación del alumno lee el perfil con { usuarioId } antes de escribir', async () => {
+    const superficie = crearSuperficieFinanciera(
+      filasEtapa3({
+        usuarios: [
+          {
+            ...usuarioAlumnoLogin,
+            passwordHash: null,
+            tokenInvitacionHash: 'sha-token-etapa-3',
+            tokenInvitacionExpira: new Date(Date.now() + 3600 * 1000),
+          },
+        ],
+      })
+    );
+    const servicio = new AuthService(superficie.db, cryptoAuthFake, superficie.withTenant);
+
+    const res = await servicio.establecerPasswordConToken({
+      token: 'token-etapa-3',
+      password: 'nueva-clave-2026',
+    } as any);
+
+    expect(res.usuario.entrenadorId).toBe(COACH_ID);
+    expect(superficie.withTenant).toHaveBeenCalledWith(
+      { usuarioId: ALUMNO_USER_ID },
+      expect.any(Function)
+    );
+    expect(superficie.llamadasDb).not.toContain('perfiles_alumno');
+  });
+
+  it('el guard de alumno habilitado lee el ciclo de vida con { usuarioId }', async () => {
+    const superficie = crearSuperficieFinanciera(filasEtapa3());
+    const guard = new AlumnoHabilitadoGuard(
+      superficie.db,
+      new Reflector(),
+      undefined,
+      superficie.withTenant
+    );
+    const contexto: any = {
+      switchToHttp: () => ({
+        getRequest: () => ({ user: { sub: ALUMNO_USER_ID, rol: Rol.ALUMNO } }),
+      }),
+      getHandler: () => ({}),
+      getClass: () => ({}),
+    };
+
+    await expect(guard.canActivate(contexto)).resolves.toBe(true);
+    expect(superficie.withTenant).toHaveBeenCalledWith(
+      { usuarioId: ALUMNO_USER_ID },
+      expect.any(Function)
+    );
+    expect(superficie.llamadasDb).not.toContain('perfiles_alumno');
+  });
+
+  it('alta manual: el INSERT del perfil corre con { entrenadorId } del coach creador', async () => {
+    const superficie = crearSuperficieFinanciera(filasEtapa3({ usuarios: [] }));
+    const servicio = new AlumnosService(
+      superficie.db,
+      cryptoAuthFake,
+      undefined,
+      superficie.withTenant
+    );
+
+    await servicio.crearAlumnoManual(COACH_ID, {
+      nombres: 'Marcos',
+      apellidos: 'Pérez',
+      email: 'marcos@guachafit.com',
+      tipoDocumento: 'V_',
+      numeroDocumento: '18456123',
+      fechaNacimiento: '1994-05-15',
+      telefonoWhatsapp: '+584121234567',
+      modalidad: 'presencial',
+    } as any);
+
+    expect(superficie.withTenant).toHaveBeenCalledWith(
+      { entrenadorId: COACH_ID },
+      expect.any(Function)
+    );
+    expect(superficie.llamadasTx).toContain('perfiles_alumno');
+    expect(superficie.llamadasDb).not.toContain('perfiles_alumno');
+  });
+
+  it('registro público (RF-011): el INSERT anónimo usa { entrenadorId: coachResuelto }', async () => {
+    const superficie = crearSuperficieFinanciera(filasEtapa3({ usuarios: [] }));
+    const servicio = new AlumnosService(
+      superficie.db,
+      cryptoAuthFake,
+      undefined,
+      superficie.withTenant
+    );
+
+    await servicio.registroPublico({
+      coachCode: 'GUACHA-COACH',
+      nombres: 'Valeria',
+      apellidos: 'Castillo',
+      email: 'valeria@guachafit.com',
+      password: 'clave-segura-2026',
+      tipoDocumento: 'V_',
+      numeroDocumento: '26123456',
+      fechaNacimiento: '1999-03-10',
+      telefonoWhatsapp: '+584149998877',
+      modalidad: 'remoto',
+    } as any);
+
+    expect(superficie.withTenant).toHaveBeenCalledWith(
+      { entrenadorId: COACH_ID },
+      expect.any(Function)
+    );
+    expect(superficie.llamadasTx).toContain('perfiles_alumno');
+    expect(superficie.llamadasDb).not.toContain('perfiles_alumno');
+  });
+
+  it('softDelete y restaurarAlumno leen/escriben el perfil con { entrenadorId }', async () => {
+    const superficieSoft = crearSuperficieFinanciera(filasEtapa3());
+    const servicioSoft = new AlumnosService(
+      superficieSoft.db,
+      cryptoAuthFake,
+      undefined,
+      superficieSoft.withTenant
+    );
+    await servicioSoft.softDelete(COACH_ID, ALUMNO_PERFIL_ID);
+
+    expect(superficieSoft.withTenant).toHaveBeenCalledWith(
+      { entrenadorId: COACH_ID },
+      expect.any(Function)
+    );
+    expect(superficieSoft.llamadasDb).not.toContain('perfiles_alumno');
+
+    const superficieRestaurar = crearSuperficieFinanciera(
+      filasEtapa3({
+        perfiles_alumno: [
+          { ...perfilAlumnoEtapa3, estadoActivacion: EstadoAlumno.INACTIVO_PAUSADO, deletedAtUtc: new Date() },
+        ],
+      })
+    );
+    const servicioRestaurar = new AlumnosService(
+      superficieRestaurar.db,
+      cryptoAuthFake,
+      undefined,
+      superficieRestaurar.withTenant
+    );
+    await servicioRestaurar.restaurarAlumno(COACH_ID, ALUMNO_PERFIL_ID);
+
+    expect(superficieRestaurar.withTenant).toHaveBeenCalledWith(
+      { entrenadorId: COACH_ID },
+      expect.any(Function)
+    );
+    expect(superficieRestaurar.llamadasDb).not.toContain('perfiles_alumno');
+  });
+
+  it('obtenerPorId es actor-aware: coach { entrenadorId } y alumno { usuarioId }', async () => {
+    const superficieCoach = crearSuperficieFinanciera(filasEtapa3());
+    const servicioCoach = new AlumnosService(
+      superficieCoach.db,
+      cryptoAuthFake,
+      undefined,
+      superficieCoach.withTenant
+    );
+    await servicioCoach.obtenerPorId(ALUMNO_PERFIL_ID, COACH_ID, Rol.ENTRENADOR, COACH_ID);
+    expect(superficieCoach.withTenant).toHaveBeenCalledWith(
+      { entrenadorId: COACH_ID },
+      expect.any(Function)
+    );
+    expect(superficieCoach.llamadasDb).not.toContain('perfiles_alumno');
+
+    const superficieAlumno = crearSuperficieFinanciera(filasEtapa3());
+    const servicioAlumno = new AlumnosService(
+      superficieAlumno.db,
+      cryptoAuthFake,
+      undefined,
+      superficieAlumno.withTenant
+    );
+    await servicioAlumno.obtenerPorId(ALUMNO_PERFIL_ID, ALUMNO_USER_ID, Rol.ALUMNO);
+    expect(superficieAlumno.withTenant).toHaveBeenCalledWith(
+      { usuarioId: ALUMNO_USER_ID },
+      expect.any(Function)
+    );
+    expect(superficieAlumno.llamadasDb).not.toContain('perfiles_alumno');
+  });
+
+  it('finalizarSesion (alumno) persiste la racha con { usuarioId } (self-update de 0013)', async () => {
+    const superficie = crearSuperficieFinanciera({
+      perfiles_alumno: [perfilAlumnoEtapa3],
+      sesiones_entrenamiento: [sesionEnProgresoEtapa3],
+      ejercicios_sesion: [
+        { id: 'es-1', sesionId: SESION_ENTRENAMIENTO_ID, ejercicioId: 'ej-1', orden: 1 },
+      ],
+      series_registro: [
+        {
+          id: 'sr-1',
+          ejercicioSesionId: 'es-1',
+          numeroSerie: 1,
+          repsObjetivo: 10,
+          repsLogradas: 10,
+          pesoKg: '50.00',
+          pesoPrescritoKg: '50.00',
+          rpe: '8.0',
+          completada: true,
+        },
+      ],
+      ejercicios_catalogo: [],
+    });
+    const servicio = new EntrenamientoService(
+      superficie.db,
+      superficie.withTenant,
+      undefined
+    );
+
+    await servicio.finalizarSesion(SESION_ENTRENAMIENTO_ID, ALUMNO_USER_ID, {} as any);
+
+    expect(superficie.withTenant).toHaveBeenCalledWith(
+      { usuarioId: ALUMNO_USER_ID },
+      expect.any(Function)
+    );
+    expect(superficie.llamadasTx).toContain('perfiles_alumno');
+    expect(superficie.llamadasDb).not.toContain('perfiles_alumno');
+  });
+
+  it('crearSesion (coach) valida la tenancy del alumno con { entrenadorId }', async () => {
+    const superficie = crearSuperficieFinanciera(
+      filasEtapa3({
+        sesiones_entrenamiento: [
+          {
+            ...sesionEnProgresoEtapa3,
+            id: 'fila-insertada',
+            estado: EstadoSesion.PLANIFICADA,
+            fechaInicioUtc: null,
+          },
+        ],
+        ejercicios_sesion: [],
+      })
+    );
+    const servicio = new EntrenamientoService(
+      superficie.db,
+      superficie.withTenant,
+      undefined
+    );
+
+    await servicio.crearSesion(COACH_ID, {
+      alumnoId: ALUMNO_USER_ID,
+      fechaProgramada: '2026-09-25',
+      ejercicios: [
+        {
+          ejercicioId: 'ee111111-1111-4111-8111-111111111111',
+          series: [{ numeroSerie: 1, repsObjetivo: 10 }],
+        },
+      ],
+    } as any);
+
+    expect(superficie.withTenant).toHaveBeenCalledWith(
+      { entrenadorId: COACH_ID },
+      expect.any(Function)
+    );
+    expect(superficie.llamadasDb).not.toContain('perfiles_alumno');
+  });
+
+  it('antropometría (coach) lee la cartera y el perfil con { entrenadorId }', async () => {
+    const superficie = crearSuperficieFinanciera(
+      filasEtapa3({
+        controles_antropometricos: [
+          {
+            id: CONTROL_ANTROPOMETRICO_ID,
+            alumnoId: ALUMNO_USER_ID,
+            fechaEvaluacion: '2026-09-20',
+            pesoKg: '78.50',
+            estado: 'pendiente_aprobacion',
+            modalidad: 'remoto',
+            origen: 'remoto_autoreporte',
+            registradoPor: ALUMNO_USER_ID,
+            createdAtUtc: new Date('2026-09-20T10:00:00Z'),
+            updatedAtUtc: new Date('2026-09-20T10:00:00Z'),
+          },
+        ],
+        fotos_antropometria: [],
+      })
+    );
+    const servicio = new AntropometriaService(
+      superficie.db,
+      { generarPresignedGetUrl: vi.fn(async () => 'https://r2/x') } as any,
+      { emitAsync: vi.fn(async () => []) } as any,
+      superficie.withTenant
+    );
+
+    await servicio.listarPendientes(COACH_ID);
+    await servicio.obtenerControlPorId(CONTROL_ANTROPOMETRICO_ID, {
+      id: COACH_ID,
+      rol: Rol.ENTRENADOR,
+      entrenadorId: COACH_ID,
+    });
+
+    expect(superficie.withTenant).toHaveBeenCalledWith(
+      { entrenadorId: COACH_ID },
+      expect.any(Function)
+    );
+    expect(superficie.llamadasDb).not.toContain('perfiles_alumno');
+  });
+
+  it('el barrido de recordatorios antropométricos (sistema) lee perfiles con is_superadmin', async () => {
+    const superficie = crearSuperficieFinanciera({
+      perfiles_alumno: [
+        {
+          ...perfilAlumnoEtapa3,
+          periodicidad: 'mensual',
+          inicio: '2026-01-01',
+          timezone: 'America/Caracas',
+          modalidad: 'remoto',
+        },
+      ],
+      controles_antropometricos: [],
+      notificaciones_in_app: [],
+    });
+    const processor = new AntropometriaRecordatorioProcessor(
+      superficie.db,
+      { emitAsync: vi.fn(async () => []) } as any,
+      superficie.withTenant
+    );
+
+    await processor.generarYDespachar(new Date('2026-09-07T10:00:00Z'));
+
+    expect(superficie.withTenant).toHaveBeenCalledWith(
+      { isSuperadmin: true },
+      expect.any(Function)
+    );
+    expect(superficie.llamadasDb).not.toContain('perfiles_alumno');
+  });
+
+  it('nutrición: tenancy del coach ({ entrenadorId }) y self del alumno ({ usuarioId })', async () => {
+    const superficieCoach = crearSuperficieFinanciera(filasEtapa3());
+    const servicioCoach = new NutricionService(
+      superficieCoach.db,
+      undefined,
+      superficieCoach.withTenant
+    );
+    await servicioCoach.obtenerMetasDeAlumno(COACH_ID, ALUMNO_USER_ID);
+
+    expect(superficieCoach.withTenant).toHaveBeenCalledWith(
+      { entrenadorId: COACH_ID },
+      expect.any(Function)
+    );
+    expect(superficieCoach.llamadasDb).not.toContain('perfiles_alumno');
+
+    const superficieAlumno = crearSuperficieFinanciera(
+      filasEtapa3({
+        checkins_nutricionales: [
+          {
+            id: 'chk-1',
+            alumnoId: ALUMNO_USER_ID,
+            fecha: '2026-09-20',
+            semaforo: 'cumplido',
+            createdAtUtc: new Date('2026-09-20T22:00:00Z'),
+            updatedAtUtc: new Date('2026-09-20T22:00:00Z'),
+          },
+        ],
+        fotos_comida: [],
+      })
+    );
+    const servicioAlumno = new NutricionService(
+      superficieAlumno.db,
+      undefined,
+      superficieAlumno.withTenant
+    );
+    await servicioAlumno.obtenerCheckinHoy(ALUMNO_USER_ID, '2026-09-20');
+
+    expect(superficieAlumno.withTenant).toHaveBeenCalledWith(
+      { usuarioId: ALUMNO_USER_ID },
+      expect.any(Function)
+    );
+    expect(superficieAlumno.llamadasDb).not.toContain('perfiles_alumno');
+  });
+
+  it('obtenerTasaVigente con cliente abre su propia transacción con el contexto del actor', async () => {
+    const superficie = crearSuperficieFinanciera(filasEtapa3({ tasas_cambio_referencia: [] }));
+    const servicio = new FinanzasService(
+      superficie.db,
+      undefined,
+      undefined,
+      undefined,
+      superficie.withTenant
+    );
+
+    await servicio.obtenerTasaVigente(COACH_ID, ALUMNO_USER_ID);
+
+    expect(superficie.withTenant).toHaveBeenCalledWith(
+      { entrenadorId: COACH_ID },
+      expect.any(Function)
+    );
+    expect(superficie.llamadasDb).not.toContain('perfiles_alumno');
+  });
+
+  it('el digest semanal (sistema) lee la cartera de alumnos con is_superadmin', async () => {
+    const superficie = crearSuperficieFinanciera(filasEtapa3());
+    const processor = new ResumenSemanalProcessor(
+      superficie.db,
+      { emitAsync: vi.fn(async () => []) } as any,
+      { add: vi.fn() } as any,
+      superficie.withTenant
+    );
+
+    await processor.generarYDespachar(new Date('2026-09-22T08:00:00Z'));
+
+    expect(superficie.withTenant).toHaveBeenCalledWith(
+      { isSuperadmin: true },
+      expect.any(Function)
+    );
+    expect(superficie.llamadasDb).not.toContain('perfiles_alumno');
+  });
+});
+
 describe('RNF-003: contrato de la migración 0004 (alcance por etapas)', () => {
   const migrationPath = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -1246,5 +1783,64 @@ describe('RNF-003/ADR-011 (etapa 2): contrato de la migración 0012 (finanzas)',
     const entrada = journal.entries.find((e: any) => e.idx === 12);
     expect(entrada?.tag).toBe('0012_rls_finanzas');
     expect(entrada?.breakpoints).toBe(true);
+  });
+});
+
+describe('RNF-003/ADR-011 (etapa 3): contrato de la migración 0013 (perfiles_alumno)', () => {
+  const drizzleDir = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../../../packages/database/drizzle'
+  );
+  const sql = readFileSync(path.join(drizzleDir, '0013_rls_perfiles_alumno.sql'), 'utf8');
+
+  it('es aditiva: no redefine funciones ni reescribe las políticas base de 0004', () => {
+    expect(sql).not.toMatch(/CREATE (OR REPLACE )?FUNCTION/);
+    expect(sql).not.toMatch(/CREATE POLICY rls_perfiles_alumno ON/);
+    expect(sql).not.toMatch(/CREATE POLICY rls_perfiles_alumno_self_select ON/);
+    expect(sql).toContain('current_usuario_id()');
+    // El contrato de sesión documenta los 3 GUCs.
+    expect(sql).toContain('app.current_entrenador_id');
+    expect(sql).toContain('app.current_usuario_id');
+    expect(sql).toContain('app.is_superadmin');
+  });
+
+  it('crea el self-update que faltaba para el camino real del alumno (racha, RF-001 RN-02)', () => {
+    expect(sql).toMatch(/CREATE POLICY rls_perfiles_alumno_self_update ON perfiles_alumno/);
+    const checks = sql
+      .split('\n')
+      .filter((linea) => !linea.trim().startsWith('--') && /WITH CHECK \(/.test(linea));
+    expect(checks).toHaveLength(1);
+    for (const linea of checks) {
+      expect(linea).toContain('usuario_id = current_usuario_id()');
+    }
+  });
+
+  it('habilita RLS SOLO en perfiles_alumno y no usa FORCE ROW LEVEL SECURITY', () => {
+    const tablasHabilitadas = sql
+      .split('\n')
+      .filter((linea) => !linea.trim().startsWith('--') && /ENABLE ROW LEVEL SECURITY/i.test(linea))
+      .map((linea) => linea.match(/ALTER TABLE\s+(\w+)/i)?.[1]);
+
+    expect(tablasHabilitadas).toEqual(['perfiles_alumno']);
+    const forceActivo = sql
+      .split('\n')
+      .some((linea) => !linea.trim().startsWith('--') && /FORCE ROW LEVEL SECURITY/i.test(linea));
+    expect(forceActivo).toBe(false);
+  });
+
+  it('incluye el rollback (DISABLE + DROP POLICY)', () => {
+    expect(sql).toContain('DISABLE ROW LEVEL SECURITY');
+    expect(sql).toContain('DROP POLICY IF EXISTS rls_perfiles_alumno_self_update ON perfiles_alumno');
+  });
+
+  it('está registrada en el journal con un `when` real (nunca futuro, incidente D1 de 0012)', () => {
+    const journal = JSON.parse(readFileSync(path.join(drizzleDir, 'meta/_journal.json'), 'utf8'));
+    const entrada = journal.entries.find((e: any) => e.idx === 13);
+    expect(entrada?.tag).toBe('0013_rls_perfiles_alumno');
+    expect(entrada?.breakpoints).toBe(true);
+
+    const anterior = journal.entries.find((e: any) => e.idx === 12);
+    expect(entrada?.when).toBeGreaterThan(anterior?.when);
+    expect(entrada?.when).toBeLessThanOrEqual(Date.now());
   });
 });

@@ -160,19 +160,23 @@ export class ResumenSemanalProcessor extends WorkerHost {
     const coachIds = coaches.map((c) => c.usuarioId);
 
     // Alumnos ACTIVOS por coach (la cartera viva del digest).
-    const alumnos = await this.db
-      .select({
-        usuarioId: perfilesAlumno.usuarioId,
-        entrenadorId: perfilesAlumno.entrenadorId,
-      })
-      .from(perfilesAlumno)
-      .where(
-        and(
-          inArray(perfilesAlumno.entrenadorId, coachIds),
-          eq(perfilesAlumno.estadoActivacion, EstadoAlumno.ACTIVO),
-          isNull(perfilesAlumno.deletedAtUtc)
+    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; ruta de sistema con el bypass
+    // explícito `is_superadmin` (el digest agrega la cartera de TODOS los tenants).
+    const alumnos = await this.withTenant({ isSuperadmin: true }, (tx) =>
+      tx
+        .select({
+          usuarioId: perfilesAlumno.usuarioId,
+          entrenadorId: perfilesAlumno.entrenadorId,
+        })
+        .from(perfilesAlumno)
+        .where(
+          and(
+            inArray(perfilesAlumno.entrenadorId, coachIds),
+            eq(perfilesAlumno.estadoActivacion, EstadoAlumno.ACTIVO),
+            isNull(perfilesAlumno.deletedAtUtc)
+          )
         )
-      );
+    );
 
     const coachPorAlumno = new Map<string, string>();
     const alumnosActivosPorCoach = new Map<string, number>();

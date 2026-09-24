@@ -2,14 +2,18 @@ import {
   Injectable,
   Inject,
   Logger,
+  Optional,
   NotFoundException,
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { DRIZZLE_DB } from '../../database/database.module';
+import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
 import {
   Database,
+  TenantRlsContext,
+  WithTenantFn,
+  withTenant as withTenantBase,
   eq,
   and,
   desc,
@@ -76,11 +80,36 @@ function toIsoUtcString(date: Date | string | null | undefined): string | null {
 export class AntropometriaService {
   private readonly logger = new Logger(AntropometriaService.name);
 
+  /**
+   * RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; toda lectura del perfil corre dentro
+   * de `withTenant` con el contexto del actor (self del alumno o tenant del coach).
+   */
+  private readonly withTenant: WithTenantFn;
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
     public readonly r2StorageService: R2StorageService,
-    private readonly eventEmitter: EventEmitter2
-  ) {}
+    private readonly eventEmitter: EventEmitter2,
+    @Optional() @Inject(WITH_TENANT) withTenant?: WithTenantFn
+  ) {
+    this.withTenant = withTenant ?? ((context, fn) => withTenantBase(context, fn, this.db));
+  }
+
+  /**
+   * RNF-003/ADR-011 (etapa 3): contexto RLS del perfil según el actor de la petición.
+   * - ALUMNO -> self-select (`current_usuario_id`).
+   * - ENTRENADOR -> tenant del coach.
+   * - SUPERADMIN -> bypass explícito.
+   */
+  private contextoRlsDeCaller(caller: {
+    id: string;
+    rol: Rol;
+    entrenadorId?: string;
+  }): TenantRlsContext {
+    if (caller.rol === Rol.ALUMNO) return { usuarioId: caller.id };
+    if (caller.rol === Rol.SUPERADMIN) return { isSuperadmin: true };
+    return { entrenadorId: caller.entrenadorId ?? caller.id };
+  }
 
   /**
    * Genera URL presignada PUT directa a Cloudflare R2 con TTL de 15 minutos (RNF-001, ADR-007).
@@ -93,20 +122,25 @@ export class AntropometriaService {
   ): Promise<PresignedUploadUrlResponseDTO> {
     const validado = PresignedUploadUrlSchema.parse(dto);
 
-    const [alumno] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(eq(perfilesAlumno.usuarioId, validado.alumnoId))
-      .limit(1);
+    // RBAC primero: un alumno solo opera sobre su propio perfil (y su contexto RLS es self).
+    if (caller.rol === Rol.ALUMNO && caller.id !== validado.alumnoId) {
+      throw new ForbiddenException('Aislamiento RBAC: No puede solicitar URLs de subida para otro alumno.');
+    }
+
+    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura con el contexto del actor.
+    const [alumno] = await this.withTenant(this.contextoRlsDeCaller(caller), (tx) =>
+      tx
+        .select()
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.usuarioId, validado.alumnoId))
+        .limit(1)
+    );
 
     if (!alumno) {
       throw new NotFoundException(`Perfil del alumno '${validado.alumnoId}' no encontrado.`);
     }
 
     if (caller.rol === Rol.ALUMNO) {
-      if (caller.id !== validado.alumnoId) {
-        throw new ForbiddenException('Aislamiento RBAC: No puede solicitar URLs de subida para otro alumno.');
-      }
       if (validado.modulo === 'antropometria' && alumno.modalidad === Modalidad.PRESENCIAL) {
         throw new ForbiddenException(
           'Los alumnos en modalidad presencial no registran sus propias medidas: las toma tu entrenador y quedan verificadas.'
@@ -140,11 +174,19 @@ export class AntropometriaService {
   ): Promise<ControlAntropometricoDetalleDTO> {
     const validado = CheckinAntropometricoSchema.parse(dto);
 
-    const [alumno] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(eq(perfilesAlumno.usuarioId, validado.alumnoId))
-      .limit(1);
+    // RBAC primero: un alumno solo registra sus propias métricas (y su contexto RLS es self).
+    if (caller.rol === Rol.ALUMNO && caller.id !== validado.alumnoId) {
+      throw new ForbiddenException('Aislamiento RBAC: No puede registrar métricas para otro alumno.');
+    }
+
+    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura con el contexto del actor.
+    const [alumno] = await this.withTenant(this.contextoRlsDeCaller(caller), (tx) =>
+      tx
+        .select()
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.usuarioId, validado.alumnoId))
+        .limit(1)
+    );
 
     if (!alumno) {
       throw new NotFoundException(`Perfil del alumno '${validado.alumnoId}' no encontrado.`);
@@ -165,9 +207,6 @@ export class AntropometriaService {
     const now = new Date();
 
     if (caller.rol === Rol.ALUMNO) {
-      if (caller.id !== validado.alumnoId) {
-        throw new ForbiddenException('Aislamiento RBAC: No puede registrar métricas para otro alumno.');
-      }
       if (alumno.modalidad === Modalidad.PRESENCIAL) {
         throw new ForbiddenException(
           'Los alumnos en modalidad presencial no registran sus propias medidas: las toma tu entrenador y quedan verificadas.'
@@ -323,11 +362,14 @@ export class AntropometriaService {
       throw new NotFoundException(`Control antropométrico con ID '${controlId}' no encontrado.`);
     }
 
-    const [alumno] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(eq(perfilesAlumno.usuarioId, control.alumnoId))
-      .limit(1);
+    // RNF-003/ADR-011 (etapa 3): lectura del perfil con el GUC del coach (RLS).
+    const [alumno] = await this.withTenant({ entrenadorId: coachId }, (tx) =>
+      tx
+        .select()
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.usuarioId, control.alumnoId))
+        .limit(1)
+    );
 
     if (!alumno || alumno.entrenadorId !== coachId) {
       throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');
@@ -395,11 +437,14 @@ export class AntropometriaService {
       }
       if (caller.rol === Rol.ENTRENADOR) {
         const coachId = caller.entrenadorId || caller.id;
-        const [perfil] = await this.db
-          .select()
-          .from(perfilesAlumno)
-          .where(eq(perfilesAlumno.usuarioId, alumnoId))
-          .limit(1);
+        // RNF-003/ADR-011 (etapa 3): lectura del perfil con el GUC del coach (RLS).
+        const [perfil] = await this.withTenant({ entrenadorId: coachId }, (tx) =>
+          tx
+            .select()
+            .from(perfilesAlumno)
+            .where(eq(perfilesAlumno.usuarioId, alumnoId))
+            .limit(1)
+        );
 
         if (!perfil || perfil.entrenadorId !== coachId) {
           throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');
@@ -549,11 +594,14 @@ export class AntropometriaService {
       }
       if (caller.rol === Rol.ENTRENADOR) {
         const coachId = caller.entrenadorId || caller.id;
-        const [perfil] = await this.db
-          .select()
-          .from(perfilesAlumno)
-          .where(eq(perfilesAlumno.usuarioId, alumnoId))
-          .limit(1);
+        // RNF-003/ADR-011 (etapa 3): lectura del perfil con el GUC del coach (RLS).
+        const [perfil] = await this.withTenant({ entrenadorId: coachId }, (tx) =>
+          tx
+            .select()
+            .from(perfilesAlumno)
+            .where(eq(perfilesAlumno.usuarioId, alumnoId))
+            .limit(1)
+        );
 
         if (!perfil || perfil.entrenadorId !== coachId) {
           throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');
@@ -671,14 +719,18 @@ export class AntropometriaService {
     limit = LIMITE_COLA_ANTROPOMETRIA_POR_DEFECTO,
     offset = 0
   ): Promise<ColaPendientesAntropometricosDTO> {
-    const alumnosCoach = await this.db
-      .select({
-        usuarioId: perfilesAlumno.usuarioId,
-        nombres: perfilesAlumno.nombres,
-        apellidos: perfilesAlumno.apellidos,
-      })
-      .from(perfilesAlumno)
-      .where(eq(perfilesAlumno.entrenadorId, coachId));
+    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura de la cartera con el GUC
+    // del coach.
+    const alumnosCoach = await this.withTenant({ entrenadorId: coachId }, (tx) =>
+      tx
+        .select({
+          usuarioId: perfilesAlumno.usuarioId,
+          nombres: perfilesAlumno.nombres,
+          apellidos: perfilesAlumno.apellidos,
+        })
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.entrenadorId, coachId))
+    );
 
     const alumnoIds = alumnosCoach.map((a) => a.usuarioId);
     if (alumnoIds.length === 0) {
@@ -748,11 +800,14 @@ export class AntropometriaService {
       }
       if (caller.rol === Rol.ENTRENADOR) {
         const coachId = caller.entrenadorId || caller.id;
-        const [alumno] = await this.db
-          .select()
-          .from(perfilesAlumno)
-          .where(eq(perfilesAlumno.usuarioId, control.alumnoId))
-          .limit(1);
+        // RNF-003/ADR-011 (etapa 3): lectura del perfil con el GUC del coach (RLS).
+        const [alumno] = await this.withTenant({ entrenadorId: coachId }, (tx) =>
+          tx
+            .select()
+            .from(perfilesAlumno)
+            .where(eq(perfilesAlumno.usuarioId, control.alumnoId))
+            .limit(1)
+        );
 
         if (!alumno || alumno.entrenadorId !== coachId) {
           throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');

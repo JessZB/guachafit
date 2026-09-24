@@ -1,15 +1,18 @@
 import {
   Injectable,
   Inject,
+  Optional,
   UnauthorizedException,
   NotFoundException,
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
-import { DRIZZLE_DB } from '../../database/database.module';
+import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
 import {
   Database,
+  WithTenantFn,
+  withTenant as withTenantBase,
   eq,
   and,
   gt,
@@ -45,12 +48,22 @@ export class AuthService {
   private readonly jwtSecret: string;
   private readonly refreshSecret: string;
 
+  /**
+   * RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS. El perfil del alumno se lee SIEMPRE
+   * dentro de `withTenant` con el contexto self (`current_usuario_id`), incluso en login/refresh/
+   * canje donde todavía no hay JWT: el usuario autenticado en ese instante ES el dueño del perfil.
+   * Se inyecta para que los tests puedan espiarlo.
+   */
+  private readonly withTenant: WithTenantFn;
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
-    private readonly cryptoService: CryptoService
+    private readonly cryptoService: CryptoService,
+    @Optional() @Inject(WITH_TENANT) withTenant?: WithTenantFn
   ) {
     this.jwtSecret = process.env.JWT_SECRET || 'guachafit_jwt_super_secret_key_2026';
     this.refreshSecret = process.env.JWT_REFRESH_SECRET || 'guachafit_jwt_refresh_super_secret_key_2026';
+    this.withTenant = withTenant ?? ((context, fn) => withTenantBase(context, fn, this.db));
   }
 
   /**
@@ -123,10 +136,10 @@ export class AuthService {
       // que la cuenta deshabilitada, sin revelar si la cuenta existe).
       await this.verificarLicenciaEntrenadorActiva(usuario.id);
     } else if (usuario.rol === Rol.ALUMNO) {
-      const [perfil] = await this.db
-        .select()
-        .from(perfilesAlumno)
-        .where(eq(perfilesAlumno.usuarioId, usuario.id));
+      // RNF-003/ADR-011 (etapa 3): lectura self del perfil con RLS (`current_usuario_id`).
+      const [perfil] = await this.withTenant({ usuarioId: usuario.id }, (tx) =>
+        tx.select().from(perfilesAlumno).where(eq(perfilesAlumno.usuarioId, usuario.id))
+      );
 
       // RF-012 RN-02: la baja lógica revoca el acceso de la cuenta vinculada. Sin este chequeo,
       // el alumno archivado seguía iniciando sesión (y renovando tokens) pese a no tener acceso
@@ -201,17 +214,20 @@ export class AuthService {
       // access token.
       await this.verificarLicenciaEntrenadorActiva(usuario.id);
     } else if (usuario.rol === Rol.ALUMNO) {
-      const [perfil] = await this.db
-        .select({
-          entrenadorId: perfilesAlumno.entrenadorId,
-          modalidad: perfilesAlumno.modalidad,
-          periodicidadAntropometria: perfilesAlumno.periodicidadAntropometria,
-          antropometriaInicio: perfilesAlumno.antropometriaInicio,
-          deletedAtUtc: perfilesAlumno.deletedAtUtc,
-        })
-        .from(perfilesAlumno)
-        .where(eq(perfilesAlumno.usuarioId, usuario.id))
-        .limit(1);
+      // RNF-003/ADR-011 (etapa 3): lectura self del perfil con RLS (`current_usuario_id`).
+      const [perfil] = await this.withTenant({ usuarioId: usuario.id }, (tx) =>
+        tx
+          .select({
+            entrenadorId: perfilesAlumno.entrenadorId,
+            modalidad: perfilesAlumno.modalidad,
+            periodicidadAntropometria: perfilesAlumno.periodicidadAntropometria,
+            antropometriaInicio: perfilesAlumno.antropometriaInicio,
+            deletedAtUtc: perfilesAlumno.deletedAtUtc,
+          })
+          .from(perfilesAlumno)
+          .where(eq(perfilesAlumno.usuarioId, usuario.id))
+          .limit(1)
+      );
 
       if (perfil?.deletedAtUtc) {
         throw new UnauthorizedException(
@@ -276,10 +292,10 @@ export class AuthService {
       // tokens; sería una tercera vía de sesión sin el ciclo de verificación).
       await this.verificarLicenciaEntrenadorActiva(usuario.id);
     } else if (usuario.rol === Rol.ALUMNO) {
-      const [perfil] = await this.db
-        .select()
-        .from(perfilesAlumno)
-        .where(eq(perfilesAlumno.usuarioId, usuario.id));
+      // RNF-003/ADR-011 (etapa 3): canje de invitación — lectura self del perfil con RLS.
+      const [perfil] = await this.withTenant({ usuarioId: usuario.id }, (tx) =>
+        tx.select().from(perfilesAlumno).where(eq(perfilesAlumno.usuarioId, usuario.id))
+      );
 
       // RF-012 RN-02: la baja lógica revoca el acceso; el mensaje es el mismo que en el login.
       if (perfil?.deletedAtUtc) {
@@ -355,10 +371,10 @@ export class AuthService {
       // RF-010 §6: la licencia se re-verifica en cada refresh; una cuenta suspendida no renueva.
       await this.verificarLicenciaEntrenadorActiva(usuario.id);
     } else if (usuario.rol === Rol.ALUMNO) {
-      const [perfil] = await this.db
-        .select()
-        .from(perfilesAlumno)
-        .where(eq(perfilesAlumno.usuarioId, usuario.id));
+      // RNF-003/ADR-011 (etapa 3): refresh — lectura self del perfil con RLS.
+      const [perfil] = await this.withTenant({ usuarioId: usuario.id }, (tx) =>
+        tx.select().from(perfilesAlumno).where(eq(perfilesAlumno.usuarioId, usuario.id))
+      );
 
       // RF-012 RN-02: la baja lógica también revoca la renovación de tokens.
       if (perfil?.deletedAtUtc) {

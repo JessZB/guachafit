@@ -265,7 +265,7 @@ export class PlantillasService {
     alumnoId: string
   ): Promise<ResultadoAsignacionAlumnoDTO> {
     try {
-      const perfil = await this.resolverPerfilAlumno(alumnoId);
+      const perfil = await this.resolverPerfilAlumno(alumnoId, entrenadorId);
       if (!perfil) {
         return {
           alumnoId,
@@ -375,22 +375,29 @@ export class PlantillasService {
     return plantilla;
   }
 
-  private async resolverPerfilAlumno(alumnoId: string): Promise<PerfilAlumnoRow | undefined> {
+  private async resolverPerfilAlumno(
+    alumnoId: string,
+    entrenadorId: string
+  ): Promise<PerfilAlumnoRow | undefined> {
     // Acepta `perfiles_alumno.id` o `usuarios.id`, igual que el resto del módulo.
-    let [perfil] = await this.db
-      .select()
-      .from(perfilesAlumno)
-      .where(eq(perfilesAlumno.id, alumnoId))
-      .limit(1);
-
-    if (!perfil) {
-      [perfil] = await this.db
+    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura con el GUC del coach
+    // (un perfil de otro tenant no es visible: se reporta como alumno no encontrado).
+    return this.withTenant({ entrenadorId }, async (tx) => {
+      let [perfil] = await tx
         .select()
         .from(perfilesAlumno)
-        .where(eq(perfilesAlumno.usuarioId, alumnoId))
+        .where(eq(perfilesAlumno.id, alumnoId))
         .limit(1);
-    }
-    return perfil;
+
+      if (!perfil) {
+        [perfil] = await tx
+          .select()
+          .from(perfilesAlumno)
+          .where(eq(perfilesAlumno.usuarioId, alumnoId))
+          .limit(1);
+      }
+      return perfil;
+    });
   }
 
   /**
