@@ -5,7 +5,7 @@ categoria: seguridad # seguridad | rendimiento | disponibilidad
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-20
+fecha_verificacion: 2026-09-24
 requisito_origen: "[[RF-003-checkin-antropometrico-rbac-hibrido]]"
 metrica_objetivo: "p95 < 800ms subida / URLs firmadas TTL < 15 min"
 fecha_creacion: 2026-09-05
@@ -67,4 +67,5 @@ Las fotografías de control corporal y progreso físico constituyen datos biomé
 - TTL de URLs presignadas y subida directa a storage (direct-to-storage) implementados.
 - Compresión en el cliente sin evidencia de implementación.
 - Cifrado en reposo (SSE-S3 / SSE-KMS) sin evidencia.
-- Validación de `storageKey` sin evidencia.
+- Validación de `storageKey` implementada: estructura estricta por módulo (`validarStorageKeyEstructura`) y, en los recursos de nutrición, tenancy por prefijo del alumno (`nutricion-recursos/{alumnoId}/`, clave ajena → 400). Verificada en las suites `rnf001-r2-storage` y `nutricion-service`.
+- Borrado de objetos implementado: `R2StorageService.eliminarObjeto` (`DeleteObject` idempotente; valida la estructura de la clave y no lanza si es inválida; early-return en modo mock; un fallo de red se propaga al llamador). Ciclo de vida **best-effort post-commit** en el PUT-replace de metas de nutrición ([[RF-002-nutricion-agil-reporte-rapido]]), con re-lectura anti-race y respuesta intacta ante fallos. Decisión y límites en [[ADR-015-borrado-best-effort-objetos-boveda]].

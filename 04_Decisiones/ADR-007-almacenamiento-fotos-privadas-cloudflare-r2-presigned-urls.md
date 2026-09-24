@@ -87,3 +87,5 @@ Elegimos la **Opción C: Cloudflare R2 Storage con Arquitectura de Subida Direct
   - [[RF-004-evolucion-corporal-comparador-fotografico]]
   - [[RF-007-reporte-pagos-bandeja-conciliacion]]
 - **Decisión vinculada:** [[ADR-001-modelo-hibrido-auditoria-antropometrica]]
+- **Ciclo de vida de borrado de objetos:** [[ADR-015-borrado-best-effort-objetos-boveda]] (borrado best-effort post-commit en el PUT-replace de recursos de nutrición; guards de estructura/prefijo y respuesta 200 intacta ante fallos).
+- **Estado de implementación (drift detectado el 2026-09-24):** el código implementa la clave de comprobantes como `comprobantes/{alumnoId}/{anio}/{uuid}.webp` (tenancy por alumno), mientras §3 de este ADR describe `comprobantes/{entrenadorId}/{cuotaId}/{uuid}.webp`. Se conserva la línea original y esta nota registra la deriva para su reconciliación documental.

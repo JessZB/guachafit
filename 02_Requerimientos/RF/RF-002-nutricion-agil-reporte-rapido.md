@@ -4,7 +4,7 @@ modulo: Nutricion
 prioridad: alta
 estado: implementado
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-22
+fecha_verificacion: 2026-09-24
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0
@@ -126,6 +126,6 @@ Then el sistema debe persistir los totales numéricos asociados a la fecha
 Tres de los cuatro puntos quedaron **resueltos**; el único abierto es de entorno (smoke contra Cloudflare R2 real). Por eso el estado pasa a `implementado`.
 
 1. **Encolado de fotos (§6, subida fallida): RESUELTO.** Un check-in con fotos sin conexión (o con fallo de red/5xx en la subida) se encola completo —datos + blobs comprimidos en IndexedDB— como mutación `nutricion-checkin-fotos` y se sincroniza solo: primero cada foto (presign `comidas` + PUT) persistiendo su `storageKey` al instante para reanudar sin re-subir, y después el POST del check-in con las claves. Un 4xx del servidor (p. ej. ventana/día cerrado) deja la mutación rechazada con mensaje claro y la evidencia se conserva hasta descarte manual; el panel de sincronización muestra estado, razón y Reintentar/Descartar, y explica la evidencia retenida. Máximo 4 fotos (RN-03).
-2. **Recursos educativos (RN-01): RESUELTO.** Enlaces externos o **PDFs subidos** (módulo `nutricion-recursos`, migración de contrato aplicada); `validarStorageKey` exige clave del módulo y del alumno (clave ajena → 400); al leer se resuelve con presigned GET (900 s). Verificado E2E contra MinIO real (PUT firmado 200, integridad SHA256, limpieza). Nota: "Quitar recurso" no borra el objeto del bucket (no existe DELETE de objetos; seguimiento anotado).
+2. **Recursos educativos (RN-01): RESUELTO.** Enlaces externos o **PDFs subidos** (módulo `nutricion-recursos`, migración de contrato aplicada); `validarStorageKey` exige clave del módulo y del alumno (clave ajena → 400); al leer se resuelve con presigned GET (900 s). Verificado E2E contra MinIO real (PUT firmado 200, integridad SHA256, limpieza). **Borrado best-effort implementado y verificado (2026-09-24):** al guardar metas, los PDFs que dejaron de estar referenciados se eliminan de la bóveda **post-commit** (`eliminarObjeto` con `DeleteObject` idempotente; E2E MinIO: presign PUT → existe → borrar → 404 → limpieza); un fallo de storage o de la re-lectura anti-race no altera el 200 y solo deja warning. Queda **pendiente** la recolección de objetos **nunca referenciados** (PDFs subidos sin guardar y fotos de comidas descartadas offline con objetos ya subidos); ciclo de vida en [[ADR-015-borrado-best-effort-objetos-boveda]].
 3. **Listado de check-ins:** no es server-paginado; el calendario del coach usa la ventana de 30 días con paginación en cliente declarada.
 4. **Smoke de almacenamiento:** la subida real quedó verificada E2E contra **MinIO real** (presign no-mock, PUT con Content-Type firmado, descarga con integridad SHA256); falta repetirla contra **Cloudflare R2** cuando existan credenciales reales del bucket de producción.

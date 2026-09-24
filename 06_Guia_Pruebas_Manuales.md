@@ -1,7 +1,7 @@
 ---
 id: GUIA-PRUEBAS
 titulo: "Guía de Pruebas Manuales — GUACHAFIT"
-fecha: 2026-09-23
+fecha: 2026-09-24
 estado: activo
 tags:
   - pruebas
@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** con pruebas automáticas en verde (**612** de la web + **809** del API). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (**612** de la web + **818** del API, más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -161,14 +161,14 @@ tags:
 - [ ] **Calendario de 30 días:** los días cerrados sin check-in se muestran como **No reportado** (derivado, en gris); los reportados, con su semáforo real.
 - [ ] **Totales vs metas y semáforo:** el panel compara lo reportado contra las metas y clasifica la tolerancia; con datos faltantes dice "sin evaluar".
 - [ ] **Fotos del diario:** abre las miniaturas de cada día en el visor accesible (Escape cierra).
-- [ ] **Editor de metas:** define kcal, macros, agua y hasta 10 recursos por enlace; al guardar, el alumno ve las metas. Un alumno sin metas no muestra ceros fabricados (204 honesto).
+- [ ] **Editor de metas:** define kcal, macros, agua y hasta 10 recursos por enlace o PDF subido; al guardar, el alumno ve las metas. Un alumno sin metas no muestra ceros fabricados (204 honesto). Al quitar un PDF y guardar, el archivo se **elimina de la bóveda** (borrado best-effort del servidor, sin aviso nuevo en la UI) y el enlace firmado anterior deja de servirse; un recurso por enlace externo solo deja de listarse.
 - [ ] **Paginación declarada:** el calendario trabaja sobre la ventana de 30 días con paginación en cliente (no es un listado server-paginado).
 - [ ] **Alerta semanal:** si hay días cerrados sin reporte, el resumen semanal del coach lo menciona (solo cuando el contador es mayor que 0; llega por la campana in-app — sección 10).
 
 ## 13. ⛔ Lo que AÚN NO existe (no lo reportes como error)
 
 - **Notificaciones**: proveedores reales de push/email (la entrega sigue **simulada por log**), cliente push del navegador (WebPush sin UI), recordatorio de check-in 06:00 con cron exacto por huso horario (el recordatorio **sí existe**: corre por barrido aproximado en UTC con cadencia de 15 min, que cae dentro de la hora local 6 para offsets de hora entera, media hora y 45 min; sin reemisión si el worker está caído toda la hora local 6) y alerta externa de colas/DLQ (Sentry/Datadog). La campana, las preferencias y el resumen semanal **ya existen** (sección 10).
-- **Nutrición**: los recursos educativos del coach pueden ser **enlaces o PDFs subidos** (validados por tipo, firma `%PDF-` y tamaño; se sirven con enlace firmado). Los reportes **con fotos** sin conexión se **encolan completos** (primero las fotos, después el check-in), con la evidencia visible, reintentable y descartable en el panel. La subida real está verificada contra MinIO; falta repetirla contra Cloudflare R2 con credenciales reales.
+- **Nutrición**: los recursos educativos del coach pueden ser **enlaces o PDFs subidos** (validados por tipo, firma `%PDF-` y tamaño; se sirven con enlace firmado). Los reportes **con fotos** sin conexión se **encolan completos** (primero las fotos, después el check-in), con la evidencia visible, reintentable y descartable en el panel. La subida real está verificada contra MinIO; falta repetirla contra Cloudflare R2 con credenciales reales. El **borrado al quitar un recurso guardado ya existe**: al guardar metas, los PDFs sin referencia se eliminan de la bóveda (best-effort, verificado contra MinIO). Siguen sin existir la recolección de objetos nunca referenciados (subir sin guardar) y la serialización por alumno del ciclo de metas (carrera residual, [[ADR-015-borrado-best-effort-objetos-boveda]]).
 - **Antropometría**: los avisos al coach (check-in remoto recibido y ventana vencida) **ya existen** (sección 11); el único punto documentado es que `POST /antropometria/presigned-upload-url` no evalúa la ventana (la ventana se valida al registrar el check-in; el presencial sigue bloqueado al subir fotos).
 - **Admin**: planes/facturación de la plataforma y correo automático de bienvenida pendientes. La gestión de cuentas (deshabilitar/reactivar) y de licencias (suspender/activar) **ya existe** (sección 7).
 - **Listas**: los filtros de Conciliación/Evaluaciones/Pagos filtran solo la página visible (la UI lo dice); Plantillas no está paginada.
