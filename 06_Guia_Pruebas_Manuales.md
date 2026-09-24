@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** con pruebas automáticas en verde (**612** de la web + **789** del API). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (**612** de la web + **809** del API). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -172,7 +172,7 @@ tags:
 - **Antropometría**: los avisos al coach (check-in remoto recibido y ventana vencida) **ya existen** (sección 11); el único punto documentado es que `POST /antropometria/presigned-upload-url` no evalúa la ventana (la ventana se valida al registrar el check-in; el presencial sigue bloqueado al subir fotos).
 - **Admin**: planes/facturación de la plataforma y correo automático de bienvenida pendientes. La gestión de cuentas (deshabilitar/reactivar) y de licencias (suspender/activar) **ya existe** (sección 7).
 - **Listas**: los filtros de Conciliación/Evaluaciones/Pagos filtran solo la página visible (la UI lo dice); Plantillas no está paginada.
-- **Seguridad**: RLS activo en `rutinas`/`plantillas` (etapa 1) **y en finanzas** (`planes_membresia`, `cuotas_membresia` y `transacciones_pago`, etapa 2 — migración `0012`, verificado E2E con el rol no-dueño `guachafit_app`). Queda `perfiles_alumno` (etapa 3) y el cambio del rol de conexión (`DATABASE_URL` sigue apuntando al rol dueño en dev) para el enforcement real. Push del navegador no implementado.
+- **Seguridad**: RLS **ya activo en las 6 tablas** — `rutinas`/`plantillas` (etapa 1), finanzas `planes_membresia`/`cuotas_membresia`/`transacciones_pago` (etapa 2, migración `0012`) y `perfiles_alumno` (etapa 3, migración `0013`), verificado E2E con el rol no-dueño `guachafit_app` (52/52 en la etapa 3, cero errores RLS). Lo único pendiente es el **rol de conexión (D2)**: en dev `DATABASE_URL` sigue apuntando al rol dueño, así que el blindaje no está activo en el entorno normal. Verificación disponible: arranca el API con `DATABASE_URL` del rol `guachafit_app` (así se validó la etapa 3: login, altas, directorio, entrenamiento, antropometría, nutrición y finanzas). Push del navegador no implementado.
 - **Extras**: iconos provisionales (mancuerna generada) — si hay logo oficial, se reemplazan; instalación real en dispositivo físico pendiente de tu prueba.
 
 ## 14. Cómo reportar un hallazgo

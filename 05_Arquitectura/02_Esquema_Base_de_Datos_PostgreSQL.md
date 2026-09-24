@@ -980,17 +980,19 @@ CREATE TABLE tasas_cambio_referencia (
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
--- ENTREGA POR ETAPAS (migraciones 0004_rls_multitenant.sql, 0005_rls_plantillas.sql y
--- 0012_rls_finanzas.sql):
+-- ENTREGA POR ETAPAS (migraciones 0004_rls_multitenant.sql, 0005_rls_plantillas.sql,
+-- 0012_rls_finanzas.sql y 0013_rls_perfiles_alumno.sql):
 --   * Políticas creadas para las 6 tablas de RNF-003 + RF-017 (se sumó plantillas_rutina).
---   * ENABLE ROW LEVEL SECURITY aplicado en:
+--   * ENABLE ROW LEVEL SECURITY aplicado en las 6 tablas:
 --       - etapa 1: `rutinas` (0004) y `plantillas_rutina` (0005);
 --       - etapa 2 (finanzas): `planes_membresia`, `cuotas_membresia` y
 --         `transacciones_pago` (0012, migración aditiva que completa las políticas
 --         self del alumno para los caminos reales: self-select del plan de su cuota,
---         self-update de la cuota al reportar pago y self-insert de la transacción).
---   * `perfiles_alumno` queda PREPARADA (políticas creadas, ENABLE pendiente:
---     etapa 3) hasta que el 100% de sus caminos corran dentro de withTenant().
+--         self-update de la cuota al reportar pago y self-insert de la transacción);
+--       - etapa 3: `perfiles_alumno` (0013, aditiva sobre 0004: ENABLE + política
+--         self-update para que el alumno persista su racha al finalizar sesión).
+--   * RNF-003 implementado: el 100% de los accesos de tenant corre en withTenant()
+--     (72 accesos de `perfiles_alumno` en 13 archivos + seed, actor-aware).
 -- -----------------------------------------------------------------------------
 
 -- Funciones de sesión (STABLE, sin SECURITY DEFINER: current_setting no requiere privilegios)
@@ -1030,7 +1032,7 @@ CREATE POLICY rls_plantillas_rutina ON plantillas_rutina
 
 ALTER TABLE plantillas_rutina ENABLE ROW LEVEL SECURITY;
 
--- perfiles_alumno — PREPARADA (ENABLE pendiente: etapa 3)
+-- perfiles_alumno — ETAPA 3: RLS habilitado (0013_rls_perfiles_alumno.sql)
 CREATE POLICY rls_perfiles_alumno ON perfiles_alumno
   FOR ALL
   USING (is_superadmin() OR entrenador_id = current_entrenador_id())
@@ -1039,6 +1041,15 @@ CREATE POLICY rls_perfiles_alumno ON perfiles_alumno
 CREATE POLICY rls_perfiles_alumno_self_select ON perfiles_alumno
   FOR SELECT
   USING (usuario_id = current_usuario_id());
+
+-- self-update del alumno (0013): persiste su racha al finalizar la sesión
+-- (RF-001 RN-02); solo su propia fila (la app controla qué columnas se escriben).
+CREATE POLICY rls_perfiles_alumno_self_update ON perfiles_alumno
+  FOR UPDATE
+  USING (usuario_id = current_usuario_id())
+  WITH CHECK (usuario_id = current_usuario_id());
+
+ALTER TABLE perfiles_alumno ENABLE ROW LEVEL SECURITY;
 
 -- planes_membresia — ETAPA 2: RLS habilitado (0012_rls_finanzas.sql)
 CREATE POLICY rls_planes_membresia ON planes_membresia
@@ -1095,10 +1106,6 @@ CREATE POLICY rls_transacciones_pago_self_insert ON transacciones_pago
 
 ALTER TABLE transacciones_pago ENABLE ROW LEVEL SECURITY;
 
--- ETAPA 3 (PENDIENTE — `perfiles_alumno`): descomentar únicamente cuando TODAS
--- sus consultas de tenant corran dentro de withTenant() y la suite lo verifique.
--- ALTER TABLE perfiles_alumno ENABLE ROW LEVEL SECURITY;
-
 -- REQUISITO DE EFECTIVIDAD: el rol dueño de las tablas ignora RLS y
 -- FORCE ROW LEVEL SECURITY solo somete al dueño; los superusers y los roles con
 -- BYPASSRLS siguen exentos incluso con FORCE (comprobado empíricamente). La API
@@ -1113,7 +1120,7 @@ ALTER TABLE transacciones_pago ENABLE ROW LEVEL SECURITY;
 
 | Requerimiento / ADR | Invariante de Negocio | Implementación en PostgreSQL |
 | :--- | :--- | :--- |
-| **RNF-003 / ADR-009 / [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]]** | Aislamiento multi-tenant entre carteras de entrenadores (entrega por etapas). | Row-Level Security con funciones `current_entrenador_id()` / `current_usuario_id()` / `is_superadmin()`: `ENABLE` operativo en `rutinas` y `plantillas_rutina` (etapa 1, migraciones `0004`/`0005`) y en las 3 tablas de finanzas `planes_membresia`, `cuotas_membresia` y `transacciones_pago` (etapa 2, migración `0012`); `perfiles_alumno` tiene políticas creadas y `ENABLE` pendiente (etapa 3). Efectividad condicionada a rol de conexión no-dueño `NOSUPERUSER NOBYPASSRLS` (D2: dev aún conecta como dueño; `FORCE RLS` no cubre a superusers/`BYPASSRLS`). |
+| **RNF-003 / ADR-009 / [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]]** | Aislamiento multi-tenant entre carteras de entrenadores (entrega por etapas, finalizada). | Row-Level Security con funciones `current_entrenador_id()` / `current_usuario_id()` / `is_superadmin()`: `ENABLE` operativo en las 6 tablas — `rutinas` y `plantillas_rutina` (etapa 1, migraciones `0004`/`0005`), `planes_membresia`, `cuotas_membresia` y `transacciones_pago` (etapa 2, migración `0012`) y `perfiles_alumno` (etapa 3, migración `0013`, con política self-update de la racha). Verificado E2E con rol no-dueño (etapas 2 y 3: 30/30 y 52/52). Efectividad en el entorno normal condicionada a rol de conexión no-dueño `NOSUPERUSER NOBYPASSRLS` (D2: dev aún conecta como dueño; `FORCE RLS` no cubre a superusers/`BYPASSRLS`). |
 | **RF-011 / RNF-003** | Ficha de salud privada confidencial (exclusiva del coach). | Columna `ficha_salud_privada TEXT` cifrada con `AES-256-GCM` y excluida de los DTOs de alumnos. |
 | **RF-012 (Soft Delete)** | Preservación del histórico deportivo y contable al dar de baja un cliente. | Columna `deleted_at_utc` con índice parcial `WHERE deleted_at_utc IS NULL`. |
 | **RNF-002 (Precisión Decimal)** | Cero error binario de redondeo (prohibido IEEE 754 `float`/`double`). | Columnas `NUMERIC(14,2)` para dinero y `NUMERIC(12,4)` para tasas cambiarias. |
@@ -1125,7 +1132,7 @@ ALTER TABLE transacciones_pago ENABLE ROW LEVEL SECURITY;
 | **RF-002 (Metas Nutricionales)** | Una fila de metas por alumno: cada objetivo es anulable (`NULL` = no configurado, nunca `0` fabricado) y admite hasta 10 recursos educativos por enlace. | Tabla `metas_nutricionales` con `UNIQUE (alumno_id)` y FK `alumno_id → usuarios(id) ON DELETE CASCADE` (migración `0009`). |
 | **RF-002 (Calendario Nutricional)** | El estado `No reportado` del calendario es derivado, no un dato persistido. | Sin columna de estado: se calcula por la ausencia de fila en `checkins_nutricionales` para el día cerrado (RF-002 §6). |
 
-### 3.1. Estado de Implementación RLS (2026-09-23)
+### 3.1. Estado Final de Implementación RLS (2026-09-23)
 
 | Tabla | Políticas creadas | `ENABLE RLS` | Caminos de tenant envueltos en `withTenant` |
 | :--- | :---: | :---: | :--- |
@@ -1134,9 +1141,9 @@ ALTER TABLE transacciones_pago ENABLE ROW LEVEL SECURITY;
 | `planes_membresia` | ✅ (+ self-select, 0012) | ✅ (etapa 2 — migración `0012`) | 100% |
 | `cuotas_membresia` | ✅ (+ self-update, 0012) | ✅ (etapa 2 — migración `0012`) | 100% |
 | `transacciones_pago` | ✅ (+ self-insert, 0012) | ✅ (etapa 2 — migración `0012`) | 100% |
-| `perfiles_alumno` | ✅ | ⏳ pendiente (etapa 3, prevista en `0013`) | parcial |
+| `perfiles_alumno` | ✅ (+ self-update, 0013) | ✅ (etapa 3 — migración `0013`) | 100% |
 
-> **Verificación real de etapas 1 y 2 ejecutada:** la suite `rnf003-rls-multitenant.spec.ts` valida mecanismo/contrato con mocks y la batería real contra PostgreSQL con rol no-dueño `NOSUPERUSER NOBYPASSRLS` confirmó `deny-by-default` sin GUC, aislamiento por GUC, bypass superadmin explícito y bloqueo de escrituras cross-tenant en `rutinas` y `plantillas_rutina` (etapa 1, rol `guachafit_rls_test`) y en las 3 tablas de finanzas (etapa 2, E2E 30/30 con rol `guachafit_app` + batería psql independiente). **D2:** el `.env` de dev sigue conectando como rol dueño (`postgres`), por lo que el enforcement real exige apuntar `DATABASE_URL` a `guachafit_app`; **nota:** las políticas self acotan fila, no columnas/montos (la app valida transiciones y montos). `FORCE ROW LEVEL SECURITY` no sustituye al rol no-dueño (superusers/`BYPASSRLS` la ignoran); la etapa 3 (`perfiles_alumno`) debe repetir la batería. Ver [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]].
+> **Verificación real de etapas 1, 2 y 3 ejecutada:** la suite `rnf003-rls-multitenant.spec.ts` valida mecanismo/contrato con mocks y la batería real contra PostgreSQL con rol no-dueño `NOSUPERUSER NOBYPASSRLS` confirmó `deny-by-default` sin GUC, aislamiento por GUC, bypass superadmin explícito y bloqueo de escrituras cross-tenant en `rutinas` y `plantillas_rutina` (etapa 1, rol `guachafit_rls_test`), en las 3 tablas de finanzas (etapa 2, E2E 30/30 con rol `guachafit_app` + batería psql independiente) y en `perfiles_alumno` (etapa 3, migración `0013`: `ENABLE` + política self-update de la racha; E2E 52/52 con `guachafit_app`, batería psql y validación independiente). **D2:** el `.env` de dev sigue conectando como rol dueño (`postgres`), por lo que el enforcement en el entorno normal exige apuntar `DATABASE_URL` a `guachafit_app` (las verificaciones E2E corrieron con override de proceso); **nota:** las políticas self acotan fila, no columnas/montos (la app valida transiciones y montos). `FORCE ROW LEVEL SECURITY` no sustituye al rol no-dueño (superusers/`BYPASSRLS` la ignoran). Ver [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]].
 
 ---
 
