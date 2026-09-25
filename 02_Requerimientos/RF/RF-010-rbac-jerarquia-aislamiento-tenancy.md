@@ -4,7 +4,7 @@ modulo: Acceso
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-23
+fecha_verificacion: 2026-09-24
 problema_origen: "[[PROB-003-acceso-onboarding-dashboard-central]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -105,4 +105,8 @@ Then solo debe poder visualizar sus rutinas asignadas, sus medidas y sus cuotas 
   - Deshabilitar/reactivar cuentas (`PATCH /auth/entrenadores/:id/estado`, idempotente, sin auto-deshabilitación y solo sobre entrenadores) y activar/suspender licencias (`PATCH /auth/entrenadores/:id/licencia`, idempotente). El panel web (`/admin`) expone ambas acciones con confirmación accesible y feedback solo con 2xx.
   - **Invalidación de sesión (§6, ENTRENADOR) — mecanismo real:** el estado se re-verifica contra la BD en cada ciclo de sesión (login, refresh y `GET /auth/me`); no hay listas negras. Al deshabilitar la cuenta o suspender la licencia, login y refresh responden 401 con mensaje claro y `/auth/me` cierra la sesión de la web. Límite documentado y aceptado: un access token ya emitido es un JWT stateless sin consulta a BD en el guard, así que sigue siendo válido como máximo sus 15 minutos de TTL.
   - Suspender la licencia también bloquea la resolución pública del `coach_code` (RF-011 RN-07.1) y excluye al coach del resumen semanal (RF-014).
-- Pendiente explícito: la cascada del §6 a los alumnos del entrenador deshabilitado no se implementa en este WU (un alumno del coach deshabilitado conserva su acceso hasta que su propio token rota). Se evita así añadir una verificación del estado del coach en cada petición de cada alumno; queda como decisión abierta si el negocio la exige.
+- Implementado (2026-09-24, unidad CASCADA-COACH): la cascada del §6 a los alumnos se evalúa **derivada en runtime durante la autenticación** (decisión del usuario, opción A; ver [[ADR-016-cascada-acceso-coach-alumnos-autenticacion]]), sin migración y sin verificación en cada petición:
+  - Coach operable = cuenta habilitada (`usuarios.activo`) Y licencia vigente (`perfiles_entrenador.estado_licencia = 'activa'`). Se aplica en los 4 emisores/ciclos de sesión del alumno: login, `GET /auth/me`, refresh y canje de credenciales (`POST /auth/invitacion/establecer-password`; si bloquea, el token no se consume). El mensaje es único y no revela cuál de los dos interruptores falló: *"Tu entrenador no está disponible en este momento. Inténtalo de nuevo más tarde."* (401).
+  - La resolución pública del `coach_code` y el registro público (RF-011) ahora exigen coach operable (mismo 404 uniforme que un código inexistente). Los guards no cambian: no hay costo por petición.
+  - Límites honestos: un access token ya emitido sigue vigente hasta ~15 min en endpoints que no pasan por login/me/refresh/canje; las filas legacy de alumno sin coach quedan exentas (hoy 0 filas); el canje está cubierto por tests unitarios, no por un E2E con token real.
+  - Evidencia (2026-09-24): API 832 passed / 1 skipped y web 624; typechecks OK; E2E real contra Postgres (cuenta `activo=false` y licencia `suspendida_superadmin`: el alumno recibe 401 con el mensaje exacto en login/me/refresh, el link público responde 404 y el coach su propio 401; al restaurar, todo vuelve a 200 con restauración verificada por SELECT). Validación independiente: PASA CON SALVEDADES.

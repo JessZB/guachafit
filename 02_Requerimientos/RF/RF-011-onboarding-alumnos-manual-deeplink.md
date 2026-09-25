@@ -4,7 +4,7 @@ modulo: Onboarding
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-20
+fecha_verificacion: 2026-09-24
 problema_origen: "[[PROB-003-acceso-onboarding-dashboard-central]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -63,7 +63,7 @@ Permite al entrenador captar e incorporar alumnos tanto en el entorno físico de
 - **RN-06 (Estructura del Enlace):** Cada entrenador dispone de una URL personalizable:
   $$\text{https://app.guachafit.com/registro?coach\_code=XYZ}$$
 - **RN-07 (Vinculación Automática al Tenant):** Cuando un usuario completa el formulario público a través de ese enlace, el backend:
-  1. Valida la validez y estado activo del `coach_code`.
+  1. Valida que el `coach_code` exista y que su entrenador esté operativo (cuenta habilitada y licencia vigente); un código inexistente, una cuenta deshabilitada o una licencia suspendida responden con el mismo 404 uniforme.
   2. Crea la cuenta del alumno vinculada automáticamente al `entrenador_id` correspondiente.
   3. Establece la contraseña definida por el usuario en el formulario.
   4. Envía una notificación push y correo al coach: *"Nuevo alumno registrado: [Nombre Completo]"*.
@@ -121,7 +121,7 @@ Then la aplicación debe navegar a "/coach/alumnos/al-001"
 ---
 
 ## 6. Casos Borde y Excepciones
-- **Enlace con Coach Code Invalido o Desactivado:** Si un usuario intenta registrarse con un `coach_code` que no existe o cuyo entrenador está suspendido, el sistema debe mostrar un mensaje amigable: *"El código de entrenador no es válido o no está disponible. Por favor contacta a tu coach."*
+- **Enlace con Coach Code Inválido, Desactivado o Suspendido:** Si un usuario intenta registrarse con un `coach_code` que no existe, o cuyo entrenador tiene la cuenta deshabilitada o la licencia suspendida, el backend responde el mismo 404 uniforme que ante un código inexistente y el sistema muestra el mensaje amigable: *"El código de entrenador no es válido o no está disponible. Por favor contacta a tu coach."*
 - **Correo Electrónico Duplicado:** Si el email ya existe en la base de datos de la plataforma, el sistema debe indicar: *"Este correo ya se encuentra registrado. Si eres tú, inicia sesión o recupera tu contraseña."*
 - **Alumno Sin Cuotas Emitidas en el Semáforo:** Si un alumno recién registrado no posee aún ninguna cuota emitida, el semáforo se mostrará en gris neutro con etiqueta "Sin Cuota Emitida".
 
@@ -132,3 +132,4 @@ Then la aplicación debe navegar a "/coach/alumnos/al-001"
 - Resuelto (2026-09-21): deep link con `coachCode` REAL (perfil del coach + `construirLinkOnboarding`), validación de licencia activa (404 uniforme) y notificación al coach del nuevo registro (evento `ALUMNO_REGISTRADO`). Sin hardcodes.
 - Resuelto (2026-09-21): el alta manual entrega credenciales con token de un solo uso (TTL 48 h) y enlace copiable a la página pública `/activar`; el canje establece la contraseña (RN-05). Sigue pendiente el envío automático por correo transaccional.
 - Resuelto parcial (2026-09-21): "Sin cuota emitida" ya se rotula correctamente vía etiquetas centralizadas (`apps/web/src/lib/etiquetas-dominio.ts`). El estado de datos `Por Vencer` sigue sin existir.
+- Implementado (2026-09-24, unidad CASCADA-COACH): la resolución pública del `coach_code` y el registro público exigen un entrenador **operable** (cuenta habilitada + licencia vigente): un código inexistente, una cuenta deshabilitada y una licencia suspendida comparten la misma respuesta 404 uniforme en ambos flujos ([[ADR-016-cascada-acceso-coach-alumnos-autenticacion]]).

@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** con pruebas automáticas en verde (**612** de la web + **818** del API, más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (**624** de la web + **832** del API, más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -95,7 +95,9 @@ tags:
 - [ ] **Admin** (`/admin`, solo superadmin): crear entrenador y ver el enlace de activación; abajo verás la **lista de entrenadores** con su cuenta (activa/deshabilitada), su licencia (activa/suspendida), su `coach_code` y su fecha de alta.
 - [ ] **Deshabilitar / Reactivar cuenta:** pulsa "Deshabilitar" en un coach de prueba → aparece una confirmación que explica el efecto; al confirmar, el aviso solo sale si el servidor aceptó. Luego entra con ese coach en una ventana de incógnito: verás **"Su cuenta se encuentra inactiva o bloqueada"**. Reactívalo desde el panel y podrá entrar de nuevo. Repite "Deshabilitar" dos veces: la segunda dice que ya estaba deshabilitado (sin error).
 - [ ] **Suspender / Activar licencia:** suspende la licencia de un coach → su login queda bloqueado con el mensaje de licencia y su enlace público (`/onboarding?coach=CODIGO`) deja de resolver. Actívala y ambos vuelven.
-- [ ] **Límite honesto de la sesión activa:** un coach que YA tenía sesión abierta sigue dentro hasta que la app vuelve a verificar (recarga o llamada a `/auth/me`); como máximo 15 minutos, porque el token de acceso es corto. No es un bug.
+- [ ] **Cascada al alumno — cuenta deshabilitada:** con un alumno de prueba vinculado al coach, deshabilita la cuenta del coach → **el alumno de ese coach no puede iniciar sesión** ("Tu entrenador no está disponible en este momento. Inténtalo de nuevo más tarde.") y el enlace público `/onboarding?coach=CODIGO` deja de resolver (mismo "no válido" que un código inventado). Reactiva la cuenta: el alumno vuelve a entrar y el enlace vuelve a resolver.
+- [ ] **Cascada al alumno — licencia suspendida:** repite lo anterior suspendiendo la licencia → el alumno recibe **el mismo mensaje** (no revela cuál de los dos cambios fue) y su enlace público deja de resolver. Al activar la licencia, ambos vuelven.
+- [ ] **Límite honesto de la sesión activa:** un coach (o un alumno de ese coach) que YA tenía sesión abierta sigue dentro hasta que la app vuelve a verificar (recarga, `/auth/me`, refresh o canje); como máximo 15 minutos, porque el token de acceso es corto. No es un bug.
 - [ ] **El superadmin sigue sin poder operar el negocio del coach** (recibe "no autorizado").
 
 ## 8. PWA, instalación y actualizaciones
