@@ -28,6 +28,9 @@ describe('WU RF-003a: modalidad del alumno en el DTO de sesión', () => {
         const resultado = respuestasSelect[indice++] ?? [];
         const consulta: any = {
           from: vi.fn(() => consulta),
+          // RF-010 §6 (CASCADA-COACH): el chequeo de operabilidad del entrenador une
+          // `perfiles_entrenador` con `usuarios`.
+          innerJoin: vi.fn(() => consulta),
           where: vi.fn(() => ({
             limit: vi.fn(() => ({
               then: (resolve: (valor: any) => unknown) => resolve(resultado),
@@ -71,7 +74,12 @@ describe('WU RF-003a: modalidad del alumno en el DTO de sesión', () => {
       deletedAtUtc: null,
     };
 
-    respuestasSelect = [[filaUsuario], [filaPerfil]];
+    // RF-010 §6 (CASCADA-COACH): el alumno solo entra si su entrenador está operable.
+    respuestasSelect = [
+      [filaUsuario],
+      [filaPerfil],
+      [{ activo: true, estadoLicencia: EstadoLicencia.ACTIVA }],
+    ];
     mockCryptoService.comparePassword.mockResolvedValue(true);
 
     authService = new AuthService(crearDbAuth(), mockCryptoService as any);
@@ -118,7 +126,11 @@ describe('WU RF-003a: modalidad del alumno en el DTO de sesión', () => {
 
   it('`obtenerSesion` refleja un cambio de modalidad posterior al login (sin esperar al JWT)', async () => {
     filaPerfil = { ...filaPerfil, modalidad: Modalidad.PRESENCIAL };
-    respuestasSelect = [[filaUsuario], [filaPerfil]];
+    respuestasSelect = [
+      [filaUsuario],
+      [filaPerfil],
+      [{ activo: true, estadoLicencia: EstadoLicencia.ACTIVA }],
+    ];
 
     const sesion = await authService.obtenerSesion(ALUMNO_ID);
 

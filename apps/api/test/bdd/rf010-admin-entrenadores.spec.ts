@@ -9,7 +9,7 @@ import {
   UnauthorizedException,
   type INestApplication,
 } from '@nestjs/common';
-import { EstadoLicencia, EstadoUsuario, Rol } from '@guachafit/shared';
+import { EstadoLicencia, EstadoUsuario, Modalidad, Rol } from '@guachafit/shared';
 import { AuthController } from '../../src/modules/auth/auth.controller';
 import { AuthService } from '../../src/modules/auth/auth.service';
 import { RolesGuard } from '../../src/common/guards/roles.guard';
@@ -142,7 +142,10 @@ describe('RF-010 (WU Admin): gestión de entrenadores desde el panel maestro', (
     mock = crearDbAdmin();
     mockCryptoService.comparePassword.mockClear();
     mockCryptoService.comparePassword.mockResolvedValue(true);
-    authService = new AuthService(mock.db, mockCryptoService as any);
+    // RNF-003/ADR-011 (etapa 3): las rutas del alumno leen su perfil con RLS dentro de withTenant.
+    // El mock lo resuelve como passthrough sobre la misma superficie de select() espiada.
+    const withTenant = async (_ctx: unknown, fn: (tx: unknown) => Promise<unknown>) => fn(mock.db);
+    authService = new AuthService(mock.db, mockCryptoService as any, withTenant as any);
   });
 
   describe('1. Listado del panel (GET /auth/entrenadores)', () => {
@@ -451,6 +454,249 @@ describe('RF-010 (WU Admin): gestión de entrenadores desde el panel maestro', (
       });
 
       expect(resultado.accessToken).toBeTruthy();
+      expect(mock.updates[0].valores).toMatchObject({ passwordHash: 'hash-nueva-clave-2026' });
+    });
+  });
+
+  describe('5. Cascada hacia los alumnos (RF-010 §6)', () => {
+    const MENSAJE_ENTRENADOR_NO_OPERABLE =
+      'Tu entrenador no está disponible en este momento. Inténtalo de nuevo más tarde.';
+
+    /** Fila de `usuarios` para el alumno que intenta iniciar sesión. */
+    function filaUsuarioAlumno(parcial: Record<string, unknown> = {}) {
+      return filaUsuario({
+        id: ALUMNO_ID,
+        email: 'alumno@guachafit.com',
+        rol: Rol.ALUMNO,
+        ...parcial,
+      });
+    }
+
+    /** Fila de `perfiles_alumno` con la vinculación al coach. */
+    function filaPerfilAlumno(parcial: Record<string, unknown> = {}) {
+      return {
+        usuarioId: ALUMNO_ID,
+        entrenadorId: COACH_USUARIO_ID,
+        modalidad: Modalidad.PRESENCIAL,
+        deletedAtUtc: null,
+        ...parcial,
+      };
+    }
+
+    /** Fila que devuelve el chequeo unificado de operabilidad del entrenador. */
+    function filaEntrenadorOperable(parcial: Record<string, unknown> = {}) {
+      return { activo: true, estadoLicencia: EstadoLicencia.ACTIVA, ...parcial };
+    }
+
+    async function capturarError(promesa: Promise<unknown>): Promise<UnauthorizedException> {
+      try {
+        await promesa;
+      } catch (error) {
+        return error as UnauthorizedException;
+      }
+      throw new Error('Se esperaba una excepción y la promesa resolvió.');
+    }
+
+    it('login del alumno: cuenta del coach deshabilitada se bloquea con el mensaje único', async () => {
+      mock.setRespuestas([
+        [filaUsuarioAlumno()],
+        [filaPerfilAlumno()],
+        [filaEntrenadorOperable({ activo: false })],
+      ]);
+
+      const error = await capturarError(
+        authService.login({ email: 'alumno@guachafit.com', password: 'secreto-123' })
+      );
+
+      expect(error).toBeInstanceOf(UnauthorizedException);
+      expect((error.getResponse() as any).message).toBe(MENSAJE_ENTRENADOR_NO_OPERABLE);
+    });
+
+    it('login del alumno: licencia suspendida del coach se bloquea con el mismo mensaje', async () => {
+      mock.setRespuestas([
+        [filaUsuarioAlumno()],
+        [filaPerfilAlumno()],
+        [filaEntrenadorOperable({ estadoLicencia: EstadoLicencia.SUSPENDIDA_SUPERADMIN })],
+      ]);
+
+      const error = await capturarError(
+        authService.login({ email: 'alumno@guachafit.com', password: 'secreto-123' })
+      );
+
+      expect(error).toBeInstanceOf(UnauthorizedException);
+      expect((error.getResponse() as any).message).toBe(MENSAJE_ENTRENADOR_NO_OPERABLE);
+    });
+
+    it('reactivar la cuenta del coach desbloquea el login del alumno (desbloqueo inmediato)', async () => {
+      mock.setRespuestas([
+        [filaUsuarioAlumno()],
+        [filaPerfilAlumno()],
+        [filaEntrenadorOperable({ activo: false })],
+      ]);
+      await expect(
+        authService.login({ email: 'alumno@guachafit.com', password: 'secreto-123' })
+      ).rejects.toThrow(UnauthorizedException);
+
+      mock.setRespuestas([
+        [filaUsuarioAlumno()],
+        [filaPerfilAlumno()],
+        [filaEntrenadorOperable({ activo: true })],
+      ]);
+      const resultado = await authService.login({
+        email: 'alumno@guachafit.com',
+        password: 'secreto-123',
+      });
+
+      expect(resultado.accessToken).toBeTruthy();
+      expect(resultado.usuario.entrenadorId).toBe(COACH_USUARIO_ID);
+    });
+
+    it('reactivar la licencia del coach desbloquea el login del alumno (desbloqueo inmediato)', async () => {
+      mock.setRespuestas([
+        [filaUsuarioAlumno()],
+        [filaPerfilAlumno()],
+        [filaEntrenadorOperable({ estadoLicencia: EstadoLicencia.SUSPENDIDA_SUPERADMIN })],
+      ]);
+      await expect(
+        authService.login({ email: 'alumno@guachafit.com', password: 'secreto-123' })
+      ).rejects.toThrow(UnauthorizedException);
+
+      mock.setRespuestas([
+        [filaUsuarioAlumno()],
+        [filaPerfilAlumno()],
+        [filaEntrenadorOperable({ estadoLicencia: EstadoLicencia.ACTIVA })],
+      ]);
+      const resultado = await authService.login({
+        email: 'alumno@guachafit.com',
+        password: 'secreto-123',
+      });
+
+      expect(resultado.accessToken).toBeTruthy();
+    });
+
+    it('login de fila legacy sin coach vinculado no paga el chequeo (sin cambio de comportamiento)', async () => {
+      mock.setRespuestas([[filaUsuarioAlumno()], [filaPerfilAlumno({ entrenadorId: null })]]);
+
+      const resultado = await authService.login({
+        email: 'alumno@guachafit.com',
+        password: 'secreto-123',
+      });
+
+      expect(resultado.accessToken).toBeTruthy();
+      expect(resultado.usuario.entrenadorId).toBeNull();
+    });
+
+    it('`/auth/me` del alumno se bloquea si la cuenta del coach está deshabilitada', async () => {
+      mock.setRespuestas([
+        [filaUsuarioAlumno()],
+        [filaPerfilAlumno()],
+        [filaEntrenadorOperable({ activo: false })],
+      ]);
+
+      const error = await capturarError(authService.obtenerSesion(ALUMNO_ID));
+
+      expect(error).toBeInstanceOf(UnauthorizedException);
+      expect((error.getResponse() as any).message).toBe(MENSAJE_ENTRENADOR_NO_OPERABLE);
+    });
+
+    it('`/auth/me` del alumno sigue resolviendo la sesión con el coach operable (sin regresión)', async () => {
+      mock.setRespuestas([
+        [filaUsuarioAlumno()],
+        [filaPerfilAlumno()],
+        [filaEntrenadorOperable()],
+      ]);
+
+      const sesion = await authService.obtenerSesion(ALUMNO_ID);
+
+      expect(sesion).toMatchObject({
+        id: ALUMNO_ID,
+        rol: Rol.ALUMNO,
+        entrenadorId: COACH_USUARIO_ID,
+        modalidad: Modalidad.PRESENCIAL,
+      });
+    });
+
+    it('refresh del alumno se bloquea si la licencia del coach está suspendida', async () => {
+      const refreshToken = jwt.sign(
+        { sub: ALUMNO_ID, email: 'alumno@guachafit.com', rol: Rol.ALUMNO },
+        REFRESH_SECRET,
+        { expiresIn: '7d' }
+      );
+      mock.setRespuestas([
+        [filaUsuarioAlumno()],
+        [filaPerfilAlumno()],
+        [filaEntrenadorOperable({ estadoLicencia: EstadoLicencia.SUSPENDIDA_SUPERADMIN })],
+      ]);
+
+      const error = await capturarError(authService.refresh(refreshToken));
+
+      expect(error).toBeInstanceOf(UnauthorizedException);
+      expect((error.getResponse() as any).message).toBe(MENSAJE_ENTRENADOR_NO_OPERABLE);
+    });
+
+    it('refresh del alumno renueva tokens con el coach operable (sin regresión)', async () => {
+      const refreshToken = jwt.sign(
+        { sub: ALUMNO_ID, email: 'alumno@guachafit.com', rol: Rol.ALUMNO },
+        REFRESH_SECRET,
+        { expiresIn: '7d' }
+      );
+      mock.setRespuestas([
+        [filaUsuarioAlumno()],
+        [filaPerfilAlumno()],
+        [filaEntrenadorOperable()],
+      ]);
+
+      const resultado = await authService.refresh(refreshToken);
+
+      expect(resultado.accessToken).toBeTruthy();
+      expect(resultado.refreshToken).toBeTruthy();
+    });
+
+    it('el canje del alumno se bloquea con el coach deshabilitado y no consume el token', async () => {
+      mock.setRespuestas([
+        [
+          filaUsuarioAlumno({
+            passwordHash: null,
+            tokenInvitacionHash: 'sha256-token-valido',
+            tokenInvitacionExpira: new Date(Date.now() + 3600 * 1000),
+          }),
+        ],
+        [filaPerfilAlumno()],
+        [filaEntrenadorOperable({ activo: false })],
+      ]);
+
+      const error = await capturarError(
+        authService.establecerPasswordConToken({
+          token: 'token-valido',
+          password: 'nueva-clave-2026',
+        })
+      );
+
+      expect(error).toBeInstanceOf(UnauthorizedException);
+      expect((error.getResponse() as any).message).toBe(MENSAJE_ENTRENADOR_NO_OPERABLE);
+      expect(mock.updates).toHaveLength(0);
+    });
+
+    it('el canje del alumno emite sesión con el coach operable (sin regresión)', async () => {
+      mock.setRespuestas([
+        [
+          filaUsuarioAlumno({
+            passwordHash: null,
+            tokenInvitacionHash: 'sha256-token-valido',
+            tokenInvitacionExpira: new Date(Date.now() + 3600 * 1000),
+          }),
+        ],
+        [filaPerfilAlumno()],
+        [filaEntrenadorOperable()],
+      ]);
+
+      const resultado = await authService.establecerPasswordConToken({
+        token: 'token-valido',
+        password: 'nueva-clave-2026',
+      });
+
+      expect(resultado.accessToken).toBeTruthy();
+      expect(resultado.usuario.entrenadorId).toBe(COACH_USUARIO_ID);
       expect(mock.updates[0].valores).toMatchObject({ passwordHash: 'hash-nueva-clave-2026' });
     });
   });

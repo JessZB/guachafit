@@ -244,11 +244,11 @@ export function AdminPage() {
         detalle:
           confirmacion.tipo === 'estado'
             ? confirmacion.activo
-              ? 'La cuenta podrá iniciar sesión y renovar tokens de nuevo.'
-              : 'No podrá iniciar sesión ni renovar tokens. Su sesión actual se cierra en el próximo ciclo de verificación (máximo 15 minutos).'
+              ? 'La cuenta podrá iniciar sesión y renovar tokens de nuevo. Sus alumnos recuperan el acceso.'
+              : 'No podrá iniciar sesión ni renovar tokens. Su sesión actual se cierra en el próximo ciclo de verificación (máximo 15 minutos). Sus alumnos tampoco podrán iniciar sesión mientras la cuenta esté deshabilitada.'
             : confirmacion.estadoLicencia === EstadoLicencia.ACTIVA
-              ? 'El entrenador recupera su acceso y su enlace público de captación vuelve a resolver.'
-              : 'No podrá iniciar sesión ni renovar tokens, y su enlace público de captación deja de resolver. Los alumnos ya vinculados no se ven afectados.',
+              ? 'El entrenador recupera su acceso y su enlace público de captación vuelve a resolver. Sus alumnos también recuperan el acceso.'
+              : 'No podrá iniciar sesión ni renovar tokens, y su enlace público de captación deja de resolver. Sus alumnos tampoco podrán iniciar sesión mientras la licencia esté suspendida.',
         boton: confirmacion.tipo === 'estado'
           ? confirmacion.activo
             ? 'Reactivar cuenta'

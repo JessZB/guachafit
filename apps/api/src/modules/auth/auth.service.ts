@@ -103,6 +103,36 @@ export class AuthService {
   }
 
   /**
+   * RF-010 §6 (CASCADA-COACH): el alumno solo opera si su entrenador está operable — cuenta
+   * habilitada (`usuarios.activo`) Y licencia vigente (`perfiles_entrenador.estado_licencia`).
+   *
+   * Se evalúa en autenticación y derivado en runtime (login, `/auth/me`, refresh y canje), NO por
+   * request: el guard no consulta la BD y no paga coste por petición (RF-010 §7). Al reactivar
+   * cualquiera de los dos interruptores, el desbloqueo del alumno es inmediato en su siguiente
+   * ciclo de sesión. El mensaje es único y no revela cuál de los dos falló.
+   *
+   * Semántica espejo del helper de licencia: sin fila en `perfiles_entrenador` el entrenador no
+   * es operable. Ambas tablas no tienen RLS: la lectura va por el pool raíz (`this.db`).
+   */
+  private async verificarEntrenadorOperable(entrenadorId: string): Promise<void> {
+    const [entrenador] = await this.db
+      .select({
+        activo: usuarios.activo,
+        estadoLicencia: perfilesEntrenador.estadoLicencia,
+      })
+      .from(perfilesEntrenador)
+      .innerJoin(usuarios, eq(usuarios.id, perfilesEntrenador.usuarioId))
+      .where(eq(perfilesEntrenador.usuarioId, entrenadorId))
+      .limit(1);
+
+    if (!entrenador || !entrenador.activo || entrenador.estadoLicencia !== EstadoLicencia.ACTIVA) {
+      throw new UnauthorizedException(
+        'Tu entrenador no está disponible en este momento. Inténtalo de nuevo más tarde.'
+      );
+    }
+  }
+
+  /**
    * Inicio de Sesión de Usuario (SuperAdmin, Entrenador o Alumno)
    */
   async login(dto: LoginUsuarioDTO) {
@@ -152,6 +182,12 @@ export class AuthService {
 
       entrenadorId = perfil?.entrenadorId;
       modalidad = perfil?.modalidad ?? null;
+
+      // RF-010 §6 (CASCADA-COACH): la sesión del alumno depende de que su entrenador esté
+      // operable. Filas legacy sin coach no pagan el chequeo ni cambian de comportamiento.
+      if (entrenadorId) {
+        await this.verificarEntrenadorOperable(entrenadorId);
+      }
     }
 
     const payload: JwtPayload = {
@@ -241,6 +277,12 @@ export class AuthService {
       // pueda avisar de su ventana de check-in sin necesitar el UUID de `perfiles_alumno`.
       periodicidadAntropometria = perfil?.periodicidadAntropometria ?? null;
       antropometriaInicio = perfil?.antropometriaInicio ?? null;
+
+      // RF-010 §6 (CASCADA-COACH): `/auth/me` del alumno también refleja la cascada; si su
+      // entrenador queda inoperable, la web cierra la sesión sin esperar al TTL del access token.
+      if (entrenadorId) {
+        await this.verificarEntrenadorOperable(entrenadorId);
+      }
     }
 
     return {
@@ -306,6 +348,12 @@ export class AuthService {
 
       entrenadorId = perfil?.entrenadorId;
       modalidad = perfil?.modalidad ?? null;
+
+      // RF-010 §6 (CASCADA-COACH): el canje emite sesión, así que también exige un entrenador
+      // operable; el token no se consume cuando la cascada bloquea.
+      if (entrenadorId) {
+        await this.verificarEntrenadorOperable(entrenadorId);
+      }
     }
 
     const passwordHash = await this.cryptoService.hashPassword(dto.password);
@@ -384,6 +432,12 @@ export class AuthService {
       }
 
       entrenadorId = perfil?.entrenadorId;
+
+      // RF-010 §6 (CASCADA-COACH): el refresh del alumno re-verifica a su entrenador; una cuenta
+      // deshabilitada o una licencia suspendida cortan la renovación de inmediato.
+      if (entrenadorId) {
+        await this.verificarEntrenadorOperable(entrenadorId);
+      }
     }
 
     const payload: JwtPayload = {

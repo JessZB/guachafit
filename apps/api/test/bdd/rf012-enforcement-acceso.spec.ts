@@ -11,7 +11,14 @@ import {
 } from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
 import { getTableName } from '@guachafit/database';
-import { EstadoAlumno, EstadoUsuario, Modalidad, Rol, TipoDocumento } from '@guachafit/shared';
+import {
+  EstadoAlumno,
+  EstadoLicencia,
+  EstadoUsuario,
+  Modalidad,
+  Rol,
+  TipoDocumento,
+} from '@guachafit/shared';
 import { AlumnoHabilitadoGuard } from '../../src/common/guards/alumno-habilitado.guard';
 import { RolesGuard } from '../../src/common/guards/roles.guard';
 import { ESTADOS_BLOQUEADOS_ALUMNO_KEY } from '../../src/common/decorators/bloqueo-alumno.decorator';
@@ -390,15 +397,36 @@ describe('RF-012 / WU-D: Enforcement de acceso por estado de activación (Alumno
   });
 
   describe('3. Soft delete revoca login/refresh (AuthService)', () => {
+    /** RF-010 §6 (CASCADA-COACH): el entrenador del alumno es operable en el camino feliz. */
+    const coachOperable = {
+      usuarioId: COACH_ID,
+      estadoLicencia: EstadoLicencia.ACTIVA,
+      activo: true,
+    };
+
     function crearDbAuth(store: { usuario: any; perfil: any }) {
       const db: any = {
         select: () => ({
-          from: (table: any) => ({
-            where: () =>
-              Promise.resolve(
-                getTableName(table) === 'usuarios' ? [store.usuario] : [store.perfil]
-              ),
-          }),
+          from: (table: any) => {
+            const nombre = getTableName(table);
+            const consulta: any = {
+              innerJoin: () => consulta,
+              // El chequeo de operabilidad usa `.limit(1)`; el resto de lecturas resuelve directo.
+              where: () => {
+                const filas =
+                  nombre === 'usuarios'
+                    ? [store.usuario]
+                    : nombre === 'perfiles_entrenador'
+                    ? [coachOperable]
+                    : [store.perfil];
+                return {
+                  limit: () => Promise.resolve(filas),
+                  then: (resolve: any, reject: any) => Promise.resolve(filas).then(resolve, reject),
+                };
+              },
+            };
+            return consulta;
+          },
         }),
         update: () => ({
           set: () => ({
@@ -535,12 +563,26 @@ describe('RF-012 / WU-D: Enforcement de acceso por estado de activación (Alumno
 
       const db: any = {
         select: () => ({
-          from: (table: any) => ({
-            where: () =>
-              Promise.resolve(
-                getTableName(table) === 'usuarios' ? [store.usuario] : [store.perfil]
-              ),
-          }),
+          from: (table: any) => {
+            const nombre = getTableName(table);
+            const consulta: any = {
+              innerJoin: () => consulta,
+              // El chequeo de operabilidad usa `.limit(1)`; el resto de lecturas resuelve directo.
+              where: () => {
+                const filas =
+                  nombre === 'usuarios'
+                    ? [store.usuario]
+                    : nombre === 'perfiles_entrenador'
+                    ? [coachOperable]
+                    : [store.perfil];
+                return {
+                  limit: () => Promise.resolve(filas),
+                  then: (resolve: any, reject: any) => Promise.resolve(filas).then(resolve, reject),
+                };
+              },
+            };
+            return consulta;
+          },
         }),
         update: (table: any) => ({
           set: (valores: any) => ({

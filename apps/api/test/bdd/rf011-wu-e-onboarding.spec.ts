@@ -40,6 +40,8 @@ const coachBase = {
   nombreComercial: 'AlexFit Gym',
   coachCode: 'ALEXFIT',
   estadoLicencia: EstadoLicencia.ACTIVA,
+  // RF-010 §6 (CASCADA-COACH): la cuenta del coach también forma parte de su operabilidad.
+  activo: true,
   capacidadMaxima: 50,
   telefonoContacto: '+584121234567',
 };
@@ -152,9 +154,15 @@ describe('WU-E (RF-011 RN-06/RN-07.1): resolución pública del coach_code', () 
   function crearDbResolucion(coach: any | null) {
     return {
       select: () => ({
-        from: () => ({
-          where: () => Promise.resolve(coach ? [coach] : []),
-        }),
+        from: () => {
+          // RF-010 §6 (CASCADA-COACH): el resolver une `perfiles_entrenador` con `usuarios`
+          // para evaluar la operabilidad completa (licencia vigente + cuenta habilitada).
+          const consulta: any = {
+            innerJoin: () => consulta,
+            where: () => Promise.resolve(coach ? [coach] : []),
+          };
+          return consulta;
+        },
       }),
     } as any;
   }
@@ -196,6 +204,31 @@ describe('WU-E (RF-011 RN-06/RN-07.1): resolución pública del coach_code', () 
     );
   });
 
+  it('rechaza con 404 un coach con cuenta deshabilitada y licencia activa (mismo mensaje)', async () => {
+    const service = new AlumnosService(
+      crearDbResolucion({ ...coachBase, activo: false }),
+      cryptoServiceMock
+    );
+
+    await expect(service.resolverCoachPublico('ALEXFIT')).rejects.toThrow(
+      'El código de entrenador no es válido o no está disponible. Por favor contacta a tu coach.'
+    );
+  });
+
+  it('al reactivar la cuenta del coach el código vuelve a resolver (desbloqueo inmediato)', async () => {
+    const coach = { ...coachBase, activo: false };
+    const service = new AlumnosService(crearDbResolucion(coach), cryptoServiceMock);
+
+    await expect(service.resolverCoachPublico('ALEXFIT')).rejects.toBeInstanceOf(
+      NotFoundException
+    );
+
+    coach.activo = true;
+    await expect(service.resolverCoachPublico('ALEXFIT')).resolves.toMatchObject({
+      coachCode: 'ALEXFIT',
+    });
+  });
+
   it('el controller valida el formato del código con 400 antes de consultar', async () => {
     const resolver = vi.fn();
     const controller = new AlumnosController({ resolverCoachPublico: resolver } as any);
@@ -228,18 +261,24 @@ describe('WU-E (RF-011 RN-07): registro público valida licencia y notifica al c
 
     const db: any = {
       select: () => ({
-        from: (table: any) => ({
-          where: () =>
-            Promise.resolve(
-              getTableName(table) === 'perfiles_entrenador'
-                ? coach
-                  ? [coach]
+        from: (table: any) => {
+          // RF-010 §6 (CASCADA-COACH): la validación del código une `perfiles_entrenador` con
+          // `usuarios` para exigir licencia vigente Y cuenta habilitada.
+          const consulta: any = {
+            innerJoin: () => consulta,
+            where: () =>
+              Promise.resolve(
+                getTableName(table) === 'perfiles_entrenador'
+                  ? coach
+                    ? [coach]
+                    : []
+                  : usuarioExistente
+                  ? [usuarioExistente]
                   : []
-                : usuarioExistente
-                ? [usuarioExistente]
-                : []
-            ),
-        }),
+              ),
+          };
+          return consulta;
+        },
       }),
       insert: (table: any) => ({
         values: () => ({
@@ -303,6 +342,18 @@ describe('WU-E (RF-011 RN-07): registro público valida licencia y notifica al c
     expect(emitAsync).not.toHaveBeenCalled();
   });
 
+  it('rechaza con 404 si la cuenta del coach está deshabilitada (licencia activa) y NO crea filas', async () => {
+    const { db, inserts } = crearDbRegistroPublico({ ...coachBase, activo: false });
+    const emitAsync = vi.fn();
+    const service = new AlumnosService(db, cryptoServiceMock, { emitAsync } as any);
+
+    await expect(service.registroPublico(registroPublicoDto)).rejects.toBeInstanceOf(
+      NotFoundException
+    );
+    expect(inserts).toEqual([]);
+    expect(emitAsync).not.toHaveBeenCalled();
+  });
+
   it('rechaza con 404 un coach inexistente', async () => {
     const { db } = crearDbRegistroPublico(null);
     const service = new AlumnosService(db, cryptoServiceMock);
@@ -335,20 +386,39 @@ describe('WU-E (RF-011 RN-05 / RF-012): establecerPasswordConToken', () => {
       usuario: usuarioInicial ? { ...usuarioInicial } : null,
       perfil: perfilInicial ? { ...perfilInicial } : null,
     };
+    // RF-010 §6 (CASCADA-COACH): el canje del alumno consulta la operabilidad de su entrenador
+    // (cuenta habilitada + licencia vigente) antes de escribir.
+    const coachOperable = {
+      usuarioId: COACH_USUARIO_ID,
+      estadoLicencia: EstadoLicencia.ACTIVA,
+      activo: true,
+    };
     const db: any = {
       select: () => ({
-        from: (table: any) => ({
-          where: () =>
-            Promise.resolve(
-              getTableName(table) === 'usuarios'
-                ? store.usuario
-                  ? [store.usuario]
-                  : []
-                : store.perfil
-                ? [store.perfil]
-                : []
-            ),
-        }),
+        from: (table: any) => {
+          const nombre = getTableName(table);
+          const consulta: any = {
+            innerJoin: () => consulta,
+            // El chequeo de operabilidad usa `.limit(1)`; el resto de lecturas resuelve directo.
+            where: () => {
+              const filas =
+                nombre === 'usuarios'
+                  ? store.usuario
+                    ? [store.usuario]
+                    : []
+                  : nombre === 'perfiles_entrenador'
+                  ? [coachOperable]
+                  : store.perfil
+                  ? [store.perfil]
+                  : [];
+              return {
+                limit: () => Promise.resolve(filas),
+                then: (resolve: any, reject: any) => Promise.resolve(filas).then(resolve, reject),
+              };
+            },
+          };
+          return consulta;
+        },
       }),
       update: (table: any) => ({
         set: (valores: any) => ({
