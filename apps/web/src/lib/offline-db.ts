@@ -3,6 +3,7 @@ import {
   SesionEntrenamientoDetalleDTO,
   CheckinNutricionalDetalleDTO,
   EjercicioCatalogoDetalleDTO,
+  EstadoSesion,
   type SemanaEntrenamientoProgresoDTO,
   type CheckinNutricionalDTO,
   type TipoComida,
@@ -576,11 +577,20 @@ export interface RutinaCacheadaParaHoy {
   ultimaDeOtroDia: CachedRutina | null;
 }
 
-/** D3: separa la sesión guardada de hoy de la última de otro día (desempate por `updatedAt`). */
+/**
+ * D3: separa la sesión guardada de hoy de la última de otro día (desempate por `updatedAt`).
+ * Una sesión EN_PROGRESO se muestra aunque sea de otro día (entrenamiento que cruza la
+ * medianoche sin conexión) y tiene prioridad sobre la de hoy: si no, quedaría sin poder
+ * terminarse. Con varias en progreso, la actualizada más recientemente.
+ */
 export function seleccionarRutinaCacheadaParaHoy(
   filas: CachedRutina[],
   hoyYyyyMmDd: string
 ): RutinaCacheadaParaHoy {
+  const enProgreso = filas
+    .filter((fila) => fila.sesion?.estado === EstadoSesion.EN_PROGRESO)
+    .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))[0];
+  if (enProgreso) return { deHoy: enProgreso, ultimaDeOtroDia: null };
   const porRecencia = (a: CachedRutina, b: CachedRutina) => {
     const fechaA = a.fechaProgramada ?? '';
     const fechaB = b.fechaProgramada ?? '';

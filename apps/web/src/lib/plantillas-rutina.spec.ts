@@ -5,6 +5,7 @@ import {
   claveOverrideEjercicio,
   construirAjustesPlantilla,
   construirBloquesParaPlantilla,
+  firmaFormularioPlantilla,
   normalizarAjustePeso,
   resumirBloques,
   validarNombrePlantilla,
@@ -80,7 +81,7 @@ describe('construirBloquesParaPlantilla (RF-017 Escenario 1)', () => {
 
     const { errores } = construirBloquesParaPlantilla([vacio, conRpeMalo]);
     expect(errores.some((e) => e.includes('al menos un ejercicio'))).toBe(true);
-    expect(errores.some((e) => e.includes('RPE'))).toBe(true);
+    expect(errores.some((e) => e.includes('Esfuerzo no válido'))).toBe(true);
   });
 
   it('bloquea un peso con formato inválido (tres decimales)', () => {
@@ -187,5 +188,21 @@ describe('aplicarOverridesPreview (previsualización de la asignación)', () => 
     });
 
     expect(bloque.ejercicios[0]).toMatchObject({ peso: '60', series: 4 });
+  });
+});
+
+describe('firmaFormularioPlantilla (aviso de cambios sin guardar)', () => {
+  it('es igual para el mismo formulario y cambia al editar nombre, nivel o días', () => {
+    const bloques = [crearBloqueEdicion(1)];
+    const base = firmaFormularioPlantilla('Fuerza', 'PRINCIPIANTE', bloques);
+
+    expect(firmaFormularioPlantilla('Fuerza', 'PRINCIPIANTE', [...bloques])).toBe(base);
+    expect(firmaFormularioPlantilla('Fuerza 2', 'PRINCIPIANTE', bloques)).not.toBe(base);
+    expect(firmaFormularioPlantilla('Fuerza', 'AVANZADO', bloques)).not.toBe(base);
+    expect(
+      firmaFormularioPlantilla('Fuerza', 'PRINCIPIANTE', [
+        { ...bloques[0], ejercicios: [crearEjercicioEdicion('Sentadilla')] },
+      ])
+    ).not.toBe(base);
   });
 });

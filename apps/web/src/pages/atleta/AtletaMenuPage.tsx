@@ -11,6 +11,7 @@ import {
   SemanaEntrenamientoProgresoDTO,
 } from '@guachafit/shared';
 import { buildDemoSemanaProgreso } from './EntrenamientoPage';
+import { formatearProgresoDias, formatearTituloSemana } from '../../lib/entrenamiento-textos';
 import {
   Dumbbell,
   Utensils,
@@ -183,7 +184,7 @@ export function AtletaMenuPage() {
               <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full bg-primary/20 text-primary border border-primary/30">
                 <Zap className="h-3 w-3" />
                 <span>
-                  {semanaProgreso.bloquesCompletados}/{semanaProgreso.totalBloques} Bloques ({semanaProgreso.porcentajeCumplimiento}%)
+                  {formatearProgresoDias(semanaProgreso.bloquesCompletados, semanaProgreso.totalBloques)}
                 </span>
               </span>
             ) : (
@@ -200,18 +201,20 @@ export function AtletaMenuPage() {
               <ArrowUpRight className="h-5 w-5 text-primary opacity-80 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
             </h2>
             <p className="text-sm text-muted-foreground mt-1 max-w-md">
-              Abre el checklist de tu entrenamiento de hoy, registra series, pesos y descansos sin interrupciones.
+              Abre tu entrenamiento de hoy y anota series, pesos y descansos sin interrupciones.
             </p>
           </div>
 
           {semanaProgreso && semanaProgreso.totalBloques > 0 && (
             <div className="mt-4 pt-3 border-t border-border/50">
               <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground mb-1.5">
-                <span className="font-semibold text-foreground">Progreso Semanal ({semanaProgreso.semanaIso})</span>
+                <span className="font-semibold text-foreground">
+                  {formatearTituloSemana(semanaProgreso.inicioSemana, semanaProgreso.finSemana)}
+                </span>
                 <span className="font-bold text-primary">
                   {semanaProgreso.bloquesCompletados === semanaProgreso.totalBloques
                     ? '¡100% Completado! 🎉'
-                    : `${semanaProgreso.bloquesCompletados} de ${semanaProgreso.totalBloques} completados`}
+                    : formatearProgresoDias(semanaProgreso.bloquesCompletados, semanaProgreso.totalBloques)}
                 </span>
               </div>
               <div className="w-full h-1.5 rounded-full bg-secondary overflow-hidden">

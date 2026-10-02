@@ -294,3 +294,15 @@ export function aplicarOverridesPreview(
     }),
   }));
 }
+
+/**
+ * C4: firma estable del formulario de plantilla para detectar cambios sin guardar al cerrar
+ * el panel (se compara contra la firma tomada al abrir o al guardar).
+ */
+export function firmaFormularioPlantilla(
+  nombre: string,
+  nivelObjetivo: string,
+  bloques: BloqueEdicion[]
+): string {
+  return JSON.stringify({ nombre: nombre.trim(), nivelObjetivo, bloques });
+}

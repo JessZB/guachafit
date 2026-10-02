@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { EjercicioCatalogoDetalleDTO } from '@guachafit/shared';
+import { EstadoSesion, type EjercicioCatalogoDetalleDTO } from '@guachafit/shared';
 import {
   clearOfflineData,
   contarMutacionesPendientes,
@@ -8,6 +8,7 @@ import {
   discardMutation,
   getDueMutations,
   getFailedMutations,
+  getCachedRutinaParaHoy,
   getLatestCachedRutina,
   getOutboxSummary,
   getPendingMutations,
@@ -321,6 +322,59 @@ describe('offline-db: rutina guardada de hoy vs. de otro día (D3)', () => {
       deHoy: null,
       ultimaDeOtroDia: null,
     });
+  });
+
+  const filaConEstado = (
+    id: string,
+    alumnoId: string,
+    fechaProgramada: string,
+    estado: EstadoSesion,
+    updatedAt: number
+  ): CachedRutina => ({
+    id,
+    alumnoId,
+    fechaProgramada,
+    sesion: { id, estado } as unknown as CachedRutina['sesion'],
+    updatedAt,
+  });
+
+  it('muestra la sesión EN_PROGRESO de ayer si no hay de hoy (entrenamiento que cruza la medianoche)', () => {
+    const ayer = filaConEstado('a', 'x', '2026-10-01', EstadoSesion.EN_PROGRESO, 5);
+    expect(seleccionarRutinaCacheadaParaHoy([ayer], '2026-10-02')).toEqual({
+      deHoy: ayer,
+      ultimaDeOtroDia: null,
+    });
+  });
+
+  it('una sesión PLANIFICADA de ayer sigue informándose como de otro día', () => {
+    const ayer = filaConEstado('a', 'x', '2026-10-01', EstadoSesion.PLANIFICADA, 5);
+    expect(seleccionarRutinaCacheadaParaHoy([ayer], '2026-10-02')).toEqual({
+      deHoy: null,
+      ultimaDeOtroDia: ayer,
+    });
+  });
+
+  it('prioriza la sesión en progreso de ayer sobre la planificada de hoy', () => {
+    // Una sesión empezada y sin terminar debe poder cerrarse: si se ocultara tras la
+    // medianoche, el alumno perdería su progreso. Al terminarla, la de hoy vuelve a mostrarse.
+    const hoy = filaConEstado('h', 'x', '2026-10-02', EstadoSesion.PLANIFICADA, 9);
+    const ayerVieja = filaConEstado('v', 'x', '2026-10-01', EstadoSesion.EN_PROGRESO, 3);
+    const ayerReciente = filaConEstado('r', 'x', '2026-09-30', EstadoSesion.EN_PROGRESO, 7);
+    expect(seleccionarRutinaCacheadaParaHoy([hoy, ayerVieja, ayerReciente], '2026-10-02')).toEqual({
+      deHoy: ayerReciente,
+      ultimaDeOtroDia: null,
+    });
+  });
+
+  it('getCachedRutinaParaHoy no muestra la sesión en progreso de otro alumno', async () => {
+    await offlineDb.rutinaHoy.bulkPut([
+      filaConEstado('otro', 'alumno-2', '2026-10-01', EstadoSesion.EN_PROGRESO, 9),
+      filaConEstado('mia', 'alumno-1', '2026-10-01', EstadoSesion.PLANIFICADA, 1),
+    ]);
+    const rutina = await getCachedRutinaParaHoy('alumno-1', '2026-10-02');
+    expect(rutina.deHoy).toBeNull();
+    expect(rutina.ultimaDeOtroDia?.id).toBe('mia');
+    expect((await getCachedRutinaParaHoy('alumno-2', '2026-10-02')).deHoy?.id).toBe('otro');
   });
 
   it('guarda y lee la semana del alumno para verla sin conexión', async () => {

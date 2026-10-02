@@ -2,9 +2,33 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../../context/auth-context';
 import { apiClient, ApiError, generateIdempotencyKey } from '../../lib/api-client';
 import { resolverBloqueoAlumno, type BloqueoAlumno } from '../../lib/acceso-alumno';
-import { queueOfflineMutation, offlineDb, getLatestCachedRutina } from '../../lib/offline-db';
-import { subscribeToSyncStatus, type SyncStatusState } from '../../lib/offline-sync';
+import {
+  queueOfflineMutation,
+  offlineDb,
+  getCachedRutinaParaHoy,
+  guardarSemanaCacheada,
+  elegirSesionParaMostrar,
+  hayMutacionesSinEnviarDeGrupo,
+  leerSemanaCacheada,
+} from '../../lib/offline-db';
+import {
+  esFalloParaEncolar,
+  subscribeToSyncStatus,
+  type SyncStatusState,
+} from '../../lib/offline-sync';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
+import { fechaCalendarioLocal } from '../../lib/date-format';
+import {
+  describirEsfuerzo,
+  formatearNotaEntrenadorParaAlumno,
+  formatearNotasParaAlumno,
+  formatearProgresoDias,
+  formatearRangoHorario,
+  formatearTituloSemana,
+  textoEsfuerzoSugerido,
+  textoUltimoEntrenamientoGuardado,
+} from '../../lib/entrenamiento-textos';
+import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import { BloqueoAlumnoPanel } from '../../components/common/BloqueoAlumnoPanel';
 import { SyncQueuePanel } from '../../components/common/SyncQueuePanel';
 import { RestTimer } from '../../components/common/RestTimer';
@@ -60,13 +84,13 @@ import {
   ExternalLink,
   ClipboardList,
   ChevronRight,
+  Loader2,
 } from 'lucide-react';
 import {
   formatDuracionMinutos,
   formatFechaCalendario,
   formatFechaHoraLocal,
   formatFechaLocal,
-  formatRangoHorasLocal,
 } from '../../lib/date-format';
 import { estimarCumpleRachaPorVolumen } from '../../lib/racha';
 import {
@@ -80,7 +104,7 @@ const DEMO_BLOQUES_CATALOGO = [
   {
     bloqueId: 'd1',
     titulo: 'Día 1 (Lunes): Empuje & Pectoral / Tríceps',
-    enfoque: 'Hipertrofia e Intensidad RPE 8',
+    enfoque: 'Hipertrofia e intensidad alta (esfuerzo 8 de 10)',
     diaSugerido: 1,
     completado: true,
     ejercicios: [
@@ -254,8 +278,8 @@ export function buildDemoSemanaProgreso(selectedBloqueId?: string): SemanaEntren
   const activoId = selectedBloqueId || 'd2';
   return {
     semanaIso: '2026-W38',
-    inicioSemana: '14 sep',
-    finSemana: '20 sep',
+    inicioSemana: '2026-09-14',
+    finSemana: '2026-09-20',
     totalBloques: 4,
     bloquesCompletados: 1,
     porcentajeCumplimiento: '25.00',
@@ -431,7 +455,7 @@ function validarSerieParaEnviar(
   if (serie.rpe) {
     const resultado = validarRpe(serie.rpe);
     if (!resultado.ok) {
-      return { campo: 'rpe', mensaje: resultado.error ?? 'RPE inválido' };
+      return { campo: 'rpe', mensaje: resultado.error ?? 'Esfuerzo no válido' };
     }
   }
   return null;
@@ -497,6 +521,13 @@ export function EntrenamientoPage() {
   const [loadError, setLoadError] = useState(false);
   const [isOffline, setIsOffline] = useState(() => !navigator.onLine);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // D2/D3: lo mostrado viene de lo guardado en el teléfono (con su antigüedad) y, si solo hay
+  // un entrenamiento de otro día, se avisa en vez de presentarlo como el de hoy.
+  const [datosGuardadosEn, setDatosGuardadosEn] = useState<number | null>(null);
+  const [ultimoGuardadoOtroDia, setUltimoGuardadoOtroDia] = useState<string | null>(null);
+  // C9/D4: "Comenzar" deshabilitado con indicador mientras se guarda y envía.
+  const [isStarting, setIsStarting] = useState(false);
 
   // RF-012: bloqueo por ciclo de vida (pausado / suspendido por pago / archivado). Cuando la API
   // responde 403 ALUMNO_BLOQUEADO, la pantalla informativa sustituye al checklist.
@@ -569,29 +600,90 @@ export function EntrenamientoPage() {
     [isDemoMode, user]
   );
 
+  /**
+   * D1/D6: envía una mutación de la sesión o la deja en la cola.
+   * - Sin red, o si la cola aún tiene algo de ESTA sesión, se encola (orden causal: nada se
+   *   adelanta a un "iniciar" o a una serie pendiente).
+   * - Con red: un fallo de red/5xx se encola; cualquier otro 4xx vuelve como `rechazado` para
+   *   que la pantalla revierta y muestre el error (nunca se encola un rechazo de datos).
+   */
+  const enviarOEncolar = useCallback(
+    async <T,>(
+      sesionId: string,
+      endpoint: string,
+      method: 'POST' | 'PUT',
+      payload: unknown,
+      descripcion: string,
+      idempotencyKey: string
+    ): Promise<
+      | { estado: 'enviado'; respuesta: T }
+      | { estado: 'encolado' }
+      | { estado: 'rechazado'; error: unknown }
+    > => {
+      const encolar = async () => {
+        await queueOfflineMutation(endpoint, method, payload, descripcion, idempotencyKey);
+        return { estado: 'encolado' as const };
+      };
+      const colaOcupada = await hayMutacionesSinEnviarDeGrupo(`sesion:${sesionId}`).catch(
+        () => false
+      );
+      if (!navigator.onLine || colaOcupada) return encolar();
+      try {
+        const respuesta = await apiClient<T>(endpoint, {
+          method,
+          body: JSON.stringify(payload),
+          idempotencyKey,
+        });
+        return { estado: 'enviado', respuesta };
+      } catch (err) {
+        // RF-012: un bloqueo (403) nunca se encola; lo resuelve quien llama.
+        if (resolverBloqueoAlumno(err) || !esFalloParaEncolar(err)) {
+          return { estado: 'rechazado', error: err };
+        }
+        return encolar();
+      }
+    },
+    []
+  );
+
   const refreshSemana = useCallback(async () => {
     if (isDemoMode) return;
     try {
       const progreso = await apiClient<SemanaEntrenamientoProgresoDTO>(
         `/alumnos/me/rutina/semana-actual?timezone=${encodeURIComponent(tz)}`
       );
-      if (progreso) setSemanaProgreso(progreso);
+      if (progreso) {
+        setSemanaProgreso(progreso);
+        if (user?.id) await guardarSemanaCacheada(user.id, progreso).catch(() => {});
+      }
     } catch (err) {
       // Refresco best-effort: no rompe la vista actual. Un bloqueo de ciclo de vida sí se muestra.
       const bloqueoDetectado = resolverBloqueoAlumno(err);
       if (bloqueoDetectado) setBloqueo(bloqueoDetectado);
     }
-  }, [isDemoMode, tz]);
+  }, [isDemoMode, tz, user]);
 
-  const getRpeDescription = (val: number): string => {
-    if (val <= 3) return 'Descarga / Muy ligero';
-    if (val <= 5) return 'Ligero / Cómodo';
-    if (val === 6) return 'Exigencia media';
-    if (val === 7) return 'Esfuerzo notable';
-    if (val === 8) return 'Óptimo (RIR 2)';
-    if (val === 9) return 'Casi al límite (RIR 1-0)';
-    return 'Fallo muscular (10/10)';
-  };
+  /**
+   * D2/D3: carga lo guardado en el teléfono. Solo presenta como "de hoy" la sesión cuya fecha
+   * programada es hoy (día local); si solo hay una de otro día, se informa su fecha.
+   * Devuelve `true` si había algo que mostrar.
+   */
+  const cargarDesdeGuardado = useCallback(async (): Promise<boolean> => {
+    const alumnoId = user?.id ?? '';
+    const [rutina, semana] = await Promise.all([
+      getCachedRutinaParaHoy(alumnoId, fechaCalendarioLocal()).catch(() => ({
+        deHoy: null,
+        ultimaDeOtroDia: null,
+      })),
+      leerSemanaCacheada(alumnoId).catch(() => null),
+    ]);
+    setSesion(rutina.deHoy?.sesion ?? null);
+    setUltimoGuardadoOtroDia(rutina.deHoy ? null : rutina.ultimaDeOtroDia?.fechaProgramada ?? null);
+    if (semana) setSemanaProgreso(semana.semana);
+    const guardadoEn = rutina.deHoy?.updatedAt ?? semana?.updatedAt ?? null;
+    setDatosGuardadosEn(guardadoEn);
+    return Boolean(rutina.deHoy || semana);
+  }, [user]);
 
   // Accesibilidad (U3b): Escape, trampa de foco y restore viven en `useDialogoAccesible`.
 
@@ -627,15 +719,12 @@ export function EntrenamientoPage() {
         return;
       }
 
+      setDatosGuardadosEn(null);
+      setUltimoGuardadoOtroDia(null);
+
       // OFFLINE: solo cache local; sin cache => estado offline vacío (nunca demo).
       if (!navigator.onLine) {
-        try {
-          // WU4: la sesión más reciente por fechaProgramada/updatedAt (no el orden de UUID).
-          const cached = await getLatestCachedRutina(user?.id);
-          setSesion(cached?.sesion ?? null);
-        } catch {
-          setSesion(null);
-        }
+        await cargarDesdeGuardado();
         setIsOffline(true);
         setIsLoading(false);
         setIsSwitchingBloque(false);
@@ -648,14 +737,26 @@ export function EntrenamientoPage() {
           `/alumnos/me/rutina/semana-actual?timezone=${encodeURIComponent(tz)}`
         );
         setSemanaProgreso(progresoRes);
+        // D3: la semana queda guardada para consultarla sin conexión.
+        if (user?.id) await guardarSemanaCacheada(user.id, progresoRes).catch(() => {});
 
         // 2. Sesión de hoy: del bloque consultado o la más reciente del alumno
         const url = bloqueId
           ? `/alumnos/me/sesiones/hoy?timezone=${encodeURIComponent(tz)}&bloqueId=${encodeURIComponent(bloqueId)}`
           : `/alumnos/me/sesiones/hoy?timezone=${encodeURIComponent(tz)}`;
 
-        const data = await apiClient<SesionEntrenamientoDetalleDTO | null>(url);
-        setSesion(data ?? null);
+        const respuesta = await apiClient<SesionEntrenamientoDetalleDTO | null>(url);
+        // D4: con cambios de esta sesión aún en la cola (p. ej. "Comenzar" encolado), manda la
+        // copia del teléfono: así una recarga no ofrece "Comenzar" otra vez ni pierde series.
+        let data = respuesta ?? null;
+        if (data?.id) {
+          const [pendientes, local] = await Promise.all([
+            hayMutacionesSinEnviarDeGrupo(`sesion:${data.id}`).catch(() => false),
+            offlineDb.rutinaHoy.get(data.id).catch(() => undefined),
+          ]);
+          data = elegirSesionParaMostrar(data, local?.sesion ?? null, pendientes);
+        }
+        setSesion(data);
         if (data?.bloqueId) setSelectedBloqueId(data.bloqueId);
         else if (bloqueId) setSelectedBloqueId(bloqueId);
         else setSelectedBloqueId(progresoRes.siguienteBloqueSugeridoId ?? null);
@@ -673,13 +774,16 @@ export function EntrenamientoPage() {
           return;
         }
         console.warn('No se pudo cargar la sesión del alumno:', err);
-        setLoadError(true);
+        // D2: si la red falló (o el servidor no respondió), se muestra lo guardado en el
+        // teléfono con su antigüedad en lugar de un error vacío.
+        const hayGuardado = esFalloParaEncolar(err) ? await cargarDesdeGuardado() : false;
+        if (!hayGuardado) setLoadError(true);
       } finally {
         setIsLoading(false);
         setIsSwitchingBloque(false);
       }
     },
-    [cacheSesion, isDemoMode, tz, user]
+    [cacheSesion, cargarDesdeGuardado, isDemoMode, tz, user]
   );
 
   useEffect(() => {
@@ -751,7 +855,7 @@ export function EntrenamientoPage() {
         setActionError(
           err instanceof ApiError
             ? err.message
-            : 'No pudimos iniciar el bloque. Revisa tu conexión e inténtalo de nuevo.'
+            : 'No pudimos empezar este entrenamiento. Revisa tu conexión e inténtalo de nuevo.'
         );
       }
     } finally {
@@ -767,7 +871,7 @@ export function EntrenamientoPage() {
 
   // Start workout session
   const handleStartSession = async () => {
-    if (!sesion) return;
+    if (!sesion || isStarting) return;
     const nowUtc = new Date().toISOString();
     const updated: SesionEntrenamientoDetalleDTO = {
       ...sesion,
@@ -775,45 +879,45 @@ export function EntrenamientoPage() {
       fechaInicioUtc: nowUtc,
     };
     setSesion(updated);
+    setActionError(null);
 
     // Modo demo: transición local sin llamadas reales ni cola offline.
     if (isDemoMode) return;
 
-    const initPayload = { timezoneCliente: tz, fechaInicioUtc: nowUtc };
-    // WU4: una sola key por mutación lógica; se reutiliza si el intento directo cae y se encola.
-    const idempotencyKey = generateIdempotencyKey();
+    setIsStarting(true);
+    try {
+      // D4: el estado "en progreso" se guarda ANTES de enviar/encolar: si el teléfono se recarga,
+      // la sesión ya aparece iniciada y no se puede pulsar "Comenzar" otra vez.
+      await cacheSesion(updated);
 
-    if (navigator.onLine) {
-      try {
-        await apiClient(`/sesiones/${sesion.id}/iniciar`, {
-          method: 'POST',
-          body: JSON.stringify(initPayload),
-          idempotencyKey,
-        });
-      } catch (err) {
-        // RF-012: un bloqueo nunca se encola offline (reintentaría contra un 403 para siempre).
-        const bloqueoDetectado = resolverBloqueoAlumno(err);
-        if (bloqueoDetectado) {
-          setBloqueo(bloqueoDetectado);
-          setSesion(sesion);
-          return;
-        }
-        await queueOfflineMutation(
-          `/sesiones/${sesion.id}/iniciar`,
-          'POST',
-          initPayload,
-          'Iniciar sesión',
-          idempotencyKey
-        );
-      }
-    } else {
-      await queueOfflineMutation(
+      const initPayload = { timezoneCliente: tz, fechaInicioUtc: nowUtc };
+      // WU4: una sola key por mutación lógica; se reutiliza si el intento directo cae y se encola.
+      const resultado = await enviarOEncolar(
+        sesion.id,
         `/sesiones/${sesion.id}/iniciar`,
         'POST',
         initPayload,
-        'Iniciar sesión',
-        idempotencyKey
+        'Comenzar entrenamiento',
+        generateIdempotencyKey()
       );
+
+      if (resultado.estado === 'rechazado') {
+        // RF-012: un bloqueo nunca se encola offline (reintentaría contra un 403 para siempre).
+        const bloqueoDetectado = resolverBloqueoAlumno(resultado.error);
+        setSesion(sesion);
+        await cacheSesion(sesion);
+        if (bloqueoDetectado) {
+          setBloqueo(bloqueoDetectado);
+          return;
+        }
+        setActionError(
+          resultado.error instanceof Error && resultado.error.message
+            ? resultado.error.message
+            : 'No pudimos comenzar tu entrenamiento. Inténtalo de nuevo.'
+        );
+      }
+    } finally {
+      setIsStarting(false);
     }
   };
 
@@ -975,30 +1079,46 @@ export function EntrenamientoPage() {
         return;
       }
 
-      if (navigator.onLine) {
-        try {
-          await apiClient(`/sesiones/${sesion.id}/series`, {
-            method: 'PUT',
-            body: JSON.stringify({
-              series: [
-                {
-                  serieId: serie.id,
-                  repsLogradas: serie.repsLogradas ?? serie.repsObjetivo,
-                  pesoKg: normalizarKgParaContrato(serie.pesoKg),
-                  rpe: serie.rpe,
-                  descansoSegundos: newSeconds,
-                  completada: serie.completada,
-                  // WU17: la marca de inicio viaja en el mismo batch (undefined = no se envía).
-                  timestampInicioUtc: serie.timestampInicioUtc ?? undefined,
-                  timestampCompletadaUtc: serie.timestampCompletadaUtc,
-                },
-              ],
-            }),
-          });
-        } catch {}
+      // D5: el cambio de descanso viaja (o se encola sin conexión) como cualquier serie.
+      const payload = {
+        series: [
+          {
+            serieId: serie.id,
+            repsLogradas: serie.repsLogradas ?? serie.repsObjetivo,
+            pesoKg: normalizarKgParaContrato(serie.pesoKg),
+            rpe: serie.rpe,
+            descansoSegundos: newSeconds,
+            completada: serie.completada,
+            // WU17: la marca de inicio viaja en el mismo batch (undefined = no se envía).
+            timestampInicioUtc: serie.timestampInicioUtc ?? undefined,
+            timestampCompletadaUtc: serie.timestampCompletadaUtc,
+          },
+        ],
+      };
+      const nombreEjercicio = ejercicio.ejercicio?.nombre || `ejercicio ${ejercicioIndex + 1}`;
+      const resultado = await enviarOEncolar(
+        sesion.id,
+        `/sesiones/${sesion.id}/series`,
+        'PUT',
+        payload,
+        `Descanso de la serie ${serie.numeroSerie} de ${nombreEjercicio}`,
+        generateIdempotencyKey()
+      );
+      if (resultado.estado === 'rechazado') {
+        const bloqueoDetectado = resolverBloqueoAlumno(resultado.error);
+        if (bloqueoDetectado) {
+          setBloqueo(bloqueoDetectado);
+          return;
+        }
+        marcarErrorInline(
+          `${serie.id}:envio`,
+          resultado.error instanceof Error && resultado.error.message
+            ? resultado.error.message
+            : 'No pudimos guardar el descanso de esta serie.'
+        );
       }
     },
-    [activeSerieKey, sesion, user, isDemoMode]
+    [activeSerieKey, sesion, user, isDemoMode, enviarOEncolar, marcarErrorInline]
   );
 
   // Toggle set completion and trigger rest timer
@@ -1007,6 +1127,11 @@ export function EntrenamientoPage() {
     const updated = { ...sesion };
     const serie = updated.ejercicios[ejercicioIndex].series[serieIndex];
     const willBeCompleted = !serie.completada;
+    // D6: copia previa para revertir si el servidor rechaza la serie (4xx con conexión).
+    const serieAntes: SerieRegistroDetalleDTO = { ...serie };
+    const porcentajeAntes = sesion.porcentajeCumplimiento;
+    const rachaAntes = sesion.cumpleReglaRacha;
+    limpiarErrorInline(`${serie.id}:envio`);
 
     // WU3b: sin valores válidos no se marca ni se envía/encola nada (error inline visible).
     const errorSerie = validarSerieParaEnviar(serie);
@@ -1104,39 +1229,58 @@ export function EntrenamientoPage() {
     };
 
     // WU4: misma key para el intento directo y un eventual encolado (defensa de idempotencia).
-    const idempotencyKey = generateIdempotencyKey();
+    const nombreEjercicio =
+      updated.ejercicios[ejercicioIndex].ejercicio?.nombre || `ejercicio ${ejercicioIndex + 1}`;
+    const resultado = await enviarOEncolar(
+      sesion.id,
+      `/sesiones/${sesion.id}/series`,
+      'PUT',
+      payload,
+      `Serie ${serie.numeroSerie} de ${nombreEjercicio}`,
+      generateIdempotencyKey()
+    );
 
-    if (navigator.onLine) {
-      try {
-        await apiClient(`/sesiones/${sesion.id}/series`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-          idempotencyKey,
-        });
-      } catch (err) {
-        // RF-012: un bloqueo no se encola; se muestra la pantalla informativa.
-        const bloqueoDetectado = resolverBloqueoAlumno(err);
-        if (bloqueoDetectado) {
-          setBloqueo(bloqueoDetectado);
-          return;
-        }
-        await queueOfflineMutation(
-          `/sesiones/${sesion.id}/series`,
-          'PUT',
-          payload,
-          `Sync serie ${serie.numeroSerie}`,
-          idempotencyKey
-        );
-      }
-    } else {
-      await queueOfflineMutation(
-        `/sesiones/${sesion.id}/series`,
-        'PUT',
-        payload,
-        `Sync serie ${serie.numeroSerie}`,
-        idempotencyKey
-      );
+    if (resultado.estado !== 'rechazado') return;
+
+    // RF-012: un bloqueo no se encola; se muestra la pantalla informativa.
+    const bloqueoDetectado = resolverBloqueoAlumno(resultado.error);
+    if (bloqueoDetectado) {
+      setBloqueo(bloqueoDetectado);
+      return;
     }
+
+    // D6: rechazo de datos con conexión → la serie vuelve a como estaba y el error se ve junto a ella.
+    setSesion((actual) => {
+      if (!actual || actual.id !== updated.id) return actual;
+      const revertida: SesionEntrenamientoDetalleDTO = {
+        ...actual,
+        porcentajeCumplimiento: porcentajeAntes,
+        cumpleReglaRacha: rachaAntes,
+        ejercicios: actual.ejercicios.map((ejercicio, indice) =>
+          indice === ejercicioIndex
+            ? {
+                ...ejercicio,
+                series: ejercicio.series.map((s, indiceSerie) =>
+                  indiceSerie === serieIndex ? { ...serieAntes } : s
+                ),
+              }
+            : ejercicio
+        ),
+      };
+      void cacheSesion(revertida);
+      return revertida;
+    });
+    if (willBeCompleted) {
+      setIsRestTimerOpen(false);
+      setActiveSerieKey(null);
+    }
+    triggerHaptic('warning');
+    marcarErrorInline(
+      `${serie.id}:envio`,
+      resultado.error instanceof Error && resultado.error.message
+        ? resultado.error.message
+        : 'No pudimos guardar esta serie. Inténtalo de nuevo.'
+    );
   };
 
   // Update set values (weight, reps, rpe)
@@ -1169,7 +1313,7 @@ export function EntrenamientoPage() {
       setInputDrafts((prev) => ({ ...prev, [clave]: value }));
       const resultado = validarRpe(value);
       if (!resultado.ok) {
-        marcarErrorInline(clave, resultado.error ?? 'RPE inválido');
+        marcarErrorInline(clave, resultado.error ?? 'Esfuerzo no válido');
         return;
       }
       limpiarErrorInline(clave);
@@ -1339,58 +1483,55 @@ export function EntrenamientoPage() {
 
     let finalUpdated = updated;
     // WU4: idempotencia persistente también en la finalización (misma key en reintentos).
-    const idempotencyKey = generateIdempotencyKey();
-    if (navigator.onLine) {
-      try {
-        const res = await apiClient<FinalizarSesionResponseDTO>(`/sesiones/${sesion.id}/finalizar`, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-          idempotencyKey,
-        });
-        if (res?.sesion) {
-          finalUpdated = res.sesion;
-          setSesion(res.sesion);
-        }
-        if (res) {
-          setFinishFeedback({
-            cumpleRacha: res.cumpleRacha,
-            nuevaRacha: res.nuevaRacha,
-            duracionMinutos: res.duracionMinutos ?? res.sesion?.duracionMinutos ?? null,
-          });
-          setPendienteSync(false);
-        }
-      } catch (err) {
-        // RF-012: bloqueo por ciclo de vida en pleno cierre → pantalla informativa, sin encolar.
-        const bloqueoDetectado = resolverBloqueoAlumno(err);
-        if (bloqueoDetectado) {
-          setBloqueo(bloqueoDetectado);
-          setIsFinishing(false);
-          setIsFinishModalOpen(false);
-          return;
-        }
-        // Defensa (RF-001 Escenario 5): SOLO el 400 con código máquina estable `SESION_VACIA`
-        // abre el modal de cierre vacío; cualquier otro 400 es un error normal visible.
-        if (err instanceof ApiError && err.status === 400) {
-          setSesion(sesion); // revertir el estado optimista
-          setIsFinishing(false);
-          if (err.problem?.code === 'SESION_VACIA') {
-            setIsFinishModalOpen(false);
-            setIsEmptyCloseModalOpen(true);
-            return;
-          }
-          setActionError(
-            err.problem?.message || err.message || 'No se pudo finalizar la sesión.'
-          );
-          return;
-        }
-        await queueOfflineMutation(`/sesiones/${sesion.id}/finalizar`, 'POST', payload, 'Finalizar sesión con feedback', idempotencyKey);
-        setPendienteSync(true);
-        setFinishFeedback(null);
+    // D1: si quedan series de esta sesión en la cola, la finalización se encola detrás de ellas.
+    const resultado = await enviarOEncolar<FinalizarSesionResponseDTO>(
+      sesion.id,
+      `/sesiones/${sesion.id}/finalizar`,
+      'POST',
+      payload,
+      'Finalizar entrenamiento',
+      generateIdempotencyKey()
+    );
+    if (resultado.estado === 'enviado') {
+      const res = resultado.respuesta;
+      if (res?.sesion) {
+        finalUpdated = res.sesion;
+        setSesion(res.sesion);
       }
-    } else {
-      await queueOfflineMutation(`/sesiones/${sesion.id}/finalizar`, 'POST', payload, 'Finalizar sesión con feedback', idempotencyKey);
+      if (res) {
+        setFinishFeedback({
+          cumpleRacha: res.cumpleRacha,
+          nuevaRacha: res.nuevaRacha,
+          duracionMinutos: res.duracionMinutos ?? res.sesion?.duracionMinutos ?? null,
+        });
+        setPendienteSync(false);
+      }
+    } else if (resultado.estado === 'encolado') {
       setPendienteSync(true);
       setFinishFeedback(null);
+    } else {
+      const err = resultado.error;
+      // RF-012: bloqueo por ciclo de vida en pleno cierre → pantalla informativa, sin encolar.
+      const bloqueoDetectado = resolverBloqueoAlumno(err);
+      if (bloqueoDetectado) {
+        setBloqueo(bloqueoDetectado);
+        setIsFinishing(false);
+        setIsFinishModalOpen(false);
+        return;
+      }
+      setSesion(sesion); // revertir el estado optimista
+      setIsFinishing(false);
+      // Defensa (RF-001 Escenario 5): SOLO el 400 con código máquina estable `SESION_VACIA`
+      // abre el modal de cierre vacío; cualquier otro rechazo es un error normal visible.
+      if (err instanceof ApiError && err.status === 400 && err.problem?.code === 'SESION_VACIA') {
+        setIsFinishModalOpen(false);
+        setIsEmptyCloseModalOpen(true);
+        return;
+      }
+      setActionError(
+        err instanceof Error && err.message ? err.message : 'No pudimos finalizar tu entrenamiento.'
+      );
+      return;
     }
 
     if (sesion.id) {
@@ -1440,41 +1581,37 @@ export function EntrenamientoPage() {
       tipoCierre === TipoCierreSesion.DESCANSADA ? 'Registrar día descansado' : 'Registrar día incompleto';
     let finalUpdated = updated;
     // WU4: idempotencia persistente también en el cierre vacío (descansado/incompleto).
-    const idempotencyKey = generateIdempotencyKey();
-
-    if (navigator.onLine) {
-      try {
-        const res = await apiClient<FinalizarSesionResponseDTO>(`/sesiones/${sesion.id}/finalizar`, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-          idempotencyKey,
-        });
-        if (res?.sesion) {
-          finalUpdated = res.sesion;
-          setSesion(res.sesion);
-        }
-      } catch (err) {
-        // RF-012: bloqueo por ciclo de vida en pleno cierre → pantalla informativa, sin encolar.
-        const bloqueoDetectado = resolverBloqueoAlumno(err);
-        if (bloqueoDetectado) {
-          setBloqueo(bloqueoDetectado);
-          setSesion(sesion);
-          setIsFinishing(false);
-          setIsEmptyCloseModalOpen(false);
-          return;
-        }
-        if (err instanceof ApiError && err.status === 400) {
-          setActionError(err.problem?.message || err.message);
-          setSesion(sesion); // revertir
-          setIsFinishing(false);
-          return;
-        }
-        await queueOfflineMutation(`/sesiones/${sesion.id}/finalizar`, 'POST', payload, descripcion, idempotencyKey);
-        setPendienteSync(true);
+    const resultado = await enviarOEncolar<FinalizarSesionResponseDTO>(
+      sesion.id,
+      `/sesiones/${sesion.id}/finalizar`,
+      'POST',
+      payload,
+      descripcion,
+      generateIdempotencyKey()
+    );
+    if (resultado.estado === 'enviado') {
+      if (resultado.respuesta?.sesion) {
+        finalUpdated = resultado.respuesta.sesion;
+        setSesion(resultado.respuesta.sesion);
       }
-    } else {
-      await queueOfflineMutation(`/sesiones/${sesion.id}/finalizar`, 'POST', payload, descripcion, idempotencyKey);
+    } else if (resultado.estado === 'encolado') {
       setPendienteSync(true);
+    } else {
+      // RF-012: bloqueo por ciclo de vida en pleno cierre → pantalla informativa, sin encolar.
+      const bloqueoDetectado = resolverBloqueoAlumno(resultado.error);
+      setSesion(sesion); // revertir
+      setIsFinishing(false);
+      if (bloqueoDetectado) {
+        setBloqueo(bloqueoDetectado);
+        setIsEmptyCloseModalOpen(false);
+        return;
+      }
+      setActionError(
+        resultado.error instanceof Error && resultado.error.message
+          ? resultado.error.message
+          : 'No pudimos registrar el día. Inténtalo de nuevo.'
+      );
+      return;
     }
 
     await cacheSesion(finalUpdated);
@@ -1520,16 +1657,22 @@ export function EntrenamientoPage() {
   }
   if (syncUnsynced > 0) {
     syncLabelParts.push(
-      `${syncUnsynced} cambio${syncUnsynced > 1 ? 's' : ''} sin sincronizar`
+      `${syncUnsynced} cambio${syncUnsynced > 1 ? 's' : ''} por enviar a tu entrenador`
     );
   }
   const syncSummaryLabel = syncLabelParts.join(' · ');
+  const rangoHorarioSesion = sesion
+    ? formatearRangoHorario(sesion.fechaInicioUtc, sesion.fechaFinUtc)
+    : null;
 
   return (
     <div className="space-y-6">
       {/* Errores de acciones explícitas (conflictos, red): visibles y accionables */}
       {actionError && (
-        <div className="p-3.5 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-semibold flex items-center gap-2">
+        <div
+          role="alert"
+          className="p-3.5 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-semibold flex items-center gap-2"
+        >
           <AlertTriangle className="h-4 w-4 shrink-0" />
           <span>{actionError}</span>
         </div>
@@ -1540,7 +1683,7 @@ export function EntrenamientoPage() {
         <button
           type="button"
           onClick={() => setIsSyncPanelOpen(true)}
-          title={`${syncSummaryLabel}. Clic para revisar la sincronización.`}
+          title={`${syncSummaryLabel}. Toca para ver qué falta por enviar.`}
           className={`w-full p-3 rounded-2xl border text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer active:scale-[0.99] ${
             syncRejected > 0
               ? 'bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/15'
@@ -1553,10 +1696,15 @@ export function EntrenamientoPage() {
             <RefreshCw className={`h-4 w-4 shrink-0 ${syncState.isSyncing ? 'animate-spin' : ''}`} />
           )}
           <span>{syncSummaryLabel}</span>
-          <span className="ml-auto text-[11px] uppercase tracking-wider font-bold opacity-80">
+          <span className="ml-auto text-xs uppercase tracking-wider font-bold opacity-80">
             Ver detalles
           </span>
         </button>
+      )}
+
+      {/* D2: lo que se ve viene de lo guardado en el teléfono (sin conexión o sin respuesta) */}
+      {datosGuardadosEn !== null && (
+        <AvisoDatosOffline actualizadoEn={datosGuardadosEn} mostrarConConexion />
       )}
 
       {/* Barra de Progreso Semanal Interactiva */}
@@ -1569,18 +1717,18 @@ export function EntrenamientoPage() {
               </div>
               <div>
                 <h2 className="text-xs sm:text-sm font-bold text-foreground">
-                  Planificación Semanal · {semanaProgreso.semanaIso}
+                  {formatearTituloSemana(semanaProgreso.inicioSemana, semanaProgreso.finSemana)}
                 </h2>
-                <p className="text-[11px] text-muted-foreground">
-                  Lunes {semanaProgreso.inicioSemana} al Domingo {semanaProgreso.finSemana}
-                </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2.5 self-end sm:self-center">
               <div className="text-right">
-                <span className="text-xs font-black font-mono text-foreground">
-                  {semanaProgreso.bloquesCompletados}/{semanaProgreso.totalBloques} Bloques
+                <span className="text-xs font-black text-foreground">
+                  {formatearProgresoDias(
+                    semanaProgreso.bloquesCompletados,
+                    semanaProgreso.totalBloques
+                  )}
                 </span>
                 <span className="text-[11px] text-muted-foreground ml-1.5 font-bold">
                   ({semanaProgreso.porcentajeCumplimiento}%)
@@ -1602,7 +1750,7 @@ export function EntrenamientoPage() {
           <div className="relative">
             <div
               className="flex items-center gap-2 overflow-x-auto pb-1 pr-10 sm:pr-2 scrollbar-thin"
-              aria-label="Bloques de la semana"
+              aria-label="Entrenamientos de la semana"
               role="group"
             >
             {semanaProgreso.bloques.map((b) => {
@@ -1645,7 +1793,7 @@ export function EntrenamientoPage() {
                   type="button"
                   disabled={isSwitchingBloque}
                   onClick={() => handleSelectBloque(b.bloqueId)}
-                  className={`py-2 px-3.5 rounded-2xl border text-xs whitespace-nowrap transition-all duration-200 flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50 ${badgeStyle}`}
+                  className={`min-h-11 py-2 px-3.5 rounded-2xl border text-xs whitespace-nowrap transition-all duration-200 flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50 ${badgeStyle}`}
                   title={
                     detalleFecha ? `Consultar ${b.titulo} · ${detalleFecha}` : `Consultar ${b.titulo}`
                   }
@@ -1708,7 +1856,7 @@ export function EntrenamientoPage() {
           <button
             type="button"
             onClick={() => loadSessionAndProgress(selectedBloqueId ?? undefined)}
-            className="mx-auto py-2.5 px-5 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/25 hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+            className="mx-auto min-h-11 py-2.5 px-5 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/25 hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
           >
             <RefreshCw className="h-4 w-4" />
             <span>Reintentar</span>
@@ -1725,14 +1873,18 @@ export function EntrenamientoPage() {
           <div className="max-w-md mx-auto space-y-1.5">
             <h3 className="text-xl font-black text-foreground">Sin conexión</h3>
             <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-              No hay datos de entrenamiento guardados en este dispositivo. Cuando recuperes conexión
-              podrás cargar tu rutina.
+              {/* D3: lo guardado de otro día se informa, nunca se presenta como el de hoy */}
+              {ultimoGuardadoOtroDia
+                ? `No hay un entrenamiento de hoy guardado en este teléfono. ${textoUltimoEntrenamientoGuardado(
+                    ultimoGuardadoOtroDia
+                  )}. Cuando vuelvas a tener internet podrás cargar el de hoy.`
+                : 'No hay datos de entrenamiento guardados en este teléfono. Cuando vuelvas a tener internet podrás cargar tu rutina.'}
             </p>
           </div>
           <button
             type="button"
             onClick={() => loadSessionAndProgress(selectedBloqueId ?? undefined)}
-            className="mx-auto py-2.5 px-5 rounded-xl bg-secondary text-foreground border border-border font-bold text-xs hover:bg-secondary/80 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+            className="mx-auto min-h-11 py-2.5 px-5 rounded-xl bg-secondary text-foreground border border-border font-bold text-xs hover:bg-secondary/80 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
           >
             <RefreshCw className="h-4 w-4" />
             <span>Reintentar</span>
@@ -1765,34 +1917,40 @@ export function EntrenamientoPage() {
             </h3>
             <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
               {!semanaProgreso || semanaProgreso.totalBloques === 0
-                ? 'Tu entrenador aún no ha prescrito tu rutina semanal. Cuando la asignes, aparecerá aquí.'
+                ? 'Tu entrenador aún no ha preparado tu rutina de la semana. Cuando la asigne, aparecerá aquí.'
                 : semanaProgreso.bloquesCompletados === semanaProgreso.totalBloques
-                ? '¡Excelente trabajo! Has completado el 100% de tus bloques semanales. Disfruta tu recuperación o repite un bloque si te queda energía.'
+                ? '¡Excelente trabajo! Hiciste todos los entrenamientos de la semana. Disfruta tu recuperación o repite uno si te queda energía.'
                 : semanaProgreso.esDiaDescansoHoy
-                ? 'Hoy toca recuperación. Si quieres adelantar o recuperar trabajo, elige un bloque pendiente e inícialo de forma explícita.'
-                : 'Elige un bloque pendiente y pulsa "Entrenar este bloque hoy". Consultar la rutina no altera tus sesiones.'}
+                ? 'Hoy toca recuperación. Si quieres adelantar o recuperar trabajo, elige un entrenamiento pendiente y empiézalo.'
+                : 'Elige un entrenamiento pendiente y pulsa "Hacer este entrenamiento hoy". Mirar tu rutina no cambia nada.'}
             </p>
           </div>
 
           {/* CTA informativo cuando aún no hay rutina publicada */}
           {(!semanaProgreso || semanaProgreso.totalBloques === 0) && (
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-full bg-secondary border border-border text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-secondary border border-border text-muted-foreground">
               <Info className="h-3.5 w-3.5" />
-              Tu entrenador aún no ha publicado tu plan semanal
+              Tu entrenador aún no ha publicado tu plan de la semana
             </span>
           )}
 
-          {/* CTA explícita del bloque seleccionado (acción, no consulta) */}
+          {/* CTA explícita del bloque seleccionado (acción, no consulta).
+              C9: un solo paso — crea la sesión y la deja iniciada (`iniciarInmediato`). */}
           {selectedBloque && !selectedBloque.completado && (
             <div className="max-w-lg mx-auto pt-1">
               <button
                 type="button"
                 disabled={isSwitchingBloque}
-                onClick={() => handleEntrenarBloqueHoy(selectedBloque.bloqueId)}
-                className="w-full py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-lg shadow-primary/25 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                aria-busy={isSwitchingBloque}
+                onClick={() => handleEntrenarBloqueHoy(selectedBloque.bloqueId, true)}
+                className="w-full min-h-11 py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-lg shadow-primary/25 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
-                <Play className="h-5 w-5 fill-primary-foreground" />
-                <span>Entrenar este bloque hoy</span>
+                {isSwitchingBloque ? (
+                  <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Play className="h-5 w-5 fill-primary-foreground" aria-hidden="true" />
+                )}
+                <span>{isSwitchingBloque ? 'Preparando tu entrenamiento...' : 'Hacer este entrenamiento hoy'}</span>
               </button>
               {selectedBloque.enfoque && (
                 <p className="text-[11px] text-muted-foreground mt-2">{selectedBloque.enfoque}</p>
@@ -1804,7 +1962,7 @@ export function EntrenamientoPage() {
           {semanaProgreso && semanaProgreso.bloques.filter((b) => !b.completado).length > 0 && (
             <div className="pt-3 border-t border-border/60 max-w-lg mx-auto space-y-2.5">
               <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">
-                Otros bloques pendientes de esta semana
+                Otros entrenamientos pendientes de esta semana
               </span>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -1815,7 +1973,7 @@ export function EntrenamientoPage() {
                       key={b.bloqueId}
                       type="button"
                       disabled={isSwitchingBloque}
-                      onClick={() => handleEntrenarBloqueHoy(b.bloqueId)}
+                      onClick={() => handleEntrenarBloqueHoy(b.bloqueId, true)}
                       className="p-3.5 rounded-2xl bg-secondary/50 hover:bg-secondary border border-border hover:border-primary/50 text-left transition-all duration-200 active:scale-98 cursor-pointer flex flex-col justify-between group disabled:opacity-50"
                     >
                       <div className="flex items-center justify-between gap-1 mb-1">
@@ -1838,8 +1996,8 @@ export function EntrenamientoPage() {
                           Programado: {formatFechaCalendario(b.fechaProgramada)}
                         </span>
                       )}
-                      <div className="mt-2.5 flex items-center justify-between text-[11px] font-bold text-primary">
-                        <span>Entrenar este bloque hoy</span>
+                      <div className="mt-2.5 flex items-center justify-between text-xs font-bold text-primary">
+                        <span>Hacer este entrenamiento hoy</span>
                         <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
                       </div>
                     </button>
@@ -1872,7 +2030,7 @@ export function EntrenamientoPage() {
                     {isCompleted
                       ? 'Completada'
                       : isInProgress
-                      ? 'En Progreso'
+                      ? 'En progreso'
                       : isOmitted
                       ? sesion.motivoOmision === MotivoOmision.DESCANSO
                         ? 'Descansado'
@@ -1882,19 +2040,17 @@ export function EntrenamientoPage() {
                   <span className="text-xs text-muted-foreground font-mono">
                     {formatFechaCalendario(sesion.fechaProgramada) ?? sesion.fechaProgramada}
                   </span>
-                  {formatRangoHorasLocal(sesion.fechaInicioUtc, sesion.fechaFinUtc) && (
-                    <span className="text-xs text-muted-foreground">
-                      · {formatRangoHorasLocal(sesion.fechaInicioUtc, sesion.fechaFinUtc)} h local
-                    </span>
+                  {rangoHorarioSesion && (
+                    <span className="text-xs text-muted-foreground">· {rangoHorarioSesion}</span>
                   )}
                   {sesion.esDiaDescansoOriginal && (
-                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider bg-warning/15 text-warning border border-warning/25 flex items-center gap-1">
-                      ⏱️ Recuperada en Descanso
+                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/25 flex items-center gap-1">
+                      Hecho en tu día de descanso
                     </span>
                   )}
                 </div>
                 <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground mt-1">
-                  Checklist de Entrenamiento
+                  Tu entrenamiento de hoy
                 </h1>
               </div>
 
@@ -1948,9 +2104,11 @@ export function EntrenamientoPage() {
 
             {/* Quick Rest Timer Trigger */}
             <button
+              type="button"
               onClick={() => setIsRestTimerOpen(!isRestTimerOpen)}
-              className="p-3 rounded-2xl bg-secondary/60 border border-border hover:border-primary/50 text-foreground transition-colors flex items-center gap-2 cursor-pointer"
-              title="Abrir cronómetro de descanso"
+              aria-label={isRestTimerOpen ? 'Cerrar cronómetro de descanso' : 'Abrir cronómetro de descanso'}
+              className="min-h-11 min-w-11 p-3 rounded-2xl bg-secondary/60 border border-border hover:border-primary/50 text-foreground transition-colors flex items-center gap-2 cursor-pointer"
+              title="Cronómetro de descanso"
             >
               <Timer className="h-6 w-6 text-primary" />
               <span className="text-xs font-bold hidden sm:inline">Descanso</span>
@@ -1959,7 +2117,7 @@ export function EntrenamientoPage() {
             {/* RN-01: preferencia de unidad de peso (kg/lb) persistida en el dispositivo */}
             <div
               role="group"
-              aria-label="Unidad de peso del checklist"
+              aria-label="Unidad de peso"
               className="p-1 rounded-2xl bg-secondary/60 border border-border flex items-center gap-1"
             >
               {(['kg', 'lb'] as UnidadPeso[]).map((u) => (
@@ -1985,16 +2143,23 @@ export function EntrenamientoPage() {
         {/* Action Button: Start or Finish */}
         {isPlanned && (
           <button
+            type="button"
             onClick={handleStartSession}
-            className="w-full py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-lg shadow-primary/25 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            disabled={isStarting}
+            aria-busy={isStarting}
+            className="w-full min-h-11 py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-lg shadow-primary/25 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
           >
-            <Play className="h-5 w-5 fill-primary-foreground" />
-            <span>COMENZAR ENTRENAMIENTO</span>
+            {isStarting ? (
+              <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Play className="h-5 w-5 fill-primary-foreground" aria-hidden="true" />
+            )}
+            <span>{isStarting ? 'Comenzando...' : 'Comenzar a entrenar'}</span>
           </button>
         )}
 
         {isInProgress && (
-          <div className="flex items-center justify-between gap-3 pt-1">
+          <div className="flex flex-col gap-3 pt-1">
             <div className="text-xs text-muted-foreground flex items-center gap-2">
               <div className="relative flex items-center justify-center">
                 <Clock className="h-4 w-4 text-primary" />
@@ -2003,10 +2168,11 @@ export function EntrenamientoPage() {
               <span>Entrenamiento activo. Marca tus series y pesos al completarlas.</span>
             </div>
             <button
+              type="button"
               onClick={handleOpenFinishModal}
-              className="py-2.5 px-5 rounded-xl bg-primary hover:brightness-110 text-primary-foreground font-bold text-xs shadow-md shadow-primary/25 active:scale-95 transition-all cursor-pointer"
+              className="w-full min-h-11 py-3.5 px-5 rounded-2xl bg-primary hover:brightness-110 text-primary-foreground font-bold text-sm shadow-md shadow-primary/25 active:scale-98 transition-all cursor-pointer"
             >
-              Finalizar Entrenamiento
+              Finalizar entrenamiento
             </button>
           </div>
         )}
@@ -2033,34 +2199,28 @@ export function EntrenamientoPage() {
                       : 'Día registrado como incompleto'
                     : '¡Sesión de entrenamiento finalizada con éxito!'}
                 </p>
-                <p className={`text-[11px] ${isOmitted ? 'text-warning/90' : 'text-success/80'}`}>
+                <p className={`text-xs ${isOmitted ? 'text-warning/90' : 'text-success/80'}`}>
                   {isOmitted
                     ? 'No suma racha. Puedes repetir el entrenamiento cuando quieras: el historial de este día se conserva.'
                     : pendienteSync
-                    ? 'Sesión guardada localmente. Se sincronizará con tu coach al recuperar conexión.'
+                    ? 'Guardamos tu entrenamiento en este teléfono. Se enviará a tu entrenador cuando vuelvas a tener internet.'
                     : finishFeedback
                     ? finishFeedback.cumpleRacha
                       ? `Sumaste un día a tu racha. Racha: ${pluralizar(finishFeedback.nuevaRacha, 'día', 'días')}.`
                       : 'Sesión guardada. Completa al menos el 70% del plan para sumar racha.'
                     : 'Sesión guardada en tu historial.'}
                 </p>
-                {(formatDuracionMinutos(sesion.duracionMinutos) ||
-                  formatRangoHorasLocal(sesion.fechaInicioUtc, sesion.fechaFinUtc)) && (
+                {(formatDuracionMinutos(sesion.duracionMinutos) || rangoHorarioSesion) && (
                   <p
-                    className={`text-[11px] mt-0.5 font-medium ${
+                    className={`text-xs mt-0.5 font-medium ${
                       isOmitted ? 'text-warning/80' : 'text-success/80'
                     }`}
                   >
                     {formatDuracionMinutos(sesion.duracionMinutos)
                       ? `Duración: ${formatDuracionMinutos(sesion.duracionMinutos)}`
                       : ''}
-                    {formatDuracionMinutos(sesion.duracionMinutos) &&
-                    formatRangoHorasLocal(sesion.fechaInicioUtc, sesion.fechaFinUtc)
-                      ? ' · '
-                      : ''}
-                    {formatRangoHorasLocal(sesion.fechaInicioUtc, sesion.fechaFinUtc)
-                      ? `Horario local: ${formatRangoHorasLocal(sesion.fechaInicioUtc, sesion.fechaFinUtc)}`
-                      : ''}
+                    {formatDuracionMinutos(sesion.duracionMinutos) && rangoHorarioSesion ? ' · ' : ''}
+                    {rangoHorarioSesion ? `Horario: ${rangoHorarioSesion}` : ''}
                   </p>
                 )}
               </div>
@@ -2070,9 +2230,11 @@ export function EntrenamientoPage() {
               <div className="p-3.5 rounded-2xl bg-secondary/50 border border-border/80 text-xs space-y-1">
                 <span className="font-bold text-muted-foreground text-[11px] uppercase tracking-wider flex items-center gap-1.5">
                   <MessageSquare className="h-3 w-3 text-primary" />
-                  Sensaciones y notas enviadas a tu coach:
+                  Lo que le contaste a tu entrenador:
                 </span>
-                <p className="text-foreground font-medium">{sesion.notasAlumno}</p>
+                <p className="text-foreground font-medium">
+                  {formatearNotasParaAlumno(sesion.notasAlumno)}
+                </p>
               </div>
             )}
 
@@ -2081,7 +2243,7 @@ export function EntrenamientoPage() {
                 type="button"
                 disabled={isSwitchingBloque || !sesion.bloqueId}
                 onClick={handleRepetirBloque}
-                className="text-xs font-bold text-muted-foreground hover:text-foreground flex items-center gap-1.5 py-1.5 px-3.5 rounded-xl bg-secondary/80 hover:bg-secondary border border-border/60 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+                className="min-h-11 text-xs font-bold text-muted-foreground hover:text-foreground flex items-center gap-1.5 py-1.5 px-3.5 rounded-xl bg-secondary/80 hover:bg-secondary border border-border/60 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
               >
                 <RotateCcw className="h-3.5 w-3.5 text-primary" />
                 <span>Repetir entrenamiento</span>
@@ -2139,7 +2301,7 @@ export function EntrenamientoPage() {
                       type="button"
                       onClick={() => handleAbrirVideo(ejercicioSesion)}
                       aria-label={`Ver video demostrativo de ${nombreEjercicio}`}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/25 hover:bg-primary/20 transition-colors cursor-pointer active:scale-95"
+                      className="min-h-11 inline-flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-xl bg-primary/10 text-primary border border-primary/25 hover:bg-primary/20 transition-colors cursor-pointer active:scale-95"
                     >
                       <Video className="h-3 w-3" />
                       <span>Ver técnica</span>
@@ -2150,7 +2312,7 @@ export function EntrenamientoPage() {
               {ejercicioSesion.notasCoach && (
                 <div className="p-2.5 rounded-2xl bg-secondary/60 text-muted-foreground flex items-center gap-2 max-w-xs text-xs">
                   <Info className="h-4 w-4 text-primary shrink-0" />
-                  <span className="truncate">{ejercicioSesion.notasCoach}</span>
+                  <span className="truncate">{formatearNotaEntrenadorParaAlumno(ejercicioSesion.notasCoach)}</span>
                 </div>
               )}
             </div>
@@ -2160,18 +2322,18 @@ export function EntrenamientoPage() {
               <ClipboardList className="h-4 w-4 text-primary shrink-0 mt-0.5" />
               <div className="min-w-0 flex-1">
                 <span className="text-[11px] font-black uppercase tracking-wider text-primary block leading-none mb-1">
-                  Prescrito por tu coach
+                  Lo que te indicó tu entrenador
                 </span>
                 <p className="text-[11px] sm:text-xs font-bold text-foreground leading-snug">
                   {formatearPrescripcion(prescripcion, unidadPeso)}
                   {rpeSugerido && (
                     <span className="text-muted-foreground font-semibold">
-                      {` · RPE sugerido ${rpeSugerido}/10`}
+                      {` · ${textoEsfuerzoSugerido(rpeSugerido)}`}
                     </span>
                   )}
                   {!pesoPrescritoTexto && !rpeSugerido && (
                     <span className="text-muted-foreground font-semibold">
-                      {` · ${ejercicioSesion.notasCoach ? 'referencia en las notas del coach' : 'sin carga prescrita'}`}
+                      {` · ${ejercicioSesion.notasCoach ? 'mira la nota de tu entrenador' : 'peso a tu criterio'}`}
                     </span>
                   )}
                 </p>
@@ -2182,7 +2344,7 @@ export function EntrenamientoPage() {
             <div className="space-y-2.5">
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-black uppercase tracking-wider text-muted-foreground">
-                  Registrado (real)
+                  Lo que hiciste
                 </span>
                 <span className="h-px flex-1 bg-border/60" aria-hidden="true" />
               </div>
@@ -2190,8 +2352,8 @@ export function EntrenamientoPage() {
               <div className="hidden sm:grid grid-cols-12 gap-1.5 sm:gap-2.5 text-xs font-black text-muted-foreground uppercase tracking-wider px-2">
                 <span className="col-span-1 text-center">#</span>
                 <span className="col-span-4 text-center">Peso ({unidadPeso})</span>
-                <span className="col-span-3 text-center">Reps</span>
-                <span className="col-span-2 text-center" title="Nivel de esfuerzo percibido (0 a 10)">RPE</span>
+                <span className="col-span-3 text-center">Repeticiones</span>
+                <span className="col-span-2 text-center" title="Qué tan duro fue, de 1 a 10">Esfuerzo (1-10)</span>
                 <span className="col-span-2 text-center">Listo</span>
               </div>
 
@@ -2204,7 +2366,9 @@ export function EntrenamientoPage() {
                 const errorPeso = inputErrors[clavePeso];
                 const errorRpe = inputErrors[claveRpe];
                 const errorReps = inputErrors[claveReps];
-                const errorSerie = errorPeso ?? errorRpe ?? errorReps ?? null;
+                // D6: rechazo del servidor al guardar la serie (se muestra junto a ella).
+                const errorEnvio = inputErrors[`${serie.id}:envio`];
+                const errorSerie = errorPeso ?? errorRpe ?? errorReps ?? errorEnvio ?? null;
                 const pesoMostrado =
                   borradorPeso !== undefined
                     ? borradorPeso
@@ -2282,7 +2446,7 @@ export function EntrenamientoPage() {
                   {/* Reps Input with Steppers (- / + 1 rep) */}
                   <div className="col-span-2 sm:col-span-3">
                     <span className="sm:hidden mb-1 block text-[11px] font-black uppercase tracking-wider text-muted-foreground">
-                      Reps
+                      Repeticiones
                     </span>
                     <div className="flex items-center rounded-xl bg-background border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 overflow-hidden transition-colors h-12 sm:h-11 shadow-2xs">
                       <button
@@ -2302,7 +2466,7 @@ export function EntrenamientoPage() {
                         onChange={(e) =>
                           handleUpdateSerieValue(ejIdx, sIdx, 'repsLogradas', e.target.value)
                         }
-                        aria-label={`Reps logradas, serie ${serie.numeroSerie}`}
+                        aria-label={`Repeticiones hechas, serie ${serie.numeroSerie}`}
                         aria-invalid={Boolean(errorReps)}
                         className={`w-full min-w-0 text-center py-2 px-1 bg-transparent text-base font-mono font-black text-foreground focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
                           errorReps ? 'text-destructive' : ''
@@ -2319,14 +2483,14 @@ export function EntrenamientoPage() {
                       </button>
                     </div>
                     <span className="block text-center text-[11px] font-bold text-muted-foreground leading-tight mt-1 sm:mt-0.5">
-                      Objetivo: {serie.repsObjetivo} reps
+                      Objetivo: {pluralizar(serie.repsObjetivo, 'repetición', 'repeticiones')}
                     </span>
                   </div>
 
                   {/* RPE Input (0-10 validado contra el contrato) */}
                   <div className="col-span-1 sm:col-span-2">
                     <span className="sm:hidden mb-1 block text-[11px] font-black uppercase tracking-wider text-muted-foreground">
-                      RPE
+                      Esfuerzo (1-10)
                     </span>
                     <input
                       type="text"
@@ -2338,7 +2502,7 @@ export function EntrenamientoPage() {
                       }
                       onBlur={() => handleBlurRpe(serie.id)}
                       placeholder="8.5"
-                      aria-label={`RPE real, serie ${serie.numeroSerie}`}
+                      aria-label={`Esfuerzo de 1 a 10, serie ${serie.numeroSerie}`}
                       aria-invalid={Boolean(errorRpe)}
                       className={`w-full text-center py-2 px-1 rounded-xl bg-background border text-base sm:text-sm font-mono font-bold text-foreground focus:outline-hidden focus:border-primary focus:ring-2 focus:ring-primary/25 h-12 sm:h-11 shadow-2xs ${
                         errorRpe ? 'border-destructive text-destructive' : 'border-border'
@@ -2375,7 +2539,7 @@ export function EntrenamientoPage() {
                       type="button"
                       onClick={() => handleIniciarSerie(ejIdx, sIdx)}
                       title="Marca el inicio de esta serie para medir tu descanso real"
-                      className="mt-1.5 w-full py-1.5 rounded-lg inline-flex items-center justify-center gap-1 text-[11px] font-bold bg-primary/10 text-primary border border-primary/25 hover:bg-primary/20 transition-colors cursor-pointer active:scale-95"
+                      className="mt-2 w-full min-h-11 py-2 rounded-xl inline-flex items-center justify-center gap-1.5 text-xs font-bold bg-primary/10 text-primary border border-primary/25 hover:bg-primary/20 transition-colors cursor-pointer active:scale-95"
                     >
                       <Play className="h-3 w-3 fill-current" />
                       <span>Iniciar serie</span>
@@ -2398,7 +2562,7 @@ export function EntrenamientoPage() {
                   {errorSerie && (
                     <p
                       role="alert"
-                      className="mt-1.5 px-1 text-[11px] font-bold text-destructive flex items-center gap-1"
+                      className="mt-1.5 px-1 text-xs font-bold text-destructive flex items-center gap-1"
                     >
                       <AlertTriangle className="h-3 w-3 shrink-0" />
                       <span>{errorSerie}</span>
@@ -2437,71 +2601,83 @@ export function EntrenamientoPage() {
                 </div>
                 <div>
                   <h3 id="modal-finish-title" className="font-bold text-base text-foreground leading-tight">
-                    Finalizar Entrenamiento
+                    Finalizar entrenamiento
                   </h3>
-                  <p className="text-[11px] text-muted-foreground">Feedback directo para tu entrenador</p>
+                  <p className="text-xs text-muted-foreground">Cuéntale a tu entrenador cómo te fue</p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsFinishModalOpen(false)}
-                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground transition-colors cursor-pointer"
+                aria-label="Cerrar sin finalizar"
+                className="min-h-11 min-w-11 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground transition-colors cursor-pointer"
               >
-                <X className="h-4 w-4" />
+                <X className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
 
-            {/* RPE Global de la Sesión (Escala completa 1-10) */}
+            {/* Esfuerzo global de la sesión (escala completa 1-10) */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-foreground">
-                  Esfuerzo Percibido Global (RPE)
-                </label>
-                <span className="text-primary font-mono font-black text-sm">
-                  {rpeSesion} / 10 · <span className="text-[11px] font-semibold text-muted-foreground">{getRpeDescription(rpeSesion)}</span>
+              <div className="flex items-center justify-between gap-2">
+                <span id="finalizar-esfuerzo-titulo" className="text-xs font-bold text-foreground">
+                  ¿Qué tan duro fue? (1 a 10)
+                </span>
+                <span className="text-primary font-mono font-black text-sm text-right">
+                  {rpeSesion} / 10 · <span className="text-xs font-semibold text-muted-foreground">{describirEsfuerzo(rpeSesion)}</span>
                 </span>
               </div>
-              <div className="grid grid-cols-5 gap-1.5">
+              <div
+                role="group"
+                aria-labelledby="finalizar-esfuerzo-titulo"
+                className="grid grid-cols-5 gap-2"
+              >
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((val) => (
                   <button
                     key={val}
                     type="button"
+                    aria-pressed={rpeSesion === val}
                     onClick={() => {
                       triggerHaptic('light');
                       setRpeSesion(val);
                     }}
-                    className={`py-2 px-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    className={`min-h-11 py-2 px-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       rpeSesion === val
                         ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/25 scale-105'
                         : 'bg-secondary/60 text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    {val === 1 ? '1 (Bajo)' : val === 8 ? '8 (Ideal)' : val === 10 ? '10 (Max)' : val}
+                    {val === 1 ? '1 (Bajo)' : val === 8 ? '8 (Ideal)' : val === 10 ? '10 (Máximo)' : val}
                   </button>
                 ))}
               </div>
-              <div className="flex justify-between text-[11px] text-muted-foreground px-1 font-medium">
-                <span>1-4: Descarga / Ligero</span>
+              <div className="flex flex-wrap justify-between gap-x-2 text-xs text-muted-foreground px-1 font-medium">
+                <span>1-4: Suave</span>
                 <span>5-6: Moderado</span>
-                <span>7-8: Óptimo</span>
+                <span>7-8: Exigente</span>
                 <span>9-10: Al límite</span>
               </div>
             </div>
 
             {/* Molestias o dolores articulares */}
             <div className="space-y-2">
-              <label className="text-xs font-bold text-foreground">
-                ¿Sentiste alguna molestia articular o dolor?
-              </label>
-              <div className="flex flex-wrap gap-1.5">
+              <span id="finalizar-molestia-titulo" className="block text-xs font-bold text-foreground">
+                ¿Sentiste alguna molestia o dolor?
+              </span>
+              <div
+                role="group"
+                aria-labelledby="finalizar-molestia-titulo"
+                className="flex flex-wrap gap-2"
+              >
                 {['Ninguna 👍', 'Hombro', 'Rodilla', 'Lumbar', 'Codo', 'Muñeca', 'Otra'].map((zona) => (
                   <button
                     key={zona}
                     type="button"
+                    aria-pressed={molestia === zona}
                     onClick={() => {
                       triggerHaptic('light');
                       setMolestia(zona);
                     }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    className={`min-h-11 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                       molestia === zona
                         ? 'bg-warning/20 text-warning border border-warning/40 shadow-xs'
                         : 'bg-secondary/40 text-muted-foreground hover:text-foreground border border-transparent'
@@ -2515,11 +2691,15 @@ export function EntrenamientoPage() {
 
             {/* Notas para el coach */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-foreground flex items-center justify-between">
-                <span>Notas u observaciones para tu coach</span>
-                <span className="text-[11px] text-muted-foreground font-normal">Opcional</span>
+              <label
+                htmlFor="finalizar-notas-entrenador"
+                className="text-xs font-bold text-foreground flex items-center justify-between"
+              >
+                <span>Notas para tu entrenador</span>
+                <span className="text-xs text-muted-foreground font-normal">Opcional</span>
               </label>
               <textarea
+                id="finalizar-notas-entrenador"
                 rows={3}
                 value={notasCoachInput}
                 onChange={(e) => setNotasCoachInput(e.target.value)}
@@ -2554,7 +2734,7 @@ export function EntrenamientoPage() {
                   <div className="flex items-center gap-2">
                     <Timer className="h-4 w-4 text-primary" />
                     <div>
-                      <span className="font-bold text-foreground block">Descanso Promedio</span>
+                      <span className="font-bold text-foreground block">Descanso promedio</span>
                       <span className="text-[11px] text-muted-foreground">Planificado: {formatearSegundos(avgPresc)}</span>
                     </div>
                   </div>
@@ -2587,7 +2767,7 @@ export function EntrenamientoPage() {
               className="w-full py-3 px-4 rounded-2xl bg-primary hover:brightness-110 text-primary-foreground font-bold text-xs tracking-wide shadow-md shadow-primary/25 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <CheckCircle2 className="h-4 w-4" />
-              <span>{isFinishing ? 'Guardando entrenamiento...' : 'Guardar y Enviar al Coach'}</span>
+              <span>{isFinishing ? 'Guardando entrenamiento...' : 'Guardar y enviar a mi entrenador'}</span>
             </button>
           </div>
         </div>
@@ -2623,16 +2803,18 @@ export function EntrenamientoPage() {
                   >
                     No has marcado ninguna serie
                   </h3>
-                  <p className="text-[11px] text-muted-foreground">
-                    ¿Deseas registrar este día como descansado o incompleto?
+                  <p className="text-xs text-muted-foreground">
+                    ¿Quieres registrar este día como descansado o incompleto?
                   </p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsEmptyCloseModalOpen(false)}
-                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground transition-colors cursor-pointer"
+                aria-label="Cerrar"
+                className="min-h-11 min-w-11 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground transition-colors cursor-pointer"
               >
-                <X className="h-4 w-4" />
+                <X className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
 
@@ -2665,7 +2847,7 @@ export function EntrenamientoPage() {
             <button
               type="button"
               onClick={() => setIsEmptyCloseModalOpen(false)}
-              className="w-full py-2.5 rounded-2xl bg-transparent text-muted-foreground hover:text-foreground text-xs font-bold transition-colors cursor-pointer"
+              className="w-full min-h-11 py-2.5 rounded-2xl bg-transparent text-muted-foreground hover:text-foreground text-xs font-bold transition-colors cursor-pointer"
             >
               Cancelar
             </button>
@@ -2713,7 +2895,7 @@ export function EntrenamientoPage() {
                     type="button"
                     onClick={() => setVideoModal(null)}
                     aria-label="Cerrar video demostrativo"
-                    className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground transition-colors cursor-pointer"
+                    className="min-h-11 min-w-11 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground transition-colors cursor-pointer"
                   >
                     <X className="h-4 w-4" />
                   </button>

@@ -178,11 +178,11 @@ export function validarRpe(texto: string): { ok: boolean; rpe: string; error?: s
   const normalizado = normalizarEntradaDecimal(texto);
   if (normalizado === '') return { ok: true, rpe: '' };
   if (!RPE_REGEX.test(normalizado)) {
-    return { ok: false, rpe: '', error: 'RPE inválido: usa 0 a 10 (ej. 8 u 8.5)' };
+    return { ok: false, rpe: '', error: 'Esfuerzo no válido: usa un número del 0 al 10 (ej. 8 u 8.5)' };
   }
   const valor = Number(normalizado);
   if (!Number.isFinite(valor) || valor < 0 || valor > 10) {
-    return { ok: false, rpe: '', error: 'RPE inválido: debe estar entre 0 y 10' };
+    return { ok: false, rpe: '', error: 'Esfuerzo no válido: debe estar entre 0 y 10' };
   }
   return { ok: true, rpe: normalizado };
 }
@@ -190,7 +190,7 @@ export function validarRpe(texto: string): { ok: boolean; rpe: string; error?: s
 /** Valida reps contra `RegistrarSerieSchema` (entero 0..200). Devuelve el error o null. */
 export function validarReps(valor: number): string | null {
   if (!Number.isInteger(valor) || valor < 0 || valor > 200) {
-    return 'Reps inválidas: entero entre 0 y 200';
+    return 'Repeticiones no válidas: usa un número entero entre 0 y 200';
   }
   return null;
 }

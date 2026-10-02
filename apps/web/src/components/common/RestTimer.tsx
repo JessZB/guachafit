@@ -139,7 +139,8 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
               setIsMinimized(false);
             }}
             title="Expandir controles de descanso"
-            className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+            aria-label={`Descanso: ${formatTime(secondsLeft)}. Expandir controles`}
+            className="min-h-11 min-w-11 flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
           >
             <div
               className={`p-1.5 rounded-full ${
@@ -174,7 +175,8 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
               setIsRunning(!isRunning);
             }}
             title={isRunning ? 'Pausar descanso' : 'Reanudar descanso'}
-            className={`h-8 w-8 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+            aria-label={isRunning ? 'Pausar descanso' : 'Reanudar descanso'}
+            className={`min-h-11 min-w-11 h-11 w-11 rounded-full flex items-center justify-center transition-all cursor-pointer ${
               isRunning
                 ? 'bg-secondary hover:bg-secondary/80 text-foreground'
                 : 'bg-primary text-primary-foreground shadow-xs'
@@ -188,7 +190,8 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
             type="button"
             onClick={() => adjustSeconds(30)}
             title="Agregar 30 segundos"
-            className="px-2.5 py-1 rounded-lg bg-secondary/80 hover:bg-secondary text-xs font-bold text-foreground cursor-pointer transition-colors"
+            aria-label="Agregar 30 segundos"
+            className="min-h-11 min-w-11 px-2.5 py-1 rounded-lg bg-secondary/80 hover:bg-secondary text-xs font-bold text-foreground cursor-pointer transition-colors"
           >
             +{formatearSegundos(30)}
           </button>
@@ -201,7 +204,8 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
               setIsMinimized(false);
             }}
             title="Expandir cronómetro"
-            className="p-1.5 rounded-lg hover:bg-secondary/80 text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+            aria-label="Expandir cronómetro"
+            className="min-h-11 min-w-11 flex items-center justify-center p-1.5 rounded-lg hover:bg-secondary/80 text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
           >
             <ChevronUp className="h-4 w-4" />
           </button>
@@ -212,7 +216,8 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
               type="button"
               onClick={onClose}
               title="Cerrar cronómetro"
-              className="p-1.5 rounded-lg hover:bg-secondary/80 text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+              aria-label="Cerrar cronómetro"
+              className="min-h-11 min-w-11 flex items-center justify-center p-1.5 rounded-lg hover:bg-secondary/80 text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
             >
               <X className="h-4 w-4" />
             </button>
@@ -238,18 +243,19 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
                   isFinished ? 'text-destructive' : ''
                 }`}
               >
-                {isFinished ? '¡Tiempo Cumplido!' : 'Tiempo de Descanso'}
+                {isFinished ? '¡Tiempo cumplido!' : 'Tiempo de descanso'}
               </span>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
                   triggerHaptic('light');
                   setIsMinimized(true);
                 }}
-                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                title="Minimizar a píldora"
+                className="min-h-11 min-w-11 flex items-center justify-center p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                title="Minimizar cronómetro"
+                aria-label="Minimizar cronómetro"
               >
                 <ChevronDown className="h-4 w-4" />
               </button>
@@ -257,8 +263,9 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
                 <button
                   type="button"
                   onClick={onClose}
-                  className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                  title="Cerrar"
+                  className="min-h-11 min-w-11 flex items-center justify-center p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  title="Cerrar cronómetro"
+                  aria-label="Cerrar cronómetro"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -286,7 +293,9 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
                 key={sec}
                 type="button"
                 onClick={() => setPreset(sec)}
-                className={`py-2 text-xs font-extrabold rounded-xl border transition-all cursor-pointer ${
+                aria-pressed={totalSeconds === sec}
+                aria-label={`Descanso de ${formatearSegundos(sec)}`}
+                className={`min-h-11 min-w-11 py-2 text-xs font-extrabold rounded-xl border transition-all cursor-pointer ${
                   totalSeconds === sec
                     ? 'bg-primary text-primary-foreground border-primary shadow-sm scale-102'
                     : 'bg-secondary/60 hover:bg-secondary border-border text-foreground'
@@ -299,20 +308,22 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
 
           {/* Controles de Ajuste Fino */}
           <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/40">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => adjustSeconds(-15)}
-                className="px-2.5 py-1.5 rounded-xl bg-secondary/80 hover:bg-secondary text-xs font-black text-foreground cursor-pointer"
-                title="-15 segundos"
+                className="min-h-11 min-w-11 px-2.5 py-1.5 rounded-xl bg-secondary/80 hover:bg-secondary text-xs font-black text-foreground cursor-pointer"
+                title="Quitar 15 segundos"
+                aria-label="Quitar 15 segundos"
               >
                 -{formatearSegundos(15)}
               </button>
               <button
                 type="button"
                 onClick={() => adjustSeconds(30)}
-                className="px-2.5 py-1.5 rounded-xl bg-secondary/80 hover:bg-secondary text-xs font-black text-foreground cursor-pointer"
-                title="+30 segundos"
+                className="min-h-11 min-w-11 px-2.5 py-1.5 rounded-xl bg-secondary/80 hover:bg-secondary text-xs font-black text-foreground cursor-pointer"
+                title="Agregar 30 segundos"
+                aria-label="Agregar 30 segundos"
               >
                 +{formatearSegundos(30)}
               </button>
@@ -325,7 +336,8 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
                   triggerHaptic('selection');
                   setIsRunning(!isRunning);
                 }}
-                className={`py-2 px-3.5 rounded-xl font-bold flex items-center gap-1.5 text-xs shadow-md transition-all cursor-pointer ${
+                aria-label={isRunning ? 'Pausar descanso' : 'Reanudar descanso'}
+                className={`min-h-11 min-w-11 py-2 px-3.5 rounded-xl font-bold flex items-center gap-1.5 text-xs shadow-md transition-all cursor-pointer ${
                   isRunning
                     ? 'bg-warning/20 text-warning border border-warning/30'
                     : 'bg-primary text-primary-foreground'
@@ -352,8 +364,9 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
                   setIsRunning(false);
                   setIsFinished(false);
                 }}
-                className="p-2 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground text-xs cursor-pointer"
+                className="min-h-11 min-w-11 flex items-center justify-center p-2 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground text-xs cursor-pointer"
                 title="Reiniciar tiempo"
+                aria-label="Reiniciar tiempo"
               >
                 <RotateCcw className="h-4 w-4" />
               </button>
