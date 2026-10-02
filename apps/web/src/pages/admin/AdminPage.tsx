@@ -7,12 +7,11 @@ import {
   EstadoLicencia,
   ListadoEntrenadoresAdminDTO,
 } from '@guachafit/shared';
-import { ApiError, apiClient } from '../../lib/api-client';
+import { apiClient } from '../../lib/api-client';
 import { construirLinkActivacion, normalizarCoachCode } from '../../lib/onboarding-links';
 import { useLogoutSeguro } from '../../lib/use-logout-seguro';
 import { useAuth } from '../../context/auth-context';
 import { usePaginacionServidor, type ParametrosCargaPagina } from '../../lib/use-paginacion-servidor';
-import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import {
   TAMANO_PAGINA_ENTRENADORES_ADMIN,
   endpointEstadoEntrenador,
@@ -22,13 +21,14 @@ import {
   type CambioDemoEntrenador,
 } from '../../lib/admin-entrenadores';
 import { DialogoLogoutPendientes } from '../../components/common/DialogoLogoutPendientes';
+import { DialogoConfirmacion } from '../../components/common/DialogoConfirmacion';
+import { copiarAlPortapapeles, MENSAJE_COPIA_FALLIDA } from '../../lib/acceso-ui';
 import { Paginacion } from '../../components/common/Paginacion';
 import { TablaEntrenadoresAdmin } from '../../components/admin/TablaEntrenadoresAdmin';
 import {
   Check,
   ClipboardCopy,
   Clock,
-  Loader2,
   Lock,
   LogOut,
   ShieldCheck,
@@ -70,6 +70,7 @@ export function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [creado, setCreado] = useState<EntrenadorCreadoDTO | null>(null);
   const [copiado, setCopiado] = useState(false);
+  const [errorCopia, setErrorCopia] = useState<string | null>(null);
 
   // Listado paginado del panel (RF-010 RN-01).
   const [pagina, setPagina] = useState(1);
@@ -108,13 +109,6 @@ export function AdminPage() {
     onAjustarPagina: setPagina,
   });
 
-  const refDialogoConfirmacion = useDialogoAccesible({
-    abierto: confirmacion !== null,
-    onCerrar: () => {
-      if (!procesandoUsuarioId) setConfirmacion(null);
-    },
-  });
-
   const actualizarCampo =
     (campo: keyof typeof FORMULARIO_INICIAL) => (evento: React.ChangeEvent<HTMLInputElement>) => {
       setFormulario((actual) => ({ ...actual, [campo]: evento.target.value }));
@@ -124,6 +118,8 @@ export function AdminPage() {
     evento.preventDefault();
     setError(null);
     setCreado(null);
+    setCopiado(false);
+    setErrorCopia(null);
     setEnviando(true);
     try {
       const nombreComercial = formulario.nombreComercial.trim();
@@ -140,10 +136,11 @@ export function AdminPage() {
       // El alta nueva aparece en la lista del panel sin recargar la página.
       recargar();
     } catch (err) {
-      // Mensaje honesto: el detalle real de la API (correo duplicado, código en uso o formato).
+      // Mensaje honesto: el cliente conserva el texto de la API si es legible (correo duplicado,
+      // código en uso) y traduce los técnicos.
       setError(
-        err instanceof ApiError
-          ? err.problem.detail || err.message
+        err instanceof Error && err.message
+          ? err.message
           : 'No se pudo crear el entrenador. Intenta de nuevo.'
       );
     } finally {
@@ -157,12 +154,9 @@ export function AdminPage() {
 
   const copiarEnlace = async () => {
     if (!enlaceActivacion) return;
-    try {
-      await navigator.clipboard.writeText(enlaceActivacion);
-      setCopiado(true);
-    } catch {
-      setCopiado(false);
-    }
+    const ok = await copiarAlPortapapeles(enlaceActivacion);
+    setCopiado(ok);
+    setErrorCopia(ok ? null : MENSAJE_COPIA_FALLIDA);
   };
 
   const solicitarCambioEstado = (entrenador: EntrenadorAdminDTO, activo: boolean) => {
@@ -222,8 +216,8 @@ export function AdminPage() {
       recargar();
     } catch (err) {
       setAccionError(
-        err instanceof ApiError
-          ? err.problem?.detail || err.message
+        err instanceof Error && err.message
+          ? err.message
           : 'No se pudo aplicar el cambio. Intenta de nuevo.'
       );
     } finally {
@@ -244,11 +238,11 @@ export function AdminPage() {
         detalle:
           confirmacion.tipo === 'estado'
             ? confirmacion.activo
-              ? 'La cuenta podrá iniciar sesión y renovar tokens de nuevo. Sus alumnos recuperan el acceso.'
-              : 'No podrá iniciar sesión ni renovar tokens. Su sesión actual se cierra en el próximo ciclo de verificación (máximo 15 minutos). Sus alumnos tampoco podrán iniciar sesión mientras la cuenta esté deshabilitada.'
+              ? 'Podrá volver a iniciar sesión. Sus alumnos también recuperan el acceso.'
+              : 'Ya no podrá entrar: su sesión se cerrará en unos minutos (máximo 15). Sus alumnos tampoco podrán entrar mientras la cuenta esté deshabilitada.'
             : confirmacion.estadoLicencia === EstadoLicencia.ACTIVA
-              ? 'El entrenador recupera su acceso y su enlace público de captación vuelve a resolver. Sus alumnos también recuperan el acceso.'
-              : 'No podrá iniciar sesión ni renovar tokens, y su enlace público de captación deja de resolver. Sus alumnos tampoco podrán iniciar sesión mientras la licencia esté suspendida.',
+              ? 'Podrá volver a iniciar sesión y su enlace de registro para alumnos vuelve a funcionar. Sus alumnos también recuperan el acceso.'
+              : 'Ya no podrá entrar y su enlace de registro para alumnos dejará de funcionar. Sus alumnos tampoco podrán entrar mientras la licencia esté suspendida.',
         boton: confirmacion.tipo === 'estado'
           ? confirmacion.activo
             ? 'Reactivar cuenta'
@@ -279,8 +273,9 @@ export function AdminPage() {
         <button
           type="button"
           onClick={() => void logoutSeguro.solicitarCierre()}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 text-xs font-semibold transition-colors cursor-pointer"
+          className="min-h-11 min-w-11 justify-center flex items-center gap-2 px-3 py-2 rounded-xl border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 text-xs font-semibold transition-colors cursor-pointer"
           title="Cerrar sesión"
+          aria-label="Cerrar sesión"
         >
           <LogOut className="h-4 w-4" />
           <span className="hidden sm:inline">Cerrar sesión</span>
@@ -316,8 +311,8 @@ export function AdminPage() {
           <div>
             <h2 className="text-base font-bold text-foreground">Entrenadores de la plataforma</h2>
             <p className="text-xs text-muted-foreground">
-              Deshabilita cuentas o suspende licencias: el acceso del entrenador se revoca en el
-              siguiente ciclo de verificación (login, refresh y sesión activa).
+              Deshabilita cuentas o suspende licencias: el acceso del entrenador se revoca la
+              próxima vez que la persona use la app.
             </p>
           </div>
         </div>
@@ -396,18 +391,23 @@ export function AdminPage() {
                   Comparte este enlace de activación (válido 48 horas):
                 </p>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 text-[11px] font-mono break-all px-2.5 py-2 rounded-lg bg-background border border-border text-foreground">
+                  <code className="flex-1 text-xs font-mono break-all px-2.5 py-2 rounded-lg bg-background border border-border text-foreground">
                     {enlaceActivacion}
                   </code>
                   <button
                     type="button"
                     onClick={copiarEnlace}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 active:scale-95 transition-all cursor-pointer shrink-0"
+                    className="min-h-11 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 active:scale-95 transition-all cursor-pointer shrink-0"
                   >
                     {copiado ? <Check className="h-3.5 w-3.5" /> : <ClipboardCopy className="h-3.5 w-3.5" />}
                     <span>{copiado ? 'Copiado' : 'Copiar'}</span>
                   </button>
                 </div>
+                {errorCopia && (
+                  <p role="alert" className="text-xs font-semibold text-destructive">
+                    {errorCopia}
+                  </p>
+                )}
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
@@ -430,7 +430,7 @@ export function AdminPage() {
               value={formulario.nombres}
               onChange={actualizarCampo('nombres')}
               placeholder="Marcos"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-foreground text-sm focus:outline-hidden focus:border-primary transition-colors"
+              className="w-full min-h-11 px-3.5 py-2.5 rounded-xl bg-background border border-border text-foreground text-sm focus:outline-hidden focus:border-primary transition-colors"
             />
           </div>
 
@@ -446,7 +446,7 @@ export function AdminPage() {
               value={formulario.apellidos}
               onChange={actualizarCampo('apellidos')}
               placeholder="Fitness"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-foreground text-sm focus:outline-hidden focus:border-primary transition-colors"
+              className="w-full min-h-11 px-3.5 py-2.5 rounded-xl bg-background border border-border text-foreground text-sm focus:outline-hidden focus:border-primary transition-colors"
             />
           </div>
 
@@ -461,7 +461,7 @@ export function AdminPage() {
               value={formulario.email}
               onChange={actualizarCampo('email')}
               placeholder="marcos@gym.com"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-foreground text-sm focus:outline-hidden focus:border-primary transition-colors"
+              className="w-full min-h-11 px-3.5 py-2.5 rounded-xl bg-background border border-border text-foreground text-sm focus:outline-hidden focus:border-primary transition-colors"
             />
           </div>
 
@@ -479,7 +479,7 @@ export function AdminPage() {
               value={formulario.telefonoContacto}
               onChange={actualizarCampo('telefonoContacto')}
               placeholder="+58 412 000 0000"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-foreground text-sm focus:outline-hidden focus:border-primary transition-colors"
+              className="w-full min-h-11 px-3.5 py-2.5 rounded-xl bg-background border border-border text-foreground text-sm focus:outline-hidden focus:border-primary transition-colors"
             />
           </div>
 
@@ -497,9 +497,9 @@ export function AdminPage() {
               value={formulario.coachCode}
               onChange={actualizarCampo('coachCode')}
               placeholder="MARCOS-921"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-foreground text-sm font-mono focus:outline-hidden focus:border-primary transition-colors"
+              className="w-full min-h-11 px-3.5 py-2.5 rounded-xl bg-background border border-border text-foreground text-sm font-mono focus:outline-hidden focus:border-primary transition-colors"
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Será el código del enlace de captación de sus alumnos.
             </p>
           </div>
@@ -515,19 +515,19 @@ export function AdminPage() {
               value={formulario.nombreComercial}
               onChange={actualizarCampo('nombreComercial')}
               placeholder="Marcos Fitness"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-foreground text-sm focus:outline-hidden focus:border-primary transition-colors"
+              className="w-full min-h-11 px-3.5 py-2.5 rounded-xl bg-background border border-border text-foreground text-sm focus:outline-hidden focus:border-primary transition-colors"
             />
           </div>
 
           <div className="sm:col-span-2 flex items-center justify-between gap-3 pt-1">
-            <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground flex items-center gap-1.5">
               <Lock className="h-3.5 w-3.5" />
               La contraseña se define con el enlace de activación.
             </span>
             <button
               type="submit"
               disabled={enviando}
-              className="px-4 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:brightness-110 active:scale-98 transition-all cursor-pointer disabled:opacity-50"
+              className="min-h-11 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:brightness-110 active:scale-98 transition-all cursor-pointer disabled:opacity-50"
             >
               {enviando ? 'Creando cuenta...' : 'Crear entrenador'}
             </button>
@@ -555,49 +555,16 @@ export function AdminPage() {
       </section>
 
       {/* Confirmación accesible de las acciones de cuenta/licencia */}
-      {confirmacion && textoConfirmacion && (
-        <div
-          onClick={(evento) => {
-            if (evento.target === evento.currentTarget && !procesandoUsuarioId) {
-              setConfirmacion(null);
-            }
-          }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
-        >
-          <div
-            ref={refDialogoConfirmacion}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="admin-confirmacion-titulo"
-            tabIndex={-1}
-            className="w-full max-w-md rounded-2xl bg-card border border-border shadow-2xl p-5 space-y-4"
-          >
-            <h2 id="admin-confirmacion-titulo" className="text-base font-bold text-foreground">
-              {textoConfirmacion.titulo}
-            </h2>
-            <p className="text-xs text-muted-foreground">{textoConfirmacion.detalle}</p>
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmacion(null)}
-                disabled={!!procesandoUsuarioId}
-                className="px-3 py-2 rounded-xl border border-border text-muted-foreground text-xs font-semibold hover:text-foreground transition-colors cursor-pointer disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => void confirmarAccion()}
-                disabled={!!procesandoUsuarioId}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
-              >
-                {procesandoUsuarioId && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                {textoConfirmacion.boton}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DialogoConfirmacion
+        abierto={confirmacion !== null && textoConfirmacion !== null}
+        idTitulo="admin-confirmacion-titulo"
+        titulo={textoConfirmacion?.titulo ?? ''}
+        detalle={textoConfirmacion?.detalle ?? ''}
+        textoConfirmar={textoConfirmacion?.boton ?? ''}
+        procesando={!!procesandoUsuarioId}
+        onCancelar={() => setConfirmacion(null)}
+        onConfirmar={() => void confirmarAccion()}
+      />
 
       <DialogoLogoutPendientes
         abierto={logoutSeguro.dialogoAbierto}

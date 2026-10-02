@@ -1,17 +1,19 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient, ApiError } from '../../lib/api-client';
 import {
+  esErrorCorreoYaRegistrado,
   MENSAJE_ACTIVACION_INVALIDA,
   MINIMO_CARACTERES_PASSWORD,
   validarPasswordActivacion,
 } from '../../lib/onboarding-links';
+import { MENSAJE_ERROR_GENERICO } from '../../lib/mensajes-error';
 import { Dumbbell, ArrowLeft, CheckCircle2, KeyRound, Lock, ShieldAlert } from 'lucide-react';
 
 /**
  * WU-E (RF-011 RN-05): pantalla pública de activación de credenciales.
  *
- * Consume `POST /auth/invitacion/establecer-password` con el token de un solo uso (TTL 48h)
+ * Consume `POST /auth/invitacion/establecer-password` con el token de un solo uso (vence en 48 h)
  * generado por el alta manual o por cualquier invitación. No requiere sesión: es el segundo paso
  * del flujo "crear alumno → compartir enlace → el alumno crea su contraseña".
  */
@@ -26,10 +28,21 @@ export function ActivacionPage() {
   const [error, setError] = useState<string | null>(null);
   const [tokenInvalido, setTokenInvalido] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [correoYaRegistrado, setCorreoYaRegistrado] = useState(false);
+  // C7: la redirección tras el éxito se cancela si la pantalla se desmonta antes.
+  const redireccionRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (redireccionRef.current) clearTimeout(redireccionRef.current);
+    },
+    []
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setCorreoYaRegistrado(false);
 
     const errorValidacion = validarPasswordActivacion(password, confirmacion);
     if (errorValidacion) {
@@ -45,18 +58,22 @@ export function ActivacionPage() {
         skipAuth: true,
       });
       setSuccess(true);
-      setTimeout(() => {
+      redireccionRef.current = setTimeout(() => {
         navigate('/login');
       }, 2500);
     } catch (err: any) {
-      // 404 = token inexistente/expirado/ya usado; 401 = cuenta dada de baja o bloqueada.
-      if (err instanceof ApiError && (err.status === 404 || err.status === 401)) {
+      // 404 = enlace inexistente/vencido/ya usado → copy propio; 401 = cuenta archivada o
+      // bloqueada → el cliente conserva el mensaje del servidor solo si es amigable.
+      if (err instanceof ApiError && err.status === 404) {
         setTokenInvalido(true);
-        setError(err.message || MENSAJE_ACTIVACION_INVALIDA);
+        setError(MENSAJE_ACTIVACION_INVALIDA);
+      } else if (err instanceof ApiError && err.status === 401) {
+        setTokenInvalido(true);
+        setError(err.message !== MENSAJE_ERROR_GENERICO ? err.message : MENSAJE_ACTIVACION_INVALIDA);
       } else {
-        setError(
-          err?.message || 'No se pudo crear la contraseña. Revisa tu conexión e inténtalo de nuevo.'
-        );
+        // C8: la cuenta ya existe → se ofrece ir a iniciar sesión.
+        setCorreoYaRegistrado(esErrorCorreoYaRegistrado(err));
+        setError(err?.message || MENSAJE_ERROR_GENERICO);
       }
     } finally {
       setIsLoading(false);
@@ -70,7 +87,7 @@ export function ActivacionPage() {
       <div className="w-full max-w-md space-y-6">
         <Link
           to="/login"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+          className="inline-flex items-center gap-1.5 min-h-11 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
           <span>Volver al inicio de sesión</span>
@@ -94,8 +111,15 @@ export function ActivacionPage() {
               <CheckCircle2 className="h-12 w-12 text-success mx-auto" />
               <h2 className="font-bold text-base text-foreground">¡Contraseña creada!</h2>
               <p className="text-xs text-muted-foreground">
-                Ya puedes iniciar sesión con tu correo y tu nueva contraseña. Redirigiendo...
+                Ya puedes iniciar sesión con tu correo y tu nueva contraseña. En unos segundos te
+                llevamos a iniciar sesión.
               </p>
+              <Link
+                to="/login"
+                className="inline-flex items-center justify-center min-h-11 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:brightness-110 active:scale-95 transition-all"
+              >
+                Ir a iniciar sesión
+              </Link>
             </div>
           ) : enlaceInvalido ? (
             <div className="p-5 rounded-xl bg-destructive/10 border border-destructive/30 space-y-3">
@@ -103,12 +127,12 @@ export function ActivacionPage() {
                 <ShieldAlert className="h-5 w-5 shrink-0" />
                 <span>Enlace no válido</span>
               </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
+              <p role="alert" className="text-xs text-muted-foreground leading-relaxed">
                 {error || MENSAJE_ACTIVACION_INVALIDA}
               </p>
               <Link
                 to="/login"
-                className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 active:scale-95 transition-all"
+                className="inline-flex items-center gap-1.5 min-h-11 py-2 px-3.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 active:scale-95 transition-all"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
                 <span>Volver al inicio de sesión</span>
@@ -119,9 +143,17 @@ export function ActivacionPage() {
               {error && (
                 <div
                   role="alert"
-                  className="p-3 rounded-xl bg-destructive/15 border border-destructive/30 text-destructive text-xs font-semibold"
+                  className="p-3 rounded-xl bg-destructive/15 border border-destructive/30 text-destructive text-xs font-semibold space-y-1"
                 >
-                  {error}
+                  <p>{error}</p>
+                  {correoYaRegistrado && (
+                    <Link
+                      to="/login"
+                      className="inline-flex items-center min-h-11 font-bold text-primary underline"
+                    >
+                      Iniciar sesión
+                    </Link>
+                  )}
                 </div>
               )}
 
@@ -130,17 +162,19 @@ export function ActivacionPage() {
                   Nueva contraseña
                 </label>
                 <div className="relative">
-                  <Lock className="h-4 w-4 text-muted-foreground absolute left-3 top-2.5" />
+                  <Lock className="h-4 w-4 text-muted-foreground absolute left-3 top-3.5" />
                   <input
                     id="password"
+                    name="password"
                     type="password"
+                    autoComplete="new-password"
                     required
                     minLength={MINIMO_CARACTERES_PASSWORD}
                     maxLength={100}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder={`Mínimo ${MINIMO_CARACTERES_PASSWORD} caracteres`}
-                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                    className="w-full min-h-11 pl-9 pr-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
                   />
                 </div>
               </div>
@@ -150,30 +184,32 @@ export function ActivacionPage() {
                   Confirma tu contraseña
                 </label>
                 <div className="relative">
-                  <KeyRound className="h-4 w-4 text-muted-foreground absolute left-3 top-2.5" />
+                  <KeyRound className="h-4 w-4 text-muted-foreground absolute left-3 top-3.5" />
                   <input
                     id="confirmacion"
+                    name="confirmacion"
                     type="password"
+                    autoComplete="new-password"
                     required
                     minLength={MINIMO_CARACTERES_PASSWORD}
                     maxLength={100}
                     value={confirmacion}
                     onChange={(e) => setConfirmacion(e.target.value)}
                     placeholder="Repite tu contraseña"
-                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                    className="w-full min-h-11 pl-9 pr-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
                   />
                 </div>
               </div>
 
-              <p className="text-[11px] text-muted-foreground">
-                Usa al menos {MINIMO_CARACTERES_PASSWORD} caracteres. Este enlace es de un solo uso
-                y caduca a las 48 horas.
+              <p className="text-xs text-muted-foreground">
+                Usa al menos {MINIMO_CARACTERES_PASSWORD} caracteres. Este enlace se usa una sola vez
+                y vence en 48 horas.
               </p>
 
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:brightness-110 active:scale-98 transition-all cursor-pointer disabled:opacity-50"
+                className="w-full min-h-11 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:brightness-110 active:scale-98 transition-all cursor-pointer disabled:opacity-50"
               >
                 {isLoading ? 'Creando contraseña...' : 'Crear contraseña'}
               </button>

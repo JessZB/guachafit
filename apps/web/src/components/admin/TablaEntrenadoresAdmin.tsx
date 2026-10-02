@@ -51,7 +51,7 @@ const CLASES_TONO: Record<string, string> = {
 function Badge({ tono, children }: { tono: string; children: React.ReactNode }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-bold uppercase tracking-wide ${
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-bold uppercase tracking-wide ${
         CLASES_TONO[tono] ?? CLASES_TONO.neutral
       }`}
     >
@@ -84,7 +84,7 @@ function BotonAccion({
       type="button"
       onClick={onClick}
       disabled={deshabilitado}
-      className={`inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-[11px] font-bold transition-all active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-primary ${clase}`}
+      className={`min-h-11 min-w-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-primary ${clase}`}
     >
       <Icono className="h-3.5 w-3.5 shrink-0" />
       <span>{texto}</span>
@@ -115,7 +115,7 @@ export function TablaEntrenadoresAdmin({
         <button
           type="button"
           onClick={onReintentar}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-secondary/70 text-foreground border border-border/70 text-[11px] font-bold hover:bg-secondary transition-all active:scale-95 cursor-pointer"
+          className="min-h-11 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-secondary/70 text-foreground border border-border/70 text-xs font-bold hover:bg-secondary transition-all active:scale-95 cursor-pointer"
         >
           <RefreshCw className="h-3.5 w-3.5" />
           Reintentar
@@ -172,14 +172,14 @@ export function TablaEntrenadoresAdmin({
                   {entrenador.nombres} {entrenador.apellidos}
                 </span>
                 {entrenador.nombreComercial && (
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     · {entrenador.nombreComercial}
                   </span>
                 )}
               </div>
               <p className="text-xs text-muted-foreground truncate">{entrenador.email}</p>
               <div className="flex items-center gap-2 flex-wrap pt-0.5">
-                <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-background border border-border text-foreground">
+                <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-background border border-border text-foreground">
                   {entrenador.coachCode}
                 </span>
                 <Badge tono={entrenador.activo ? 'success' : 'danger'}>
@@ -203,7 +203,7 @@ export function TablaEntrenadoresAdmin({
                   {etiquetaLicencia(entrenador.estadoLicencia)}
                 </Badge>
                 {fechaAlta && (
-                  <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
                     <CalendarDays className="h-3 w-3" />
                     Alta: {fechaAlta}
                   </span>

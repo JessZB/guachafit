@@ -1,8 +1,9 @@
 import React, { Suspense, lazy } from 'react';
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter, Navigate, useLocation } from 'react-router-dom';
 import { Rol } from '@guachafit/shared';
 import { useAuth } from './context/auth-context';
 import { rutaInicioPorRol } from './lib/rutas-rol';
+import { construirDestinoRegistro } from './lib/onboarding-links';
 
 // Layout & Guards
 import { AppLayout } from './components/layout/AppLayout';
@@ -105,6 +106,12 @@ function RootRedirect() {
   return <Navigate to={rutaInicioPorRol(user.rol)} replace />;
 }
 
+/** A10: `/registro` es un alias de `/onboarding` que conserva la query (coach_code → coach). */
+function RegistroRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={construirDestinoRegistro(search)} replace />;
+}
+
 export const router = createBrowserRouter([
   // Public Routes
   {
@@ -122,6 +129,10 @@ export const router = createBrowserRouter([
         <OnboardingPage />
       </Suspense>
     ),
+  },
+  {
+    path: '/registro',
+    element: <RegistroRedirect />,
   },
   {
     path: '/activar',

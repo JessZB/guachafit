@@ -6,10 +6,10 @@
  */
 
 export const MENSAJE_COACH_NO_DISPONIBLE =
-  'Código de invitación no válido o licencia inactiva.';
+  'El código de entrenador no es válido o no está disponible. Por favor contacta a tu coach.';
 
 export const MENSAJE_ACTIVACION_INVALIDA =
-  'El enlace de activación no es válido o ha expirado (TTL 48 horas). Solicita uno nuevo a tu entrenador.';
+  'Este enlace ya no sirve: venció o ya se usó. Pídele uno nuevo a tu entrenador.';
 
 export const MINIMO_CARACTERES_PASSWORD = 8;
 export const MAXIMO_CARACTERES_PASSWORD = 100;
@@ -35,6 +35,26 @@ export function construirLinkOnboarding(coachCode: string, origin: string): stri
 /** Enlace de activación de un alumno recién creado a mano: `/activar?token=...`. */
 export function construirLinkActivacion(token: string, origin: string): string {
   return `${origin}/activar?token=${encodeURIComponent(token)}`;
+}
+
+/**
+ * A10: `/registro` es un alias público de `/onboarding`. Conserva toda la query y traduce el
+ * parámetro legado `coach_code` al canónico `coach` (sin pisar un `coach` explícito).
+ */
+export function construirDestinoRegistro(search: string): string {
+  const parametros = new URLSearchParams(search);
+  const coachLegado = parametros.get('coach_code');
+  parametros.delete('coach_code');
+  if (coachLegado && !parametros.has('coach')) {
+    parametros.set('coach', coachLegado);
+  }
+  const query = parametros.toString();
+  return query ? `/onboarding?${query}` : '/onboarding';
+}
+
+/** C8: el alta respondió 409 (correo ya registrado): la UI ofrece ir a iniciar sesión. */
+export function esErrorCorreoYaRegistrado(error: unknown): boolean {
+  return (error as { status?: unknown } | null)?.status === 409;
 }
 
 /**

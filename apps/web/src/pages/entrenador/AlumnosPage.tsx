@@ -32,6 +32,16 @@ import {
 } from '../../lib/etiquetas-dominio';
 import type { TonoSemaforo } from '../../lib/adherencia';
 import { Paginacion } from '../../components/common/Paginacion';
+import { CampoWhatsapp } from '../../components/common/CampoWhatsapp';
+import { copiarAlPortapapeles, MENSAJE_COPIA_FALLIDA } from '../../lib/acceso-ui';
+import {
+  componerTelefonoWhatsapp,
+  fechaLocalHoyISO,
+  PREFIJO_PAIS_POR_DEFECTO,
+  textoEdad,
+  validarFechaNacimiento,
+  validarTelefonoWhatsapp,
+} from '../../lib/formulario-registro';
 import {
   Users,
   UserPlus,
@@ -100,6 +110,7 @@ export function AlumnosPage() {
   const [filterModalidad, setFilterModalidad] = useState<FilterModalidad>('todas');
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [isCopied, setIsCopied] = useState(false);
+  const [errorCopiaCaptacion, setErrorCopiaCaptacion] = useState<string | null>(null);
   // D5: fallo de mutación visible; nunca éxito falso ni alumno fantasma.
   const [actionError, setActionError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -111,8 +122,10 @@ export function AlumnosPage() {
   const [email, setEmail] = useState('');
   const [tipoDocumento, setTipoDocumento] = useState<TipoDocumento>(TipoDocumento.V);
   const [numeroDocumento, setNumeroDocumento] = useState('');
-  const [fechaNacimiento, setFechaNacimiento] = useState('1998-05-14');
-  const [telefonoWhatsapp, setTelefonoWhatsapp] = useState('+584121234567');
+  // Sin datos precargados: fecha vacía y WhatsApp con prefijo de país editable.
+  const [fechaNacimiento, setFechaNacimiento] = useState('');
+  const [prefijoWhatsapp, setPrefijoWhatsapp] = useState(PREFIJO_PAIS_POR_DEFECTO);
+  const [numeroWhatsapp, setNumeroWhatsapp] = useState('');
   const [modalidad, setModalidad] = useState<Modalidad>(Modalidad.PRESENCIAL);
   const [fichaSaludPrivada, setFichaSaludPrivada] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -123,6 +136,7 @@ export function AlumnosPage() {
     linkActivacion: string;
   } | null>(null);
   const [activacionCopiada, setActivacionCopiada] = useState(false);
+  const [errorCopiaActivacion, setErrorCopiaActivacion] = useState<string | null>(null);
 
   // WU-E (RF-011 RN-06): el enlace de captación usa el coachCode REAL del entrenador
   // (GET /entrenador/perfil). Nunca un código hardcodeado; en modo demo no se consulta la API.
@@ -159,19 +173,6 @@ export function AlumnosPage() {
   const registrationUrl = coachCode
     ? construirLinkOnboarding(coachCode, window.location.origin)
     : null;
-
-  const calculateAge = (fechaStr: string): number => {
-    if (!fechaStr) return 0;
-    const nacimiento = new Date(fechaStr);
-    if (isNaN(nacimiento.getTime())) return 0;
-    const hoy = new Date();
-    let edad = hoy.getFullYear() - nacimiento.getFullYear();
-    const m = hoy.getMonth() - nacimiento.getMonth();
-    if (m < 0 || (m === 0 && hoy.getDate() < nacimiento.getDate())) {
-      edad--;
-    }
-    return Math.max(0, edad);
-  };
 
   /**
    * WU25a: carga de UNA página del directorio. Los filtros viajan al servidor (`q`, `estado`,
@@ -269,19 +270,25 @@ export function AlumnosPage() {
     setAlumnoCreado(null);
     setFormError(null);
     setActivacionCopiada(false);
+    setErrorCopiaActivacion(null);
     setIsModalOpen(true);
   };
 
-  const handleCopyLink = () => {
+  // C5: el portapapeles puede fallar (permiso denegado, navegador sin API): aviso para copiar a mano.
+  const handleCopyLink = async () => {
     if (!registrationUrl) return;
-    navigator.clipboard.writeText(registrationUrl);
+    const ok = await copiarAlPortapapeles(registrationUrl);
+    setErrorCopiaCaptacion(ok ? null : MENSAJE_COPIA_FALLIDA);
+    if (!ok) return;
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  const handleCopyActivacionLink = () => {
+  const handleCopyActivacionLink = async () => {
     if (!alumnoCreado) return;
-    navigator.clipboard.writeText(alumnoCreado.linkActivacion);
+    const ok = await copiarAlPortapapeles(alumnoCreado.linkActivacion);
+    setErrorCopiaActivacion(ok ? null : MENSAJE_COPIA_FALLIDA);
+    if (!ok) return;
     setActivacionCopiada(true);
     setTimeout(() => setActivacionCopiada(false), 2000);
   };
@@ -292,6 +299,7 @@ export function AlumnosPage() {
     setAlumnoCreado(null);
     setFormError(null);
     setActivacionCopiada(false);
+    setErrorCopiaActivacion(null);
   };
 
   // U3b: Escape, trampa de Tab, foco inicial y restore del foco al disparador.
@@ -299,8 +307,17 @@ export function AlumnosPage() {
 
   const handleCrearAlumnoManual = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
     setFormError(null);
+
+    const errorValidacion =
+      validarTelefonoWhatsapp(prefijoWhatsapp, numeroWhatsapp) ??
+      validarFechaNacimiento(fechaNacimiento);
+    if (errorValidacion) {
+      setFormError(errorValidacion);
+      return;
+    }
+
+    setIsSubmitting(true);
 
     try {
       const resultado = await apiClient<AltaManualAlumnoResultadoDTO>('/alumnos/manual', {
@@ -312,7 +329,7 @@ export function AlumnosPage() {
           tipoDocumento,
           numeroDocumento,
           fechaNacimiento,
-          telefonoWhatsapp,
+          telefonoWhatsapp: componerTelefonoWhatsapp(prefijoWhatsapp, numeroWhatsapp),
           modalidad,
           fichaSaludPrivada: fichaSaludPrivada || undefined,
         }),
@@ -391,24 +408,28 @@ export function AlumnosPage() {
               <button
                 type="button"
                 onClick={() => setViewMode('cards')}
-                className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`min-h-11 min-w-11 flex items-center justify-center rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   viewMode === 'cards'
                     ? 'bg-primary text-primary-foreground shadow-xs'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
-                title="Vista de Cards Compactas"
+                title="Vista en tarjetas"
+                aria-label="Vista en tarjetas"
+                aria-pressed={viewMode === 'cards'}
               >
                 <LayoutGrid className="h-4 w-4" />
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode('table')}
-                className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`min-h-11 min-w-11 flex items-center justify-center rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   viewMode === 'table'
                     ? 'bg-primary text-primary-foreground shadow-xs'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
-                title="Vista Tabla"
+                title="Vista en tabla"
+                aria-label="Vista en tabla"
+                aria-pressed={viewMode === 'table'}
               >
                 <TableIcon className="h-4 w-4" />
               </button>
@@ -417,7 +438,7 @@ export function AlumnosPage() {
             {/* Inscribir Alumno */}
             <button
               onClick={abrirModalInscripcion}
-              className="py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="min-h-11 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <UserPlus className="h-4 w-4" />
               <span>Inscribir Manual</span>
@@ -440,7 +461,7 @@ export function AlumnosPage() {
                 : 'bg-secondary/30 border-border/40 hover:bg-secondary/50 hover:border-border/80'
             }`}
           >
-            <span className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider block">
+            <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider block">
               Total Cartera
             </span>
             <p className="font-mono font-black text-xl sm:text-2xl text-foreground tracking-tight">
@@ -460,7 +481,7 @@ export function AlumnosPage() {
                 : 'bg-secondary/30 border-border/40 hover:bg-secondary/50 hover:border-border/80'
             }`}
           >
-            <span className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider block">
+            <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider block">
               Activos
             </span>
             <p className="font-mono font-black text-xl sm:text-2xl text-success tracking-tight">
@@ -480,7 +501,7 @@ export function AlumnosPage() {
                 : 'bg-secondary/30 border-border/40 hover:bg-secondary/50 hover:border-border/80'
             }`}
           >
-            <span className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider block">
+            <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider block">
               Pausados
             </span>
             <p className="font-mono font-black text-xl sm:text-2xl text-warning tracking-tight">
@@ -501,7 +522,7 @@ export function AlumnosPage() {
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider block">
+              <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider block">
                 En Mora
               </span>
               {kpis.morosos > 0 && (
@@ -525,7 +546,7 @@ export function AlumnosPage() {
                 : 'bg-secondary/30 border-border/40 hover:bg-secondary/50 hover:border-border/80'
             }`}
           >
-            <span className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider block">
+            <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider block">
               Presenciales
             </span>
             <p className="font-mono font-black text-xl sm:text-2xl text-primary tracking-tight">
@@ -545,7 +566,7 @@ export function AlumnosPage() {
                 : 'bg-secondary/30 border-border/40 hover:bg-secondary/50 hover:border-border/80'
             }`}
           >
-            <span className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider block">
+            <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider block">
               Archivados
             </span>
             <p className="font-mono font-black text-xl sm:text-2xl text-muted-foreground tracking-tight">
@@ -560,19 +581,24 @@ export function AlumnosPage() {
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-primary font-bold text-xs">
             <Share2 className="h-4 w-4" />
-            <span>Enlace Único de Captación de Alumnos (Deep Link)</span>
+            <span>Tu enlace de registro para alumnos</span>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
             {registrationUrl
               ? 'Comparte este enlace con tus prospectos para que se autorregistren y se vinculen automáticamente a tu cartera.'
               : coachCodeError ||
                 (isDemoMode
-                  ? 'En modo demostración no se consulta tu coach_code real; inicia sesión con tu cuenta para ver tu enlace.'
+                  ? 'En la demo no se muestra tu código real; inicia sesión con tu cuenta para ver tu enlace.'
                   : 'Cargando tu enlace personalizado...')}
           </p>
           {coachCode && (
-            <p className="text-[11px] text-muted-foreground font-mono">
+            <p className="text-xs text-muted-foreground font-mono">
               Tu código: <span className="text-primary font-bold">{coachCode}</span>
+            </p>
+          )}
+          {errorCopiaCaptacion && (
+            <p role="alert" className="text-xs font-semibold text-destructive">
+              {errorCopiaCaptacion}
             </p>
           )}
         </div>
@@ -582,10 +608,10 @@ export function AlumnosPage() {
             type="button"
             onClick={handleCopyLink}
             disabled={!registrationUrl}
-            className="py-2 px-3.5 rounded-xl bg-card hover:bg-secondary text-foreground text-xs font-bold border border-border flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="min-h-11 py-2 px-3.5 rounded-xl bg-card hover:bg-secondary text-foreground text-xs font-bold border border-border flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isCopied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5 text-primary" />}
-            <span>{isCopied ? '¡Enlace Copiado!' : 'Copiar Enlace'}</span>
+            <span>{isCopied ? '¡Enlace copiado!' : 'Copiar enlace'}</span>
           </button>
 
           {registrationUrl ? (
@@ -595,7 +621,7 @@ export function AlumnosPage() {
               )}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="py-2 px-3.5 rounded-xl bg-success-strong hover:bg-success-strong/90 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-success-strong/20 transition-all active:scale-95 cursor-pointer"
+              className="min-h-11 py-2 px-3.5 rounded-xl bg-success-strong hover:bg-success-strong/90 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-success-strong/20 transition-all active:scale-95 cursor-pointer"
             >
               <MessageSquare className="h-3.5 w-3.5" />
               <span>Compartir por WhatsApp</span>
@@ -615,7 +641,7 @@ export function AlumnosPage() {
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
             <button
               onClick={() => setFilterEstado('todos')}
-              className={`py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              className={`min-h-11 py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                 filterEstado === 'todos'
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'bg-secondary/70 hover:bg-secondary text-muted-foreground hover:text-foreground'
@@ -625,7 +651,7 @@ export function AlumnosPage() {
             </button>
             <button
               onClick={() => setFilterEstado('activo')}
-              className={`py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              className={`min-h-11 py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                 filterEstado === 'activo'
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'bg-secondary/70 hover:bg-secondary text-muted-foreground hover:text-foreground'
@@ -635,7 +661,7 @@ export function AlumnosPage() {
             </button>
             <button
               onClick={() => setFilterEstado('pausado')}
-              className={`py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              className={`min-h-11 py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                 filterEstado === 'pausado'
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'bg-secondary/70 hover:bg-secondary text-muted-foreground hover:text-foreground'
@@ -645,7 +671,7 @@ export function AlumnosPage() {
             </button>
             <button
               onClick={() => setFilterEstado('mora')}
-              className={`py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              className={`min-h-11 py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                 filterEstado === 'mora'
                   ? 'bg-danger-strong text-white shadow-xs'
                   : 'bg-secondary/70 hover:bg-secondary text-muted-foreground hover:text-foreground'
@@ -655,7 +681,7 @@ export function AlumnosPage() {
             </button>
             <button
               onClick={() => setFilterEstado('archivados')}
-              className={`py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              className={`min-h-11 py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                 filterEstado === 'archivados'
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'bg-secondary/70 hover:bg-secondary text-muted-foreground hover:text-foreground'
@@ -669,7 +695,7 @@ export function AlumnosPage() {
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => setFilterModalidad('todas')}
-              className={`py-1 px-2.5 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+              className={`min-h-11 py-1 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 filterModalidad === 'todas'
                   ? 'bg-foreground text-background font-bold'
                   : 'bg-secondary/60 text-muted-foreground hover:text-foreground'
@@ -679,7 +705,7 @@ export function AlumnosPage() {
             </button>
             <button
               onClick={() => setFilterModalidad('presencial')}
-              className={`py-1 px-2.5 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+              className={`min-h-11 py-1 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 filterModalidad === 'presencial'
                   ? 'bg-foreground text-background font-bold'
                   : 'bg-secondary/60 text-muted-foreground hover:text-foreground'
@@ -689,7 +715,7 @@ export function AlumnosPage() {
             </button>
             <button
               onClick={() => setFilterModalidad('remoto')}
-              className={`py-1 px-2.5 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+              className={`min-h-11 py-1 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 filterModalidad === 'remoto'
                   ? 'bg-foreground text-background font-bold'
                   : 'bg-secondary/60 text-muted-foreground hover:text-foreground'
@@ -702,13 +728,14 @@ export function AlumnosPage() {
 
         {/* Input de Búsqueda */}
         <div className="relative">
-          <Search className="h-4 w-4 text-muted-foreground absolute left-3.5 top-3" />
+          <Search className="h-4 w-4 text-muted-foreground absolute left-3.5 top-3.5" aria-hidden="true" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por nombre, apellido, correo o documento..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-card border border-border text-xs text-foreground focus:outline-hidden focus:border-primary shadow-xs"
+            aria-label="Buscar alumnos"
+            className="w-full min-h-11 pl-10 pr-4 py-2.5 rounded-2xl bg-card border border-border text-xs text-foreground focus:outline-hidden focus:border-primary shadow-xs"
           />
         </div>
       </div>
@@ -835,20 +862,20 @@ export function AlumnosPage() {
                       <h3 className="font-black text-sm text-foreground truncate group-hover:text-primary transition-colors">
                         {a.nombres} {a.apellidos}
                       </h3>
-                      <p className="text-[11px] text-muted-foreground font-mono truncate">
+                      <p className="text-xs text-muted-foreground font-mono truncate">
                         {formatearDocumento(a.tipoDocumento, a.numeroDocumento) ?? '—'} •{' '}
                         {a.edadCalculada}a
                       </p>
                     </div>
                   </div>
 
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary text-foreground border border-border uppercase shrink-0">
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-secondary text-foreground border border-border uppercase shrink-0">
                     {a.modalidad}
                   </span>
                 </div>
 
                 {/* Middle Info: Plan y Estado */}
-                <div className="flex items-center justify-between text-[11px] border-t border-border/40 pt-2 text-muted-foreground">
+                <div className="flex items-center justify-between text-xs border-t border-border/40 pt-2 text-muted-foreground">
                   {/* D6: sin plan real se muestra "Sin plan asignado"; nunca un nombre inventado. */}
                   {a.planActivoNombre ? (
                     <span className="truncate">{a.planActivoNombre}</span>
@@ -856,7 +883,7 @@ export function AlumnosPage() {
                     <span className="truncate italic">Sin plan asignado</span>
                   )}
                   <span
-                    className={`font-mono font-bold uppercase text-[11px] ${CLASES_TEXTO_SEMAFORO_PAGO[estadoPago.tono]}`}
+                    className={`font-mono font-bold uppercase text-xs ${CLASES_TEXTO_SEMAFORO_PAGO[estadoPago.tono]}`}
                   >
                     {estadoPago.texto}
                   </span>
@@ -864,18 +891,18 @@ export function AlumnosPage() {
 
                 {/* Bottom Row: Botón WhatsApp y Acción */}
                 <div className="flex items-center justify-between pt-1">
-                  <span className="text-[11px] font-mono text-muted-foreground truncate">
+                  <span className="text-xs font-mono text-muted-foreground truncate">
                     {a.telefonoWhatsapp}
                   </span>
 
-                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     <a
                       href={`https://wa.me/${a.telefonoWhatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
                         `Hola ${a.nombres}, te contacto desde Guachafit.`
                       )}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="p-1.5 rounded-lg bg-success/15 hover:bg-success/30 text-success border border-success/20 transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-success"
+                      className="min-h-11 min-w-11 flex items-center justify-center rounded-lg bg-success/15 hover:bg-success/30 text-success border border-success/20 transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-success"
                       title="Enviar mensaje por WhatsApp"
                       aria-label={`Enviar mensaje de WhatsApp a ${a.nombres}`}
                     >
@@ -886,7 +913,7 @@ export function AlumnosPage() {
                       <button
                         type="button"
                         onClick={(e) => handleRestaurarAlumno(a.id, e)}
-                        className="py-1 px-2.5 rounded-lg bg-primary text-primary-foreground font-bold text-[11px] flex items-center gap-1 cursor-pointer hover:brightness-110 active:scale-95 transition-all focus-visible:outline-2 focus-visible:outline-primary"
+                        className="min-h-11 py-1 px-3 rounded-lg bg-primary text-primary-foreground font-bold text-xs flex items-center gap-1 cursor-pointer hover:brightness-110 active:scale-95 transition-all focus-visible:outline-2 focus-visible:outline-primary"
                         title="Restaurar alumno archivado"
                         aria-label={`Restaurar alumno ${a.nombres} ${a.apellidos}`}
                       >
@@ -913,7 +940,7 @@ export function AlumnosPage() {
       {viewMode === 'table' && (
         <div className="p-4 rounded-3xl bg-card border border-border shadow-xs overflow-x-auto">
           <table className="w-full text-xs text-left">
-            <thead className="border-b border-border/80 text-muted-foreground uppercase text-[11px]">
+            <thead className="border-b border-border/80 text-muted-foreground uppercase text-xs">
               <tr>
                 <th className="py-3 px-3">Alumno</th>
                 <th className="py-3 px-3">Documento</th>
@@ -945,7 +972,7 @@ export function AlumnosPage() {
                           <p className="font-extrabold text-foreground group-hover:text-primary transition-colors">
                             {a.nombres} {a.apellidos}
                           </p>
-                          <span className="text-[11px] text-muted-foreground">{a.email}</span>
+                          <span className="text-xs text-muted-foreground">{a.email}</span>
                         </div>
                       </div>
                     </td>
@@ -956,14 +983,14 @@ export function AlumnosPage() {
                     </td>
 
                     <td className="py-3 px-3">
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary text-foreground border border-border uppercase">
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-secondary text-foreground border border-border uppercase">
                         {a.modalidad}
                       </span>
                     </td>
 
                     <td className="py-3 px-3">
                       <span
-                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                        className={`text-xs font-bold px-2 py-0.5 rounded-full uppercase ${
                           isArchived
                             ? 'bg-muted text-muted-foreground border border-border'
                             : a.estadoActivacion === EstadoAlumno.ACTIVO
@@ -977,7 +1004,7 @@ export function AlumnosPage() {
 
                     <td className="py-3 px-3 font-mono font-bold">
                       <span
-                        className={`text-[11px] uppercase ${CLASES_TEXTO_SEMAFORO_PAGO[estadoPago.tono]}`}
+                        className={`text-xs uppercase ${CLASES_TEXTO_SEMAFORO_PAGO[estadoPago.tono]}`}
                       >
                         ● {estadoPago.texto}
                       </span>
@@ -993,7 +1020,7 @@ export function AlumnosPage() {
                           href={`https://wa.me/${a.telefonoWhatsapp.replace(/[^0-9]/g, '')}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="p-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer"
+                          className="min-h-11 min-w-11 flex items-center justify-center rounded-lg bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer"
                           aria-label={`Contactar por WhatsApp a ${a.nombres}`}
                         >
                           <MessageSquare className="h-3.5 w-3.5 text-success" />
@@ -1003,7 +1030,7 @@ export function AlumnosPage() {
                           <button
                             type="button"
                             onClick={(e) => handleRestaurarAlumno(a.id, e)}
-                            className="py-1 px-2.5 rounded-lg bg-primary text-primary-foreground font-bold text-[11px] flex items-center gap-1 cursor-pointer hover:brightness-110 active:scale-95 transition-all"
+                            className="min-h-11 py-1 px-3 rounded-lg bg-primary text-primary-foreground font-bold text-xs flex items-center gap-1 cursor-pointer hover:brightness-110 active:scale-95 transition-all"
                             aria-label={`Restaurar alumno ${a.nombres} ${a.apellidos}`}
                           >
                             <RefreshCw className="h-3 w-3" />
@@ -1016,7 +1043,7 @@ export function AlumnosPage() {
                               triggerHaptic('light');
                               navigate(`/coach/alumnos/${a.id}`);
                             }}
-                            className="p-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 transition-all cursor-pointer"
+                            className="min-h-11 min-w-11 flex items-center justify-center rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 transition-all cursor-pointer"
                             aria-label={`Ver expediente de ${a.nombres} ${a.apellidos}`}
                           >
                             <ChevronRight className="h-3.5 w-3.5" />
@@ -1056,9 +1083,10 @@ export function AlumnosPage() {
                 </h3>
               </div>
               <button
+                type="button"
                 onClick={cerrarModal}
                 aria-label="Cerrar"
-                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
+                className="min-h-11 min-w-11 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -1072,26 +1100,27 @@ export function AlumnosPage() {
                     {alumnoCreado.nombres} {alumnoCreado.apellidos} fue registrado en tu cartera.
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Comparte el enlace de activación con tu alumno para que cree su contraseña.
+                    Comparte este enlace con tu alumno para que cree su contraseña.
                   </p>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground">
-                    Enlace de activación (un solo uso, caduca en 48 horas)
+                  <label htmlFor="alta-enlace-activacion" className="text-xs font-semibold text-muted-foreground">
+                    Enlace para crear su contraseña (se usa una vez y vence en 48 horas)
                   </label>
                   <div className="flex items-center gap-2">
                     <input
+                      id="alta-enlace-activacion"
                       type="text"
                       readOnly
                       value={alumnoCreado.linkActivacion}
                       onFocus={(e) => e.currentTarget.select()}
-                      className="w-full px-3 py-2 rounded-xl bg-background border border-border font-mono text-[11px] text-foreground focus:outline-hidden focus:border-primary"
+                      className="w-full min-h-11 px-3 py-2 rounded-xl bg-background border border-border font-mono text-xs text-foreground focus:outline-hidden focus:border-primary"
                     />
                     <button
                       type="button"
                       onClick={handleCopyActivacionLink}
-                      className="shrink-0 py-2 px-3.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold flex items-center gap-1.5 shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+                      className="shrink-0 min-h-11 py-2 px-3.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold flex items-center gap-1.5 shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
                     >
                       {activacionCopiada ? (
                         <Check className="h-3.5 w-3.5" />
@@ -1101,12 +1130,17 @@ export function AlumnosPage() {
                       <span>{activacionCopiada ? '¡Copiado!' : 'Copiar enlace'}</span>
                     </button>
                   </div>
+                  {errorCopiaActivacion && (
+                    <p role="alert" className="text-xs font-semibold text-destructive">
+                      {errorCopiaActivacion}
+                    </p>
+                  )}
                 </div>
 
                 <button
                   type="button"
                   onClick={cerrarModal}
-                  className="w-full py-2.5 px-4 rounded-xl bg-secondary text-foreground font-bold text-sm border border-border hover:bg-secondary/80 active:scale-98 transition-all cursor-pointer"
+                  className="w-full min-h-11 py-2.5 px-4 rounded-xl bg-secondary text-foreground font-bold text-sm border border-border hover:bg-secondary/80 active:scale-98 transition-all cursor-pointer"
                 >
                   Listo
                 </button>
@@ -1124,48 +1158,55 @@ export function AlumnosPage() {
                 )}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-muted-foreground">Nombres</label>
+                    <label htmlFor="alta-nombres" className="text-xs font-semibold text-muted-foreground">Nombres</label>
                     <input
+                      id="alta-nombres"
+                      autoComplete="off"
                       type="text"
                       required
                       value={nombres}
                       onChange={(e) => setNombres(e.target.value)}
                       placeholder="Carlos"
-                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                      className="w-full min-h-11 px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-muted-foreground">Apellidos</label>
+                    <label htmlFor="alta-apellidos" className="text-xs font-semibold text-muted-foreground">Apellidos</label>
                     <input
+                      id="alta-apellidos"
+                      autoComplete="off"
                       type="text"
                       required
                       value={apellidos}
                       onChange={(e) => setApellidos(e.target.value)}
                       placeholder="Mendoza"
-                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                      className="w-full min-h-11 px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-muted-foreground">Correo Electrónico</label>
+                  <label htmlFor="alta-email" className="text-xs font-semibold text-muted-foreground">Correo electrónico</label>
                   <input
+                    id="alta-email"
+                    autoComplete="off"
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="carlos@email.com"
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                    className="w-full min-h-11 px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
                   />
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
                   <div className="space-y-1 col-span-1">
-                    <label className="text-xs font-semibold text-muted-foreground">Tipo Doc</label>
+                    <label htmlFor="alta-tipo-documento" className="text-xs font-semibold text-muted-foreground">Tipo de documento</label>
                     <select
+                      id="alta-tipo-documento"
                       value={tipoDocumento}
                       onChange={(e) => setTipoDocumento(e.target.value as TipoDocumento)}
-                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                      className="w-full min-h-11 px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
                     >
                       <option value={TipoDocumento.V}>V-</option>
                       <option value={TipoDocumento.E}>E-</option>
@@ -1173,35 +1214,45 @@ export function AlumnosPage() {
                     </select>
                   </div>
                   <div className="space-y-1 col-span-2">
-                    <label className="text-xs font-semibold text-muted-foreground">Documento</label>
+                    <label htmlFor="alta-documento" className="text-xs font-semibold text-muted-foreground">Número de documento</label>
                     <input
+                      id="alta-documento"
+                      autoComplete="off"
                       type="text"
                       required
                       value={numeroDocumento}
                       onChange={(e) => setNumeroDocumento(e.target.value)}
                       placeholder="24123456"
-                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                      className="w-full min-h-11 px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-muted-foreground">Fecha Nacimiento</label>
+                    <label htmlFor="alta-nacimiento" className="text-xs font-semibold text-muted-foreground">Fecha de nacimiento</label>
                     <input
+                      id="alta-nacimiento"
+                      autoComplete="off"
                       type="date"
                       required
+                      max={fechaLocalHoyISO()}
                       value={fechaNacimiento}
                       onChange={(e) => setFechaNacimiento(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                      aria-describedby="alta-edad"
+                      className="w-full min-h-11 px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
                     />
+                    <p id="alta-edad" aria-live="polite" className="text-xs font-mono font-bold text-primary min-h-4">
+                      {textoEdad(fechaNacimiento) ?? ''}
+                    </p>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-muted-foreground">Modalidad</label>
+                    <label htmlFor="alta-modalidad" className="text-xs font-semibold text-muted-foreground">Modalidad</label>
                     <select
+                      id="alta-modalidad"
                       value={modalidad}
                       onChange={(e) => setModalidad(e.target.value as Modalidad)}
-                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                      className="w-full min-h-11 px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
                     >
                       <option value={Modalidad.PRESENCIAL}>Presencial</option>
                       <option value={Modalidad.REMOTO}>Remoto</option>
@@ -1209,36 +1260,34 @@ export function AlumnosPage() {
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-muted-foreground">WhatsApp</label>
-                  <input
-                    type="tel"
-                    inputMode="tel"
-                    required
-                    value={telefonoWhatsapp}
-                    onChange={(e) => setTelefonoWhatsapp(e.target.value)}
-                    placeholder="+584121234567"
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
-                  />
-                </div>
+                <CampoWhatsapp
+                  idBase="alta-whatsapp"
+                  prefijo={prefijoWhatsapp}
+                  numero={numeroWhatsapp}
+                  onCambiarPrefijo={setPrefijoWhatsapp}
+                  onCambiarNumero={setNumeroWhatsapp}
+                  etiquetaClassName="text-xs font-semibold text-muted-foreground"
+                  ayuda="Número sin el código de país; el prefijo va en la casilla de la izquierda."
+                />
 
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-muted-foreground">
-                    Ficha Médica Confidencial (Cifrado AES-256-GCM)
+                  <label htmlFor="alta-ficha-salud" className="text-xs font-semibold text-muted-foreground">
+                    Ficha médica confidencial (se guarda cifrada)
                   </label>
                   <textarea
+                    id="alta-ficha-salud"
                     rows={2}
                     value={fichaSaludPrivada}
                     onChange={(e) => setFichaSaludPrivada(e.target.value)}
                     placeholder="Lesiones previas, dolor articular, recomendaciones..."
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary resize-none"
+                    className="w-full min-h-11 px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary resize-none"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-md hover:brightness-110 active:scale-98 transition-all disabled:opacity-50 mt-2 cursor-pointer"
+                  className="w-full min-h-11 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-md hover:brightness-110 active:scale-98 transition-all disabled:opacity-50 mt-2 cursor-pointer"
                 >
                   {isSubmitting ? 'Inscribiendo alumno...' : 'Inscribir Alumno'}
                 </button>

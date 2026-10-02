@@ -52,7 +52,7 @@ describe('resolverBloqueoAlumno (RF-012): código máquina → pantalla de bloqu
     expect(bloqueo!.rutaAccion).toBe('/app/progreso');
   });
 
-  it('archivado: cuenta dada de baja sin acción de pago (solo contactar al entrenador)', () => {
+  it('archivado: cuenta archivada sin acción de pago (solo contactar al entrenador, B14)', () => {
     const bloqueo = resolverBloqueoAlumno(
       apiError(403, {
         code: CODIGO_ALUMNO_BLOQUEADO,
@@ -63,7 +63,9 @@ describe('resolverBloqueoAlumno (RF-012): código máquina → pantalla de bloqu
 
     expect(bloqueo!.estado).toBe('archivado');
     expect(bloqueo!.motivo).toBe('CUENTA_ARCHIVADA');
-    expect(bloqueo!.mensaje).toMatch(/dada de baja/i);
+    expect(bloqueo!.titulo).toBe('Cuenta archivada');
+    expect(bloqueo!.mensaje).toMatch(/archivó tu cuenta/i);
+    expect(bloqueo!.mensaje).not.toMatch(/baja/i);
     expect(bloqueo!.rutaAccion).toBeNull();
     expect(bloqueo!.textoAccion).toBeNull();
   });

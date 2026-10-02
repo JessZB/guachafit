@@ -64,9 +64,9 @@ const COPY_POR_ESTADO: Record<EstadoBloqueoAlumno, CopyBloqueo> = {
     textoAccion: null,
   },
   archivado: {
-    titulo: 'Cuenta dada de baja',
+    titulo: 'Cuenta archivada',
     mensaje:
-      'Tu cuenta fue dada de baja por tu entrenador. Todo tu historial está protegido; contacta con tu entrenador para restaurar tu acceso.',
+      'Tu entrenador archivó tu cuenta. Todo tu historial está protegido; contacta con tu entrenador para restaurar tu acceso.',
     rutaAccion: null,
     textoAccion: null,
   },

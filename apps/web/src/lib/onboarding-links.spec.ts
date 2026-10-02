@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   construirLinkActivacion,
   construirLinkOnboarding,
+  construirDestinoRegistro,
+  esErrorCorreoYaRegistrado,
   esFormatoCoachCodeValido,
   MENSAJE_ACTIVACION_INVALIDA,
   MENSAJE_COACH_NO_DISPONIBLE,
@@ -47,9 +49,41 @@ describe('WU-E (RF-011): helpers de onboarding', () => {
       );
     });
 
-    it('expone mensajes claros para la UI', () => {
-      expect(MENSAJE_COACH_NO_DISPONIBLE).toContain('no válido');
-      expect(MENSAJE_ACTIVACION_INVALIDA).toContain('expirado');
+    it('expone mensajes claros para la UI, sin jerga técnica (B6/B7)', () => {
+      expect(MENSAJE_COACH_NO_DISPONIBLE).toBe(
+        'El código de entrenador no es válido o no está disponible. Por favor contacta a tu coach.'
+      );
+      expect(MENSAJE_ACTIVACION_INVALIDA).toBe(
+        'Este enlace ya no sirve: venció o ya se usó. Pídele uno nuevo a tu entrenador.'
+      );
+      expect(MENSAJE_ACTIVACION_INVALIDA).not.toMatch(/TTL|token/i);
+    });
+  });
+
+  describe('construirDestinoRegistro (A10: /registro → /onboarding)', () => {
+    it('preserva la query y traduce coach_code → coach', () => {
+      expect(construirDestinoRegistro('?coach_code=alexfit&utm=ig')).toBe(
+        '/onboarding?utm=ig&coach=alexfit'
+      );
+    });
+
+    it('respeta coach si ya viene y no lo duplica', () => {
+      expect(construirDestinoRegistro('?coach=ALEXFIT&coach_code=OTRO')).toBe(
+        '/onboarding?coach=ALEXFIT'
+      );
+    });
+
+    it('sin query va a /onboarding a secas', () => {
+      expect(construirDestinoRegistro('')).toBe('/onboarding');
+    });
+  });
+
+  describe('esErrorCorreoYaRegistrado (C8)', () => {
+    it('detecta el conflicto 409 del alta', () => {
+      expect(esErrorCorreoYaRegistrado({ status: 409 })).toBe(true);
+      expect(esErrorCorreoYaRegistrado({ status: 400 })).toBe(false);
+      expect(esErrorCorreoYaRegistrado(new Error('x'))).toBe(false);
+      expect(esErrorCorreoYaRegistrado(null)).toBe(false);
     });
   });
 
