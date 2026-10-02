@@ -8,6 +8,7 @@ import { InstalarAppPrompt } from '../common/InstalarAppPrompt';
 import { DialogoLogoutPendientes } from '../common/DialogoLogoutPendientes';
 import { CampanaNotificaciones } from '../notificaciones/CampanaNotificaciones';
 import { useLogoutSeguro } from '../../lib/use-logout-seguro';
+import { pluralizar } from '../../lib/pluralizar';
 import {
   AlertTriangle,
   Check,
@@ -125,7 +126,9 @@ export function Header() {
             }`}
             title={
               pending > 0
-                ? `${pending} mutaciones pendientes. Clic para sincronizar.`
+                ? `${pluralizar(pending, 'cambio pendiente', 'cambios pendientes')} de enviar. Toca para ${
+                    pending === 1 ? 'enviarlo' : 'enviarlos'
+                  } ahora.`
                 : isOnline
                 ? 'Conexión activa'
                 : 'Modo sin conexión'

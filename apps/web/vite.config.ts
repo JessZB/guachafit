@@ -3,13 +3,11 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
-import { buildApiCachePattern } from './src/lib/api-cache-pattern';
-import { API_RUNTIME_CACHE_NAME } from './src/lib/cache-runtime';
+import { construirRuntimeCachingApi } from './src/lib/api-cache-pattern';
 
 export default defineConfig(({ mode }) => {
   // WU4: el patrón de cache se deriva de la API realmente configurada (local o producción).
   const env = loadEnv(mode, process.cwd(), 'VITE_');
-  const apiCachePattern = buildApiCachePattern(env.VITE_API_URL);
 
   return {
     plugins: [
@@ -83,23 +81,8 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-          runtimeCaching: [
-            {
-              urlPattern: apiCachePattern,
-              method: 'GET',
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: API_RUNTIME_CACHE_NAME,
-                expiration: {
-                  maxEntries: 100,
-                  maxAgeSeconds: 60 * 60 * 24, // 24 hours
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-              },
-            },
-          ],
+          // D4: NetworkFirst con corte de 4 s y sin rutas /auth/ (ver api-cache-pattern.ts).
+          runtimeCaching: construirRuntimeCachingApi(env.VITE_API_URL),
         },
       }),
     ],
