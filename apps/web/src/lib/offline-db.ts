@@ -3,6 +3,7 @@ import {
   SesionEntrenamientoDetalleDTO,
   CheckinNutricionalDetalleDTO,
   EjercicioCatalogoDetalleDTO,
+  type SemanaEntrenamientoProgresoDTO,
   type CheckinNutricionalDTO,
   type TipoComida,
 } from '@guachafit/shared';
@@ -59,7 +60,24 @@ export interface OutboxMutation {
   alumnoId?: string;
   /** Evidencia fotográfica del check-in: blobs locales + progreso de subida por foto. */
   fotos?: FotoCheckinEnCola[];
+  /**
+   * D1: causa de un rechazo que se resuelve sola (p. ej. una serie enviada antes de que la
+   * sesión estuviera en progreso). Opcional: las filas antiguas no lo tienen.
+   */
+  motivoRechazo?: MotivoRechazoCola | null;
+  /**
+   * Fallos con error del servidor (5xx) acumulados; los de red no cuentan. Al llegar al tope la
+   * mutación pasa a `rejected` para no bloquear su sesión para siempre. Opcional en filas antiguas.
+   */
+  fallosServidor?: number;
 }
+
+/**
+ * Causa de un rechazo local:
+ * - `sesion-no-iniciada`: se reintenta solo cuando su causa desaparece.
+ * - `tope-errores-servidor`: el servidor falló (5xx) demasiadas veces; espera al usuario.
+ */
+export type MotivoRechazoCola = 'sesion-no-iniciada' | 'tope-errores-servidor';
 
 export interface OutboxSummary {
   pending: number;
@@ -83,11 +101,19 @@ export interface CachedNutricion {
   updatedAt: number;
 }
 
+/** D3: progreso semanal del alumno guardado para consultarlo sin conexión. */
+export interface CachedSemana {
+  alumnoId: string;
+  semana: SemanaEntrenamientoProgresoDTO;
+  updatedAt: number;
+}
+
 export class GuachafitDatabase extends Dexie {
   outboxMutations!: Table<OutboxMutation, number>;
   rutinaHoy!: Table<CachedRutina, string>;
   checkinsNutricion!: Table<CachedNutricion, number>;
   catalogoEjercicios!: Table<EjercicioCatalogoDetalleDTO, string>;
+  semanaEntrenamiento!: Table<CachedSemana, string>;
 
   constructor() {
     super('GuachafitOfflineDB');
@@ -96,6 +122,10 @@ export class GuachafitDatabase extends Dexie {
       rutinaHoy: 'id, alumnoId, fechaProgramada',
       checkinsNutricion: '++id, [alumnoId+fecha], fecha',
       catalogoEjercicios: 'id, grupoMuscular, nombre',
+    });
+    // D3: versión aditiva (solo agrega una tabla); los datos existentes no se migran ni se borran.
+    this.version(2).stores({
+      semanaEntrenamiento: 'alumnoId',
     });
   }
 }
@@ -242,26 +272,62 @@ export async function markMutationSynced(id: number): Promise<void> {
 export async function markMutationFailed(
   id: number,
   lastError: string,
-  nextRetryAt: number
+  nextRetryAt: number,
+  /** Solo en errores del servidor (5xx); un fallo de red no toca el contador. */
+  fallosServidor?: number
 ): Promise<void> {
   await offlineDb.outboxMutations.update(id, {
     status: 'failed',
     lastError,
     nextRetryAt,
+    ...(fallosServidor !== undefined ? { fallosServidor } : {}),
   });
   notifyOutboxChanged();
 }
 
-export async function markMutationRejected(id: number, lastError: string): Promise<void> {
+export async function markMutationRejected(
+  id: number,
+  lastError: string,
+  motivoRechazo: MotivoRechazoCola | null = null
+): Promise<void> {
   await offlineDb.outboxMutations.update(id, {
     status: 'rejected',
     lastError,
     nextRetryAt: null,
+    motivoRechazo,
   });
   notifyOutboxChanged();
 }
 
-/** Reintento manual (rechazadas/fallidas): vuelve a `pending` y queda elegible de inmediato. */
+/**
+ * D1: cuando "iniciar" de una sesión por fin se confirma, las series de esa sesión que el
+ * servidor rechazó por no estar en progreso vuelven a `pending` para enviarse solas.
+ */
+export async function reactivarSeriesRechazadasPorSesionNoIniciada(grupo: string): Promise<number> {
+  const rechazadas = await offlineDb.outboxMutations.where('status').equals('rejected').toArray();
+  const aReactivar = rechazadas.filter(
+    (item) =>
+      item.id !== undefined &&
+      item.motivoRechazo === 'sesion-no-iniciada' &&
+      accionSesionDeMutacion(item) === 'series' &&
+      grupoCausalDeMutacion(item) === grupo
+  );
+  for (const item of aReactivar) {
+    await offlineDb.outboxMutations.update(item.id as number, {
+      status: 'pending',
+      lastError: null,
+      nextRetryAt: null,
+      motivoRechazo: null,
+    });
+  }
+  if (aReactivar.length > 0) notifyOutboxChanged();
+  return aReactivar.length;
+}
+
+/**
+ * Reintento manual (rechazadas/fallidas): vuelve a `pending` y queda elegible de inmediato.
+ * El contador de fallos del servidor se reinicia: el usuario concede una nueva tanda de intentos.
+ */
 export async function retryMutation(id: number): Promise<void> {
   const item = await offlineDb.outboxMutations.get(id);
   if (!item) return;
@@ -269,6 +335,8 @@ export async function retryMutation(id: number): Promise<void> {
     status: 'pending',
     lastError: null,
     nextRetryAt: null,
+    motivoRechazo: null,
+    fallosServidor: 0,
   });
   notifyOutboxChanged();
 }
@@ -298,6 +366,20 @@ export async function recoverStuckMutations(): Promise<number> {
   return stuck.length;
 }
 
+/**
+ * Sesión vencida (401) durante el envío: no es un rechazo del servidor sino falta de sesión.
+ * La mutación vuelve a `pending` con los intentos previos (el intento fallido no cuenta) y sin
+ * backoff, para enviarse en cuanto la misma persona vuelva a iniciar sesión.
+ */
+export async function devolverMutacionAPendiente(id: number, attemptsPrevios: number): Promise<void> {
+  await offlineDb.outboxMutations.update(id, {
+    status: 'pending',
+    attempts: attemptsPrevios,
+    nextRetryAt: null,
+  });
+  notifyOutboxChanged();
+}
+
 /** Poda acotada de las mutaciones ya sincronizadas (auditoría reciente, sin crecer sin límite). */
 export async function pruneSyncedMutations(maxKeep = 20): Promise<number> {
   const synced = await offlineDb.outboxMutations.where('status').equals('synced').sortBy('createdAt');
@@ -317,16 +399,99 @@ export async function pruneSyncedMutations(maxKeep = 20): Promise<number> {
 // Consultas de la cola
 // ---------------------------------------------------------------------------
 
-/** Mutaciones elegibles ahora: pendientes + fallidas cuyo backoff ya venció. */
+// ---------------------------------------------------------------------------
+// D1: orden causal por sesión de entrenamiento
+// ---------------------------------------------------------------------------
+
+const PATRON_ENDPOINT_SESION = /^\/sesiones\/([^/?#]+)\/(iniciar|series|finalizar)(?:[/?#]|$)/;
+
+export type AccionSesionCola = 'iniciar' | 'series' | 'finalizar';
+
+/**
+ * Sesión a la que pertenece una mutación (`sesion:{id}`), derivada del endpoint para que las
+ * filas ya guardadas en IndexedDB funcionen sin migración. `null` = sin orden causal.
+ */
+export function grupoCausalDeMutacion(item: Pick<OutboxMutation, 'endpoint'>): string | null {
+  const match = PATRON_ENDPOINT_SESION.exec(item.endpoint ?? '');
+  return match ? `sesion:${match[1]}` : null;
+}
+
+export function accionSesionDeMutacion(
+  item: Pick<OutboxMutation, 'endpoint'>
+): AccionSesionCola | null {
+  const match = PATRON_ENDPOINT_SESION.exec(item.endpoint ?? '');
+  return match ? (match[2] as AccionSesionCola) : null;
+}
+
+/** Pendiente, en vuelo o fallida: todavía no llegó al servidor ni espera decisión del usuario. */
+function estaSinEnviar(item: OutboxMutation): boolean {
+  return item.status === 'pending' || item.status === 'syncing' || item.status === 'failed';
+}
+
+function esElegibleAhora(item: OutboxMutation, now: number): boolean {
+  return (
+    item.status === 'pending' || (item.status === 'failed' && (item.nextRetryAt ?? 0) <= now)
+  );
+}
+
+function ordenarPorCreacion(a: OutboxMutation, b: OutboxMutation): number {
+  if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt;
+  return (a.id ?? 0) - (b.id ?? 0);
+}
+
+/**
+ * Selección pura de lo elegible respetando el orden causal de cada sesión:
+ * - Una mutación sin enviar que aún no puede salir (fallida en espera o en vuelo) detiene
+ *   todas las posteriores de SU sesión; otras sesiones y tipos siguen.
+ * - "Finalizar" nunca sale mientras queden series de esa sesión sin enviar.
+ * - Una rechazada no detiene su sesión (espera la decisión del usuario).
+ * Las elegibles de una misma sesión salen en el orden en que se encolaron.
+ */
+export function seleccionarMutacionesElegibles(
+  todas: OutboxMutation[],
+  now: number = Date.now()
+): OutboxMutation[] {
+  const ordenadas = [...todas].sort(ordenarPorCreacion);
+  const gruposDetenidos = new Set<string>();
+  const elegibles: OutboxMutation[] = [];
+
+  ordenadas.forEach((item, indice) => {
+    const grupo = grupoCausalDeMutacion(item);
+    if (grupo && gruposDetenidos.has(grupo)) return;
+
+    if (!esElegibleAhora(item, now)) {
+      if (grupo && estaSinEnviar(item)) gruposDetenidos.add(grupo);
+      return;
+    }
+
+    if (grupo && accionSesionDeMutacion(item) === 'finalizar') {
+      const quedanSeriesDespues = ordenadas
+        .slice(indice + 1)
+        .some(
+          (otra) =>
+            grupoCausalDeMutacion(otra) === grupo &&
+            accionSesionDeMutacion(otra) === 'series' &&
+            estaSinEnviar(otra)
+        );
+      if (quedanSeriesDespues) return;
+    }
+
+    elegibles.push(item);
+  });
+
+  return elegibles;
+}
+
+/** Mutaciones elegibles ahora: pendientes + fallidas cuyo backoff ya venció (orden causal D1). */
 export async function getDueMutations(now: number = Date.now()): Promise<OutboxMutation[]> {
   const all = await offlineDb.outboxMutations.toArray();
-  return all
-    .filter(
-      (item) =>
-        item.status === 'pending' ||
-        (item.status === 'failed' && (item.nextRetryAt ?? 0) <= now)
-    )
-    .sort((a, b) => a.createdAt - b.createdAt);
+  return seleccionarMutacionesElegibles(all, now);
+}
+
+/** D1: ¿queda algo de esta sesión sin llegar al servidor? (para no adelantarse a la cola). */
+export async function hayMutacionesSinEnviarDeGrupo(grupo: string): Promise<boolean> {
+  const all = await offlineDb.outboxMutations.toArray();
+  return all.some((item) => grupoCausalDeMutacion(item) === grupo && estaSinEnviar(item));
 }
 
 export async function getPendingMutations(): Promise<OutboxMutation[]> {
@@ -389,13 +554,73 @@ export async function getLatestCachedRutina(alumnoId?: string): Promise<CachedRu
   })[0];
 }
 
+/**
+ * D4: mientras la cola tenga cambios de una sesión sin llegar al servidor (p. ej. "Comenzar"
+ * encolado), la copia del teléfono es la verdad más reciente: mostrar la del servidor
+ * permitiría pulsar "Comenzar" otra vez o perder series marcadas tras recargar.
+ */
+export function elegirSesionParaMostrar<T extends { id: string }>(
+  servidor: T | null,
+  local: T | null,
+  hayCambiosSinEnviar: boolean
+): T | null {
+  if (!servidor) return null;
+  if (hayCambiosSinEnviar && local && local.id === servidor.id) return local;
+  return servidor;
+}
+
+export interface RutinaCacheadaParaHoy {
+  /** Sesión guardada cuya fecha programada es HOY (día local del alumno). */
+  deHoy: CachedRutina | null;
+  /** Si no hay de hoy: la más reciente de otro día (se informa, no se presenta como de hoy). */
+  ultimaDeOtroDia: CachedRutina | null;
+}
+
+/** D3: separa la sesión guardada de hoy de la última de otro día (desempate por `updatedAt`). */
+export function seleccionarRutinaCacheadaParaHoy(
+  filas: CachedRutina[],
+  hoyYyyyMmDd: string
+): RutinaCacheadaParaHoy {
+  const porRecencia = (a: CachedRutina, b: CachedRutina) => {
+    const fechaA = a.fechaProgramada ?? '';
+    const fechaB = b.fechaProgramada ?? '';
+    if (fechaA !== fechaB) return fechaB.localeCompare(fechaA);
+    return (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
+  };
+  const deHoy = filas.filter((fila) => fila.fechaProgramada === hoyYyyyMmDd).sort(porRecencia)[0];
+  if (deHoy) return { deHoy, ultimaDeOtroDia: null };
+  const ultima = [...filas].sort(porRecencia)[0];
+  return { deHoy: null, ultimaDeOtroDia: ultima ?? null };
+}
+
+/** D3: lectura offline de la sesión de hoy del alumno (nunca expone la de otro alumno). */
+export async function getCachedRutinaParaHoy(
+  alumnoId: string,
+  hoyYyyyMmDd: string
+): Promise<RutinaCacheadaParaHoy> {
+  const filas = await offlineDb.rutinaHoy.where('alumnoId').equals(alumnoId).toArray();
+  return seleccionarRutinaCacheadaParaHoy(filas, hoyYyyyMmDd);
+}
+
+/** D3: guarda el progreso semanal del alumno para verlo sin conexión. */
+export async function guardarSemanaCacheada(
+  alumnoId: string,
+  semana: SemanaEntrenamientoProgresoDTO
+): Promise<void> {
+  await offlineDb.semanaEntrenamiento.put({ alumnoId, semana, updatedAt: Date.now() });
+}
+
+export async function leerSemanaCacheada(alumnoId: string): Promise<CachedSemana | null> {
+  return (await offlineDb.semanaEntrenamiento.get(alumnoId)) ?? null;
+}
+
 // ---------------------------------------------------------------------------
 // Higiene de sesión (WU22)
 // ---------------------------------------------------------------------------
 
 /**
  * WU22 — privacidad en dispositivo compartido: borra TODAS las tablas del
- * esquema (outbox, rutina cacheada, check-ins de nutrición y catálogo) para que
+ * esquema (outbox, rutina y semana cacheadas, check-ins de nutrición y catálogo) para que
  * el siguiente usuario del dispositivo no vea datos del anterior.
  *
  * DECISIÓN: las mutaciones sin sincronizar se descartan a propósito.
@@ -421,12 +646,14 @@ export async function clearOfflineData(): Promise<void> {
     offlineDb.rutinaHoy,
     offlineDb.checkinsNutricion,
     offlineDb.catalogoEjercicios,
+    offlineDb.semanaEntrenamiento,
     async () => {
       await Promise.all([
         offlineDb.outboxMutations.clear(),
         offlineDb.rutinaHoy.clear(),
         offlineDb.checkinsNutricion.clear(),
         offlineDb.catalogoEjercicios.clear(),
+        offlineDb.semanaEntrenamiento.clear(),
       ]);
     }
   );

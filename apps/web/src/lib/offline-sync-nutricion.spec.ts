@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SemaforoNutricional, TipoComida, type CheckinNutricionalDTO } from '@guachafit/shared';
-import { apiClient } from './api-client';
+import { apiClient, setAuthToken } from './api-client';
 import { processOutboxQueue } from './offline-sync';
 import {
   MAX_FOTOS_CHECKIN_NUTRICIONAL,
@@ -36,6 +36,17 @@ function httpError(status: number, detail: string): Error & { status: number } {
   return Object.assign(new Error(detail), { status });
 }
 
+/** localStorage en memoria (entorno node): la cola solo se procesa con sesión activa. */
+function instalarSesionActiva(): void {
+  const datos = new Map<string, string>();
+  vi.stubGlobal('localStorage', {
+    getItem: (clave: string) => datos.get(clave) ?? null,
+    setItem: (clave: string, valor: string) => void datos.set(clave, valor),
+    removeItem: (clave: string) => void datos.delete(clave),
+  });
+  setAuthToken('token-sesion-activa');
+}
+
 function payloadCheckin(): CheckinNutricionalDTO {
   return {
     fecha: '2026-09-22',
@@ -63,6 +74,7 @@ beforeEach(async () => {
   setNavigatorOnline(true);
   mockedApiClient.mockReset();
   vi.unstubAllGlobals();
+  instalarSesionActiva();
   await offlineDb.outboxMutations.clear();
 });
 

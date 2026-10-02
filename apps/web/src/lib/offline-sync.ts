@@ -1,7 +1,11 @@
-import { apiClient, generateIdempotencyKey } from './api-client';
+import { apiClient, generateIdempotencyKey, getAuthToken } from './api-client';
 import type { PresignedUploadUrlResponseDTO } from '@guachafit/shared';
 import {
+  accionSesionDeMutacion,
+  devolverMutacionAPendiente,
   getDueMutations,
+  grupoCausalDeMutacion,
+  reactivarSeriesRechazadasPorSesionNoIniciada,
   getOutboxSummary,
   markMutationFailed,
   markMutationRejected,
@@ -28,6 +32,13 @@ import { queryClient } from './query-client';
 
 export const BASE_BACKOFF_MS = 2_000;
 export const MAX_BACKOFF_MS = 60_000;
+/**
+ * Tope de fallos del servidor (5xx) por mutación: al alcanzarlo pasa a `rejected` para no
+ * bloquear para siempre lo posterior de su sesión (D1). Los fallos de red no cuentan.
+ */
+export const MAX_INTENTOS_ERROR_SERVIDOR = 8;
+export const MENSAJE_TOPE_ERRORES_SERVIDOR =
+  'No pudimos enviar este cambio después de varios intentos. Puedes reintentar o descartarlo.';
 /** Intervalo del reintento periódico mientras la app está abierta. */
 export const AUTO_SYNC_INTERVAL_MS = 45_000;
 
@@ -100,11 +111,49 @@ function getErrorStatus(err: unknown): number {
   return typeof status === 'number' ? status : 0;
 }
 
+/**
+ * D6: un envío directo (con red) que falla solo va a la cola si reintentar puede servir:
+ * error de red, 5xx o sesión vencida (401, se envía al volver a iniciar sesión). Cualquier otro
+ * 4xx es un rechazo de datos: no se encola, se revierte y se muestra el error al alumno.
+ */
+export function esFalloParaEncolar(err: unknown): boolean {
+  const status = getErrorStatus(err);
+  return status === 0 || status === 401 || status >= 500;
+}
+
+/**
+ * D6: mensaje para el usuario. `ApiError.message` ya viene traducido (mensajes-error), así que
+ * tiene prioridad sobre el `detail` crudo del servidor.
+ */
 function getErrorMessage(err: unknown): string {
+  if (err instanceof Error && err.message) return err.message;
   const problemDetail = (err as { problem?: { detail?: unknown } } | null)?.problem?.detail;
   if (typeof problemDetail === 'string' && problemDetail.trim()) return problemDetail;
-  if (err instanceof Error && err.message) return err.message;
   return 'Error de red al sincronizar';
+}
+
+/** Texto original del servidor (sin traducir), solo para clasificar el rechazo. */
+function getMensajeServidorCrudo(err: unknown): string {
+  const conMensaje = err as {
+    mensajeServidor?: unknown;
+    problem?: { detail?: unknown; message?: unknown };
+  } | null;
+  for (const candidato of [
+    conMensaje?.mensajeServidor,
+    conMensaje?.problem?.detail,
+    conMensaje?.problem?.message,
+  ]) {
+    if (typeof candidato === 'string' && candidato.trim()) return candidato;
+  }
+  return err instanceof Error ? err.message : '';
+}
+
+/** D1: el servidor rechazó una serie porque la sesión aún no estaba en progreso. */
+function esRechazoPorSesionNoIniciada(item: OutboxMutation, err: unknown): boolean {
+  return (
+    accionSesionDeMutacion(item) === 'series' &&
+    /en_progreso|en progreso/i.test(getMensajeServidorCrudo(err))
+  );
 }
 
 /**
@@ -179,7 +228,7 @@ async function processCheckinNutricionalConFotos(item: OutboxMutation): Promise<
   } catch (err) {
     // RN-02: la ventana/día local cerró mientras la evidencia esperaba en la cola. Se marca
     // como rechazo definitivo con un mensaje claro (sin el tecnicismo del servidor).
-    if (getErrorStatus(err) === 400 && esRechazoVentanaCheckin(getErrorMessage(err))) {
+    if (getErrorStatus(err) === 400 && esRechazoVentanaCheckin(getMensajeServidorCrudo(err))) {
       const rechazo = new Error(MENSAJE_DIA_CERRADO_REPORTE_CON_FOTOS) as Error & {
         status: number;
       };
@@ -203,6 +252,12 @@ export async function processOutboxQueue(): Promise<ProcessOutboxResult> {
     await refreshOutboxStatus();
     return { processed: 0, failed: 0, rejected: 0, skipped: true };
   }
+  // Sin sesión (cerrada o vencida) no se envía nada: la cola se conserva intacta y se procesa
+  // cuando la misma persona vuelva a iniciar sesión (el login dispara el procesamiento).
+  if (!getAuthToken()) {
+    await refreshOutboxStatus();
+    return { processed: 0, failed: 0, rejected: 0, skipped: true };
+  }
 
   isSyncing = true;
   emit();
@@ -212,11 +267,21 @@ export async function processOutboxQueue(): Promise<ProcessOutboxResult> {
   let rejected = 0;
 
   try {
-    const queue = await getDueMutations();
+    // D1: la cola se relee tras cada envío para respetar el orden causal por sesión (una
+    // falla detiene lo posterior de su sesión; un "iniciar" confirmado reactiva sus series).
+    const vistasEnEstaPasada = new Set<number>();
+    const gruposDetenidos = new Set<string>();
 
-    for (const item of queue) {
+    while (true) {
       if (typeof navigator !== 'undefined' && !navigator.onLine) break;
-      if (item.id === undefined) continue;
+      const item = (await getDueMutations()).find((candidata) => {
+        if (candidata.id === undefined || vistasEnEstaPasada.has(candidata.id)) return false;
+        const grupo = grupoCausalDeMutacion(candidata);
+        return !grupo || !gruposDetenidos.has(grupo);
+      });
+      if (!item || item.id === undefined) break;
+      vistasEnEstaPasada.add(item.id);
+      const grupo = grupoCausalDeMutacion(item);
 
       await markMutationSyncing(item.id);
 
@@ -235,24 +300,59 @@ export async function processOutboxQueue(): Promise<ProcessOutboxResult> {
         }
         await markMutationSynced(item.id);
         processed++;
+        if (grupo && accionSesionDeMutacion(item) === 'iniciar') {
+          await reactivarSeriesRechazadasPorSesionNoIniciada(grupo);
+        }
       } catch (err) {
         const status = getErrorStatus(err);
         const message = getErrorMessage(err);
 
+        if (status === 401) {
+          // Sesión vencida: no es un rechazo de datos. Vuelve a pendiente sin contar el intento
+          // y se detiene el bucle (el resto de la cola también fallaría por falta de sesión).
+          await devolverMutacionAPendiente(item.id, item.attempts ?? 0);
+          console.warn(
+            `[Guachafit Sync] Sesión vencida: la mutación #${item.id} queda pendiente hasta volver a iniciar sesión`
+          );
+          break;
+        }
+
         if (status >= 400 && status < 500) {
           // Error del servidor (contrato/datos): reintentar no ayuda. Queda VISIBLE
           // para el usuario con la razón; jamás se descarta en silencio.
-          await markMutationRejected(item.id, message);
+          await markMutationRejected(
+            item.id,
+            message,
+            esRechazoPorSesionNoIniciada(item, err) ? 'sesion-no-iniciada' : null
+          );
           rejected++;
           console.warn(
             `[Guachafit Sync] Mutación #${item.id} rechazada por el servidor (${status}): ${message}`
           );
+        } else if (
+          status >= 500 &&
+          (item.fallosServidor ?? 0) + 1 >= MAX_INTENTOS_ERROR_SERVIDOR
+        ) {
+          // Tope de 5xx: deja de reintentar sola y espera la decisión del usuario. Una rechazada
+          // no detiene su sesión, así que las series siguientes y el finalizar pueden salir.
+          await markMutationRejected(item.id, MENSAJE_TOPE_ERRORES_SERVIDOR, 'tope-errores-servidor');
+          rejected++;
+          console.warn(
+            `[Guachafit Sync] Mutación #${item.id} rechazada tras ${MAX_INTENTOS_ERROR_SERVIDOR} errores del servidor (${status})`
+          );
         } else {
-          // Red/5xx: reintento con backoff exponencial + jitter.
+          // Red/5xx: reintento con backoff exponencial + jitter. Solo los 5xx suman al tope.
           const attempts = (item.attempts ?? 0) + 1;
           const delay = computeBackoffDelayMs(attempts);
-          await markMutationFailed(item.id, message, Date.now() + delay);
+          await markMutationFailed(
+            item.id,
+            message,
+            Date.now() + delay,
+            status >= 500 ? (item.fallosServidor ?? 0) + 1 : undefined
+          );
           failed++;
+          // D1: lo posterior de esta sesión espera a que esta mutación salga.
+          if (grupo) gruposDetenidos.add(grupo);
           console.warn(
             `[Guachafit Sync] Mutación #${item.id} falló (${status || 'red'}); próximo intento en ${Math.round(
               delay / 1000

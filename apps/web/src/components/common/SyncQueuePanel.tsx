@@ -17,6 +17,7 @@ import {
 } from '../../lib/offline-db';
 import { processOutboxQueue, subscribeToSyncStatus, type SyncStatusState } from '../../lib/offline-sync';
 import { formatFechaHoraLocal } from '../../lib/date-format';
+import { describirRechazoCola } from '../../lib/mensajes-error';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 
 interface SyncQueuePanelProps {
@@ -29,16 +30,16 @@ const STATUS_META: Record<
   { label: string; className: string }
 > = {
   pending: { label: 'Pendiente', className: 'bg-info/15 text-info border-info/30' },
-  syncing: { label: 'Sincronizando', className: 'bg-primary/15 text-primary border-primary/30' },
-  synced: { label: 'Sincronizado', className: 'bg-success/15 text-success border-success/30' },
+  syncing: { label: 'Enviando', className: 'bg-primary/15 text-primary border-primary/30' },
+  synced: { label: 'Enviado', className: 'bg-success/15 text-success border-success/30' },
   failed: { label: 'Reintentando', className: 'bg-warning/15 text-warning border-warning/30' },
-  rejected: { label: 'Rechazado', className: 'bg-destructive/15 text-destructive border-destructive/30' },
+  rejected: { label: 'No guardado', className: 'bg-destructive/15 text-destructive border-destructive/30' },
 };
 
 /**
- * WU4: panel único de la cola offline. Las mutaciones rechazadas (4xx) quedan visibles con su
- * razón y acciones explícitas; las fallidas (red/5xx) se reintentan con backoff. Nunca hay
- * descarte silencioso.
+ * WU4: panel único de la cola offline. Las mutaciones rechazadas (4xx o tope de 5xx) quedan
+ * visibles con su razón y acciones explícitas; las fallidas (red/5xx) se reintentan con backoff
+ * y también pueden descartarse a mano. Nunca hay descarte silencioso.
  */
 export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
   const [items, setItems] = useState<OutboxMutation[]>([]);
@@ -143,26 +144,26 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
             </div>
             <div className="min-w-0">
               <h3 id="sync-panel-title" className="font-bold text-base text-foreground leading-tight">
-                Sincronización
+                Cambios por enviar
               </h3>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {rejected > 0
-                  ? `${rejected} cambio${rejected > 1 ? 's' : ''} rechazado${rejected > 1 ? 's' : ''} por el servidor`
+                  ? `${rejected} cambio${rejected > 1 ? 's' : ''} que no se pudo guardar`
                   : failed > 0
                   ? `${failed} cambio${failed > 1 ? 's' : ''} esperando reintento`
                   : pending > 0
                   ? `${pending} cambio${pending > 1 ? 's' : ''} pendiente${pending > 1 ? 's' : ''}`
-                  : 'Todo sincronizado con tu coach'}
+                  : 'Todo enviado a tu entrenador'}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Cerrar panel de sincronización"
-            className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground transition-colors cursor-pointer shrink-0"
+            aria-label="Cerrar cambios por enviar"
+            className="min-h-11 min-w-11 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground transition-colors cursor-pointer shrink-0"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
 
@@ -170,7 +171,7 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
         {!isOnline && (
           <div className="p-3 rounded-2xl bg-destructive/10 border border-destructive/25 text-destructive text-xs font-semibold flex items-center gap-2">
             <WifiOff className="h-4 w-4 shrink-0" />
-            <span>Sin conexión. Los cambios se enviarán automáticamente al recuperar señal.</span>
+            <span>Sin conexión. Los cambios se enviarán solos cuando vuelvas a tener internet.</span>
           </div>
         )}
 
@@ -185,9 +186,9 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
           {!isLoading && items.length === 0 && (
             <div className="py-8 text-center space-y-2">
               <CheckCircle2 className="h-8 w-8 text-success mx-auto" />
-              <p className="text-sm font-bold text-foreground">Todo sincronizado</p>
-              <p className="text-[11px] text-muted-foreground">
-                No hay cambios locales esperando envío.
+              <p className="text-sm font-bold text-foreground">Todo enviado</p>
+              <p className="text-xs text-muted-foreground">
+                No hay cambios en este teléfono esperando envío.
               </p>
             </div>
           )}
@@ -205,9 +206,6 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-xs font-bold text-foreground truncate">{item.description}</p>
-                    <p className="text-[11px] text-muted-foreground font-mono truncate">
-                      {item.method} {item.endpoint}
-                    </p>
                   </div>
                   <span
                     className={`text-[11px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0 ${meta.className}`}
@@ -216,7 +214,7 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
                   </span>
                 </div>
 
-                <div className="flex items-center gap-3 text-[11px] text-muted-foreground font-medium">
+                <div className="flex items-center gap-3 text-xs text-muted-foreground font-medium">
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />
                     {formatFechaHoraLocal(new Date(item.createdAt).toISOString()) ?? '—'}
@@ -230,20 +228,22 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
 
                 {item.lastError && (
                   <p
-                    className={`text-[11px] font-semibold rounded-xl px-2.5 py-1.5 border ${
+                    className={`text-xs font-semibold rounded-xl px-2.5 py-1.5 border ${
                       item.status === 'rejected'
                         ? 'text-destructive bg-destructive/10 border-destructive/25'
                         : 'text-warning bg-warning/10 border-warning/25'
                     }`}
                   >
                     {item.status === 'rejected'
-                      ? `El servidor rechazó este cambio: ${item.lastError}. No se reintentará automáticamente.`
-                      : `Último error: ${item.lastError}. Se reintentará automáticamente.`}
+                      ? item.motivoRechazo === 'tope-errores-servidor'
+                        ? item.lastError
+                        : describirRechazoCola(item.lastError)
+                      : 'Todavía no se pudo enviar. Lo intentaremos de nuevo automáticamente.'}
                   </p>
                 )}
 
                 {fotosEnCola > 0 && (item.status === 'rejected' || item.status === 'failed') && (
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Este reporte conserva {fotosEnCola} foto{fotosEnCola === 1 ? '' : 's'} en tu
                     dispositivo. Si reintentas se subirá solo lo pendiente; si lo descartas, la
                     evidencia se eliminará del dispositivo.
@@ -256,31 +256,35 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
                       type="button"
                       disabled={isBusy || isSyncing}
                       onClick={() => item.id !== undefined && handleRetry(item.id)}
-                      className="py-1.5 px-3 rounded-xl bg-primary text-primary-foreground font-bold text-[11px] shadow-sm shadow-primary/25 hover:brightness-110 active:scale-95 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                      className="min-h-11 py-1.5 px-3 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-sm shadow-primary/25 hover:brightness-110 active:scale-95 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                     >
                       <RefreshCw className={`h-3 w-3 ${isBusy ? 'animate-spin' : ''}`} />
                       <span>Reintentar</span>
                     </button>
 
-                    {item.status === 'rejected' && !isDiscarding && (
+                    {/* Descartar también una fallida: un 5xx persistente no debe bloquear la sesión. */}
+                    {!isDiscarding && (
                       <button
                         type="button"
                         disabled={isBusy}
                         onClick={() => setConfirmDiscardId(item.id ?? null)}
-                        className="py-1.5 px-3 rounded-xl bg-transparent border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 font-bold text-[11px] transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                        className="min-h-11 py-1.5 px-3 rounded-xl bg-transparent border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 font-bold text-xs transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                       >
                         <Trash2 className="h-3 w-3" />
                         <span>Descartar</span>
                       </button>
                     )}
 
-                    {item.status === 'rejected' && isDiscarding && (
-                      <div className="flex items-center gap-1.5">
+                    {isDiscarding && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground font-semibold">
+                          ¿Descartar este cambio? No se enviará.
+                        </span>
                         <button
                           type="button"
                           disabled={isBusy}
                           onClick={() => item.id !== undefined && handleDiscard(item.id)}
-                          className="py-1.5 px-3 rounded-xl bg-destructive text-white font-bold text-[11px] active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                          className="min-h-11 py-1.5 px-3 rounded-xl bg-destructive text-white font-bold text-xs active:scale-95 transition-all cursor-pointer disabled:opacity-50"
                         >
                           Sí, descartar
                         </button>
@@ -288,7 +292,7 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
                           type="button"
                           disabled={isBusy}
                           onClick={() => setConfirmDiscardId(null)}
-                          className="py-1.5 px-2.5 rounded-xl text-muted-foreground text-[11px] font-bold hover:text-foreground transition-colors cursor-pointer disabled:opacity-50"
+                          className="min-h-11 py-1.5 px-2.5 rounded-xl text-muted-foreground text-xs font-bold hover:text-foreground transition-colors cursor-pointer disabled:opacity-50"
                         >
                           Cancelar
                         </button>
@@ -303,19 +307,19 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
 
         {/* Footer */}
         <div className="pt-3 border-t border-border/80 flex items-center justify-between gap-2">
-          <p className="text-[11px] text-muted-foreground font-medium">
+          <p className="text-xs text-muted-foreground font-medium">
             {pending > 0 || failed > 0
-              ? 'Los cambios pendientes se envían solos al recuperar conexión.'
+              ? 'Los cambios pendientes se envían solos cuando vuelves a tener internet.'
               : 'Sin cambios pendientes de envío.'}
           </p>
           <button
             type="button"
             disabled={isSyncing}
             onClick={() => void processOutboxQueue()}
-            className="py-2 px-4 rounded-xl bg-secondary border border-border text-foreground font-bold text-[11px] hover:bg-secondary/70 active:scale-95 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+            className="min-h-11 py-2 px-4 rounded-xl bg-secondary border border-border text-foreground font-bold text-xs hover:bg-secondary/70 active:scale-95 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shrink-0"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>Sincronizar ahora</span>
+            <span>Enviar ahora</span>
           </button>
         </div>
       </div>

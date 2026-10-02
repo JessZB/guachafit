@@ -4,6 +4,7 @@ import type { EjercicioCatalogoDetalleDTO } from '@guachafit/shared';
 import {
   clearOfflineData,
   contarMutacionesPendientes,
+  devolverMutacionAPendiente,
   discardMutation,
   getDueMutations,
   getFailedMutations,
@@ -11,6 +12,13 @@ import {
   getOutboxSummary,
   getPendingMutations,
   getRejectedMutations,
+  grupoCausalDeMutacion,
+  guardarSemanaCacheada,
+  hayMutacionesSinEnviarDeGrupo,
+  leerSemanaCacheada,
+  reactivarSeriesRechazadasPorSesionNoIniciada,
+  seleccionarRutinaCacheadaParaHoy,
+  elegirSesionParaMostrar,
   markMutationFailed,
   markMutationRejected,
   markMutationSyncing,
@@ -40,6 +48,7 @@ async function putCachedRutina(
 beforeEach(async () => {
   await offlineDb.outboxMutations.clear();
   await offlineDb.rutinaHoy.clear();
+  await offlineDb.semanaEntrenamiento.clear();
 });
 
 describe('offline-db: cola outbox durable', () => {
@@ -156,6 +165,21 @@ describe('offline-db: cola outbox durable', () => {
     expect(await getDueMutations()).toHaveLength(1);
   });
 
+  it('devolverMutacionAPendiente (sesión vencida) restaura los intentos previos y la deja elegible sin backoff', async () => {
+    const id = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Sync serie 6');
+    await markMutationSyncing(id);
+    await markMutationFailed(id, 'Servicio no disponible', Date.now() + 60_000);
+    await markMutationSyncing(id); // segundo intento: attempts = 2
+
+    await devolverMutacionAPendiente(id, 1);
+
+    const row = await offlineDb.outboxMutations.get(id);
+    expect(row?.status).toBe('pending');
+    expect(row?.attempts).toBe(1);
+    expect(row?.nextRetryAt).toBeNull();
+    expect(await getDueMutations()).toHaveLength(1);
+  });
+
   it('contarMutacionesPendientes cuenta todo lo no sincronizado (pendiente, en vuelo, fallida y rechazada)', async () => {
     expect(await contarMutacionesPendientes()).toBe(0);
 
@@ -177,6 +201,153 @@ describe('offline-db: cola outbox durable', () => {
 
     await discardMutation(rechazada);
     expect(await contarMutacionesPendientes()).toBe(2);
+  });
+});
+
+describe('offline-db: orden causal por sesión de entrenamiento (D1)', () => {
+  it('identifica la sesión de cada mutación por su endpoint (compatible con filas antiguas)', () => {
+    expect(grupoCausalDeMutacion({ endpoint: '/sesiones/s1/iniciar' })).toBe('sesion:s1');
+    expect(grupoCausalDeMutacion({ endpoint: '/sesiones/s1/series' })).toBe('sesion:s1');
+    expect(grupoCausalDeMutacion({ endpoint: '/sesiones/s1/finalizar' })).toBe('sesion:s1');
+    expect(grupoCausalDeMutacion({ endpoint: '/nutricion/checkin-diario' })).toBeNull();
+  });
+
+  it('una mutación fallida con espera bloquea las posteriores de SU sesión, no las de otras', async () => {
+    const iniciar = await queueOfflineMutation('/sesiones/s1/iniciar', 'POST', {}, 'Comenzar');
+    const serie = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 1');
+    const otra = await queueOfflineMutation('/sesiones/s2/series', 'PUT', {}, 'Serie 1 otra');
+    const nutricion = await queueOfflineMutation('/nutricion/checkin-diario', 'POST', {}, 'Reporte');
+    await markMutationFailed(iniciar, 'Servicio no disponible', Date.now() + 60_000);
+
+    const elegibles = (await getDueMutations()).map((m) => m.id);
+
+    expect(elegibles).not.toContain(iniciar);
+    expect(elegibles).not.toContain(serie);
+    expect(elegibles).toEqual([otra, nutricion]);
+  });
+
+  it('las pendientes de una misma sesión se entregan en el orden en que se encolaron', async () => {
+    const iniciar = await queueOfflineMutation('/sesiones/s1/iniciar', 'POST', {}, 'Comenzar');
+    const serie = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 1');
+    const finalizar = await queueOfflineMutation('/sesiones/s1/finalizar', 'POST', {}, 'Finalizar');
+
+    expect((await getDueMutations()).map((m) => m.id)).toEqual([iniciar, serie, finalizar]);
+  });
+
+  it('finalizar nunca es elegible mientras haya series de esa sesión sin enviar (aunque sean posteriores)', async () => {
+    const finalizar = await queueOfflineMutation('/sesiones/s1/finalizar', 'POST', {}, 'Finalizar');
+    await offlineDb.outboxMutations.update(finalizar, { createdAt: 1 });
+    const serie = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 1');
+
+    expect((await getDueMutations()).map((m) => m.id)).toEqual([serie]);
+  });
+
+  it('una rechazada no bloquea su sesión', async () => {
+    const serie = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 1');
+    await markMutationRejected(serie, 'Dato inválido');
+    const finalizar = await queueOfflineMutation('/sesiones/s1/finalizar', 'POST', {}, 'Finalizar');
+
+    expect((await getDueMutations()).map((m) => m.id)).toEqual([finalizar]);
+  });
+
+  it('descartar una fallida en espera desbloquea lo posterior de su sesión', async () => {
+    const serie = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 1');
+    const finalizar = await queueOfflineMutation('/sesiones/s1/finalizar', 'POST', {}, 'Finalizar');
+    await markMutationFailed(serie, 'Servicio no disponible', Date.now() + 60_000, 3);
+    expect(await getDueMutations()).toHaveLength(0);
+
+    await discardMutation(serie);
+
+    expect((await getDueMutations()).map((m) => m.id)).toEqual([finalizar]);
+  });
+
+  it('markMutationFailed guarda los fallos del servidor y el reintento manual los reinicia', async () => {
+    const id = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 1');
+    await markMutationFailed(id, 'Servicio no disponible', Date.now() + 60_000, 4);
+    expect((await offlineDb.outboxMutations.get(id))?.fallosServidor).toBe(4);
+
+    // Un fallo de red no toca el contador.
+    await markMutationFailed(id, 'Failed to fetch', Date.now() + 60_000);
+    expect((await offlineDb.outboxMutations.get(id))?.fallosServidor).toBe(4);
+
+    await retryMutation(id);
+    expect((await offlineDb.outboxMutations.get(id))?.fallosServidor).toBe(0);
+  });
+
+  it('reactivarSeriesRechazadasPorSesionNoIniciada devuelve a pendiente solo las series marcadas de esa sesión', async () => {
+    const marcada = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 1');
+    await markMutationRejected(marcada, 'No se pudo guardar', 'sesion-no-iniciada');
+    const otraRazon = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 2');
+    await markMutationRejected(otraRazon, 'Peso inválido');
+    const otraSesion = await queueOfflineMutation('/sesiones/s2/series', 'PUT', {}, 'Serie 1');
+    await markMutationRejected(otraSesion, 'No se pudo guardar', 'sesion-no-iniciada');
+
+    expect(await reactivarSeriesRechazadasPorSesionNoIniciada('sesion:s1')).toBe(1);
+
+    const fila = await offlineDb.outboxMutations.get(marcada);
+    expect(fila?.status).toBe('pending');
+    expect(fila?.motivoRechazo ?? null).toBeNull();
+    expect((await offlineDb.outboxMutations.get(otraRazon))?.status).toBe('rejected');
+    expect((await offlineDb.outboxMutations.get(otraSesion))?.status).toBe('rejected');
+  });
+
+  it('hayMutacionesSinEnviarDeGrupo detecta pendientes/fallidas/en vuelo de esa sesión', async () => {
+    expect(await hayMutacionesSinEnviarDeGrupo('sesion:s1')).toBe(false);
+    const id = await queueOfflineMutation('/sesiones/s1/iniciar', 'POST', {}, 'Comenzar');
+    expect(await hayMutacionesSinEnviarDeGrupo('sesion:s1')).toBe(true);
+    expect(await hayMutacionesSinEnviarDeGrupo('sesion:s2')).toBe(false);
+    await markMutationRejected(id, 'x');
+    expect(await hayMutacionesSinEnviarDeGrupo('sesion:s1')).toBe(false);
+  });
+});
+
+describe('offline-db: rutina guardada de hoy vs. de otro día (D3)', () => {
+  it('elige la sesión de la fecha de hoy y, si no hay, informa la última de otro día', () => {
+    const filas = [
+      { id: 'a', alumnoId: 'x', fechaProgramada: '2026-10-01', sesion: fakeSesion('a'), updatedAt: 5 },
+      { id: 'b', alumnoId: 'x', fechaProgramada: '2026-10-02', sesion: fakeSesion('b'), updatedAt: 1 },
+      { id: 'c', alumnoId: 'x', fechaProgramada: '2026-10-02', sesion: fakeSesion('c'), updatedAt: 9 },
+    ];
+
+    expect(seleccionarRutinaCacheadaParaHoy(filas, '2026-10-02')).toEqual({
+      deHoy: filas[2],
+      ultimaDeOtroDia: null,
+    });
+    expect(seleccionarRutinaCacheadaParaHoy(filas, '2026-10-03')).toEqual({
+      deHoy: null,
+      ultimaDeOtroDia: filas[2],
+    });
+    expect(seleccionarRutinaCacheadaParaHoy([], '2026-10-03')).toEqual({
+      deHoy: null,
+      ultimaDeOtroDia: null,
+    });
+  });
+
+  it('guarda y lee la semana del alumno para verla sin conexión', async () => {
+    const semana = { semanaIso: '2026-W40' } as unknown as Parameters<typeof guardarSemanaCacheada>[1];
+    await guardarSemanaCacheada('alumno-1', semana);
+
+    const leida = await leerSemanaCacheada('alumno-1');
+    expect(leida?.semana).toEqual(semana);
+    expect(leida?.updatedAt).toBeTypeOf('number');
+    expect(await leerSemanaCacheada('alumno-2')).toBeNull();
+  });
+});
+
+describe('offline-db: sesión mostrada con cambios por enviar (D4)', () => {
+  const servidor = { id: 's1', estado: 'planificada' } as unknown as CachedRutina['sesion'];
+  const local = { id: 's1', estado: 'en_progreso' } as unknown as CachedRutina['sesion'];
+
+  it('si la cola tiene cambios de esa sesión, manda la copia del teléfono (evita un segundo "Comenzar")', () => {
+    expect(elegirSesionParaMostrar(servidor, local, true)).toBe(local);
+  });
+
+  it('sin cambios pendientes, o sin copia local de la misma sesión, manda el servidor', () => {
+    expect(elegirSesionParaMostrar(servidor, local, false)).toBe(servidor);
+    expect(elegirSesionParaMostrar(servidor, null, true)).toBe(servidor);
+    const otra = { id: 's2', estado: 'en_progreso' } as unknown as CachedRutina['sesion'];
+    expect(elegirSesionParaMostrar(servidor, otra, true)).toBe(servidor);
+    expect(elegirSesionParaMostrar(null, local, true)).toBeNull();
   });
 });
 
@@ -229,6 +400,10 @@ describe('offline-db: clearOfflineData (higiene de logout)', () => {
       nombre: 'Sentadilla',
       grupoMuscular: 'Piernas',
     } as unknown as EjercicioCatalogoDetalleDTO);
+    await guardarSemanaCacheada(
+      'alumno-1',
+      {} as unknown as Parameters<typeof guardarSemanaCacheada>[1]
+    );
   }
 
   it('vacía TODAS las tablas del esquema', async () => {
@@ -236,6 +411,7 @@ describe('offline-db: clearOfflineData (higiene de logout)', () => {
 
     await clearOfflineData();
 
+    expect(await offlineDb.semanaEntrenamiento.count()).toBe(0);
     expect(await offlineDb.outboxMutations.count()).toBe(0);
     expect(await offlineDb.rutinaHoy.count()).toBe(0);
     expect(await offlineDb.checkinsNutricion.count()).toBe(0);

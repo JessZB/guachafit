@@ -1,11 +1,15 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { apiClient } from './api-client';
+import { ApiError, apiClient, setAuthToken } from './api-client';
+import { MENSAJE_ERROR_GENERICO } from './mensajes-error';
 import {
   AUTO_SYNC_INTERVAL_MS,
   BASE_BACKOFF_MS,
   MAX_BACKOFF_MS,
+  MAX_INTENTOS_ERROR_SERVIDOR,
+  MENSAJE_TOPE_ERRORES_SERVIDOR,
   computeBackoffDelayMs,
+  esFalloParaEncolar,
   processOutboxQueue,
 } from './offline-sync';
 import {
@@ -35,7 +39,19 @@ function httpError(status: number, detail: string): Error & { status: number } {
   return Object.assign(new Error(detail), { status });
 }
 
+/** localStorage en memoria (entorno node): la cola solo se procesa con sesión activa. */
+function instalarStorageEnMemoria(): void {
+  const datos = new Map<string, string>();
+  vi.stubGlobal('localStorage', {
+    getItem: (clave: string) => datos.get(clave) ?? null,
+    setItem: (clave: string, valor: string) => void datos.set(clave, valor),
+    removeItem: (clave: string) => void datos.delete(clave),
+  });
+}
+
 beforeEach(async () => {
+  instalarStorageEnMemoria();
+  setAuthToken('token-sesion-activa');
   setNavigatorOnline(true);
   mockedApiClient.mockReset();
   await offlineDb.outboxMutations.clear();
@@ -160,5 +176,202 @@ describe('offline-sync: procesamiento de la cola', () => {
     const failed = await getFailedMutations();
     expect(failed).toHaveLength(1);
     expect(failed[0].lastError).toContain('Failed to fetch');
+  });
+});
+
+describe('offline-sync: qué fallos del envío directo van a la cola (D6)', () => {
+  it('red, 5xx y sesión vencida se encolan; los demás 4xx no', () => {
+    expect(esFalloParaEncolar(new TypeError('Failed to fetch'))).toBe(true);
+    expect(esFalloParaEncolar(httpError(503, 'x'))).toBe(true);
+    expect(esFalloParaEncolar(httpError(401, 'x'))).toBe(true);
+    expect(esFalloParaEncolar(httpError(400, 'x'))).toBe(false);
+    expect(esFalloParaEncolar(httpError(409, 'x'))).toBe(false);
+    expect(esFalloParaEncolar(httpError(422, 'x'))).toBe(false);
+  });
+});
+
+describe('offline-sync: orden causal por sesión (D1)', () => {
+  it('iniciar falla (5xx) → series y finalizar esperan; al recuperarse todo se envía en orden y nada se rechaza', async () => {
+    const iniciar = await queueOfflineMutation('/sesiones/s1/iniciar', 'POST', {}, 'Comenzar', 'k-ini');
+    const serie1 = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 1', 'k-s1');
+    const serie2 = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 2', 'k-s2');
+    const finalizar = await queueOfflineMutation('/sesiones/s1/finalizar', 'POST', {}, 'Finalizar', 'k-fin');
+    mockedApiClient.mockRejectedValueOnce(httpError(503, 'Servicio no disponible'));
+
+    const primera = await processOutboxQueue();
+
+    expect(primera).toMatchObject({ processed: 0, failed: 1, rejected: 0 });
+    expect(mockedApiClient).toHaveBeenCalledTimes(1);
+    for (const id of [serie1, serie2, finalizar]) {
+      expect((await offlineDb.outboxMutations.get(id))?.status).toBe('pending');
+    }
+
+    // Recuperación: vence el backoff y el servidor responde.
+    await offlineDb.outboxMutations.update(iniciar, { nextRetryAt: 0 });
+    mockedApiClient.mockResolvedValue(null);
+    const segunda = await processOutboxQueue();
+
+    expect(segunda).toMatchObject({ processed: 4, failed: 0, rejected: 0 });
+    expect(mockedApiClient.mock.calls.slice(1).map((llamada) => llamada[1]?.idempotencyKey)).toEqual([
+      'k-ini',
+      'k-s1',
+      'k-s2',
+      'k-fin',
+    ]);
+    expect(await getRejectedMutations()).toHaveLength(0);
+  });
+
+  it('si una serie falla en la misma pasada, finalizar de esa sesión no se envía pero otras sesiones sí', async () => {
+    await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 1', 'k-s1');
+    const finalizar = await queueOfflineMutation('/sesiones/s1/finalizar', 'POST', {}, 'Finalizar', 'k-fin');
+    const otra = await queueOfflineMutation('/sesiones/s2/series', 'PUT', {}, 'Serie otra', 'k-otra');
+    mockedApiClient.mockRejectedValueOnce(httpError(502, 'Bad gateway')).mockResolvedValue(null);
+
+    const resultado = await processOutboxQueue();
+
+    expect(resultado).toMatchObject({ processed: 1, failed: 1 });
+    expect(mockedApiClient.mock.calls.map((llamada) => llamada[1]?.idempotencyKey)).toEqual([
+      'k-s1',
+      'k-otra',
+    ]);
+    expect((await offlineDb.outboxMutations.get(finalizar))?.status).toBe('pending');
+    expect((await offlineDb.outboxMutations.get(otra))?.status).toBe('synced');
+  });
+
+  it('serie rechazada por sesión no iniciada → vuelve a pendiente y se envía cuando iniciar tiene éxito', async () => {
+    const serie = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 1', 'k-s1');
+    const crudo =
+      "Operación denegada: Solo se pueden registrar series en sesiones con estado 'en_progreso'. Estado actual: 'planificada'.";
+    mockedApiClient.mockRejectedValueOnce(new ApiError(400, { detail: crudo } as never));
+
+    await processOutboxQueue();
+    const rechazada = await offlineDb.outboxMutations.get(serie);
+    expect(rechazada?.status).toBe('rejected');
+    // D6: el usuario ve el mensaje traducido, nunca el texto técnico del servidor.
+    expect(rechazada?.lastError).toBe(MENSAJE_ERROR_GENERICO);
+
+    await queueOfflineMutation('/sesiones/s1/iniciar', 'POST', {}, 'Comenzar', 'k-ini');
+    mockedApiClient.mockResolvedValue(null);
+    await processOutboxQueue();
+    await processOutboxQueue();
+
+    expect((await offlineDb.outboxMutations.get(serie))?.status).toBe('synced');
+    const claves = mockedApiClient.mock.calls.map((llamada) => llamada[1]?.idempotencyKey);
+    expect(claves.indexOf('k-ini')).toBeLessThan(claves.lastIndexOf('k-s1'));
+  });
+
+  it('usa el mensaje ya traducido (err.message) en lugar del detalle crudo del servidor', async () => {
+    const id = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 1', 'k-s1');
+    mockedApiClient.mockRejectedValueOnce(
+      new ApiError(404, { detail: "Sesión con ID 'abc' no encontrada." } as never)
+    );
+
+    await processOutboxQueue();
+
+    expect((await offlineDb.outboxMutations.get(id))?.lastError).toBe(MENSAJE_ERROR_GENERICO);
+  });
+});
+
+describe('offline-sync: tope de intentos ante errores del servidor', () => {
+  it('5xx repetido alcanza el tope → rejected con motivo legible y lo siguiente de la sesión se envía', async () => {
+    const serie1 = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 1', 'k-s1');
+    const serie2 = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 2', 'k-s2');
+    const finalizar = await queueOfflineMutation('/sesiones/s1/finalizar', 'POST', {}, 'Finalizar', 'k-fin');
+    mockedApiClient.mockImplementation(async (_endpoint, opciones) => {
+      if (opciones?.idempotencyKey === 'k-s1') throw httpError(503, 'Servicio no disponible');
+      return null;
+    });
+
+    for (let intento = 1; intento < MAX_INTENTOS_ERROR_SERVIDOR; intento++) {
+      await offlineDb.outboxMutations.update(serie1, { nextRetryAt: 0 });
+      await processOutboxQueue();
+      expect((await offlineDb.outboxMutations.get(serie1))?.status).toBe('failed');
+      expect((await offlineDb.outboxMutations.get(serie2))?.status).toBe('pending');
+    }
+
+    await offlineDb.outboxMutations.update(serie1, { nextRetryAt: 0 });
+    const resultado = await processOutboxQueue();
+
+    expect(resultado).toMatchObject({ processed: 2, rejected: 1, failed: 0 });
+    const rechazada = await offlineDb.outboxMutations.get(serie1);
+    expect(rechazada?.status).toBe('rejected');
+    expect(rechazada?.lastError).toBe(MENSAJE_TOPE_ERRORES_SERVIDOR);
+    expect((await offlineDb.outboxMutations.get(serie2))?.status).toBe('synced');
+    expect((await offlineDb.outboxMutations.get(finalizar))?.status).toBe('synced');
+  });
+
+  it('un fallo de red repetido no cuenta para el tope: sigue reintentando con backoff', async () => {
+    const id = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 1', 'k-s1');
+    mockedApiClient.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    for (let intento = 0; intento < MAX_INTENTOS_ERROR_SERVIDOR + 2; intento++) {
+      await offlineDb.outboxMutations.update(id, { nextRetryAt: 0 });
+      await processOutboxQueue();
+    }
+
+    const fila = await offlineDb.outboxMutations.get(id);
+    expect(fila?.status).toBe('failed');
+    expect(fila?.attempts).toBe(MAX_INTENTOS_ERROR_SERVIDOR + 2);
+    expect(await getRejectedMutations()).toHaveLength(0);
+  });
+});
+
+describe('offline-sync: sesión vencida conserva la cola', () => {
+  it('sin sesión activa no procesa ni toca la cola', async () => {
+    setAuthToken(null);
+    const id = await queueOfflineMutation('/sesiones/s1/iniciar', 'POST', {}, 'Iniciar sesión', 'key-sin-sesion');
+
+    const result = await processOutboxQueue();
+
+    expect(result.skipped).toBe(true);
+    expect(mockedApiClient).not.toHaveBeenCalled();
+    const row = await offlineDb.outboxMutations.get(id);
+    expect(row?.status).toBe('pending');
+    expect(row?.attempts).toBe(0);
+  });
+
+  it('401 → vuelve a pendiente sin sumar intentos y detiene el bucle', async () => {
+    const primera = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Sync 1', 'key-401-a');
+    const segunda = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Sync 2', 'key-401-b');
+    mockedApiClient.mockRejectedValue(httpError(401, 'Tu sesión venció'));
+
+    const result = await processOutboxQueue();
+
+    expect(result).toMatchObject({ processed: 0, failed: 0, rejected: 0, skipped: false });
+    // No se sigue quemando el resto de la cola contra un servidor que exige iniciar sesión.
+    expect(mockedApiClient).toHaveBeenCalledTimes(1);
+    for (const id of [primera, segunda]) {
+      const row = await offlineDb.outboxMutations.get(id);
+      expect(row?.status).toBe('pending');
+      expect(row?.attempts).toBe(0);
+      expect(row?.nextRetryAt).toBeNull();
+    }
+    expect(await getRejectedMutations()).toHaveLength(0);
+    expect(await getOutboxSummary()).toEqual({ pending: 2, failed: 0, rejected: 0 });
+  });
+
+  it('422 sigue siendo rechazo definitivo aunque exista el manejo de 401', async () => {
+    await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Sync 3', 'key-422');
+    mockedApiClient.mockRejectedValueOnce(httpError(422, 'Dato inválido'));
+
+    const result = await processOutboxQueue();
+
+    expect(result).toMatchObject({ rejected: 1 });
+    expect(await getRejectedMutations()).toHaveLength(1);
+  });
+
+  it('tras volver a iniciar sesión, la cola conservada se envía', async () => {
+    setAuthToken(null);
+    const id = await queueOfflineMutation('/sesiones/s1/finalizar', 'POST', {}, 'Finalizar', 'key-relogin');
+    expect((await processOutboxQueue()).skipped).toBe(true);
+
+    // Login de la misma persona: se persiste el token nuevo.
+    setAuthToken('token-nuevo');
+    mockedApiClient.mockResolvedValueOnce(null);
+    const result = await processOutboxQueue();
+
+    expect(result).toMatchObject({ processed: 1, skipped: false });
+    expect(mockedApiClient.mock.calls[0][1]?.idempotencyKey).toBe('key-relogin');
+    expect((await offlineDb.outboxMutations.get(id))?.status).toBe('synced');
   });
 });
