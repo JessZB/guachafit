@@ -60,6 +60,8 @@ import { SelectorPlantillaAsignacion } from '../../components/entrenador/Selecto
 import { DetalleSesionEntrenamiento } from '../../components/entrenador/DetalleSesionEntrenamiento';
 import { PanelNutricionAlumno } from '../../components/entrenador/PanelNutricionAlumno';
 import { Paginacion } from '../../components/common/Paginacion';
+import { DialogoConfirmacion } from '../../components/common/DialogoConfirmacion';
+import { useFrescuraOffline } from '../../lib/use-frescura-offline';
 import { GraficoEvolucion } from '../../components/common/GraficoEvolucion';
 import { crearEvolucionDemo } from '../../lib/demo-evolucion';
 import {
@@ -163,6 +165,31 @@ const CONFIRMACION_CAMBIO_ESTADO: Record<EstadoAlumno, (nombre: string) => strin
     `¿Pausar a ${nombre}? Dejará de ver su planificación y no podrá iniciar sesiones ni enviar reportes; su historial se conserva en modo lectura.`,
   [EstadoAlumno.SUSPENDIDO_PAGO]: (nombre) =>
     `¿Suspender por pago a ${nombre}? Su planificación quedará bloqueada con la pantalla de mensualidad pendiente; podrá seguir reportando pagos.`,
+};
+
+/**
+ * C6: confirmación pendiente de la ficha (sustituye a `window.confirm`). La acción solo se
+ * ejecuta al confirmar en el diálogo accesible compartido.
+ */
+interface ConfirmacionFicha {
+  titulo: string;
+  detalle: string;
+  boton: string;
+  variante?: 'primaria' | 'peligro';
+  accion: () => Promise<void>;
+}
+
+/** Separa "¿Pregunta? Detalle." en título y detalle para el diálogo de confirmación. */
+function separarPreguntaYDetalle(texto: string): { titulo: string; detalle: string } {
+  const corte = texto.indexOf('? ');
+  if (corte < 0) return { titulo: texto, detalle: '' };
+  return { titulo: texto.slice(0, corte + 1), detalle: texto.slice(corte + 2) };
+}
+
+const TEXTO_BOTON_CAMBIO_ESTADO: Record<EstadoAlumno, string> = {
+  [EstadoAlumno.ACTIVO]: 'Reactivar',
+  [EstadoAlumno.INACTIVO_PAUSADO]: 'Pausar',
+  [EstadoAlumno.SUSPENDIDO_PAGO]: 'Suspender por pago',
 };
 
 /** WU-D: feedback humano solo después de un 2xx (o del cambio local en modo demo). */
@@ -299,6 +326,14 @@ export function AlumnoDetallePage() {
   };
 
   const [alumno, setAlumno] = useState<PerfilAlumnoDetalleDTO | null>(null);
+  const [confirmacionFicha, setConfirmacionFicha] = useState<ConfirmacionFicha | null>(null);
+  // C4: borrar un día o un ejercicio de la rutina en edición pide confirmación.
+  const [confirmarBorradoRutina, setConfirmarBorradoRutina] = useState<
+    { tipo: 'dia'; indice: number } | { tipo: 'ejercicio'; indice: number } | null
+  >(null);
+  // D7: sin conexión no se puede guardar la rutina (se avisa en el botón).
+  const { isOnline: hayConexion } = useFrescuraOffline(null);
+  const [confirmandoFicha, setConfirmandoFicha] = useState(false);
   const [finanzas, setFinanzas] = useState<ResumenFinancieroAlumnoDTO | null>(null);
   // WU25b: paginación server-side del historial de transacciones (`txLimit`/`txOffset` + total).
   const [paginaTx, setPaginaTx] = useState(1);
@@ -1259,13 +1294,17 @@ export function AlumnoDetallePage() {
   /** WU-J (RF-005): quitar el override vigente (el alumno vuelve al catálogo). */
   const handleQuitarOverride = async () => {
     if (!alumno || overridesAlumno.length === 0) return;
-    if (
-      !window.confirm(
+    setConfirmacionFicha({
+      ...separarPreguntaYDetalle(
         '¿Quitar el override de este alumno? Volverá a los valores del plan del catálogo y a la tasa global.'
-      )
-    ) {
-      return;
-    }
+      ),
+      boton: 'Quitar override',
+      accion: quitarOverrideConfirmado,
+    });
+  };
+
+  const quitarOverrideConfirmado = async () => {
+    if (!alumno || overridesAlumno.length === 0) return;
     setSaveSuccessMsg(null);
     setSaveErrorMsg(null);
 
@@ -1305,8 +1344,15 @@ export function AlumnoDetallePage() {
   const handleCambiarEstado = async (nuevoEstado: EstadoAlumno) => {
     if (!id || !alumno) return;
     const nombre = `${alumno.nombres} ${alumno.apellidos}`.trim();
-    if (!window.confirm(CONFIRMACION_CAMBIO_ESTADO[nuevoEstado](nombre))) return;
+    setConfirmacionFicha({
+      ...separarPreguntaYDetalle(CONFIRMACION_CAMBIO_ESTADO[nuevoEstado](nombre)),
+      boton: TEXTO_BOTON_CAMBIO_ESTADO[nuevoEstado],
+      accion: () => cambiarEstadoConfirmado(nuevoEstado),
+    });
+  };
 
+  const cambiarEstadoConfirmado = async (nuevoEstado: EstadoAlumno) => {
+    if (!id || !alumno) return;
     setHeaderActionError(null);
     setHeaderActionSuccess(null);
 
@@ -1332,22 +1378,50 @@ export function AlumnoDetallePage() {
     }
   };
 
-  // Dar de Baja Lógica (Soft Delete)
-  const handleSoftDelete = async () => {
+  // Archivar alumno (baja lógica: los datos se conservan y se puede restaurar)
+  const handleSoftDelete = () => {
     if (!id || !alumno) return;
-    const confirm = window.confirm(
-      `¿Estás seguro de dar de baja a ${alumno.nombres} ${alumno.apellidos}?\n\nEsta acción archivará al alumno. Su historial deportivo, antropométrico y financiero permanecerá 100% protegido y podrás restaurarlo cuando regrese.`
-    );
-    if (!confirm) return;
+    setConfirmacionFicha({
+      titulo: `¿Archivar a ${alumno.nombres} ${alumno.apellidos}?`,
+      detalle:
+        'Dejará de tener acceso a la app. Su historial de entrenamiento, medidas y pagos se conserva y podrás restaurarlo cuando regrese.',
+      boton: 'Archivar alumno',
+      variante: 'peligro',
+      accion: archivarConfirmado,
+    });
+  };
+
+  const archivarConfirmado = async () => {
+    if (!id || !alumno) return;
     setHeaderActionError(null);
 
     try {
       await apiClient.delete(`/alumnos/${id}`);
-      setAlumno((prev) =>
-        prev ? { ...prev, deletedAtUtc: new Date().toISOString(), estadoActivacion: EstadoAlumno.INACTIVO_PAUSADO } : null
-      );
     } catch (err: any) {
       setHeaderActionError(err?.message || 'No se pudo archivar al alumno. Inténtalo de nuevo.');
+      return;
+    }
+
+    // A13: la ficha se vuelve a leer del servidor (fuente de verdad) en lugar de inventar el
+    // estado archivado en local.
+    try {
+      const perfil = await apiClient<PerfilAlumnoDetalleDTO>(`/alumnos/${id}`);
+      if (perfil) setAlumno(perfil);
+    } catch {
+      setHeaderActionError(
+        'El alumno se archivó, pero no pudimos actualizar su ficha. Recarga la página para verla al día.'
+      );
+    }
+  };
+
+  const ejecutarConfirmacionFicha = async () => {
+    if (!confirmacionFicha) return;
+    setConfirmandoFicha(true);
+    try {
+      await confirmacionFicha.accion();
+    } finally {
+      setConfirmandoFicha(false);
+      setConfirmacionFicha(null);
     }
   };
 
@@ -1633,7 +1707,7 @@ export function AlumnoDetallePage() {
       const ejerciciosNormalizados = (b.ejercicios || []).map((ej: any) => {
         if (ej.ejercicioId && !UUID_REGEX.test(String(ej.ejercicioId))) {
           erroresCatalogo.push(
-            `"${ej.nombre || `Ejercicio ${idx + 1}`}" no está vinculado al catálogo (ID inválido). Elimínalo y agrégalo de nuevo desde el catálogo.`
+            `«${ej.nombre || `Ejercicio ${idx + 1}`}» no está en tu lista de ejercicios. Quítalo y agrégalo de nuevo desde la lista.`
           );
         }
         const resultadoPeso = normalizarPesoPrescritoTexto(ej.peso);
@@ -1653,7 +1727,7 @@ export function AlumnoDetallePage() {
 
     if (erroresCatalogo.length > 0) {
       triggerHaptic('warning');
-      setRutinaErrorMsg(`Revisa los ejercicios — ${erroresCatalogo[0]}`);
+      setRutinaErrorMsg(`Revisa los ejercicios: ${erroresCatalogo[0]}`);
       return;
     }
 
@@ -1679,7 +1753,9 @@ export function AlumnoDetallePage() {
       triggerHaptic('success');
       setRutinaSemanal(bloquesNormalizados);
       // WU5: el mensaje de éxito persiste inline hasta que el coach cierre el modal.
-      setRutinaSuccessMsg('Planificación semanal guardada y activada. El monitor ya calcula con ella.');
+      setRutinaSuccessMsg(
+        'Planificación semanal guardada y activada. Tu alumno ya la ve en su app y cuenta para el seguimiento semanal.'
+      );
     } catch (err: any) {
       triggerHaptic('warning');
       setRutinaErrorMsg(err?.message || 'Error al guardar la planificación en el servidor.');
@@ -1899,7 +1975,7 @@ export function AlumnoDetallePage() {
               )}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="py-2 px-3.5 rounded-xl bg-success-strong hover:bg-success-strong/90 text-white font-bold text-xs shadow-md shadow-success-strong/20 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+              className="min-h-11 py-2 px-3.5 rounded-xl bg-success-strong hover:bg-success-strong/90 text-white font-bold text-xs shadow-md shadow-success-strong/20 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <MessageSquare className="h-4 w-4" />
               <span>WhatsApp</span>
@@ -1911,7 +1987,7 @@ export function AlumnoDetallePage() {
                 {alumno.estadoActivacion === EstadoAlumno.ACTIVO ? (
                   <button
                     onClick={() => handleCambiarEstado(EstadoAlumno.INACTIVO_PAUSADO)}
-                    className="py-2 px-3 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs border border-border flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                    className="min-h-11 py-2 px-3 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs border border-border flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                     title="Pausar alumno temporalmente por viaje o lesión"
                   >
                     <PauseCircle className="h-4 w-4 text-warning" />
@@ -1920,7 +1996,7 @@ export function AlumnoDetallePage() {
                 ) : (
                   <button
                     onClick={() => handleCambiarEstado(EstadoAlumno.ACTIVO)}
-                    className="py-2 px-3 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs border border-border flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                    className="min-h-11 py-2 px-3 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs border border-border flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                     title="Reactivar alumno"
                   >
                     <PlayCircle className="h-4 w-4 text-success" />
@@ -1931,7 +2007,7 @@ export function AlumnoDetallePage() {
                 {alumno.estadoActivacion !== EstadoAlumno.SUSPENDIDO_PAGO && (
                   <button
                     onClick={() => handleCambiarEstado(EstadoAlumno.SUSPENDIDO_PAGO)}
-                    className="py-2 px-3 rounded-xl bg-warning/10 hover:bg-warning/20 text-warning font-semibold text-xs border border-warning/25 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                    className="min-h-11 py-2 px-3 rounded-xl bg-warning/10 hover:bg-warning/20 text-warning font-semibold text-xs border border-warning/25 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                     title="Suspender la planificación por mensualidad pendiente"
                   >
                     <DollarSign className="h-4 w-4" />
@@ -1939,11 +2015,11 @@ export function AlumnoDetallePage() {
                   </button>
                 )}
 
-                {/* Baja Lógica (Soft Delete) */}
+                {/* Archivar (los datos se conservan) */}
                 <button
                   onClick={handleSoftDelete}
-                  className="py-2 px-3 rounded-xl bg-destructive/10 hover:bg-destructive/20 text-destructive font-semibold text-xs border border-destructive/20 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                  title="Dar de baja lógica con preservación de datos"
+                  className="min-h-11 py-2 px-3 rounded-xl bg-destructive/10 hover:bg-destructive/20 text-destructive font-semibold text-xs border border-destructive/20 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                  title="Archivar alumno (sus datos se conservan)"
                 >
                   <Trash2 className="h-4 w-4" />
                   <span>Archivar</span>
@@ -1955,7 +2031,7 @@ export function AlumnoDetallePage() {
             {isArchived && (
               <button
                 onClick={handleRestaurar}
-                className="py-2 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                className="min-h-11 py-2 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <RefreshCw className="h-4 w-4" />
                 <span>Restaurar Alumno</span>
@@ -1963,6 +2039,19 @@ export function AlumnoDetallePage() {
             )}
           </div>
         </div>
+
+        {/* C6: confirmación accesible de archivar / cambiar estado / quitar override */}
+        <DialogoConfirmacion
+          abierto={confirmacionFicha !== null}
+          idTitulo="ficha-confirmacion-titulo"
+          titulo={confirmacionFicha?.titulo ?? ''}
+          detalle={confirmacionFicha?.detalle ?? ''}
+          textoConfirmar={confirmacionFicha?.boton ?? ''}
+          variante={confirmacionFicha?.variante}
+          procesando={confirmandoFicha}
+          onCancelar={() => setConfirmacionFicha(null)}
+          onConfirmar={() => void ejecutarConfirmacionFicha()}
+        />
 
         {/* D5: errores de acciones del ciclo de vida (pausar/reactivar/archivar/restaurar) */}
         {headerActionError && (
@@ -2354,7 +2443,7 @@ export function AlumnoDetallePage() {
                     <Lock className="h-4 w-4" />
                     <h3 className="font-extrabold text-sm text-foreground">Ficha Médica Confidencial</h3>
                   </div>
-                  <span className="text-[11px] font-mono text-muted-foreground">Cifrado AES-256-GCM</span>
+                  <span className="text-xs text-muted-foreground">Se guarda cifrada</span>
                 </div>
 
                 <p className="text-xs text-muted-foreground leading-relaxed">
@@ -3811,22 +3900,20 @@ export function AlumnoDetallePage() {
                     {/* 3. Acción de Eliminar Bloque */}
                     <div className="flex items-end justify-between sm:justify-start gap-2">
                       <div className="flex-1 sm:flex-none">
-                        <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
-                          Acción
-                        </label>
                         {bloquesRutinaEdit.length > 1 ? (
                           <button
                             type="button"
-                            onClick={() => removerDiaRutina(activeDiaIdx)}
-                            title="Eliminar este bloque de la rutina"
-                            className="px-3 py-2 rounded-xl bg-destructive/10 hover:bg-destructive text-destructive hover:text-destructive-foreground text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                            onClick={() =>
+                              setConfirmarBorradoRutina({ tipo: 'dia', indice: activeDiaIdx })
+                            }
+                            className="min-h-11 px-3 py-2 rounded-xl bg-destructive/10 hover:bg-destructive text-destructive hover:text-destructive-foreground text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            <span>Eliminar Bloque</span>
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>Eliminar este día</span>
                           </button>
                         ) : (
-                          <span className="text-[11px] text-muted-foreground italic py-2 block">
-                            Mínimo 1 bloque
+                          <span className="text-xs text-muted-foreground italic py-2 block">
+                            Mínimo 1 día
                           </span>
                         )}
                       </div>
@@ -3952,12 +4039,13 @@ export function AlumnoDetallePage() {
                               type="button"
                               onClick={() => {
                                 triggerHaptic('light');
-                                removerEjercicioDeDia(ejIdx);
+                                setConfirmarBorradoRutina({ tipo: 'ejercicio', indice: ejIdx });
                               }}
                               title="Eliminar este ejercicio"
-                              className="p-1.5 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer shrink-0"
+                              aria-label={`Eliminar ${ej.nombre || 'este ejercicio'}`}
+                              className="min-h-11 min-w-11 flex items-center justify-center rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer shrink-0"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-4 w-4" aria-hidden="true" />
                             </button>
                           </div>
 
@@ -4257,17 +4345,19 @@ export function AlumnoDetallePage() {
                 </button>
                 <button
                   type="button"
-                  disabled={isSavingRutina}
+                  disabled={isSavingRutina || (!hayConexion && !isDemoMode)}
                   onClick={guardarRutinaPrescrita}
-                  className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  className="min-h-11 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                 >
                   {isSavingRutina ? (
                     <>
                       <div className="h-3 w-3 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin" />
                       <span>Guardando...</span>
                     </>
+                  ) : !hayConexion && !isDemoMode ? (
+                    <span>Necesitas internet para guardar</span>
                   ) : (
-                    <span>Guardar Planificación Activa</span>
+                    <span>Guardar planificación activa</span>
                   )}
                 </button>
               </div>
@@ -4275,6 +4365,33 @@ export function AlumnoDetallePage() {
           </div>
         </div>
       )}
+
+      {/* C4: confirmación antes de borrar un día o un ejercicio de la rutina en edición */}
+      <DialogoConfirmacion
+        abierto={confirmarBorradoRutina !== null}
+        idTitulo="rutina-confirmar-borrado"
+        titulo={
+          confirmarBorradoRutina?.tipo === 'dia' ? '¿Eliminar este día?' : '¿Eliminar este ejercicio?'
+        }
+        detalle={
+          confirmarBorradoRutina?.tipo === 'dia'
+            ? 'Se quitará este día con todos sus ejercicios de la rutina que estás editando.'
+            : `Se quitará «${
+                bloquesRutinaEdit[activeDiaIdx]?.ejercicios?.[confirmarBorradoRutina?.indice ?? -1]
+                  ?.nombre ?? 'este ejercicio'
+              }» de este día.`
+        }
+        textoConfirmar="Sí, eliminar"
+        variante="peligro"
+        onCancelar={() => setConfirmarBorradoRutina(null)}
+        onConfirmar={() => {
+          if (confirmarBorradoRutina?.tipo === 'dia') removerDiaRutina(confirmarBorradoRutina.indice);
+          else if (confirmarBorradoRutina?.tipo === 'ejercicio') {
+            removerEjercicioDeDia(confirmarBorradoRutina.indice);
+          }
+          setConfirmarBorradoRutina(null);
+        }}
+      />
 
       {/* ===================================================================== */}
       {/* TAB 5: NUTRICIÓN & CHECK-INS (RF-002: metas, calendario y diario)      */}

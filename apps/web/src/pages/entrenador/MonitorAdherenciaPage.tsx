@@ -526,7 +526,7 @@ export function MonitorAdherenciaPage() {
             </h1>
             <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
               Cumplimiento de la semana por alumno, ordenado por nivel de riesgo.
-              Las horas se muestran en tu zona horaria local ({timezone}).
+              Las horas se muestran en tu hora local.
             </p>
           </div>
 

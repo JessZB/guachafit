@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ModoAsignacionPlantilla,
@@ -17,6 +17,9 @@ import {
 import { formatearSegundos } from '../../lib/sesion-tiempos';
 import { pluralizar } from '../../lib/pluralizar';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
+import { traducirMensajeSuelto } from '../../lib/mensajes-error';
+import { textoConfirmacionReemplazo } from '../../lib/asignacion-masiva';
+import { DialogoConfirmacion } from '../common/DialogoConfirmacion';
 import {
   ETIQUETAS_NIVEL_PLANTILLA,
   aplicarOverridesPreview,
@@ -80,6 +83,9 @@ export function SelectorPlantillaAsignacion({
   const [resultado, setResultado] = useState<AsignacionPlantillaResponseDTO | null>(null);
   const [errorAsignacion, setErrorAsignacion] = useState<string | null>(null);
   const [erroresAjustes, setErroresAjustes] = useState<ErrorAjuste[]>([]);
+  // C4: reemplazar la rutina actual del alumno pide confirmación explícita.
+  const [confirmandoReemplazo, setConfirmandoReemplazo] = useState(false);
+  const idBase = useId();
 
   // U3b: Escape, trampa de Tab y restore del foco; el foco inicial sigue en el buscador
   // (`autoFocus`), por eso el hook no lo reasigna.
@@ -203,7 +209,7 @@ export function SelectorPlantillaAsignacion({
   /** Tras un éxito no se permite re-confirmar: cada asignación crea/fusiona bloques reales. */
   const asignacionCompletada = Boolean(resultado && resultado.exitosos > 0);
 
-  const confirmarAsignacion = async () => {
+  const confirmarAsignacion = async (reemplazoConfirmado = false) => {
     if (!detalle || asignacionCompletada) return;
     const { ajustes, errores } = construirAjustesPlantilla(overrides);
     if (errores.length > 0) {
@@ -211,6 +217,11 @@ export function SelectorPlantillaAsignacion({
       triggerHaptic('warning');
       return;
     }
+    if (modo === ModoAsignacionPlantilla.REEMPLAZAR && !reemplazoConfirmado) {
+      setConfirmandoReemplazo(true);
+      return;
+    }
+    setConfirmandoReemplazo(false);
 
     // MODO DEMO EXPLÍCITO (isDemoMode): asignación simulada en estado local, sin llamada API.
     // No se invoca `onAsignada`: el refresco del padre consulta la API real, innecesaria en
@@ -258,9 +269,8 @@ export function SelectorPlantillaAsignacion({
         onAsignada(res);
       }
       if (res.fallidos > 0) {
-        setErrorAsignacion(
-          res.resultados.find((r) => !r.exito)?.error || 'La asignación falló para el alumno.'
-        );
+        // A6/C6: el error crudo de `resultados[].error` se traduce antes de mostrarse.
+        setErrorAsignacion(traducirMensajeSuelto(res.resultados.find((r) => !r.exito)?.error));
       }
     } catch (err: any) {
       setErrorAsignacion(err?.message || 'No se pudo asignar la plantilla en el servidor.');
@@ -291,7 +301,7 @@ export function SelectorPlantillaAsignacion({
             <ClipboardList className="h-5 w-5 text-primary" />
             <div>
               <h3 id="modal-plantilla-asignar-title" className="font-black text-base text-foreground">
-                Cargar desde Plantilla
+                Cargar desde plantilla
               </h3>
               <p className="text-xs text-muted-foreground">
                 Expediente de <span className="font-semibold text-foreground">{alumnoNombre}</span> ·
@@ -302,11 +312,11 @@ export function SelectorPlantillaAsignacion({
           <button
             type="button"
             onClick={onCerrar}
-            className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer"
+            className="min-h-11 min-w-11 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer"
             title="Cerrar"
             aria-label="Cerrar selector de plantilla"
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 
@@ -316,7 +326,7 @@ export function SelectorPlantillaAsignacion({
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
                 <Layers className="h-3.5 w-3.5 text-primary" />
-                Plantillas Activas
+                Plantillas activas
               </span>
               <span className="text-[11px] font-mono text-muted-foreground">
                 {plantillas.length} disponibles
@@ -452,7 +462,7 @@ export function SelectorPlantillaAsignacion({
                     </span>
                   </div>
                   <p className="text-[11px] text-muted-foreground font-mono">
-                    {pluralizar(detalle.bloques.length, 'bloque de día', 'bloques de día')} ·{' '}
+                    {pluralizar(detalle.bloques.length, 'día', 'días')} ·{' '}
                     {pluralizar(
                       detalle.bloques.reduce((t, b) => t + b.ejercicios.length, 0),
                       'ejercicio',
@@ -471,7 +481,7 @@ export function SelectorPlantillaAsignacion({
                 <div className="space-y-2">
                   <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                     <Repeat2 className="h-3.5 w-3.5 text-primary" />
-                    Modo de Asignación
+                    ¿Qué hacemos con la rutina actual?
                   </span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <label
@@ -491,7 +501,7 @@ export function SelectorPlantillaAsignacion({
                         className="sr-only"
                       />
                       <span className="text-xs font-bold text-foreground block">
-                        Reemplazar rutina activa
+                        Reemplazar la rutina actual
                       </span>
                       <span className="text-[11px] text-muted-foreground block mt-1 leading-snug">
                         Sustituye la rutina vigente de {alumnoNombre} por esta plantilla. La rutina
@@ -516,11 +526,11 @@ export function SelectorPlantillaAsignacion({
                         className="sr-only"
                       />
                       <span className="text-xs font-bold text-foreground block">
-                        Fusionar con la rutina activa
+                        Añadir a la rutina actual
                       </span>
                       <span className="text-[11px] text-muted-foreground block mt-1 leading-snug">
-                        Anexa los días de la plantilla a los bloques existentes sin borrar ninguno. Si
-                        no hay rutina activa, se crea como nueva.
+                        Agrega los días de la plantilla a los que ya tiene, sin borrar ninguno. Si no
+                        tiene rutina, se crea una nueva.
                       </span>
                     </label>
                   </div>
@@ -530,7 +540,7 @@ export function SelectorPlantillaAsignacion({
                 <div className="space-y-2">
                   <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                     <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
-                    Previsualización y Ajustes de Carga
+                    Vista previa y ajustes de carga
                   </span>
 
                   <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
@@ -590,7 +600,7 @@ export function SelectorPlantillaAsignacion({
                                       type="button"
                                       onClick={() => limpiarOverride(clave)}
                                       disabled={asignacionCompletada}
-                                      className="text-[11px] font-bold text-muted-foreground hover:text-foreground underline cursor-pointer shrink-0 disabled:opacity-50"
+                                      className="min-h-11 px-2 text-xs font-bold text-muted-foreground hover:text-foreground underline cursor-pointer shrink-0 disabled:opacity-50"
                                       title="Descartar los ajustes de este ejercicio"
                                     >
                                       Restablecer
@@ -605,17 +615,21 @@ export function SelectorPlantillaAsignacion({
                                   <span className="px-1.5 py-0.5 rounded-md bg-primary/10 border border-primary/20 font-bold text-primary">
                                     {ej.peso || 'sin carga'}
                                   </span>
-                                  {ej.rpe && <span>RPE {ej.rpe}</span>}
+                                  {ej.rpe && <span title="Esfuerzo percibido">Esfuerzo {ej.rpe}/10</span>}
                                   <span>Descanso: {formatearSegundos(ej.descansoSegundos || 90)}</span>
                                 </div>
 
                                 {/* Overrides de peso / series / reps */}
                                 <div className="flex items-end gap-2 flex-wrap pt-1.5 border-t border-border/40">
                                   <div className="flex flex-col">
-                                    <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
+                                    <label
+                                      htmlFor={`${idBase}-${bloque.diaId}-${ejIdx}-peso`}
+                                      className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5"
+                                    >
                                       Peso (kg)
                                     </label>
                                     <input
+                                      id={`${idBase}-${bloque.diaId}-${ejIdx}-peso`}
                                       type="text"
                                       value={override?.peso ?? ''}
                                       onChange={(e) =>
@@ -628,17 +642,21 @@ export function SelectorPlantillaAsignacion({
                                           : 'sin cambio'
                                       }
                                       aria-invalid={Boolean(erroresCampo.peso)}
-                                      className={`h-7 w-20 px-2 rounded-lg bg-background border text-center font-mono font-bold text-[11px] text-foreground focus:outline-hidden focus:border-primary transition-colors ${
+                                      className={`h-11 w-20 px-2 rounded-lg bg-background border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors ${
                                         erroresCampo.peso ? 'border-destructive/70' : 'border-border'
                                       }`}
                                     />
                                   </div>
 
                                   <div className="flex flex-col">
-                                    <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
+                                    <label
+                                      htmlFor={`${idBase}-${bloque.diaId}-${ejIdx}-series`}
+                                      className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5"
+                                    >
                                       Series
                                     </label>
                                     <input
+                                      id={`${idBase}-${bloque.diaId}-${ejIdx}-series`}
                                       type="text"
                                       inputMode="numeric"
                                       value={override?.series ?? ''}
@@ -648,17 +666,21 @@ export function SelectorPlantillaAsignacion({
                                       disabled={asignacionCompletada}
                                       placeholder={String(ej.series)}
                                       aria-invalid={Boolean(erroresCampo.series)}
-                                      className={`h-7 w-14 px-1.5 rounded-lg bg-background border text-center font-mono font-bold text-[11px] text-foreground focus:outline-hidden focus:border-primary transition-colors ${
+                                      className={`h-11 w-14 px-1.5 rounded-lg bg-background border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors ${
                                         erroresCampo.series ? 'border-destructive/70' : 'border-border'
                                       }`}
                                     />
                                   </div>
 
                                   <div className="flex flex-col">
-                                    <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
-                                      Reps
+                                    <label
+                                      htmlFor={`${idBase}-${bloque.diaId}-${ejIdx}-reps`}
+                                      className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5"
+                                    >
+                                      Repeticiones
                                     </label>
                                     <input
+                                      id={`${idBase}-${bloque.diaId}-${ejIdx}-reps`}
                                       type="text"
                                       value={override?.reps ?? ''}
                                       onChange={(e) =>
@@ -667,7 +689,7 @@ export function SelectorPlantillaAsignacion({
                                       disabled={asignacionCompletada}
                                       placeholder={ej.reps}
                                       aria-invalid={Boolean(erroresCampo.reps)}
-                                      className={`h-7 w-16 px-1.5 rounded-lg bg-background border text-center font-mono font-bold text-[11px] text-foreground focus:outline-hidden focus:border-primary transition-colors ${
+                                      className={`h-11 w-16 px-1.5 rounded-lg bg-background border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors ${
                                         erroresCampo.reps ? 'border-destructive/70' : 'border-border'
                                       }`}
                                     />
@@ -675,7 +697,7 @@ export function SelectorPlantillaAsignacion({
                                 </div>
 
                                 {(erroresCampo.peso || erroresCampo.series || erroresCampo.reps) && (
-                                  <p className="text-[11px] font-bold text-destructive">
+                                  <p role="alert" className="text-xs font-bold text-destructive">
                                     {erroresCampo.peso || erroresCampo.series || erroresCampo.reps}
                                   </p>
                                 )}
@@ -715,12 +737,12 @@ export function SelectorPlantillaAsignacion({
                       <span className="block text-[11px] text-success/80">
                         {resultado.modo === ModoAsignacionPlantilla.REEMPLAZAR
                           ? 'Rutina activa reemplazada'
-                          : 'Días fusionados con la rutina activa'}
+                          : 'Días añadidos a la rutina actual'}
                         {resultado.resultados[0]?.rutinaNombre
                           ? ` · «${resultado.resultados[0].rutinaNombre}»`
                           : ''}
                         {resultado.resultados[0]?.bloquesTotal
-                          ? ` · ${pluralizar(resultado.resultados[0].bloquesTotal, 'bloque', 'bloques')}`
+                          ? ` · ${pluralizar(resultado.resultados[0].bloquesTotal, 'día', 'días')}`
                           : ''}
                         . El expediente ya refleja la rutina vigente.
                       </span>
@@ -729,7 +751,10 @@ export function SelectorPlantillaAsignacion({
                 )}
 
                 {errorAsignacion && (
-                  <div className="p-3 rounded-2xl bg-destructive/15 border border-destructive/30 text-destructive text-xs flex items-center gap-2">
+                  <div
+                    role="alert"
+                    className="p-3 rounded-2xl bg-destructive/15 border border-destructive/30 text-destructive text-xs flex items-center gap-2"
+                  >
                     <AlertCircle className="h-4 w-4 shrink-0" />
                     <span>{errorAsignacion}</span>
                   </div>
@@ -763,20 +788,20 @@ export function SelectorPlantillaAsignacion({
                       type="button"
                       disabled={isAsignando}
                       onClick={onCerrar}
-                      className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs cursor-pointer disabled:opacity-50"
+                      className="min-h-11 px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs cursor-pointer disabled:opacity-50"
                     >
                       Cerrar
                     </button>
                     <button
                       type="button"
                       disabled={isAsignando || asignacionCompletada}
-                      onClick={confirmarAsignacion}
+                      onClick={() => void confirmarAsignacion()}
                       title={
                         asignacionCompletada
                           ? 'La asignación ya se completó. Cierra el panel para asignar otra plantilla o modo.'
                           : undefined
                       }
-                      className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                      className="min-h-11 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                     >
                       {isAsignando ? (
                         <>
@@ -786,12 +811,12 @@ export function SelectorPlantillaAsignacion({
                       ) : asignacionCompletada ? (
                         <>
                           <CheckCircle2 className="h-3.5 w-3.5" />
-                          <span>Asignación Completada</span>
+                          <span>Asignación completada</span>
                         </>
                       ) : (
                         <>
                           <Dumbbell className="h-3.5 w-3.5" />
-                          <span>Confirmar Asignación</span>
+                          <span>Confirmar asignación</span>
                         </>
                       )}
                     </button>
@@ -802,6 +827,19 @@ export function SelectorPlantillaAsignacion({
           </div>
         </div>
       </div>
+
+      {/* C4: reemplazar la rutina actual es destructivo para el plan vigente: se confirma. */}
+      <DialogoConfirmacion
+        abierto={confirmandoReemplazo}
+        idTitulo={`${idBase}-confirmar-reemplazo`}
+        titulo="Reemplazar la rutina actual"
+        detalle={textoConfirmacionReemplazo(1, alumnoNombre)}
+        textoConfirmar="Sí, reemplazar"
+        variante="peligro"
+        procesando={isAsignando}
+        onCancelar={() => setConfirmandoReemplazo(false)}
+        onConfirmar={() => void confirmarAsignacion(true)}
+      />
     </div>
   );
 }

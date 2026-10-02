@@ -5,12 +5,16 @@ import {
   type PlantillaRutinaDTO,
   type PlantillaRutinaResumenDTO,
 } from '@guachafit/shared';
-import { apiClient } from '../../lib/api-client';
+import { apiClient, resolverUrlApi } from '../../lib/api-client';
 import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
 import { formatFechaLocal } from '../../lib/date-format';
 import { pluralizar } from '../../lib/pluralizar';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
+import { useFrescuraOffline } from '../../lib/use-frescura-offline';
+import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
+import { DialogoConfirmacion } from '../../components/common/DialogoConfirmacion';
+import { AsignacionMasivaPlantilla } from '../../components/entrenador/AsignacionMasivaPlantilla';
 import {
   CATALOGO_DEMO,
   PLANTILLAS_DEMO,
@@ -23,6 +27,7 @@ import {
   ETIQUETAS_NIVEL_PLANTILLA,
   NIVELES_PLANTILLA_ORDEN,
   construirBloquesParaPlantilla,
+  firmaFormularioPlantilla,
   resumirBloques,
   validarNombrePlantilla,
 } from '../../lib/plantillas-rutina';
@@ -49,6 +54,8 @@ import {
   SearchX,
   Sparkles,
   Trash2,
+  Users,
+  WifiOff,
   X,
 } from 'lucide-react';
 
@@ -119,6 +126,16 @@ export function PlantillasPage() {
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
   const [ocupadaId, setOcupadaId] = useState<string | null>(null);
 
+  // C4: firma del formulario al abrir/guardar para avisar de cambios sin guardar al cerrar.
+  const [firmaGuardada, setFirmaGuardada] = useState('');
+  const [confirmandoCierre, setConfirmandoCierre] = useState(false);
+  // A6: plantilla elegida para asignarla a varios alumnos.
+  const [asignandoPlantilla, setAsignandoPlantilla] = useState<PlantillaRutinaResumenDTO | null>(
+    null
+  );
+  // D7: sin conexión no se puede guardar (la lista puede venir de la copia guardada).
+  const { isOnline } = useFrescuraOffline(null);
+
   const cargarPlantillas = async () => {
     setIsLoading(true);
     setError(null);
@@ -188,7 +205,11 @@ export function PlantillasPage() {
     setEditando(null);
     setFormNombre('');
     setFormNivel(NivelObjetivoPlantilla.PRINCIPIANTE);
-    setBloquesEdit([crearBloqueEdicion(1)]);
+    const bloquesIniciales = [crearBloqueEdicion(1)];
+    setBloquesEdit(bloquesIniciales);
+    setFirmaGuardada(
+      firmaFormularioPlantilla('', NivelObjetivoPlantilla.PRINCIPIANTE, bloquesIniciales)
+    );
     setEditorKey((k) => k + 1);
     setSaveSuccess(null);
     setSaveError(null);
@@ -201,8 +222,12 @@ export function PlantillasPage() {
     setEditando(detalle);
     setFormNombre(detalle.nombre);
     setFormNivel(detalle.nivelObjetivo);
-    setBloquesEdit(
-      (detalle.bloques ?? []).map((bloque, idx) => parsearBloqueParaEdicion(bloque, idx))
+    const bloquesDetalle = (detalle.bloques ?? []).map((bloque, idx) =>
+      parsearBloqueParaEdicion(bloque, idx)
+    );
+    setBloquesEdit(bloquesDetalle);
+    setFirmaGuardada(
+      firmaFormularioPlantilla(detalle.nombre, detalle.nivelObjetivo, bloquesDetalle)
     );
     setEditorKey((k) => k + 1);
     setSaveSuccess(null);
@@ -252,7 +277,7 @@ export function PlantillasPage() {
 
     const { bloques, errores } = construirBloquesParaPlantilla(bloquesEdit);
     if (errores.length > 0) {
-      setSaveError(`Revisa la estructura — ${errores[0]}`);
+      setSaveError(`Revisa los días y ejercicios: ${errores[0]}`);
       triggerHaptic('warning');
       return;
     }
@@ -262,6 +287,8 @@ export function PlantillasPage() {
       nivelObjetivo: formNivel,
       bloques,
     };
+    // Firma de lo que realmente se envía, calculada al INICIAR el guardado.
+    const firmaEnviada = firmaFormularioPlantilla(formNombre, formNivel, bloquesEdit);
 
     // MODO DEMO EXPLÍCITO (isDemoMode): crear/editar en estado LOCAL, sin llamada API,
     // con los mismos mensajes de éxito y la misma actualización del listado.
@@ -280,6 +307,7 @@ export function PlantillasPage() {
         ...prev.filter((p) => p.id !== detalle.id),
       ]);
       setEditando(detalle);
+      setFirmaGuardada(firmaEnviada);
       triggerHaptic('success');
       setSaveError(null);
       // WU5: el mensaje persiste inline hasta que el coach cierre el panel.
@@ -320,6 +348,7 @@ export function PlantillasPage() {
       };
       setPlantillas((prev) => [resumen, ...prev.filter((p) => p.id !== res.id)]);
       setEditando(res);
+      setFirmaGuardada(firmaEnviada);
       triggerHaptic('success');
       // WU5: el mensaje persiste inline hasta que el coach cierre el panel.
       setSaveSuccess(
@@ -424,11 +453,25 @@ export function PlantillasPage() {
     }
   };
 
-  const cerrarModal = () => {
+  const cerrarModalSinPreguntar = () => {
+    setConfirmandoCierre(false);
     setIsModalOpen(false);
     setSaveSuccess(null);
     setSaveError(null);
     setIntentoGuardar(false);
+  };
+
+  const hayCambiosSinGuardar =
+    isModalOpen && firmaFormularioPlantilla(formNombre, formNivel, bloquesEdit) !== firmaGuardada;
+
+  /** C4: con cambios sin guardar, cerrar pide confirmación (X, Escape, fondo o "Cerrar"). */
+  const cerrarModal = () => {
+    if (isSaving) return;
+    if (hayCambiosSinGuardar) {
+      setConfirmandoCierre(true);
+      return;
+    }
+    cerrarModalSinPreguntar();
   };
 
   // U3b: Escape, trampa de Tab y restore del foco; el foco inicial sigue en el nombre
@@ -459,12 +502,17 @@ export function PlantillasPage() {
         <button
           type="button"
           onClick={abrirCrear}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer self-start sm:self-auto"
+          className="min-h-11 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer self-start sm:self-auto"
         >
-          <Plus className="h-4 w-4" />
-          <span>Nueva Plantilla</span>
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          <span>Nueva plantilla</span>
         </button>
       </div>
+
+      {/* D7: la lista puede venir de la copia guardada cuando no hay conexión */}
+      {!isDemoMode && plantillas.length > 0 && (
+        <AvisoDatosOffline url={resolverUrlApi('/plantillas')} />
+      )}
 
       {accionError && (
         <div
@@ -478,10 +526,11 @@ export function PlantillasPage() {
           <button
             type="button"
             onClick={() => setAccionError(null)}
-            className="p-1 rounded-lg hover:bg-destructive/10 cursor-pointer"
+            className="min-h-11 min-w-11 flex items-center justify-center rounded-lg hover:bg-destructive/10 cursor-pointer shrink-0"
             title="Descartar aviso"
+            aria-label="Descartar aviso"
           >
-            <X className="h-3.5 w-3.5" />
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </div>
       )}
@@ -501,14 +550,15 @@ export function PlantillasPage() {
                     triggerHaptic('selection');
                     setFiltro(opcion.valor);
                   }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  aria-pressed={activo}
+                  className={`min-h-11 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                     activo
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   <span>{opcion.label}</span>
-                  <span className={`font-mono text-[11px] ${activo ? 'opacity-80' : 'opacity-60'}`}>
+                  <span className={`font-mono text-xs ${activo ? 'opacity-80' : 'opacity-60'}`}>
                     {conteo}
                   </span>
                 </button>
@@ -618,8 +668,8 @@ export function PlantillasPage() {
               onClick={abrirCrear}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs cursor-pointer"
             >
-              <Plus className="h-3.5 w-3.5" />
-              <span>Crear Plantilla</span>
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Crear plantilla</span>
             </button>
           </div>
         )
@@ -672,7 +722,7 @@ export function PlantillasPage() {
 
               {confirmandoId === plantilla.id ? (
                 <div className="p-3 rounded-2xl bg-destructive/10 border border-destructive/30 space-y-2">
-                  <p className="text-[11px] text-foreground leading-snug">
+                  <p className="text-xs text-foreground leading-snug">
                     ¿Desactivar <span className="font-bold">{plantilla.nombre}</span>? No se borra: podrás
                     reactivarla. Las rutinas ya asignadas no cambian.
                   </p>
@@ -681,7 +731,7 @@ export function PlantillasPage() {
                       type="button"
                       disabled={ocupadaId === plantilla.id}
                       onClick={() => desactivarPlantilla(plantilla.id)}
-                      className="px-3 py-1.5 rounded-lg bg-destructive text-destructive-foreground font-bold text-[11px] disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                      className="min-h-11 px-3 py-1.5 rounded-lg bg-destructive text-destructive-foreground font-bold text-xs disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
                     >
                       {ocupadaId === plantilla.id ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -693,19 +743,35 @@ export function PlantillasPage() {
                     <button
                       type="button"
                       onClick={() => setConfirmandoId(null)}
-                      className="px-3 py-1.5 rounded-lg bg-secondary text-foreground font-bold text-[11px] cursor-pointer"
+                      className="min-h-11 px-3 py-1.5 rounded-lg bg-secondary text-foreground font-bold text-xs cursor-pointer"
                     >
                       Cancelar
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 pt-3 border-t border-border/60">
+                <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border/60">
+                  {/* A6: asignación masiva desde la tarjeta (solo plantillas activas) */}
+                  {plantilla.activa && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        triggerHaptic('light');
+                        setAsignandoPlantilla(plantilla);
+                      }}
+                      disabled={!isOnline && !isDemoMode}
+                      title={!isOnline && !isDemoMode ? 'Necesitas internet para asignar' : undefined}
+                      className="w-full min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <Users className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>Asignar a alumnos</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => abrirEditar(plantilla)}
                     disabled={cargandoDetalleId === plantilla.id}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground font-bold text-[11px] transition-colors cursor-pointer disabled:opacity-50"
+                    className="flex-1 min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
                   >
                     {cargandoDetalleId === plantilla.id ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -722,7 +788,7 @@ export function PlantillasPage() {
                         triggerHaptic('light');
                         setConfirmandoId(plantilla.id);
                       }}
-                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-destructive/10 hover:bg-destructive/20 text-destructive font-bold text-[11px] transition-colors cursor-pointer"
+                      className="flex-1 min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-destructive/10 hover:bg-destructive/20 text-destructive font-bold text-xs transition-colors cursor-pointer"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                       <span>Desactivar</span>
@@ -732,7 +798,7 @@ export function PlantillasPage() {
                       type="button"
                       disabled={ocupadaId === plantilla.id}
                       onClick={() => reactivarPlantilla(plantilla.id)}
-                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-bold text-[11px] transition-colors cursor-pointer disabled:opacity-50"
+                      className="flex-1 min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
                     >
                       {ocupadaId === plantilla.id ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -772,7 +838,7 @@ export function PlantillasPage() {
                 <ClipboardList className="h-5 w-5 text-primary" />
                 <div>
                   <h3 id="modal-plantilla-title" className="font-black text-base text-foreground">
-                    {editando ? 'Editar Plantilla' : 'Nueva Plantilla de Rutina'}
+                    {editando ? 'Editar plantilla' : 'Nueva plantilla de rutina'}
                   </h3>
                   <p className="text-xs text-muted-foreground">
                     Estructura los días, los ejercicios y sus cargas. Podrás reutilizarla con cualquier
@@ -783,11 +849,11 @@ export function PlantillasPage() {
               <button
                 type="button"
                 onClick={cerrarModal}
-                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer"
+                className="min-h-11 min-w-11 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer"
                 title="Cerrar"
                 aria-label="Cerrar"
               >
-                <X className="h-5 w-5" />
+                <X className="h-5 w-5" aria-hidden="true" />
               </button>
             </div>
 
@@ -807,6 +873,13 @@ export function PlantillasPage() {
               </div>
             )}
 
+            {/* Mientras se guarda, el formulario queda bloqueado: lo que ves es lo que se envía. */}
+            <fieldset
+              disabled={isSaving}
+              aria-busy={isSaving}
+              className="min-w-0 m-0 p-0 border-0 space-y-5 disabled:opacity-70"
+            >
+            <legend className="sr-only">Datos de la plantilla</legend>
             {/* Identidad de la plantilla */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="sm:col-span-2 space-y-1">
@@ -814,7 +887,7 @@ export function PlantillasPage() {
                   htmlFor="plantilla-nombre"
                   className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block"
                 >
-                  Nombre de la Plantilla
+                  Nombre de la plantilla
                 </label>
                 <input
                   id="plantilla-nombre"
@@ -830,7 +903,9 @@ export function PlantillasPage() {
                   }`}
                 />
                 {mostrarNombreError && (
-                  <span className="text-[11px] font-bold text-destructive block">{nombreError}</span>
+                  <span role="alert" className="text-xs font-bold text-destructive block">
+                    {nombreError}
+                  </span>
                 )}
               </div>
 
@@ -839,7 +914,7 @@ export function PlantillasPage() {
                   htmlFor="plantilla-nivel"
                   className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block"
                 >
-                  Nivel Objetivo
+                  Nivel objetivo
                 </label>
                 <select
                   id="plantilla-nivel"
@@ -867,9 +942,13 @@ export function PlantillasPage() {
               mostrarNotas
               minBloques={1}
             />
+            </fieldset>
 
             {saveError && (
-              <div className="p-3 rounded-xl bg-destructive/15 border border-destructive/30 text-destructive text-xs flex items-center gap-2">
+              <div
+                role="alert"
+                className="p-3 rounded-xl bg-destructive/15 border border-destructive/30 text-destructive text-xs flex items-center gap-2"
+              >
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{saveError}</span>
               </div>
@@ -889,29 +968,55 @@ export function PlantillasPage() {
                   type="button"
                   disabled={isSaving}
                   onClick={cerrarModal}
-                  className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs cursor-pointer disabled:opacity-50"
+                  className="min-h-11 px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs cursor-pointer disabled:opacity-50"
                 >
                   Cerrar
                 </button>
                 <button
                   type="button"
-                  disabled={isSaving}
+                  disabled={isSaving || (!isOnline && !isDemoMode)}
                   onClick={guardarPlantilla}
-                  className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  className="min-h-11 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                 >
                   {isSaving ? (
                     <>
                       <div className="h-3 w-3 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin" />
                       <span>Guardando...</span>
                     </>
+                  ) : !isOnline && !isDemoMode ? (
+                    <>
+                      <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>Necesitas internet para guardar</span>
+                    </>
                   ) : (
-                    <span>{editando ? 'Guardar Cambios' : 'Crear Plantilla Activa'}</span>
+                    <span>{editando ? 'Guardar cambios' : 'Crear plantilla'}</span>
                   )}
                 </button>
               </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* C4: aviso de cambios sin guardar al cerrar el panel de la plantilla */}
+      <DialogoConfirmacion
+        abierto={confirmandoCierre}
+        idTitulo="plantilla-confirmar-cierre"
+        titulo="¿Salir sin guardar?"
+        detalle="Tienes cambios sin guardar en esta plantilla. Si sales ahora, se perderán."
+        textoConfirmar="Salir sin guardar"
+        textoCancelar="Seguir editando"
+        variante="peligro"
+        onCancelar={() => setConfirmandoCierre(false)}
+        onConfirmar={cerrarModalSinPreguntar}
+      />
+
+      {/* A6: asignar la plantilla a varios alumnos */}
+      {asignandoPlantilla && (
+        <AsignacionMasivaPlantilla
+          plantilla={asignandoPlantilla}
+          onCerrar={() => setAsignandoPlantilla(null)}
+        />
       )}
     </div>
   );
