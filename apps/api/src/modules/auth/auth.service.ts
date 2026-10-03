@@ -24,6 +24,13 @@ import {
   perfilesAlumno,
 } from '@guachafit/database';
 import { CryptoService } from '../../common/services/crypto.service';
+import { obtenerSecretosJwt } from '../../common/config/secretos-jwt';
+import {
+  MENSAJE_SESION_VENCIDA,
+  MENSAJE_CUENTA_ARCHIVADA,
+  MENSAJE_CREDENCIALES_INCORRECTAS,
+  MENSAJE_CUENTA_DESACTIVADA,
+} from '../../common/mensajes-acceso';
 import {
   LoginUsuarioDTO,
   EstablecerPasswordConTokenDTO,
@@ -43,6 +50,15 @@ import {
   CambioLicenciaEntrenadorResultadoDTO,
 } from '@guachafit/shared';
 
+/**
+ * A6: hash bcrypt de un texto que nunca es una contraseña real. Se compara contra él cuando el
+ * usuario no existe o aún no tiene contraseña para que el tiempo de respuesta no delate qué
+ * correos están registrados. DEBE tener el mismo costo que `CryptoService.hashPassword`
+ * (`RONDAS_BCRYPT`, hoy 10 => prefijo `$2b$10$`); si cambian las rondas, regenéralo con
+ * `bcrypt.hashSync(<texto aleatorio>, RONDAS_BCRYPT)` (lo vigila api1-seguridad-auth.spec.ts).
+ */
+const HASH_FICTICIO_SIN_USUARIO = '$2b$10$NE1sOETTV3S5BxjlNsXI6O6ENy1JcQJTkBlST32ZI6dQF5C04OVye';
+
 @Injectable()
 export class AuthService {
   private readonly jwtSecret: string;
@@ -61,8 +77,10 @@ export class AuthService {
     private readonly cryptoService: CryptoService,
     @Optional() @Inject(WITH_TENANT) withTenant?: WithTenantFn
   ) {
-    this.jwtSecret = process.env.JWT_SECRET || 'guachafit_jwt_super_secret_key_2026';
-    this.refreshSecret = process.env.JWT_REFRESH_SECRET || 'guachafit_jwt_refresh_super_secret_key_2026';
+    // A3: los secretos salen de la fuente única (fail-fast en producción).
+    const { jwtSecret, refreshSecret } = obtenerSecretosJwt();
+    this.jwtSecret = jwtSecret;
+    this.refreshSecret = refreshSecret;
     this.withTenant = withTenant ?? ((context, fn) => withTenantBase(context, fn, this.db));
   }
 
@@ -141,17 +159,16 @@ export class AuthService {
       .from(usuarios)
       .where(eq(usuarios.email, dto.email.toLowerCase().trim()));
 
-    if (!usuario || !usuario.passwordHash) {
-      throw new UnauthorizedException('Credenciales inválidas.');
+    // A6: la contraseña se verifica SIEMPRE y ANTES de revelar el estado de la cuenta. Sin usuario
+    // (o sin contraseña aún) se compara contra un hash ficticio para no filtrar por tiempo.
+    const hashAComparar = usuario?.passwordHash || HASH_FICTICIO_SIN_USUARIO;
+    const isMatch = await this.cryptoService.comparePassword(dto.password, hashAComparar);
+    if (!usuario || !usuario.passwordHash || !isMatch) {
+      throw new UnauthorizedException(MENSAJE_CREDENCIALES_INCORRECTAS);
     }
 
     if (usuario.estado === EstadoUsuario.BLOQUEADO || !usuario.activo) {
-      throw new UnauthorizedException('Su cuenta se encuentra inactiva o bloqueada.');
-    }
-
-    const isMatch = await this.cryptoService.comparePassword(dto.password, usuario.passwordHash);
-    if (!isMatch) {
-      throw new UnauthorizedException('Credenciales inválidas.');
+      throw new UnauthorizedException(MENSAJE_CUENTA_DESACTIVADA);
     }
 
     // Resolver el entrenador_id de pertenencia para el claim de Tenancy
@@ -175,9 +192,7 @@ export class AuthService {
       // el alumno archivado seguía iniciando sesión (y renovando tokens) pese a no tener acceso
       // operativo. El mensaje es claro y no expone datos del perfil ni del entrenador.
       if (perfil?.deletedAtUtc) {
-        throw new UnauthorizedException(
-          'Tu cuenta fue dada de baja por tu entrenador. Contacta con tu entrenador para restaurar tu acceso.'
-        );
+        throw new UnauthorizedException(MENSAJE_CUENTA_ARCHIVADA);
       }
 
       entrenadorId = perfil?.entrenadorId;
@@ -235,7 +250,7 @@ export class AuthService {
       .limit(1);
 
     if (!usuario || !usuario.activo || usuario.estado === EstadoUsuario.BLOQUEADO) {
-      throw new UnauthorizedException('Usuario no válido o inactivo.');
+      throw new UnauthorizedException(MENSAJE_SESION_VENCIDA);
     }
 
     let entrenadorId: string | undefined;
@@ -266,9 +281,7 @@ export class AuthService {
       );
 
       if (perfil?.deletedAtUtc) {
-        throw new UnauthorizedException(
-          'Tu cuenta fue dada de baja por tu entrenador. Contacta con tu entrenador para restaurar tu acceso.'
-        );
+        throw new UnauthorizedException(MENSAJE_CUENTA_ARCHIVADA);
       }
 
       entrenadorId = perfil?.entrenadorId;
@@ -318,12 +331,12 @@ export class AuthService {
 
     if (!usuario) {
       throw new NotFoundException(
-        'El enlace de invitación no es válido o ha expirado (TTL 48 horas). Solicite uno nuevo a su entrenador.'
+        'El enlace de invitación no es válido o venció (dura 48 horas). Pide uno nuevo a tu entrenador.'
       );
     }
 
     if (!usuario.activo || usuario.estado === EstadoUsuario.BLOQUEADO) {
-      throw new UnauthorizedException('Su cuenta se encuentra inactiva o bloqueada.');
+      throw new UnauthorizedException(MENSAJE_CUENTA_DESACTIVADA);
     }
 
     // La resolución del perfil ocurre ANTES de escribir: un alumno archivado no activa su cuenta.
@@ -341,9 +354,7 @@ export class AuthService {
 
       // RF-012 RN-02: la baja lógica revoca el acceso; el mensaje es el mismo que en el login.
       if (perfil?.deletedAtUtc) {
-        throw new UnauthorizedException(
-          'Tu cuenta fue dada de baja por tu entrenador. Contacta con tu entrenador para restaurar tu acceso.'
-        );
+        throw new UnauthorizedException(MENSAJE_CUENTA_ARCHIVADA);
       }
 
       entrenadorId = perfil?.entrenadorId;
@@ -400,7 +411,7 @@ export class AuthService {
     try {
       decoded = jwt.verify(refreshToken, this.refreshSecret);
     } catch {
-      throw new UnauthorizedException('Refresh token expirado o inválido.');
+      throw new UnauthorizedException(MENSAJE_SESION_VENCIDA);
     }
 
     const [usuario] = await this.db
@@ -410,7 +421,7 @@ export class AuthService {
 
     // "Bloqueado total" (RF-012): inactivo o bloqueado no renueva tokens.
     if (!usuario || !usuario.activo || usuario.estado === EstadoUsuario.BLOQUEADO) {
-      throw new UnauthorizedException('Usuario no válido o inactivo.');
+      throw new UnauthorizedException(MENSAJE_SESION_VENCIDA);
     }
 
     let entrenadorId: string | undefined;
@@ -426,9 +437,7 @@ export class AuthService {
 
       // RF-012 RN-02: la baja lógica también revoca la renovación de tokens.
       if (perfil?.deletedAtUtc) {
-        throw new UnauthorizedException(
-          'Tu cuenta fue dada de baja por tu entrenador. Contacta con tu entrenador para restaurar tu acceso.'
-        );
+        throw new UnauthorizedException(MENSAJE_CUENTA_ARCHIVADA);
       }
 
       entrenadorId = perfil?.entrenadorId;
@@ -475,7 +484,7 @@ export class AuthService {
       .where(eq(perfilesEntrenador.coachCode, dto.coachCode.toUpperCase().trim()));
 
     if (existenteCode) {
-      throw new ConflictException('El coach_code ya se encuentra en uso.');
+      throw new ConflictException('Ese código de entrenador ya está en uso.');
     }
 
     // 3. Generar token de bienvenida o hashear contraseña directa

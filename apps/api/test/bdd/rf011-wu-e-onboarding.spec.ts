@@ -499,7 +499,7 @@ describe('WU-E (RF-011 RN-05 / RF-012): establecerPasswordConToken', () => {
 
     await expect(
       service.establecerPasswordConToken({ token: 'token-usado', password: 'otra-clave-2026' })
-    ).rejects.toThrow('El enlace de invitación no es válido o ha expirado (TTL 48 horas).');
+    ).rejects.toThrow('El enlace de invitación no es válido o venció (dura 48 horas).');
   });
 
   it('alumno archivado (baja lógica): 401 y NO se consume el token ni se escribe contraseña', async () => {

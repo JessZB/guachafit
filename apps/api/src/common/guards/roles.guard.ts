@@ -4,11 +4,14 @@ import {
   ExecutionContext,
   ForbiddenException,
   Inject,
+  Logger,
   Optional,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Rol } from '@guachafit/shared';
 import { ROLES_KEY } from '../decorators/roles.decorator';
+// B2: texto que ve el usuario cuando su rol no puede entrar a una ruta.
+import { MENSAJE_SIN_PERMISO } from '../mensajes-acceso';
 import {
   AuditoriaAccesosDenegadosService,
   contextoPeticionHttp,
@@ -16,6 +19,8 @@ import {
 
 @Injectable()
 export class RolesGuard implements CanActivate {
+  private readonly logger = new Logger(RolesGuard.name);
+
   constructor(
     // Token explícito (como los demás guards del proyecto): la inyección no depende de
     // `design:paramtypes`, que los transformadores de test (esbuild) no emiten.
@@ -42,7 +47,8 @@ export class RolesGuard implements CanActivate {
     const { user } = request;
     if (!user || !user.rol) {
       this.auditar(request, user, 'SIN_AUTENTICACION');
-      throw new ForbiddenException('Acceso denegado: Usuario no autenticado o sin rol asignado.');
+      this.logger.warn('Acceso denegado: usuario no autenticado o sin rol asignado.');
+      throw new ForbiddenException(MENSAJE_SIN_PERMISO);
     }
 
     // RF-010 RN-01 (matriz de control de acceso): NO existe jerarquía con bypass. Cada endpoint
@@ -51,9 +57,11 @@ export class RolesGuard implements CanActivate {
     const hasRole = requiredRoles.includes(user.rol);
     if (!hasRole) {
       this.auditar(request, user, 'ROL_NO_AUTORIZADO');
-      throw new ForbiddenException(
-        `Acceso denegado: Se requiere uno de los roles [${requiredRoles.join(', ')}], pero el rol actual es ${user.rol}.`
+      // B2: el detalle técnico (roles requeridos vs. actual) queda solo en los logs.
+      this.logger.warn(
+        `Acceso denegado: se requiere uno de los roles [${requiredRoles.join(', ')}], rol actual ${user.rol}.`
       );
+      throw new ForbiddenException(MENSAJE_SIN_PERMISO);
     }
 
     return true;

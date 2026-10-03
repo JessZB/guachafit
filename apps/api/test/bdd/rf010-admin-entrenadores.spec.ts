@@ -13,6 +13,7 @@ import { EstadoLicencia, EstadoUsuario, Modalidad, Rol } from '@guachafit/shared
 import { AuthController } from '../../src/modules/auth/auth.controller';
 import { AuthService } from '../../src/modules/auth/auth.service';
 import { RolesGuard } from '../../src/common/guards/roles.guard';
+import { JWT_REFRESH_SECRET_DESARROLLO, JWT_SECRET_DESARROLLO } from '../../src/common/config/secretos-jwt';
 
 /**
  * RF-010 (WU Admin): gestión de entrenadores desde el panel maestro y revocación de sesión (§6).
@@ -31,7 +32,7 @@ const PERFIL_ID = 'p1111111-1111-4111-8111-111111111111';
 const ALUMNO_ID = 'a3333333-3333-4333-8333-333333333333';
 const SUPERADMIN_ID = '50000000-0000-4000-8000-000000000001';
 const REFRESH_SECRET =
-  process.env.JWT_REFRESH_SECRET || 'guachafit_jwt_refresh_super_secret_key_2026';
+  process.env.JWT_REFRESH_SECRET || JWT_REFRESH_SECRET_DESARROLLO;
 
 /** Fila de `usuarios` tal como la devuelve el `select()` completo del servicio. */
 function filaUsuario(parcial: Record<string, unknown> = {}) {
@@ -327,13 +328,13 @@ describe('RF-010 (WU Admin): gestión de entrenadores desde el panel maestro', (
   });
 
   describe('4. Invalidación de sesión (RF-010 §6)', () => {
-    it('login rechaza la cuenta deshabilitada antes de comparar la contraseña', async () => {
+    it('login rechaza la cuenta deshabilitada DESPUÉS de comparar la contraseña (A6: sin enumeración)', async () => {
       mock.setRespuestas([[filaUsuario({ activo: false })]]);
 
       await expect(
         authService.login({ email: 'coach@guachafit.com', password: 'secreto-123' })
       ).rejects.toThrow(UnauthorizedException);
-      expect(mockCryptoService.comparePassword).not.toHaveBeenCalled();
+      expect(mockCryptoService.comparePassword).toHaveBeenCalledTimes(1);
     });
 
     it('login rechaza al coach con licencia suspendida (mensaje claro)', async () => {
@@ -707,7 +708,7 @@ describe('RF-010 (WU Admin): gestión de entrenadores desde el panel maestro', (
  * llamada exacta al servicio. El `AuthService` va mockeado: aquí se fija el contrato del controller.
  */
 describe('RF-010 (WU Admin): verificación HTTP real del panel maestro', () => {
-  const JWT_SECRET = process.env.JWT_SECRET || 'guachafit_jwt_super_secret_key_2026';
+  const JWT_SECRET = process.env.JWT_SECRET || JWT_SECRET_DESARROLLO;
 
   function token(rol: Rol, sub: string): string {
     return jwt.sign({ sub, email: `${rol}@guachafit.com`, rol }, JWT_SECRET, { expiresIn: '15m' });

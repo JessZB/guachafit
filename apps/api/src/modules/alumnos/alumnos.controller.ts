@@ -17,6 +17,7 @@ import {
 import { AlumnosService } from './alumnos.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { LimitarIntentosPublico } from '../../common/guards/limite-intentos.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import {
   Rol,
@@ -56,6 +57,8 @@ export class AlumnosController {
    */
   @Post('registro-publico')
   @HttpCode(HttpStatus.CREATED)
+  // A5: registro público sin sesión, 20/min por IP.
+  @LimitarIntentosPublico()
   async registroPublico(@Body() body: unknown) {
     const dto = RegistroPublicoAlumnoSchema.parse(body);
     return this.alumnosService.registroPublico(dto);
@@ -69,6 +72,8 @@ export class AlumnosController {
    */
   @Get('coach/:code')
   @HttpCode(HttpStatus.OK)
+  // A5: evita barrer códigos de coach por fuerza bruta (20/min por IP).
+  @LimitarIntentosPublico()
   async resolverCoachPublico(@Param('code') code: string): Promise<CoachPublicoDTO> {
     const codigo = (code ?? '').trim().toUpperCase();
     if (!COACH_CODE_REGEX.test(codigo)) {
@@ -91,7 +96,7 @@ export class AlumnosController {
     @Body() body: unknown
   ) {
     if (!UUID_REGEX.test(alumnoId)) {
-      throw new BadRequestException('El ID del alumno debe ser un UUID válido.');
+      throw new BadRequestException('El alumno indicado no es válido.');
     }
     const dto = CambioEstadoAlumnoSchema.parse(body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
@@ -110,7 +115,7 @@ export class AlumnosController {
     @Body() body: unknown
   ) {
     if (!UUID_REGEX.test(alumnoId)) {
-      throw new BadRequestException('El ID del alumno debe ser un UUID válido.');
+      throw new BadRequestException('El alumno indicado no es válido.');
     }
     const dto = ActualizarPerfilAlumnoSchema.parse(body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
@@ -125,7 +130,7 @@ export class AlumnosController {
   @Roles(Rol.ENTRENADOR)
   async softDelete(@Req() req: any, @Param('id') alumnoId: string) {
     if (!UUID_REGEX.test(alumnoId)) {
-      throw new BadRequestException('El ID del alumno debe ser un UUID válido.');
+      throw new BadRequestException('El alumno indicado no es válido.');
     }
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.alumnosService.softDelete(entrenadorId, alumnoId);
@@ -143,7 +148,7 @@ export class AlumnosController {
     @Body() body: unknown
   ) {
     if (!UUID_REGEX.test(alumnoId)) {
-      throw new BadRequestException('El ID del alumno debe ser un UUID válido.');
+      throw new BadRequestException('El alumno indicado no es válido.');
     }
     const dto = body && typeof body === 'object' && Object.keys(body).length > 0
       ? RestaurarAlumnoSchema.parse(body)
@@ -176,7 +181,7 @@ export class AlumnosController {
   @Roles(Rol.ENTRENADOR, Rol.ALUMNO)
   async obtenerPorId(@Req() req: any, @Param('id') alumnoId: string) {
     if (!UUID_REGEX.test(alumnoId)) {
-      throw new BadRequestException('El ID del alumno debe ser un UUID válido.');
+      throw new BadRequestException('El alumno indicado no es válido.');
     }
     return this.alumnosService.obtenerPorId(
       alumnoId,

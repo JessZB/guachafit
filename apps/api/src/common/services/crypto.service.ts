@@ -2,6 +2,9 @@ import { Injectable, Optional, Inject } from '@nestjs/common';
 import * as crypto from 'node:crypto';
 import * as bcrypt from 'bcryptjs';
 
+/** Costo bcrypt de las contraseñas (A6: el hash ficticio del login debe usar el mismo). */
+export const RONDAS_BCRYPT = 10;
+
 @Injectable()
 export class CryptoService {
   private readonly encryptionKey: Buffer;
@@ -17,7 +20,7 @@ export class CryptoService {
    * Hashea una contraseña usando bcryptjs con 10 rondas de salt
    */
   async hashPassword(password: string): Promise<string> {
-    return bcrypt.hash(password, 10);
+    return bcrypt.hash(password, RONDAS_BCRYPT);
   }
 
   /**

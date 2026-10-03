@@ -19,6 +19,11 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import {
+  LimitarIntentosLogin,
+  LimitarIntentosPublico,
+  LimitarIntentosRefresh,
+} from '../../common/guards/limite-intentos.guard';
+import {
   Rol,
   UUID_REGEX,
   LoginUsuarioSchema,
@@ -55,6 +60,8 @@ export class AuthController {
    */
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  // A5: 5 intentos/min por IP + correo (fuerza bruta) y 60/min por IP (rociado de correos).
+  @LimitarIntentosLogin()
   async login(@Body() body: unknown) {
     const dto = LoginUsuarioSchema.parse(body);
     return this.authService.login(dto);
@@ -65,6 +72,8 @@ export class AuthController {
    */
   @Post('invitacion/establecer-password')
   @HttpCode(HttpStatus.OK)
+  // A5: activación de cuenta (ruta pública), 20/min por IP.
+  @LimitarIntentosPublico()
   async establecerPassword(@Body() body: unknown) {
     const dto = EstablecerPasswordConTokenSchema.parse(body);
     return this.authService.establecerPasswordConToken(dto);
@@ -75,6 +84,8 @@ export class AuthController {
    */
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  // A5: exige un refresh token válido; tope holgado por IP sin consumir el cupo del login.
+  @LimitarIntentosRefresh()
   async refresh(@Body() body: unknown) {
     const dto = RefreshTokenSchema.parse(body);
     return this.authService.refresh(dto.refreshToken);
@@ -120,7 +131,7 @@ export class AuthController {
     @Body() body: unknown
   ) {
     if (!UUID_REGEX.test(usuarioId)) {
-      throw new BadRequestException('El ID del entrenador debe ser un UUID válido.');
+      throw new BadRequestException('El entrenador indicado no es válido.');
     }
     const dto = parsearContrato(CambiarEstadoEntrenadorSchema, body);
     return this.authService.cambiarEstadoEntrenador(usuarioId, dto, req.user.sub);
@@ -141,7 +152,7 @@ export class AuthController {
     @Body() body: unknown
   ) {
     if (!UUID_REGEX.test(usuarioId)) {
-      throw new BadRequestException('El ID del entrenador debe ser un UUID válido.');
+      throw new BadRequestException('El entrenador indicado no es válido.');
     }
     const dto = parsearContrato(CambiarLicenciaEntrenadorSchema, body);
     return this.authService.cambiarLicenciaEntrenador(usuarioId, dto);

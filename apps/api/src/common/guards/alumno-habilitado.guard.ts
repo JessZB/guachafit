@@ -10,6 +10,7 @@ import {
 } from '@guachafit/database';
 import { EstadoAlumno, Rol } from '@guachafit/shared';
 import { ESTADOS_BLOQUEADOS_ALUMNO_KEY } from '../decorators/bloqueo-alumno.decorator';
+import { MENSAJE_CUENTA_ARCHIVADA } from '../mensajes-acceso';
 import {
   AuditoriaAccesosDenegadosService,
   contextoPeticionHttp,
@@ -34,8 +35,7 @@ const MENSAJE_POR_ESTADO: Record<EstadoBloqueoAlumno, string> = {
     'Tu plan está pausado. Puedes consultar tu historial, pero no iniciar nuevas sesiones ni enviar reportes hasta que tu entrenador lo reactive.',
   [EstadoAlumno.ACTIVO]:
     'Tu cuenta no se encuentra habilitada para esta acción en este momento.',
-  archivado:
-    'Tu cuenta fue dada de baja por tu entrenador. Contacta con tu entrenador para restaurar tu acceso.',
+  archivado: MENSAJE_CUENTA_ARCHIVADA,
 };
 
 /**

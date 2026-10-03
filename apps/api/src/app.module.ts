@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { ExpressAdapter } from '@bull-board/express';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -18,6 +19,7 @@ import { AntropometriaModule } from './modules/antropometria/antropometria.modul
 import { EntrenadorModule } from './modules/entrenador/entrenador.module';
 import { NotificacionesModule } from './modules/notificaciones/notificaciones.module';
 import { crearBullBoardAuthMiddleware } from './common/bull-board-auth.middleware';
+import { crearOpcionesLimiteIntentos } from './common/guards/limite-intentos.guard';
 
 @Module({
   imports: [
@@ -28,6 +30,11 @@ import { crearBullBoardAuthMiddleware } from './common/bull-board-auth.middlewar
     // RF-014 RN-01 (ADR-010): bus de eventos de dominio. `wildcard: true` habilita el patrón
     // `notificacion.**` que escucha el despachador (global por defecto).
     EventEmitterModule.forRoot({ wildcard: true }),
+    // A5 (LOTE API-1): opciones y almacén compartidos del límite de intentos. No hay guard global:
+    // solo las rutas con `@LimitarIntentos*()` quedan limitadas. PENDIENTE: el almacén es en
+    // memoria (por proceso); con varias instancias del API debe usarse uno compartido (Redis,
+    // que ya existe en el proyecto) o cada instancia contará por separado.
+    ThrottlerModule.forRoot(crearOpcionesLimiteIntentos()),
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

@@ -4,10 +4,22 @@ import { RequestMethod } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { obtenerSecretosJwt } from './common/config/secretos-jwt';
+import { aplicarTrustProxy } from './common/config/trust-proxy';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  // A3 (LOTE API-1): fail-fast. En producción, sin JWT_SECRET/JWT_REFRESH_SECRET reales el API no
+  // arranca y el error indica al operador qué variable configurar.
+  obtenerSecretosJwt();
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // A5 (LOTE API-1): IP real del cliente para el límite de intentos. Desactivado por defecto
+  // (se ignora X-Forwarded-For). ADR-005 despliega el API detrás de Nginx / Cloudflare: en ese
+  // despliegue DEBE configurarse TRUST_PROXY (saltos de proxy o rangos de Cloudflare/Nginx);
+  // si no, todos los usuarios comparten la IP del proxy y el límite los bloquea juntos.
+  aplicarTrustProxy(app);
 
   // Global Route Prefix. `/admin/queues` (Bull-Board, ADR-008 §4.4) queda EXCLUIDO del prefijo
   // para montarse exactamente en la ruta administrativa documentada; su protección vive en el

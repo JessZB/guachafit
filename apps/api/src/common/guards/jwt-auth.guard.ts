@@ -1,13 +1,24 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  UnauthorizedException,
+  Logger,
+} from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
 import { JwtPayload } from '@guachafit/shared';
+import { obtenerSecretosJwt } from '../config/secretos-jwt';
+// B3: texto que ve el usuario; el detalle técnico queda solo en los logs.
+import { MENSAJE_SESION_VENCIDA } from '../mensajes-acceso';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
+  private readonly logger = new Logger(JwtAuthGuard.name);
   private readonly jwtSecret: string;
 
   constructor() {
-    this.jwtSecret = process.env.JWT_SECRET || 'guachafit_jwt_super_secret_key_2026';
+    // A3: el secreto sale de la fuente única (fail-fast en producción).
+    this.jwtSecret = obtenerSecretosJwt().jwtSecret;
   }
 
   canActivate(context: ExecutionContext): boolean {
@@ -15,12 +26,14 @@ export class JwtAuthGuard implements CanActivate {
     const authHeader = request.headers['authorization'];
 
     if (!authHeader) {
-      throw new UnauthorizedException('Encabezado de autorización ausente');
+      this.logger.debug('Encabezado de autorización ausente');
+      throw new UnauthorizedException(MENSAJE_SESION_VENCIDA);
     }
 
     const [scheme, token] = authHeader.split(' ');
     if (scheme !== 'Bearer' || !token) {
-      throw new UnauthorizedException('Formato de Bearer token inválido');
+      this.logger.debug('Formato de Bearer token inválido');
+      throw new UnauthorizedException(MENSAJE_SESION_VENCIDA);
     }
 
     try {
@@ -28,7 +41,8 @@ export class JwtAuthGuard implements CanActivate {
       request.user = decoded;
       return true;
     } catch (err: any) {
-      throw new UnauthorizedException('Token inválido o expirado: ' + err.message);
+      this.logger.debug(`Token inválido o expirado: ${err?.message}`);
+      throw new UnauthorizedException(MENSAJE_SESION_VENCIDA);
     }
   }
 }

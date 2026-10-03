@@ -36,6 +36,7 @@ import {
   planesMembresia,
 } from '@guachafit/database';
 import { CryptoService } from '../../common/services/crypto.service';
+import { MENSAJE_SIN_ACCESO_ALUMNO } from '../../common/mensajes-acceso';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AlumnoRegistradoEvent } from '../notificaciones/events/eventos-notificacion';
 import {
@@ -527,7 +528,7 @@ export class AlumnosService {
       }
 
       if (perfil.entrenadorId !== entrenadorId) {
-        throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');
+        throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
       }
 
       // RF-012 RN-02/RN-04: un alumno archivado sólo admite la restauración; editar su expediente
@@ -574,7 +575,7 @@ export class AlumnosService {
 
       if (periodicidadEfectiva && !inicioEfectivo) {
         throw new BadRequestException(
-          'Para activar la periodicidad del check-in antropométrico debes indicar la fecha de inicio del calendario (antropometriaInicio, formato YYYY-MM-DD).'
+          'Para activar la periodicidad del check-in antropométrico debes indicar la fecha de inicio del calendario.'
         );
       }
 
@@ -690,7 +691,7 @@ export class AlumnosService {
           .where(eq(perfilesAlumno.id, alumnoId));
 
         if (perfilOtroCoach) {
-          throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a restaurar alumno de otro entrenador.');
+          throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
         }
 
         throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
@@ -1270,12 +1271,12 @@ export class AlumnosService {
 
     // Aislamiento: El alumno solo puede verse a sí mismo
     if (actorRole === Rol.ALUMNO && perfil.usuarioId !== actorUserId) {
-      throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro alumno.');
+      throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
     }
 
     // Aislamiento: El coach solo puede ver a alumnos de su tenant
     if (actorRole === Rol.ENTRENADOR && perfil.entrenadorId !== actorEntrenadorId && perfil.entrenadorId !== actorUserId) {
-      throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');
+      throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
     }
 
     // RF-005: plan activo + precio acordado reales del expediente (override o última cuota).

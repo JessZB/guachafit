@@ -186,6 +186,10 @@ describe('RF-011: Onboarding Híbrido de Alumnos (Registro Manual y Enlace Deep 
       await expect(
         service.actualizarAlumno('coach-uuid-2-intruso', 'alumno-uuid-1', dto)
       ).rejects.toThrow(ForbiddenException);
+      // B4: mensaje claro, sin jerga interna.
+      await expect(
+        service.actualizarAlumno('coach-uuid-2-intruso', 'alumno-uuid-1', dto)
+      ).rejects.toThrow('No tienes acceso a este alumno.');
     });
 
     it('debe lanzar NotFoundException si el alumno no existe en la base de datos', async () => {

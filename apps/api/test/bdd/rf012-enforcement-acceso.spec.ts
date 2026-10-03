@@ -30,6 +30,7 @@ import { AntropometriaController } from '../../src/modules/antropometria/antropo
 import { FinanzasController } from '../../src/modules/finanzas/finanzas.controller';
 import { AuthService } from '../../src/modules/auth/auth.service';
 import { AlumnosService } from '../../src/modules/alumnos/alumnos.service';
+import { JWT_REFRESH_SECRET_DESARROLLO, JWT_SECRET_DESARROLLO } from '../../src/common/config/secretos-jwt';
 
 /**
  * RF-012 (auditoría RF-012 / WU-D): enforcement real del ciclo de vida del alumno.
@@ -46,7 +47,7 @@ const COACH_ID = '11111111-1111-4111-8111-111111111111';
 const ALUMNO_USUARIO_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const ALUMNO_PERFIL_ID = 'a1111111-1111-4111-8111-111111111111';
 const REFRESH_SECRET =
-  process.env.JWT_REFRESH_SECRET || 'guachafit_jwt_refresh_super_secret_key_2026';
+  process.env.JWT_REFRESH_SECRET || JWT_REFRESH_SECRET_DESARROLLO;
 
 function perfilAlumno(overrides: Partial<Record<string, any>> = {}) {
   return {
@@ -295,6 +296,8 @@ describe('RF-012 / WU-D: Enforcement de acceso por estado de activación (Alumno
         code: 'ALUMNO_BLOQUEADO',
         estado: 'archivado',
         motivo: 'CUENTA_ARCHIVADA',
+        // B9: lenguaje claro y consistente con el login ("archivada", no "dada de baja").
+        message: 'Tu cuenta está archivada. Contacta a tu entrenador.',
       });
     });
 
@@ -472,7 +475,9 @@ describe('RF-012 / WU-D: Enforcement de acceso por estado de activación (Alumno
       }
 
       expect(error).toBeInstanceOf(UnauthorizedException);
-      expect((error!.getResponse() as any).message).toContain('dada de baja');
+      expect((error!.getResponse() as any).message).toBe(
+        'Tu cuenta está archivada. Contacta a tu entrenador.'
+      );
     });
 
     it('login: el alumno pausado y el suspendido por pago SÍ entran (conservan su cuenta y Payos)', async () => {
@@ -517,7 +522,9 @@ describe('RF-012 / WU-D: Enforcement de acceso por estado de activación (Alumno
       }
 
       expect(error).toBeInstanceOf(UnauthorizedException);
-      expect((error!.getResponse() as any).message).toContain('dada de baja');
+      expect((error!.getResponse() as any).message).toBe(
+        'Tu cuenta está archivada. Contacta a tu entrenador.'
+      );
     });
 
     it('refresh: un bloqueado total (activo=true pero estado=bloqueado) tampoco renueva', async () => {
@@ -544,7 +551,7 @@ describe('RF-012 / WU-D: Enforcement de acceso por estado de activación (Alumno
       );
 
       await expect(service.refresh('no-es-un-jwt')).rejects.toThrow(
-        'Refresh token expirado o inválido.'
+        'Tu sesión venció. Inicia sesión de nuevo.'
       );
     });
 
@@ -676,7 +683,7 @@ describe('RF-012 / WU-D: Enforcement de acceso por estado de activación (Alumno
   });
 
   describe('5. Verificación HTTP real (Nest + supertest): cuerpo 403 y cableado del guard', () => {
-    const JWT_SECRET = process.env.JWT_SECRET || 'guachafit_jwt_super_secret_key_2026';
+    const JWT_SECRET = process.env.JWT_SECRET || JWT_SECRET_DESARROLLO;
 
     async function crearApp(perfil: any | null): Promise<INestApplication> {
       const moduleRef = await Test.createTestingModule({

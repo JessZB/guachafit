@@ -34,6 +34,7 @@ import { FinanzasService } from '../../src/modules/finanzas/finanzas.service';
 import { CarteraService } from '../../src/modules/finanzas/cartera.service';
 import { AlumnosService } from '../../src/modules/alumnos/alumnos.service';
 import { AuthService } from '../../src/modules/auth/auth.service';
+import { JWT_REFRESH_SECRET_DESARROLLO } from '../../src/common/config/secretos-jwt';
 import { AlumnoHabilitadoGuard } from '../../src/common/guards/alumno-habilitado.guard';
 import { AntropometriaService } from '../../src/modules/antropometria/antropometria.service';
 import { NutricionService } from '../../src/modules/nutricion/nutricion.service';
@@ -1184,7 +1185,7 @@ describe('RNF-003/ADR-011 (etapa 3): perfiles_alumno siempre dentro de withTenan
 
     const refreshToken = jwt.sign(
       { sub: ALUMNO_USER_ID, email: 'alumno@guachafit.com', rol: Rol.ALUMNO },
-      process.env.JWT_REFRESH_SECRET || 'guachafit_jwt_refresh_super_secret_key_2026',
+      process.env.JWT_REFRESH_SECRET || JWT_REFRESH_SECRET_DESARROLLO,
       { expiresIn: '7d' }
     );
     await servicio.refresh(refreshToken);
