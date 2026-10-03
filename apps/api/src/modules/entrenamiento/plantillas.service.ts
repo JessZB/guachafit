@@ -35,6 +35,11 @@ import {
   AsignacionPlantillaResponseDTO,
   ResultadoAsignacionAlumnoDTO,
 } from '@guachafit/shared';
+import { parsearContrato } from '../../common/errores/parsear-contrato';
+import {
+  MENSAJE_ALUMNO_FUERA_DE_LISTA,
+  MENSAJE_ALUMNO_NO_ENCONTRADO,
+} from '../../common/mensajes-acceso';
 
 // =============================================================================
 // SERVICIO: BANCO DE PLANTILLAS DE RUTINA (RF-017)
@@ -65,6 +70,12 @@ import {
 //    asignación a un alumno de otro tenant es un fallo POR ALUMNO (no aborta el
 //    lote) con el mismo criterio de aislamiento del resto del módulo.
 // =============================================================================
+
+/** LOTE API-2: un ajuste apunta a un día o ejercicio que no está en la plantilla. */
+const MENSAJE_AJUSTE_AJENO_A_PLANTILLA =
+  'Uno de los ajustes no corresponde a esta plantilla. Ábrela de nuevo.';
+/** LOTE API-2: fallo inesperado al asignar a un alumno del lote (el detalle va al log). */
+const MENSAJE_ASIGNACION_FALLIDA = 'No pudimos asignar la rutina a este alumno. Inténtalo de nuevo.';
 
 @Injectable()
 export class PlantillasService {
@@ -122,7 +133,7 @@ export class PlantillasService {
     entrenadorId: string,
     input: CrearPlantillaRutinaDTO
   ): Promise<PlantillaRutinaDTO> {
-    const validado = CrearPlantillaRutinaSchema.parse(input);
+    const validado = parsearContrato(CrearPlantillaRutinaSchema, input);
     const bloques = await this.validarEjerciciosDeBloques(entrenadorId, validado.bloques);
     const ahora = new Date();
 
@@ -156,7 +167,7 @@ export class PlantillasService {
     plantillaId: string,
     input: ActualizarPlantillaRutinaDTO
   ): Promise<PlantillaRutinaDTO> {
-    const validado = ActualizarPlantillaRutinaSchema.parse(input);
+    const validado = parsearContrato(ActualizarPlantillaRutinaSchema, input);
     const existente = await this.cargarPlantillaDelCoach(entrenadorId, plantillaId);
 
     const cambios: {
@@ -219,7 +230,7 @@ export class PlantillasService {
     plantillaId: string,
     input: AsignarPlantillaDTO
   ): Promise<AsignacionPlantillaResponseDTO> {
-    const validado = AsignarPlantillaSchema.parse(input);
+    const validado = parsearContrato(AsignarPlantillaSchema, input);
     const plantilla = await this.cargarPlantillaDelCoach(entrenadorId, plantillaId);
 
     if (!plantilla.activa) {
@@ -270,7 +281,7 @@ export class PlantillasService {
         return {
           alumnoId,
           exito: false,
-          error: `Alumno con ID '${alumnoId}' no encontrado.`,
+          error: MENSAJE_ALUMNO_NO_ENCONTRADO,
         };
       }
       if (perfil.entrenadorId !== entrenadorId) {
@@ -278,7 +289,7 @@ export class PlantillasService {
           alumnoId,
           usuarioId: perfil.usuarioId,
           exito: false,
-          error: 'Aislamiento de Tenant: el alumno pertenece a otro entrenador.',
+          error: MENSAJE_ALUMNO_FUERA_DE_LISTA,
         };
       }
 
@@ -348,9 +359,10 @@ export class PlantillasService {
         bloquesTotal: bloquesClonados.length,
       };
     } catch (error) {
-      const mensaje = error instanceof Error ? error.message : 'Error inesperado en la asignación.';
-      this.logger.warn(`Asignación de plantilla falló para alumno ${alumnoId}: ${mensaje}`);
-      return { alumnoId, exito: false, error: mensaje };
+      const detalle = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Asignación de plantilla falló para alumno ${alumnoId}: ${detalle}`);
+      // LOTE API-2: el detalle técnico (BD, red) queda en el log; al coach, un texto claro.
+      return { alumnoId, exito: false, error: MENSAJE_ASIGNACION_FALLIDA };
     }
   }
 
@@ -370,7 +382,7 @@ export class PlantillasService {
     );
 
     if (!plantilla || plantilla.entrenadorId !== entrenadorId) {
-      throw new NotFoundException(`Plantilla de rutina con ID '${plantillaId}' no encontrada.`);
+      throw new NotFoundException('No encontramos esa plantilla. Puede que se haya eliminado.');
     }
     return plantilla;
   }
@@ -518,18 +530,14 @@ export class PlantillasService {
     for (const ajuste of ajustes) {
       const bloque = bloques.find((b) => b.diaId === ajuste.diaId);
       if (!bloque) {
-        throw new BadRequestException(
-          `El día '${ajuste.diaId}' del ajuste no existe en la plantilla.`
-        );
+        throw new BadRequestException(MENSAJE_AJUSTE_AJENO_A_PLANTILLA);
       }
 
       const ejercicio = bloque.ejercicios.find((e) =>
         ajuste.ejercicioId ? e.ejercicioId === ajuste.ejercicioId : e.nombre === ajuste.nombre
       );
       if (!ejercicio) {
-        throw new BadRequestException(
-          `El ejercicio del ajuste no existe en el día '${ajuste.diaId}' de la plantilla.`
-        );
+        throw new BadRequestException(MENSAJE_AJUSTE_AJENO_A_PLANTILLA);
       }
 
       if (ajuste.pesoPrescritoKg !== undefined) ejercicio.peso = ajuste.pesoPrescritoKg;

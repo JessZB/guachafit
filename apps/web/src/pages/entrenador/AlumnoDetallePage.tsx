@@ -2166,7 +2166,7 @@ export function AlumnoDetallePage() {
           }`}
         >
           <Utensils className="h-4 w-4" />
-          <span>Nutrición & Check-ins</span>
+          <span>Nutrición y reportes</span>
         </button>
       </div>
 

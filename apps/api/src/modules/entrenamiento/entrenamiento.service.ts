@@ -9,6 +9,11 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
+import {
+  MENSAJE_ALUMNO_NO_ENCONTRADO,
+  MENSAJE_SIN_ACCESO_ALUMNO,
+} from '../../common/mensajes-acceso';
+import { CODIGO_SESION_NO_INICIADA, CODIGO_SESION_VACIA } from '@guachafit/shared';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SesionAlumnoFinalizadaEvent } from '../notificaciones/events/eventos-notificacion';
 import {
@@ -249,6 +254,10 @@ export function calcularRachaEfectiva(
 // SERVICIO DE ENTRENAMIENTO (RF-001)
 // =============================================================================
 
+/** LOTE API-2: textos claros de la sesión de entrenamiento (sin estados ni identificadores). */
+const MENSAJE_SESION_NO_ENCONTRADA = 'No encontramos este entrenamiento. Actualiza la pantalla.';
+const MENSAJE_HORA_INVALIDA = 'La hora de tu teléfono no es válida. Revísala.';
+
 @Injectable()
 export class EntrenamientoService {
   private readonly logger = new Logger(EntrenamientoService.name);
@@ -407,9 +416,7 @@ export class EntrenamientoService {
     );
 
     if (!perfilAlumno) {
-      throw new ForbiddenException(
-        'Aislamiento de Tenant: Acceso denegado o el alumno no pertenece a este entrenador.'
-      );
+      throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
     }
 
     const targetAlumnoUserId = perfilAlumno.usuarioId;
@@ -510,9 +517,7 @@ export class EntrenamientoService {
     }
 
     if (perfil.entrenadorId !== entrenadorId) {
-      throw new ForbiddenException(
-        'Aislamiento de Tenant: Acceso denegado. El alumno pertenece a otro entrenador.'
-      );
+      throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
     }
 
     const usuarioAlumnoId = perfil.usuarioId;
@@ -602,9 +607,7 @@ export class EntrenamientoService {
     }
 
     if (rol === Rol.ENTRENADOR && perfil.entrenadorId !== entrenadorId) {
-      throw new ForbiddenException(
-        'Aislamiento de Tenant: Acceso denegado. El alumno pertenece a otro entrenador.'
-      );
+      throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
     }
 
     if (rol === Rol.ALUMNO && currentUserId && perfil.usuarioId !== currentUserId) {
@@ -878,7 +881,7 @@ export class EntrenamientoService {
     input: EntrenarBloqueHoyDTO = {}
   ): Promise<SesionEntrenamientoDetalleDTO> {
     if (!bloqueId || !bloqueId.trim()) {
-      throw new BadRequestException('El bloqueId es obligatorio para entrenar un bloque.');
+      throw new BadRequestException('Elige qué día quieres entrenar.');
     }
 
     const tz = input.timezoneCliente || 'America/Caracas';
@@ -914,7 +917,7 @@ export class EntrenamientoService {
     const bloques = rutinaActiva.bloques as BloqueDiaRutinaDTO[];
     const bloqueTarget = bloques.find((b) => b.diaId === bloqueId);
     if (!bloqueTarget) {
-      throw new NotFoundException(`El bloque '${bloqueId}' no pertenece a tu rutina activa.`);
+      throw new NotFoundException('Este día ya no está en tu rutina. Actualiza la pantalla.');
     }
     if (!bloqueTarget.ejercicios || bloqueTarget.ejercicios.length === 0) {
       throw new BadRequestException('El bloque seleccionado no tiene ejercicios prescritos.');
@@ -1131,9 +1134,7 @@ export class EntrenamientoService {
     }
 
     if (rol === Rol.ENTRENADOR && perfil.entrenadorId !== entrenadorId) {
-      throw new ForbiddenException(
-        'Aislamiento de Tenant: Acceso denegado a sesiones de un alumno de otro entrenador.'
-      );
+      throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
     }
 
     // Aislamiento por titularidad: un alumno SOLO puede leer su propio historial.
@@ -1196,7 +1197,7 @@ export class EntrenamientoService {
       .limit(1);
 
     if (!sesion) {
-      throw new NotFoundException(`Sesión de entrenamiento con ID '${sesionId}' no encontrada.`);
+      throw new NotFoundException(MENSAJE_SESION_NO_ENCONTRADA);
     }
 
     // Validación de acceso por rol
@@ -1223,9 +1224,7 @@ export class EntrenamientoService {
       );
 
       if (!perfil) {
-        throw new ForbiddenException(
-          'Aislamiento de Tenant: La sesión pertenece a un alumno de otro entrenador.'
-        );
+        throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
       }
     }
 
@@ -1285,7 +1284,7 @@ export class EntrenamientoService {
       });
 
       if (!perfil) {
-        throw new NotFoundException(`Alumno con ID '${alumnoId}' no encontrado.`);
+        throw new NotFoundException(MENSAJE_ALUMNO_NO_ENCONTRADO);
       }
 
       // Defensa en profundidad: si un ALUMNO llegara a este método, solo puede verse a sí mismo.
@@ -1294,9 +1293,7 @@ export class EntrenamientoService {
       }
 
       if (perfil.entrenadorId !== entrenadorId) {
-        throw new ForbiddenException(
-          'Aislamiento de Tenant: El alumno pertenece a otro entrenador.'
-        );
+        throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
       }
 
       targetUsuarioId = perfil.usuarioId;
@@ -1378,7 +1375,7 @@ export class EntrenamientoService {
       .limit(1);
 
     if (!sesion) {
-      throw new NotFoundException(`Sesión con ID '${sesionId}' no encontrada.`);
+      throw new NotFoundException(MENSAJE_SESION_NO_ENCONTRADA);
     }
 
     if (sesion.alumnoId !== alumnoId) {
@@ -1386,16 +1383,12 @@ export class EntrenamientoService {
     }
 
     if (sesion.estado !== EstadoSesion.PLANIFICADA) {
-      throw new BadRequestException(
-        `Transición inválida: No se puede iniciar una sesión en estado '${sesion.estado}'. Solo se permite desde 'planificada'.`
-      );
+      throw new BadRequestException('Este entrenamiento ya fue iniciado o terminado.');
     }
 
     const fechaInicioUtc = validado.fechaInicioUtc ?? new Date().toISOString();
     if (!fechaInicioUtc.endsWith('Z')) {
-      throw new BadRequestException(
-        `El timestamp de inicio '${fechaInicioUtc}' debe estar en UTC estricto (terminar en 'Z').`
-      );
+      throw new BadRequestException(MENSAJE_HORA_INVALIDA);
     }
 
     await this.db
@@ -1441,7 +1434,7 @@ export class EntrenamientoService {
       .limit(1);
 
     if (!sesion) {
-      throw new NotFoundException(`Sesión con ID '${sesionId}' no encontrada.`);
+      throw new NotFoundException(MENSAJE_SESION_NO_ENCONTRADA);
     }
 
     if (sesion.alumnoId !== alumnoId) {
@@ -1449,9 +1442,14 @@ export class EntrenamientoService {
     }
 
     if (sesion.estado !== EstadoSesion.EN_PROGRESO) {
-      throw new BadRequestException(
-        `Operación denegada: Solo se pueden registrar series en sesiones con estado 'en_progreso'. Estado actual: '${sesion.estado}'.`
-      );
+      // LOTE API-2: código estable para que la web reactive las series encoladas cuando el
+      // alumno inicie la sesión (`offline-sync.ts`), sin depender del texto del mensaje.
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        code: CODIGO_SESION_NO_INICIADA,
+        message: 'Para marcar series, primero pulsa «Comenzar a entrenar».',
+      });
     }
 
     // Obtener los ejercicios de la sesión para validar pertenencia de las series
@@ -1480,16 +1478,14 @@ export class EntrenamientoService {
       const serie = seriesMap.get(sInput.serieId);
       if (!serie) {
         throw new BadRequestException(
-          `Serie con ID '${sInput.serieId}' no pertenece a esta sesión de entrenamiento.`
+          'Esta serie ya no está en tu entrenamiento. Actualiza la pantalla.'
         );
       }
 
       let pesoKgFinal = '0.00';
       if (sInput.pesoKg !== null && sInput.pesoKg !== undefined && sInput.pesoKg !== '') {
         if (!DECIMAL_STRING_REGEX.test(sInput.pesoKg)) {
-          throw new BadRequestException(
-            `Formato de peso inválido: '${sInput.pesoKg}'. Debe ser un string decimal con hasta 2 decimales.`
-          );
+          throw new BadRequestException('Escribe el peso con números, por ejemplo 60 o 62,5.');
         }
         pesoKgFinal = sInput.pesoKg;
       }
@@ -1567,7 +1563,7 @@ export class EntrenamientoService {
       .limit(1);
 
     if (!sesion) {
-      throw new NotFoundException(`Sesión con ID '${sesionId}' no encontrada.`);
+      throw new NotFoundException(MENSAJE_SESION_NO_ENCONTRADA);
     }
 
     if (sesion.alumnoId !== alumnoId) {
@@ -1575,9 +1571,7 @@ export class EntrenamientoService {
     }
 
     if (sesion.estado !== EstadoSesion.EN_PROGRESO) {
-      throw new BadRequestException(
-        `Operación denegada: No se puede finalizar una sesión que no esté 'en_progreso'. Estado actual: '${sesion.estado}'.`
-      );
+      throw new BadRequestException('Este entrenamiento no está en curso; no se puede finalizar.');
     }
 
     // Contar series totales y completadas
@@ -1619,7 +1613,7 @@ export class EntrenamientoService {
     const porcentajeCumplimientoStr = porcentajeNumero.toFixed(2);
 
     // RF-001 Escenario 5: cierre de sesión vacía exige decisión explícita del alumno.
-    // El 400 viaja con un código máquina estable (`code: 'SESION_VACIA'`, campo canónico
+    // El 400 viaja con un código máquina estable (`code: CODIGO_SESION_VACIA`, campo canónico
     // del esquema de error RFC 7807 §1 del doc de contratos) para que la UI abra el
     // modal de cierre vacío solo ante ESTE caso y trate cualquier otro 400 como error normal.
     if (seriesCompletadas === 0) {
@@ -1627,14 +1621,14 @@ export class EntrenamientoService {
         throw new BadRequestException({
           statusCode: 400,
           error: 'Bad Request',
-          code: 'SESION_VACIA',
+          code: CODIGO_SESION_VACIA,
           message:
             'La sesión no registra series completadas. Indica si el día fue descansado o incompleto.',
         });
       }
       if (validado.tipoCierre === TipoCierreSesion.COMPLETADA) {
         throw new BadRequestException(
-          'No se puede cerrar como COMPLETADA una sesión sin series completadas. Indica si el día fue descansado o incompleto.'
+          'No puedes marcarlo como completado sin series hechas. Indica si fue día de descanso o quedó incompleto.'
         );
       }
     }
@@ -1650,9 +1644,7 @@ export class EntrenamientoService {
 
     const fechaFinUtc = validado.fechaFinUtc ?? new Date().toISOString();
     if (!fechaFinUtc.endsWith('Z')) {
-      throw new BadRequestException(
-        `El timestamp de finalización '${fechaFinUtc}' debe terminar en 'Z' (UTC).`
-      );
+      throw new BadRequestException(MENSAJE_HORA_INVALIDA);
     }
 
     const duracionMinutos = calcularDuracionMinutos(sesion.fechaInicioUtc, fechaFinUtc);

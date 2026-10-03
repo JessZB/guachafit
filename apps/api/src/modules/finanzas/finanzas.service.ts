@@ -8,6 +8,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { MENSAJE_SIN_ACCESO_ALUMNO } from '../../common/mensajes-acceso';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { R2StorageService } from '../antropometria/r2-storage.service';
 import { BillingSchedulerService } from './billing-scheduler.service';
@@ -583,12 +584,12 @@ export class FinanzasService {
         .limit(1);
 
       if (!plan) {
-        throw new NotFoundException(`Plan con ID '${planId}' no encontrado.`);
+        throw new NotFoundException('No encontramos ese plan. Puede que se haya eliminado.');
       }
 
       if (plan.entrenadorId !== entrenadorId) {
         throw new ForbiddenException(
-          'Aislamiento de Tenant: Acceso denegado a planes de otro entrenador.'
+          'No tienes acceso a este plan.'
         );
       }
 
@@ -869,7 +870,7 @@ export class FinanzasService {
         .limit(1);
 
       if (!override) {
-        throw new NotFoundException('Override no encontrado.');
+        throw new NotFoundException('No encontramos ese precio especial. Puede que se haya eliminado.');
       }
 
       const [plan] = await tx
@@ -880,7 +881,7 @@ export class FinanzasService {
 
       if (!plan || plan.entrenadorId !== entrenadorId) {
         throw new ForbiddenException(
-          'Aislamiento de Tenant: Acceso denegado a overrides de otro entrenador.'
+          'No tienes acceso a este precio especial.'
         );
       }
 
@@ -902,7 +903,7 @@ export class FinanzasService {
       return {
         id: overrideId,
         eliminado: true,
-        mensaje: `Override de ${plan.nombre} eliminado: el alumno vuelve a los valores del catálogo.`,
+        mensaje: `Precio especial de ${plan.nombre} eliminado: el alumno vuelve a los valores del catálogo.`,
       };
     });
   }
@@ -1007,7 +1008,7 @@ export class FinanzasService {
           montoTotal = plan.precioBaseUsd;
         } else {
           throw new BadRequestException(
-            'El plan no tiene un precio base mayor a 0.00. Para un alumno becado o un acuerdo de intercambio, define un override con precio acordado 0.00 (RF-005 §6).'
+            'El plan no tiene un precio base mayor a 0.00. Para un alumno becado o un acuerdo de intercambio, asígnale un precio especial de 0.00.'
           );
         }
 
@@ -1122,7 +1123,7 @@ export class FinanzasService {
 
       // Aislamiento de Tenancy / Autorización
       if (actorRole === Rol.ALUMNO && cuota.clienteId !== actorUserId) {
-        throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a cuota de otro alumno.');
+        throw new ForbiddenException('No tienes acceso a esta cuota.');
       }
 
       if (
@@ -1131,7 +1132,7 @@ export class FinanzasService {
         cuota.entrenadorId !== actorEntrenadorId
       ) {
         throw new ForbiddenException(
-          'Aislamiento de Tenant: Acceso denegado a cuota de otro entrenador.'
+          'No tienes acceso a esta cuota.'
         );
       }
 
@@ -1273,7 +1274,7 @@ export class FinanzasService {
       }
 
       if (cuota.clienteId !== alumnoUserId) {
-        throw new ForbiddenException('Aislamiento de Tenant: No tiene permisos para reportar pagos en esta cuota.');
+        throw new ForbiddenException('No puedes reportar pagos en esta cuota.');
       }
 
       if (cuota.estado === EstadoCuota.ANULADA) {
@@ -1454,7 +1455,7 @@ export class FinanzasService {
 
     if (!esEfectivo) {
       throw new BadRequestException(
-        'El cobro directo en sala solo admite métodos en efectivo (efectivo_usd o efectivo_ves).'
+        'El cobro en sala solo acepta efectivo (dólares o bolívares).'
       );
     }
 
@@ -1688,7 +1689,7 @@ export class FinanzasService {
       }
 
       if (txRecord.estadoConciliacion !== EstadoConciliacion.PENDIENTE) {
-        throw new ConflictException(`Transacción ${transaccionId} ya fue conciliada previamente.`);
+        throw new ConflictException('Este pago ya fue revisado.');
       }
 
       // 3. Bloqueo Pesimista en la Cuota asociada
@@ -2060,7 +2061,7 @@ export class FinanzasService {
         }
 
         if (actorRole === Rol.ALUMNO && perfil.usuarioId !== actorUserId) {
-          throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a finanzas de otro alumno.');
+          throw new ForbiddenException('Solo puedes ver tus propios pagos.');
         }
 
         if (
@@ -2068,7 +2069,7 @@ export class FinanzasService {
           perfil.entrenadorId !== entrenadorId &&
           perfil.entrenadorId !== actorUserId
         ) {
-          throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a finanzas de un alumno de otro entrenador.');
+          throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
         }
 
         const clienteUsuarioId = perfil.usuarioId;
@@ -2212,7 +2213,7 @@ export class FinanzasService {
         }
 
         if (perfil.entrenadorId !== entrenadorId) {
-          throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a operaciones de un alumno de otro entrenador.');
+          throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
         }
 
         const clienteUsuarioId = perfil.usuarioId;

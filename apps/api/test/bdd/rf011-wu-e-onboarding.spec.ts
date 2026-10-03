@@ -26,6 +26,7 @@ import { AlumnosController } from '../../src/modules/alumnos/alumnos.controller'
 import { AuthService } from '../../src/modules/auth/auth.service';
 import { EntrenadorService } from '../../src/modules/entrenador/entrenador.service';
 import { AlumnoRegistradoEvent } from '../../src/modules/notificaciones/events/eventos-notificacion';
+import { configurarErroresGlobales } from '../../src/common/errores/filtro-errores-global';
 
 const COACH_USUARIO_ID = '11111111-1111-4111-8111-111111111111';
 const COACH_PERFIL_ID = '22222222-2222-4222-8222-222222222222';
@@ -559,6 +560,8 @@ describe('WU-E (RF-011 RN-06): cableado HTTP de GET /alumnos/coach/:code', () =>
     }).compile();
 
     const app = moduleRef.createNestApplication();
+
+    configurarErroresGlobales(app);
     await app.init();
     return { app, resolver };
   }

@@ -639,6 +639,49 @@ describe('Módulo 3: Check-ins Nutricionales (NutricionService & NutricionContro
       expect(mockCheckinsNutricionales).toHaveLength(0);
     });
 
+    it('LOTE API-2: el rechazo de ventana lleva code CHECKIN_FUERA_DE_VENTANA y texto claro', async () => {
+      let capturado: any;
+      try {
+        await nutricionService.registrarCheckinDiario(
+          alumnoId1,
+          { fecha: '2026-09-06', semaforo: SemaforoNutricional.CUMPLIDO },
+          new Date('2026-09-06T15:00:00.000Z') // 11:00 Caracas
+        );
+      } catch (error) {
+        capturado = error;
+      }
+      expect(capturado).toBeInstanceOf(BadRequestException);
+      expect(capturado.getResponse()).toMatchObject({
+        statusCode: 400,
+        // Literal a propósito: fija el contrato del cable con la web.
+        code: 'CHECKIN_FUERA_DE_VENTANA',
+        message:
+          'Puedes enviar el reporte de hoy entre las 18:00 y las 23:59 (hora de tu teléfono). Fuera de ese horario el día queda como «No reportado».',
+      });
+    });
+
+    it('LOTE API-2: fecha distinta al día local → code estable y texto que la web anterior aún reconoce', async () => {
+      let capturado: any;
+      try {
+        await nutricionService.registrarCheckinDiario(
+          alumnoId1,
+          { fecha: '2026-09-05', semaforo: SemaforoNutricional.CUMPLIDO },
+          enVentanaCaracas('2026-09-06')
+        );
+      } catch (error) {
+        capturado = error;
+      }
+      expect(capturado).toBeInstanceOf(BadRequestException);
+      expect(capturado.getResponse()).toMatchObject({
+        statusCode: 400,
+        // Literal a propósito: fija el contrato del cable con la web.
+        code: 'CHECKIN_FUERA_DE_VENTANA',
+        message: 'La fecha del reporte no coincide con el día local de tu teléfono. Actualiza la pantalla.',
+      });
+      // Clasificador por texto de la web publicada antes del código estable (PWA `prompt`).
+      expect(capturado.getResponse().message).toMatch(/18:00|23:59|ventana|día local/i);
+    });
+
     it('el controller propaga el rechazo de ventana del servicio', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-09-06T15:00:00.000Z')); // 11:00 Caracas
@@ -686,6 +729,22 @@ describe('Módulo 3: Check-ins Nutricionales (NutricionService & NutricionContro
           enVentanaCaracas('2026-09-06')
         )
       ).rejects.toThrow(ConflictException);
+    });
+
+    it('LOTE API-2: el 409 usa el mismo texto que la web ("Ya registraste tu reporte de hoy.")', async () => {
+      await nutricionService.registrarCheckinDiario(
+        alumnoId1,
+        { fecha: '2026-09-06', semaforo: SemaforoNutricional.CUMPLIDO },
+        enVentanaCaracas('2026-09-06')
+      );
+
+      await expect(
+        nutricionService.registrarCheckinDiario(
+          alumnoId1,
+          { fecha: '2026-09-06', semaforo: SemaforoNutricional.PARCIAL },
+          enVentanaCaracas('2026-09-06')
+        )
+      ).rejects.toThrow('Ya registraste tu reporte de hoy.');
     });
 
     it('debe permitir check-ins en fechas distintas para el mismo alumno', async () => {

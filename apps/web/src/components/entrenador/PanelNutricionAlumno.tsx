@@ -171,7 +171,7 @@ export function PanelNutricionAlumno({
     } catch (err: any) {
       setCheckins([]);
       setCheckinsError(
-        err?.message || 'No se pudieron cargar los check-ins del alumno. Inténtalo de nuevo.'
+        err?.message || 'No se pudieron cargar los reportes del alumno. Inténtalo de nuevo.'
       );
     } finally {
       setIsCargandoCheckins(false);
@@ -498,7 +498,7 @@ export function PanelNutricionAlumno({
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/80 pb-3">
           <div className="flex items-center gap-2">
             <Activity className="h-4 w-4 text-primary" />
-            <h3 className="font-bold text-sm text-foreground">Check-ins de los últimos 30 días</h3>
+            <h3 className="font-bold text-sm text-foreground">Reportes de los últimos 30 días</h3>
           </div>
           <span className="text-[11px] font-semibold text-muted-foreground">
             {pluralizar(reportadosVentana, 'día reportado', 'días reportados')} ·{' '}
@@ -870,7 +870,7 @@ function FilaDiaNutricional({
         <p className="text-[11px] text-muted-foreground">
           {dia.estado === EstadoDiaNutricional.NO_REPORTADO
             ? 'Sin reporte ese día. No penaliza la racha de entrenamiento; cuenta en el resumen semanal.'
-            : 'El día sigue en curso: el check-in se habilita de 18:00 a 23:59 (hora local del alumno).'}
+            : 'El día sigue en curso: el reporte se habilita de 18:00 a 23:59 (hora local del alumno).'}
         </p>
       )}
 

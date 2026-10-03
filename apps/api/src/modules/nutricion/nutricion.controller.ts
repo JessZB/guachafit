@@ -12,10 +12,9 @@ import {
   Inject,
   HttpCode,
   HttpStatus,
-  BadRequestException,
 } from '@nestjs/common';
-import { ZodSchema } from 'zod';
 import { NutricionService } from './nutricion.service';
+import { parsearContrato } from '../../common/errores/parsear-contrato';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AlumnoHabilitadoGuard } from '../../common/guards/alumno-habilitado.guard';
@@ -28,19 +27,6 @@ import {
   FiltroCheckinsNutricionalesSchema,
   MetasNutricionalesSchema,
 } from '@guachafit/shared';
-
-/**
- * Valida un cuerpo con el contrato compartido y devuelve 400 con el primer mensaje del contrato.
- * El servicio vuelve a validar (defensa en profundidad para sus otros llamadores); aquí se evita
- * que un ZodError crudo termine en un 500 genérico.
- */
-function parsearContrato<T>(schema: ZodSchema<T>, body: unknown): T {
-  const resultado = schema.safeParse(body);
-  if (!resultado.success) {
-    throw new BadRequestException(resultado.error.issues[0]?.message ?? 'Datos inválidos.');
-  }
-  return resultado.data;
-}
 
 @Controller('nutricion')
 export class NutricionController {

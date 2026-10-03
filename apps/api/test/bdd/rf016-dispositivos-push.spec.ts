@@ -2,8 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { DispositivosService } from '../../src/modules/notificaciones/dispositivos.service';
 import { DispositivosController } from '../../src/modules/notificaciones/dispositivos.controller';
 import { PlataformaDispositivo } from '@guachafit/shared';
-import { NotFoundException } from '@nestjs/common';
-import { ZodError } from 'zod';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 describe('RF-016: Gestión Multi-Dispositivo, Registro de Tokens Push y Depuración Reactiva', () => {
   let service: DispositivosService;
@@ -176,7 +175,8 @@ describe('RF-016: Gestión Multi-Dispositivo, Registro de Tokens Push y Depuraci
         platform: 'windows-phone',
       };
 
-      await expect(controller.registrarToken(req, invalidBody)).rejects.toThrow(ZodError);
+      // LOTE API-2: el controlador responde 400 (no un ZodError crudo que terminaría en 500).
+      await expect(controller.registrarToken(req, invalidBody)).rejects.toThrow(BadRequestException);
     });
   });
 });

@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { parsearContrato } from '../../common/errores/parsear-contrato';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { DispositivosService } from './dispositivos.service';
 import { RegistrarDispositivoSchema } from '@guachafit/shared';
@@ -25,7 +26,7 @@ export class DispositivosController {
   @Post('token-push')
   @HttpCode(HttpStatus.OK)
   async registrarToken(@Req() req: any, @Body() body: unknown) {
-    const dto = RegistrarDispositivoSchema.parse(body);
+    const dto = parsearContrato(RegistrarDispositivoSchema, body);
     const usuarioId = req.user.sub;
     return this.dispositivosService.registrarToken(usuarioId, dto);
   }

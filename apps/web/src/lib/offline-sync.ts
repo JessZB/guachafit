@@ -1,5 +1,5 @@
 import { apiClient, generateIdempotencyKey, getAuthToken } from './api-client';
-import type { PresignedUploadUrlResponseDTO } from '@guachafit/shared';
+import { CODIGO_SESION_NO_INICIADA, type PresignedUploadUrlResponseDTO } from '@guachafit/shared';
 import {
   accionSesionDeMutacion,
   devolverMutacionAPendiente,
@@ -148,12 +148,20 @@ function getMensajeServidorCrudo(err: unknown): string {
   return err instanceof Error ? err.message : '';
 }
 
-/** D1: el servidor rechazó una serie porque la sesión aún no estaba en progreso. */
+/** Código máquina estable del servidor (`code` del cuerpo del error), si viene. */
+function getCodigoServidor(err: unknown): string | null {
+  const codigo = (err as { problem?: { code?: unknown } } | null)?.problem?.code;
+  return typeof codigo === 'string' ? codigo : null;
+}
+
+/**
+ * D1: el servidor rechazó una serie porque la sesión aún no estaba en progreso. Se clasifica por
+ * el código estable; el texto (`en_progreso`) queda como respaldo para servidores anteriores.
+ */
 function esRechazoPorSesionNoIniciada(item: OutboxMutation, err: unknown): boolean {
-  return (
-    accionSesionDeMutacion(item) === 'series' &&
-    /en_progreso|en progreso/i.test(getMensajeServidorCrudo(err))
-  );
+  if (accionSesionDeMutacion(item) !== 'series') return false;
+  if (getCodigoServidor(err) === CODIGO_SESION_NO_INICIADA) return true;
+  return /en_progreso|en progreso/i.test(getMensajeServidorCrudo(err));
 }
 
 /**
@@ -228,7 +236,7 @@ async function processCheckinNutricionalConFotos(item: OutboxMutation): Promise<
   } catch (err) {
     // RN-02: la ventana/día local cerró mientras la evidencia esperaba en la cola. Se marca
     // como rechazo definitivo con un mensaje claro (sin el tecnicismo del servidor).
-    if (getErrorStatus(err) === 400 && esRechazoVentanaCheckin(getMensajeServidorCrudo(err))) {
+    if (getErrorStatus(err) === 400 && esRechazoVentanaCheckin(getMensajeServidorCrudo(err), getCodigoServidor(err))) {
       const rechazo = new Error(MENSAJE_DIA_CERRADO_REPORTE_CON_FOTOS) as Error & {
         status: number;
       };

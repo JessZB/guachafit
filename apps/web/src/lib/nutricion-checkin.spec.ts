@@ -2,12 +2,22 @@ import { describe, expect, it } from 'vitest';
 import {
   construirPayloadCheckinNutricional,
   decidirAccionErrorCheckinNutricional,
+  esRechazoVentanaCheckin,
   evaluarVentanaCheckinLocal,
+  MENSAJE_ANTES_DE_VENTANA,
+  MENSAJE_COLA_SERVIDOR,
+  MENSAJE_COLA_SIN_CONEXION,
+  MENSAJE_DIA_CERRADO_REPORTE_CON_FOTOS,
+  MENSAJE_ERROR_GENERICO,
   MENSAJE_YA_REGISTRADO_HOY,
   obtenerStatusError,
 } from './nutricion-checkin';
 import { obtenerTimezoneDispositivo } from './date-format';
-import { SemaforoNutricional, TipoComida } from '@guachafit/shared';
+import {
+  CODIGO_CHECKIN_FUERA_DE_VENTANA,
+  SemaforoNutricional,
+  TipoComida,
+} from '@guachafit/shared';
 
 /** Error con la forma de ApiError del cliente web (status HTTP + message). */
 function apiError(status: number, message = 'Error del servidor'): Error & { status: number } {
@@ -153,5 +163,43 @@ describe('construirPayloadCheckinNutricional (fecha LOCAL + timezoneCliente)', (
         new Date(2026, 8, 21, 20, 0, 0)
       )
     ).toThrow(/4 fotografías/);
+  });
+});
+
+describe('esRechazoVentanaCheckin (LOTE API-2: código estable con respaldo por texto)', () => {
+  it('reconoce el código estable del servidor aunque el texto cambie', () => {
+    // Literal a propósito: fija el contrato del cable con el API.
+    expect(CODIGO_CHECKIN_FUERA_DE_VENTANA).toBe('CHECKIN_FUERA_DE_VENTANA');
+    expect(
+      esRechazoVentanaCheckin('La fecha del reporte no coincide con el día local de tu teléfono. Actualiza la pantalla.', 'CHECKIN_FUERA_DE_VENTANA')
+    ).toBe(true);
+  });
+
+  it('respaldo: un servidor anterior sin código se sigue reconociendo por el texto', () => {
+    expect(
+      esRechazoVentanaCheckin(
+        "El check-in nutricional solo se habilita entre las 18:00 y las 23:59 (hora local del alumno 'America/Caracas')."
+      )
+    ).toBe(true);
+  });
+
+  it('otro 400 sin código ni texto de ventana no es un rechazo de ventana', () => {
+    expect(esRechazoVentanaCheckin('Puedes subir hasta 4 fotos de platos por día.', 'OTRO_CODIGO')).toBe(false);
+  });
+});
+
+describe('vocabulario visible de nutrición (LOTE API-2)', () => {
+  it('los mensajes al alumno hablan de "reporte", nunca de "check-in"', () => {
+    for (const mensaje of [
+      MENSAJE_ANTES_DE_VENTANA,
+      MENSAJE_COLA_SERVIDOR,
+      MENSAJE_COLA_SIN_CONEXION,
+      MENSAJE_DIA_CERRADO_REPORTE_CON_FOTOS,
+      MENSAJE_ERROR_GENERICO,
+      MENSAJE_YA_REGISTRADO_HOY,
+    ]) {
+      expect(mensaje).not.toMatch(/check-?in/i);
+    }
+    expect(MENSAJE_YA_REGISTRADO_HOY).toBe('Ya registraste tu reporte de hoy.');
   });
 });

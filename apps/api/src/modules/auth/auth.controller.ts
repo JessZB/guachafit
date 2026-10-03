@@ -13,8 +13,8 @@ import {
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
-import { ZodType } from 'zod';
 import { AuthService } from './auth.service';
+import { parsearContrato } from '../../common/errores/parsear-contrato';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -36,17 +36,14 @@ import {
 } from '@guachafit/shared';
 
 /**
- * Valida con el contrato compartido y devuelve 400 con el primer mensaje del contrato (mismo
- * patrón que `nutricion.controller`): evita que un ZodError crudo termine en un 500 genérico.
- * Se usa `ZodType<T, any, any>` (no `ZodSchema<T>`) para que T sea el tipo de SALIDA: los
- * contratos con `.default()` (paginación) resuelven `limit`/`offset` en el parseo.
+ * LOTE API-2: el correo del login se recorta antes de validar. Un espacio pegado al copiar el
+ * correo no es un error del usuario: el límite de intentos y `AuthService.login` ya lo normalizan
+ * (minúsculas + trim), así que validar el valor recortado es coherente y evita un 400 inútil.
  */
-function parsearContrato<T>(schema: ZodType<T, any, any>, body: unknown): T {
-  const resultado = schema.safeParse(body);
-  if (!resultado.success) {
-    throw new BadRequestException(resultado.error.issues[0]?.message ?? 'Datos inválidos.');
-  }
-  return resultado.data;
+function normalizarCorreoLogin(body: unknown): unknown {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return body;
+  const { email } = body as { email?: unknown };
+  return typeof email === 'string' ? { ...(body as object), email: email.trim() } : body;
 }
 
 @Controller('auth')
@@ -63,7 +60,7 @@ export class AuthController {
   // A5: 5 intentos/min por IP + correo (fuerza bruta) y 60/min por IP (rociado de correos).
   @LimitarIntentosLogin()
   async login(@Body() body: unknown) {
-    const dto = LoginUsuarioSchema.parse(body);
+    const dto = parsearContrato(LoginUsuarioSchema, normalizarCorreoLogin(body));
     return this.authService.login(dto);
   }
 
@@ -75,7 +72,7 @@ export class AuthController {
   // A5: activación de cuenta (ruta pública), 20/min por IP.
   @LimitarIntentosPublico()
   async establecerPassword(@Body() body: unknown) {
-    const dto = EstablecerPasswordConTokenSchema.parse(body);
+    const dto = parsearContrato(EstablecerPasswordConTokenSchema, body);
     return this.authService.establecerPasswordConToken(dto);
   }
 
@@ -87,7 +84,7 @@ export class AuthController {
   // A5: exige un refresh token válido; tope holgado por IP sin consumir el cupo del login.
   @LimitarIntentosRefresh()
   async refresh(@Body() body: unknown) {
-    const dto = RefreshTokenSchema.parse(body);
+    const dto = parsearContrato(RefreshTokenSchema, body);
     return this.authService.refresh(dto.refreshToken);
   }
 
@@ -99,7 +96,7 @@ export class AuthController {
   @Roles(Rol.SUPERADMIN)
   @HttpCode(HttpStatus.CREATED)
   async crearEntrenador(@Body() body: unknown) {
-    const dto = CrearEntrenadorSchema.parse(body);
+    const dto = parsearContrato(CrearEntrenadorSchema, body);
     return this.authService.crearEntrenador(dto);
   }
 

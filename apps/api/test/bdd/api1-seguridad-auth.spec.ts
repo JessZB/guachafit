@@ -39,6 +39,7 @@ import { RolesGuard } from '../../src/common/guards/roles.guard';
 import { AuthService } from '../../src/modules/auth/auth.service';
 import { RONDAS_BCRYPT } from '../../src/common/services/crypto.service';
 import { AuthController } from '../../src/modules/auth/auth.controller';
+import { configurarErroresGlobales } from '../../src/common/errores/filtro-errores-global';
 
 /**
  * LOTE API-1 — Seguridad de autenticación.
@@ -320,6 +321,7 @@ describe('A5: límite de intentos', () => {
       providers: [{ provide: AuthService, useValue: authService }],
     }).compile();
     const app = moduleRef.createNestApplication<NestExpressApplication>();
+    configurarErroresGlobales(app);
     aplicarTrustProxy(app, entorno);
     await app.init();
     return app;
@@ -359,8 +361,8 @@ describe('A5: límite de intentos', () => {
     const variantes = ['coach@guachafit.com', ' COACH@guachafit.com', 'Coach@Guachafit.com '];
 
     for (let i = 0; i < LIMITE_INTENTOS_LOGIN; i++) {
-      // Solo importa que no se bloquee antes de tiempo (el contrato rechaza espacios con otro código).
-      expect((await login(servidor, variantes[i % variantes.length])).status).not.toBe(429);
+      // LOTE API-2: el correo se recorta antes de validar → 401 de credenciales (no 400/500).
+      expect((await login(servidor, variantes[i % variantes.length])).status).toBe(401);
     }
     expect((await login(servidor, 'COACH@GUACHAFIT.COM')).status).toBe(429);
 

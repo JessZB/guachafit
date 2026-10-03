@@ -15,6 +15,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { EntrenamientoService } from './entrenamiento.service';
+import { parsearContrato } from '../../common/errores/parsear-contrato';
+import { MENSAJE_ALUMNO_NO_ENCONTRADO } from '../../common/mensajes-acceso';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AlumnoHabilitadoGuard } from '../../common/guards/alumno-habilitado.guard';
@@ -86,7 +88,7 @@ export class EntrenamientoController {
     @Body() body: unknown,
     @Headers('x-idempotency-key') idempotencyHeader?: string
   ) {
-    const dto = EntrenarBloqueHoySchema.parse(body ?? {});
+    const dto = parsearContrato(EntrenarBloqueHoySchema, body ?? {});
     return this.entrenamientoService.entrenarBloqueHoy(
       req.user.sub,
       bloqueId,
@@ -125,7 +127,7 @@ export class EntrenamientoController {
     @Body() body: any
   ) {
     const raw = typeof body === 'object' && body !== null ? { ...body, alumnoId } : { alumnoId };
-    const dto = GuardarRutinaSemanalSchema.parse(raw);
+    const dto = parsearContrato(GuardarRutinaSemanalSchema, raw);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.entrenamientoService.guardarRutinaSemanal(entrenadorId, alumnoId, dto);
   }
@@ -168,7 +170,7 @@ export class EntrenamientoController {
   @Roles(Rol.ENTRENADOR)
   @HttpCode(HttpStatus.CREATED)
   async prescribirSesion(@Req() req: any, @Body() body: unknown) {
-    const dto = CrearSesionEntrenamientoSchema.parse(body);
+    const dto = parsearContrato(CrearSesionEntrenamientoSchema, body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.entrenamientoService.crearSesion(entrenadorId, dto);
   }
@@ -189,7 +191,7 @@ export class EntrenamientoController {
     @Body() body: unknown,
     @Headers('x-idempotency-key') idempotencyHeader?: string
   ) {
-    const dto = IniciarSesionSchema.parse(body);
+    const dto = parsearContrato(IniciarSesionSchema, body);
     const alumnoId = req.user.sub;
     return this.entrenamientoService.iniciarSesion(sesionId, alumnoId, dto, idempotencyHeader);
   }
@@ -209,7 +211,7 @@ export class EntrenamientoController {
     @Body() body: unknown,
     @Headers('x-idempotency-key') idempotencyHeader?: string
   ) {
-    const dto = SincronizarSeriesBatchSchema.parse(body);
+    const dto = parsearContrato(SincronizarSeriesBatchSchema, body);
     const alumnoId = req.user.sub;
     return this.entrenamientoService.sincronizarSeries(sesionId, alumnoId, dto, idempotencyHeader);
   }
@@ -230,7 +232,7 @@ export class EntrenamientoController {
     @Body() body: unknown,
     @Headers('x-idempotency-key') idempotencyHeader?: string
   ) {
-    const dto = FinalizarSesionSchema.parse(body);
+    const dto = parsearContrato(FinalizarSesionSchema, body);
     const alumnoId = req.user.sub;
     return this.entrenamientoService.finalizarSesion(sesionId, alumnoId, dto, idempotencyHeader);
   }
@@ -278,7 +280,7 @@ export class EntrenamientoController {
     @Query('offset') offset?: string
   ) {
     if (!UUID_REGEX.test(alumnoId)) {
-      throw new BadRequestException(`El ID de alumno '${alumnoId}' no es un UUID válido.`);
+      throw new BadRequestException(MENSAJE_ALUMNO_NO_ENCONTRADO);
     }
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     const limitNum = limit
@@ -338,7 +340,7 @@ export class EntrenamientoController {
   @Roles(Rol.ENTRENADOR)
   @HttpCode(HttpStatus.CREATED)
   async crearEjercicio(@Req() req: any, @Body() body: unknown) {
-    const dto = CrearEjercicioCatalogoSchema.parse(body);
+    const dto = parsearContrato(CrearEjercicioCatalogoSchema, body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.entrenamientoService.crearEjercicio(entrenadorId, dto);
   }
@@ -375,7 +377,7 @@ export class EntrenamientoController {
       : LIMITE_MONITOR_ADHERENCIA_POR_DEFECTO;
     const offsetNum = offset ? Math.max(parseInt(offset, 10) || 0, 0) : 0;
     // WU25a/WU26: validación Zod de los filtros nuevos (400 ante valores fuera del contrato).
-    const filtro = FiltroMonitorAdherenciaSchema.parse({ q, semaforo, orden });
+    const filtro = parsearContrato(FiltroMonitorAdherenciaSchema, { q, semaforo, orden });
     return this.entrenamientoService.calcularSemanaAdherencia(
       entrenadorId,
       timezone,

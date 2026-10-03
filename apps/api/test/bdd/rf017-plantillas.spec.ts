@@ -559,7 +559,7 @@ describe('RF-017: Banco de Plantillas de Rutina y Prescripción Reutilizable', (
           nivelObjetivo: 'ELITE' as any,
           bloques: plantillaFixtureBloques(),
         })
-      ).rejects.toThrow();
+      ).rejects.toThrow(BadRequestException);
 
       await expect(
         plantillasService.crearPlantilla(coach1, {
@@ -567,7 +567,7 @@ describe('RF-017: Banco de Plantillas de Rutina y Prescripción Reutilizable', (
           nivelObjetivo: NivelObjetivoPlantilla.INTERMEDIO,
           bloques: [],
         })
-      ).rejects.toThrow();
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -654,6 +654,10 @@ describe('RF-017: Banco de Plantillas de Rutina y Prescripción Reutilizable', (
 
       await expect(plantillasService.obtenerPlantilla(coach2, plantilla.id)).rejects.toThrow(
         NotFoundException
+      );
+      // LOTE API-2: mensaje claro, sin el identificador de la plantilla.
+      await expect(plantillasService.obtenerPlantilla(coach2, plantilla.id)).rejects.toThrow(
+        'No encontramos esa plantilla. Puede que se haya eliminado.'
       );
       await expect(
         plantillasService.actualizarPlantilla(coach2, plantilla.id, { nombre: 'Hackeada' })
@@ -815,6 +819,14 @@ describe('RF-017: Banco de Plantillas de Rutina y Prescripción Reutilizable', (
           ajustes: [{ diaId: 'dia-inexistente', ejercicioId: ejercicioGlobal, series: 5 }],
         })
       ).rejects.toThrow(BadRequestException);
+      // LOTE API-2: mensaje claro, sin el identificador técnico del día.
+      await expect(
+        plantillasService.asignarPlantilla(coach1, plantilla.id, {
+          alumnoIds: [alumnoUsuario1],
+          modo: ModoAsignacionPlantilla.REEMPLAZAR,
+          ajustes: [{ diaId: 'dia-inexistente', ejercicioId: ejercicioGlobal, series: 5 }],
+        })
+      ).rejects.toThrow('Uno de los ajustes no corresponde a esta plantilla. Ábrela de nuevo.');
 
       await expect(
         plantillasService.asignarPlantilla(coach1, plantilla.id, {
@@ -823,6 +835,13 @@ describe('RF-017: Banco de Plantillas de Rutina y Prescripción Reutilizable', (
           ajustes: [{ diaId: 'd1', nombre: 'Ejercicio Inexistente', series: 5 }],
         })
       ).rejects.toThrow(BadRequestException);
+      await expect(
+        plantillasService.asignarPlantilla(coach1, plantilla.id, {
+          alumnoIds: [alumnoUsuario1],
+          modo: ModoAsignacionPlantilla.REEMPLAZAR,
+          ajustes: [{ diaId: 'd1', nombre: 'Ejercicio Inexistente', series: 5 }],
+        })
+      ).rejects.toThrow('Uno de los ajustes no corresponde a esta plantilla. Ábrela de nuevo.');
     });
   });
 
@@ -897,11 +916,12 @@ describe('RF-017: Banco de Plantillas de Rutina y Prescripción Reutilizable', (
 
       expect(ajeno.alumnoId).toBe(alumnoUsuario2);
       expect(ajeno.exito).toBe(false);
-      expect(ajeno.error).toContain('Aislamiento de Tenant');
+      // LOTE API-2: mensajes claros por alumno (sin "tenant" ni identificadores).
+      expect(ajeno.error).toBe('Este alumno no está en tu lista.');
 
       expect(inexistente.alumnoId).toBe(alumnoInexistente);
       expect(inexistente.exito).toBe(false);
-      expect(inexistente.error).toContain('no encontrado');
+      expect(inexistente.error).toBe('No encontramos a este alumno.');
 
       // El alumno válido sí recibió su rutina; el ajeno no fue tocado.
       expect(mockRutinas.filter((r) => r.alumnoId === alumnoUsuario1 && r.activa)).toHaveLength(1);
@@ -916,14 +936,14 @@ describe('RF-017: Banco de Plantillas de Rutina y Prescripción Reutilizable', (
           alumnoIds: [],
           modo: ModoAsignacionPlantilla.REEMPLAZAR,
         })
-      ).rejects.toThrow();
+      ).rejects.toThrow(BadRequestException);
 
       await expect(
         plantillasService.asignarPlantilla(coach1, plantilla.id, {
           alumnoIds: [alumnoUsuario1],
           modo: 'SOBRESCRIBIR' as any,
         })
-      ).rejects.toThrow();
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });

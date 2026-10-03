@@ -23,6 +23,7 @@ import { EntrenamientoController } from '../../src/modules/entrenamiento/entrena
 import { FinanzasController } from '../../src/modules/finanzas/finanzas.controller';
 import { NutricionController } from '../../src/modules/nutricion/nutricion.controller';
 import { NutricionService } from '../../src/modules/nutricion/nutricion.service';
+import { configurarErroresGlobales } from '../../src/common/errores/filtro-errores-global';
 
 describe('RF-010: Arquitectura de Roles Jerárquicos (RBAC) y Aislamiento de Tenancy', () => {
   const reflectorMock = {
@@ -72,7 +73,7 @@ describe('RF-010: Arquitectura de Roles Jerárquicos (RBAC) y Aislamiento de Ten
       // Simular verificación de tenant
       const assertTenantMatch = (currentCoachTenant: string, targetResourceTenant: string) => {
         if (currentCoachTenant !== targetResourceTenant) {
-          throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');
+          throw new ForbiddenException('No tienes acceso a este alumno.');
         }
       };
 
@@ -269,6 +270,8 @@ describe('RF-010 RN-01: verificación HTTP real (Nest + supertest)', () => {
       .compile();
 
     const app = moduleRef.createNestApplication();
+
+    configurarErroresGlobales(app);
     await app.init();
     return app;
   }

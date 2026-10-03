@@ -260,6 +260,50 @@ describe('offline-sync: orden causal por sesión (D1)', () => {
     expect(claves.indexOf('k-ini')).toBeLessThan(claves.lastIndexOf('k-s1'));
   });
 
+  it('LOTE API-2: serie rechazada con code SESION_NO_INICIADA (texto nuevo) → se reactiva al iniciar', async () => {
+    const serie = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 1', 'k-s1');
+    mockedApiClient.mockRejectedValueOnce(
+      new ApiError(400, {
+        statusCode: 400,
+        error: 'Bad Request',
+        // Literal a propósito: fija el contrato del cable con el API.
+        code: 'SESION_NO_INICIADA',
+        message: 'Para marcar series, primero pulsa «Comenzar a entrenar».',
+      } as never)
+    );
+
+    await processOutboxQueue();
+    const rechazada = await offlineDb.outboxMutations.get(serie);
+    expect(rechazada?.status).toBe('rejected');
+    // El texto nuevo del servidor ya es claro: se muestra tal cual.
+    expect(rechazada?.lastError).toBe('Para marcar series, primero pulsa «Comenzar a entrenar».');
+
+    await queueOfflineMutation('/sesiones/s1/iniciar', 'POST', {}, 'Comenzar', 'k-ini');
+    mockedApiClient.mockResolvedValue(null);
+    await processOutboxQueue();
+    await processOutboxQueue();
+
+    expect((await offlineDb.outboxMutations.get(serie))?.status).toBe('synced');
+  });
+
+  it('LOTE API-2: un 400 de series SIN el código ni el texto de sesión no iniciada no se reactiva', async () => {
+    const serie = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 1', 'k-s1');
+    mockedApiClient.mockRejectedValueOnce(
+      new ApiError(400, {
+        statusCode: 400,
+        message: 'Esta serie ya no está en tu entrenamiento. Actualiza la pantalla.',
+      } as never)
+    );
+
+    await processOutboxQueue();
+    await queueOfflineMutation('/sesiones/s1/iniciar', 'POST', {}, 'Comenzar', 'k-ini');
+    mockedApiClient.mockResolvedValue(null);
+    await processOutboxQueue();
+    await processOutboxQueue();
+
+    expect((await offlineDb.outboxMutations.get(serie))?.status).toBe('rejected');
+  });
+
   it('usa el mensaje ya traducido (err.message) en lugar del detalle crudo del servidor', async () => {
     const id = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie 1', 'k-s1');
     mockedApiClient.mockRejectedValueOnce(

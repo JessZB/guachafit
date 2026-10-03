@@ -15,6 +15,7 @@
  * rechazar.
  */
 import {
+  CODIGO_CHECKIN_FUERA_DE_VENTANA,
   CheckinNutricionalSchema,
   HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL,
   type CheckinNutricionalDTO,
@@ -40,10 +41,12 @@ export const MENSAJE_DIA_CERRADO_REPORTE_CON_FOTOS =
   'El día ya cerró: el reporte con fotos no pudo registrarse. Las fotos y los datos siguen guardados en tu dispositivo hasta que decidas descartarlos desde el panel de sincronización.';
 
 /**
- * Detecta el rechazo de ventana/día local del servidor (RN-02) por su texto: es el único 400
- * del check-in que merece una explicación humana en vez del detalle crudo de la API.
+ * Detecta el rechazo de ventana/día local del servidor (RN-02): es el único 400 del check-in que
+ * merece una explicación humana en vez del detalle crudo de la API. Se clasifica por el código
+ * estable (`code`); el texto queda como respaldo para servidores anteriores sin código.
  */
-export function esRechazoVentanaCheckin(detalle: string): boolean {
+export function esRechazoVentanaCheckin(detalle: string, codigo?: unknown): boolean {
+  if (codigo === CODIGO_CHECKIN_FUERA_DE_VENTANA) return true;
   return /18:00|23:59|ventana|día local/i.test(detalle);
 }
 
@@ -51,7 +54,7 @@ export const MENSAJE_ERROR_GENERICO =
   'No se pudo guardar tu reporte. Revisa los datos e inténtalo de nuevo.';
 
 /** RN-02: copy de la ventana antes de las 18:00 locales (aún no se puede reportar hoy). */
-export const MENSAJE_ANTES_DE_VENTANA = `El check-in se habilita a las ${HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL}:00 (hora local). Cuando abra, marca tu semáforo y guarda tu día; fuera de esa ventana el día queda como "No reportado".`;
+export const MENSAJE_ANTES_DE_VENTANA = `El reporte se habilita a las ${HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL}:00 (hora local). Cuando abra, marca tu semáforo y guarda tu día; fuera de esa ventana el día queda como "No reportado".`;
 
 export type AccionErrorCheckinNutricional = 'encolar' | 'refrescar' | 'mostrar_error';
 

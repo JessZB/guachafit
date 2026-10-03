@@ -168,7 +168,7 @@ describe('RNF-001: Almacenamiento Seguro, Privacidad y Bóveda Cloudflare R2', (
       });
       expect(uuidInvalido.success).toBe(false);
       if (!uuidInvalido.success) {
-        expect(uuidInvalido.error.errors[0].message).toMatch(/UUID válido/i);
+        expect(uuidInvalido.error.errors[0].message).toMatch(/No encontramos ese alumno/);
       }
     });
   });

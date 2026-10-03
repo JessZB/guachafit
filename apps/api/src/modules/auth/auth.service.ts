@@ -647,8 +647,8 @@ export class AuthService {
       activo: dto.activo,
       cambioAplicado: true,
       mensaje: dto.activo
-        ? 'Entrenador reactivado. Ya puede iniciar sesión y renovar tokens.'
-        : 'Entrenador deshabilitado. Su login y su refresh quedan bloqueados; su access token actual expira en 15 minutos como máximo.',
+        ? 'Entrenador reactivado. Ya puede volver a iniciar sesión.'
+        : 'Entrenador deshabilitado. Ya no podrá iniciar sesión; si tiene una sesión abierta, se cerrará en unos minutos.',
     };
   }
 
@@ -696,8 +696,8 @@ export class AuthService {
       cambioAplicado: true,
       mensaje:
         dto.estadoLicencia === EstadoLicencia.ACTIVA
-          ? 'Licencia activada. El entrenador recupera su acceso y su enlace de captación vuelve a resolver.'
-          : 'Licencia suspendida. El entrenador no puede iniciar sesión ni renovar tokens y su enlace público deja de resolver.',
+          ? 'Licencia activada. El entrenador recupera su acceso y su enlace de captación vuelve a funcionar.'
+          : 'Licencia suspendida. El entrenador ya no podrá iniciar sesión y su enlace de captación deja de funcionar.',
     };
   }
 }

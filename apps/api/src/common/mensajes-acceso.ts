@@ -20,3 +20,7 @@ export const MENSAJE_SIN_ACCESO_ALUMNO = 'No tienes acceso a este alumno.';
 /** A5: respuesta 429 del límite de intentos (pasa el filtro de mensajes técnicos de la web). */
 export const MENSAJE_DEMASIADOS_INTENTOS =
   'Hiciste demasiados intentos. Espera un momento y vuelve a intentarlo.';
+/** LOTE API-2: el entrenador intenta operar con un alumno de otro entrenador (lote/lista). */
+export const MENSAJE_ALUMNO_FUERA_DE_LISTA = 'Este alumno no está en tu lista.';
+/** LOTE API-2: alumno inexistente o identificador mal formado (sin mostrar el identificador). */
+export const MENSAJE_ALUMNO_NO_ENCONTRADO = 'No encontramos a este alumno.';

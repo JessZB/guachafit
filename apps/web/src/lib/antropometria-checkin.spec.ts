@@ -62,7 +62,7 @@ describe('construirPayloadCheckinAntropometrico (RF-003: contrato del check-in r
   it('rechaza un alumnoId que no sea UUID (el service busca por usuarioId)', () => {
     expect(() =>
       construirPayloadCheckinAntropometrico('user-demo-1', { pesoKg: '70.00' }, '2026-09-20')
-    ).toThrowError(/UUID válido/i);
+    ).toThrowError(/No encontramos ese alumno/);
   });
 
   it('envía el modelo RN-02 completo: brazo relajado/contraído, muslo medio y pliegues', () => {

@@ -15,6 +15,8 @@ import {
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
+import { MENSAJE_ALUMNO_NO_ENCONTRADO } from '../../common/mensajes-acceso';
+import { parsearContrato } from '../../common/errores/parsear-contrato';
 import { FinanzasService } from './finanzas.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -84,7 +86,7 @@ export class FinanzasController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
   async actualizarTasa(@Req() req: any, @Body() body: unknown) {
-    const dto = ActualizarTasaCambioSchema.parse(body);
+    const dto = parsearContrato(ActualizarTasaCambioSchema, body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.finanzasService.actualizarTasa(entrenadorId, dto);
   }
@@ -98,7 +100,7 @@ export class FinanzasController {
   @Roles(Rol.ENTRENADOR, Rol.ALUMNO)
   @HttpCode(HttpStatus.OK)
   async calcularConversion(@Req() req: any, @Body() body: unknown) {
-    const dto = CalcularConversionSchema.parse(body);
+    const dto = parsearContrato(CalcularConversionSchema, body);
     const entrenadorId =
       req.user.rol === Rol.ALUMNO
         ? req.user.entrenadorId
@@ -125,7 +127,7 @@ export class FinanzasController {
   @Roles(Rol.ENTRENADOR)
   @HttpCode(HttpStatus.CREATED)
   async crearPlan(@Req() req: any, @Body() body: unknown) {
-    const dto = CrearPlanMembresiaSchema.parse(body);
+    const dto = parsearContrato(CrearPlanMembresiaSchema, body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.finanzasService.crearPlan(entrenadorId, dto);
   }
@@ -155,9 +157,9 @@ export class FinanzasController {
     @Body() body: unknown
   ) {
     if (!UUID_REGEX.test(planId)) {
-      throw new BadRequestException(`El ID de plan '${planId}' no es un UUID válido.`);
+      throw new BadRequestException('No encontramos ese plan. Puede que se haya eliminado.');
     }
-    const dto = ActualizarPlanMembresiaSchema.parse(body);
+    const dto = parsearContrato(ActualizarPlanMembresiaSchema, body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.finanzasService.actualizarPlan(entrenadorId, planId, dto);
   }
@@ -171,7 +173,7 @@ export class FinanzasController {
   @Roles(Rol.ENTRENADOR)
   @HttpCode(HttpStatus.CREATED)
   async crearOverride(@Req() req: any, @Body() body: unknown) {
-    const dto = CrearOverridePlanSchema.parse(body);
+    const dto = parsearContrato(CrearOverridePlanSchema, body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.finanzasService.crearOverride(entrenadorId, dto);
   }
@@ -187,7 +189,7 @@ export class FinanzasController {
   @Roles(Rol.ENTRENADOR)
   async listarOverrides(@Req() req: any, @Query('clienteId') clienteId?: string) {
     if (clienteId !== undefined && !UUID_REGEX.test(clienteId)) {
-      throw new BadRequestException(`El ID de cliente '${clienteId}' no es un UUID válido.`);
+      throw new BadRequestException(MENSAJE_ALUMNO_NO_ENCONTRADO);
     }
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.finanzasService.listarOverrides(entrenadorId, clienteId || undefined);
@@ -202,7 +204,7 @@ export class FinanzasController {
   @Roles(Rol.ENTRENADOR)
   async eliminarOverride(@Req() req: any, @Param('id') overrideId: string) {
     if (!UUID_REGEX.test(overrideId)) {
-      throw new BadRequestException(`El ID de override '${overrideId}' no es un UUID válido.`);
+      throw new BadRequestException('No encontramos ese precio especial. Puede que se haya eliminado.');
     }
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.finanzasService.eliminarOverride(entrenadorId, overrideId);
@@ -217,7 +219,7 @@ export class FinanzasController {
   @Roles(Rol.ENTRENADOR)
   @HttpCode(HttpStatus.CREATED)
   async emitirCuota(@Req() req: any, @Body() body: unknown) {
-    const dto = EmitirCuotaSchema.parse(body);
+    const dto = parsearContrato(EmitirCuotaSchema, body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.finanzasService.emitirCuota(entrenadorId, dto);
   }
@@ -252,7 +254,7 @@ export class FinanzasController {
     @Headers('x-idempotency-key') idempotencyHeader: string | undefined,
     @Body() body: unknown
   ) {
-    const dto = ReportarPagoSchema.parse(body);
+    const dto = parsearContrato(ReportarPagoSchema, body);
     const alumnoUserId = req.user.sub;
     return this.finanzasService.reportarPago(
       cuotaId,
@@ -275,7 +277,7 @@ export class FinanzasController {
     @Param('id') cuotaId: string,
     @Body() body: unknown
   ) {
-    const dto = CobroDirectoSchema.parse(body);
+    const dto = parsearContrato(CobroDirectoSchema, body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.finanzasService.cobroDirecto(cuotaId, entrenadorId, dto);
   }
@@ -317,7 +319,7 @@ export class FinanzasController {
     @Param('id') transaccionId: string,
     @Body() body: unknown
   ) {
-    const dto = ConciliarTransaccionSchema.parse(body);
+    const dto = parsearContrato(ConciliarTransaccionSchema, body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.finanzasService.conciliarTransaccion(transaccionId, entrenadorId, dto);
   }
@@ -338,7 +340,7 @@ export class FinanzasController {
     @Query('txOffset') txOffset?: string
   ) {
     if (!UUID_REGEX.test(clienteId)) {
-      throw new BadRequestException('El ID del alumno debe ser un UUID válido.');
+      throw new BadRequestException(MENSAJE_ALUMNO_NO_ENCONTRADO);
     }
     const entrenadorId =
       req.user.rol === Rol.ALUMNO
@@ -376,9 +378,9 @@ export class FinanzasController {
     @Body() body: unknown
   ) {
     if (!UUID_REGEX.test(clienteId)) {
-      throw new BadRequestException('El ID del alumno debe ser un UUID válido.');
+      throw new BadRequestException(MENSAJE_ALUMNO_NO_ENCONTRADO);
     }
-    const dto = CobroDirectoInteligenteSchema.parse(body);
+    const dto = parsearContrato(CobroDirectoInteligenteSchema, body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.finanzasService.cobroDirectoInteligente(entrenadorId, clienteId, dto);
   }

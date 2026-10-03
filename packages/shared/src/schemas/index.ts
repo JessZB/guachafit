@@ -52,7 +52,7 @@ export const CrearEntrenadorSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).max(100).optional(),
   nombreComercial: z.string().min(2).max(150).optional(),
-  coachCode: z.string().min(4).max(15).regex(/^[A-Za-z0-9_-]+$/, 'El coachCode debe ser alfanumérico'),
+  coachCode: z.string().min(4).max(15).regex(/^[A-Za-z0-9_-]+$/, 'El código del entrenador solo puede tener letras, números y guiones'),
   capacidadMaxima: z.number().int().min(1).default(50),
   tasaCambioGlobal: z.string().regex(TASA_STRING_REGEX).default('65.0000'),
   telefonoContacto: z.string().min(8).max(30),
@@ -86,8 +86,8 @@ export const ListarEntrenadoresAdminQuerySchema = z.object({
   offset: z
     .coerce
     .number()
-    .int('El offset debe ser un número entero')
-    .min(0, 'El offset debe ser mayor o igual a 0')
+    .int('La posición de inicio debe ser un número entero')
+    .min(0, 'La posición de inicio no puede ser negativa')
     .optional()
     .default(0),
 });
@@ -98,15 +98,15 @@ export const ListarEntrenadoresAdminQuerySchema = z.object({
  */
 export const CambiarEstadoEntrenadorSchema = z.object({
   activo: z.boolean({
-    required_error: 'El estado `activo` es obligatorio.',
-    invalid_type_error: 'El estado `activo` debe ser booleano.',
+    required_error: 'Indica si la cuenta queda activa o inactiva.',
+    invalid_type_error: 'El estado de la cuenta debe ser activa o inactiva.',
   }),
 });
 
 /** RF-010 RN-01: activar o suspender la LICENCIA de un entrenador (idempotente). */
 export const CambiarLicenciaEntrenadorSchema = z.object({
   estadoLicencia: z.nativeEnum(EstadoLicencia, {
-    errorMap: () => ({ message: 'La licencia debe ser `activa` o `suspendida_superadmin`.' }),
+    errorMap: () => ({ message: 'La licencia debe quedar activa o suspendida.' }),
   }),
 });
 
@@ -116,7 +116,7 @@ export const AltaManualAlumnoSchema = z.object({
   email: z.string().email(),
   tipoDocumento: z.nativeEnum(TipoDocumento),
   numeroDocumento: z.string().min(5).max(30),
-  fechaNacimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD'),
+  fechaNacimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha no es válida. Usa el formato año-mes-día (por ejemplo, 2026-01-31)'),
   telefonoWhatsapp: z.string().min(8).max(30),
   modalidad: z.nativeEnum(Modalidad),
   tasaFijadaOverride: z.string().regex(TASA_STRING_REGEX).optional(),
@@ -146,7 +146,7 @@ export const ActualizarPerfilAlumnoSchema = z.object({
   apellidos: z.string().min(2).max(100).optional(),
   tipoDocumento: z.nativeEnum(TipoDocumento).optional(),
   numeroDocumento: z.string().min(5).max(30).optional(),
-  fechaNacimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD').optional(),
+  fechaNacimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha no es válida. Usa el formato año-mes-día (por ejemplo, 2026-01-31)').optional(),
   telefonoWhatsapp: z.string().min(8).max(30).optional(),
   modalidad: z.nativeEnum(Modalidad).optional(),
   tasaFijadaOverride: z.string().regex(TASA_STRING_REGEX).optional().nullable(),
@@ -160,7 +160,7 @@ export const ActualizarPerfilAlumnoSchema = z.object({
   periodicidadAntropometria: z.nativeEnum(PeriodicidadAntropometria).optional().nullable(),
   antropometriaInicio: z
     .string()
-    .regex(FECHA_CALENDARIO_REGEX, 'El formato de fecha debe ser YYYY-MM-DD')
+    .regex(FECHA_CALENDARIO_REGEX, 'La fecha no es válida. Usa el formato año-mes-día (por ejemplo, 2026-01-31)')
     .optional()
     .nullable(),
 });
@@ -255,8 +255,8 @@ export const FiltroCarteraSchema = z.object({
   offset: z
     .coerce
     .number()
-    .int('El offset debe ser un número entero')
-    .min(0, 'El offset debe ser mayor o igual a 0')
+    .int('La posición de inicio debe ser un número entero')
+    .min(0, 'La posición de inicio no puede ser negativa')
     .optional()
     .default(0),
 });
@@ -328,8 +328,8 @@ export const FiltroDirectorioAlumnosSchema = z.object({
   offset: z
     .coerce
     .number()
-    .int('El offset debe ser un número entero')
-    .min(0, 'El offset debe ser mayor o igual a 0')
+    .int('La posición de inicio debe ser un número entero')
+    .min(0, 'La posición de inicio no puede ser negativa')
     .optional()
     .default(0),
 });
@@ -343,7 +343,7 @@ export const RestaurarAlumnoSchema = z.object({
 // =============================================================================
 
 export const CrearEjercicioCatalogoSchema = z.object({
-  entrenadorId: z.string().uuid('El ID de entrenador debe ser un UUID válido').optional(),
+  entrenadorId: z.string().uuid('No encontramos ese entrenador. Actualiza la pantalla e inténtalo de nuevo.').optional(),
   nombre: z.string().min(2, 'El nombre debe tener al menos 2 caracteres').max(120, 'El nombre no puede exceder 120 caracteres'),
   grupoMuscular: z.string().min(2, 'El grupo muscular debe tener al menos 2 caracteres').max(60, 'El grupo muscular no puede exceder 60 caracteres'),
   patronMovimiento: z.string().max(60, 'El patrón de movimiento no puede exceder 60 caracteres').optional(),
@@ -371,7 +371,7 @@ export const SeriePrescritaInputSchema = z.object({
 });
 
 export const EjercicioPrescritoInputSchema = z.object({
-  ejercicioId: z.string().uuid('El ID del ejercicio debe ser un UUID válido'),
+  ejercicioId: z.string().uuid('No encontramos ese ejercicio. Actualiza la pantalla e inténtalo de nuevo.'),
   orden: z.number().int().min(1).default(1),
   notasCoach: z.string().max(1000, 'Las notas no pueden exceder 1000 caracteres').optional(),
   descansoSegundos: z.number().int().min(5).max(1800).optional().default(90),
@@ -379,9 +379,9 @@ export const EjercicioPrescritoInputSchema = z.object({
 });
 
 export const CrearSesionEntrenamientoSchema = z.object({
-  alumnoId: z.string().uuid('El ID del alumno debe ser un UUID válido'),
-  rutinaId: z.string().uuid('El ID de la rutina debe ser un UUID válido').optional(),
-  fechaProgramada: z.string().regex(FECHA_CALENDARIO_REGEX, 'El formato de fecha debe ser YYYY-MM-DD'),
+  alumnoId: z.string().uuid('No encontramos ese alumno. Actualiza la pantalla e inténtalo de nuevo.'),
+  rutinaId: z.string().uuid('No encontramos esa rutina. Actualiza la pantalla e inténtalo de nuevo.').optional(),
+  fechaProgramada: z.string().regex(FECHA_CALENDARIO_REGEX, 'La fecha no es válida. Usa el formato año-mes-día (por ejemplo, 2026-01-31)'),
   timezoneCliente: z.string().min(2).max(64).default('America/Caracas'),
   ejercicios: z.array(EjercicioPrescritoInputSchema).min(1, 'Debe incluir al menos un ejercicio en la sesión'),
 });
@@ -415,7 +415,7 @@ export const BloqueDiaRutinaSchema = z.object({
 });
 
 export const GuardarRutinaSemanalSchema = z.object({
-  alumnoId: z.string().uuid('El ID del alumno debe ser un UUID válido'),
+  alumnoId: z.string().uuid('No encontramos ese alumno. Actualiza la pantalla e inténtalo de nuevo.'),
   nombreRutina: z.string().max(120).optional(),
   bloques: z
     .array(BloqueDiaRutinaSchema)
@@ -466,7 +466,7 @@ export const ActualizarPlantillaRutinaSchema = z.object({
 export const AjusteEjercicioPlantillaSchema = z
   .object({
     diaId: z.string().min(1, 'El día del ajuste es obligatorio'),
-    ejercicioId: z.string().uuid('El ID del ejercicio debe ser un UUID válido').optional(),
+    ejercicioId: z.string().uuid('No encontramos ese ejercicio. Actualiza la pantalla e inténtalo de nuevo.').optional(),
     nombre: z.string().min(2).max(120, 'El nombre del ejercicio no puede exceder 120 caracteres').optional(),
     pesoPrescritoKg: z
       .string()
@@ -481,7 +481,7 @@ export const AjusteEjercicioPlantillaSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['ejercicioId'],
-        message: 'El ajuste debe indicar ejercicioId o el nombre del ejercicio',
+        message: 'Cada ajuste debe indicar el ejercicio (elígelo de la lista o escribe su nombre)',
       });
     }
     const sinCambios =
@@ -493,7 +493,7 @@ export const AjusteEjercicioPlantillaSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['series'],
-        message: 'El ajuste debe modificar al menos pesoPrescritoKg, series, reps o rpe',
+        message: 'Cada ajuste debe cambiar al menos el peso, las series, las repeticiones o el RPE',
       });
     }
   });
@@ -504,11 +504,11 @@ export const AjusteEjercicioPlantillaSchema = z
  */
 export const AsignarPlantillaSchema = z.object({
   alumnoIds: z
-    .array(z.string().uuid('Cada ID de alumno debe ser un UUID válido'))
+    .array(z.string().uuid('No encontramos uno de los alumnos elegidos. Actualiza la pantalla e inténtalo de nuevo.'))
     .min(1, 'Debe indicar al menos un alumno')
     .max(50, 'No se pueden asignar más de 50 alumnos en una sola solicitud'),
   modo: z.nativeEnum(ModoAsignacionPlantilla, {
-    errorMap: () => ({ message: 'El modo de asignación debe ser REEMPLAZAR o FUSIONAR' }),
+    errorMap: () => ({ message: 'Elige si la rutina reemplaza la actual o se combina con ella' }),
   }),
   ajustes: z
     .array(AjusteEjercicioPlantillaSchema)
@@ -518,12 +518,12 @@ export const AsignarPlantillaSchema = z.object({
 
 export const IniciarSesionSchema = z.object({
   timezoneCliente: z.string().min(2).max(64),
-  fechaInicioUtc: z.string().datetime({ message: 'La fecha de inicio debe ser un timestamp ISO 8601 UTC válido' }).optional(),
+  fechaInicioUtc: z.string().datetime({ message: 'La fecha de inicio no es válida' }).optional(),
 });
 
 export const RegistrarSerieSchema = z
   .object({
-    serieId: z.string().uuid('El ID de la serie debe ser un UUID válido'),
+    serieId: z.string().uuid('No encontramos esa serie. Actualiza la pantalla e inténtalo de nuevo.'),
     repsLogradas: z.number().int().min(0).max(200),
     pesoKg: z
       .string()
@@ -545,9 +545,9 @@ export const RegistrarSerieSchema = z
      */
     timestampInicioUtc: z
       .string()
-      .datetime({ message: 'El timestamp de inicio debe estar en formato ISO 8601 UTC' })
+      .datetime({ message: 'La hora de inicio de la serie no es válida' })
       .optional(),
-    timestampCompletadaUtc: z.string().datetime({ message: 'El timestamp debe estar en formato ISO 8601 UTC' }).optional(),
+    timestampCompletadaUtc: z.string().datetime({ message: 'La hora de la serie no es válida' }).optional(),
   })
   /**
    * WU17: coherencia temporal dentro de la misma serie. Si llegan ambas marcas, el inicio
@@ -560,7 +560,7 @@ export const RegistrarSerieSchema = z
       new Date(serie.timestampInicioUtc).getTime() <=
         new Date(serie.timestampCompletadaUtc).getTime(),
     {
-      message: 'El timestamp de inicio no puede ser posterior al de completada',
+      message: 'La hora de inicio de la serie no puede ser posterior a la hora en que la completaste',
       path: ['timestampInicioUtc'],
     }
   );
@@ -581,7 +581,7 @@ export const EntrenarBloqueHoySchema = z.object({
 
 export const FinalizarSesionSchema = z.object({
   notasAlumno: z.string().max(1000, 'Las notas no pueden exceder 1000 caracteres').optional(),
-  fechaFinUtc: z.string().datetime({ message: 'La fecha de fin debe ser un timestamp ISO 8601 UTC válido' }).optional(),
+  fechaFinUtc: z.string().datetime({ message: 'La fecha de fin no es válida' }).optional(),
   /**
    * RF-001 Escenario 5: decisión explícita al cerrar una sesión sin series completadas.
    * COMPLETADA con 0 series se rechaza; DESCANSADA/INCOMPLETA marcan la sesión como OMITIDA.
@@ -606,8 +606,8 @@ export const TIMEZONE_NUTRICION_POR_DEFECTO = 'America/Caracas';
 export const TOLERANCIA_TOTALES_NUTRICIONAL_PCT = 10.0;
 
 export const CheckinNutricionalSchema = z.object({
-  alumnoId: z.string().uuid('El ID del alumno debe ser un UUID válido').optional(),
-  fecha: z.string().regex(FECHA_CALENDARIO_REGEX, 'El formato de fecha debe ser YYYY-MM-DD'),
+  alumnoId: z.string().uuid('No encontramos ese alumno. Actualiza la pantalla e inténtalo de nuevo.').optional(),
+  fecha: z.string().regex(FECHA_CALENDARIO_REGEX, 'La fecha no es válida. Usa el formato año-mes-día (por ejemplo, 2026-01-31)'),
   semaforo: z.nativeEnum(SemaforoNutricional),
   aguaLitros: z.string().regex(DECIMAL_STRING_REGEX, 'El consumo de agua debe tener formato decimal con hasta 2 decimales').optional(),
   caloriasReportadas: z.number().int().min(0).max(15000).optional(),
@@ -772,7 +772,7 @@ export const MODULO_UPLOAD_PDF = 'nutricion-recursos' as const;
 export const PresignedUploadUrlSchema = z
   .object({
     modulo: z.enum(['antropometria', 'comidas', 'comprobantes', MODULO_UPLOAD_PDF]),
-    alumnoId: z.string().uuid('El ID del alumno debe ser un UUID válido'),
+    alumnoId: z.string().uuid('No encontramos ese alumno. Actualiza la pantalla e inténtalo de nuevo.'),
     angulo: z.nativeEnum(AnguloFoto).optional(),
     mimeType: z.enum(['image/webp', 'image/jpeg', 'application/pdf']),
   })
@@ -783,7 +783,7 @@ export const PresignedUploadUrlSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['mimeType'],
-        message: 'El módulo de recursos nutricionales solo admite archivos PDF (application/pdf).',
+        message: 'Los recursos nutricionales solo admiten archivos PDF.',
       });
     }
     if (valor.modulo !== MODULO_UPLOAD_PDF && valor.mimeType === 'application/pdf') {
@@ -796,8 +796,8 @@ export const PresignedUploadUrlSchema = z
   });
 
 export const CheckinAntropometricoSchema = z.object({
-  alumnoId: z.string().uuid('El ID del alumno debe ser un UUID válido'),
-  fechaEvaluacion: z.string().regex(FECHA_CALENDARIO_REGEX, 'El formato de fecha debe ser YYYY-MM-DD'),
+  alumnoId: z.string().uuid('No encontramos ese alumno. Actualiza la pantalla e inténtalo de nuevo.'),
+  fechaEvaluacion: z.string().regex(FECHA_CALENDARIO_REGEX, 'La fecha no es válida. Usa el formato año-mes-día (por ejemplo, 2026-01-31)'),
   pesoKg: z
     .string()
     .regex(DECIMAL_STRING_REGEX, 'El peso en kg debe tener hasta 2 decimales')
@@ -849,8 +849,8 @@ export const ConciliarAntropometriaSchema = z
 
 export const FiltroEvolucionAntropometricaSchema = z.object({
   periodo: z.enum(['1M', '3M', '6M', '1A', 'todo']).optional(),
-  desde: z.string().regex(FECHA_CALENDARIO_REGEX, 'El formato de fecha debe ser YYYY-MM-DD').optional(),
-  hasta: z.string().regex(FECHA_CALENDARIO_REGEX, 'El formato de fecha debe ser YYYY-MM-DD').optional(),
+  desde: z.string().regex(FECHA_CALENDARIO_REGEX, 'La fecha no es válida. Usa el formato año-mes-día (por ejemplo, 2026-01-31)').optional(),
+  hasta: z.string().regex(FECHA_CALENDARIO_REGEX, 'La fecha no es válida. Usa el formato año-mes-día (por ejemplo, 2026-01-31)').optional(),
   /**
    * WU24b: slice OPT-IN de la serie de controles aprobados. Sin ninguno de los dos parámetros,
    * `evaluaciones` devuelve la serie completa (contrato que consumen los charts del alumno).
@@ -866,14 +866,14 @@ export const FiltroEvolucionAntropometricaSchema = z.object({
   controlesOffset: z
     .coerce
     .number()
-    .int('El offset de controles debe ser un número entero')
-    .min(0, 'El offset de controles debe ser mayor o igual a 0')
+    .int('La posición de inicio de los controles debe ser un número entero')
+    .min(0, 'La posición de inicio de los controles no puede ser negativa')
     .optional(),
 });
 
 export const ConsultaComparadorFotograficoSchema = z.object({
-  controlIdA: z.string().uuid('El ID de control A debe ser un UUID válido'),
-  controlIdB: z.string().uuid('El ID de control B debe ser un UUID válido'),
+  controlIdA: z.string().uuid('No encontramos el primer control que elegiste. Actualiza la pantalla e inténtalo de nuevo.'),
+  controlIdB: z.string().uuid('No encontramos el segundo control que elegiste. Actualiza la pantalla e inténtalo de nuevo.'),
   angulo: z.nativeEnum(AnguloFoto),
 });
 
@@ -890,7 +890,7 @@ export const CrearPlanMembresiaSchema = z.object({
   // (RN-02/§6), no con un plan estándar de $0.
   precioBaseUsd: z
     .string()
-    .regex(DECIMAL_STRING_REGEX, 'El precio base debe ser una cadena decimal con hasta 2 decimales')
+    .regex(DECIMAL_STRING_REGEX, 'El precio base debe ser un número con hasta 2 decimales')
     .refine((val) => Number(val) > 0, 'El precio base debe ser mayor a 0.00'),
   duracionMeses: z.number().int().min(1).max(36).default(1),
   activo: z.boolean().default(true).optional(),
@@ -904,7 +904,7 @@ export const ActualizarPlanMembresiaSchema = z.object({
   // RF-005 RN-01: si se define, el precio base del catálogo debe ser mayor a 0.00.
   precioBaseUsd: z
     .string()
-    .regex(DECIMAL_STRING_REGEX, 'El precio base debe ser una cadena decimal con hasta 2 decimales')
+    .regex(DECIMAL_STRING_REGEX, 'El precio base debe ser un número con hasta 2 decimales')
     .refine((val) => Number(val) > 0, 'El precio base debe ser mayor a 0.00')
     .optional(),
   duracionMeses: z.number().int().min(1).max(36).optional(),
@@ -928,8 +928,8 @@ export const CrearOverridePlanSchema = z.object({
   /** `null` explícito quita la tasa especial del alumno (vuelve a la tasa global, ADR-003 §3.2). */
   tasaFijadaOverride: z
     .string()
-    .regex(TASA_STRING_REGEX, 'La tasa override debe tener hasta 4 decimales')
-    .refine((val) => Number(val) > 0, 'La tasa override debe ser mayor a 0')
+    .regex(TASA_STRING_REGEX, 'La tasa del precio especial debe tener hasta 4 decimales')
+    .refine((val) => Number(val) > 0, 'La tasa del precio especial debe ser mayor a 0')
     .nullable()
     .optional(),
   beneficiosPersonalizados: z.array(z.string().min(1)).nullable().optional(),
@@ -940,7 +940,7 @@ export const EmitirCuotaSchema = z.object({
   clienteId: z.string().uuid(),
   planId: z.string().uuid(),
   entrenadorId: z.string().uuid().optional(),
-  periodo: z.string().regex(PERIODO_MES_REGEX, 'El formato de periodo debe ser YYYY-MM'),
+  periodo: z.string().regex(PERIODO_MES_REGEX, 'El periodo no es válido. Usa el formato año-mes (por ejemplo, 2026-01)'),
   /**
    * RF-005 RN-03 (Precedencia de Valores): el monto de una cuota NUEVA NO lo dicta el cliente.
    * El servidor lo resuelve con el override activo del alumno (`precio_acordado_usd`) o, en su
@@ -950,11 +950,11 @@ export const EmitirCuotaSchema = z.object({
    */
   montoTotalUsd: z
     .string()
-    .regex(DECIMAL_STRING_REGEX, 'El monto total debe ser una cadena decimal con hasta 2 decimales')
+    .regex(DECIMAL_STRING_REGEX, 'El monto total debe ser un número con hasta 2 decimales')
     .refine((val) => Number(val) > 0, 'El monto total debe ser mayor a 0.00')
     .optional(),
-  fechaCorteUtc: z.string().datetime({ message: 'La fecha de corte debe ser una fecha ISO 8601 UTC válida' }),
-  fechaEmisionUtc: z.string().datetime({ message: 'La fecha de emisión debe ser una fecha ISO 8601 UTC válida' }).optional(),
+  fechaCorteUtc: z.string().datetime({ message: 'La fecha de corte no es válida' }),
+  fechaEmisionUtc: z.string().datetime({ message: 'La fecha de emisión no es válida' }).optional(),
   notas: z.string().max(1000).optional(),
 });
 
@@ -962,16 +962,16 @@ export const ActualizarTasaCambioSchema = z.object({
   entrenadorId: z.string().uuid().optional(),
   tasaOficialBcv: z
     .string()
-    .regex(TASA_STRING_REGEX, 'La tasa oficial BCV debe ser una cadena decimal con hasta 4 decimales')
+    .regex(TASA_STRING_REGEX, 'La tasa oficial BCV debe ser un número con hasta 4 decimales')
     .refine((val) => Number(val) > 0, 'La tasa oficial BCV debe ser mayor a 0'),
   tasaParalelo: z
     .string()
-    .regex(TASA_STRING_REGEX, 'La tasa paralelo debe ser una cadena decimal con hasta 4 decimales')
+    .regex(TASA_STRING_REGEX, 'La tasa paralelo debe ser un número con hasta 4 decimales')
     .refine((val) => Number(val) > 0, 'La tasa paralelo debe ser mayor a 0')
     .optional(),
   tasaActivaEntrenador: z
     .string()
-    .regex(TASA_STRING_REGEX, 'La tasa activa del entrenador debe ser una cadena decimal con hasta 4 decimales')
+    .regex(TASA_STRING_REGEX, 'La tasa activa del entrenador debe ser un número con hasta 4 decimales')
     .refine((val) => Number(val) > 0, 'La tasa activa del entrenador debe ser mayor a 0'),
   fuente: z.string().max(50).optional().default('manual'),
 });
@@ -989,11 +989,11 @@ export const ReportarPagoSchema = z
     cuotaId: z.string().uuid().optional(),
     montoOriginal: z
       .string()
-      .regex(DECIMAL_STRING_REGEX, 'El monto original debe ser una cadena decimal con hasta 2 decimales'),
+      .regex(DECIMAL_STRING_REGEX, 'El monto original debe ser un número con hasta 2 decimales'),
     monedaOriginal: z.nativeEnum(Moneda),
     metodoPago: z.nativeEnum(MetodoPago),
     referenciaBancaria: z.string().min(4).max(64).optional(),
-    fechaOperacion: z.string().regex(FECHA_CALENDARIO_REGEX, 'La fecha de operación debe tener formato YYYY-MM-DD'),
+    fechaOperacion: z.string().regex(FECHA_CALENDARIO_REGEX, 'La fecha del pago no es válida. Usa el formato año-mes-día (por ejemplo, 2026-01-31)'),
     comprobanteStorageKey: z.string().min(5).optional(),
   })
   .superRefine((data, ctx) => {
@@ -1024,7 +1024,7 @@ export const CobroDirectoSchema = z
     clienteId: z.string().uuid().optional(),
     montoOriginal: z
       .string()
-      .regex(DECIMAL_STRING_REGEX, 'El monto original debe ser una cadena decimal con hasta 2 decimales')
+      .regex(DECIMAL_STRING_REGEX, 'El monto original debe ser un número con hasta 2 decimales')
       .refine((val) => Number(val) > 0, 'El monto original debe ser mayor a 0.00')
       .refine((val) => Number(val) <= 100000, 'El monto original no puede exceder 100,000.00'),
     monedaOriginal: z.nativeEnum(Moneda, {
@@ -1033,7 +1033,7 @@ export const CobroDirectoSchema = z
     metodoPago: z.nativeEnum(MetodoPago, {
       errorMap: () => ({ message: 'El método de pago no es válido' }),
     }).default(MetodoPago.EFECTIVO_USD),
-    fechaOperacion: z.string().regex(FECHA_CALENDARIO_REGEX, 'La fecha de operación debe tener formato YYYY-MM-DD'),
+    fechaOperacion: z.string().regex(FECHA_CALENDARIO_REGEX, 'La fecha del pago no es válida. Usa el formato año-mes-día (por ejemplo, 2026-01-31)'),
     referenciaBancaria: z.string().max(64).optional(),
     notas: z.string().max(500).optional(),
   });
@@ -1041,7 +1041,7 @@ export const CobroDirectoSchema = z
 export const CobroDirectoInteligenteSchema = z.object({
   montoOriginal: z
     .string({ required_error: 'El monto original es obligatorio' })
-    .regex(DECIMAL_STRING_REGEX, 'El monto original debe ser una cadena decimal con hasta 2 decimales')
+    .regex(DECIMAL_STRING_REGEX, 'El monto original debe ser un número con hasta 2 decimales')
     .refine((val) => Number(val) > 0, 'El monto original debe ser mayor a 0.00')
     .refine((val) => Number(val) <= 100000, 'El monto original no puede exceder 100,000.00'),
   monedaOriginal: z.nativeEnum(Moneda, {
@@ -1052,7 +1052,7 @@ export const CobroDirectoInteligenteSchema = z.object({
   }).default(MetodoPago.EFECTIVO_USD),
   fechaOperacion: z
     .string()
-    .regex(FECHA_CALENDARIO_REGEX, 'La fecha de operación debe tener formato YYYY-MM-DD')
+    .regex(FECHA_CALENDARIO_REGEX, 'La fecha del pago no es válida. Usa el formato año-mes-día (por ejemplo, 2026-01-31)')
     .optional()
     .default(() => new Date().toISOString().split('T')[0]),
   referenciaBancaria: z.string().max(64, 'La referencia bancaria no puede exceder 64 caracteres').optional(),
@@ -1086,7 +1086,7 @@ export type CanalPreferenciaNotificacion = 'push' | 'email';
  * (Escenario 2 — "Este canal es obligatorio para proteger tu cuenta").
  */
 export const MENSAJE_CANAL_OBLIGATORIO_SEGURIDAD =
-  'Este canal es obligatorio para proteger tu cuenta: el correo de seguridad no puede desactivarse (RF-015 RN-01).';
+  'Este canal es obligatorio para proteger tu cuenta: el correo de seguridad no puede desactivarse.';
 
 /**
  * RF-015 RN-02: advertencia al apagar a la vez Push y Email de "Finanzas y Pagos". El usuario
@@ -1402,8 +1402,8 @@ export const FiltroBandejaInAppSchema = z.object({
   offset: z
     .coerce
     .number()
-    .int('El offset debe ser un número entero')
-    .min(0, 'El offset debe ser mayor o igual a 0')
+    .int('La posición de inicio debe ser un número entero')
+    .min(0, 'La posición de inicio no puede ser negativa')
     .optional()
     .default(0),
   soloNoLeidas: BooleanoQuerySchema.optional().default(false),

@@ -28,7 +28,7 @@ export class DispositivosService {
       .limit(1);
 
     if (!user) {
-      throw new NotFoundException(`Usuario con ID '${usuarioId}' no encontrado`);
+      throw new NotFoundException('No encontramos tu cuenta. Inicia sesión de nuevo.');
     }
 
     // Buscar si el token ya existe en la base de datos
@@ -92,7 +92,7 @@ export class DispositivosService {
       .returning();
 
     if (!actualizado) {
-      throw new NotFoundException(`Dispositivo con token '${deviceToken.slice(0, 12)}...' no encontrado para este usuario`);
+      throw new NotFoundException('Este dispositivo ya no está registrado para recibir avisos.');
     }
 
     this.logger.log(`Dispositivo desactivado por logout para usuario ${usuarioId}`);

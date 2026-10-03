@@ -7,6 +7,7 @@ import { Logger } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { obtenerSecretosJwt } from './common/config/secretos-jwt';
 import { aplicarTrustProxy } from './common/config/trust-proxy';
+import { configurarErroresGlobales } from './common/errores/filtro-errores-global';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -20,6 +21,10 @@ async function bootstrap() {
   // despliegue DEBE configurarse TRUST_PROXY (saltos de proxy o rangos de Cloudflare/Nginx);
   // si no, todos los usuarios comparten la IP del proxy y el límite los bloquea juntos.
   aplicarTrustProxy(app);
+
+  // LOTE API-2: errores claros. ZodError no capturado → 400 con mensaje humano; error no
+  // controlado → 500 genérico (el detalle solo va al log).
+  configurarErroresGlobales(app);
 
   // Global Route Prefix. `/admin/queues` (Bull-Board, ADR-008 §4.4) queda EXCLUIDO del prefijo
   // para montarse exactamente en la ruta administrativa documentada; su protección vive en el

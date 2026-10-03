@@ -208,7 +208,7 @@ export class AntropometriaTestEngine {
 
     const alumno = this.alumnos.get(control.alumnoId);
     if (alumno && alumno.entrenadorId !== coachId) {
-      throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');
+      throw new ForbiddenException('No tienes acceso a este alumno.');
     }
 
     const nowIso = new Date().toISOString();

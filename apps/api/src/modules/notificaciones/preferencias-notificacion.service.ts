@@ -47,7 +47,7 @@ export class PreferenciasNotificacionService {
     const rol = await this.resolverRol(usuarioId);
 
     if (!rol) {
-      throw new NotFoundException(`Usuario con ID '${usuarioId}' no encontrado`);
+      throw new NotFoundException('No encontramos tu cuenta. Inicia sesión de nuevo.');
     }
 
     const [nuevo] = await this.db

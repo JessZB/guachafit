@@ -14,6 +14,7 @@ import {
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
+import { parsearContrato } from '../../common/errores/parsear-contrato';
 import { AlumnosService } from './alumnos.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -47,7 +48,7 @@ export class AlumnosController {
   @Roles(Rol.ENTRENADOR)
   @HttpCode(HttpStatus.CREATED)
   async altaManual(@Req() req: any, @Body() body: unknown): Promise<AltaManualAlumnoResultadoDTO> {
-    const dto = AltaManualAlumnoSchema.parse(body);
+    const dto = parsearContrato(AltaManualAlumnoSchema, body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.alumnosService.crearAlumnoManual(entrenadorId, dto);
   }
@@ -60,7 +61,7 @@ export class AlumnosController {
   // A5: registro público sin sesión, 20/min por IP.
   @LimitarIntentosPublico()
   async registroPublico(@Body() body: unknown) {
-    const dto = RegistroPublicoAlumnoSchema.parse(body);
+    const dto = parsearContrato(RegistroPublicoAlumnoSchema, body);
     return this.alumnosService.registroPublico(dto);
   }
 
@@ -98,7 +99,7 @@ export class AlumnosController {
     if (!UUID_REGEX.test(alumnoId)) {
       throw new BadRequestException('El alumno indicado no es válido.');
     }
-    const dto = CambioEstadoAlumnoSchema.parse(body);
+    const dto = parsearContrato(CambioEstadoAlumnoSchema, body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.alumnosService.cambiarEstado(entrenadorId, alumnoId, dto);
   }
@@ -117,7 +118,7 @@ export class AlumnosController {
     if (!UUID_REGEX.test(alumnoId)) {
       throw new BadRequestException('El alumno indicado no es válido.');
     }
-    const dto = ActualizarPerfilAlumnoSchema.parse(body);
+    const dto = parsearContrato(ActualizarPerfilAlumnoSchema, body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.alumnosService.actualizarAlumno(entrenadorId, alumnoId, dto);
   }
@@ -151,7 +152,7 @@ export class AlumnosController {
       throw new BadRequestException('El alumno indicado no es válido.');
     }
     const dto = body && typeof body === 'object' && Object.keys(body).length > 0
-      ? RestaurarAlumnoSchema.parse(body)
+      ? parsearContrato(RestaurarAlumnoSchema, body)
       : undefined;
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.alumnosService.restaurarAlumno(entrenadorId, alumnoId, dto);
@@ -166,7 +167,7 @@ export class AlumnosController {
   @Roles(Rol.ENTRENADOR)
   async listarAlumnos(@Req() req: any, @Query() query: unknown) {
     const filtro = query && typeof query === 'object' && Object.keys(query).length > 0
-      ? FiltroDirectorioAlumnosSchema.parse(query)
+      ? parsearContrato(FiltroDirectorioAlumnosSchema, query)
       : undefined;
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.alumnosService.listarAlumnos(entrenadorId, filtro);

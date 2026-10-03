@@ -10,6 +10,8 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { MENSAJE_ALUMNO_NO_ENCONTRADO } from '../../common/mensajes-acceso';
+import { parsearContrato } from '../../common/errores/parsear-contrato';
 import { CarteraService } from './cartera.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -35,7 +37,7 @@ export class CarteraController {
   @Get()
   @Roles(Rol.ENTRENADOR)
   async obtenerCartera(@Req() req: any, @Query() query: unknown) {
-    const dto = FiltroCarteraSchema.parse(query);
+    const dto = parsearContrato(FiltroCarteraSchema, query);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.carteraService.obtenerCartera(entrenadorId, dto);
   }
@@ -53,7 +55,7 @@ export class CarteraController {
     @Param('clienteId') clienteId: string
   ) {
     if (!UUID_REGEX.test(clienteId)) {
-      throw new BadRequestException('El ID del alumno debe ser un UUID válido.');
+      throw new BadRequestException(MENSAJE_ALUMNO_NO_ENCONTRADO);
     }
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.carteraService.enviarRecordatorioManual(entrenadorId, clienteId);

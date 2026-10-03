@@ -10,6 +10,7 @@ import {
   Inject,
   NotFoundException,
 } from '@nestjs/common';
+import { parsearContrato } from '../../common/errores/parsear-contrato';
 import { eq } from '@guachafit/database';
 import { DRIZZLE_DB } from '../../database/database.module';
 import { Database, usuarios } from '@guachafit/database';
@@ -57,7 +58,7 @@ export class UsuariosController {
   @Patch('me/preferencias')
   @HttpCode(HttpStatus.OK)
   async actualizarPreferencias(@Req() req: any, @Body() body: unknown) {
-    const dto = ActualizarTemaUiSchema.parse(body);
+    const dto = parsearContrato(ActualizarTemaUiSchema, body);
 
     const [actualizado] = await this.db
       .update(usuarios)

@@ -14,6 +14,7 @@ import { AuthController } from '../../src/modules/auth/auth.controller';
 import { AuthService } from '../../src/modules/auth/auth.service';
 import { RolesGuard } from '../../src/common/guards/roles.guard';
 import { JWT_REFRESH_SECRET_DESARROLLO, JWT_SECRET_DESARROLLO } from '../../src/common/config/secretos-jwt';
+import { configurarErroresGlobales } from '../../src/common/errores/filtro-errores-global';
 
 /**
  * RF-010 (WU Admin): gestión de entrenadores desde el panel maestro y revocación de sesión (§6).
@@ -218,7 +219,10 @@ describe('RF-010 (WU Admin): gestión de entrenadores desde el panel maestro', (
       );
 
       expect(resultado).toMatchObject({ usuarioId: COACH_USUARIO_ID, activo: false, cambioAplicado: true });
-      expect(resultado.mensaje).toContain('deshabilitado');
+      // LOTE API-2: mensaje para el superadmin en lenguaje claro (sin "token", "login", "refresh").
+      expect(resultado.mensaje).toBe(
+        'Entrenador deshabilitado. Ya no podrá iniciar sesión; si tiene una sesión abierta, se cerrará en unos minutos.'
+      );
       expect(mock.updates).toHaveLength(1);
       expect(mock.updates[0].valores).toMatchObject({ activo: false });
     });
@@ -725,6 +729,8 @@ describe('RF-010 (WU Admin): verificación HTTP real del panel maestro', () => {
       .compile();
 
     const app = moduleRef.createNestApplication();
+
+    configurarErroresGlobales(app);
     await app.init();
     return app;
   }
@@ -846,7 +852,7 @@ describe('RF-010 (WU Admin): verificación HTTP real del panel maestro', () => {
       await app.close();
     });
 
-    it('body sin booleano → 400 con el mensaje del contrato', async () => {
+    it('body sin booleano → 400 con mensaje claro (sin jerga del contrato)', async () => {
       const cambiarEstadoEntrenador = vi.fn();
       const app = await crearApp({ cambiarEstadoEntrenador });
 
@@ -856,7 +862,8 @@ describe('RF-010 (WU Admin): verificación HTTP real del panel maestro', () => {
         .send({ activo: 'sí' });
 
       expect(res.status).toBe(400);
-      expect(res.body.message).toMatch(/booleano/i);
+      // LOTE API-2: el mensaje del contrato ya es claro y se respeta tal cual.
+      expect(res.body.message).toBe('El estado de la cuenta debe ser activa o inactiva.');
       expect(cambiarEstadoEntrenador).not.toHaveBeenCalled();
 
       await app.close();

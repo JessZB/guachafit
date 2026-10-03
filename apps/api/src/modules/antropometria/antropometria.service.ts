@@ -7,6 +7,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { MENSAJE_ALUMNO_NO_ENCONTRADO, MENSAJE_SIN_ACCESO_ALUMNO } from '../../common/mensajes-acceso';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
 import {
@@ -76,6 +77,9 @@ function toIsoUtcString(date: Date | string | null | undefined): string | null {
   return d.toISOString();
 }
 
+/** LOTE API-2: control antropométrico inexistente o de otro alumno (sin mostrar identificadores). */
+const MENSAJE_CONTROL_NO_ENCONTRADO = 'No encontramos esa medición. Actualiza la pantalla.';
+
 @Injectable()
 export class AntropometriaService {
   private readonly logger = new Logger(AntropometriaService.name);
@@ -124,7 +128,7 @@ export class AntropometriaService {
 
     // RBAC primero: un alumno solo opera sobre su propio perfil (y su contexto RLS es self).
     if (caller.rol === Rol.ALUMNO && caller.id !== validado.alumnoId) {
-      throw new ForbiddenException('Aislamiento RBAC: No puede solicitar URLs de subida para otro alumno.');
+      throw new ForbiddenException('No puedes subir archivos para otro alumno.');
     }
 
     // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura con el contexto del actor.
@@ -137,7 +141,7 @@ export class AntropometriaService {
     );
 
     if (!alumno) {
-      throw new NotFoundException(`Perfil del alumno '${validado.alumnoId}' no encontrado.`);
+      throw new NotFoundException(MENSAJE_ALUMNO_NO_ENCONTRADO);
     }
 
     if (caller.rol === Rol.ALUMNO) {
@@ -149,7 +153,7 @@ export class AntropometriaService {
     } else if (caller.rol === Rol.ENTRENADOR) {
       const coachId = caller.entrenadorId || caller.id;
       if (alumno.entrenadorId !== coachId) {
-        throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');
+        throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
       }
     }
 
@@ -176,7 +180,7 @@ export class AntropometriaService {
 
     // RBAC primero: un alumno solo registra sus propias métricas (y su contexto RLS es self).
     if (caller.rol === Rol.ALUMNO && caller.id !== validado.alumnoId) {
-      throw new ForbiddenException('Aislamiento RBAC: No puede registrar métricas para otro alumno.');
+      throw new ForbiddenException('No puedes registrar medidas para otro alumno.');
     }
 
     // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura con el contexto del actor.
@@ -189,7 +193,7 @@ export class AntropometriaService {
     );
 
     if (!alumno) {
-      throw new NotFoundException(`Perfil del alumno '${validado.alumnoId}' no encontrado.`);
+      throw new NotFoundException(MENSAJE_ALUMNO_NO_ENCONTRADO);
     }
 
     // Zona IANA del alumno para el día local del calendario (RN-01/RN-04). Es una consulta
@@ -231,7 +235,7 @@ export class AntropometriaService {
     } else if (caller.rol === Rol.ENTRENADOR) {
       const coachId = caller.entrenadorId || caller.id;
       if (alumno.entrenadorId !== coachId) {
-        throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');
+        throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
       }
       origen = OrigenAntropometria.PRESENCIAL_VERIFICADO;
       estado = EstadoMedicion.APROBADO;
@@ -359,7 +363,7 @@ export class AntropometriaService {
       .limit(1);
 
     if (!control) {
-      throw new NotFoundException(`Control antropométrico con ID '${controlId}' no encontrado.`);
+      throw new NotFoundException(MENSAJE_CONTROL_NO_ENCONTRADO);
     }
 
     // RNF-003/ADR-011 (etapa 3): lectura del perfil con el GUC del coach (RLS).
@@ -372,7 +376,7 @@ export class AntropometriaService {
     );
 
     if (!alumno || alumno.entrenadorId !== coachId) {
-      throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');
+      throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
     }
 
     const now = new Date();
@@ -433,7 +437,7 @@ export class AntropometriaService {
 
     if (caller) {
       if (caller.rol === Rol.ALUMNO && caller.id !== alumnoId) {
-        throw new ForbiddenException('Aislamiento RBAC: Solo puedes consultar tu propia evolución corporal.');
+        throw new ForbiddenException('Solo puedes ver tu propia evolución.');
       }
       if (caller.rol === Rol.ENTRENADOR) {
         const coachId = caller.entrenadorId || caller.id;
@@ -447,7 +451,7 @@ export class AntropometriaService {
         );
 
         if (!perfil || perfil.entrenadorId !== coachId) {
-          throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');
+          throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
         }
       }
     }
@@ -590,7 +594,7 @@ export class AntropometriaService {
 
     if (caller) {
       if (caller.rol === Rol.ALUMNO && caller.id !== alumnoId) {
-        throw new ForbiddenException('Aislamiento RBAC: Solo puedes consultar tu propia comparativa.');
+        throw new ForbiddenException('Solo puedes ver tu propia comparación de fotos.');
       }
       if (caller.rol === Rol.ENTRENADOR) {
         const coachId = caller.entrenadorId || caller.id;
@@ -604,7 +608,7 @@ export class AntropometriaService {
         );
 
         if (!perfil || perfil.entrenadorId !== coachId) {
-          throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');
+          throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
         }
       }
     }
@@ -622,10 +626,10 @@ export class AntropometriaService {
       .limit(1);
 
     if (!controlA || controlA.alumnoId !== alumnoId) {
-      throw new NotFoundException(`Control antropométrico A (${dto.controlIdA}) no encontrado para este alumno.`);
+      throw new NotFoundException(MENSAJE_CONTROL_NO_ENCONTRADO);
     }
     if (!controlB || controlB.alumnoId !== alumnoId) {
-      throw new NotFoundException(`Control antropométrico B (${dto.controlIdB}) no encontrado para este alumno.`);
+      throw new NotFoundException(MENSAJE_CONTROL_NO_ENCONTRADO);
     }
 
     if (controlA.estado !== EstadoMedicion.APROBADO || controlB.estado !== EstadoMedicion.APROBADO) {
@@ -791,12 +795,12 @@ export class AntropometriaService {
       .limit(1);
 
     if (!control) {
-      throw new NotFoundException(`Control antropométrico con ID '${controlId}' no encontrado.`);
+      throw new NotFoundException(MENSAJE_CONTROL_NO_ENCONTRADO);
     }
 
     if (caller) {
       if (caller.rol === Rol.ALUMNO && caller.id !== control.alumnoId) {
-        throw new ForbiddenException('Aislamiento RBAC: No puede acceder a este control antropométrico.');
+        throw new ForbiddenException('No tienes acceso a esta medición.');
       }
       if (caller.rol === Rol.ENTRENADOR) {
         const coachId = caller.entrenadorId || caller.id;
@@ -810,7 +814,7 @@ export class AntropometriaService {
         );
 
         if (!alumno || alumno.entrenadorId !== coachId) {
-          throw new ForbiddenException('Aislamiento de Tenant: Acceso denegado a datos de otro entrenador.');
+          throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
         }
       }
     }
@@ -918,7 +922,7 @@ export class AntropometriaService {
       .limit(1);
 
     if (!control) {
-      throw new NotFoundException(`Control antropométrico con ID '${controlId}' no encontrado.`);
+      throw new NotFoundException(MENSAJE_CONTROL_NO_ENCONTRADO);
     }
 
     return this.hidratarControl(control);

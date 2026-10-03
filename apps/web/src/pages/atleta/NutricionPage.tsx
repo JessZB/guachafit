@@ -455,7 +455,7 @@ export function NutricionPage() {
           '/nutricion/checkin-diario',
           'POST',
           payload,
-          'Check-in nutricional diario'
+          'Reporte nutricional del día'
         );
       }
       setEstadoReporte('queued');
@@ -608,7 +608,7 @@ export function NutricionPage() {
         >
           <Clock className="h-5 w-5 shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <p className="text-sm font-bold text-foreground">El check-in aún no está abierto</p>
+            <p className="text-sm font-bold text-foreground">El reporte aún no está abierto</p>
             <p className="text-xs text-muted-foreground">{MENSAJE_ANTES_DE_VENTANA}</p>
           </div>
         </div>
@@ -1014,7 +1014,7 @@ export function NutricionPage() {
                 : 'Guardado sin conexión · pendiente de envío'
               : !puedeReportar
               ? 'Disponible a partir de las 18:00'
-              : 'Guardar Check-in Nutricional'}
+              : 'Guardar reporte nutricional'}
           </span>
         </button>
 

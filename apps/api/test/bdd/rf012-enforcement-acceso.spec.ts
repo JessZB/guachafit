@@ -31,6 +31,7 @@ import { FinanzasController } from '../../src/modules/finanzas/finanzas.controll
 import { AuthService } from '../../src/modules/auth/auth.service';
 import { AlumnosService } from '../../src/modules/alumnos/alumnos.service';
 import { JWT_REFRESH_SECRET_DESARROLLO, JWT_SECRET_DESARROLLO } from '../../src/common/config/secretos-jwt';
+import { configurarErroresGlobales } from '../../src/common/errores/filtro-errores-global';
 
 /**
  * RF-012 (auditoría RF-012 / WU-D): enforcement real del ciclo de vida del alumno.
@@ -700,6 +701,8 @@ describe('RF-012 / WU-D: Enforcement de acceso por estado de activación (Alumno
         .compile();
 
       const app = moduleRef.createNestApplication();
+
+      configurarErroresGlobales(app);
       await app.init();
       return app;
     }

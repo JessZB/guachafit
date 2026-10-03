@@ -12,6 +12,7 @@ import {
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
+import { parsearContrato } from '../../common/errores/parsear-contrato';
 import { AntropometriaService } from './antropometria.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -72,7 +73,7 @@ export class AntropometriaController {
   @Roles(Rol.ENTRENADOR, Rol.ALUMNO)
   @HttpCode(HttpStatus.CREATED)
   async registrarCheckin(@Req() req: any, @Body() body: unknown) {
-    const dto = CheckinAntropometricoSchema.parse(body);
+    const dto = parsearContrato(CheckinAntropometricoSchema, body);
     const caller = {
       id: req.user.sub,
       rol: req.user.rol,
@@ -120,7 +121,7 @@ export class AntropometriaController {
     @Param('alumnoId') alumnoId: string,
     @Query() query: unknown
   ) {
-    const filtro = FiltroEvolucionAntropometricaSchema.parse(query || {});
+    const filtro = parsearContrato(FiltroEvolucionAntropometricaSchema, query || {});
     const caller = {
       id: req.user.sub,
       rol: req.user.rol,
@@ -142,7 +143,7 @@ export class AntropometriaController {
     @Param('alumnoId') alumnoId: string,
     @Query() query: unknown
   ) {
-    const dto = ConsultaComparadorFotograficoSchema.parse(query);
+    const dto = parsearContrato(ConsultaComparadorFotograficoSchema, query);
     const caller = {
       id: req.user.sub,
       rol: req.user.rol,
@@ -164,7 +165,7 @@ export class AntropometriaController {
     @Param('id') id: string,
     @Body() body: unknown
   ) {
-    const dto = ConciliarAntropometriaSchema.parse(body);
+    const dto = parsearContrato(ConciliarAntropometriaSchema, body);
     const coachId = req.user.entrenadorId || req.user.sub;
     return this.antropometriaService.conciliarControl(coachId, id, dto);
   }

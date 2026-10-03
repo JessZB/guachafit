@@ -43,6 +43,7 @@ import {
   TipoCierreSesion,
   FinalizarSesionResponseDTO,
   SemanaEntrenamientoProgresoDTO,
+  CODIGO_SESION_VACIA,
 } from '@guachafit/shared';
 import {
   convertirEntradaPesoAKg,
@@ -1523,7 +1524,7 @@ export function EntrenamientoPage() {
       setIsFinishing(false);
       // Defensa (RF-001 Escenario 5): SOLO el 400 con código máquina estable `SESION_VACIA`
       // abre el modal de cierre vacío; cualquier otro rechazo es un error normal visible.
-      if (err instanceof ApiError && err.status === 400 && err.problem?.code === 'SESION_VACIA') {
+      if (err instanceof ApiError && err.status === 400 && err.problem?.code === CODIGO_SESION_VACIA) {
         setIsFinishModalOpen(false);
         setIsEmptyCloseModalOpen(true);
         return;

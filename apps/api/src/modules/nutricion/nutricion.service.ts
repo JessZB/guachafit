@@ -8,6 +8,8 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { MENSAJE_SIN_ACCESO_ALUMNO } from '../../common/mensajes-acceso';
+import { CODIGO_CHECKIN_FUERA_DE_VENTANA } from '@guachafit/shared';
 import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
 import {
   Database,
@@ -295,19 +297,30 @@ export class NutricionService {
     const ventana = evaluarVentanaCheckinNutricional(validado.fecha, validado.timezoneCliente, ahora);
     if (!ventana.permitido) {
       if (ventana.motivo === 'FECHA_DISTINTA_AL_DIA_LOCAL') {
-        throw new BadRequestException(
-          `La fecha del check-in '${validado.fecha}' no corresponde al día local actual '${ventana.fechaLocalHoy}' en la zona horaria del alumno '${ventana.timezone}'.`
+        this.logger.warn(
+          `Check-in con fecha ${validado.fecha} fuera del día local ${ventana.fechaLocalHoy} (${ventana.timezone}).`
         );
+        throw new BadRequestException({
+          statusCode: 400,
+          error: 'Bad Request',
+          code: CODIGO_CHECKIN_FUERA_DE_VENTANA,
+          message: 'La fecha del reporte no coincide con el día local de tu teléfono. Actualiza la pantalla.',
+        });
       }
-      throw new BadRequestException(
-        `El check-in nutricional solo se habilita entre las 18:00 y las 23:59 (hora local del alumno '${ventana.timezone}'). Fuera de esa ventana el día queda como 'No reportado'.`
-      );
+      // LOTE API-2: código estable para la web (`offline-sync.ts`), sin depender del texto.
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        code: CODIGO_CHECKIN_FUERA_DE_VENTANA,
+        message:
+          'Puedes enviar el reporte de hoy entre las 18:00 y las 23:59 (hora de tu teléfono). Fuera de ese horario el día queda como «No reportado».',
+      });
     }
 
     // Regla RN-03: Máximo 4 fotos de platos por día
     if (validado.fotosPlatos && validado.fotosPlatos.length > 4) {
       throw new BadRequestException(
-        'Regla RN-03 violada: No se permiten más de 4 fotografías de platos por día.'
+        'Puedes subir hasta 4 fotos de platos por día.'
       );
     }
 
@@ -325,7 +338,7 @@ export class NutricionService {
 
     if (existente) {
       throw new ConflictException(
-        `Violación de unicidad: Ya existe un check-in nutricional registrado para el alumno '${alumnoId}' en la fecha '${validado.fecha}'.`
+        'Ya registraste tu reporte de hoy.'
       );
     }
 
@@ -596,7 +609,7 @@ export class NutricionService {
 
     if (!perfil) {
       throw new ForbiddenException(
-        'Aislamiento de Tenant: Acceso denegado a datos de un alumno que no pertenece a este entrenador.'
+        MENSAJE_SIN_ACCESO_ALUMNO
       );
     }
   }
@@ -681,7 +694,7 @@ export class NutricionService {
       .limit(1);
 
     if (!checkin) {
-      throw new NotFoundException(`Check-in nutricional con ID '${checkinId}' no encontrado.`);
+      throw new NotFoundException('No encontramos ese reporte. Actualiza la pantalla.');
     }
 
     // RNF-003/ADR-011 (etapa 3): único llamador = el propio alumno (registrarCheckinDiario);
@@ -702,7 +715,7 @@ export class NutricionService {
   ): Promise<CheckinNutricionalDetalleDTO[]> {
     // Validar aislamiento Tenancy
     if (callerRol === Rol.ALUMNO && callerId && callerId !== alumnoId) {
-      throw new ForbiddenException('Aislamiento de Tenant: Solo puedes consultar tus propios check-ins.');
+      throw new ForbiddenException('Solo puedes ver tus propios reportes.');
     }
 
     if (callerRol === Rol.ENTRENADOR) {

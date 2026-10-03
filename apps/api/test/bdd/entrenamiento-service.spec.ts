@@ -1236,6 +1236,7 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
       expect(errorVacio).toBeInstanceOf(BadRequestException);
       expect(errorVacio!.getResponse()).toMatchObject({
         statusCode: 400,
+        // Literal a propósito: fija el contrato del cable con la web.
         code: 'SESION_VACIA',
       });
 
@@ -1294,6 +1295,117 @@ describe('Módulo 3: Sesiones de Entrenamiento (EntrenamientoService & Entrenami
 
       await expect(
         entrenamientoService.finalizarSesion(sesion.id, alumnoId1, { tipoCierre: 'COMPLETADA' })
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('6.b.2 LOTE API-2: mensajes claros y código estable', () => {
+    async function crearSesionPlanificada() {
+      return entrenamientoService.crearSesion(coachId1, {
+        alumnoId: alumnoId1,
+        fechaProgramada: '2026-09-06',
+        ejercicios: [{ ejercicioId: ejercicioGlobalId, series: [{ repsObjetivo: 10 }] }],
+      });
+    }
+
+    async function capturar(promesa: Promise<unknown>): Promise<any> {
+      try {
+        await promesa;
+      } catch (error) {
+        return error;
+      }
+      throw new Error('Se esperaba un rechazo');
+    }
+
+    it('series en una sesión no iniciada → 400 con code SESION_NO_INICIADA y texto claro', async () => {
+      const sesion = await crearSesionPlanificada();
+      const error = await capturar(
+        entrenamientoService.sincronizarSeries(sesion.id, alumnoId1, {
+          series: [{ serieId: sesion.ejercicios[0].series[0].id, repsLogradas: 10, completada: true }],
+        })
+      );
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect(error.getResponse()).toEqual({
+        statusCode: 400,
+        error: 'Bad Request',
+        // Literal a propósito: fija el contrato del cable con la web.
+        code: 'SESION_NO_INICIADA',
+        message: 'Para marcar series, primero pulsa «Comenzar a entrenar».',
+      });
+    });
+
+    it('iniciar dos veces → "Este entrenamiento ya fue iniciado o terminado."', async () => {
+      const sesion = await crearSesionPlanificada();
+      await entrenamientoService.iniciarSesion(sesion.id, alumnoId1, { timezoneCliente: 'America/Caracas' });
+
+      await expect(
+        entrenamientoService.iniciarSesion(sesion.id, alumnoId1, { timezoneCliente: 'America/Caracas' })
+      ).rejects.toThrow('Este entrenamiento ya fue iniciado o terminado.');
+    });
+
+    it('finalizar una sesión no iniciada → mensaje claro', async () => {
+      const sesion = await crearSesionPlanificada();
+      await expect(
+        entrenamientoService.finalizarSesion(sesion.id, alumnoId1, { tipoCierre: 'DESCANSADA' } as any)
+      ).rejects.toThrow('Este entrenamiento no está en curso; no se puede finalizar.');
+    });
+
+    it('sesión inexistente → "No encontramos este entrenamiento. Actualiza la pantalla."', async () => {
+      const inexistente = randomUUID();
+      const mensaje = 'No encontramos este entrenamiento. Actualiza la pantalla.';
+      await expect(
+        entrenamientoService.iniciarSesion(inexistente, alumnoId1, { timezoneCliente: 'America/Caracas' })
+      ).rejects.toThrow(mensaje);
+      await expect(
+        entrenamientoService.sincronizarSeries(inexistente, alumnoId1, {
+          series: [{ serieId: randomUUID(), repsLogradas: 10, completada: true }],
+        })
+      ).rejects.toThrow(mensaje);
+      await expect(
+        entrenamientoService.finalizarSesion(inexistente, alumnoId1, { tipoCierre: 'DESCANSADA' } as any)
+      ).rejects.toThrow(mensaje);
+    });
+
+    it('serie ajena a la sesión → "Esta serie ya no está en tu entrenamiento. Actualiza la pantalla."', async () => {
+      const sesion = await crearSesionPlanificada();
+      await entrenamientoService.iniciarSesion(sesion.id, alumnoId1, { timezoneCliente: 'America/Caracas' });
+
+      await expect(
+        entrenamientoService.sincronizarSeries(sesion.id, alumnoId1, {
+          series: [{ serieId: randomUUID(), repsLogradas: 10, completada: true }],
+        })
+      ).rejects.toThrow('Esta serie ya no está en tu entrenamiento. Actualiza la pantalla.');
+    });
+
+    it('entrenador de otro alumno → 403 sin jerga ("tenant")', async () => {
+      const error = await capturar(
+        entrenamientoController.obtenerHistorialSesionesAlumno(
+          { user: { sub: coachId2, entrenadorId: coachId2, rol: Rol.ENTRENADOR } },
+          alumnoId1
+        )
+      );
+      expect(error).toBeInstanceOf(ForbiddenException);
+      expect(error.message).toBe('No tienes acceso a este alumno.');
+    });
+
+    it('historial con un identificador de alumno mal formado → "No encontramos a este alumno."', async () => {
+      await expect(
+        entrenamientoController.obtenerHistorialSesionesAlumno(
+          { user: { sub: coachId1, entrenadorId: coachId1, rol: Rol.ENTRENADOR } },
+          'no-es-un-id'
+        )
+      ).rejects.toThrow('No encontramos a este alumno.');
+    });
+
+    it('cuerpo inválido en el controlador → 400 (BadRequestException), no un ZodError crudo', async () => {
+      const sesion = await crearSesionPlanificada();
+      await expect(
+        entrenamientoController.iniciarSesion(
+          { user: { sub: alumnoId1, rol: Rol.ALUMNO } },
+          sesion.id,
+          { timezoneCliente: 42 }
+        )
       ).rejects.toThrow(BadRequestException);
     });
   });

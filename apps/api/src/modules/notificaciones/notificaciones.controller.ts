@@ -12,6 +12,7 @@ import {
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
+import { parsearContrato } from '../../common/errores/parsear-contrato';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PreferenciasNotificacionService } from './preferencias-notificacion.service';
 import { NotificationDispatcherService } from './notification-dispatcher.service';
@@ -78,7 +79,7 @@ export class NotificacionesController {
   @Get('in-app')
   async listarInApp(@Req() req: any, @Query() query: unknown) {
     const usuarioId = req.user.sub;
-    const filtro = FiltroBandejaInAppSchema.parse(query);
+    const filtro = parsearContrato(FiltroBandejaInAppSchema, query);
     return this.dispatcherService.listarNotificacionesInApp(usuarioId, filtro);
   }
 

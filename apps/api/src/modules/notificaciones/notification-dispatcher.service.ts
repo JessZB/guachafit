@@ -307,7 +307,7 @@ export class NotificationDispatcherService {
       .returning();
 
     if (!actualizado) {
-      throw new NotFoundException(`Notificación '${notificacionId}' no encontrada`);
+      throw new NotFoundException('No encontramos ese aviso. Actualiza la pantalla.');
     }
 
     return true;
