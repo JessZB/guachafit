@@ -16,6 +16,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "db:generate": "pnpm --filter @guachafit/database db:generate",
     "db:migrate": "pnpm --filter @guachafit/database db:migrate",
+    "db:migrate:prod": "pnpm --filter @guachafit/database db:migrate:prod",
     "db:seed": "pnpm --filter @guachafit/database db:seed",
     "db:studio": "pnpm --filter @guachafit/database db:studio",
     "sdd:drift-check": "node scripts/sdd-drift-check.js"

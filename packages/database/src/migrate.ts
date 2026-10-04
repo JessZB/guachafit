@@ -3,6 +3,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import path from 'node:path';
 import fs from 'node:fs';
+import { enmascararUrlConexion, seleccionarUrlMigraciones } from './url-migraciones';
 
 // Cargar .env de forma segura si existe
 const possibleEnvPaths = [
@@ -22,15 +23,19 @@ for (const p of possibleEnvPaths) {
 const migrationsFolder = path.resolve(__dirname, '../drizzle');
 
 async function runMigrate() {
-  const rawUrl =
-    process.env.DATABASE_URL ||
-    'postgres://postgres:postgres@127.0.0.1:5432/guachafit';
+  // DATABASE_URL_MIGRACIONES (rol propietario) con respaldo en DATABASE_URL. En producción,
+  // sin ninguna de las dos, se termina con un error claro en vez de usar la URL local.
+  const seleccion = seleccionarUrlMigraciones(process.env);
+  if (!seleccion.ok) {
+    console.error(`❌ [Drizzle Migrator] ${seleccion.mensaje}`);
+    process.exit(1);
+  }
 
   // En Windows/Node.js, 'localhost' resuelve a IPv6 [::1], lo cual genera CONNECT_TIMEOUT en Docker WSL2.
-  const connectionString = rawUrl.replace('@localhost:', '@127.0.0.1:');
+  const connectionString = seleccion.url.replace('@localhost:', '@127.0.0.1:');
 
   console.log('⏳ [Drizzle Migrator] Conectando a PostgreSQL...');
-  console.log(`📡 URL objetivo: ${connectionString.replace(/:[^:@]+@/, ':****@')}`);
+  console.log(`📡 URL objetivo (${seleccion.origen}): ${enmascararUrlConexion(connectionString)}`);
   console.log(`📁 Directorio de migraciones: ${migrationsFolder}`);
 
   // Conexión exclusiva para migración (max 1 cliente para evitar bloqueos DDL)

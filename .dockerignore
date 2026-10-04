@@ -1,0 +1,39 @@
+# Contexto de build de la imagen del API (apps/api/Dockerfile).
+
+# Dependencias y artefactos locales: se reconstruyen dentro de la imagen.
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+
+# Historial y metadatos de Git.
+.git
+
+# Entornos y secretos: TODO .env queda fuera, salvo los .env.example (documentación,
+# sin valores reales) que algunos tests locales leen.
+**/.env
+**/.env.*
+!**/.env.example
+
+# Claves y certificados: nunca entran al contexto de build.
+**/*.pem
+**/*.key
+**/*.p12
+
+# Herramientas locales y briefs: no forman parte del build.
+.opencode-briefs
+.claude
+.codegraph
+.agents
+.atl
+.impeccable
+
+# Bóveda de Obsidian: carpetas y notas que no son código.
+00_*
+01_*
+02_*
+03_*
+04_*
+05_*
+06_*
+_templates
+*.md
