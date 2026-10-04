@@ -6,6 +6,11 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { obtenerSecretosJwt } from './common/config/secretos-jwt';
+import {
+  debeExponerSwagger,
+  origenesCors,
+  validarConfiguracionProduccion,
+} from './common/config/validar-configuracion-produccion';
 import { aplicarTrustProxy } from './common/config/trust-proxy';
 import { configurarErroresGlobales } from './common/errores/filtro-errores-global';
 import {
@@ -20,6 +25,12 @@ async function bootstrap() {
   // A3 (LOTE API-1): fail-fast. En producción, sin JWT_SECRET/JWT_REFRESH_SECRET reales el API no
   // arranca y el error indica al operador qué variable configurar.
   obtenerSecretosJwt();
+  // deploy-05a: fail-fast de la configuración crítica de producción (clave de cifrado, bóveda,
+  // CORS y Bull-Board). En producción lanza UN error con TODOS los problemas a la vez; en
+  // desarrollo/test solo se registran advertencias y el arranque continúa.
+  for (const problema of validarConfiguracionProduccion()) {
+    logger.warn(problema);
+  }
   // Las migraciones se aplican a mano (`pnpm db:migrate`). Si falta la última, en producción el API
   // no arranca (las consultas a columnas nuevas fallarían); en desarrollo solo avisa.
   await verificarMigracionesAlArrancar({
@@ -50,32 +61,38 @@ async function bootstrap() {
     exclude: [{ path: 'admin/queues', method: RequestMethod.ALL }],
   });
 
-  // Enable CORS
+  // Enable CORS: en producción SOLO los orígenes de CORS_ORIGINS (validados al arrancar); fuera
+  // de producción se conserva el origen local por defecto.
   app.enableCors({
-    origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000'],
+    origin: origenesCors(),
     credentials: true,
   });
 
-  // Swagger Documentation Setup
-  const config = new DocumentBuilder()
-    .setTitle('GUACHAFIT API')
-    .setDescription('Contratos REST para el ecosistema de Alto Rendimiento y Gestión GUACHAFIT')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .addTag('entrenamientos', 'Gestión de sesiones de entrenamiento y catálogo')
-    .addTag('nutricion', 'Check-ins nutricionales y adherencia')
-    .addTag('antropometria', 'Mediciones y bóveda fotográfica en R2')
-    .addTag('finanzas', 'Membresías, cuotas, tasas de cambio y conciliación de pagos')
-    .addTag('usuarios', 'Perfil y preferencias de usuario')
-    .build();
+  // Swagger Documentation Setup: en producción queda oculto salvo SWAGGER_HABILITADO=true.
+  const exponerSwagger = debeExponerSwagger();
+  if (exponerSwagger) {
+    const config = new DocumentBuilder()
+      .setTitle('GUACHAFIT API')
+      .setDescription('Contratos REST para el ecosistema de Alto Rendimiento y Gestión GUACHAFIT')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .addTag('entrenamientos', 'Gestión de sesiones de entrenamiento y catálogo')
+      .addTag('nutricion', 'Check-ins nutricionales y adherencia')
+      .addTag('antropometria', 'Mediciones y bóveda fotográfica en R2')
+      .addTag('finanzas', 'Membresías, cuotas, tasas de cambio y conciliación de pagos')
+      .addTag('usuarios', 'Perfil y preferencias de usuario')
+      .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   const port = process.env.PORT || 4000;
   await app.listen(port);
   logger.log(`🚀 GUACHAFIT API ejecutándose en http://localhost:${port}/api/v1`);
-  logger.log(`📚 Swagger UI disponible en http://localhost:${port}/api/docs`);
+  if (exponerSwagger) {
+    logger.log(`📚 Swagger UI disponible en http://localhost:${port}/api/docs`);
+  }
 }
 
 bootstrap();

@@ -2,6 +2,10 @@ import { Injectable, Optional, Inject } from '@nestjs/common';
 import * as crypto from 'node:crypto';
 import * as bcrypt from 'bcryptjs';
 import { VIGENCIA_ENLACE_ACTIVACION_MS, VIGENCIA_ENLACE_RECUPERACION_MS } from '@guachafit/shared';
+import {
+  ENCRYPTION_KEY_DESARROLLO,
+  esClaveCifradoValida,
+} from '../config/validar-configuracion-produccion';
 
 /** Costo bcrypt de las contraseñas (A6: el hash ficticio del login debe usar el mismo). */
 export const RONDAS_BCRYPT = 10;
@@ -12,9 +16,25 @@ export class CryptoService {
   private readonly algorithm = 'aes-256-gcm';
 
   constructor(@Optional() @Inject('ENCRYPTION_KEY') customKey?: string) {
-    // Clave de 32 bytes requerida para AES-256-GCM
-    const keyString = customKey || process.env.ENCRYPTION_KEY || '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
-    this.encryptionKey = Buffer.from(keyString.slice(0, 64), 'hex');
+    // Clave de 32 bytes (64 caracteres hexadecimales) requerida para AES-256-GCM. En producción
+    // una clave ausente o mal formada impide el arranque: esta clave cifra las fichas de salud,
+    // cambiarla después deja ilegibles los registros ya cifrados.
+    const desdeParametro = (customKey ?? '').trim();
+    const desdeEntorno = (process.env.ENCRYPTION_KEY ?? '').trim();
+    const candidata = desdeParametro || desdeEntorno;
+
+    if (process.env.NODE_ENV === 'production' && !esClaveCifradoValida(candidata)) {
+      throw new Error(
+        '[Configuración] ENCRYPTION_KEY inválida o ausente: se esperan exactamente 64 caracteres ' +
+          'hexadecimales (32 bytes) para AES-256-GCM. Genera una con "openssl rand -hex 32" y no la ' +
+          'cambies cuando ya existan fichas cifradas: los registros cifrados quedarían ilegibles.'
+      );
+    }
+
+    // Desarrollo/test: se mantiene el respaldo de siempre cuando no hay clave; una clave mal
+    // formada tampoco rompe el arranque local.
+    const keyString = esClaveCifradoValida(candidata) ? candidata : ENCRYPTION_KEY_DESARROLLO;
+    this.encryptionKey = Buffer.from(keyString, 'hex');
   }
 
   /**

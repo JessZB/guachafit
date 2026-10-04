@@ -59,3 +59,6 @@ logs/
 
 # Tooling local: caché del registry de skills y estado de automatizaciones (no versionar)
 .atl/
+
+# Briefs y salidas de despachos a OpenCode (artefactos del director)
+.opencode-briefs/
