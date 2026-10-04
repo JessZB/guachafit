@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** con pruebas automáticas en verde (**797** de la web + **1143** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (**797** de la web + **1155** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -40,6 +40,15 @@ Estas comprobaciones no necesitan la web: se hacen en una terminal con el API.
 - [ ] **Con valores de ejemplo, el API se niega a arrancar:** arranca el API con `NODE_ENV=production` y tu `.env` local de desarrollo (los mismos valores de `.env.example`: secretos JWT vacíos, `ENCRYPTION_KEY` de ejemplo, `STORAGE_*` de MinIO y `BULL_BOARD_PASS=cambia_esta_clave`; en PowerShell, `$env:NODE_ENV = "production"` en esa ventana antes del comando) → el API **no arranca** y muestra **un único error `[Configuración]`** que enumera **todos** los problemas, uno por línea (no solo el primero).
 - [ ] **Con valores válidos, arranca:** secretos JWT propios (`openssl rand -base64 48`), `ENCRYPTION_KEY` nueva de 64 caracteres hexadecimales (`openssl rand -hex 32`), `STORAGE_*` reales de R2, `CORS_ORIGINS` con el dominio de la web (sin `*`) y `BULL_BOARD_PASS` de ≥12 caracteres → el API arranca (con Postgres y Redis de Docker arriba y las migraciones al día). Si ya había fichas cifradas, la `ENCRYPTION_KEY` debe ser **la misma** con la que se cifraron: cambiarla las deja ilegibles.
 - [ ] **Swagger oculto en producción:** con `NODE_ENV=production`, `http://localhost:4000/api/docs` responde **404**; en desarrollo sigue disponible; con `SWAGGER_HABILITADO=true` en producción vuelve a verse.
+
+### 0.2. Imagen Docker del API y migraciones de producción (deploy-05b `de2975b`)
+
+Con Docker Desktop arriba; se hacen desde la raíz del repositorio.
+
+- [ ] **Construir la imagen:** `docker build -f apps/api/Dockerfile -t guachafit-api .` → termina sin error y la guardia final imprime `runtime deps OK: bcryptjs, jsonwebtoken`. La imagen ronda los **484 MB** en disco (`docker images`; ~99 MB comprimida) y **no** lleva herramientas de desarrollo (`tsx`, `vitest`) ni `.env` dentro.
+- [ ] **Arrancar con valores válidos → sano:** ejecuta el contenedor con `NODE_ENV=production` y valores reales (los del punto 0.1; Postgres y Redis accesibles desde el contenedor), publicando el puerto (`-p 4000:4000`) → tras ~20 s `docker ps` lo muestra **`(healthy)`**; `http://localhost:4000/api/v1/health` responde **200**; `http://localhost:4000/api/docs` responde **404**.
+- [ ] **Con valores de ejemplo, el contenedor muere:** ejecútalo con los valores de `.env.example` → **termina con código 1** y `docker logs` muestra **un único error `[Configuración]`** con los **7 problemas** enumerados (uno por línea), igual que en el punto 0.1.
+- [ ] **Migrar desde la imagen:** `docker run --rm -e DATABASE_URL_MIGRACIONES='postgres://USUARIO:CLAVE@HOST:5432/guachafit' guachafit-api node /app/node_modules/@guachafit/database/dist/migrate.js` → el log muestra la URL objetivo con la contraseña **enmascarada** (`****`, sin el valor real) y termina con `Todas las migraciones fueron aplicadas con éxito`. En Windows con Git Bash, antepón `MSYS_NO_PATHCONV=1` al comando (Git Bash reescribe las rutas `/app/...`).
 
 ---
 

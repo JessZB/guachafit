@@ -27,8 +27,8 @@ Esta guía lleva GUACHAFIT a producción en un VPS con Coolify, detrás de Cloud
 1. Crear el VPS y entrar por SSH con llave.
 2. Instalar Coolify.
 3. Crear Postgres y Redis en Coolify.
-4. Conectar el repositorio y configurar las variables del API.
-5. Ejecutar las migraciones (`pnpm db:migrate`) **antes** de iniciar el API.
+4. Conectar el repositorio, configurar el build con `apps/api/Dockerfile` (contexto: raíz del repositorio) y las variables del API.
+5. Ejecutar las migraciones (`pnpm db:migrate:prod` o el migrador de la imagen) **antes** de iniciar el API.
 6. Configurar Cloudflare (DNS, proxy, SSL *Full (strict)*).
 7. Activar backups diarios de Postgres a R2 y **probar una restauración**.
 8. Recorrer la checklist final.
@@ -103,7 +103,7 @@ Esta guía lleva GUACHAFIT a producción en un VPS con Coolify, detrás de Cloud
 3. Añade un recurso **Redis 7**. Tampoco lo expongas.
 4. Anota las URLs **internas** que muestra Coolify para cada servicio. Las usarás en `DATABASE_URL`, `REDIS_HOST` y `REDIS_PORT`.
 
-> **Aislamiento multi-tenant (RLS):** el API debe conectarse con un rol **no dueño** (`NOSUPERUSER NOBYPASSRLS`, p. ej. `guachafit_app`); con el rol dueño, las políticas RLS no se aplican. Las migraciones sí necesitan el rol dueño. Ver [[02_Esquema_Base_de_Datos_PostgreSQL]] (nota D2) y [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]]. ⚠️ **No verificado:** cómo y dónde se crea `guachafit_app` en producción.
+> **Aislamiento multi-tenant (RLS):** el API debe conectarse con un rol **no dueño** (`NOSUPERUSER NOBYPASSRLS`, p. ej. `guachafit_app`); con el rol dueño, las políticas RLS no se aplican. Las migraciones sí necesitan el rol dueño: se le pasa aparte, en `DATABASE_URL_MIGRACIONES` (§6). Ver [[02_Esquema_Base_de_Datos_PostgreSQL]] (nota D2) y [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]]. **Pendiente (5c):** el script que crea `guachafit_app`; hasta que exista, el API se conecta con el rol que indique `DATABASE_URL` —si es el dueño de las tablas, RLS no queda aplicado en el servidor. ⚠️ **No verificado:** cómo y dónde se crea ese rol en producción.
 
 ---
 
@@ -111,10 +111,13 @@ Esta guía lleva GUACHAFIT a producción en un VPS con Coolify, detrás de Cloud
 
 1. En el proyecto, añade un recurso **Application** desde tu repositorio Git (GitHub).
 2. Rama: `main`.
-3. Puerto del contenedor: el valor de `PORT` (por defecto el API escucha en `4000`).
-4. Comando de inicio en producción: `node dist/main` (script `start:prod` de `apps/api`).
-
-> ⚠️ **No verificado — cómo se construye la imagen:** el repositorio **no tiene Dockerfile**. Es un monorepo pnpm (`apps/api` depende de `packages/database`). Antes del primer despliegue hay que decidir entre un Dockerfile propio o el *build pack* automático de Coolify, y comprobar que la imagen incluye `packages/database/drizzle` (el API lee el journal de migraciones al arrancar).
+3. **Cómo se construye la imagen (deploy-05b `de2975b`):** elige la construcción por **Dockerfile**, con la ruta `apps/api/Dockerfile` y el **contexto de build en la raíz del repositorio** (el Dockerfile copia el monorepo pnpm completo). Equivale a, desde la raíz:
+   ```bash
+   docker build -f apps/api/Dockerfile -t guachafit-api .
+   ```
+   La imagen usa `node:24-slim`, fija pnpm 11.6.0 por corepack, instala con `--frozen-lockfile`, compila shared → database → api y despliega solo el árbol de producción. Corre como usuario `node` (uid 1000), expone el puerto `4000` y trae un `HEALTHCHECK` cada 30 s contra `http://127.0.0.1:4000/api/v1/health` (o el `PORT` configurado, con 20 s de espera inicial). Incluye `packages/database/dist` **y** `drizzle/` (el API lee el journal de migraciones al arrancar) y **no** trae `tsx`, `vitest` ni `.env`. Tamaño verificado: ~484 MB en disco (~99 MB comprimida). ⚠️ **No verificado:** los rótulos exactos de estas opciones en el panel de Coolify; consulta https://coolify.io/docs.
+4. Puerto del contenedor: el valor de `PORT` (por defecto el API escucha en `4000`; el healthcheck usa el mismo valor).
+5. Comando de inicio: la imagen arranca sola con `node dist/main.js` (`CMD`); no hace falta configurarlo en Coolify.
 
 ### 5.1 Variables de entorno del API
 
@@ -191,16 +194,30 @@ Con `NODE_ENV=production`, el API **no arranca** si falta la última migración.
 
 > *Faltan migraciones de base de datos por aplicar (última esperada: …). Ejecuta pnpm db:migrate antes de iniciar el API.*
 
-1. En cada despliegue con migraciones nuevas, ejecuta **primero**:
-   ```bash
-   pnpm db:migrate
-   ```
-   con `DATABASE_URL` apuntando al rol **dueño** de la base.
-2. Después inicia (o reinicia) el API.
-3. Para que el API pueda hacer esta comprobación, su rol necesita `SELECT` sobre el esquema `drizzle`. Sin ese permiso solo avisa en el log.
-4. La migración más reciente es **`0015_usuarios_recuperacion_password.sql`** (API-4 `79ba082`): añade 3 columnas opcionales a `usuarios` (`token_recuperacion_hash`, `token_recuperacion_expira`, `password_cambiada_en`) para la recuperación de contraseña. Es aditiva; sin ella el API no arranca en producción.
+> El mensaje nombra el script de desarrollo; en producción usa las vías de abajo (`pnpm db:migrate:prod` o el migrador de la imagen).
 
-> ⚠️ **No verificado:** dónde ejecutar el comando en Coolify (p. ej. un comando previo al despliegue o una terminal del contenedor). `db:migrate` usa `tsx`, una dependencia de desarrollo: la imagen o el entorno donde se ejecute debe tenerla.
+Orden obligatorio (deploy-05b `de2975b`): las migraciones se ejecutan **antes** de arrancar (o reiniciar) el contenedor del API con la versión nueva.
+
+1. Pasa el rol **dueño** de las tablas en `DATABASE_URL_MIGRACIONES`; si no se define, el migrador usa `DATABASE_URL` como respaldo. En producción, sin ninguna de las dos **termina con error (código 1)** —nunca cae a la URL local `127.0.0.1`— y el log muestra la URL objetivo con la **contraseña enmascarada** (`****`), nunca el valor original.
+2. Ejecuta la migración, por uno de estos dos caminos:
+
+   **a) Desde la propia imagen** (no requiere Node ni dependencias de desarrollo en el VPS):
+   ```bash
+   docker run --rm -e DATABASE_URL_MIGRACIONES='postgres://USUARIO:CLAVE@HOST:5432/guachafit' guachafit-api \
+     node /app/node_modules/@guachafit/database/dist/migrate.js
+   ```
+   > En **Windows con Git Bash**, antepón `MSYS_NO_PATHCONV=1` al comando: Git Bash reescribe las rutas `/app/...`.
+
+   **b) Fuera de la imagen**, desde un clon del repositorio (requiere Node y compilar `packages/database`):
+   ```bash
+   pnpm --filter @guachafit/database build
+   DATABASE_URL_MIGRACIONES='postgres://USUARIO:CLAVE@HOST:5432/guachafit' pnpm db:migrate:prod
+   ```
+3. Espera el cierre `Todas las migraciones fueron aplicadas con éxito` y arranca (o reinicia) el API.
+4. Para que el API pueda hacer esta comprobación, su rol necesita `SELECT` sobre el esquema `drizzle`. Sin ese permiso solo avisa en el log.
+5. La migración más reciente es **`0015_usuarios_recuperacion_password.sql`** (API-4 `79ba082`): añade 3 columnas opcionales a `usuarios` (`token_recuperacion_hash`, `token_recuperacion_expira`, `password_cambiada_en`) para la recuperación de contraseña. Es aditiva; sin ella el API no arranca en producción.
+
+> ⚠️ **No verificado:** dónde se configura el comando previo al despliegue en Coolify (opción tipo *Pre-deployment Command*); consulta https://coolify.io/docs. Si no existe, ejecuta la migración a mano (paso 2) **antes** de iniciar el contenedor nuevo.
 
 ---
 
@@ -253,7 +270,8 @@ Coolify advierte que un backup exitoso solo prueba que se creó un archivo. Hay 
 - [ ] `STORAGE_ENDPOINT`, `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY_ID` y `STORAGE_SECRET_ACCESS_KEY` son los reales de Cloudflare R2 (no los de ejemplo de MinIO); `CORS_ORIGINS` lista los dominios reales de la web (con `http(s)://`, sin `*`); si hay panel de colas, `BULL_BOARD_PASS` tiene ≥12 caracteres y no es el valor de ejemplo.
 - [ ] El API arranca sin el error bloqueante `[Configuración] El API no puede arrancar…`.
 - [ ] Swagger: `/api/docs` responde **404** en producción (salvo `SWAGGER_HABILITADO=true`).
-- [ ] `pnpm db:migrate` se ejecutó y el API arrancó sin el error de migraciones.
+- [ ] La imagen se construyó con `apps/api/Dockerfile` y contexto en la raíz; el contenedor queda **`healthy`** (healthcheck contra `/api/v1/health`).
+- [ ] Las migraciones se ejecutaron **antes** de iniciar el contenedor nuevo (con `DATABASE_URL_MIGRACIONES`, rol dueño, §6) y el API arrancó sin el error de migraciones.
 - [ ] `https://api.tudominio.com/api/v1` responde con HTTPS válido.
 - [ ] La web inicia sesión contra el API sin errores de CORS.
 - [ ] Subir y ver una foto funciona (R2).
@@ -271,7 +289,8 @@ Coolify advierte que un backup exitoso solo prueba que se creó un archivo. Hay 
 | Síntoma | Causa probable | Qué hacer |
 |---|---|---|
 | El API no arranca: `[Configuración] El API no puede arrancar: se encontraron N problemas…` | Configuración crítica ausente, mal formada o de ejemplo (JWT, `ENCRYPTION_KEY`, `STORAGE_*`, `CORS_ORIGINS`, Bull-Board) | El error enumera **cada** problema en una línea; corrige todos y reinicia el API. |
-| El API no arranca: *Faltan migraciones…* | No se ejecutó `pnpm db:migrate` | Ejecuta las migraciones (§6) y reinicia el API. |
+| El API no arranca: *Faltan migraciones…* | No se ejecutaron las migraciones antes del contenedor nuevo | Ejecuta §6 (`DATABASE_URL_MIGRACIONES` con el rol dueño; migrador de la imagen o `pnpm db:migrate:prod`) y reinicia el API. |
+| El contenedor queda `unhealthy` (o reinicia en bucle) | El healthcheck no obtiene 200 en `/api/v1/health`: configuración, migraciones, Postgres o Redis | Mira los logs del contenedor y corrige el error de arranque; el healthcheck consulta `PORT` (o 4000). |
 | El API no arranca: *TRUST_PROXY no es válido* | Valor `true` o no numérico | Usa un número de saltos (p. ej. `2`) o una lista de IPs/subredes. |
 | Todos los usuarios quedan bloqueados a la vez tras intentos fallidos | `TRUST_PROXY` vacío o incorrecto | Ajusta `TRUST_PROXY` (§5.1) y repite la prueba de IP real. |
 | La web muestra errores de CORS | `CORS_ORIGINS` no incluye el dominio de la web | Añade el dominio exacto (con `https://`) y reinicia. |
@@ -287,5 +306,5 @@ Si no sabes la causa: abre los **logs** de la aplicación en Coolify. Los mensaj
 ## Referencias
 
 - Decisiones: [[ADR-005-arquitectura-backend-monolito-modular-nestjs]], [[ADR-007-almacenamiento-fotos-privadas-cloudflare-r2-presigned-urls]], [[ADR-008-motor-colas-background-workers-bullmq]], [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]], [[ADR-017-despliegue-vps-coolify]], [[ADR-018-proveedor-correo-transaccional-brevo]].
-- Código: `apps/api/src/main.ts`, `apps/api/src/common/config/` (`secretos-jwt.ts`, `validar-configuracion-produccion.ts`, `variables-almacenamiento.ts`, `trust-proxy.ts`, `verificar-migraciones.ts`, `correo.ts`), `apps/api/src/modules/notificaciones/correo/`, `apps/api/src/modules/antropometria/r2-storage.service.ts`, `apps/api/src/common/bull-board-auth.middleware.ts`, `apps/api/src/common/services/crypto.service.ts`.
+- Código: `apps/api/src/main.ts`, `apps/api/src/common/config/` (`secretos-jwt.ts`, `validar-configuracion-produccion.ts`, `variables-almacenamiento.ts`, `trust-proxy.ts`, `verificar-migraciones.ts`, `correo.ts`), `apps/api/src/modules/notificaciones/correo/`, `apps/api/src/modules/antropometria/r2-storage.service.ts`, `apps/api/src/common/bull-board-auth.middleware.ts`, `apps/api/src/common/services/crypto.service.ts`; imagen: `apps/api/Dockerfile`, `.dockerignore`; migraciones: `packages/database/src/migrate.ts`, `packages/database/src/url-migraciones.ts`.
 - Coolify: instalación (https://coolify.io/docs/get-started/installation), backups (https://coolify.io/docs/databases/backups), documentación general (https://coolify.io/docs).
