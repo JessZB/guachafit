@@ -1,7 +1,9 @@
 /**
  * Comprobación al arrancar: ¿la base de datos tiene aplicada la última migración?
  *
- * Aplicar migraciones es un paso manual (`pnpm db:migrate`, `packages/database/src/migrate.ts`).
+ * Aplicar migraciones es un paso manual (`packages/database/src/migrate.ts`); los mensajes al
+ * operador reutilizan la instrucción única de `INSTRUCCION_APLICAR_MIGRACIONES` (producción y
+ * desarrollo local).
  * Si el API nuevo arranca antes, las consultas a columnas nuevas fallan ("column does not
  * exist") y pantallas como el entrenamiento del alumno se rompen. Por eso, al arrancar:
  * - producción: si falta la última migración, el API no arranca y explica qué ejecutar;
@@ -10,8 +12,9 @@
  *
  * Se compara igual que drizzle (`pg-core/dialect.js` → `migrate`): una migración del journal
  * está pendiente si el `created_at` de la última fila de `drizzle.__drizzle_migrations` es menor
- * que su `when`. Si la comprobación no se puede hacer (sin permiso sobre el esquema `drizzle`,
- * sin conexión o sin journal) se avisa sin bloquear: no es lo mismo que saber que falta.
+ * que su `when`. Si la comprobación no se puede hacer (rol del API sin permiso para leer
+ * `drizzle.__drizzle_migrations`, sin conexión o sin journal) se avisa sin bloquear: no es lo
+ * mismo que saber que falta, y el caso sin permiso explica cómo provisionar el rol.
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -34,6 +37,32 @@ export const CONSULTA_ULTIMA_MIGRACION_APLICADA =
 /** Códigos de PostgreSQL: tabla (42P01) o esquema (3F000) inexistentes = nunca se migró. */
 const CODIGOS_SIN_TABLA_DE_CONTROL = new Set(['42P01', '3F000']);
 
+/** Código de PostgreSQL: permiso insuficiente (42501). */
+const CODIGO_PERMISO_INSUFICIENTE = '42501';
+
+/**
+ * Instrucción única para aplicar migraciones, compartida por los mensajes al operador:
+ * producción (pipeline o imagen del API, con el rol propietario) y desarrollo local.
+ */
+export const INSTRUCCION_APLICAR_MIGRACIONES =
+  'en producción, pnpm db:migrate:prod o, dentro de la imagen del API, ' +
+  'node /app/node_modules/@guachafit/database/dist/migrate.js con DATABASE_URL_MIGRACIONES ' +
+  '(rol propietario de las tablas); en desarrollo local, pnpm db:migrate.';
+
+/**
+ * Aviso cuando el rol de base de datos del API no puede leer la tabla de control de migraciones:
+ * el aislamiento exige un rol restringido, pero ese rol debe aprovisionarse (tras migrar) para que
+ * la comprobación de arranque funcione.
+ */
+export function mensajeRolSinPermisoMigraciones(detalle: string): string {
+  return (
+    `No se pudo comprobar si la base de datos tiene todas las migraciones aplicadas (${detalle}). ` +
+    'El rol de base de datos del API no puede leer drizzle.__drizzle_migrations: después de aplicar ' +
+    'las migraciones, provisiona el rol de aplicación con packages/database/scripts/crear-rol-app.sql. ' +
+    'El API continúa sin esta comprobación.'
+  );
+}
+
 export function ultimaMigracionDelJournal(journal: JournalDrizzle): MigracionDelJournal | null {
   let ultima: MigracionDelJournal | null = null;
   for (const entrada of journal.entries ?? []) {
@@ -52,7 +81,10 @@ export function faltanMigraciones(
 }
 
 export function mensajeMigracionesPendientes(tag: string): string {
-  return `Faltan migraciones de base de datos por aplicar (última esperada: ${tag}). Ejecuta pnpm db:migrate antes de iniciar el API.`;
+  return (
+    `Faltan migraciones de base de datos por aplicar (última esperada: ${tag}). ` +
+    `Aplica las migraciones antes de iniciar el API: ${INSTRUCCION_APLICAR_MIGRACIONES}`
+  );
 }
 
 export function decidirAccionMigraciones(
@@ -98,9 +130,14 @@ export async function verificarMigracionesAlArrancar({
     });
   } catch (error) {
     const detalle = error instanceof Error ? error.message : String(error);
+    const codigo = (error as { code?: string })?.code;
+    if (codigo === CODIGO_PERMISO_INSUFICIENTE) {
+      logger.warn(mensajeRolSinPermisoMigraciones(detalle));
+      return;
+    }
     logger.warn(
       `No se pudo comprobar si la base de datos tiene todas las migraciones aplicadas (${detalle}). ` +
-        'Si actualizaste el API, ejecuta pnpm db:migrate.'
+        `Si actualizaste el API, aplica las migraciones: ${INSTRUCCION_APLICAR_MIGRACIONES}`
     );
     return;
   }

@@ -1,8 +1,9 @@
 /**
  * Arranque del API con migraciones pendientes.
  *
- * Si el API nuevo arranca antes de aplicar la última migración (paso manual `pnpm db:migrate`),
- * las consultas a columnas nuevas fallan y pantallas como el entrenamiento del alumno se rompen.
+ * Si el API nuevo arranca antes de aplicar la última migración (paso manual; la instrucción al
+ * operador vive en `INSTRUCCION_APLICAR_MIGRACIONES`), las consultas a columnas nuevas fallan y
+ * pantallas como el entrenamiento del alumno se rompen.
  * Al arrancar se compara la última migración del journal de drizzle con la última aplicada en
  * `drizzle.__drizzle_migrations` (drizzle aplica una migración si `created_at` de la última
  * aplicada es menor que su `when` del journal):
@@ -16,7 +17,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   decidirAccionMigraciones,
   faltanMigraciones,
+  INSTRUCCION_APLICAR_MIGRACIONES,
   mensajeMigracionesPendientes,
+  mensajeRolSinPermisoMigraciones,
   ultimaMigracionDelJournal,
   verificarMigracionesAlArrancar,
 } from '../../src/common/config/verificar-migraciones';
@@ -30,7 +33,8 @@ const JOURNAL = {
 };
 const ULTIMA = { tag: '0014_ejercicios_sesion_indicaciones', when: 1790990234338 };
 const MENSAJE =
-  'Faltan migraciones de base de datos por aplicar (última esperada: 0014_ejercicios_sesion_indicaciones). Ejecuta pnpm db:migrate antes de iniciar el API.';
+  'Faltan migraciones de base de datos por aplicar (última esperada: 0014_ejercicios_sesion_indicaciones). ' +
+  `Aplica las migraciones antes de iniciar el API: ${INSTRUCCION_APLICAR_MIGRACIONES}`;
 
 function loggerFalso() {
   return { warn: vi.fn(), log: vi.fn() };
@@ -64,6 +68,19 @@ describe('Arranque · comparación de la última migración (función pura)', ()
 
   it('el mensaje dice al operador cuál falta y qué ejecutar', () => {
     expect(mensajeMigracionesPendientes(ULTIMA.tag)).toBe(MENSAJE);
+  });
+
+  it('la instrucción de migración nombra las rutas de producción y deja `pnpm db:migrate` para desarrollo local', () => {
+    expect(INSTRUCCION_APLICAR_MIGRACIONES).toContain('pnpm db:migrate:prod');
+    expect(INSTRUCCION_APLICAR_MIGRACIONES).toContain(
+      'node /app/node_modules/@guachafit/database/dist/migrate.js'
+    );
+    expect(INSTRUCCION_APLICAR_MIGRACIONES).toContain('DATABASE_URL_MIGRACIONES');
+    // `pnpm db:migrate` aparece exactamente una vez y como comando local (no como prefijo de `:prod`).
+    expect(INSTRUCCION_APLICAR_MIGRACIONES.match(/pnpm db:migrate(?!:)/g)).toEqual(['pnpm db:migrate']);
+    expect(INSTRUCCION_APLICAR_MIGRACIONES).toMatch(/desarrollo local, pnpm db:migrate\.$/);
+    // El mensaje al operador reutiliza la misma instrucción (sin copiarla).
+    expect(mensajeMigracionesPendientes(ULTIMA.tag)).toContain(INSTRUCCION_APLICAR_MIGRACIONES);
   });
 
   it('decide según el entorno: producción detiene, desarrollo avisa, test omite', () => {
@@ -142,7 +159,7 @@ describe('Arranque · verificarMigracionesAlArrancar', () => {
     expect(consultarUltimaAplicada).not.toHaveBeenCalled();
   });
 
-  it('si no se puede comprobar (sin permiso, sin conexión o sin journal) avisa sin bloquear', async () => {
+  it('sin permiso de lectura (42501) → avisa que falta provisionar el rol, sin bloquear', async () => {
     const sinPermiso = Object.assign(new Error('permission denied for schema drizzle'), {
       code: '42501',
     });
@@ -158,6 +175,19 @@ describe('Arranque · verificarMigracionesAlArrancar', () => {
         logger,
       })
     ).resolves.toBeUndefined();
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      mensajeRolSinPermisoMigraciones('permission denied for schema drizzle')
+    );
+    const aviso = logger.warn.mock.calls[0][0];
+    expect(aviso).toContain('no puede leer drizzle.__drizzle_migrations');
+    expect(aviso).toContain('packages/database/scripts/crear-rol-app.sql');
+  });
+
+  it('si no se puede comprobar (sin conexión o sin journal) avisa sin bloquear', async () => {
+    const logger = loggerFalso();
+
     await expect(
       verificarMigracionesAlArrancar({
         nodeEnv: 'production',
@@ -169,8 +199,9 @@ describe('Arranque · verificarMigracionesAlArrancar', () => {
       })
     ).resolves.toBeUndefined();
 
-    expect(logger.warn).toHaveBeenCalledTimes(2);
-    expect(logger.warn.mock.calls[0][0]).toMatch(/No se pudo comprobar/);
-    expect(logger.warn.mock.calls[1][0]).toMatch(/No se pudo comprobar/);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    const aviso = logger.warn.mock.calls[0][0];
+    expect(aviso).toMatch(/No se pudo comprobar/);
+    expect(aviso).toContain(INSTRUCCION_APLICAR_MIGRACIONES);
   });
 });
