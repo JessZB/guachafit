@@ -5,10 +5,10 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { obtenerSecretosJwt } from './common/config/secretos-jwt';
 import {
   debeExponerSwagger,
   origenesCors,
+  resumenProblemasConfiguracion,
   validarConfiguracionProduccion,
 } from './common/config/validar-configuracion-produccion';
 import { aplicarTrustProxy } from './common/config/trust-proxy';
@@ -22,14 +22,16 @@ import { queryClient } from '@guachafit/database';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  // A3 (LOTE API-1): fail-fast. En producción, sin JWT_SECRET/JWT_REFRESH_SECRET reales el API no
-  // arranca y el error indica al operador qué variable configurar.
-  obtenerSecretosJwt();
-  // deploy-05a: fail-fast de la configuración crítica de producción (clave de cifrado, bóveda,
-  // CORS y Bull-Board). En producción lanza UN error con TODOS los problemas a la vez; en
-  // desarrollo/test solo se registran advertencias y el arranque continúa.
-  for (const problema of validarConfiguracionProduccion()) {
-    logger.warn(problema);
+  // Fail-fast de la configuración crítica: en producción, sin secretos JWT, clave de cifrado,
+  // bóveda, CORS o credenciales de Bull-Board válidas el API no arranca, y el error lista todos
+  // los problemas a la vez. Fuera de producción se registra un único resumen y el arranque
+  // continúa; una clave de cifrado mal formada es un error en cualquier entorno.
+  const { problemas, advertencias } = validarConfiguracionProduccion();
+  for (const advertencia of advertencias) {
+    logger.warn(advertencia);
+  }
+  if (process.env.NODE_ENV !== 'production' && problemas.length > 0) {
+    logger.warn(resumenProblemasConfiguracion(problemas));
   }
   // Las migraciones se aplican a mano (`pnpm db:migrate`). Si falta la última, en producción el API
   // no arranca (las consultas a columnas nuevas fallarían); en desarrollo solo avisa.

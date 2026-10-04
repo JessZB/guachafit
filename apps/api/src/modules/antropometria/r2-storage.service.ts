@@ -18,15 +18,18 @@ import {
 // En local el endpoint apunta a MinIO (`http://localhost:9000`, namespace S3), que exige
 // direccionamiento path-style (`/bucket/key`) — a diferencia del virtual-hosted de R2.
 // =============================================================================
-export const ENV_ENDPOINT = ['STORAGE_ENDPOINT', 'R2_ENDPOINT'] as const;
+import {
+  ENV_ACCESS_KEY_ID,
+  ENV_BUCKET,
+  ENV_ENDPOINT,
+  ENV_SECRET_ACCESS_KEY,
+} from '../../common/config/variables-almacenamiento';
+
+// Alias de la bóveda: la definición vive en `common/config` (fuente única) y aquí solo se
+// re-exportan para no romper los imports existentes de este servicio.
+export { ENV_ACCESS_KEY_ID, ENV_BUCKET, ENV_ENDPOINT, ENV_SECRET_ACCESS_KEY };
+
 export const ENV_REGION = ['STORAGE_REGION', 'R2_REGION'] as const;
-export const ENV_BUCKET = ['STORAGE_BUCKET', 'STORAGE_BUCKET_NAME', 'R2_BUCKET_NAME'] as const;
-export const ENV_ACCESS_KEY_ID = ['STORAGE_ACCESS_KEY_ID', 'STORAGE_ACCESS_KEY', 'R2_ACCESS_KEY_ID'] as const;
-export const ENV_SECRET_ACCESS_KEY = [
-  'STORAGE_SECRET_ACCESS_KEY',
-  'STORAGE_SECRET_KEY',
-  'R2_SECRET_ACCESS_KEY',
-] as const;
 export const ENV_FORCE_PATH_STYLE = ['STORAGE_FORCE_PATH_STYLE', 'R2_FORCE_PATH_STYLE'] as const;
 
 const ENDPOINT_MOCK = 'https://mock-account.r2.cloudflarestorage.com';
