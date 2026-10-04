@@ -137,7 +137,7 @@ describe('RF-012: Ciclo de Vida del Alumno y Preservación Soft Delete', () => {
 
       expect(resultado.id).toBe('alumno-activo-1');
       expect(resultado.estadoActivacion).toBe(EstadoAlumno.ACTIVO);
-      expect(resultado.mensaje).toContain('ya se encuentra activo');
+      expect(resultado.mensaje).toContain('ya está activo');
     });
 
     it('debe arrojar NotFoundException si el alumno no pertenece al entrenador', async () => {

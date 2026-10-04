@@ -7,6 +7,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { parsearContrato } from '../../common/errores/parsear-contrato';
 import { MENSAJE_ALUMNO_NO_ENCONTRADO, MENSAJE_SIN_ACCESO_ALUMNO } from '../../common/mensajes-acceso';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
@@ -124,7 +125,7 @@ export class AntropometriaService {
     dto: PresignedUploadUrlDTO,
     customUuid?: string
   ): Promise<PresignedUploadUrlResponseDTO> {
-    const validado = PresignedUploadUrlSchema.parse(dto);
+    const validado = parsearContrato(PresignedUploadUrlSchema, dto);
 
     // RBAC primero: un alumno solo opera sobre su propio perfil (y su contexto RLS es self).
     if (caller.rol === Rol.ALUMNO && caller.id !== validado.alumnoId) {
@@ -176,7 +177,7 @@ export class AntropometriaService {
     dto: CheckinAntropometricoDTO,
     customId?: string
   ): Promise<ControlAntropometricoDetalleDTO> {
-    const validado = CheckinAntropometricoSchema.parse(dto);
+    const validado = parsearContrato(CheckinAntropometricoSchema, dto);
 
     // RBAC primero: un alumno solo registra sus propias métricas (y su contexto RLS es self).
     if (caller.rol === Rol.ALUMNO && caller.id !== validado.alumnoId) {
@@ -354,7 +355,7 @@ export class AntropometriaService {
     controlId: string,
     dto: ConciliarAntropometriaDTO
   ): Promise<ControlAntropometricoDetalleDTO> {
-    const validado = ConciliarAntropometriaSchema.parse(dto);
+    const validado = parsearContrato(ConciliarAntropometriaSchema, dto);
 
     const [control] = await this.db
       .select()
@@ -432,7 +433,7 @@ export class AntropometriaService {
     caller?: { id: string; rol: Rol; entrenadorId?: string }
   ): Promise<EvolucionCorporalDTO> {
     if (filtro) {
-      FiltroEvolucionAntropometricaSchema.parse(filtro);
+      parsearContrato(FiltroEvolucionAntropometricaSchema, filtro);
     }
 
     if (caller) {
@@ -590,7 +591,7 @@ export class AntropometriaService {
     dto: ConsultaComparadorFotograficoDTO,
     caller?: { id: string; rol: Rol; entrenadorId?: string }
   ): Promise<ComparativaAngularResultadoDTO> {
-    ConsultaComparadorFotograficoSchema.parse(dto);
+    parsearContrato(ConsultaComparadorFotograficoSchema, dto);
 
     if (caller) {
       if (caller.rol === Rol.ALUMNO && caller.id !== alumnoId) {

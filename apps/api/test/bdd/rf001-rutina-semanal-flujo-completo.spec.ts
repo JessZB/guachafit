@@ -314,6 +314,15 @@ describe('BDD: RF-001 & RF-017 - Cierre End-to-End del Flujo de Entrenamiento (C
         createdAtUtc: new Date(),
         updatedAtUtc: new Date(),
       });
+      // La rutina solo acepta ejercicios del catálogo visible para el coach.
+      mockEjerciciosCatalogo.push({
+        id: 'ej-dominadas-coach-a',
+        entrenadorId: COACH_A_ID,
+        nombre: 'Dominadas',
+        grupoMuscular: 'ESPALDA',
+        activo: true,
+        createdAtUtc: new Date(),
+      });
 
       const payload = {
         alumnoId: ALUMNO_A_USER_ID,

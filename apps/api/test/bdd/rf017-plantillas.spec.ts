@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { PlantillasService } from '../../src/modules/entrenamiento/plantillas.service';
+import { PlantillasController } from '../../src/modules/entrenamiento/plantillas.controller';
 import { EntrenamientoService } from '../../src/modules/entrenamiento/entrenamiento.service';
 import {
   Rol,
@@ -235,6 +236,8 @@ describe('RF-017: Banco de Plantillas de Rutina y Prescripción Reutilizable', (
               filtered = filtered.slice(0, count);
               return queryObj;
             }),
+            // FUSIONAR bloquea la fila de la rutina (SELECT ... FOR UPDATE).
+            for: vi.fn(() => queryObj),
             then: (resolve: any) => resolve([...filtered]),
           };
 
@@ -944,6 +947,320 @@ describe('RF-017: Banco de Plantillas de Rutina y Prescripción Reutilizable', (
           modo: 'SOBRESCRIBIR' as any,
         })
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+  // ===========================================================================
+  // Ejercicios fuera de la lista del coach (privados de otro coach, inactivos o
+  // inexistentes): rutina semanal y plantillas los rechazan nombrándolos
+  // ===========================================================================
+  describe('LOTE API-3: guardarRutinaSemanal valida los ejercicios contra el catálogo del coach', () => {
+    const mensajeUno = (nombre: string) =>
+      `«${nombre}» ya no está en tu lista de ejercicios. Quítalo o cámbialo por otro y vuelve a guardar.`;
+    const ejercicioInactivo = 'e5555555-5555-4555-8555-555555555555';
+
+    beforeEach(() => {
+      mockEjerciciosCatalogo.push({
+        id: ejercicioInactivo,
+        entrenadorId: coach1,
+        nombre: 'Press banca',
+        grupoMuscular: 'Pecho',
+        activo: false,
+        createdAtUtc: new Date(),
+      });
+    });
+
+    function rutinaCon(ejercicio: { ejercicioId?: string; nombre: string }) {
+      return {
+        alumnoId: alumnoUsuario1,
+        nombreRutina: 'Semana 1',
+        bloques: [bloqueFixture('d1', 'Día 1', [{ ...ejercicio, series: 3, reps: '10' }])],
+      };
+    }
+
+    it('rechaza con 400 un ejercicio privado de otro coach (por id), lo nombra y no guarda nada', async () => {
+      await expect(
+        entrenamientoService.guardarRutinaSemanal(
+          coach1,
+          alumnoUsuario1,
+          rutinaCon({ ejercicioId: ejercicioCoach2, nombre: 'Sentadilla Búlgara Privada' })
+        )
+      ).rejects.toThrow(new BadRequestException(mensajeUno('Sentadilla Búlgara Privada')));
+      expect(mockRutinas).toHaveLength(0);
+    });
+
+    it('rechaza con 400 un ejercicio privado de otro coach (por nombre, sin id)', async () => {
+      await expect(
+        entrenamientoService.guardarRutinaSemanal(
+          coach1,
+          alumnoUsuario1,
+          rutinaCon({ nombre: 'Sentadilla Búlgara Privada' })
+        )
+      ).rejects.toThrow(mensajeUno('Sentadilla Búlgara Privada'));
+      expect(mockRutinas).toHaveLength(0);
+    });
+
+    it('rechaza un ejercicio propio que ya está inactivo y lo nombra', async () => {
+      await expect(
+        entrenamientoService.guardarRutinaSemanal(
+          coach1,
+          alumnoUsuario1,
+          rutinaCon({ ejercicioId: ejercicioInactivo, nombre: 'Press banca' })
+        )
+      ).rejects.toThrow(new BadRequestException(mensajeUno('Press banca')));
+      expect(mockRutinas).toHaveLength(0);
+    });
+
+    it('con varios ejercicios problemáticos en distintos días los nombra todos (sin los válidos)', async () => {
+      const error = await entrenamientoService
+        .guardarRutinaSemanal(coach1, alumnoUsuario1, {
+          alumnoId: alumnoUsuario1,
+          bloques: [
+            bloqueFixture('d1', 'Día 1', [
+              { ejercicioId: ejercicioGlobal, nombre: 'Press de Banca Plano con Barra', series: 3, reps: '10' },
+              { ejercicioId: ejercicioInactivo, nombre: 'Press banca', series: 3, reps: '10' },
+            ]),
+            bloqueFixture('d2', 'Día 2', [
+              { ejercicioId: ejercicioCoach2, nombre: 'Sentadilla Búlgara Privada', series: 3, reps: '10' },
+              { nombre: 'Ejercicio que no existe', series: 3, reps: '10' },
+            ]),
+          ],
+        })
+        .catch((e) => e);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect(error.message).toBe(
+        '«Press banca», «Sentadilla Búlgara Privada», «Ejercicio que no existe» ya no están en tu lista de ejercicios. Quítalos o cámbialos por otros y vuelve a guardar.'
+      );
+      expect(error.message).not.toMatch(/e[0-9]{7}-/);
+      expect(mockRutinas).toHaveLength(0);
+    });
+
+    it('acepta ejercicios globales y propios, y resuelve el id por nombre', async () => {
+      const rutina = await entrenamientoService.guardarRutinaSemanal(coach1, alumnoUsuario1, {
+        alumnoId: alumnoUsuario1,
+        bloques: [
+          bloqueFixture('d1', 'Día 1', [
+            { ejercicioId: ejercicioCoach1, nombre: 'Press Militar con Mancuernas', series: 3, reps: '10' },
+            { nombre: 'Remo con Barra Prono', series: 3, reps: '10' },
+          ]),
+        ],
+      });
+
+      expect(rutina.bloques[0].ejercicios.map((e) => e.ejercicioId)).toEqual([
+        ejercicioCoach1,
+        'e4444444-4444-4444-8444-444444444444',
+      ]);
+    });
+
+    it('una plantilla tampoco acepta el ejercicio privado de otro coach (mismo mensaje con nombre)', async () => {
+      await expect(
+        plantillasService.crearPlantilla(coach1, {
+          nombre: 'Plantilla con ajeno',
+          nivelObjetivo: NivelObjetivoPlantilla.INTERMEDIO,
+          bloques: [
+            bloqueFixture('d1', 'Día 1', [
+              { ejercicioId: ejercicioCoach2, nombre: 'Sentadilla Búlgara Privada', series: 3, reps: '10' },
+            ]),
+          ],
+        })
+      ).rejects.toThrow(new BadRequestException(mensajeUno('Sentadilla Búlgara Privada')));
+    });
+
+    it('al editar una plantilla con un ejercicio inactivo, el mensaje lo nombra', async () => {
+      const plantilla = await crearPlantillaCoach1();
+      await expect(
+        plantillasService.actualizarPlantilla(coach1, plantilla.id, {
+          bloques: [
+            bloqueFixture('d1', 'Día 1', [
+              { ejercicioId: ejercicioInactivo, nombre: 'Press banca', series: 3, reps: '10' },
+            ]),
+          ],
+        })
+      ).rejects.toThrow(new BadRequestException(mensajeUno('Press banca')));
+    });
+  });
+
+  // ===========================================================================
+  // FUSIONAR respeta el máximo de 7 días y no repite días
+  // ===========================================================================
+  describe('LOTE API-3: FUSIONAR con tope de 7 días, días sin repetir y en una transacción', () => {
+    const MENSAJE_MAS_DE_7 =
+      'La rutina de este alumno quedaría con más de 7 días. Usa «Reemplazar» o quita días antes de añadir.';
+
+    function bloquesPrevios(cantidad: number) {
+      return Array.from({ length: cantidad }, (_, i) => ({
+        ...bloqueFixture(`previo-d${i + 1}`, `Día previo ${i + 1}`, [
+          { ejercicioId: ejercicioGlobal, nombre: 'Sentadilla', series: 3, reps: '10' },
+        ]),
+        diaSugerido: i + 1,
+      }));
+    }
+
+    it('si la fusión supera 7 días falla SOLO ese alumno y su rutina no cambia', async () => {
+      const plantilla = await crearPlantillaCoach1(); // 2 días
+      const rutinaLlena = crearRutinaActiva(alumnoUsuario1);
+      rutinaLlena.bloques = bloquesPrevios(6);
+
+      const respuesta = await plantillasService.asignarPlantilla(coach1, plantilla.id, {
+        alumnoIds: [alumnoUsuario1, alumnoUsuario3],
+        modo: ModoAsignacionPlantilla.FUSIONAR,
+      });
+
+      expect(respuesta.resultados[0]).toMatchObject({
+        alumnoId: alumnoUsuario1,
+        exito: false,
+        error: MENSAJE_MAS_DE_7,
+      });
+      expect(rutinaLlena.bloques).toHaveLength(6);
+      // El resto del lote sigue adelante.
+      expect(respuesta.resultados[1].exito).toBe(true);
+      expect(respuesta.exitosos).toBe(1);
+      expect(respuesta.fallidos).toBe(1);
+    });
+
+    it('justo 7 días está permitido', async () => {
+      const plantilla = await crearPlantillaCoach1(); // 2 días
+      const rutina = crearRutinaActiva(alumnoUsuario1);
+      rutina.bloques = bloquesPrevios(5);
+
+      const respuesta = await plantillasService.asignarPlantilla(coach1, plantilla.id, {
+        alumnoIds: [alumnoUsuario1],
+        modo: ModoAsignacionPlantilla.FUSIONAR,
+      });
+
+      expect(respuesta.resultados[0]).toMatchObject({ exito: true, bloquesTotal: 7 });
+    });
+
+    it('los días añadidos no repiten el día sugerido de los existentes ni entre sí', async () => {
+      const plantilla = await crearPlantillaCoach1(); // 2 días, ambos con diaSugerido 1
+      const rutina = crearRutinaActiva(alumnoUsuario1); // 1 día con diaSugerido 1
+
+      await plantillasService.asignarPlantilla(coach1, plantilla.id, {
+        alumnoIds: [alumnoUsuario1],
+        modo: ModoAsignacionPlantilla.FUSIONAR,
+      });
+
+      const dias = rutina.bloques.map((b: any) => b.diaSugerido);
+      expect(dias).toHaveLength(3);
+      expect(dias[0]).toBe(1); // el día existente no se toca
+      expect(new Set(dias).size).toBe(3);
+      for (const dia of dias) {
+        expect(dia).toBeGreaterThanOrEqual(1);
+        expect(dia).toBeLessThanOrEqual(7);
+      }
+      // La plantilla no cambia.
+      expect(mockPlantillasRutina[0].bloques.map((b: any) => b.diaSugerido)).toEqual([1, 1]);
+    });
+
+    it('lee y actualiza la rutina activa dentro de la MISMA transacción', async () => {
+      const plantilla = await crearPlantillaCoach1();
+      crearRutinaActiva(alumnoUsuario1);
+
+      let transaccion = 0;
+      const eventos: string[] = [];
+      const withTenantRastreado = vi.fn(async (_ctx: any, fn: any) => {
+        const id = ++transaccion;
+        const tx = {
+          select: (...args: any[]) => ({
+            from: (tabla: any) => {
+              eventos.push(`${id}:select:${getTableName(tabla)}`);
+              return mockDb.select(...args).from(tabla);
+            },
+          }),
+          update: (tabla: any) => {
+            eventos.push(`${id}:update:${getTableName(tabla)}`);
+            return mockDb.update(tabla);
+          },
+          insert: (tabla: any) => mockDb.insert(tabla),
+        };
+        return fn(tx);
+      });
+      const servicio = new PlantillasService(mockDb, withTenantRastreado as any);
+
+      const respuesta = await servicio.asignarPlantilla(coach1, plantilla.id, {
+        alumnoIds: [alumnoUsuario1],
+        modo: ModoAsignacionPlantilla.FUSIONAR,
+      });
+
+      expect(respuesta.resultados[0].exito).toBe(true);
+      const lectura = eventos.find((e) => e.endsWith(':select:rutinas'))!;
+      const escritura = eventos.find((e) => e.endsWith(':update:rutinas'))!;
+      expect(lectura.split(':')[0]).toBe(escritura.split(':')[0]);
+    });
+  });
+
+  // ===========================================================================
+  // POST /plantillas/:id/asignar idempotente con X-Idempotency-Key
+  // ===========================================================================
+  describe('LOTE API-3: asignación idempotente con X-Idempotency-Key', () => {
+    const cuerpo = () => ({ alumnoIds: [alumnoUsuario1], modo: ModoAsignacionPlantilla.FUSIONAR });
+
+    it('misma clave + mismo cuerpo → misma respuesta sin volver a añadir los días', async () => {
+      const plantilla = await crearPlantillaCoach1();
+      const rutina = crearRutinaActiva(alumnoUsuario1);
+
+      const primera = await plantillasService.asignarPlantilla(coach1, plantilla.id, cuerpo(), 'clave-1');
+      const reintento = await plantillasService.asignarPlantilla(coach1, plantilla.id, cuerpo(), 'clave-1');
+
+      expect(reintento).toEqual(primera);
+      expect(rutina.bloques).toHaveLength(3); // 1 previo + 2 de la plantilla, una sola vez
+    });
+
+    it('reintentos simultáneos con la misma clave aplican la asignación una sola vez', async () => {
+      const plantilla = await crearPlantillaCoach1();
+      const rutina = crearRutinaActiva(alumnoUsuario1);
+
+      const [a, b] = await Promise.all([
+        plantillasService.asignarPlantilla(coach1, plantilla.id, cuerpo(), 'clave-2'),
+        plantillasService.asignarPlantilla(coach1, plantilla.id, cuerpo(), 'clave-2'),
+      ]);
+
+      expect(a).toEqual(b);
+      expect(rutina.bloques).toHaveLength(3);
+    });
+
+    it('sin clave, o con la misma clave y otro cuerpo, se aplica de nuevo', async () => {
+      const plantilla = await crearPlantillaCoach1();
+      const rutina = crearRutinaActiva(alumnoUsuario1);
+
+      await plantillasService.asignarPlantilla(coach1, plantilla.id, cuerpo());
+      await plantillasService.asignarPlantilla(coach1, plantilla.id, cuerpo());
+      expect(rutina.bloques).toHaveLength(5);
+
+      await plantillasService.asignarPlantilla(
+        coach1,
+        plantilla.id,
+        { alumnoIds: [alumnoUsuario1], modo: ModoAsignacionPlantilla.REEMPLAZAR },
+        'clave-3'
+      );
+      const otroCuerpo = await plantillasService.asignarPlantilla(
+        coach1,
+        plantilla.id,
+        cuerpo(),
+        'clave-3'
+      );
+      expect(otroCuerpo.modo).toBe(ModoAsignacionPlantilla.FUSIONAR);
+      const activa = mockRutinas.find((r) => r.alumnoId === alumnoUsuario1 && r.activa);
+      expect(activa.bloques).toHaveLength(4); // 2 (reemplazo) + 2 (fusión con otro cuerpo)
+    });
+
+    it('la misma clave de otro coach no reutiliza la respuesta', async () => {
+      const plantilla = await crearPlantillaCoach1();
+      await plantillasService.asignarPlantilla(coach1, plantilla.id, cuerpo(), 'clave-compartida');
+
+      await expect(
+        plantillasService.asignarPlantilla(coach2, plantilla.id, cuerpo(), 'clave-compartida')
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('el controller pasa la cabecera X-Idempotency-Key al servicio', async () => {
+      const asignar = vi.fn().mockResolvedValue({ ok: true });
+      const controller = new PlantillasController({ asignarPlantilla: asignar } as any);
+      const req = { user: { sub: coach1, rol: Rol.ENTRENADOR } };
+
+      await controller.asignarPlantilla(req, 'plantilla-1', cuerpo(), 'clave-http');
+
+      expect(asignar).toHaveBeenCalledWith(coach1, 'plantilla-1', cuerpo(), 'clave-http');
     });
   });
 });

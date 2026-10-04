@@ -66,19 +66,49 @@ describe('RF-010: Arquitectura de Roles Jerárquicos (RBAC) y Aislamiento de Ten
   });
 
   describe('Escenario 2: Intento de Acceso Cruzado entre Entrenadores (Aislamiento)', () => {
-    it('Debe rechazar operaciones si el entrenador activo intenta manipular datos de otro tenant', () => {
-      const coachATenantId = 'coach-a-uuid';
-      const coachBTenantId = 'coach-b-uuid';
-
-      // Simular verificación de tenant
-      const assertTenantMatch = (currentCoachTenant: string, targetResourceTenant: string) => {
-        if (currentCoachTenant !== targetResourceTenant) {
-          throw new ForbiddenException('No tienes acceso a este alumno.');
-        }
+    // Antes este test definía su propia `assertTenantMatch` (tautológico). Ahora
+    // ejercita el servicio real: el coach A pide el perfil de un alumno del coach B.
+    it('el coach A no puede ver al alumno del coach B: 403 y el intento queda auditado', async () => {
+      const coachA = 'aaaaaaaa-0000-4000-8000-000000000001';
+      const coachB = 'bbbbbbbb-0000-4000-8000-000000000002';
+      const alumnoDeB = {
+        id: 'cccccccc-0000-4000-8000-000000000003',
+        usuarioId: 'dddddddd-0000-4000-8000-000000000004',
+        entrenadorId: coachB,
+        nombres: 'Ana',
+        apellidos: 'Torres',
+        fechaNacimiento: '1995-01-01',
       };
+      const tx: any = {
+        select: () => ({
+          from: () => {
+            const consulta: any = {
+              innerJoin: () => consulta,
+              where: () => Promise.resolve([alumnoDeB]),
+            };
+            return consulta;
+          },
+        }),
+      };
+      const auditoria = { registrar: vi.fn().mockResolvedValue(undefined) };
+      const servicio = new AlumnosService(
+        {} as any,
+        {} as any,
+        undefined,
+        (async (_ctx: any, fn: any) => fn(tx)) as any,
+        auditoria as any
+      );
 
-      expect(() => assertTenantMatch(coachATenantId, coachBTenantId)).toThrow(ForbiddenException);
-      expect(() => assertTenantMatch(coachATenantId, coachATenantId)).not.toThrow();
+      await expect(
+        servicio.obtenerPorId(alumnoDeB.id, coachA, Rol.ENTRENADOR, coachA)
+      ).rejects.toThrow(new ForbiddenException('No tienes acceso a este alumno.'));
+      expect(auditoria.registrar).toHaveBeenCalledWith({
+        usuarioId: coachA,
+        rol: Rol.ENTRENADOR,
+        ruta: '/alumnos/:id',
+        metodo: 'GET',
+        motivo: 'ALUMNO_DE_OTRO_ENTRENADOR',
+      });
     });
   });
 });

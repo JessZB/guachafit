@@ -20,11 +20,13 @@ import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import { fechaCalendarioLocal } from '../../lib/date-format';
 import {
   describirEsfuerzo,
-  formatearNotaEntrenadorParaAlumno,
   formatearNotasParaAlumno,
   formatearProgresoDias,
   formatearRangoHorario,
   formatearTituloSemana,
+  indicacionesDelEntrenador,
+  notaResumenEntrenador,
+  resolverRpeSugerido,
   textoEsfuerzoSugerido,
   textoUltimoEntrenamientoGuardado,
 } from '../../lib/entrenamiento-textos';
@@ -354,7 +356,8 @@ function buildDemoSesion(bloqueId: string = 'd2', alumnoId: string = 'demo-alumn
 
 /**
  * Una serie "intacta" conserva los valores prefijados por la API al crear la sesión:
- * el RPE que trae es la referencia prescrita (el backend no persiste `rpeObjetivo` aparte).
+ * el RPE que trae es la referencia prescrita. Las sesiones nuevas traen además
+ * `rpeSugerido` aparte; esta captura queda como respaldo para las sesiones anteriores.
  * En cuanto el alumno registra datos reales deja de contar como referencia.
  */
 function serieSinDatosReales(serie: SerieRegistroDetalleDTO): boolean {
@@ -2260,7 +2263,14 @@ export function EntrenamientoPage() {
           const prescripcion = calcularResumenPrescripcion(ejercicioSesion);
           // WU17: descanso real derivado por serie (inicio N − completada N−1); null sin marcas.
           const descansosReales = descansosRealesEntreSeries(ejercicioSesion.series);
-          const rpeSugerido = rpeSugeridoPorEjercicio[ejercicioSesion.id] ?? null;
+          // Esfuerzo e indicaciones del entrenador en campos propios (con respaldo
+          // para sesiones anteriores: RPE capturado al cargar y la nota de siempre).
+          const rpeSugerido = resolverRpeSugerido(
+            ejercicioSesion,
+            rpeSugeridoPorEjercicio[ejercicioSesion.id]
+          );
+          const indicaciones = indicacionesDelEntrenador(ejercicioSesion);
+          const notaResumen = notaResumenEntrenador(ejercicioSesion);
           const pesoPrescritoTexto =
             prescripcion.pesosKg.length === 0
               ? null
@@ -2310,10 +2320,10 @@ export function EntrenamientoPage() {
                   )}
                 </div>
               </div>
-              {ejercicioSesion.notasCoach && (
+              {notaResumen && (
                 <div className="p-2.5 rounded-2xl bg-secondary/60 text-muted-foreground flex items-center gap-2 max-w-xs text-xs">
                   <Info className="h-4 w-4 text-primary shrink-0" />
-                  <span className="truncate">{formatearNotaEntrenadorParaAlumno(ejercicioSesion.notasCoach)}</span>
+                  <span className="truncate">{notaResumen}</span>
                 </div>
               )}
             </div>
@@ -2334,10 +2344,16 @@ export function EntrenamientoPage() {
                   )}
                   {!pesoPrescritoTexto && !rpeSugerido && (
                     <span className="text-muted-foreground font-semibold">
-                      {` · ${ejercicioSesion.notasCoach ? 'mira la nota de tu entrenador' : 'peso a tu criterio'}`}
+                      {` · ${notaResumen ? 'mira la nota de tu entrenador' : 'peso a tu criterio'}`}
                     </span>
                   )}
                 </p>
+                {indicaciones && (
+                  <p className="mt-1.5 text-[11px] sm:text-xs text-foreground leading-snug">
+                    <span className="font-black">Indicaciones de tu entrenador: </span>
+                    <span className="font-semibold">{indicaciones}</span>
+                  </p>
+                )}
               </div>
             </div>
 

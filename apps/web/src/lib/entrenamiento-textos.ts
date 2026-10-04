@@ -113,9 +113,49 @@ export function textoUltimoEntrenamientoGuardado(fechaProgramada: string): strin
 }
 
 /**
- * La nota automática del servidor dice "Peso: Sugerido" cuando no hay carga prescrita; al
- * alumno se le muestra "a tu criterio". Solo formato local: el contenido de la nota no cambia.
+ * Notas automáticas anteriores del servidor ("Bloque: Día 1 • Reps: 8-10 • Peso: Sugerido"): al
+ * alumno se le muestran sin jerga ("Día 1 · 8-10 repeticiones · peso a tu criterio"). Solo formato
+ * local: las notas nuevas ya llegan claras y cualquier otro texto se muestra tal cual.
  */
 export function formatearNotaEntrenadorParaAlumno(nota: string): string {
-  return nota.replace(/Peso:\s*Sugerido\b/gi, 'Peso: a tu criterio');
+  const anterior = /^Bloque:\s*(.*?)\s*•\s*Reps:\s*(.*?)\s*•\s*Peso:\s*(.*?)\s*$/i.exec(nota);
+  if (!anterior) return nota;
+  const [, dia, reps, peso] = anterior;
+  const textoPeso = !peso || /^sugerido$/i.test(peso) ? 'peso a tu criterio' : `peso ${peso}`;
+  return [dia, reps ? `${reps} repeticiones` : '', textoPeso].filter(Boolean).join(' · ');
+}
+
+/** Campos del ejercicio de la sesión con lo que indicó el entrenador. */
+interface IndicacionesEjercicio {
+  notasCoach?: string | null;
+  notasTecnicas?: string | null;
+  rpeSugerido?: string | null;
+}
+
+/** Indicaciones técnicas del entrenador (campo propio); `null` si no escribió ninguna. */
+export function indicacionesDelEntrenador(ejercicio: IndicacionesEjercicio): string | null {
+  const texto = ejercicio.notasTecnicas?.trim();
+  return texto ? texto : null;
+}
+
+/**
+ * Nota corta del entrenador para la cabecera del ejercicio. Si llegan las indicaciones técnicas
+ * en su campo propio se muestran aparte (el resumen ya las repite), así que no hay nota que
+ * mostrar; en sesiones anteriores se muestra la nota de siempre, ya formateada.
+ */
+export function notaResumenEntrenador(ejercicio: IndicacionesEjercicio): string | null {
+  if (indicacionesDelEntrenador(ejercicio)) return null;
+  const nota = ejercicio.notasCoach?.trim();
+  return nota ? formatearNotaEntrenadorParaAlumno(nota) : null;
+}
+
+/**
+ * Esfuerzo sugerido. El servidor lo envía aparte (`rpeSugerido`, no cambia cuando el
+ * alumno registra su esfuerzo real); sesiones anteriores usan el valor capturado al cargar.
+ */
+export function resolverRpeSugerido(
+  ejercicio: IndicacionesEjercicio,
+  capturadoAlCargar: string | null | undefined
+): string | null {
+  return ejercicio.rpeSugerido || capturadoAlCargar || null;
 }

@@ -13,3 +13,9 @@ export const CODIGO_SESION_VACIA = 'SESION_VACIA';
 
 /** Reporte nutricional fuera de la ventana horaria o del día local (RF-002 RN-02). */
 export const CODIGO_CHECKIN_FUERA_DE_VENTANA = 'CHECKIN_FUERA_DE_VENTANA';
+
+/**
+ * Alumno pausado, suspendido o archivado intenta una acción bloqueada por su ciclo de
+ * vida (RF-012). La web muestra la pantalla informativa del bloqueo en vez de un error genérico.
+ */
+export const CODIGO_ALUMNO_BLOQUEADO = 'ALUMNO_BLOQUEADO';

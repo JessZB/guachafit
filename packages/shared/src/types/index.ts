@@ -784,7 +784,16 @@ export interface EjercicioSesionDetalleDTO {
   sesionId: string;
   ejercicioId: string;
   orden: number;
+  /**
+   * Texto corto para el alumno. En sesiones creadas desde la rutina semanal es un resumen
+   * ("Día 1 · 8-10 repeticiones · peso a tu criterio") seguido de las indicaciones del coach;
+   * se conserva para la web ya publicada. La web actual prefiere los campos estructurados.
+   */
   notasCoach?: string | null;
+  /** RF-017 RN-01: indicaciones técnicas que el coach escribió para el ejercicio. */
+  notasTecnicas?: string | null;
+  /** Esfuerzo prescrito de 1 a 10 (ej. "8.0"); no cambia cuando el alumno registra su esfuerzo real. */
+  rpeSugerido?: string | null;
   descansoPrescritoSegundos?: number | null;
   ejercicio?: EjercicioCatalogoDetalleDTO;
   series: SerieRegistroDetalleDTO[];

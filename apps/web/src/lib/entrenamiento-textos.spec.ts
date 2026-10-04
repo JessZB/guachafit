@@ -7,6 +7,9 @@ import {
   formatearProgresoDias,
   formatearRangoHorario,
   formatearTituloSemana,
+  indicacionesDelEntrenador,
+  notaResumenEntrenador,
+  resolverRpeSugerido,
   textoEsfuerzoSugerido,
   textoUltimoEntrenamientoGuardado,
 } from './entrenamiento-textos';
@@ -71,10 +74,46 @@ describe('entrenamiento-textos: textos claros para el alumno', () => {
     expect(formatearFechaLegible('2026-13-01')).toBeNull();
   });
 
-  it('la nota automática "Peso: Sugerido" se muestra como "a tu criterio" (solo formato local)', () => {
+  it('la nota automática anterior se muestra sin jerga (solo formato local)', () => {
     expect(
       formatearNotaEntrenadorParaAlumno('Bloque: Día 1 • Reps: 8-10 • Peso: Sugerido')
-    ).toBe('Bloque: Día 1 • Reps: 8-10 • Peso: a tu criterio');
+    ).toBe('Día 1 · 8-10 repeticiones · peso a tu criterio');
+    expect(
+      formatearNotaEntrenadorParaAlumno('Bloque: Día 2 • Reps: 10 • Peso: 60kg')
+    ).toBe('Día 2 · 10 repeticiones · peso 60kg');
+    // La nota nueva del servidor ya llega clara y no se toca.
+    expect(
+      formatearNotaEntrenadorParaAlumno('Día 1 · 8-10 repeticiones · peso a tu criterio')
+    ).toBe('Día 1 · 8-10 repeticiones · peso a tu criterio');
     expect(formatearNotaEntrenadorParaAlumno('Baja controlado')).toBe('Baja controlado');
+  });
+
+  it('LOTE API-3: las indicaciones técnicas del entrenador se leen del campo propio', () => {
+    expect(
+      indicacionesDelEntrenador({ notasTecnicas: '  Baja controlada en 3 s. ', notasCoach: 'x' })
+    ).toBe('Baja controlada en 3 s.');
+    expect(indicacionesDelEntrenador({ notasTecnicas: null, notasCoach: 'Día 1 · 10 repeticiones' })).toBeNull();
+    expect(indicacionesDelEntrenador({})).toBeNull();
+  });
+
+  it('LOTE API-3: la nota resumen solo se muestra si no hay indicaciones estructuradas', () => {
+    // Sesión nueva con indicaciones: el resumen (que ya las incluye) no se repite.
+    expect(
+      notaResumenEntrenador({
+        notasTecnicas: 'Baja controlada',
+        notasCoach: 'Día 1 · 10 repeticiones · peso a tu criterio · Baja controlada',
+      })
+    ).toBeNull();
+    // Sesión anterior (sin campos nuevos): se muestra la nota formateada.
+    expect(
+      notaResumenEntrenador({ notasCoach: 'Bloque: Día 1 • Reps: 8-10 • Peso: Sugerido' })
+    ).toBe('Día 1 · 8-10 repeticiones · peso a tu criterio');
+    expect(notaResumenEntrenador({ notasCoach: null })).toBeNull();
+  });
+
+  it('LOTE API-3: el esfuerzo sugerido prefiere el dato del servidor y si no, el capturado al cargar', () => {
+    expect(resolverRpeSugerido({ rpeSugerido: '8.0' }, '9.0')).toBe('8.0');
+    expect(resolverRpeSugerido({ rpeSugerido: null }, '9.0')).toBe('9.0');
+    expect(resolverRpeSugerido({}, null)).toBeNull();
   });
 });

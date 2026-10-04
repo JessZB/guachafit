@@ -780,6 +780,50 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
       expect(segundoIntento.transaccion.id).toBe(primerIntento.transaccion.id);
     });
 
+    it('dos reportes simultáneos con la misma idempotencyKey registran UN solo pago', async () => {
+      // Sin referencia bancaria no hay índice único que frene el duplicado: solo la idempotencia.
+      const payload = {
+        montoOriginal: '10.00',
+        monedaOriginal: Moneda.USD,
+        metodoPago: MetodoPago.EFECTIVO_USD,
+        fechaOperacion: '2026-09-06',
+      };
+      // El mock no persiste inserciones: se cuentan las llamadas a insert sobre la tabla.
+      const insercionesPago = () =>
+        mockDb.insert.mock.calls.filter(([tabla]: any[]) => getTableName(tabla) === 'transacciones_pago')
+          .length;
+
+      const [a, b] = await Promise.all([
+        finanzasService.reportarPago('cuota-test-1', 'alumno-uuid-1', payload, 'clave-simultanea'),
+        finanzasService.reportarPago('cuota-test-1', 'alumno-uuid-1', payload, 'clave-simultanea'),
+      ]);
+
+      expect(insercionesPago()).toBe(1);
+      expect(b.transaccion.id).toBe(a.transaccion.id);
+      expect([a.esDuplicadoIdempotente, b.esDuplicadoIdempotente].sort()).toEqual([false, true]);
+    });
+
+    it('un reporte que falla no se recuerda: el reintento con la misma clave vuelve a intentarlo', async () => {
+      const payload = {
+        montoOriginal: '10.00',
+        monedaOriginal: Moneda.USD,
+        metodoPago: MetodoPago.EFECTIVO_USD,
+        fechaOperacion: '2026-09-06',
+      };
+
+      await expect(
+        finanzasService.reportarPago('cuota-inexistente', 'alumno-uuid-1', payload, 'clave-fallo')
+      ).rejects.toThrow(NotFoundException);
+
+      const reintento = await finanzasService.reportarPago(
+        'cuota-test-1',
+        'alumno-uuid-1',
+        payload,
+        'clave-fallo'
+      );
+      expect(reintento.esDuplicadoIdempotente).toBe(false);
+    });
+
     it('no expone la respuesta cacheada a otro solicitante que reutilice la misma idempotencyKey', async () => {
       const payload = {
         montoOriginal: '1500.00',

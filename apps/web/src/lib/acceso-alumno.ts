@@ -7,10 +7,12 @@
  *
  * La decisión es pura y testeable: recibe el error, devuelve `BloqueoAlumno` o `null`.
  */
-import { EstadoAlumno } from '@guachafit/shared';
+import { CODIGO_ALUMNO_BLOQUEADO, EstadoAlumno } from '@guachafit/shared';
 import { ApiError } from './api-client';
 
-export const CODIGO_ALUMNO_BLOQUEADO = 'ALUMNO_BLOQUEADO';
+// El código vive en `@guachafit/shared` (fuente única con el API); se reexporta para
+// los consumidores existentes de este módulo.
+export { CODIGO_ALUMNO_BLOQUEADO };
 
 /** Estado con el que la API identifica el bloqueo: el de activación o `archivado` (baja lógica). */
 export type EstadoBloqueoAlumno = EstadoAlumno | 'archivado' | 'desconocido';

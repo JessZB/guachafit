@@ -8,6 +8,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { parsearContrato } from '../../common/errores/parsear-contrato';
 import { MENSAJE_SIN_ACCESO_ALUMNO } from '../../common/mensajes-acceso';
 import { CODIGO_CHECKIN_FUERA_DE_VENTANA } from '@guachafit/shared';
 import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
@@ -291,7 +292,7 @@ export class NutricionService {
     desviacionCaloriasPct?: number;
     desviacionProteinasPct?: number;
   }> {
-    const validado = CheckinNutricionalSchema.parse({ ...input, alumnoId });
+    const validado = parsearContrato(CheckinNutricionalSchema, { ...input, alumnoId });
 
     // Regla RN-02: ventana horaria local del alumno (18:00–23:59) y día local en curso.
     const ventana = evaluarVentanaCheckinNutricional(validado.fecha, validado.timezoneCliente, ahora);
@@ -439,7 +440,7 @@ export class NutricionService {
     alumnoId: string,
     dto: MetasNutricionalesDTO
   ): Promise<MetasNutricionalesDetalleDTO> {
-    const validado = MetasNutricionalesSchema.parse(dto);
+    const validado = parsearContrato(MetasNutricionalesSchema, dto);
 
     await this.validarAlumnoDelCoach(coachId, alumnoId);
 

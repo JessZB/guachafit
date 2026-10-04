@@ -36,7 +36,12 @@ import {
   planesMembresia,
 } from '@guachafit/database';
 import { CryptoService } from '../../common/services/crypto.service';
-import { MENSAJE_SIN_ACCESO_ALUMNO } from '../../common/mensajes-acceso';
+import {
+  MENSAJE_ALUMNO_FUERA_DE_LISTA,
+  MENSAJE_ALUMNO_NO_ENCONTRADO,
+  MENSAJE_SIN_ACCESO_ALUMNO,
+} from '../../common/mensajes-acceso';
+import { AuditoriaAccesosDenegadosService } from '../../common/auditoria/auditoria-accesos-denegados.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AlumnoRegistradoEvent } from '../notificaciones/events/eventos-notificacion';
 import {
@@ -99,9 +104,31 @@ export class AlumnosService {
     // RF-014 / WU-E: el alta por deep link publica un evento de dominio para el coach (RN-07.4).
     // Opcional para no romper los consumidores que instancian el servicio sin bus de eventos.
     @Optional() private readonly eventEmitter?: EventEmitter2,
-    @Optional() @Inject(WITH_TENANT) withTenant?: WithTenantFn
+    @Optional() @Inject(WITH_TENANT) withTenant?: WithTenantFn,
+    // RF-010 Escenario 2: los 403 de tenancy del servicio también se auditan.
+    @Optional()
+    @Inject(AuditoriaAccesosDenegadosService)
+    private readonly auditoria?: AuditoriaAccesosDenegadosService
   ) {
     this.withTenant = withTenant ?? ((context, fn) => withTenantBase(context, fn, this.db));
+  }
+
+  /**
+   * RF-010 Escenario 2: registra el intento de acceso cruzado y devuelve el 403.
+   * Solo metadatos mínimos (actor, rol, patrón de ruta, método y motivo): nunca el id ni datos del
+   * alumno. Best-effort: un fallo de la auditoría jamás cambia la respuesta 403.
+   */
+  private accesoDenegado(
+    actor: { usuarioId: string; rol: Rol },
+    peticion: { ruta: string; metodo: string },
+    motivo: 'ALUMNO_DE_OTRO_ENTRENADOR' | 'PERFIL_DE_OTRO_ALUMNO'
+  ): ForbiddenException {
+    if (this.auditoria) {
+      void this.auditoria
+        .registrar({ usuarioId: actor.usuarioId, rol: actor.rol, ...peticion, motivo })
+        .catch(() => {});
+    }
+    return new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
   }
 
   /**
@@ -195,24 +222,23 @@ export class AlumnosService {
     // 3. Generar token de bienvenida SHA-256 (TTL 48h)
     const { rawToken, tokenHash, expiresAt } = this.cryptoService.generateInvitationToken();
 
-    // 4. Crear usuario en estado activo
-    const [nuevoUsuario] = await this.db
-      .insert(usuarios)
-      .values({
-        email: dto.email.toLowerCase().trim(),
-        rol: Rol.ALUMNO,
-        estado: EstadoUsuario.ACTIVO,
-        tokenInvitacionHash: tokenHash,
-        tokenInvitacionExpira: expiresAt,
-        activo: true,
-      })
-      .returning();
+    // 4-5. Crear usuario + perfil en UNA transacción: si falla el perfil no queda un
+    // usuario huérfano que bloquee el correo. RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene
+    // RLS; la transacción corre con el GUC del coach creador (WITH CHECK sobre `entrenador_id`).
+    const { nuevoUsuario, nuevoPerfil } = await this.withTenant({ entrenadorId }, async (tx) => {
+      const [nuevoUsuario] = await tx
+        .insert(usuarios)
+        .values({
+          email: dto.email.toLowerCase().trim(),
+          rol: Rol.ALUMNO,
+          estado: EstadoUsuario.ACTIVO,
+          tokenInvitacionHash: tokenHash,
+          tokenInvitacionExpira: expiresAt,
+          activo: true,
+        })
+        .returning();
 
-    // 5. Crear perfil de alumno.
-    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; el alta corre con el GUC del coach
-    // creador (política tenant con WITH CHECK sobre `entrenador_id`).
-    const [nuevoPerfil] = await this.withTenant({ entrenadorId }, (tx) =>
-      tx
+      const [nuevoPerfil] = await tx
         .insert(perfilesAlumno)
         .values({
           usuarioId: nuevoUsuario.id,
@@ -228,8 +254,10 @@ export class AlumnosService {
           tasaFijadaOverride: dto.tasaFijadaOverride || null,
           estadoActivacion: EstadoAlumno.ACTIVO,
         })
-        .returning()
-    );
+        .returning();
+
+      return { nuevoUsuario, nuevoPerfil };
+    });
 
     return {
       id: nuevoPerfil.id,
@@ -334,38 +362,43 @@ export class AlumnosService {
     // 3. Hashear contraseña
     const passwordHash = await this.cryptoService.hashPassword(dto.password);
 
-    // 4. Crear usuario alumno
-    const [nuevoUsuario] = await this.db
-      .insert(usuarios)
-      .values({
-        email: dto.email.toLowerCase().trim(),
-        passwordHash,
-        rol: Rol.ALUMNO,
-        estado: EstadoUsuario.ACTIVO,
-        activo: true,
-      })
-      .returning();
-
-    // 5. Vincular alumno al tenant del coach.
+    // 4-5. Crear usuario + vincularlo al tenant del coach en UNA transacción: si
+    // falla el perfil no queda un usuario huérfano que bloquee el correo.
     // RF-011 (registro público): el INSERT es anónimo pero actúa para un coach concreto ya
     // resuelto; RNF-003/ADR-011 (etapa 3) exige el contexto `{ entrenadorId: coachResuelto }`
     // para que la política tenant acepte la fila (WITH CHECK sobre `entrenador_id`).
-    const [nuevoPerfil] = await this.withTenant({ entrenadorId: coach.usuarioId }, (tx) =>
-      tx
-        .insert(perfilesAlumno)
-        .values({
-          usuarioId: nuevoUsuario.id,
-          entrenadorId: coach.usuarioId,
-          tipoDocumento: dto.tipoDocumento,
-          numeroDocumento: dto.numeroDocumento.trim(),
-          nombres: dto.nombres.trim(),
-          apellidos: dto.apellidos.trim(),
-          fechaNacimiento: dto.fechaNacimiento,
-          telefonoWhatsapp: dto.telefonoWhatsapp.trim(),
-          modalidad: dto.modalidad,
-          estadoActivacion: EstadoAlumno.ACTIVO,
-        })
-        .returning()
+    const { nuevoUsuario, nuevoPerfil } = await this.withTenant(
+      { entrenadorId: coach.usuarioId },
+      async (tx) => {
+        const [nuevoUsuario] = await tx
+          .insert(usuarios)
+          .values({
+            email: dto.email.toLowerCase().trim(),
+            passwordHash,
+            rol: Rol.ALUMNO,
+            estado: EstadoUsuario.ACTIVO,
+            activo: true,
+          })
+          .returning();
+
+        const [nuevoPerfil] = await tx
+          .insert(perfilesAlumno)
+          .values({
+            usuarioId: nuevoUsuario.id,
+            entrenadorId: coach.usuarioId,
+            tipoDocumento: dto.tipoDocumento,
+            numeroDocumento: dto.numeroDocumento.trim(),
+            nombres: dto.nombres.trim(),
+            apellidos: dto.apellidos.trim(),
+            fechaNacimiento: dto.fechaNacimiento,
+            telefonoWhatsapp: dto.telefonoWhatsapp.trim(),
+            modalidad: dto.modalidad,
+            estadoActivacion: EstadoAlumno.ACTIVO,
+          })
+          .returning();
+
+        return { nuevoUsuario, nuevoPerfil };
+      }
     );
 
     // 6. RN-07.4: notificar al coach del nuevo registro por la infraestructura existente
@@ -458,7 +491,7 @@ export class AlumnosService {
         );
 
       if (!perfil) {
-        throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
+        throw new NotFoundException(MENSAJE_ALUMNO_FUERA_DE_LISTA);
       }
 
       const [fila] = await tx
@@ -524,11 +557,15 @@ export class AlumnosService {
         );
 
       if (!perfil) {
-        throw new NotFoundException('Alumno no encontrado');
+        throw new NotFoundException(MENSAJE_ALUMNO_NO_ENCONTRADO);
       }
 
       if (perfil.entrenadorId !== entrenadorId) {
-        throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
+        throw this.accesoDenegado(
+          { usuarioId: entrenadorId, rol: Rol.ENTRENADOR },
+          { ruta: '/alumnos/:id', metodo: 'PATCH' },
+          'ALUMNO_DE_OTRO_ENTRENADOR'
+        );
       }
 
       // RF-012 RN-02/RN-04: un alumno archivado sólo admite la restauración; editar su expediente
@@ -643,7 +680,7 @@ export class AlumnosService {
         );
 
       if (!perfil) {
-        throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
+        throw new NotFoundException(MENSAJE_ALUMNO_FUERA_DE_LISTA);
       }
 
       const ahora = new Date();
@@ -691,10 +728,14 @@ export class AlumnosService {
           .where(eq(perfilesAlumno.id, alumnoId));
 
         if (perfilOtroCoach) {
-          throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
+          throw this.accesoDenegado(
+            { usuarioId: entrenadorId, rol: Rol.ENTRENADOR },
+            { ruta: '/alumnos/:id/restaurar', metodo: 'PATCH' },
+            'ALUMNO_DE_OTRO_ENTRENADOR'
+          );
         }
 
-        throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
+        throw new NotFoundException(MENSAJE_ALUMNO_FUERA_DE_LISTA);
       }
 
       // Idempotencia: si ya está activo
@@ -729,7 +770,7 @@ export class AlumnosService {
         id: alumnoId,
         estadoActivacion: EstadoAlumno.ACTIVO,
         deletedAtUtc: null,
-        mensaje: 'El alumno ya se encuentra activo en su cartera.',
+        mensaje: 'Este alumno ya está activo en tu lista.',
       };
     }
 
@@ -1266,17 +1307,25 @@ export class AlumnosService {
     );
 
     if (!perfil) {
-      throw new NotFoundException('Alumno no encontrado');
+      throw new NotFoundException(MENSAJE_ALUMNO_NO_ENCONTRADO);
     }
 
     // Aislamiento: El alumno solo puede verse a sí mismo
     if (actorRole === Rol.ALUMNO && perfil.usuarioId !== actorUserId) {
-      throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
+      throw this.accesoDenegado(
+        { usuarioId: actorUserId, rol: actorRole },
+        { ruta: '/alumnos/:id', metodo: 'GET' },
+        'PERFIL_DE_OTRO_ALUMNO'
+      );
     }
 
     // Aislamiento: El coach solo puede ver a alumnos de su tenant
     if (actorRole === Rol.ENTRENADOR && perfil.entrenadorId !== actorEntrenadorId && perfil.entrenadorId !== actorUserId) {
-      throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
+      throw this.accesoDenegado(
+        { usuarioId: actorUserId, rol: actorRole },
+        { ruta: '/alumnos/:id', metodo: 'GET' },
+        'ALUMNO_DE_OTRO_ENTRENADOR'
+      );
     }
 
     // RF-005: plan activo + precio acordado reales del expediente (override o última cuota).

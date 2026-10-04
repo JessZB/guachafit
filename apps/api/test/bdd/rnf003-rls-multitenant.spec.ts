@@ -129,6 +129,7 @@ function crearSuperficieRls(rowsPorTabla: Record<string, any[]>): SuperficieRls 
       orderBy: () => q,
       groupBy: () => q,
       limit: () => q,
+      for: () => q,
       then: (resolve: any, reject: any) => Promise.resolve(rows).then(resolve, reject),
     };
     return q;
@@ -354,7 +355,10 @@ describe('RNF-003: setTenantSession y withTenant (mecanismo de sesión RLS)', ()
 
 describe('RNF-003: consultas a `rutinas` siempre dentro de withTenant (cableado de servicios)', () => {
   it('guardarRutinaSemanal ejecuta update+insert de rutinas con el GUC del coach', async () => {
-    const { servicio, superficie } = crearServicio();
+    // La rutina valida sus ejercicios contra el catálogo visible del coach.
+    const { servicio, superficie } = crearServicio({
+      ejercicios_catalogo: [{ ...ejercicioGlobal, nombre: 'Sentadilla' }],
+    });
 
     await servicio.guardarRutinaSemanal(COACH_ID, ALUMNO_PERFIL_ID, {
       alumnoId: ALUMNO_PERFIL_ID,

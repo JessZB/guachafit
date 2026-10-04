@@ -99,6 +99,13 @@
       "when": 1790208366631,
       "tag": "0013_rls_perfiles_alumno",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790990234338,
+      "tag": "0014_ejercicios_sesion_indicaciones",
+      "breakpoints": true
     }
   ]
 }

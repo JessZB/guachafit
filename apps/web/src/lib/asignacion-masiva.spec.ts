@@ -12,6 +12,7 @@ import {
   hayMasAlumnos,
   mensajeListaVaciaAlumnos,
   requiereConfirmacionReintento,
+  resolverClaveAsignacion,
   textoConfirmacionReemplazo,
 } from './asignacion-masiva';
 import { ApiError, ErrorDeConexion } from './api-client';
@@ -113,7 +114,7 @@ describe('asignacion-masiva: búsqueda y paginación en el servidor', () => {
   });
 });
 
-describe('asignacion-masiva: reintento tras un fallo ambiguo (sin idempotencia en la API)', () => {
+describe('asignacion-masiva: reintento tras un fallo ambiguo (clave de idempotencia + confirmación en modo Añadir)', () => {
   const problema = { type: 'about:blank', title: 'Error', status: 500, detail: 'x' } as any;
 
   it('trata como ambiguo el fallo de red, el timeout/cancelación y los 5xx', () => {
@@ -132,13 +133,52 @@ describe('asignacion-masiva: reintento tras un fallo ambiguo (sin idempotencia e
     expect(esFalloAmbiguoAsignacion(new ApiError(404, problema))).toBe(false);
   });
 
-  it('pide confirmación antes de reintentar en modo Añadir solo tras un fallo ambiguo', () => {
+  it('tras un fallo ambiguo no promete que el reintento sea seguro: pide revisar la rutina', () => {
     expect(MENSAJE_ASIGNACION_INCIERTA).toBe(
-      'No sabemos si la asignación se completó. Revisa la rutina de tus alumnos antes de volver a intentarlo.'
+      'No pudimos confirmar la asignación. Si eliges «Añadir», revisa antes la rutina de tus alumnos para no duplicar días.'
     );
+    expect(MENSAJE_ASIGNACION_INCIERTA).not.toMatch(/no se repetirá/);
+  });
+
+  it('pide confirmación antes de reintentar en modo Añadir solo tras un fallo ambiguo', () => {
+    // La clave de idempotencia protege el caso común, pero el registro del servidor vive en
+    // memoria (se pierde al reiniciar y no se comparte entre réplicas): no basta como garantía.
     expect(requiereConfirmacionReintento(true, ModoAsignacionPlantilla.FUSIONAR)).toBe(true);
     expect(requiereConfirmacionReintento(false, ModoAsignacionPlantilla.FUSIONAR)).toBe(false);
-    // Reemplazar ya pide su propia confirmación y no duplica días al repetirse.
+  });
+
+  it('en modo Reemplazar no pide una confirmación extra tras un fallo ambiguo', () => {
+    // Reemplazar ya tiene su propia confirmación y repetirlo deja el mismo resultado.
     expect(requiereConfirmacionReintento(true, ModoAsignacionPlantilla.REEMPLAZAR)).toBe(false);
+    expect(requiereConfirmacionReintento(false, ModoAsignacionPlantilla.REEMPLAZAR)).toBe(false);
+  });
+});
+
+describe('asignacion-masiva: clave de idempotencia por intento', () => {
+  let contador = 0;
+  const generar = () => `clave-${++contador}`;
+
+  it('el primer intento genera una clave nueva', () => {
+    contador = 0;
+    const intento = resolverClaveAsignacion(null, ['a', 'b'], ModoAsignacionPlantilla.FUSIONAR, generar);
+    expect(intento.clave).toBe('clave-1');
+  });
+
+  it('el reintento de la misma selección y modo reutiliza la clave', () => {
+    contador = 0;
+    const primero = resolverClaveAsignacion(null, ['a', 'b'], ModoAsignacionPlantilla.FUSIONAR, generar);
+    const reintento = resolverClaveAsignacion(primero, ['a', 'b'], ModoAsignacionPlantilla.FUSIONAR, generar);
+    expect(reintento).toEqual(primero);
+  });
+
+  it('otra selección u otro modo es otra asignación: clave nueva', () => {
+    contador = 0;
+    const primero = resolverClaveAsignacion(null, ['a', 'b'], ModoAsignacionPlantilla.FUSIONAR, generar);
+    expect(
+      resolverClaveAsignacion(primero, ['a'], ModoAsignacionPlantilla.FUSIONAR, generar).clave
+    ).toBe('clave-2');
+    expect(
+      resolverClaveAsignacion(primero, ['a', 'b'], ModoAsignacionPlantilla.REEMPLAZAR, generar).clave
+    ).toBe('clave-3');
   });
 });

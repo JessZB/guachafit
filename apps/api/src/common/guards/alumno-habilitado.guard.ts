@@ -8,7 +8,7 @@ import {
   eq,
   perfilesAlumno,
 } from '@guachafit/database';
-import { EstadoAlumno, Rol } from '@guachafit/shared';
+import { CODIGO_ALUMNO_BLOQUEADO, EstadoAlumno, Rol } from '@guachafit/shared';
 import { ESTADOS_BLOQUEADOS_ALUMNO_KEY } from '../decorators/bloqueo-alumno.decorator';
 import { MENSAJE_CUENTA_ARCHIVADA } from '../mensajes-acceso';
 import {
@@ -148,7 +148,7 @@ export class AlumnoHabilitadoGuard implements CanActivate {
     return new ForbiddenException({
       statusCode: 403,
       error: 'Forbidden',
-      code: 'ALUMNO_BLOQUEADO',
+      code: CODIGO_ALUMNO_BLOQUEADO,
       estado,
       motivo,
       title: 'Acceso bloqueado',

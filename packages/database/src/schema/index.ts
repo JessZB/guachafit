@@ -433,6 +433,10 @@ export const ejerciciosSesion = pgTable('ejercicios_sesion', {
     .references(() => ejerciciosCatalogo.id, { onDelete: 'restrict' }),
   orden: integer('orden').default(1).notNull(),
   notasCoach: text('notas_coach'),
+  /** RF-017 RN-01: indicaciones técnicas del coach para el ejercicio. */
+  notasTecnicas: text('notas_tecnicas'),
+  /** Esfuerzo prescrito (1-10). `series_registro.rpe` guarda el real del alumno. */
+  rpePrescrito: numeric('rpe_prescrito', { precision: 3, scale: 1 }),
   descansoPrescritoSegundos: integer('descanso_prescrito_segundos').default(90).notNull(),
 });
 

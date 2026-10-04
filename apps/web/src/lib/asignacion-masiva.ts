@@ -1,10 +1,10 @@
 /**
- * RF-017 RN-03 (A6): asignación de una plantilla a varios alumnos a la vez.
+ * RF-017 RN-03: asignación de una plantilla a varios alumnos a la vez.
  * Lógica pura (selección con tope, textos de confirmación y resultado por alumno) para poder
  * testearla sin DOM.
  */
 import { ModoAsignacionPlantilla, type ResultadoAsignacionAlumnoDTO } from '@guachafit/shared';
-import { ApiError } from './api-client';
+import { ApiError, generateIdempotencyKey } from './api-client';
 import { traducirMensajeSuelto } from './mensajes-error';
 
 /** Techo del contrato `AsignarPlantillaSchema.alumnoIds` (máximo 50 por solicitud). */
@@ -128,12 +128,11 @@ export function mensajeListaVaciaAlumnos(busqueda: string): string {
 }
 
 export const MENSAJE_ASIGNACION_INCIERTA =
-  'No sabemos si la asignación se completó. Revisa la rutina de tus alumnos antes de volver a intentarlo.';
+  'No pudimos confirmar la asignación. Si eliges «Añadir», revisa antes la rutina de tus alumnos para no duplicar días.';
 
 /**
- * `POST /plantillas/:id/asignar` NO acepta `X-Idempotency-Key`: si la respuesta no llegó (red,
- * timeout/cancelación) o el servidor falló (5xx/408), la asignación pudo aplicarse igual.
- * Un 4xx es un rechazo claro: no se aplicó nada.
+ * Si la respuesta no llegó (red, timeout/cancelación) o el servidor falló (5xx/408), la asignación
+ * pudo aplicarse igual. Un 4xx es un rechazo claro: no se aplicó nada.
  */
 export function esFalloAmbiguoAsignacion(error: unknown): boolean {
   if (error instanceof ApiError) return error.status >= 500 || error.status === 408;
@@ -145,8 +144,16 @@ export function esFalloAmbiguoAsignacion(error: unknown): boolean {
   return true;
 }
 
+/** Intento de asignación: misma selección + mismo modo comparten clave de idempotencia. */
+export interface IntentoAsignacion {
+  huella: string;
+  clave: string;
+}
+
 /**
  * Tras un fallo ambiguo, reintentar en modo Añadir podría duplicar los días: se pide confirmación.
+ * La clave de idempotencia evita el duplicado en el caso común, pero el servidor la recuerda solo
+ * en memoria (se pierde al reiniciar y no se comparte entre réplicas), así que no es una garantía.
  * Reemplazar ya tiene su propia confirmación y repetirlo deja el mismo resultado.
  */
 export function requiereConfirmacionReintento(
@@ -154,4 +161,21 @@ export function requiereConfirmacionReintento(
   modo: ModoAsignacionPlantilla
 ): boolean {
   return huboFalloAmbiguo && modo === ModoAsignacionPlantilla.FUSIONAR;
+}
+
+/**
+ * `POST /plantillas/:id/asignar` acepta `X-Idempotency-Key`. Cada asignación usa una clave; los
+ * reintentos de la MISMA selección y modo la reutilizan, así el servidor puede devolver la
+ * respuesta original en vez de volver a añadir los días (mientras recuerde la clave). Otra
+ * selección u otro modo es otra asignación y recibe una clave nueva.
+ */
+export function resolverClaveAsignacion(
+  previo: IntentoAsignacion | null,
+  alumnoIds: string[],
+  modo: ModoAsignacionPlantilla,
+  generarClave: () => string = generateIdempotencyKey
+): IntentoAsignacion {
+  const huella = `${modo}|${alumnoIds.join(',')}`;
+  if (previo && previo.huella === huella) return previo;
+  return { huella, clave: generarClave() };
 }

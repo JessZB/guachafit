@@ -1,4 +1,5 @@
 import { Injectable, Optional, Inject, Logger } from '@nestjs/common';
+import { parsearContrato } from '../../common/errores/parsear-contrato';
 import { ConfigService } from '@nestjs/config';
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -222,7 +223,7 @@ export class R2StorageService {
     dto: PresignedUploadUrlDTO,
     customUuid?: string
   ): Promise<PresignedUploadUrlResponseDTO> {
-    const validado = PresignedUploadUrlSchema.parse(dto);
+    const validado = parsearContrato(PresignedUploadUrlSchema, dto);
     const uuid = customUuid ?? randomUUID();
     const extension = EXTENSION_POR_MIME[validado.mimeType] ?? 'webp';
 

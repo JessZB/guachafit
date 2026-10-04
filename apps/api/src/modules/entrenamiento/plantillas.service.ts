@@ -12,12 +12,9 @@ import {
   eq,
   and,
   desc,
-  isNull,
-  or,
   plantillasRutina,
   rutinas,
   perfilesAlumno,
-  ejerciciosCatalogo,
 } from '@guachafit/database';
 import {
   NivelObjetivoPlantilla,
@@ -35,7 +32,11 @@ import {
   AsignacionPlantillaResponseDTO,
   ResultadoAsignacionAlumnoDTO,
 } from '@guachafit/shared';
+import { createHash } from 'node:crypto';
 import { parsearContrato } from '../../common/errores/parsear-contrato';
+import { RegistroIdempotencia } from '../../common/idempotencia/registro-idempotencia';
+import { obtenerDiaSugeridoBloque } from '../../common/adherencia.util';
+import { validarEjerciciosDeBloques } from './catalogo-ejercicios';
 import {
   MENSAJE_ALUMNO_FUERA_DE_LISTA,
   MENSAJE_ALUMNO_NO_ENCONTRADO,
@@ -76,10 +77,21 @@ const MENSAJE_AJUSTE_AJENO_A_PLANTILLA =
   'Uno de los ajustes no corresponde a esta plantilla. Ábrela de nuevo.';
 /** LOTE API-2: fallo inesperado al asignar a un alumno del lote (el detalle va al log). */
 const MENSAJE_ASIGNACION_FALLIDA = 'No pudimos asignar la rutina a este alumno. Inténtalo de nuevo.';
+/** FUSIONAR dejaría la rutina del alumno por encima del máximo semanal. */
+const MENSAJE_FUSION_SUPERA_7_DIAS =
+  'La rutina de este alumno quedaría con más de 7 días. Usa «Reemplazar» o quita días antes de añadir.';
+/** Máximo de días de una rutina semanal (`GuardarRutinaSemanalSchema.bloques.max(7)`). */
+const MAX_DIAS_RUTINA = 7;
 
 @Injectable()
 export class PlantillasService {
   private readonly logger = new Logger(PlantillasService.name);
+
+  /**
+   * `POST /plantillas/:id/asignar` con `X-Idempotency-Key`. Misma clave + mismo cuerpo
+   * (mismo coach y plantilla) → misma respuesta sin volver a aplicar la asignación.
+   */
+  private readonly idempotencia = new RegistroIdempotencia();
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
@@ -134,7 +146,7 @@ export class PlantillasService {
     input: CrearPlantillaRutinaDTO
   ): Promise<PlantillaRutinaDTO> {
     const validado = parsearContrato(CrearPlantillaRutinaSchema, input);
-    const bloques = await this.validarEjerciciosDeBloques(entrenadorId, validado.bloques);
+    const bloques = await validarEjerciciosDeBloques(this.db, entrenadorId, validado.bloques);
     const ahora = new Date();
 
     // RNF-003/ADR-011: `plantillas_rutina` tiene RLS; la inserción corre con el
@@ -180,7 +192,7 @@ export class PlantillasService {
     if (validado.nombre !== undefined) cambios.nombre = validado.nombre.trim();
     if (validado.nivelObjetivo !== undefined) cambios.nivelObjetivo = validado.nivelObjetivo;
     if (validado.bloques !== undefined) {
-      cambios.bloques = await this.validarEjerciciosDeBloques(entrenadorId, validado.bloques);
+      cambios.bloques = await validarEjerciciosDeBloques(this.db, entrenadorId, validado.bloques);
     }
     if (validado.activa !== undefined) cambios.activa = validado.activa;
 
@@ -224,13 +236,43 @@ export class PlantillasService {
    * - Valida la plantilla (propiedad + activa) y los ajustes UNA vez, antes del lote.
    * - Cada alumno se procesa de forma aislada: un alumno inexistente o de otro tenant
    *   se reporta como fallo sin abortar la asignación de los demás.
+   * - con `idempotencyKey`, un reintento con la misma clave y el mismo cuerpo
+   *   devuelve la respuesta original sin reaplicar (también si llega mientras la primera corre).
    */
   async asignarPlantilla(
     entrenadorId: string,
     plantillaId: string,
-    input: AsignarPlantillaDTO
+    input: AsignarPlantillaDTO,
+    idempotencyKey?: string
   ): Promise<AsignacionPlantillaResponseDTO> {
     const validado = parsearContrato(AsignarPlantillaSchema, input);
+    const clave = this.claveIdempotenciaAsignacion(entrenadorId, plantillaId, validado, idempotencyKey);
+    return this.idempotencia.ejecutar(clave, () =>
+      this.ejecutarAsignacion(entrenadorId, plantillaId, validado)
+    );
+  }
+
+  /**
+   * Coach + plantilla + clave + huella del cuerpo validado: la misma clave con otro cuerpo no
+   * reutiliza la respuesta anterior.
+   */
+  private claveIdempotenciaAsignacion(
+    entrenadorId: string,
+    plantillaId: string,
+    validado: AsignarPlantillaDTO,
+    idempotencyKey?: string
+  ): string | null {
+    const key = (idempotencyKey ?? '').trim();
+    if (!key) return null;
+    const huella = createHash('sha256').update(JSON.stringify(validado)).digest('hex');
+    return `asignar-plantilla:${entrenadorId}:${plantillaId}:${key}:${huella}`;
+  }
+
+  private async ejecutarAsignacion(
+    entrenadorId: string,
+    plantillaId: string,
+    validado: AsignarPlantillaDTO
+  ): Promise<AsignacionPlantillaResponseDTO> {
     const plantilla = await this.cargarPlantillaDelCoach(entrenadorId, plantillaId);
 
     if (!plantilla.activa) {
@@ -298,27 +340,51 @@ export class PlantillasService {
       const ahora = new Date();
 
       if (modo === ModoAsignacionPlantilla.FUSIONAR) {
-        const activa = await this.obtenerRutinaActiva(entrenadorId, perfil.usuarioId);
-        if (activa) {
-          const bloquesFusionados = [
-            ...(activa.bloques as BloqueDiaRutinaDTO[]),
-            ...bloquesClonados,
-          ];
-          // RNF-003/ADR-009: escritura tenant-scoped sobre `rutinas` con GUC del coach.
-          await this.withTenant({ entrenadorId }, async (tx) => {
-            await tx
-              .update(rutinas)
-              .set({ bloques: bloquesFusionados, updatedAtUtc: ahora })
-              .where(eq(rutinas.id, activa.id));
-          });
+        // Lectura de la rutina activa + actualización en UNA transacción con el
+        // GUC del coach (RNF-003/ADR-009) y la fila bloqueada (`FOR UPDATE`): dos fusiones
+        // simultáneas no se pisan los días.
+        const fusion = await this.withTenant({ entrenadorId }, async (tx) => {
+          const [activa] = await tx
+            .select()
+            .from(rutinas)
+            .where(and(eq(rutinas.alumnoId, perfil.usuarioId), eq(rutinas.activa, true)))
+            .orderBy(desc(rutinas.createdAtUtc))
+            .limit(1)
+            .for('update');
+          if (!activa) return null;
 
+          const existentes = (activa.bloques as BloqueDiaRutinaDTO[]) ?? [];
+          if (existentes.length + bloquesClonados.length > MAX_DIAS_RUTINA) {
+            return { activa, excedeMaximo: true as const, bloquesTotal: existentes.length };
+          }
+
+          const bloquesFusionados = [
+            ...existentes,
+            ...this.asignarDiasLibres(existentes, bloquesClonados),
+          ];
+          await tx
+            .update(rutinas)
+            .set({ bloques: bloquesFusionados, updatedAtUtc: ahora })
+            .where(eq(rutinas.id, activa.id));
+          return { activa, excedeMaximo: false as const, bloquesTotal: bloquesFusionados.length };
+        });
+
+        if (fusion?.excedeMaximo) {
+          return {
+            alumnoId,
+            usuarioId: perfil.usuarioId,
+            exito: false,
+            error: MENSAJE_FUSION_SUPERA_7_DIAS,
+          };
+        }
+        if (fusion) {
           return {
             alumnoId,
             usuarioId: perfil.usuarioId,
             exito: true,
-            rutinaId: activa.id,
-            rutinaNombre: activa.nombre,
-            bloquesTotal: bloquesFusionados.length,
+            rutinaId: fusion.activa.id,
+            rutinaNombre: fusion.activa.nombre,
+            bloquesTotal: fusion.bloquesTotal,
           };
         }
         // Sin rutina activa: la fusión degenera en reemplazo (primera rutina del alumno).
@@ -413,94 +479,26 @@ export class PlantillasService {
   }
 
   /**
-   * Rutina activa del alumno. RNF-003/ADR-009: `rutinas` tiene RLS, por lo que la
-   * lectura corre dentro de withTenant con el GUC del coach dueño del alumno.
+   * Los días añadidos por FUSIONAR no repiten el día sugerido de los existentes ni
+   * entre sí. Cada día nuevo conserva su día si está libre; si no, toma el siguiente libre de la
+   * semana (con 7 días como máximo siempre hay uno). Los días existentes no se tocan.
    */
-  private async obtenerRutinaActiva(
-    entrenadorId: string,
-    alumnoUsuarioId: string
-  ): Promise<RutinaRow | undefined> {
-    const [rutina] = await this.withTenant({ entrenadorId }, async (tx) =>
-      tx
-        .select()
-        .from(rutinas)
-        .where(and(eq(rutinas.alumnoId, alumnoUsuarioId), eq(rutinas.activa, true)))
-        .orderBy(desc(rutinas.createdAtUtc))
-        .limit(1)
-    );
-    return rutina;
-  }
-
-  /**
-   * Valida cada ejercicio de los bloques contra el catálogo:
-   * debe existir (por ID o, en su defecto, por nombre exacto) y ser global
-   * (`entrenador_id IS NULL`) o del propio coach, y estar activo.
-   * Devuelve bloques normalizados con `ejercicioId` resuelto.
-   */
-  private async validarEjerciciosDeBloques(
-    entrenadorId: string,
-    bloques: BloqueDiaRutinaDTO[]
-  ): Promise<BloqueDiaRutinaDTO[]> {
-    const resultado: BloqueDiaRutinaDTO[] = [];
-
-    for (const bloque of bloques) {
-      const ejercicios: BloqueDiaRutinaDTO['ejercicios'] = [];
-
-      for (const ejercicio of bloque.ejercicios) {
-        const resuelto = await this.resolverEjercicioDelCatalogo(
-          entrenadorId,
-          ejercicio.ejercicioId,
-          ejercicio.nombre
-        );
-
-        if (!resuelto) {
-          throw new BadRequestException(
-            `El ejercicio '${ejercicio.nombre}' no existe en el catálogo global ni en el catálogo del entrenador.`
-          );
-        }
-
-        ejercicios.push({ ...ejercicio, ejercicioId: resuelto.id });
+  private asignarDiasLibres(
+    existentes: BloqueDiaRutinaDTO[],
+    nuevos: BloqueDiaRutinaDTO[]
+  ): BloqueDiaRutinaDTO[] {
+    const ocupados = new Set(existentes.map((bloque, idx) => obtenerDiaSugeridoBloque(bloque, idx)));
+    return nuevos.map((bloque) => {
+      let dia =
+        bloque.diaSugerido && bloque.diaSugerido >= 1 && bloque.diaSugerido <= 7
+          ? bloque.diaSugerido
+          : 1;
+      for (let paso = 0; paso < 7 && ocupados.has(dia); paso++) {
+        dia = (dia % 7) + 1;
       }
-
-      resultado.push({ ...bloque, ejercicios });
-    }
-
-    return resultado;
-  }
-
-  private async resolverEjercicioDelCatalogo(
-    entrenadorId: string,
-    ejercicioId: string | undefined,
-    nombre: string
-  ): Promise<EjercicioCatalogoRow | undefined> {
-    if (ejercicioId) {
-      const [porId] = await this.db
-        .select()
-        .from(ejerciciosCatalogo)
-        .where(and(eq(ejerciciosCatalogo.id, ejercicioId), eq(ejerciciosCatalogo.activo, true)))
-        .limit(1);
-      return this.esDelTenant(porId, entrenadorId) ? porId : undefined;
-    }
-
-    const candidatos = await this.db
-      .select()
-      .from(ejerciciosCatalogo)
-      .where(
-        and(
-          eq(ejerciciosCatalogo.nombre, nombre),
-          eq(ejerciciosCatalogo.activo, true),
-          or(
-            eq(ejerciciosCatalogo.entrenadorId, entrenadorId),
-            isNull(ejerciciosCatalogo.entrenadorId)
-          )!
-        )
-      );
-    return candidatos[0];
-  }
-
-  private esDelTenant(ejercicio: EjercicioCatalogoRow | undefined, entrenadorId: string): boolean {
-    if (!ejercicio) return false;
-    return ejercicio.entrenadorId === null || ejercicio.entrenadorId === entrenadorId;
+      ocupados.add(dia);
+      return { ...bloque, diaSugerido: dia };
+    });
   }
 
   /**
@@ -608,11 +606,4 @@ interface RutinaRow {
   nombre: string;
   bloques: unknown;
   activa: boolean;
-}
-
-interface EjercicioCatalogoRow {
-  id: string;
-  entrenadorId: string | null;
-  nombre: string;
-  activo: boolean;
 }

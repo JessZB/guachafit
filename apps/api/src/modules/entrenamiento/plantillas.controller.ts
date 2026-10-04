@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   Query,
+  Headers,
   Req,
   UseGuards,
   HttpCode,
@@ -92,8 +93,14 @@ export class PlantillasController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
   @HttpCode(HttpStatus.OK)
-  async asignarPlantilla(@Req() req: any, @Param('id') id: string, @Body() body: unknown) {
-    return this.plantillasService.asignarPlantilla(this.coachId(req), id, body as any);
+  async asignarPlantilla(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: unknown,
+    // Misma clave + mismo cuerpo => misma respuesta sin reaplicar (reintentos de red).
+    @Headers('x-idempotency-key') idempotencyHeader?: string
+  ) {
+    return this.plantillasService.asignarPlantilla(this.coachId(req), id, body as any, idempotencyHeader);
   }
 
   private coachId(req: any): string {

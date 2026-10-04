@@ -8,10 +8,19 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { MENSAJE_SIN_ACCESO_ALUMNO } from '../../common/mensajes-acceso';
+import {
+  MENSAJE_ALUMNO_FUERA_DE_LISTA,
+  MENSAJE_ALUMNO_NO_ENCONTRADO,
+  MENSAJE_SIN_ACCESO_ALUMNO,
+} from '../../common/mensajes-acceso';
+
+/** Cuota o pago inexistente (o de otro coach), en lenguaje claro y con tuteo. */
+const MENSAJE_CUOTA_NO_ENCONTRADA = 'No encontramos esa cuota. Actualiza la pantalla.';
+const MENSAJE_PAGO_NO_ENCONTRADO = 'No encontramos ese pago. Actualiza la pantalla.';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { R2StorageService } from '../antropometria/r2-storage.service';
 import { BillingSchedulerService } from './billing-scheduler.service';
+import { RegistroIdempotencia } from '../../common/idempotencia/registro-idempotencia';
 import {
   CobroDirectoRegistradoEvent,
   PagoAprobadoEvent,
@@ -170,11 +179,10 @@ export function assertBalanceInvariant(
 
 @Injectable()
 export class FinanzasService {
-  // Store de idempotencia en memoria para reintentos inmediatos por lag de red (RNF-002 §4)
-  private readonly idempotencyCache = new Map<
-    string,
-    { transaccion: TransaccionPagoDetalleDTO; cuota: CuotaDetalleDTO }
-  >();
+  // Registro de idempotencia en memoria para reintentos inmediatos por lag de red (RNF-002 §4):
+  // con TTL (24 h) y tope de entradas, une los reintentos simultáneos con la misma clave a una sola
+  // ejecución y no recuerda los fallos.
+  private readonly idempotencia = new RegistroIdempotencia();
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
@@ -633,7 +641,7 @@ export class FinanzasService {
         );
 
       if (!plan) {
-        throw new NotFoundException('El plan especificado no existe o no pertenece a su catálogo.');
+        throw new NotFoundException('Ese plan no está en tu catálogo. Actualiza la pantalla.');
       }
 
       // 2. Validar que el alumno pertenezca al entrenador
@@ -649,7 +657,7 @@ export class FinanzasService {
         );
 
       if (!alumno) {
-        throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
+        throw new NotFoundException(MENSAJE_ALUMNO_FUERA_DE_LISTA);
       }
 
       // 3. Upsert en tabla overridesClientePlan
@@ -782,7 +790,7 @@ export class FinanzasService {
           );
 
         if (!alumno) {
-          throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
+          throw new NotFoundException(MENSAJE_ALUMNO_FUERA_DE_LISTA);
         }
       }
 
@@ -938,7 +946,7 @@ export class FinanzasService {
           );
 
         if (!alumno) {
-          throw new NotFoundException('El alumno especificado no existe o no pertenece a su cartera.');
+          throw new NotFoundException(MENSAJE_ALUMNO_FUERA_DE_LISTA);
         }
 
         // Validar plan
@@ -950,7 +958,7 @@ export class FinanzasService {
           );
 
         if (!plan) {
-          throw new NotFoundException('El plan especificado no pertenece a su catálogo.');
+          throw new NotFoundException('Ese plan no está en tu catálogo. Actualiza la pantalla.');
         }
 
         // Validar unicidad (clienteId, planId, periodo)
@@ -1118,7 +1126,7 @@ export class FinanzasService {
         .where(eq(cuotasMembresia.id, cuotaId));
 
       if (!cuota) {
-        throw new NotFoundException('Cuota no encontrada.');
+        throw new NotFoundException(MENSAJE_CUOTA_NO_ENCONTRADA);
       }
 
       // Aislamiento de Tenancy / Autorización
@@ -1248,17 +1256,37 @@ export class FinanzasService {
     // antes del control de titularidad.
     const cacheKey = idempotencyKey ? `${alumnoUserId}:${idempotencyKey}` : undefined;
 
-    // 1. Verificar cache en memoria para idempotencia rápida (lag de red / reintento exacto)
-    if (cacheKey && this.idempotencyCache.has(cacheKey)) {
-      const cached = this.idempotencyCache.get(cacheKey)!;
+    // 1. Idempotencia en memoria (lag de red / reintento exacto): una respuesta guardada o una
+    //    ejecución en curso con la misma clave se reutiliza en vez de registrar otro pago.
+    let ejecutadoAhora = false;
+    const { transaccion, cuota } = await this.idempotencia.ejecutar(cacheKey, () => {
+      ejecutadoAhora = true;
+      return this.registrarReportePago(cuotaId, alumnoUserId, dto);
+    });
+
+    if (!ejecutadoAhora) {
       return {
-        transaccion: cached.transaccion,
-        cuota: cached.cuota,
+        transaccion,
+        cuota,
         esDuplicadoIdempotente: true,
         mensaje: 'Pago ya reportado previamente (respuesta idempotente).',
       };
     }
 
+    return {
+      transaccion,
+      cuota,
+      esDuplicadoIdempotente: false,
+      mensaje: 'Pago reportado con éxito. Tu entrenador lo revisará pronto.',
+    };
+  }
+
+  /** Pasos 2-5 del reporte de pago (sin idempotencia): valida, registra, notifica y devuelve. */
+  private async registrarReportePago(
+    cuotaId: string,
+    alumnoUserId: string,
+    dto: ReportarPagoDTO
+  ): Promise<{ transaccion: TransaccionPagoDetalleDTO; cuota: CuotaDetalleDTO }> {
     // 2-5. RNF-003/ADR-011 (etapa 2): el alumno reporta con contexto self (`current_usuario_id`).
     // Validación de titularidad, transacción y transición de la cuota en UNA transacción; las
     // políticas `self_select`/`self_insert`/`self_update` de 0012 cubren exactamente este flujo.
@@ -1270,7 +1298,7 @@ export class FinanzasService {
         .where(eq(cuotasMembresia.id, cuotaId));
 
       if (!cuota) {
-        throw new NotFoundException('Cuota no encontrada.');
+        throw new NotFoundException(MENSAJE_CUOTA_NO_ENCONTRADA);
       }
 
       if (cuota.clienteId !== alumnoUserId) {
@@ -1392,13 +1420,6 @@ export class FinanzasService {
       updatedAtUtc: nuevaTx.updatedAtUtc.toISOString(),
     };
 
-    if (cacheKey) {
-      this.idempotencyCache.set(cacheKey, {
-        transaccion: txDto,
-        cuota: cuotaDto,
-      });
-    }
-
     if (this.eventEmitter) {
       // RF-014 RN-01: evento de dominio fire-and-forget; un fallo de colas NUNCA tumba el reporte.
       void this.eventEmitter
@@ -1428,12 +1449,7 @@ export class FinanzasService {
         .catch(() => {});
     }
 
-    return {
-      transaccion: txDto,
-      cuota: cuotaDto,
-      esDuplicadoIdempotente: false,
-      mensaje: 'Pago reportado con éxito. Se encuentra en espera de verificación por su entrenador.',
-    };
+    return { transaccion: txDto, cuota: cuotaDto };
   }
 
   // ===========================================================================
@@ -1481,7 +1497,7 @@ export class FinanzasService {
         );
 
       if (!cuotaLock) {
-        throw new NotFoundException('Cuota no encontrada o no pertenece a su cartera.');
+        throw new NotFoundException(MENSAJE_CUOTA_NO_ENCONTRADA);
       }
 
       if (cuotaLock.estado === EstadoCuota.ANULADA) {
@@ -1685,7 +1701,7 @@ export class FinanzasService {
         );
 
       if (!txRecord) {
-        throw new NotFoundException('Transacción no encontrada o no pertenece a su cartera.');
+        throw new NotFoundException(MENSAJE_PAGO_NO_ENCONTRADO);
       }
 
       if (txRecord.estadoConciliacion !== EstadoConciliacion.PENDIENTE) {
@@ -2057,7 +2073,7 @@ export class FinanzasService {
         }
 
         if (!perfil) {
-          throw new NotFoundException('El alumno especificado no existe.');
+          throw new NotFoundException(MENSAJE_ALUMNO_NO_ENCONTRADO);
         }
 
         if (actorRole === Rol.ALUMNO && perfil.usuarioId !== actorUserId) {
@@ -2209,7 +2225,7 @@ export class FinanzasService {
         }
 
         if (!perfil) {
-          throw new NotFoundException('El alumno especificado no existe.');
+          throw new NotFoundException(MENSAJE_ALUMNO_NO_ENCONTRADO);
         }
 
         if (perfil.entrenadorId !== entrenadorId) {

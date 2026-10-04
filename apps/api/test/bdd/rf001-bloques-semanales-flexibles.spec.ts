@@ -812,4 +812,147 @@ describe('BDD: RF-001 - Planificación Semanal Flexible por Bloques, Selección 
       expect(progreso.porcentajeCumplimiento).toBe('0.00');
     });
   });
+
+  // ===========================================================================
+  // El alumno recibe las indicaciones reales del coach
+  // ===========================================================================
+  describe('LOTE API-3: indicaciones del coach y esfuerzo sugerido llegan a la sesión', () => {
+    const req = { user: { sub: ALUMNO_USER_ID, rol: Rol.ALUMNO } };
+
+    function rutinaConEjercicio(ejercicio: Record<string, unknown>, titulo = 'Día 1') {
+      mockRutinas[0].bloques = [
+        { diaId: 'd1', titulo, diaSugerido: 2, ejercicios: [ejercicio] },
+      ];
+    }
+
+    it('notas técnicas y esfuerzo sugerido en campos propios; resumen sin jerga', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-15T10:00:00.000Z'));
+      rutinaConEjercicio({
+        ejercicioId: 'ej-press',
+        nombre: 'Press de Banca Plano',
+        series: 3,
+        reps: '8-10',
+        peso: '',
+        rpe: '8',
+        notas: 'Baja controlada en 3 s.',
+      });
+
+      const sesion = await entrenamientoController.entrenarBloqueHoy(req, 'd1', {
+        timezoneCliente: 'America/Caracas',
+      });
+      const ejercicio = sesion.ejercicios[0];
+
+      expect(ejercicio.notasTecnicas).toBe('Baja controlada en 3 s.');
+      expect(ejercicio.rpeSugerido).toBe('8.0');
+      // `notasCoach` sigue existiendo (web publicada) y ahora también lleva las indicaciones.
+      expect(ejercicio.notasCoach).toBe(
+        'Día 1 · 8-10 repeticiones · peso a tu criterio · Baja controlada en 3 s.'
+      );
+      expect(ejercicio.notasCoach).not.toMatch(/Reps|Bloque:|Sugerido|•/);
+    });
+
+    it('con carga prescrita y sin notas: resumen con el peso y campos estructurados vacíos', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-15T10:00:00.000Z'));
+      rutinaConEjercicio({
+        ejercicioId: 'ej-press',
+        nombre: 'Press de Banca Plano',
+        series: 3,
+        reps: '10',
+        peso: '60 kg',
+      });
+
+      const sesion = await entrenamientoController.entrenarBloqueHoy(req, 'd1', {
+        timezoneCliente: 'America/Caracas',
+      });
+      const ejercicio = sesion.ejercicios[0];
+
+      expect(ejercicio.notasCoach).toBe('Día 1 · 10 repeticiones · peso 60 kg');
+      expect(ejercicio.notasTecnicas).toBeNull();
+      expect(ejercicio.rpeSugerido).toBeNull();
+    });
+
+    it('el esfuerzo sugerido no cambia cuando el alumno registra su esfuerzo real', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-15T10:00:00.000Z'));
+      rutinaConEjercicio({
+        ejercicioId: 'ej-press',
+        nombre: 'Press de Banca Plano',
+        series: 2,
+        reps: '10',
+        rpe: '8.5',
+      });
+
+      await entrenamientoController.entrenarBloqueHoy(req, 'd1', {
+        timezoneCliente: 'America/Caracas',
+      });
+      for (const serie of mockSeriesRegistro) serie.rpe = '9.5';
+
+      const otraVez = await entrenamientoController.entrenarBloqueHoy(req, 'd1', {
+        timezoneCliente: 'America/Caracas',
+      });
+      expect(otraVez.ejercicios[0].rpeSugerido).toBe('8.5');
+    });
+  });
+
+  // ===========================================================================
+  // Nunca se usa el ejercicio privado de otro coach
+  // ===========================================================================
+  describe('LOTE API-3: aislamiento del catálogo al instanciar la sesión', () => {
+    const OTRO_COACH = '22222222-2222-4222-8222-222222222222';
+    const req = { user: { sub: ALUMNO_USER_ID, rol: Rol.ALUMNO } };
+
+    beforeEach(() => {
+      mockEjerciciosCatalogo.push({
+        id: 'ej-privado-otro',
+        entrenadorId: OTRO_COACH,
+        nombre: 'Sentadilla Búlgara Privada',
+        grupoMuscular: 'Piernas',
+        activo: true,
+      });
+    });
+
+    it('un ejercicio sin id con el mismo nombre que uno privado de otro coach no se enlaza a ese', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-15T10:00:00.000Z'));
+      mockRutinas[0].bloques = [
+        {
+          diaId: 'd1',
+          titulo: 'Día 1',
+          diaSugerido: 2,
+          ejercicios: [{ nombre: 'Sentadilla Búlgara Privada', series: 3, reps: '10' }],
+        },
+      ];
+
+      const sesion = await entrenamientoController.entrenarBloqueHoy(req, 'd1', {
+        timezoneCliente: 'America/Caracas',
+      });
+
+      expect(sesion.ejercicios[0].ejercicioId).not.toBe('ej-privado-otro');
+      const enlazado = mockEjerciciosCatalogo.find((e) => e.id === sesion.ejercicios[0].ejercicioId);
+      expect(enlazado?.entrenadorId).toBe(COACH_ID);
+    });
+
+    it('un id guardado de un ejercicio privado de otro coach tampoco se enlaza', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-15T10:00:00.000Z'));
+      mockRutinas[0].bloques = [
+        {
+          diaId: 'd1',
+          titulo: 'Día 1',
+          diaSugerido: 2,
+          ejercicios: [
+            { ejercicioId: 'ej-privado-otro', nombre: 'Sentadilla Búlgara Privada', series: 3, reps: '10' },
+          ],
+        },
+      ];
+
+      const sesion = await entrenamientoController.entrenarBloqueHoy(req, 'd1', {
+        timezoneCliente: 'America/Caracas',
+      });
+
+      expect(sesion.ejercicios[0].ejercicioId).not.toBe('ej-privado-otro');
+    });
+  });
 });

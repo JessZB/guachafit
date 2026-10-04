@@ -30,8 +30,10 @@ import {
   hayMasAlumnos,
   mensajeListaVaciaAlumnos,
   requiereConfirmacionReintento,
+  resolverClaveAsignacion,
   textoConfirmacionReemplazo,
   type FilaResultadoAsignacion,
+  type IntentoAsignacion,
 } from '../../lib/asignacion-masiva';
 import { DialogoConfirmacion } from '../common/DialogoConfirmacion';
 
@@ -67,10 +69,12 @@ export function AsignacionMasivaPlantilla({ plantilla, onCerrar }: AsignacionMas
   const [isAsignando, setIsAsignando] = useState(false);
   const [errorAsignacion, setErrorAsignacion] = useState<string | null>(null);
   const [resultados, setResultados] = useState<FilaResultadoAsignacion[] | null>(null);
-  // El endpoint de asignación no admite clave de idempotencia: tras un fallo ambiguo, reintentar
-  // en modo Añadir podría duplicar días, así que se pide confirmación explícita.
+  // La asignación acepta `X-Idempotency-Key`: los reintentos de la misma selección y modo
+  // reutilizan la clave. El servidor la recuerda solo en memoria, así que tras un fallo ambiguo
+  // en modo Añadir se pide además confirmación explícita antes de reintentar.
   const [falloAmbiguo, setFalloAmbiguo] = useState(false);
   const [confirmandoReintento, setConfirmandoReintento] = useState(false);
+  const intentoAsignacion = useRef<IntentoAsignacion | null>(null);
   const solicitudActual = useRef(0);
   const esPrimeraCarga = useRef(true);
 
@@ -188,6 +192,9 @@ export function AsignacionMasivaPlantilla({ plantilla, onCerrar }: AsignacionMas
       return;
     }
 
+    const intento = resolverClaveAsignacion(intentoAsignacion.current, seleccion, modo);
+    intentoAsignacion.current = intento;
+
     setIsAsignando(true);
     try {
       const res = await apiClient<AsignacionPlantillaResponseDTO>(
@@ -195,14 +202,19 @@ export function AsignacionMasivaPlantilla({ plantilla, onCerrar }: AsignacionMas
         {
           method: 'POST',
           body: JSON.stringify({ alumnoIds: seleccion, modo }),
+          idempotent: true,
+          idempotencyKey: intento.clave,
         }
       );
+      // Asignación confirmada: la próxima es otra asignación (clave nueva).
+      intentoAsignacion.current = null;
       setFalloAmbiguo(false);
       setResultados(describirResultadosAsignacion(res.resultados ?? [], nombresPorId));
       triggerHaptic(res.exitosos > 0 ? 'success' : 'warning');
     } catch (err) {
       if (esFalloAmbiguoAsignacion(err)) {
-        // Sin respuesta clara la asignación pudo aplicarse: no se ofrece reintentar a ciegas.
+        // Sin respuesta clara la asignación pudo aplicarse: el reintento reutiliza la clave, pero
+        // en modo Añadir se pedirá confirmación antes de volver a enviar.
         setFalloAmbiguo(true);
         setErrorAsignacion(MENSAJE_ASIGNACION_INCIERTA);
       } else {
@@ -520,7 +532,7 @@ export function AsignacionMasivaPlantilla({ plantilla, onCerrar }: AsignacionMas
         abierto={confirmandoReintento}
         idTitulo="asignacion-masiva-confirmar-reintento"
         titulo="¿Volver a intentar la asignación?"
-        detalle={`${MENSAJE_ASIGNACION_INCIERTA} Si ya se asignó, añadirla otra vez duplicará los días de su rutina.`}
+        detalle={MENSAJE_ASIGNACION_INCIERTA}
         textoConfirmar="Sí, volver a intentar"
         variante="peligro"
         onCancelar={() => setConfirmandoReintento(false)}

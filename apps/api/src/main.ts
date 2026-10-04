@@ -8,12 +8,29 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { obtenerSecretosJwt } from './common/config/secretos-jwt';
 import { aplicarTrustProxy } from './common/config/trust-proxy';
 import { configurarErroresGlobales } from './common/errores/filtro-errores-global';
+import {
+  CONSULTA_ULTIMA_MIGRACION_APLICADA,
+  leerJournalDeDrizzle,
+  verificarMigracionesAlArrancar,
+} from './common/config/verificar-migraciones';
+import { queryClient } from '@guachafit/database';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   // A3 (LOTE API-1): fail-fast. En producción, sin JWT_SECRET/JWT_REFRESH_SECRET reales el API no
   // arranca y el error indica al operador qué variable configurar.
   obtenerSecretosJwt();
+  // Las migraciones se aplican a mano (`pnpm db:migrate`). Si falta la última, en producción el API
+  // no arranca (las consultas a columnas nuevas fallarían); en desarrollo solo avisa.
+  await verificarMigracionesAlArrancar({
+    nodeEnv: process.env.NODE_ENV,
+    leerJournal: leerJournalDeDrizzle,
+    consultarUltimaAplicada: async () => {
+      const filas = await queryClient.unsafe(CONSULTA_ULTIMA_MIGRACION_APLICADA);
+      return (filas[0]?.created_at as string | number | undefined) ?? null;
+    },
+    logger,
+  });
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // A5 (LOTE API-1): IP real del cliente para el límite de intentos. Desactivado por defecto

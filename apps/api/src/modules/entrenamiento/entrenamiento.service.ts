@@ -14,6 +14,9 @@ import {
   MENSAJE_SIN_ACCESO_ALUMNO,
 } from '../../common/mensajes-acceso';
 import { CODIGO_SESION_NO_INICIADA, CODIGO_SESION_VACIA } from '@guachafit/shared';
+import { parsearContrato } from '../../common/errores/parsear-contrato';
+import { RegistroIdempotencia } from '../../common/idempotencia/registro-idempotencia';
+import { resolverEjercicioDelCatalogo, validarEjerciciosDeBloques } from './catalogo-ejercicios';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SesionAlumnoFinalizadaEvent } from '../notificaciones/events/eventos-notificacion';
 import {
@@ -254,6 +257,33 @@ export function calcularRachaEfectiva(
 // SERVICIO DE ENTRENAMIENTO (RF-001)
 // =============================================================================
 
+/**
+ * Resumen de la prescripción para el alumno, sin jerga ("Reps", "Peso: Sugerido"):
+ * 'Día 1 · 8-10 repeticiones · peso a tu criterio · Baja controlada en 3 s.'
+ * Se guarda en `notas_coach` para la web ya publicada; la web actual usa además
+ * `notasTecnicas` y `rpeSugerido`.
+ */
+export function resumirPrescripcionParaAlumno(
+  tituloDia: string,
+  ejercicio: { reps?: string; peso?: string; notas?: string }
+): string {
+  const partes = [tituloDia.trim()];
+  const reps = (ejercicio.reps ?? '').trim();
+  if (reps) partes.push(`${reps} repeticiones`);
+  const peso = (ejercicio.peso ?? '').trim();
+  partes.push(peso ? `peso ${peso}` : 'peso a tu criterio');
+  const notas = (ejercicio.notas ?? '').trim();
+  if (notas) partes.push(notas);
+  return partes.filter(Boolean).join(' · ');
+}
+
+/** RPE prescrito con un decimal ('8' -> '8.0'); `null` si no hay un número válido. */
+function normalizarRpePrescrito(rpe?: string): string | null {
+  if (!rpe) return null;
+  const valor = parseFloat(rpe);
+  return Number.isFinite(valor) ? valor.toFixed(1) : null;
+}
+
 /** LOTE API-2: textos claros de la sesión de entrenamiento (sin estados ni identificadores). */
 const MENSAJE_SESION_NO_ENCONTRADA = 'No encontramos este entrenamiento. Actualiza la pantalla.';
 const MENSAJE_HORA_INVALIDA = 'La hora de tu teléfono no es válida. Revísala.';
@@ -262,10 +292,11 @@ const MENSAJE_HORA_INVALIDA = 'La hora de tu teléfono no es válida. Revísala.
 export class EntrenamientoService {
   private readonly logger = new Logger(EntrenamientoService.name);
 
-  // RNF-002 §4: store de idempotencia en memoria para reintentos inmediatos por lag de red.
+  // RNF-002 §4: registro de idempotencia en memoria para reintentos inmediatos por lag de red.
   // Misma operación + mismo usuario + misma X-Idempotency-Key => se devuelve el resultado
-  // original sin reaplicar la mutación (mismo patrón que FinanzasService.reportarPago).
-  private readonly idempotencyCache = new Map<string, unknown>();
+  // original sin reaplicar la mutación. `ejecutar()` además une las peticiones simultáneas con la
+  // misma clave a una sola ejecución y no recuerda los fallos (el reintento vuelve a ejecutar).
+  private readonly idempotencia = new RegistroIdempotencia();
 
   private claveIdempotencia(
     operacion: 'entrenar-hoy' | 'iniciar' | 'series' | 'finalizar',
@@ -275,16 +306,6 @@ export class EntrenamientoService {
     const key = (idempotencyKey ?? '').trim();
     if (!key) return null;
     return `${operacion}:${alumnoId}:${key}`;
-  }
-
-  private leerRespuestaIdempotente<T>(clave: string | null): T | null {
-    if (!clave || !this.idempotencyCache.has(clave)) return null;
-    // Copia defensiva: el reintento nunca comparte referencias mutables con la respuesta original.
-    return JSON.parse(JSON.stringify(this.idempotencyCache.get(clave))) as T;
-  }
-
-  private guardarRespuestaIdempotente(clave: string | null, respuesta: unknown): void {
-    if (clave) this.idempotencyCache.set(clave, respuesta);
   }
 
   constructor(
@@ -324,7 +345,7 @@ export class EntrenamientoService {
     entrenadorId: string | null | undefined,
     input: CrearEjercicioCatalogoDTO
   ): Promise<EjercicioCatalogoDetalleDTO> {
-    const validado = CrearEjercicioCatalogoSchema.parse(input);
+    const validado = parsearContrato(CrearEjercicioCatalogoSchema, input);
     const targetEntrenadorId = validado.entrenadorId || entrenadorId || null;
 
     const [nuevoEjercicio] = await this.db
@@ -398,7 +419,7 @@ export class EntrenamientoService {
     entrenadorId: string,
     input: CrearSesionEntrenamientoDTO
   ): Promise<SesionEntrenamientoDetalleDTO> {
-    const validado = CrearSesionEntrenamientoSchema.parse(input);
+    const validado = parsearContrato(CrearSesionEntrenamientoSchema, input);
 
     // Validar Tenancy: El alumno debe pertenecer a este entrenador.
     // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura con el GUC del coach.
@@ -493,7 +514,7 @@ export class EntrenamientoService {
     alumnoId: string,
     input: GuardarRutinaSemanalDTO
   ): Promise<RutinaSemanalDetalleDTO> {
-    const validado = GuardarRutinaSemanalSchema.parse(input);
+    const validado = parsearContrato(GuardarRutinaSemanalSchema, input);
 
     // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura con el GUC del coach.
     const perfil = await this.withTenant({ entrenadorId }, async (tx) => {
@@ -513,7 +534,7 @@ export class EntrenamientoService {
     });
 
     if (!perfil) {
-      throw new NotFoundException('El alumno especificado no existe.');
+      throw new NotFoundException(MENSAJE_ALUMNO_NO_ENCONTRADO);
     }
 
     if (perfil.entrenadorId !== entrenadorId) {
@@ -521,6 +542,10 @@ export class EntrenamientoService {
     }
 
     const usuarioAlumnoId = perfil.usuarioId;
+
+    // Cada ejercicio debe ser global o del propio coach (nunca el privado de otro
+    // coach); se guarda con el `ejercicioId` resuelto. Mismo criterio que las plantillas (RF-017).
+    const bloques = await validarEjerciciosDeBloques(this.db, entrenadorId, validado.bloques);
 
     const ahora = new Date();
     const nuevaRutinaId = crypto.randomUUID();
@@ -550,7 +575,7 @@ export class EntrenamientoService {
           alumnoId: usuarioAlumnoId,
           entrenadorId,
           nombre,
-          bloques: validado.bloques,
+          bloques,
           activa: true,
           createdAtUtc: ahora,
           updatedAtUtc: ahora,
@@ -603,7 +628,7 @@ export class EntrenamientoService {
     );
 
     if (!perfil) {
-      throw new NotFoundException('El alumno especificado no existe.');
+      throw new NotFoundException(MENSAJE_ALUMNO_NO_ENCONTRADO);
     }
 
     if (rol === Rol.ENTRENADOR && perfil.entrenadorId !== entrenadorId) {
@@ -867,12 +892,9 @@ export class EntrenamientoService {
   ): Promise<SesionEntrenamientoDetalleDTO> {
     // RNF-002 §4: un reintento con la misma key devuelve la sesión original sin re-instaurar.
     const claveIdem = this.claveIdempotencia('entrenar-hoy', alumnoId, idempotencyKey);
-    const cacheada = this.leerRespuestaIdempotente<SesionEntrenamientoDetalleDTO>(claveIdem);
-    if (cacheada) return cacheada;
-
-    const resultado = await this.ejecutarEntrenarBloqueHoy(alumnoId, bloqueId, input);
-    this.guardarRespuestaIdempotente(claveIdem, resultado);
-    return resultado;
+    return this.idempotencia.ejecutar(claveIdem, () =>
+      this.ejecutarEntrenarBloqueHoy(alumnoId, bloqueId, input)
+    );
   }
 
   private async ejecutarEntrenarBloqueHoy(
@@ -1021,32 +1043,31 @@ export class EntrenamientoService {
 
     for (let i = 0; i < bloque.ejercicios.length; i++) {
       const ej = bloque.ejercicios[i];
-      let ejercicioCatalogoId = ej.ejercicioId;
+      // El ejercicio se resuelve SOLO en el catálogo visible para el coach de la
+      // rutina (global o propio). Un id o un nombre que apunte al ejercicio privado de otro coach
+      // no se enlaza: se usa (o se crea) uno del propio coach con ese nombre.
+      let ejercicioCatalogoId = (
+        await resolverEjercicioDelCatalogo(this.db, entrenadorId, ej.ejercicioId, ej.nombre)
+      )?.id;
+      if (!ejercicioCatalogoId && ej.ejercicioId) {
+        ejercicioCatalogoId = (
+          await resolverEjercicioDelCatalogo(this.db, entrenadorId, undefined, ej.nombre)
+        )?.id;
+      }
 
       if (!ejercicioCatalogoId) {
-        const [ejCatExistente] = await this.db
-          .select()
-          .from(ejerciciosCatalogo)
-          .where(eq(ejerciciosCatalogo.nombre, ej.nombre))
-          .limit(1);
-
-        if (ejCatExistente) {
-          ejercicioCatalogoId = ejCatExistente.id;
-        } else {
-          const nuevoEjId = crypto.randomUUID();
-          const [creado] = await this.db
-            .insert(ejerciciosCatalogo)
-            .values({
-              id: nuevoEjId,
-              entrenadorId,
-              nombre: ej.nombre,
-              grupoMuscular: 'GENERAL',
-              activo: true,
-              createdAtUtc: ahora,
-            })
-            .returning();
-          ejercicioCatalogoId = creado.id;
-        }
+        const [creado] = await this.db
+          .insert(ejerciciosCatalogo)
+          .values({
+            id: crypto.randomUUID(),
+            entrenadorId,
+            nombre: ej.nombre,
+            grupoMuscular: 'GENERAL',
+            activo: true,
+            createdAtUtc: ahora,
+          })
+          .returning();
+        ejercicioCatalogoId = creado.id;
       }
 
       const ejSesionId = crypto.randomUUID();
@@ -1055,18 +1076,20 @@ export class EntrenamientoService {
         sesionId: nuevaSesionId,
         ejercicioId: ejercicioCatalogoId,
         orden: i + 1,
-        notasCoach: `Bloque: ${bloque.titulo} • Reps: ${ej.reps} • Peso: ${ej.peso || 'Sugerido'}`,
+        notasCoach: resumirPrescripcionParaAlumno(bloque.titulo, ej),
+        notasTecnicas: ej.notas?.trim() || null,
+        rpePrescrito: normalizarRpePrescrito(ej.rpe),
         descansoPrescritoSegundos: ej.descansoSegundos || 90,
       });
 
       const numSeries = Math.max(1, ej.series || 3);
       const repsMatch = (ej.reps || '10').match(/\d+/);
       const targetReps = repsMatch ? parseInt(repsMatch[0], 10) : 10;
-      // Prescripción cualitativa (ej. "Moderado", "Sugerido"): NO materializar 0.00.
+      // Prescripción cualitativa (ej. "Moderado"): NO materializar 0.00.
       // Se persiste null en peso_prescrito_kg y el texto se conserva en notasCoach.
       const pesoMatch = (ej.peso || '').match(/\d+(\.\d+)?/);
       const targetPesoPrescrito = pesoMatch ? parseFloat(pesoMatch[0]).toFixed(2) : null;
-      const targetRpe = ej.rpe ? parseFloat(ej.rpe).toFixed(1) : null;
+      const targetRpe = normalizarRpePrescrito(ej.rpe);
 
       for (let s = 1; s <= numSeries; s++) {
         await this.db.insert(seriesRegistro).values({
@@ -1130,7 +1153,7 @@ export class EntrenamientoService {
     });
 
     if (!perfil) {
-      throw new NotFoundException('El alumno especificado no existe.');
+      throw new NotFoundException(MENSAJE_ALUMNO_NO_ENCONTRADO);
     }
 
     if (rol === Rol.ENTRENADOR && perfil.entrenadorId !== entrenadorId) {
@@ -1363,10 +1386,17 @@ export class EntrenamientoService {
   ): Promise<SesionEntrenamientoDetalleDTO> {
     // RNF-002 §4: reintento idempotente del inicio (la transición repetida devolvería 400).
     const claveIdem = this.claveIdempotencia('iniciar', alumnoId, idempotencyKey);
-    const cacheada = this.leerRespuestaIdempotente<SesionEntrenamientoDetalleDTO>(claveIdem);
-    if (cacheada) return cacheada;
+    return this.idempotencia.ejecutar(claveIdem, () =>
+      this.ejecutarIniciarSesion(sesionId, alumnoId, input)
+    );
+  }
 
-    const validado = IniciarSesionSchema.parse(input);
+  private async ejecutarIniciarSesion(
+    sesionId: string,
+    alumnoId: string,
+    input: IniciarSesionDTO
+  ): Promise<SesionEntrenamientoDetalleDTO> {
+    const validado = parsearContrato(IniciarSesionSchema, input);
 
     const [sesion] = await this.db
       .select()
@@ -1401,9 +1431,7 @@ export class EntrenamientoService {
       })
       .where(eq(sesionesEntrenamiento.id, sesionId));
 
-    const resultado = await this.obtenerSesionPorId(sesionId, alumnoId, Rol.ALUMNO);
-    this.guardarRespuestaIdempotente(claveIdem, resultado);
-    return resultado;
+    return this.obtenerSesionPorId(sesionId, alumnoId, Rol.ALUMNO);
   }
 
   // ---------------------------------------------------------------------------
@@ -1422,10 +1450,17 @@ export class EntrenamientoService {
   ): Promise<SesionEntrenamientoDetalleDTO> {
     // RNF-002 §4: el batch offline reenviado con la misma key no re-aplica ni duplica series.
     const claveIdem = this.claveIdempotencia('series', alumnoId, idempotencyKey);
-    const cacheada = this.leerRespuestaIdempotente<SesionEntrenamientoDetalleDTO>(claveIdem);
-    if (cacheada) return cacheada;
+    return this.idempotencia.ejecutar(claveIdem, () =>
+      this.ejecutarSincronizarSeries(sesionId, alumnoId, input)
+    );
+  }
 
-    const validado = SincronizarSeriesBatchSchema.parse(input);
+  private async ejecutarSincronizarSeries(
+    sesionId: string,
+    alumnoId: string,
+    input: SincronizarSeriesBatchDTO
+  ): Promise<SesionEntrenamientoDetalleDTO> {
+    const validado = parsearContrato(SincronizarSeriesBatchSchema, input);
 
     const [sesion] = await this.db
       .select()
@@ -1524,9 +1559,7 @@ export class EntrenamientoService {
         .where(eq(seriesRegistro.id, sInput.serieId));
     }
 
-    const resultado = await this.obtenerSesionPorId(sesionId, alumnoId, Rol.ALUMNO);
-    this.guardarRespuestaIdempotente(claveIdem, resultado);
-    return resultado;
+    return this.obtenerSesionPorId(sesionId, alumnoId, Rol.ALUMNO);
   }
 
   // ---------------------------------------------------------------------------
@@ -1551,10 +1584,17 @@ export class EntrenamientoService {
     // RNF-002 §4: finalizar/omitir reenviado con la misma key devuelve la respuesta original
     // (sin recalcular racha ni re-notificar al coach).
     const claveIdem = this.claveIdempotencia('finalizar', alumnoId, idempotencyKey);
-    const cacheada = this.leerRespuestaIdempotente<FinalizarSesionResponseDTO>(claveIdem);
-    if (cacheada) return cacheada;
+    return this.idempotencia.ejecutar(claveIdem, () =>
+      this.ejecutarFinalizarSesion(sesionId, alumnoId, input)
+    );
+  }
 
-    const validado = FinalizarSesionSchema.parse(input);
+  private async ejecutarFinalizarSesion(
+    sesionId: string,
+    alumnoId: string,
+    input: FinalizarSesionDTO
+  ): Promise<FinalizarSesionResponseDTO> {
+    const validado = parsearContrato(FinalizarSesionSchema, input);
 
     const [sesion] = await this.db
       .select()
@@ -1737,7 +1777,6 @@ export class EntrenamientoService {
       duracionMinutos,
       volumenTotalKg: volumenTotalKgStr,
     };
-    this.guardarRespuestaIdempotente(claveIdem, respuesta);
     return respuesta;
   }
 
@@ -2129,6 +2168,8 @@ export class EntrenamientoService {
         ejercicioId: e.ejercicioId,
         orden: e.orden,
         notasCoach: e.notasCoach,
+        notasTecnicas: e.notasTecnicas ?? null,
+        rpeSugerido: e.rpePrescrito ?? null,
         descansoPrescritoSegundos: e.descansoPrescritoSegundos ?? 90,
         ejercicio: cat
           ? {

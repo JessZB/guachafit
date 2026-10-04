@@ -1180,7 +1180,7 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
 
       expect(res.id).toBe(ALUMNO_A1_PERFIL_ID);
       expect(res.estadoActivacion).toBe(EstadoAlumno.ACTIVO);
-      expect(res.mensaje).toContain('ya se encuentra activo');
+      expect(res.mensaje).toContain('ya está activo');
     });
 
     it('2.5 debe restaurar exitosamente un alumno archivado y limpiar deletedAtUtc', async () => {
