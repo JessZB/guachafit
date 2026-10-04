@@ -8,6 +8,7 @@ estado_implementacion: parcial
 requisito_origen: "[[RF-014-arquitectura-event-driven-despachador-notificaciones]]"
 metrica_objetivo: "Push p95 < 3s / Email p95 < 10s / 0% duplicados por reintentos"
 fecha_creacion: 2026-09-06
+fecha_verificacion: 2026-10-04
 tags:
   - requerimiento
   - rnf
@@ -80,14 +81,42 @@ Define las garantías operativas y estándares no funcionales requeridos para el
 - **Backoff del §4:** el worker de email usa la política exacta 15s → 2min → 10min vía
   `settings.backoffStrategy` (verificado empíricamente contra el Redis del proyecto).
 - **Rate limiting (§5):** `limiter` por worker — email 50/s (límite de Resend citado en el
-  requisito), push 100/s conservador.
+  requisito; ver API-4 abajo, el proveedor real es Brevo), push 100/s conservador.
 - Verificación empírica de jobId/DLQ/reintentos contra el Redis de docker (encola → falla → DLQ →
   limpieza) y tests de API en verde (621 casos, 37 archivos).
+
+### API-4 (2026-10-04, `79ba082`) — email real con Brevo
+- Implementado (2026-10-04, API-4 `79ba082`) — el worker de email **entrega de verdad** vía la API
+  HTTP de Brevo ([[ADR-018-proveedor-correo-transaccional-brevo]]); antes la entrega era simulada.
+  Sin `BREVO_API_KEY`/`EMAIL_REMITENTE` sigue en modo simulado (log), avisado al arrancar.
+  - **Reintentos (§4):** errores transitorios (red o tiempo de espera de 10 s, 408, 429, 5xx) se
+    relanzan y BullMQ aplica el backoff exacto 15 s → 2 min → 10 min. Los **permanentes** (resto de
+    4xx) lanzan `UnrecoverableError`: no se reintentan y se copian **de inmediato** a la DLQ.
+  - **DLQ sin datos sensibles:** para los correos de cuenta (bienvenidas y recuperación) la copia en
+    `notificaciones-email-dead-letter` lleva solo tipo, usuario y destinatario enmascarado
+    (`a***@dominio`), **sin el enlace ni el correo completo**; esos correos no se reencolan desde la
+    DLQ (el usuario pide un enlace nuevo). El detalle del error de Brevo se recorta a 120 caracteres
+    y se le quitan los correos.
+  - **Retención:** fallidos de correos de cuenta **24 h** (`RETENCION_FALLIDOS_CORREO_CUENTA`) y
+    completados eliminados al entregarse (`removeOnComplete: true`); DLQ **7 días / 1000** registros
+    (`RETENCION_DLQ`), podada con `Queue.clean(..., 'wait')` al mover cada job (si la poda falla
+    solo avisa).
+  - **Rate limiting (§5):** `LIMITADOR_WORKER_EMAIL` se mantiene en **50/s**; la ruta de Brevo admite
+    1000 RPS (429 al superarlo, tratado como transitorio). El **tope diario del plan gratuito
+    (300/día, ADR-018)** no lo controla el limitador: al agotarlo los envíos fallan y terminan en la
+    DLQ.
+  - **Idempotencia:** los correos de cuenta usan `jobId` `cuenta_{tipo}_{usuarioId}_{huella}` (huella
+    SHA-256 del código): el mismo enlace no se encola dos veces; uno nuevo sí.
+  - **Redis caído:** el encolado de correos de cuenta se acota a 2,5 s y no llama a `add` si la
+    conexión no está lista; el flujo de negocio nunca falla por ello.
+  - Evidencia: API 986 → **1087** tests (1 skipped; `apps/api/test/bdd/api4-correo-real.spec.ts`,
+    `api4-correo-garantias.spec.ts`); web 785 → **797**.
 
 ### Pendiente
 - **Alerta de observabilidad (Sentry/Datadog):** la DLQ se registra en logs, sin integración
   externa todavía.
-- **SLOs de latencia (p95) sin verificar:** requieren proveedores reales e instrumentación.
+- **SLOs de latencia (p95) sin verificar:** requieren instrumentación (el email ya usa proveedor
+  real desde API-4; push sigue simulado).
 - **Reintento por token en Push:** el job agrupa los N tokens del usuario; un fallo transitorio
   reintenta el lote completo. La integración real debería trocear por token o registrar entregas
   por token.

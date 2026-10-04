@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** con pruebas automáticas en verde (**785** de la web + **986** del API, más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (**797** de la web + **1087** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -23,7 +23,7 @@ tags:
 1. **Docker Desktop abierto** (Postgres, Redis y MinIO deben estar corriendo).
 2. **Base de datos al día** (solo si es la primera vez o hubo cambios de esquema):
    `pnpm --filter @guachafit/database db:migrate`
-   → Desde 2026-10-04 hay una migración nueva (`0014`, indicaciones del coach en la sesión del alumno). El API revisa al arrancar que no falten migraciones: en desarrollo solo avisa en la consola; en producción no arranca.
+   → Desde 2026-10-04 hay dos migraciones nuevas: `0014` (indicaciones del coach en la sesión del alumno) y `0015` (recuperación de contraseña: 3 columnas opcionales en `usuarios`). El API revisa al arrancar que no falten migraciones: en desarrollo solo avisa en la consola; en producción no arranca.
 3. **Datos de ejemplo** (⚠️ borra y recarga los datos):
    `pnpm --filter @guachafit/database db:seed`
    → Las credenciales de prueba están definidas en `packages/database/src/seed.ts`.
@@ -101,7 +101,7 @@ tags:
 
 ## 7. Altas, enlaces y accesos
 
-- [ ] **Alta manual**: al crear un alumno, la app te muestra un **enlace de activación copiable** ("Compártelo con tu alumno"). Ábrelo en una ventana de incógnito: crea la contraseña y entra. El enlace **sirve una sola vez**.
+- [ ] **Alta manual**: al crear un alumno, la app te muestra un **enlace de activación copiable** (válido 48 horas). Ábrelo en una ventana de incógnito: crea la contraseña y entra. El enlace **sirve una sola vez**. (Los casos con y sin correo están en la sección 7.1.)
 - [ ] **Link de inscripción del coach**: la web te muestra tu enlace real (`/onboarding?coach=TU-CODIGO`). Pruébalo con un código inventado (dice "no válido") y con el real (muestra tu nombre y permite registrarse). Al registrarse alguien, te llega una notificación.
 - [ ] **Alumno suspendido/pausado**: al entrar, ve la pantalla de bloqueo con el mensaje correspondiente y botón **"Reportar pago"** (sus pagos y cuenta siguen accesibles).
 - [ ] **Alumno dado de baja**: ya **no puede iniciar sesión**; con su contraseña correcta ve **"Tu cuenta está archivada. Contacta a tu entrenador."** (con una contraseña errónea solo ve "Correo o contraseña incorrectos.", que no revela si la cuenta existe).
@@ -119,6 +119,32 @@ tags:
 - [ ] **Sesión que vence y se renueva (cualquier rol):** con sesión abierta, en DevTools → Application → Local Storage cambia `guachafit_token` por un texto cualquiera y navega a otra pantalla → la app **sigue funcionando** (renovó la sesión sola, sin pedir login). Ahora cambia también `guachafit_refresh_token` y navega → te lleva a `/login` con el aviso **"Tu sesión venció. Inicia sesión de nuevo."**. Sin red, la sesión **no** se cierra.
 - [ ] **Pendientes offline al volver a entrar (alumno):** en modo avión marca series (quedan pendientes); deja vencer la sesión como en el paso anterior, recupera la red y entra **con el mismo alumno** → los pendientes se envían solos y el panel queda vacío.
 - [ ] **Otro usuario en el mismo dispositivo:** cierra sesión como alumno A y entra como alumno B (o como coach) → **no ves nada de A** (ni rutina guardada, ni pendientes, ni datos en caché). Si la sesión de A había vencido con pendientes y entra B, esos pendientes se borran del dispositivo (no se envían con la cuenta de B).
+
+## 7.1. Correos de bienvenida y recuperación de contraseña (Brevo)
+
+> **Preparación:** sin `BREVO_API_KEY` (o sin `EMAIL_REMITENTE`) el API arranca en **modo simulado**: avisa en la consola con `[Configuración]` y los correos solo se escriben en el log (`[Correo simulado] Para …`), **sin el enlace**. Para recibir correos de verdad pon en `apps/api/.env` `BREVO_API_KEY`, `EMAIL_REMITENTE` (remitente verificado en Brevo), opcional `EMAIL_REMITENTE_NOMBRE`, y `APP_URL=http://localhost:3000`; reinicia el API. Usa buzones reales tuyos. El plan gratuito permite 300 correos al día.
+
+**Entrenador (alta de alumno)**
+
+- [ ] **Sin Brevo configurado:** crea un alumno → el mensaje dice **"Comparte este enlace con tu alumno para que cree su contraseña."** (no afirma que se envió un correo) y aparece el enlace copiable. En la consola del API sale la línea `[Correo simulado]`.
+- [ ] **Con Brevo configurado:** crea un alumno con un correo tuyo → el mensaje dice **"Le enviamos un correo con el enlace. Si no le llega, compártele este enlace."** y el enlace copiable **sigue visible**. En el buzón llega *"Te damos la bienvenida a GUACHAFIT: crea tu contraseña"*; su botón abre `/activar` y permite crear la contraseña (una sola vez).
+- [ ] **Redis caído (opcional):** con Brevo configurado, detén Redis y crea un alumno → el alta **se guarda igual** (puede tardar hasta unos 3 segundos más) y el mensaje vuelve a ser el de compartir el enlace.
+
+**Superadmin (alta de entrenador, `/admin`)**
+
+- [ ] **Sin Brevo:** crea un entrenador → *"Comparte este enlace con el entrenador para que cree su contraseña."* + enlace copiable (48 horas).
+- [ ] **Con Brevo:** crea un entrenador con un correo tuyo → *"Le enviamos un correo con el enlace. Si no le llega, compártele este enlace."*; llega *"Tu cuenta de entrenador en GUACHAFIT está lista"* y su enlace activa la cuenta.
+
+**Cualquier rol (alumno, entrenador) — "¿Olvidaste tu contraseña?"** (requiere Brevo: en modo simulado el enlace no aparece en ningún lado)
+
+- [ ] **Enlace en el login:** junto a "Contraseña" aparece **"¿Olvidaste tu contraseña?"** → abre `/recuperar`. Con un correo mal escrito avisa *"Revisa tu correo: no tiene un formato válido."*.
+- [ ] **Respuesta igual con correo inexistente:** pide el enlace con un correo que **no** existe y luego con uno que sí → ambas veces ves **la misma pantalla "Revisa tu correo"** con *"Si el correo está registrado, te enviamos un enlace para restablecer tu contraseña."* y tarda lo mismo. Con una cuenta desactivada o archivada pasa igual (sin correo).
+- [ ] **Correo recibido:** con tu correo real llega *"Restablece tu contraseña de GUACHAFIT"*; el botón abre `/restablecer?token=…`. Escribe la nueva contraseña dos veces → te lleva al login con el aviso **"Tu contraseña se actualizó. Ya puedes iniciar sesión."** y entras con la nueva.
+- [ ] **Enlace usado dos veces:** abre de nuevo el mismo enlace e intenta guardar → **"Este enlace ya no sirve: venció o ya se usó. Pide uno nuevo."** con el botón "Pedir un enlace nuevo".
+- [ ] **Enlace vencido:** pide un enlace y espera **más de 1 hora** antes de usarlo → mismo mensaje de enlace que ya no sirve.
+- [ ] **Pedir dos veces en menos de 15 minutos:** pide el enlace, y antes de 15 minutos pídelo otra vez → la pantalla es la misma, pero **no llega un segundo correo** y el **primer enlace sigue sirviendo**. Pasados 15 minutos sí llega uno nuevo y el anterior deja de servir.
+- [ ] **Límite de pedidos:** pide el enlace para el mismo correo más de 3 veces seguidas → al 4.º aparece **"Hiciste demasiados intentos. Espera un momento y vuelve a intentarlo."** (3 cada 15 min por red + correo y 3 por hora para el mismo correo desde cualquier red).
+- [ ] **La otra sesión deja de renovarse:** abre sesión con la misma cuenta en otro navegador (B); en el navegador A restablece la contraseña. En B la app sigue funcionando **hasta 15 minutos** (límite conocido: el acceso ya emitido no se corta); cuando necesita renovar la sesión, te lleva a `/login` con **"Tu sesión venció. Inicia sesión de nuevo."**. Para no esperar: en B cambia `guachafit_token` en Local Storage por un texto cualquiera y navega → pide login.
 
 ## 8. PWA, instalación y actualizaciones
 
@@ -196,10 +222,10 @@ tags:
 
 ## 13. ⛔ Lo que AÚN NO existe (no lo reportes como error)
 
-- **Notificaciones**: proveedores reales de push/email (la entrega sigue **simulada por log**), cliente push del navegador (WebPush sin UI), recordatorio de check-in 06:00 con cron exacto por huso horario (el recordatorio **sí existe**: corre por barrido aproximado en UTC con cadencia de 15 min, que cae dentro de la hora local 6 para offsets de hora entera, media hora y 45 min; sin reemisión si el worker está caído toda la hora local 6) y alerta externa de colas/DLQ (Sentry/Datadog). La campana, las preferencias y el resumen semanal **ya existen** (sección 10).
+- **Notificaciones**: proveedor real de push (la entrega push sigue **simulada por log**; el **correo ya sale por Brevo** si está configurado, sección 7.1), cliente push del navegador (WebPush sin UI), recordatorio de check-in 06:00 con cron exacto por huso horario (el recordatorio **sí existe**: corre por barrido aproximado en UTC con cadencia de 15 min, que cae dentro de la hora local 6 para offsets de hora entera, media hora y 45 min; sin reemisión si el worker está caído toda la hora local 6) y alerta externa de colas/DLQ (Sentry/Datadog). La campana, las preferencias y el resumen semanal **ya existen** (sección 10).
 - **Nutrición**: los recursos educativos del coach pueden ser **enlaces o PDFs subidos** (validados por tipo, firma `%PDF-` y tamaño; se sirven con enlace firmado). Los reportes **con fotos** sin conexión se **encolan completos** (primero las fotos, después el check-in), con la evidencia visible, reintentable y descartable en el panel. La subida real está verificada contra MinIO; falta repetirla contra Cloudflare R2 con credenciales reales. El **borrado al quitar un recurso guardado ya existe**: al guardar metas, los PDFs sin referencia se eliminan de la bóveda (best-effort, verificado contra MinIO). Siguen sin existir la recolección de objetos nunca referenciados (subir sin guardar) y la serialización por alumno del ciclo de metas (carrera residual, [[ADR-015-borrado-best-effort-objetos-boveda]]).
 - **Antropometría**: los avisos al coach (check-in remoto recibido y ventana vencida) **ya existen** (sección 11); el único punto documentado es que `POST /antropometria/presigned-upload-url` no evalúa la ventana (la ventana se valida al registrar el check-in; el presencial sigue bloqueado al subir fotos).
-- **Admin / accesos**: planes/facturación de la plataforma, **correo automático de bienvenida** (coach y alumno) y **recuperación de contraseña** siguen pendientes (en curso en el lote API-4); por ahora las credenciales se entregan con el enlace copiable. La gestión de cuentas (deshabilitar/reactivar) y de licencias (suspender/activar) **ya existe** (sección 7).
+- **Admin / accesos**: planes/facturación de la plataforma siguen pendientes. El **correo de bienvenida** (coach y alumno) y la **recuperación de contraseña** **ya existen** (sección 7.1, desde API-4); la gestión de cuentas (deshabilitar/reactivar) y de licencias (suspender/activar) también (sección 7). Límites conocidos: "Le enviamos un correo" significa que salió hacia Brevo, no que llegó al buzón; tras cambiar la contraseña, otra sesión abierta sigue hasta 15 minutos.
 - **Una sola instancia del API**: el límite de intentos (429) y la protección contra envíos repetidos (idempotencia) viven en la memoria del proceso; si reinicias el API se reinician. No es un bug mientras haya un único servidor.
 - **Orden de envío en la pantalla de entrenamiento**: si un cambio se está enviando con red y justo se corta, otro cambio encolado después puede llegar antes (carrera conocida, preexistente). Si ves un rechazo raro en ese caso, anótalo con la hora.
 - **Auditoría de accesos entre coaches**: hoy solo queda registrada en la ficha de alumnos; otras pantallas aún no la registran.

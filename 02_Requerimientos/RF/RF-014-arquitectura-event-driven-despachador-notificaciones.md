@@ -4,6 +4,7 @@ modulo: Notificaciones
 prioridad: alta
 estado: aprobado
 estado_implementacion: parcial
+fecha_verificacion: 2026-10-04
 problema_origen: "[[PROB-004-orquestacion-preferencias-notificaciones]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -133,9 +134,34 @@ Then el Despachador NO debe enviar trabajos a las colas de Push ni Email
   obligatorio → preferencia → default; detalle en [[RF-015-matriz-preferencias-usuario-canales]] §7.
 - Suites en verde: API 621 · web 465.
 
+### API-4 (2026-10-04, `79ba082`) — correo real con Brevo
+- Implementado (2026-10-04, API-4 `79ba082`) — el **worker de email entrega de verdad** vía la API
+  HTTP de Brevo (antes simulado por log; proveedor elegido en
+  [[ADR-018-proveedor-correo-transaccional-brevo]], en lugar de Resend/SendGrid citados en §2 y §5):
+  - **Mecanismo real:** el worker recibe un `AdaptadorCorreo` inyectado
+    (`apps/api/src/modules/notificaciones/correo/`): `AdaptadorCorreoBrevo` si hay `BREVO_API_KEY` y
+    `EMAIL_REMITENTE`; si falta alguno, `AdaptadorCorreoSimulado` (solo log) y el arranque lo avisa
+    (en producción como error, sin bloquear el API). El job puede traer el HTML ya armado (correos
+    de cuenta) o solo asunto + cuerpo (avisos del despachador, plantilla genérica con `APP_URL`).
+  - **RN-03 (aislamiento de fallos):** errores transitorios (red/tiempo de espera de 10 s, 408, 429,
+    5xx) se relanzan y BullMQ reintenta con el backoff de RNF-004 §4 (15 s → 2 min → 10 min); los
+    permanentes (resto de 4xx: correo inválido, clave o remitente mal configurados, sin créditos)
+    lanzan `UnrecoverableError`: sin reintentos y copia inmediata a la DLQ.
+  - **Correos de cuenta (nuevo espacio de eventos `correo-cuenta.**`):** bienvenida del alumno
+    (RF-011 RN-05), bienvenida del entrenador (RF-010 Escenario 1) y recuperación de contraseña. Los
+    servicios publican el evento y el despachador lo encola en `notificaciones-email`; no pasan por
+    la bandeja In-App ni por la matriz de preferencias (RF-015). `jobId`
+    `cuenta_{tipo}_{usuarioId}_{huella}` (huella SHA-256 del código, nunca el código en claro),
+    `removeOnComplete: true` y fallidos retenidos solo 24 h.
+  - **Límites honestos:** `LIMITADOR_WORKER_EMAIL` sigue en 50/s (Brevo admite 1000 RPS en la ruta),
+    pero el tope del **plan gratuito es de 300 correos/día** y no lo controla el limitador: al
+    superarlo los envíos fallan y acaban en la DLQ. Push (FCM/APNs/WebPush) sigue simulado.
+  - Evidencia: API 986 → **1087** tests (1 skipped; `apps/api/test/bdd/api4-correo-real.spec.ts`,
+    `api4-correo-garantias.spec.ts`); web 785 → **797**.
+
 ### Pendiente (siguientes olas)
-- **Integración real de proveedores** (FCM/APNs/WebPush y Resend/SendGrid/SMTP): los workers
-  simulan la entrega por log.
+- **Integración real de proveedores Push** (FCM/APNs/WebPush): el worker de push simula la entrega
+  por log. Resuelto (2026-10-04): el correo ya sale por Brevo (API-4, arriba).
 - **Chunking de 50 en anuncios masivos (§6):** el despachador encola un job por destinatario, sin
   lotes por anuncio global.
 - **Recordatorio antropométrico 06:00 por huso IANA:** explícitamente fuera de N1/N2 por complejidad

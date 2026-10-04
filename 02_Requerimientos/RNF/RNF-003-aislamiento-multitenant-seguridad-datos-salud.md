@@ -87,6 +87,11 @@ Establece los requerimientos de seguridad, privacidad y rendimiento asociados a 
 - Los enlaces de entrega de credenciales disparados por el correo de bienvenida contienen un token criptográfico seguro generado con `crypto.randomBytes(32)`.
 - El token se almacena en base de datos en formato **hash SHA-256** (nunca en texto plano).
 - Al ser consumido una vez para establecer la contraseña, el token se invalida permanentemente.
+- **Implementado (2026-10-04, API-4 `79ba082`):** los correos de bienvenida (alumno y entrenador) y el de recuperación de contraseña ya salen de verdad (Brevo, [[ADR-018-proveedor-correo-transaccional-brevo]]) y el **token de recuperación** sigue la misma regla: `crypto.randomBytes(32)`, solo su hash SHA-256 en `usuarios.token_recuperacion_hash` (migración `0015`), un solo uso y vigencia de 1 h. Datos sensibles fuera de Redis y de los logs:
+  - El código en claro solo vive en memoria y en el job de `notificaciones-email` hasta la entrega: `removeOnComplete: true` y fallidos retenidos **24 h**; con Redis no listo el despachador no llama a `add` (el código no queda en la cola de comandos de ioredis). El `jobId` lleva una huella del código, nunca el código.
+  - La **DLQ** guarda de los correos de cuenta solo tipo, usuario y destinatario enmascarado, **sin enlace ni correo completo**.
+  - **Correos enmascarados en logs** (`a***@dominio`, `apps/api/src/common/enmascarar-correo.util.ts`): worker, despachador, recuperación y límite de intentos; el detalle de error de Brevo se recorta y se le quitan los correos.
+  - Límites honestos: un `add` ya enviado a ioredis antes de una caída no se puede retirar; si Redis vuelve, el correo (con el enlace) sale tarde. El **adaptador simulado** (sin `BREVO_API_KEY`, desarrollo) escribe el destinatario **completo** en su línea `[Correo simulado]` (sin el enlace); el enmascarado aplica al worker, al despachador y a los demás logs.
 
 ---
 

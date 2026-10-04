@@ -158,12 +158,16 @@ El código también acepta los nombres alternativos `STORAGE_ACCESS_KEY`, `STORA
 | `RESUMEN_SEMANAL_CRON` | Resumen semanal del coach (RF-014) | `0 8 * * 1` (lunes 08:00 UTC) |
 | `ANTROPOMETRIA_RECORDATORIO_CRON` | Recordatorio de check-in antropométrico | `*/15 * * * *` |
 
-**Correo — se añadirán en el lote 4** ([[ADR-018-proveedor-correo-transaccional-brevo]])
+**Correo — Brevo** ([[ADR-018-proveedor-correo-transaccional-brevo]]; existen desde API-4 `79ba082`, `apps/api/src/common/config/correo.ts`)
 
-| Variable (nombre propuesto) | Uso |
-|---|---|
-| `BREVO_API_KEY` | API key de Brevo. Sin ella, el worker de email sigue en modo **simulado**. |
-| Remitente (nombre por definir) | Dirección y nombre del remitente verificado. |
+| Variable | Uso | Qué pasa si falta |
+|---|---|---|
+| `BREVO_API_KEY` | API key de Brevo (cabecera `api-key`). | El worker de email queda en modo **simulado** (solo log): bienvenidas, recuperación de contraseña y avisos **no se envían**. En producción se registra como error al arrancar, sin bloquear el API. |
+| `EMAIL_REMITENTE` | Correo remitente; debe ser un remitente o dominio **verificado en Brevo**. | Con clave pero sin remitente, también modo **simulado** (Brevo rechazaría todo con 400). |
+| `EMAIL_REMITENTE_NOMBRE` | Nombre visible del remitente. | Usa `GUACHAFIT`. |
+| `APP_URL` | URL pública de la web, p. ej. `https://app.tudominio.com` (base de los enlaces `/activar` y `/restablecer` de los correos). | Usa el primer origen de `CORS_ORIGINS` y, en último caso, `http://localhost:3000`. En producción se registra como error. |
+
+> El plan gratuito de Brevo admite **300 correos/día**; al superarlo los envíos fallan y quedan en la DLQ de `notificaciones-email` (ADR-018, T3).
 
 > **No uses en producción** `ENCRYPTION_KEY_HEX`: solo la lee el *seed* de datos de prueba (`packages/database/src/seed.ts`). No ejecutes el *seed* en producción.
 
@@ -191,6 +195,7 @@ Con `NODE_ENV=production`, el API **no arranca** si falta la última migración.
    con `DATABASE_URL` apuntando al rol **dueño** de la base.
 2. Después inicia (o reinicia) el API.
 3. Para que el API pueda hacer esta comprobación, su rol necesita `SELECT` sobre el esquema `drizzle`. Sin ese permiso solo avisa en el log.
+4. La migración más reciente es **`0015_usuarios_recuperacion_password.sql`** (API-4 `79ba082`): añade 3 columnas opcionales a `usuarios` (`token_recuperacion_hash`, `token_recuperacion_expira`, `password_cambiada_en`) para la recuperación de contraseña. Es aditiva; sin ella el API no arranca en producción.
 
 > ⚠️ **No verificado:** dónde ejecutar el comando en Coolify (p. ej. un comando previo al despliegue o una terminal del contenedor). `db:migrate` usa `tsx`, una dependencia de desarrollo: la imagen o el entorno donde se ejecute debe tenerla.
 
@@ -204,7 +209,7 @@ Con `NODE_ENV=production`, el API **no arranca** si falta la última migración.
    - `app.tudominio.com` → IP del VPS o Cloudflare Pages, según dónde publiques la web.
 3. En **SSL/TLS**, elige el modo **Full (strict)**.
 4. En Coolify, asigna el dominio `https://api.tudominio.com` a la aplicación para que emita su certificado.
-5. Para el correo (lote 4), publica en el mismo DNS los registros **SPF, DKIM y DMARC** que indique Brevo.
+5. Para el correo, publica en el mismo DNS los registros **SPF, DKIM y DMARC** que indique Brevo al verificar el dominio del remitente (`EMAIL_REMITENTE`).
 
 > ⚠️ **No verificado:** si el certificado de Coolify (Let's Encrypt) se emite correctamente con el proxy de Cloudflare activado. Si falla, desactiva el proxy temporalmente o usa un *Origin Certificate* de Cloudflare.
 
@@ -250,6 +255,8 @@ Coolify advierte que un backup exitoso solo prueba que se creó un archivo. Hay 
 - [ ] SSL de Cloudflare en **Full (strict)**.
 - [ ] Backup diario activo y **una restauración probada** (§8.2).
 - [ ] `/admin/queues` responde 404 o pide credenciales.
+- [ ] **Correo:** remitente y dominio **verificados en Brevo**, con SPF, DKIM y DMARC publicados en Cloudflare (§7); `BREVO_API_KEY`, `EMAIL_REMITENTE` y `APP_URL` configuradas y el log de arranque **sin** avisos `[Configuración]` de correo.
+- [ ] **Recuperación de contraseña de punta a punta:** "¿Olvidaste tu contraseña?" con un correo real → llega el correo (no a spam) → el enlace abre `/restablecer` en el dominio de la web → la nueva contraseña permite iniciar sesión.
 
 ---
 
@@ -264,7 +271,7 @@ Coolify advierte que un backup exitoso solo prueba que se creó un archivo. Hay 
 | La web muestra errores de CORS | `CORS_ORIGINS` no incluye el dominio de la web | Añade el dominio exacto (con `https://`) y reinicia. |
 | Error 526 en Cloudflare | Certificado inválido en el servidor con *Full (strict)* | Revisa el certificado del dominio en Coolify (§7). |
 | Las fotos no suben | Variables `STORAGE_*` incorrectas o token de R2 sin permisos | Revisa endpoint, bucket y token. |
-| Los correos no llegan | Worker en modo simulado o dominio sin verificar | Revisa `BREVO_API_KEY` (lote 4) y SPF/DKIM/DMARC. |
+| Los correos no llegan | Worker en modo simulado o dominio sin verificar | Revisa `BREVO_API_KEY`, `EMAIL_REMITENTE` y SPF/DKIM/DMARC; busca en el log `[Configuración]` y `[Worker Email] Fallo PERMANENTE` (clave, IP autorizada o remitente). Revisa también la DLQ `notificaciones-email-dead-letter` y el tope diario de 300 del plan gratuito. |
 | El disco se llena | Imágenes Docker viejas o backups locales | Limpia imágenes antiguas desde Coolify; desactiva los backups locales si ya suben a R2. |
 
 Si no sabes la causa: abre los **logs** de la aplicación en Coolify. Los mensajes de configuración del API empiezan con `[Configuración]` y dicen qué variable corregir.
@@ -274,5 +281,5 @@ Si no sabes la causa: abre los **logs** de la aplicación en Coolify. Los mensaj
 ## Referencias
 
 - Decisiones: [[ADR-005-arquitectura-backend-monolito-modular-nestjs]], [[ADR-007-almacenamiento-fotos-privadas-cloudflare-r2-presigned-urls]], [[ADR-008-motor-colas-background-workers-bullmq]], [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]], [[ADR-017-despliegue-vps-coolify]], [[ADR-018-proveedor-correo-transaccional-brevo]].
-- Código: `apps/api/src/main.ts`, `apps/api/src/common/config/` (`secretos-jwt.ts`, `trust-proxy.ts`, `verificar-migraciones.ts`), `apps/api/src/modules/antropometria/r2-storage.service.ts`, `apps/api/src/common/bull-board-auth.middleware.ts`, `apps/api/src/common/services/crypto.service.ts`.
+- Código: `apps/api/src/main.ts`, `apps/api/src/common/config/` (`secretos-jwt.ts`, `trust-proxy.ts`, `verificar-migraciones.ts`, `correo.ts`), `apps/api/src/modules/notificaciones/correo/`, `apps/api/src/modules/antropometria/r2-storage.service.ts`, `apps/api/src/common/bull-board-auth.middleware.ts`, `apps/api/src/common/services/crypto.service.ts`.
 - Coolify: instalación (https://coolify.io/docs/get-started/installation), backups (https://coolify.io/docs/databases/backups), documentación general (https://coolify.io/docs).

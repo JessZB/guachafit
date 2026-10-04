@@ -81,6 +81,28 @@ Elegimos **Brevo** como proveedor de correo transaccional, integrado **mediante 
 ## 5. Trazabilidad y Referencias
 - Requerimientos asociados: [[RF-011-onboarding-alumnos-manual-deeplink]] (RN-05), [[RF-008-maquina-estados-cuota-recordatorios]], [[RF-014-arquitectura-event-driven-despachador-notificaciones]], [[RNF-004-resiliencia-notificaciones-idempotencia-fallbacks]] (§5).
 - Decisiones relacionadas: [[ADR-010-arquitectura-event-driven-notificaciones-multicanal]], [[ADR-008-motor-colas-background-workers-bullmq]], [[ADR-017-despliegue-vps-coolify]].
-- Implementación: `apps/api/src/modules/notificaciones/processors/email-notification.processor.ts` (entrega hoy simulada).
+- Implementación: `apps/api/src/modules/notificaciones/correo/` (adaptadores) y `apps/api/src/modules/notificaciones/processors/email-notification.processor.ts` (worker); ver §6.
 - Guía operativa: [[04_Guia_Despliegue_VPS_Coolify]] (variables de correo y DNS).
 - Documentación externa: precios de Resend, Brevo y Amazon SES consultados el 2026-10-04.
+
+---
+
+## 6. Implementación (2026-10-04, API-4 `79ba082`)
+- **Dónde vive:** `apps/api/src/modules/notificaciones/correo/`:
+  - `adaptador-correo.ts`: contrato `AdaptadorCorreo` (token `ADAPTADOR_CORREO`) y errores `ErrorEntregaCorreoTransitorio` / `ErrorEntregaCorreoPermanente`.
+  - `adaptador-correo-brevo.ts`: API HTTP con `fetch` (**sin SDK**), tiempo de espera de 10 s.
+  - `adaptador-correo-simulado.ts`: solo log (desarrollo y tests).
+  - `crear-adaptador-correo.ts`: elige el adaptador al arrancar y registra los problemas de configuración (en producción como error, **sin bloquear** el arranque).
+  - `plantillas-correo.ts`: plantillas puras (bienvenida de alumno, de entrenador, recuperación y aviso genérico).
+  - Configuración en `apps/api/src/common/config/correo.ts`.
+- **Variables reales** (sustituyen la propuesta del punto 3 de §3):
+  - `BREVO_API_KEY`: clave de la API (cabecera `api-key`). Sin ella → modo simulado.
+  - `EMAIL_REMITENTE`: remitente o dominio verificado en Brevo. Con clave pero sin remitente → también modo simulado (Brevo rechazaría todo con 400).
+  - `EMAIL_REMITENTE_NOMBRE`: nombre visible (por defecto `GUACHAFIT`).
+  - `APP_URL`: URL pública de la web para los enlaces (`/activar`, `/restablecer`, avisos). Si falta usa el primer origen de `CORS_ORIGINS` y luego `http://localhost:3000`; en producción su ausencia se registra como error.
+- **Verificado en la documentación oficial de Brevo** (developers.brevo.com, "Send a transactional email"): `POST https://api.brevo.com/v3/smtp/email` con cabecera `api-key`; cuerpo `sender`, `to`, `subject`, `htmlContent`, `textContent`; respuestas **201** `{ messageId }` (**202** si es programado) y **400** `{ code, message }`; límite de la ruta **1000 peticiones/s** en los planes generales (429 al superarlo).
+- **No verificado:** la semántica exacta de **401/402/403** (se asumen clave inválida / sin créditos / IP o cuenta no autorizada y se tratan como permanentes, con pista de revisar la clave y las IP autorizadas) y cómo expone la API el **tope diario del plan gratuito** (300/día): no hay control propio de ese tope.
+- **Clasificación de errores:** red/tiempo de espera, 408, 429 y 5xx → transitorios (reintento con el backoff de RNF-004 §4); resto de 4xx → permanentes (`UnrecoverableError`, sin reintento, copia inmediata a la DLQ). El detalle del error se recorta a 120 caracteres y se le quitan los correos.
+- **T2 resuelto:** `LIMITADOR_WORKER_EMAIL` se mantiene en **50/s**, muy por debajo de los 1000 RPS de Brevo; RNF-004 actualizado.
+- **Desviación del punto 1 de §3:** el adaptador sí está aislado en el worker, pero el **despachador sí cambió**: escucha los nuevos eventos `correo-cuenta.**` (bienvenidas y recuperación), arma esos correos y los encola sin pasar por In-App ni preferencias (ver [[RF-014-arquitectura-event-driven-despachador-notificaciones]] §7).
+- Evidencia: API 986 → **1087** tests (1 skipped; `apps/api/test/bdd/api4-correo-real.spec.ts`, `api4-correo-garantias.spec.ts`); web 785 → **797**. Sin envío real contra Brevo registrado en el commit (pruebas con `fetch` simulado).
