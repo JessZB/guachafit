@@ -103,7 +103,33 @@ Esta guía lleva GUACHAFIT a producción en un VPS con Coolify, detrás de Cloud
 3. Añade un recurso **Redis 7**. Tampoco lo expongas.
 4. Anota las URLs **internas** que muestra Coolify para cada servicio. Las usarás en `DATABASE_URL`, `REDIS_HOST` y `REDIS_PORT`.
 
-> **Aislamiento multi-tenant (RLS):** el API debe conectarse con un rol **no dueño** (`NOSUPERUSER NOBYPASSRLS`, p. ej. `guachafit_app`); con el rol dueño, las políticas RLS no se aplican. Las migraciones sí necesitan el rol dueño: se le pasa aparte, en `DATABASE_URL_MIGRACIONES` (§6). Ver [[02_Esquema_Base_de_Datos_PostgreSQL]] (nota D2) y [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]]. **Pendiente (5c):** el script que crea `guachafit_app`; hasta que exista, el API se conecta con el rol que indique `DATABASE_URL` —si es el dueño de las tablas, RLS no queda aplicado en el servidor. ⚠️ **No verificado:** cómo y dónde se crea ese rol en producción.
+### 4.1. Rol de aplicación restringido (`guachafit_app`) — RLS (deploy-05c `bf1360e`)
+
+El API debe conectarse con un rol **no dueño** (`NOSUPERUSER NOBYPASSRLS`, `guachafit_app` por defecto); con el rol dueño, las políticas RLS no se aplican. Ver [[02_Esquema_Base_de_Datos_PostgreSQL]] (nota D2) y [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]] (§6). Orden de aprovisionamiento (el script es idempotente; todo corre en una sola transacción):
+
+1. **Aplica las migraciones primero** (§6), con el rol **dueño** de las tablas en `DATABASE_URL_MIGRACIONES`. El aprovisionamiento aborta si todavía no hay tablas en `public` o si no existe `drizzle.__drizzle_migrations`.
+2. **Crea (o actualiza) el rol** con `packages/database/scripts/crear-rol-app.sql`, ejecutado por un superusuario o un miembro del rol dueño. La contraseña se lee de la variable de entorno `GUACHAFIT_APP_PASSWORD` —**nunca** como argumento— y hace falta `psql` ≥ 15 (usa `\getenv`):
+
+   ```bash
+   export GUACHAFIT_APP_PASSWORD="$(cat <ruta-secretos>)"
+   psql "postgresql://<admin>@<host>:5432/<base>" -v ON_ERROR_STOP=1 \
+     -v owner_role=<rol-dueño> -v app_role=guachafit_app \
+     -f packages/database/scripts/crear-rol-app.sql
+   ```
+
+   Si no sabes quién es el dueño: `SELECT DISTINCT tableowner FROM pg_tables WHERE schemaname IN ('public','drizzle');`. El script fuerza `NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS LOGIN`; otorga CRUD en todas las tablas de `public`, `USAGE`/`SELECT` en sus secuencias, lectura de `drizzle.__drizzle_migrations` y privilegios por defecto para las tablas futuras del rol dueño. Aborta sin tocar nada si falta la contraseña, si quien lo ejecuta no puede aprovisionar, si `owner_role` no es el dueño real de las tablas (te dice cuáles son) o si las migraciones no están aplicadas. Intenta desactivar el registro de sentencias de su sesión; si no puede, avisa de que la contraseña podría quedar en el log del servidor.
+3. **Verifica** con `packages/database/scripts/verificar-rol-app.sql`, conectado **como** el rol de aplicación (la contraseña va por `PGPASSWORD`, nunca en la URL):
+
+   ```bash
+   PGPASSWORD="$(cat <ruta-secretos>)" psql \
+     "postgresql://guachafit_app@<host>:5432/<base>" -v ON_ERROR_STOP=1 \
+     -f packages/database/scripts/verificar-rol-app.sql
+   ```
+
+   Debe terminar en `RESULTADO · PASS` (sin superusuario ni `BYPASSRLS`, sin ser dueño ni miembro de un dueño, CRUD en las 23 tablas y `USAGE`/`SELECT` en las secuencias, las 6 tablas con RLS devuelven 0 filas sin contexto teniendo datos y lectura de `drizzle.__drizzle_migrations`). El `AVISO` informativo de las 17 tablas sin RLS es el diseño del RLS progresivo ([[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]]). Sin datos en las tablas con RLS el resultado es `INCOMPLETO`: repite la verificación con datos reales (si esperabas datos, ejecuta `ANALYZE` como el rol dueño).
+4. **Apunta `DATABASE_URL` del API** al rol de aplicación (`guachafit_app`) y reinicia. Las migraciones siguen corriendo con el rol dueño por `DATABASE_URL_MIGRACIONES` (§6).
+
+> **Límite honesto:** en el desarrollo local, `DATABASE_URL` sigue apuntando al rol dueño (D2, pendiente y a decisión del dueño del proyecto) y las 17 tablas sin RLS dependen solo de los controles de autorización del API; una tabla futura creada por un rol distinto del dueño no recibe los GRANT por defecto. El API solo **avisa** —no bloquea— cuando su rol no puede leer `drizzle.__drizzle_migrations`.
 
 ---
 
@@ -192,9 +218,7 @@ El código también acepta los nombres alternativos `STORAGE_ACCESS_KEY`, `STORA
 
 Con `NODE_ENV=production`, el API **no arranca** si falta la última migración. El log dice:
 
-> *Faltan migraciones de base de datos por aplicar (última esperada: …). Ejecuta pnpm db:migrate antes de iniciar el API.*
-
-> El mensaje nombra el script de desarrollo; en producción usa las vías de abajo (`pnpm db:migrate:prod` o el migrador de la imagen).
+> *Faltan migraciones de base de datos por aplicar (última esperada: …). Aplica las migraciones antes de iniciar el API: en producción, `pnpm db:migrate:prod` o, dentro de la imagen del API, `node /app/node_modules/@guachafit/database/dist/migrate.js` con `DATABASE_URL_MIGRACIONES` (rol propietario de las tablas); en desarrollo local, `pnpm db:migrate`.*
 
 Orden obligatorio (deploy-05b `de2975b`): las migraciones se ejecutan **antes** de arrancar (o reiniciar) el contenedor del API con la versión nueva.
 
@@ -214,7 +238,7 @@ Orden obligatorio (deploy-05b `de2975b`): las migraciones se ejecutan **antes** 
    DATABASE_URL_MIGRACIONES='postgres://USUARIO:CLAVE@HOST:5432/guachafit' pnpm db:migrate:prod
    ```
 3. Espera el cierre `Todas las migraciones fueron aplicadas con éxito` y arranca (o reinicia) el API.
-4. Para que el API pueda hacer esta comprobación, su rol necesita `SELECT` sobre el esquema `drizzle`. Sin ese permiso solo avisa en el log.
+4. Para que el API pueda hacer esta comprobación, su rol necesita `USAGE` sobre el esquema `drizzle` y `SELECT` sobre `drizzle.__drizzle_migrations` (lo otorga `crear-rol-app.sql`, §4.1). Sin ese permiso el API solo **avisa** en el log —no bloquea— y dirige a ese script.
 5. La migración más reciente es **`0015_usuarios_recuperacion_password.sql`** (API-4 `79ba082`): añade 3 columnas opcionales a `usuarios` (`token_recuperacion_hash`, `token_recuperacion_expira`, `password_cambiada_en`) para la recuperación de contraseña. Es aditiva; sin ella el API no arranca en producción.
 
 > ⚠️ **No verificado:** dónde se configura el comando previo al despliegue en Coolify (opción tipo *Pre-deployment Command*); consulta https://coolify.io/docs. Si no existe, ejecuta la migración a mano (paso 2) **antes** de iniciar el contenedor nuevo.
@@ -272,6 +296,8 @@ Coolify advierte que un backup exitoso solo prueba que se creó un archivo. Hay 
 - [ ] Swagger: `/api/docs` responde **404** en producción (salvo `SWAGGER_HABILITADO=true`).
 - [ ] La imagen se construyó con `apps/api/Dockerfile` y contexto en la raíz; el contenedor queda **`healthy`** (healthcheck contra `/api/v1/health`).
 - [ ] Las migraciones se ejecutaron **antes** de iniciar el contenedor nuevo (con `DATABASE_URL_MIGRACIONES`, rol dueño, §6) y el API arrancó sin el error de migraciones.
+- [ ] El rol de aplicación se provisionó con `packages/database/scripts/crear-rol-app.sql` **después** de migrar (contraseña por `GUACHAFIT_APP_PASSWORD`, psql ≥ 15) y `verificar-rol-app.sql`, ejecutado **como** ese rol, cerró en `RESULTADO · PASS` (§4.1).
+- [ ] `DATABASE_URL` del API apunta al rol de aplicación (no al dueño); el log de arranque no muestra el aviso de que no puede leer `drizzle.__drizzle_migrations`.
 - [ ] `https://api.tudominio.com/api/v1` responde con HTTPS válido.
 - [ ] La web inicia sesión contra el API sin errores de CORS.
 - [ ] Subir y ver una foto funciona (R2).
@@ -290,6 +316,7 @@ Coolify advierte que un backup exitoso solo prueba que se creó un archivo. Hay 
 |---|---|---|
 | El API no arranca: `[Configuración] El API no puede arrancar: se encontraron N problemas…` | Configuración crítica ausente, mal formada o de ejemplo (JWT, `ENCRYPTION_KEY`, `STORAGE_*`, `CORS_ORIGINS`, Bull-Board) | El error enumera **cada** problema en una línea; corrige todos y reinicia el API. |
 | El API no arranca: *Faltan migraciones…* | No se ejecutaron las migraciones antes del contenedor nuevo | Ejecuta §6 (`DATABASE_URL_MIGRACIONES` con el rol dueño; migrador de la imagen o `pnpm db:migrate:prod`) y reinicia el API. |
+| El API avisa *"El rol de base de datos del API no puede leer drizzle.__drizzle_migrations"* y continúa (no bloquea) | El rol de `DATABASE_URL` no tiene `SELECT` sobre la tabla del registro de migraciones | Ejecuta §4.1 (provisiona con `crear-rol-app.sql` tras migrar y verifica con `verificar-rol-app.sql`). Es solo un aviso: el API arranca igual. |
 | El contenedor queda `unhealthy` (o reinicia en bucle) | El healthcheck no obtiene 200 en `/api/v1/health`: configuración, migraciones, Postgres o Redis | Mira los logs del contenedor y corrige el error de arranque; el healthcheck consulta `PORT` (o 4000). |
 | El API no arranca: *TRUST_PROXY no es válido* | Valor `true` o no numérico | Usa un número de saltos (p. ej. `2`) o una lista de IPs/subredes. |
 | Todos los usuarios quedan bloqueados a la vez tras intentos fallidos | `TRUST_PROXY` vacío o incorrecto | Ajusta `TRUST_PROXY` (§5.1) y repite la prueba de IP real. |
@@ -306,5 +333,5 @@ Si no sabes la causa: abre los **logs** de la aplicación en Coolify. Los mensaj
 ## Referencias
 
 - Decisiones: [[ADR-005-arquitectura-backend-monolito-modular-nestjs]], [[ADR-007-almacenamiento-fotos-privadas-cloudflare-r2-presigned-urls]], [[ADR-008-motor-colas-background-workers-bullmq]], [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]], [[ADR-017-despliegue-vps-coolify]], [[ADR-018-proveedor-correo-transaccional-brevo]].
-- Código: `apps/api/src/main.ts`, `apps/api/src/common/config/` (`secretos-jwt.ts`, `validar-configuracion-produccion.ts`, `variables-almacenamiento.ts`, `trust-proxy.ts`, `verificar-migraciones.ts`, `correo.ts`), `apps/api/src/modules/notificaciones/correo/`, `apps/api/src/modules/antropometria/r2-storage.service.ts`, `apps/api/src/common/bull-board-auth.middleware.ts`, `apps/api/src/common/services/crypto.service.ts`; imagen: `apps/api/Dockerfile`, `.dockerignore`; migraciones: `packages/database/src/migrate.ts`, `packages/database/src/url-migraciones.ts`.
+- Código: `apps/api/src/main.ts`, `apps/api/src/common/config/` (`secretos-jwt.ts`, `validar-configuracion-produccion.ts`, `variables-almacenamiento.ts`, `trust-proxy.ts`, `verificar-migraciones.ts`, `correo.ts`), `apps/api/src/modules/notificaciones/correo/`, `apps/api/src/modules/antropometria/r2-storage.service.ts`, `apps/api/src/common/bull-board-auth.middleware.ts`, `apps/api/src/common/services/crypto.service.ts`; imagen: `apps/api/Dockerfile`, `.dockerignore`; migraciones: `packages/database/src/migrate.ts`, `packages/database/src/url-migraciones.ts`; scripts del rol: `packages/database/scripts/crear-rol-app.sql`, `packages/database/scripts/verificar-rol-app.sql`.
 - Coolify: instalación (https://coolify.io/docs/get-started/installation), backups (https://coolify.io/docs/databases/backups), documentación general (https://coolify.io/docs).

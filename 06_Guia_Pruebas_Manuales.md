@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** con pruebas automáticas en verde (**797** de la web + **1155** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (**797** de la web + **1157** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -49,6 +49,46 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio.
 - [ ] **Arrancar con valores válidos → sano:** ejecuta el contenedor con `NODE_ENV=production` y valores reales (los del punto 0.1; Postgres y Redis accesibles desde el contenedor), publicando el puerto (`-p 4000:4000`) → tras ~20 s `docker ps` lo muestra **`(healthy)`**; `http://localhost:4000/api/v1/health` responde **200**; `http://localhost:4000/api/docs` responde **404**.
 - [ ] **Con valores de ejemplo, el contenedor muere:** ejecútalo con los valores de `.env.example` → **termina con código 1** y `docker logs` muestra **un único error `[Configuración]`** con los **7 problemas** enumerados (uno por línea), igual que en el punto 0.1.
 - [ ] **Migrar desde la imagen:** `docker run --rm -e DATABASE_URL_MIGRACIONES='postgres://USUARIO:CLAVE@HOST:5432/guachafit' guachafit-api node /app/node_modules/@guachafit/database/dist/migrate.js` → el log muestra la URL objetivo con la contraseña **enmascarada** (`****`, sin el valor real) y termina con `Todas las migraciones fueron aplicadas con éxito`. En Windows con Git Bash, antepón `MSYS_NO_PATHCONV=1` al comando (Git Bash reescribe las rutas `/app/...`).
+
+### 0.3. Rol de aplicación restringido y su verificación (deploy-05c `bf1360e`)
+
+Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol **desechable** (`guachafit_app_pruebas`): no toques el `guachafit_app` de desarrollo.
+
+- [ ] **Aprovisionar el rol (idempotente):** define una contraseña desechable (en bash `export GUACHAFIT_APP_PASSWORD="prueba-desechable"`; en PowerShell `$env:GUACHAFIT_APP_PASSWORD = "prueba-desechable"`), copia el script al contenedor y ejecútalo:
+  ```bash
+  docker compose cp packages/database/scripts/crear-rol-app.sql postgres:/tmp/
+  docker compose exec -T -e GUACHAFIT_APP_PASSWORD postgres \
+    psql -U postgres -d guachafit -v ON_ERROR_STOP=1 -v owner_role=postgres \
+    -v app_role=guachafit_app_pruebas -f /tmp/crear-rol-app.sql
+  ```
+  → la primera vez imprime `CREATE ROLE`; reejecuta el mismo comando y verás `ALTER ROLE` (sigue funcionando). Al final, la tabla del resumen muestra `rolcanlogin=t` con `rolsuper=f`, `rolreplication=f` y `rolbypassrls=f`.
+- [ ] **Guardas (abortan sin tocar la base):** sin pasar `-e GUACHAFIT_APP_PASSWORD` → `Falta la variable de entorno GUACHAFIT_APP_PASSWORD…` (con la variable **vacía** → `… no pueden estar vacíos.`); con `-v owner_role=guachafit_app` (rol existente pero **no** dueño de las tablas) → error que **lista los dueños reales** (`postgres`); ejecutado **como el rol desechable** (`-h 127.0.0.1 -U guachafit_app_pruebas` y `PGPASSWORD` con su contraseña, además de `GUACHAFIT_APP_PASSWORD`) → `El usuario «guachafit_app_pruebas» no puede aprovisionar este rol…`. En todos los casos el rol queda igual.
+- [ ] **Verificar como el rol (esperado PASS):** copia el verificador y ejecútalo **conectado como el rol desechable** (la contraseña va por `PGPASSWORD`):
+  ```bash
+  docker compose cp packages/database/scripts/verificar-rol-app.sql postgres:/tmp/
+  docker compose exec -T -e PGPASSWORD="$GUACHAFIT_APP_PASSWORD" postgres \
+    psql -h 127.0.0.1 -U guachafit_app_pruebas -d guachafit -v ON_ERROR_STOP=1 \
+    -f /tmp/verificar-rol-app.sql
+  ```
+  → líneas `PASS`: no superusuario, sin `BYPASSRLS`, no dueño de ninguna tabla de `public`, no miembro de ningún dueño, CRUD en **las 23 tablas** y `USAGE`/`SELECT` en las secuencias, un `PASS` por cada tabla con RLS que tenga datos (**las 6**: `cuotas_membresia`, `perfiles_alumno`, `planes_membresia`, `plantillas_rutina`, `rutinas` y `transacciones_pago` devuelven 0 filas sin contexto) y `PASS · lectura de drizzle.__drizzle_migrations correcta`; un `AVISO` informativo lista las **17 tablas sin RLS** (por diseño); cierra `RESULTADO · PASS`.
+- [ ] **Caso INCOMPLETO (sin datos):** si las tablas con RLS no tienen señal de datos, sus líneas pasan a `AVISO · … no tiene filas: el aislamiento no se pudo comprobar con datos` y el cierre es `RESULTADO · INCOMPLETO` (nada de PASS engañoso). Repite la verificación con datos reales; si esperabas datos, ejecuta `ANALYZE` como `postgres` para refrescar `n_live_tup` (p. ej. tras un reinicio).
+- [ ] **Aislamiento por coach:** conectado como el rol de aplicación, sin contexto las tablas con RLS devuelven 0 filas; con `app.current_entrenador_id` puesto, solo se ven las filas de ese coach. En `psql`:
+  ```sql
+  BEGIN;
+  SELECT set_config('app.current_entrenador_id', '<uuid-de-un-coach>', true);
+  SELECT count(*) FROM public.rutinas;  -- solo las de ese coach
+  ROLLBACK;
+  ```
+  Repite con el uuid de otro coach con datos: cada uno ve un conteo distinto (nunca el del otro).
+- [ ] **Limpieza:** en una sesión de `psql` como `postgres` (p. ej. `docker compose exec -T postgres psql -U postgres -d guachafit`), elimina el rol desechable y sus permisos por defecto:
+  ```sql
+  ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+    REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM guachafit_app_pruebas;
+  ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+    REVOKE USAGE, SELECT ON SEQUENCES FROM guachafit_app_pruebas;
+  DROP OWNED BY guachafit_app_pruebas;
+  DROP ROLE guachafit_app_pruebas;
+  ```
 
 ---
 
