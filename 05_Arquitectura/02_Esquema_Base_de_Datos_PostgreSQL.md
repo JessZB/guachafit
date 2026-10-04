@@ -1169,6 +1169,7 @@ Para levantar y operar la persistencia local en desarrollo:
    pnpm db:generate   # Genera el SQL en packages/database/drizzle/
    pnpm db:migrate    # Aplica las migraciones al contenedor PostgreSQL
    ```
+   > **Despliegue:** ejecuta `pnpm db:migrate` **antes** de iniciar el API nuevo. Al arrancar, el API compara la última migración del journal (`packages/database/drizzle/meta/_journal.json`) con `drizzle.__drizzle_migrations`: con `NODE_ENV=production` no arranca si falta alguna; en desarrollo solo avisa en el log. Si el rol del API no puede leer el esquema `drizzle`, la comprobación solo avisa (concédele `SELECT` para activarla).
 
 3. **Poblar Dataset Realista de Prueba:**
    ```bash
