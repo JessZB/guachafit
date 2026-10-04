@@ -153,6 +153,14 @@ export const usuarios = pgTable('usuarios', {
   estado: estadoUsuarioEnum('estado').default(EstadoUsuario.ACTIVO).notNull(),
   tokenInvitacionHash: varchar('token_invitacion_hash', { length: 64 }),
   tokenInvitacionExpira: timestamp('token_invitacion_expira', { withTimezone: true }),
+  // Recuperación de contraseña: solo se guarda el hash SHA-256 del token de un solo uso (vence en
+  // 1 hora), así una filtración de la BD no da enlaces válidos. Un único token vigente: pedir uno
+  // nuevo lo reemplaza, salvo que el vigente tenga menos de 15 minutos (no se rota).
+  tokenRecuperacionHash: varchar('token_recuperacion_hash', { length: 64 }),
+  tokenRecuperacionExpira: timestamp('token_recuperacion_expira', { withTimezone: true }),
+  // Instante del último restablecimiento de contraseña. El refresh rechaza los tokens
+  // emitidos antes (cierra las sesiones abiertas en su siguiente renovación).
+  passwordCambiadaEn: timestamp('password_cambiada_en', { withTimezone: true }),
   ultimoAccesoUtc: timestamp('ultimo_acceso_utc', { withTimezone: true }),
   timezone: varchar('timezone', { length: 64 }).default('America/Caracas').notNull(),
   temaUi: varchar('tema_ui', { length: 10 }).default('system').notNull(),

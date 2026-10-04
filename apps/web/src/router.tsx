@@ -35,6 +35,14 @@ const ActivacionPage = lazy(() =>
   import('./pages/auth/ActivacionPage').then((m) => ({ default: m.ActivacionPage }))
 );
 
+// Recuperación de contraseña (rutas públicas: quien la usa no tiene sesión).
+const RecuperarPage = lazy(() =>
+  import('./pages/auth/RecuperarPage').then((m) => ({ default: m.RecuperarPage }))
+);
+const RestablecerPage = lazy(() =>
+  import('./pages/auth/RestablecerPage').then((m) => ({ default: m.RestablecerPage }))
+);
+
 // Lazy Athlete Pages
 const EntrenamientoPage = lazy(() =>
   import('./pages/atleta/EntrenamientoPage').then((m) => ({ default: m.EntrenamientoPage }))
@@ -139,6 +147,22 @@ export const router = createBrowserRouter([
     element: (
       <Suspense fallback={<PublicFallback />}>
         <ActivacionPage />
+      </Suspense>
+    ),
+  },
+  {
+    path: '/recuperar',
+    element: (
+      <Suspense fallback={<PublicFallback />}>
+        <RecuperarPage />
+      </Suspense>
+    ),
+  },
+  {
+    path: '/restablecer',
+    element: (
+      <Suspense fallback={<PublicFallback />}>
+        <RestablecerPage />
       </Suspense>
     ),
   },

@@ -6,6 +6,7 @@ import {
   MENSAJE_ACTIVACION_INVALIDA,
   MINIMO_CARACTERES_PASSWORD,
   validarPasswordActivacion,
+  VIGENCIA_ACTIVACION_TEXTO,
 } from '../../lib/onboarding-links';
 import { MENSAJE_ERROR_GENERICO } from '../../lib/mensajes-error';
 import { Dumbbell, ArrowLeft, CheckCircle2, KeyRound, Lock, ShieldAlert } from 'lucide-react';
@@ -130,13 +131,22 @@ export function ActivacionPage() {
               <p role="alert" className="text-xs text-muted-foreground leading-relaxed">
                 {error || MENSAJE_ACTIVACION_INVALIDA}
               </p>
-              <Link
-                to="/login"
-                className="inline-flex items-center gap-1.5 min-h-11 py-2 px-3.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 active:scale-95 transition-all"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                <span>Volver al inicio de sesión</span>
-              </Link>
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  to="/login"
+                  className="inline-flex items-center gap-1.5 min-h-11 py-2 px-3.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 active:scale-95 transition-all"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  <span>Volver al inicio de sesión</span>
+                </Link>
+                {/* Si ya creaste tu contraseña y la olvidaste, puedes restablecerla sin pedir otro enlace. */}
+                <Link
+                  to="/recuperar"
+                  className="inline-flex items-center min-h-11 px-2 text-xs font-bold text-primary underline"
+                >
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              </div>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -147,12 +157,20 @@ export function ActivacionPage() {
                 >
                   <p>{error}</p>
                   {correoYaRegistrado && (
-                    <Link
-                      to="/login"
-                      className="inline-flex items-center min-h-11 font-bold text-primary underline"
-                    >
-                      Iniciar sesión
-                    </Link>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Link
+                        to="/login"
+                        className="inline-flex items-center min-h-11 font-bold text-primary underline"
+                      >
+                        Iniciar sesión
+                      </Link>
+                      <Link
+                        to="/recuperar"
+                        className="inline-flex items-center min-h-11 font-bold text-primary underline"
+                      >
+                        Recuperar mi contraseña
+                      </Link>
+                    </div>
                   )}
                 </div>
               )}
@@ -203,7 +221,7 @@ export function ActivacionPage() {
 
               <p className="text-xs text-muted-foreground">
                 Usa al menos {MINIMO_CARACTERES_PASSWORD} caracteres. Este enlace se usa una sola vez
-                y vence en 48 horas.
+                y vence en {VIGENCIA_ACTIVACION_TEXTO}.
               </p>
 
               <button

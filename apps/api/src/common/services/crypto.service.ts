@@ -1,6 +1,7 @@
 import { Injectable, Optional, Inject } from '@nestjs/common';
 import * as crypto from 'node:crypto';
 import * as bcrypt from 'bcryptjs';
+import { VIGENCIA_ENLACE_ACTIVACION_MS, VIGENCIA_ENLACE_RECUPERACION_MS } from '@guachafit/shared';
 
 /** Costo bcrypt de las contraseñas (A6: el hash ficticio del login debe usar el mismo). */
 export const RONDAS_BCRYPT = 10;
@@ -32,13 +33,26 @@ export class CryptoService {
 
   /**
    * Genera token aleatorio criptográfico para invitaciones (RF-011)
-   * Retorna el token en texto plano (para enviar por email), su hash SHA-256 (para BD) y expiración a 48h
+   * Retorna el token en texto plano (para enviar por email), su hash SHA-256 (para BD) y su
+   * expiración (`VIGENCIA_ENLACE_ACTIVACION_MS`, compartida con los correos y la web).
    */
   generateInvitationToken(): { rawToken: string; tokenHash: string; expiresAt: Date } {
     const rawToken = crypto.randomBytes(32).toString('hex');
     const tokenHash = this.hashSha256(rawToken);
-    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 horas
+    const expiresAt = new Date(Date.now() + VIGENCIA_ENLACE_ACTIVACION_MS);
 
+    return { rawToken, tokenHash, expiresAt };
+  }
+
+  /**
+   * Token aleatorio de un solo uso para restablecer la contraseña. Igual que la invitación
+   * (32 bytes, hash SHA-256 para la BD) pero con la vigencia corta de la recuperación
+   * (`VIGENCIA_ENLACE_RECUPERACION_MS`): el enlace viaja por correo y da acceso a la cuenta.
+   */
+  generarTokenRecuperacion(): { rawToken: string; tokenHash: string; expiresAt: Date } {
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = this.hashSha256(rawToken);
+    const expiresAt = new Date(Date.now() + VIGENCIA_ENLACE_RECUPERACION_MS);
     return { rawToken, tokenHash, expiresAt };
   }
 

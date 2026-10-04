@@ -45,6 +45,10 @@ import { AuditoriaAccesosDenegadosService } from '../../common/auditoria/auditor
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AlumnoRegistradoEvent } from '../notificaciones/events/eventos-notificacion';
 import {
+  BienvenidaAlumnoEvent,
+  publicarCorreoCuenta,
+} from '../notificaciones/events/eventos-correo-cuenta';
+import {
   AltaManualAlumnoDTO,
   AltaManualAlumnoResultadoDTO,
   CoachPublicoDTO,
@@ -194,9 +198,10 @@ export class AlumnosService {
   /**
    * Alta Manual de Alumno por el Entrenador (RF-011, Vía A)
    *
-   * WU-E (RN-05): el backend NO envía correos por sí mismo (no existe adaptador de email en este
-   * flujo). Devuelve el token de un solo uso para que el entrenador comparta el enlace de
-   * activación; el mensaje nunca afirma un envío que no ocurrió.
+   * WU-E (RN-05): tras confirmar la transacción se publica el evento de bienvenida (evento →
+   * despachador → cola `notificaciones-email` → worker); este servicio nunca envía el correo. El
+   * token de un solo uso también se devuelve para que el entrenador comparta el enlace como
+   * respaldo. `correoEnviado` (y el mensaje) solo afirman el envío si el correo quedó en camino.
    */
   async crearAlumnoManual(
     entrenadorId: string,
@@ -259,6 +264,22 @@ export class AlumnosService {
       return { nuevoUsuario, nuevoPerfil };
     });
 
+    // Bienvenida con el enlace de activación, fuera de la transacción ya confirmada. Se espera la
+    // confirmación del encolado con tiempo límite solo para elegir el mensaje: un fallo del
+    // bus/cola o una cola que no responde NUNCA tumba el alta (el enlace copiable es respaldo).
+    const correoEnviado = await publicarCorreoCuenta(
+      this.eventEmitter,
+      BienvenidaAlumnoEvent.NOMBRE,
+      new BienvenidaAlumnoEvent({
+        tipo: 'BIENVENIDA_ALUMNO',
+        usuarioId: nuevoUsuario.id,
+        email: nuevoUsuario.email,
+        nombre: nuevoPerfil.nombres ?? null,
+        token: rawToken,
+      }),
+      this.logger
+    );
+
     return {
       id: nuevoPerfil.id,
       nombres: nuevoPerfil.nombres,
@@ -268,8 +289,10 @@ export class AlumnosService {
       modalidad: nuevoPerfil.modalidad,
       estadoActivacion: nuevoPerfil.estadoActivacion,
       tokenInvitacion: rawToken, // Único momento en que el token en claro sale del backend
-      mensaje:
-        'Alumno registrado con éxito. Comparte el enlace de activación con tu alumno para que cree su contraseña.',
+      correoEnviado,
+      mensaje: correoEnviado
+        ? 'Alumno registrado con éxito. Le enviamos un correo con el enlace para crear su contraseña. Si no le llega, compártele el enlace de activación.'
+        : 'Alumno registrado con éxito. Comparte el enlace de activación con tu alumno para que cree su contraseña.',
     };
   }
 

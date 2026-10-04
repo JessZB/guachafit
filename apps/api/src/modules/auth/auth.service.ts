@@ -2,12 +2,14 @@ import {
   Injectable,
   Inject,
   Optional,
+  Logger,
   UnauthorizedException,
   NotFoundException,
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
 import {
   Database,
@@ -15,7 +17,10 @@ import {
   withTenant as withTenantBase,
   eq,
   and,
+  or,
   gt,
+  lte,
+  isNull,
   count,
   desc,
   asc,
@@ -30,10 +35,22 @@ import {
   MENSAJE_CUENTA_ARCHIVADA,
   MENSAJE_CREDENCIALES_INCORRECTAS,
   MENSAJE_CUENTA_DESACTIVADA,
+  MENSAJE_RECUPERACION_SOLICITADA,
+  MENSAJE_ENLACE_RECUPERACION_INVALIDO,
+  MENSAJE_PASSWORD_ACTUALIZADA,
 } from '../../common/mensajes-acceso';
+import {
+  BienvenidaEntrenadorEvent,
+  EventoCorreoCuenta,
+  RecuperacionPasswordSolicitadaEvent,
+  publicarCorreoCuenta,
+} from '../notificaciones/events/eventos-correo-cuenta';
+import { enmascararCorreo } from '../../common/enmascarar-correo.util';
 import {
   LoginUsuarioDTO,
   EstablecerPasswordConTokenDTO,
+  SolicitarRecuperacionPasswordDTO,
+  RestablecerPasswordDTO,
   CrearEntrenadorDTO,
   AuthUserDTO,
   JwtPayload,
@@ -48,7 +65,16 @@ import {
   CambioEstadoEntrenadorResultadoDTO,
   CambiarLicenciaEntrenadorDTO,
   CambioLicenciaEntrenadorResultadoDTO,
+  VIGENCIA_ENLACE_RECUPERACION_MS,
+  EntrenadorCreadoDTO,
 } from '@guachafit/shared';
+
+/**
+ * Recuperación: intervalo mínimo entre dos enlaces para la misma cuenta. Mientras el enlace
+ * vigente tenga menos de 15 minutos no se rota (un tercero no puede anular el enlace de otra
+ * persona pidiendo uno nuevo con su correo) ni se envía otro correo.
+ */
+export const INTERVALO_MINIMO_NUEVO_ENLACE_RECUPERACION_MS = 15 * 60_000;
 
 /**
  * A6: hash bcrypt de un texto que nunca es una contraseña real. Se compara contra él cuando el
@@ -61,6 +87,7 @@ const HASH_FICTICIO_SIN_USUARIO = '$2b$10$NE1sOETTV3S5BxjlNsXI6O6ENy1JcQJTkBlST3
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly jwtSecret: string;
   private readonly refreshSecret: string;
 
@@ -75,7 +102,10 @@ export class AuthService {
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
     private readonly cryptoService: CryptoService,
-    @Optional() @Inject(WITH_TENANT) withTenant?: WithTenantFn
+    @Optional() @Inject(WITH_TENANT) withTenant?: WithTenantFn,
+    // Bienvenidas y recuperación publican un evento de dominio (ADR-010): el envío real lo hace
+    // el worker de correo, fuera de la petición. Opcional para los consumidores sin bus de eventos.
+    @Optional() @Inject(EventEmitter2) private readonly eventEmitter?: EventEmitter2
   ) {
     // A3: los secretos salen de la fuente única (fail-fast en producción).
     const { jwtSecret, refreshSecret } = obtenerSecretosJwt();
@@ -106,9 +136,14 @@ export class AuthService {
    * siguiente `/auth/me`. El ÚNICO límite es el access token ya emitido: al ser JWT stateless sin
    * consulta a BD en el guard, vive como máximo sus 15 minutos de TTL.
    */
-  private async verificarLicenciaEntrenadorActiva(usuarioId: string): Promise<void> {
+  private async verificarLicenciaEntrenadorActiva(
+    usuarioId: string
+  ): Promise<{ nombres: string | null }> {
     const [perfil] = await this.db
-      .select({ estadoLicencia: perfilesEntrenador.estadoLicencia })
+      .select({
+        estadoLicencia: perfilesEntrenador.estadoLicencia,
+        nombres: perfilesEntrenador.nombres,
+      })
       .from(perfilesEntrenador)
       .where(eq(perfilesEntrenador.usuarioId, usuarioId))
       .limit(1);
@@ -118,6 +153,8 @@ export class AuthService {
         'La licencia de esta cuenta no está activa. Contacta al administrador de la plataforma.'
       );
     }
+    // El nombre permite saludar al entrenador en el correo de recuperación.
+    return { nombres: perfil.nombres ?? null };
   }
 
   /**
@@ -424,6 +461,17 @@ export class AuthService {
       throw new UnauthorizedException(MENSAJE_SESION_VENCIDA);
     }
 
+    // Quien restablece la contraseña puede estar echando a un intruso: las sesiones abiertas
+    // antes del cambio ya no se
+    // renuevan (`iat` en segundos; un refresh emitido en el mismo segundo del cambio sigue válido).
+    if (
+      usuario.passwordCambiadaEn &&
+      typeof decoded.iat === 'number' &&
+      decoded.iat < Math.floor(new Date(usuario.passwordCambiadaEn).getTime() / 1000)
+    ) {
+      throw new UnauthorizedException(MENSAJE_SESION_VENCIDA);
+    }
+
     let entrenadorId: string | undefined;
     if (usuario.rol === Rol.ENTRENADOR) {
       entrenadorId = usuario.id;
@@ -464,9 +512,207 @@ export class AuthService {
   }
 
   /**
+   * Publica un correo de cuenta y devuelve si quedó realmente en camino (espera acotada, ver
+   * `publicarCorreoCuenta`). Un fallo del bus o de la cola NUNCA cambia el resultado del flujo de
+   * negocio: solo se registra.
+   */
+  private publicarCorreoCuenta(nombreEvento: string, evento: EventoCorreoCuenta): Promise<boolean> {
+    return publicarCorreoCuenta(this.eventEmitter, nombreEvento, evento, this.logger);
+  }
+
+  /**
+   * ¿La cuenta tiene acceso a la plataforma? Misma regla que login/refresh/canje:
+   * habilitada y no bloqueada; coach con licencia activa; alumno no archivado y con entrenador
+   * operable (cascada RF-010 §6). Lanza el 401 claro correspondiente; devuelve el nombre del
+   * alumno o del entrenador (si lo hay) para personalizar el correo.
+   */
+  private async verificarCuentaConAcceso(usuario: {
+    id: string;
+    rol: string;
+    activo: boolean;
+    estado: string;
+  }): Promise<{ nombre: string | null }> {
+    if (!usuario.activo || usuario.estado === EstadoUsuario.BLOQUEADO) {
+      throw new UnauthorizedException(MENSAJE_CUENTA_DESACTIVADA);
+    }
+    if (usuario.rol === Rol.ENTRENADOR) {
+      const { nombres } = await this.verificarLicenciaEntrenadorActiva(usuario.id);
+      return { nombre: nombres };
+    }
+    if (usuario.rol === Rol.ALUMNO) {
+      // RNF-003/ADR-011 (etapa 3): lectura self del perfil con RLS (`current_usuario_id`).
+      const [perfil] = await this.withTenant({ usuarioId: usuario.id }, (tx) =>
+        tx.select().from(perfilesAlumno).where(eq(perfilesAlumno.usuarioId, usuario.id))
+      );
+      if (perfil?.deletedAtUtc) {
+        throw new UnauthorizedException(MENSAJE_CUENTA_ARCHIVADA);
+      }
+      if (perfil?.entrenadorId) {
+        await this.verificarEntrenadorOperable(perfil.entrenadorId);
+      }
+      return { nombre: perfil?.nombres ?? null };
+    }
+    return { nombre: null };
+  }
+
+  /**
+   * `POST /auth/recuperar-password`.
+   *
+   * Responde SIEMPRE el mismo mensaje y en el mismo tiempo, exista o no la cuenta: no revela si
+   * el correo está registrado ni el estado de la cuenta.
+   *
+   * Contra la enumeración por tiempo, TODO el trabajo que depende de la cuenta (búsqueda, reglas
+   * de acceso, generación y guardado del código, encolado del correo) corre en segundo plano
+   * (`procesarSolicitudRecuperacion`) y la respuesta no lo espera: el camino visible es idéntico
+   * para un correo registrado y uno que no lo está. Los errores de ese trabajo solo se registran
+   * (con el correo enmascarado); la persona puede volver a pedir el enlace.
+   */
+  async solicitarRecuperacionPassword(
+    dto: SolicitarRecuperacionPasswordDTO
+  ): Promise<{ mensaje: string }> {
+    const email = dto.email.toLowerCase().trim();
+
+    void Promise.resolve()
+      .then(() => this.procesarSolicitudRecuperacion(email))
+      .catch((error) => {
+        this.logger.error(
+          `Falló la recuperación de contraseña pedida para ${enmascararCorreo(email)}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      });
+
+    return { mensaje: MENSAJE_RECUPERACION_SOLICITADA };
+  }
+
+  /**
+   * Trabajo en segundo plano de la recuperación (ver `solicitarRecuperacionPassword`).
+   *
+   * Solo si la cuenta tiene acceso se genera un código aleatorio de un solo uso (se guarda SOLO su
+   * hash SHA-256, con la vigencia `VIGENCIA_ENLACE_RECUPERACION_MS`) y se publica el evento que
+   * termina en el correo.
+   *
+   * Contra la anulación del enlace ajeno: si ya hay un enlace vigente emitido hace menos de
+   * `INTERVALO_MINIMO_NUEVO_ENLACE_RECUPERACION_MS`, no se rota ni se envía otro correo (el enlace
+   * de la persona sigue sirviendo). Pasado ese intervalo sí se emite uno nuevo y el anterior deja
+   * de servir. La emisión se deduce del vencimiento (`expira - vigencia`): no hace falta otra
+   * columna. El UPDATE repite la condición para que dos pedidos simultáneos no roten dos veces.
+   */
+  async procesarSolicitudRecuperacion(email: string): Promise<void> {
+    const [usuario] = await this.db.select().from(usuarios).where(eq(usuarios.email, email));
+    if (!usuario) return;
+
+    let nombre: string | null;
+    try {
+      ({ nombre } = await this.verificarCuentaConAcceso(usuario));
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        this.logger.log(
+          `Recuperación pedida para una cuenta sin acceso (${usuario.id}); no se envía enlace.`
+        );
+        return;
+      }
+      throw error;
+    }
+
+    // Un enlace que vence después de este instante fue emitido hace menos del intervalo mínimo.
+    const limiteRecienEmitido = new Date(
+      Date.now() + VIGENCIA_ENLACE_RECUPERACION_MS - INTERVALO_MINIMO_NUEVO_ENLACE_RECUPERACION_MS
+    );
+    const expiraActual = usuario.tokenRecuperacionExpira
+      ? new Date(usuario.tokenRecuperacionExpira)
+      : null;
+    if (expiraActual && expiraActual > limiteRecienEmitido) {
+      this.logger.log(
+        `Recuperación repetida para el usuario ${usuario.id}: su enlace reciente sigue vigente; no se envía otro.`
+      );
+      return;
+    }
+
+    const { rawToken, tokenHash, expiresAt } = this.cryptoService.generarTokenRecuperacion();
+    const rotados = await this.db
+      .update(usuarios)
+      .set({ tokenRecuperacionHash: tokenHash, tokenRecuperacionExpira: expiresAt })
+      .where(
+        and(
+          eq(usuarios.id, usuario.id),
+          or(
+            isNull(usuarios.tokenRecuperacionExpira),
+            lte(usuarios.tokenRecuperacionExpira, limiteRecienEmitido)
+          )
+        )
+      )
+      .returning({ id: usuarios.id });
+
+    if (rotados.length === 0) return; // Otro pedido simultáneo ya emitió el enlace.
+
+    await this.publicarCorreoCuenta(
+      RecuperacionPasswordSolicitadaEvent.NOMBRE,
+      new RecuperacionPasswordSolicitadaEvent({
+        tipo: 'RECUPERACION_PASSWORD',
+        usuarioId: usuario.id,
+        email: usuario.email,
+        nombre,
+        token: rawToken,
+      })
+    );
+  }
+
+  /**
+   * `POST /auth/restablecer-password`.
+   *
+   * Valida el token (hash, vigente) y la cuenta (misma regla de acceso que el login), aplica la
+   * política de contraseña de la activación (contrato compartido) y consume el token en el MISMO
+   * UPDATE condicionado al hash: dos canjes simultáneos no pueden usarlo dos veces. También anula
+   * una invitación pendiente y marca `passwordCambiadaEn` (el refresh rechaza sesiones previas).
+   * No emite sesión: la web lleva al inicio de sesión.
+   */
+  async restablecerPassword(dto: RestablecerPasswordDTO): Promise<{ mensaje: string }> {
+    const tokenHash = this.cryptoService.hashSha256(dto.token);
+    const ahora = new Date();
+
+    const [usuario] = await this.db
+      .select()
+      .from(usuarios)
+      .where(
+        and(
+          eq(usuarios.tokenRecuperacionHash, tokenHash),
+          gt(usuarios.tokenRecuperacionExpira, ahora)
+        )
+      );
+
+    if (!usuario) {
+      throw new NotFoundException(MENSAJE_ENLACE_RECUPERACION_INVALIDO);
+    }
+
+    await this.verificarCuentaConAcceso(usuario);
+
+    const passwordHash = await this.cryptoService.hashPassword(dto.password);
+    const actualizados = await this.db
+      .update(usuarios)
+      .set({
+        passwordHash,
+        tokenRecuperacionHash: null,
+        tokenRecuperacionExpira: null,
+        tokenInvitacionHash: null,
+        tokenInvitacionExpira: null,
+        passwordCambiadaEn: ahora,
+        updatedAtUtc: ahora,
+      })
+      .where(and(eq(usuarios.id, usuario.id), eq(usuarios.tokenRecuperacionHash, tokenHash)))
+      .returning({ id: usuarios.id });
+
+    if (actualizados.length === 0) {
+      throw new NotFoundException(MENSAJE_ENLACE_RECUPERACION_INVALIDO);
+    }
+
+    return { mensaje: MENSAJE_PASSWORD_ACTUALIZADA };
+  }
+
+  /**
    * Creación de cuenta de Entrenador por SuperAdmin (RF-010, Escenario 1)
    */
-  async crearEntrenador(dto: CrearEntrenadorDTO) {
+  async crearEntrenador(dto: CrearEntrenadorDTO): Promise<EntrenadorCreadoDTO> {
     // 1. Validar email único
     const [existenteEmail] = await this.db
       .select()
@@ -532,6 +778,22 @@ export class AuthService {
       })
       .returning();
 
+    // RF-010 Escenario 1: sin contraseña directa, la bienvenida con el enlace de activación sale
+    // por correo (evento → despachador → cola). Se espera la confirmación del encolado (acotada)
+    // solo para no prometer un envío que no ocurrió; el enlace copiable del panel es el respaldo.
+    const correoEnviado = rawToken
+      ? await this.publicarCorreoCuenta(
+          BienvenidaEntrenadorEvent.NOMBRE,
+          new BienvenidaEntrenadorEvent({
+            tipo: 'BIENVENIDA_ENTRENADOR',
+            usuarioId: nuevoUsuario.id,
+            email: nuevoUsuario.email,
+            nombre: nuevoCoach.nombres ?? null,
+            token: rawToken,
+          })
+        )
+      : false;
+
     return {
       id: nuevoCoach.id,
       usuarioId: nuevoUsuario.id,
@@ -540,7 +802,12 @@ export class AuthService {
       email: nuevoUsuario.email,
       coachCode: nuevoCoach.coachCode,
       tokenInvitacion: rawToken,
-      mensaje: 'Entrenador registrado exitosamente.',
+      correoEnviado,
+      mensaje: !rawToken
+        ? 'Entrenador registrado exitosamente.'
+        : correoEnviado
+          ? 'Entrenador registrado exitosamente. Le enviamos un correo con el enlace para crear su contraseña. Si no le llega, compártele el enlace de activación.'
+          : 'Entrenador registrado exitosamente. Comparte el enlace de activación con el entrenador para que cree su contraseña.',
     };
   }
 

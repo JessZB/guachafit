@@ -21,6 +21,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import {
   LimitarIntentosLogin,
   LimitarIntentosPublico,
+  LimitarIntentosRecuperacion,
   LimitarIntentosRefresh,
 } from '../../common/guards/limite-intentos.guard';
 import {
@@ -28,6 +29,8 @@ import {
   UUID_REGEX,
   LoginUsuarioSchema,
   EstablecerPasswordConTokenSchema,
+  SolicitarRecuperacionPasswordSchema,
+  RestablecerPasswordSchema,
   RefreshTokenSchema,
   CrearEntrenadorSchema,
   ListarEntrenadoresAdminQuerySchema,
@@ -74,6 +77,31 @@ export class AuthController {
   async establecerPassword(@Body() body: unknown) {
     const dto = parsearContrato(EstablecerPasswordConTokenSchema, body);
     return this.authService.establecerPasswordConToken(dto);
+  }
+
+  /**
+   * Pedir un enlace para restablecer la contraseña. Responde SIEMPRE 200 con el mismo mensaje y
+   * sin esperar el trabajo que depende de la cuenta (no revela si el correo está registrado).
+   */
+  @Post('recuperar-password')
+  @HttpCode(HttpStatus.OK)
+  // 20/min por IP, 3 cada 15 min por IP + correo y 3 por hora por correo (no inundar un buzón).
+  @LimitarIntentosRecuperacion()
+  async recuperarPassword(@Body() body: unknown) {
+    const dto = parsearContrato(SolicitarRecuperacionPasswordSchema, normalizarCorreoLogin(body));
+    return this.authService.solicitarRecuperacionPassword(dto);
+  }
+
+  /**
+   * Nueva contraseña con el enlace de recuperación (un solo uso, vigencia
+   * `VIGENCIA_ENLACE_RECUPERACION_MS`). Misma política de contraseña que la activación.
+   */
+  @Post('restablecer-password')
+  @HttpCode(HttpStatus.OK)
+  @LimitarIntentosPublico()
+  async restablecerPassword(@Body() body: unknown) {
+    const dto = parsearContrato(RestablecerPasswordSchema, body);
+    return this.authService.restablecerPassword(dto);
   }
 
   /**

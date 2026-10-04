@@ -1,10 +1,21 @@
 import React, { useState } from 'react';
-import { useNavigate, Link, Navigate } from 'react-router-dom';
+import { useNavigate, Link, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/auth-context';
 import { Rol } from '@guachafit/shared';
 import { mostrarAccesoDemo } from '../../lib/acceso-ui';
 import { MENSAJE_CREDENCIALES_INCORRECTAS } from '../../lib/mensajes-error';
-import { Dumbbell, ShieldCheck, ArrowRight, Sparkles, UserCheck, Eye, EyeOff, Info } from 'lucide-react';
+import { leerAvisoLogin } from '../../lib/recuperacion-password';
+import {
+  Dumbbell,
+  ShieldCheck,
+  ArrowRight,
+  Sparkles,
+  UserCheck,
+  Eye,
+  EyeOff,
+  Info,
+  CheckCircle2,
+} from 'lucide-react';
 
 // C3: el acceso de demostración solo existe en desarrollo o con VITE_DEMO=true.
 const ACCESO_DEMO_VISIBLE = mostrarAccesoDemo({
@@ -16,6 +27,8 @@ export function LoginPage() {
   const { login, demoLogin, isLoading, isAuthenticated, avisoSesion, descartarAvisoSesion } =
     useAuth();
   const navigate = useNavigate();
+  // Aviso tras restablecer la contraseña (solo avisos conocidos del estado de navegación).
+  const avisoRecuperacion = leerAvisoLogin(useLocation().state);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [mostrarPassword, setMostrarPassword] = useState(false);
@@ -66,6 +79,17 @@ export function LoginPage() {
             Inicia sesión
           </h2>
 
+          {avisoRecuperacion && !error && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="p-3 rounded-xl bg-success/10 border border-success/30 text-foreground text-xs font-semibold flex items-start gap-2"
+            >
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
+              <span>{avisoRecuperacion}</span>
+            </div>
+          )}
+
           {avisoSesion && !error && (
             <div
               role="status"
@@ -106,9 +130,18 @@ export function LoginPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="login-password" className="text-xs font-semibold text-foreground">
-                Contraseña
-              </label>
+              <div className="flex items-center justify-between gap-2">
+                <label htmlFor="login-password" className="text-xs font-semibold text-foreground">
+                  Contraseña
+                </label>
+                {/* Recuperación de contraseña por correo (sin depender del entrenador). */}
+                <Link
+                  to="/recuperar"
+                  className="inline-flex items-center min-h-11 px-1 text-xs font-semibold text-primary hover:underline"
+                >
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              </div>
               <div className="relative">
                 <input
                   id="login-password"

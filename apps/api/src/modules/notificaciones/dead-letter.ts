@@ -10,7 +10,10 @@
  *    (lo mueve a `wait` de la MISMA cola dead-letter; para reinyectarlo al pipeline hay que
  *    re-encolarlo en la cola de origen).
  * 2. Programa/consola: `await colaOrigen.add(job.nombreJob, job.datos, { jobId: ... })`.
- *    OJO: el `jobId` original sigue retenido en el set de fallidos (7 días); para forzar un
+ *    Los correos de cuenta NO se reencolan así: su copia no lleva el enlace (ver
+ *    `datosParaDeadLetter`); el usuario pide un enlace nuevo.
+ *    OJO: el `jobId` original sigue retenido en el set de fallidos (7 días; 24 h los correos
+ *    de cuenta); para forzar un
  *    reintento inmediato hay que borrar primero ese registro (`job.remove()`) o usar
  *    `job.retry()` sobre el job fallido original, que es la vía recomendada.
  *
@@ -20,6 +23,9 @@
  */
 import { Logger } from '@nestjs/common';
 import { Job, Queue } from 'bullmq';
+import { enmascararCorreo } from '../../common/enmascarar-correo.util';
+import { esTipoCorreoCuenta } from './events/eventos-correo-cuenta';
+import { RETENCION_DLQ } from './notificaciones.config';
 
 /** Carga útil del job en la DLQ: todo lo necesario para triaje y reencolado manual. */
 export interface JobDeadLetterPayload {
@@ -47,6 +53,41 @@ export function construirJobIdDlq(colaOrigen: string, jobId?: string | null): st
 }
 
 /**
+ * Datos del job que se copian a la DLQ.
+ *
+ * Los correos de cuenta llevan en `html`/`cuerpo` el enlace con el código de un solo uso: a la DLQ
+ * solo va el tipo, el usuario y el destinatario enmascarado (suficiente para el triaje; el
+ * reencolado de estos correos se hace pidiendo un enlace nuevo, no reenviando el viejo). El resto
+ * de jobs se copia completo para poder reencolarlo a mano.
+ */
+export function datosParaDeadLetter(datos: unknown): unknown {
+  const registro = datos as Record<string, unknown> | null;
+  if (!registro || typeof registro !== 'object' || !esTipoCorreoCuenta(registro.tipoEvento)) {
+    return datos;
+  }
+  return {
+    tipoEvento: registro.tipoEvento,
+    usuarioId: registro.usuarioId ?? null,
+    email: enmascararCorreo(typeof registro.email === 'string' ? registro.email : ''),
+  };
+}
+
+/**
+ * Poda de la DLQ: sus jobs quedan en espera para siempre (no hay worker), así que se borran los
+ * que superan la retención (`RETENCION_DLQ`). Si la poda falla no se interrumpe nada: solo avisa.
+ */
+async function podarDeadLetter(dlq: Queue, logger: Logger): Promise<void> {
+  if (typeof (dlq as Partial<Queue>).clean !== 'function') return;
+  try {
+    await dlq.clean(RETENCION_DLQ.age * 1000, RETENCION_DLQ.count, 'wait');
+  } catch (error) {
+    logger.warn(
+      `[DLQ] No se pudo podar '${dlq.name}': ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+/**
  * Mueve el job a la DLQ si agotó intentos. Devuelve `false` si aún le quedan reintentos.
  *
  * La DLQ no tiene worker: el job permanece en `wait` como registro de intervención manual.
@@ -55,17 +96,20 @@ export async function moverJobADeadLetter(
   dlq: Queue,
   colaOrigen: string,
   job: Job,
-  error: Error
+  error: Error,
+  // Un fallo permanente (`UnrecoverableError`) no agota intentos pero tampoco se reintentará:
+  // también va a la DLQ para triaje.
+  forzar = false
 ): Promise<boolean> {
   const logger = new Logger('DeadLetterQueue');
 
-  if (!agotoIntentos(job)) return false;
+  if (!forzar && !agotoIntentos(job)) return false;
 
   const payload: JobDeadLetterPayload = {
     colaOrigen,
     jobIdOriginal: job.id ?? null,
     nombreJob: job.name,
-    datos: job.data,
+    datos: datosParaDeadLetter(job.data),
     error: error?.message ?? 'Error desconocido',
     intentosRealizados: job.attemptsMade,
     fallidoEnUtc: new Date().toISOString(),
@@ -78,6 +122,7 @@ export async function moverJobADeadLetter(
     logger.error(
       `[DLQ] Job '${job.id}' de '${colaOrigen}' agotó ${job.attemptsMade} intentos y fue movido a '${dlq.name}': ${payload.error}`
     );
+    await podarDeadLetter(dlq, logger);
     return true;
   } catch (dlqError) {
     // Un fallo del propio DLQ jamás debe tumbar al worker ni ocultar el fallo original.

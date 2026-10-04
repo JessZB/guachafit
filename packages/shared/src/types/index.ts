@@ -4,6 +4,8 @@ import {
   RefreshTokenSchema,
   CrearEntrenadorSchema,
   EstablecerPasswordConTokenSchema,
+  SolicitarRecuperacionPasswordSchema,
+  RestablecerPasswordSchema,
   ListarEntrenadoresAdminQuerySchema,
   CambiarEstadoEntrenadorSchema,
   CambiarLicenciaEntrenadorSchema,
@@ -100,6 +102,8 @@ export type LoginUsuarioDTO = z.infer<typeof LoginUsuarioSchema>;
 export type RefreshTokenDTO = z.infer<typeof RefreshTokenSchema>;
 export type CrearEntrenadorDTO = z.infer<typeof CrearEntrenadorSchema>;
 export type EstablecerPasswordConTokenDTO = z.infer<typeof EstablecerPasswordConTokenSchema>;
+export type SolicitarRecuperacionPasswordDTO = z.infer<typeof SolicitarRecuperacionPasswordSchema>;
+export type RestablecerPasswordDTO = z.infer<typeof RestablecerPasswordSchema>;
 export type ListarEntrenadoresAdminQueryDTO = z.infer<typeof ListarEntrenadoresAdminQuerySchema>;
 export type CambiarEstadoEntrenadorDTO = z.infer<typeof CambiarEstadoEntrenadorSchema>;
 export type CambiarLicenciaEntrenadorDTO = z.infer<typeof CambiarLicenciaEntrenadorSchema>;
@@ -343,6 +347,11 @@ export interface EntrenadorCreadoDTO {
   email: string;
   coachCode: string;
   tokenInvitacion: string | null;
+  /**
+   * `true` solo si el correo de bienvenida quedó realmente en camino (proveedor configurado y
+   * encolado confirmado). Con `false` la web pide compartir el enlace a mano.
+   */
+  correoEnviado: boolean;
   mensaje: string;
 }
 
@@ -412,6 +421,8 @@ export interface AltaManualAlumnoResultadoDTO {
   estadoActivacion: EstadoAlumno;
   /** Token de un solo uso (TTL 48h) con el que el alumno crea su contraseña en `/activar`. */
   tokenInvitacion: string;
+  /** `true` solo si el correo de bienvenida quedó realmente en camino (ver `EntrenadorCreadoDTO`). */
+  correoEnviado: boolean;
   mensaje: string;
 }
 

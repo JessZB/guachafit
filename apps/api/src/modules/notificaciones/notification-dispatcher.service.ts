@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -29,10 +29,24 @@ import {
   PATRON_EVENTOS_NOTIFICACION,
 } from './events/eventos-notificacion';
 import {
+  EventoCorreoCuenta,
+  CorreoCuentaPayload,
+  PATRON_EVENTOS_CORREO_CUENTA,
+  ResultadoDespachoCorreoCuenta,
+  TIEMPO_MAX_ENCOLADO_CORREO_CUENTA_MS,
+} from './events/eventos-correo-cuenta';
+import { construirCorreoCuenta } from './correo/plantillas-correo';
+import { ADAPTADOR_CORREO, AdaptadorCorreo } from './correo/adaptador-correo';
+import { leerConfigCorreo, obtenerUrlWeb } from '../../common/config/correo';
+import { esperarConLimite } from '../../common/esperar-con-limite.util';
+import { enmascararCorreo } from '../../common/enmascarar-correo.util';
+import { createHash } from 'node:crypto';
+import {
   COLA_EMAIL,
   COLA_PUSH,
   OPCIONES_JOB_EMAIL,
   OPCIONES_JOB_PUSH,
+  RETENCION_FALLIDOS_CORREO_CUENTA,
   construirJobIdNotificacion,
 } from './notificaciones.config';
 
@@ -52,7 +66,10 @@ export class NotificationDispatcherService {
     private readonly preferenciasService: PreferenciasNotificacionService,
     private readonly dispositivosService: DispositivosService,
     @InjectQueue(COLA_PUSH) private readonly pushQueue: Queue,
-    @InjectQueue(COLA_EMAIL) private readonly emailQueue: Queue
+    @InjectQueue(COLA_EMAIL) private readonly emailQueue: Queue,
+    // Para saber si un correo de cuenta sale de verdad (Brevo) o solo se registra (simulado).
+    // Sin adaptador (tests que instancian el servicio a mano) se decide por la configuración.
+    @Optional() @Inject(ADAPTADOR_CORREO) private readonly adaptadorCorreo?: AdaptadorCorreo
   ) {}
 
   /**
@@ -66,6 +83,117 @@ export class NotificationDispatcherService {
   @OnEvent(PATRON_EVENTOS_NOTIFICACION, { suppressErrors: false })
   async alEventoDeNotificacion(evento: EventoNotificacionDominio): Promise<DespachoResultado> {
     return this.despacharEvento(evento.payload);
+  }
+
+  /**
+   * Correos de CUENTA (ADR-008/ADR-010): bienvenidas y recuperación de contraseña.
+   *
+   * No pasan por la bandeja In-App ni por las preferencias (RF-015): son transaccionales de acceso
+   * y se envían siempre. El correo se arma aquí (plantillas puras + `APP_URL`) y el worker solo lo
+   * entrega. Devuelve si el correo quedó en camino: el alta lo usa para no prometer un envío que
+   * no ocurrió. No lanza: los fallos se registran aquí.
+   */
+  @OnEvent(PATRON_EVENTOS_CORREO_CUENTA, { suppressErrors: false })
+  async alEventoCorreoCuenta(evento: EventoCorreoCuenta): Promise<ResultadoDespachoCorreoCuenta> {
+    return this.despacharCorreoCuenta(evento.payload);
+  }
+
+  /**
+   * Encola el correo esperando la confirmación de Redis como máximo
+   * `TIEMPO_MAX_ENCOLADO_CORREO_CUENTA_MS`.
+   *
+   * Con Redis caído (`maxRetriesPerRequest: null`) `Queue.add` quedaría pendiente para siempre en
+   * la cola de comandos de ioredis, reteniendo en memoria el enlace con el código. Por eso:
+   * - si la conexión no está lista, no se llama a `add` (el código no entra en esa cola);
+   * - si vence el tiempo antes de llamar a `add`, se cancela y ya no se encola;
+   * - la espera se acota con `esperarConLimite` (sin temporizadores colgados).
+   * Límite conocido: un `add` ya enviado a ioredis no se puede retirar; si Redis vuelve, el
+   * correo sale tarde (el enlace sigue siendo válido mientras no venza).
+   */
+  async despacharCorreoCuenta(payload: CorreoCuentaPayload): Promise<ResultadoDespachoCorreoCuenta> {
+    const control = { cancelado: false };
+    const resultado = await esperarConLimite(
+      this.encolarCorreoCuenta(payload, control),
+      TIEMPO_MAX_ENCOLADO_CORREO_CUENTA_MS,
+      () => {
+        control.cancelado = true;
+      }
+    );
+
+    if (!resultado.ok) {
+      const motivo =
+        resultado.motivo === 'tiempo'
+          ? `la cola no respondió en ${TIEMPO_MAX_ENCOLADO_CORREO_CUENTA_MS} ms`
+          : resultado.error instanceof Error
+            ? resultado.error.message
+            : String(resultado.error);
+      // Sin el código ni el correo completo: solo tipo, usuario y destinatario enmascarado.
+      const linea = `No se pudo encolar el correo '${payload.tipo}' del usuario ${
+        payload.usuarioId
+      } (${enmascararCorreo(payload.email)}): ${motivo}`;
+      // La recuperación no tiene respaldo visible (su respuesta es genérica): es un error. Las
+      // bienvenidas tienen el enlace copiable en pantalla: aviso.
+      if (payload.tipo === 'RECUPERACION_PASSWORD') this.logger.error(linea);
+      else this.logger.warn(linea);
+      return { encolado: false, correoEnCamino: false };
+    }
+
+    this.logger.log(`Correo de cuenta '${payload.tipo}' encolado para el usuario ${payload.usuarioId}`);
+    return { encolado: true, correoEnCamino: this.entregaRealDeCorreo() };
+  }
+
+  private async encolarCorreoCuenta(
+    payload: CorreoCuentaPayload,
+    control: { cancelado: boolean }
+  ): Promise<void> {
+    await this.verificarColaEmailLista();
+    if (control.cancelado) return;
+
+    const correo = construirCorreoCuenta(payload, obtenerUrlWeb());
+    // Idempotencia por enlace: el mismo código no se encola dos veces; un enlace nuevo sí. El id
+    // lleva una huella del código, nunca el código en claro.
+    const huella = createHash('sha256').update(payload.token).digest('hex').slice(0, 16);
+
+    await this.emailQueue.add(
+      'enviar-email',
+      {
+        usuarioId: payload.usuarioId,
+        email: payload.email,
+        nombreDestinatario: payload.nombre,
+        asunto: correo.asunto,
+        cuerpo: correo.texto,
+        html: correo.html,
+        tipoEvento: payload.tipo,
+        esCriticoSeguridad: payload.tipo === 'RECUPERACION_PASSWORD',
+      },
+      {
+        ...OPCIONES_JOB_EMAIL,
+        jobId: `cuenta_${payload.tipo}_${payload.usuarioId}_${huella}`,
+        // El enlace de un solo uso no se retiene en Redis una vez entregado, y los fallidos solo
+        // 24 h (la copia de la DLQ va sin el enlace).
+        removeOnComplete: true,
+        removeOnFail: RETENCION_FALLIDOS_CORREO_CUENTA,
+      }
+    );
+  }
+
+  /**
+   * Lanza si la conexión de la cola existe pero no está lista (Redis caído o reconectando): así el
+   * job con el enlace no queda esperando en memoria a que Redis vuelva.
+   */
+  private async verificarColaEmailLista(): Promise<void> {
+    const cliente = (this.emailQueue as Partial<Queue>).client;
+    if (!cliente) return;
+    const conexion = (await cliente) as { status?: string } | undefined;
+    if (conexion?.status && conexion.status !== 'ready') {
+      throw new Error(`la conexión con la cola no está lista (${conexion.status})`);
+    }
+  }
+
+  private entregaRealDeCorreo(): boolean {
+    return this.adaptadorCorreo
+      ? this.adaptadorCorreo.entregaReal
+      : leerConfigCorreo().modo === 'brevo';
   }
 
   /**
@@ -192,7 +320,7 @@ export class NotificationDispatcherService {
           }
         );
         emailEnqueued = true;
-        this.logger.log(`Job email encolado hacia ${destinatario.email}`);
+        this.logger.log(`Job email encolado hacia ${enmascararCorreo(destinatario.email)}`);
       }
     }
 

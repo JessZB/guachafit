@@ -105,6 +105,26 @@ export function retrocesoRnf004(intentosRealizados: number): number {
 const RETENCION_COMPLETADOS = { age: 24 * 60 * 60, count: 5000 };
 const RETENCION_FALLIDOS = { age: 7 * 24 * 60 * 60, count: 5000 };
 
+/**
+ * Correos de cuenta (bienvenidas y recuperación) fallidos: 24 h. El job lleva el enlace con el
+ * código en claro; pasado ese plazo el de recuperación ya venció y la copia para triaje está en la
+ * DLQ sin el enlace (ver `dead-letter.ts`).
+ */
+export const RETENCION_FALLIDOS_CORREO_CUENTA = { age: 24 * 60 * 60, count: 1000 };
+
+/**
+ * Dead-Letter Queues: 7 días y como mucho 1000 registros. Sus jobs quedan en espera (no hay
+ * worker), así que `removeOnComplete/removeOnFail` solo aplican si alguien los mueve; la poda
+ * real de la espera la hace `moverJobADeadLetter` con `Queue.clean(..., 'wait')`.
+ */
+export const RETENCION_DLQ = { age: 7 * 24 * 60 * 60, count: 1000 };
+
+/** Opciones por defecto de las colas DLQ (ver `RETENCION_DLQ`). */
+export const OPCIONES_JOB_DLQ = {
+  removeOnComplete: RETENCION_DLQ,
+  removeOnFail: RETENCION_DLQ,
+};
+
 /** Push: 4 intentos (1 + 3 reintentos) con backoff exponencial corto (latencia p95 < 3s). */
 export const OPCIONES_JOB_PUSH = {
   attempts: 4,
@@ -145,7 +165,10 @@ export const OPCIONES_JOB_ANTROPOMETRIA_RECORDATORIO = {
 
 /**
  * Rate limiting por worker (RNF-004 §5):
- * - Email: máximo 50/s (límite de la capa gratuita de Resend citado en el requisito).
+ * - Email: máximo 50/s. El RNF-004 §5 citaba la capa gratuita de Resend; el proveedor elegido es
+ *   Brevo (ADR-018), cuya ruta `POST /v3/smtp/email` admite 1000 peticiones/s en los planes
+ *   generales (429 al superarlo). 50/s queda muy por debajo y suaviza ráfagas; el tope diario de
+ *   envíos depende del plan contratado y no lo controla este limitador.
  * - Push: 100/s conservador (las cuotas de FCM/APNs son mucho mayores; ajustable por env futuro).
  */
 export const LIMITADOR_WORKER_EMAIL = { max: 50, duration: 1000 };

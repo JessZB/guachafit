@@ -8,7 +8,12 @@ import {
   ListadoEntrenadoresAdminDTO,
 } from '@guachafit/shared';
 import { apiClient } from '../../lib/api-client';
-import { construirLinkActivacion, normalizarCoachCode } from '../../lib/onboarding-links';
+import {
+  construirLinkActivacion,
+  mensajeCorreoBienvenida,
+  normalizarCoachCode,
+  VIGENCIA_ACTIVACION_TEXTO,
+} from '../../lib/onboarding-links';
 import { useLogoutSeguro } from '../../lib/use-logout-seguro';
 import { useAuth } from '../../context/auth-context';
 import { usePaginacionServidor, type ParametrosCargaPagina } from '../../lib/use-paginacion-servidor';
@@ -43,7 +48,6 @@ import {
  */
 const CAPACIDADES_PENDIENTES = [
   'Planes y facturación de la plataforma (la licencia hoy solo se activa o suspende)',
-  'Envío automático del correo de bienvenida con el enlace de activación',
 ];
 
 const FORMULARIO_INICIAL = {
@@ -352,7 +356,7 @@ export function AdminPage() {
           <div>
             <h2 className="text-base font-bold text-foreground">Crear entrenador</h2>
             <p className="text-xs text-muted-foreground">
-              El entrenador recibirá un enlace de activación válido por 48 horas para crear su
+              El entrenador recibirá un enlace de activación válido por {VIGENCIA_ACTIVACION_TEXTO} para crear su
               contraseña.
             </p>
           </div>
@@ -388,7 +392,8 @@ export function AdminPage() {
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                   <Clock className="h-3.5 w-3.5" />
-                  Comparte este enlace de activación (válido 48 horas):
+                  {mensajeCorreoBienvenida(creado.correoEnviado, 'entrenador')} Es válido por{' '}
+                  {VIGENCIA_ACTIVACION_TEXTO}.
                 </p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 text-xs font-mono break-all px-2.5 py-2 rounded-lg bg-background border border-border text-foreground">

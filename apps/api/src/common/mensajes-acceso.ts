@@ -24,3 +24,12 @@ export const MENSAJE_DEMASIADOS_INTENTOS =
 export const MENSAJE_ALUMNO_FUERA_DE_LISTA = 'Este alumno no está en tu lista.';
 /** LOTE API-2: alumno inexistente o identificador mal formado (sin mostrar el identificador). */
 export const MENSAJE_ALUMNO_NO_ENCONTRADO = 'No encontramos a este alumno.';
+/**
+ * Recuperación de contraseña: la web compara estos textos por igualdad, así que viven en
+ * `@guachafit/shared` (una sola fuente) y aquí solo se reexportan.
+ */
+export {
+  MENSAJE_RECUPERACION_SOLICITADA,
+  MENSAJE_ENLACE_RECUPERACION_INVALIDO,
+  MENSAJE_PASSWORD_ACTUALIZADA,
+} from '@guachafit/shared';

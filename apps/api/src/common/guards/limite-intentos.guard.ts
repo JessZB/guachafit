@@ -22,6 +22,7 @@ import {
   ThrottlerStorageService,
 } from '@nestjs/throttler';
 import { MENSAJE_DEMASIADOS_INTENTOS } from '../mensajes-acceso';
+import { enmascararCorreo } from '../enmascarar-correo.util';
 
 /**
  * A5 (LOTE API-1): límite de intentos en las rutas sensibles sin sesión.
@@ -50,19 +51,43 @@ export const LIMITE_INTENTOS_REFRESH = 60;
 /** Rutas públicas (código de coach, registro, activación): 20 por minuto y por IP. */
 export const LIMITE_INTENTOS_PUBLICO = 20;
 
+/**
+ * Recuperación de contraseña: 3 pedidos por IP + correo cada 15 minutos (evita inundar un buzón
+ * con correos) además del tope público por IP.
+ */
+export const LIMITE_INTENTOS_RECUPERACION_POR_CORREO = 3;
+export const VENTANA_RECUPERACION_MS = 15 * 60_000;
+
+/**
+ * Recuperación: además, 3 pedidos por hora para el MISMO correo venga de la IP que venga. Sin
+ * este tope, alguien que rote IPs podría saturar el buzón de otra persona.
+ */
+export const LIMITE_RECUPERACION_SOLO_CORREO = 3;
+export const VENTANA_RECUPERACION_SOLO_CORREO_MS = 60 * 60_000;
+
 const LIMITE_POR_IP = 'por-ip';
 const LIMITE_POR_CORREO = 'por-correo';
+/** Solo lo usa la recuperación; las demás rutas lo saltan explícitamente. */
+const LIMITE_SOLO_CORREO = 'solo-correo';
 
 /** IP del cliente tal como la calcula Express (respeta `trust proxy`), normalizada como throttler. */
 function ipDelCliente(req: Record<string, any>): string {
   return typeof req.ip === 'string' && req.ip ? normalizeIp(req.ip) : 'ip-desconocida';
 }
 
+function correoNormalizado(req: Record<string, any>): string {
+  const email = req.body?.email;
+  return typeof email === 'string' ? email.trim().toLowerCase() : '';
+}
+
 /** Tracker del login: `IP|correo` con el correo en minúsculas y sin espacios. */
 export function trackerPorIpYCorreo(req: Record<string, any>): string {
-  const email = req.body?.email;
-  const correo = typeof email === 'string' ? email.trim().toLowerCase() : '';
-  return `${ipDelCliente(req)}|${correo}`;
+  return `${ipDelCliente(req)}|${correoNormalizado(req)}`;
+}
+
+/** Tracker de la recuperación por correo: `*|correo` (cualquier IP). */
+export function trackerSoloCorreo(req: Record<string, any>): string {
+  return `*|${correoNormalizado(req)}`;
 }
 
 /** Versión apta para logs del tracker: el usuario del correo queda como `j***`. */
@@ -72,9 +97,7 @@ export function enmascararTracker(tracker: string): string {
   const ip = tracker.slice(0, separador);
   const correo = tracker.slice(separador + 1);
   if (!correo) return `${ip}|(sin correo)`;
-  const arroba = correo.lastIndexOf('@');
-  if (arroba < 1) return `${ip}|***`;
-  return `${ip}|${correo[0]}***${correo.slice(arroba)}`;
+  return `${ip}|${enmascararCorreo(correo)}`;
 }
 
 /** Login: 5/min por IP + correo y 60/min por IP. */
@@ -84,7 +107,8 @@ export const LimitarIntentosLogin = () =>
     Throttle({
       [LIMITE_POR_IP]: { limit: LIMITE_INTENTOS_LOGIN_POR_IP, ttl: VENTANA_LIMITE_INTENTOS_MS },
       [LIMITE_POR_CORREO]: { limit: LIMITE_INTENTOS_LOGIN, ttl: VENTANA_LIMITE_INTENTOS_MS },
-    })
+    }),
+    SkipThrottle({ [LIMITE_SOLO_CORREO]: true })
   );
 
 /** Refresh: 60/min por IP; no comparte cupo con el login. */
@@ -94,7 +118,27 @@ export const LimitarIntentosRefresh = () =>
     Throttle({
       [LIMITE_POR_IP]: { limit: LIMITE_INTENTOS_REFRESH, ttl: VENTANA_LIMITE_INTENTOS_MS },
     }),
-    SkipThrottle({ [LIMITE_POR_CORREO]: true })
+    SkipThrottle({ [LIMITE_POR_CORREO]: true, [LIMITE_SOLO_CORREO]: true })
+  );
+
+/**
+ * Recuperación de contraseña: 20/min por IP, 3 cada 15 min por IP + correo y 3 por hora por
+ * correo (independiente de la IP).
+ */
+export const LimitarIntentosRecuperacion = () =>
+  applyDecorators(
+    UseGuards(LimiteIntentosGuard),
+    Throttle({
+      [LIMITE_POR_IP]: { limit: LIMITE_INTENTOS_PUBLICO, ttl: VENTANA_LIMITE_INTENTOS_MS },
+      [LIMITE_POR_CORREO]: {
+        limit: LIMITE_INTENTOS_RECUPERACION_POR_CORREO,
+        ttl: VENTANA_RECUPERACION_MS,
+      },
+      [LIMITE_SOLO_CORREO]: {
+        limit: LIMITE_RECUPERACION_SOLO_CORREO,
+        ttl: VENTANA_RECUPERACION_SOLO_CORREO_MS,
+      },
+    })
   );
 
 /** Rutas públicas sin sesión: 20/min por IP. */
@@ -104,7 +148,7 @@ export const LimitarIntentosPublico = () =>
     Throttle({
       [LIMITE_POR_IP]: { limit: LIMITE_INTENTOS_PUBLICO, ttl: VENTANA_LIMITE_INTENTOS_MS },
     }),
-    SkipThrottle({ [LIMITE_POR_CORREO]: true })
+    SkipThrottle({ [LIMITE_POR_CORREO]: true, [LIMITE_SOLO_CORREO]: true })
   );
 
 type EntornoLimite = Partial<Record<'NODE_ENV' | 'LIMITE_INTENTOS_DESACTIVADO', string | undefined>>;
@@ -130,6 +174,12 @@ export function crearOpcionesLimiteIntentos(entorno: EntornoLimite = process.env
         limit: LIMITE_INTENTOS_LOGIN,
         ttl: VENTANA_LIMITE_INTENTOS_MS,
         getTracker: trackerPorIpYCorreo,
+      },
+      {
+        name: LIMITE_SOLO_CORREO,
+        limit: LIMITE_RECUPERACION_SOLO_CORREO,
+        ttl: VENTANA_RECUPERACION_SOLO_CORREO_MS,
+        getTracker: trackerSoloCorreo,
       },
     ],
     errorMessage: MENSAJE_DEMASIADOS_INTENTOS,

@@ -15,6 +15,8 @@ import {
 import {
   construirLinkActivacion,
   construirLinkOnboarding,
+  mensajeCorreoBienvenida,
+  VIGENCIA_ACTIVACION_TEXTO,
 } from '../../lib/onboarding-links';
 import {
   calcularResumenDirectorio,
@@ -134,6 +136,8 @@ export function AlumnosPage() {
     nombres: string;
     apellidos: string;
     linkActivacion: string;
+    /** Solo si el servidor confirmó que el correo de bienvenida quedó en camino. */
+    correoEnviado: boolean;
   } | null>(null);
   const [activacionCopiada, setActivacionCopiada] = useState(false);
   const [errorCopiaActivacion, setErrorCopiaActivacion] = useState<string | null>(null);
@@ -335,11 +339,12 @@ export function AlumnosPage() {
         }),
       });
 
-      // WU-E (RF-011 RN-05): sin correo fantasma. El token de un solo uso se convierte en un
-      // enlace visible y copiable para que el coach lo comparta con su alumno.
+      // WU-E (RF-011 RN-05): el servidor intenta enviar la bienvenida por correo y dice si quedó
+      // en camino; el enlace visible y copiable es el respaldo (o la vía principal si no salió).
       setAlumnoCreado({
         nombres: resultado.nombres,
         apellidos: resultado.apellidos,
+        correoEnviado: resultado.correoEnviado === true,
         linkActivacion: construirLinkActivacion(
           resultado.tokenInvitacion,
           window.location.origin
@@ -1100,13 +1105,13 @@ export function AlumnosPage() {
                     {alumnoCreado.nombres} {alumnoCreado.apellidos} fue registrado en tu cartera.
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Comparte este enlace con tu alumno para que cree su contraseña.
+                    {mensajeCorreoBienvenida(alumnoCreado.correoEnviado, 'alumno')}
                   </p>
                 </div>
 
                 <div className="space-y-1.5">
                   <label htmlFor="alta-enlace-activacion" className="text-xs font-semibold text-muted-foreground">
-                    Enlace para crear su contraseña (se usa una vez y vence en 48 horas)
+                    Enlace para crear su contraseña (se usa una vez y vence en {VIGENCIA_ACTIVACION_TEXTO})
                   </label>
                   <div className="flex items-center gap-2">
                     <input

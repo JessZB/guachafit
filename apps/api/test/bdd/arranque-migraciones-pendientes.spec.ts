@@ -42,10 +42,11 @@ describe('Arranque · comparación de la última migración (función pura)', ()
     expect(ultimaMigracionDelJournal({ entries: [] })).toBeNull();
   });
 
-  it('el journal real del repositorio termina en la migración 0014', () => {
+  // La 0015 (recuperación de contraseña) es la última: el arranque debe exigirla.
+  it('el journal real del repositorio termina en la migración 0015', () => {
     const ruta = path.resolve(__dirname, '../../../../packages/database/drizzle/meta/_journal.json');
     const journal = JSON.parse(fs.readFileSync(ruta, 'utf8'));
-    expect(ultimaMigracionDelJournal(journal)?.tag).toMatch(/^0014_/);
+    expect(ultimaMigracionDelJournal(journal)?.tag).toMatch(/^0015_/);
   });
 
   it('faltan migraciones si no hay ninguna aplicada o la última aplicada es anterior', () => {

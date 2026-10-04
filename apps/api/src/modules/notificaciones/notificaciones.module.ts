@@ -15,11 +15,14 @@ import {
   COLA_EMAIL,
   COLA_PUSH,
   COLA_RESUMEN_SEMANAL,
+  OPCIONES_JOB_DLQ,
   OPCIONES_JOB_EMAIL,
   OPCIONES_JOB_PUSH,
   OPCIONES_JOB_RESUMEN_SEMANAL,
   nombreColaDlq,
 } from './notificaciones.config';
+import { ADAPTADOR_CORREO } from './correo/adaptador-correo';
+import { crearAdaptadorCorreo } from './correo/crear-adaptador-correo';
 
 /**
  * RNF-004 §4 (Ola 3): Dead-Letter Queues. No tienen worker: acumulan los jobs que agotaron
@@ -46,7 +49,8 @@ const COLAS_DLQ = [
         name: COLA_RESUMEN_SEMANAL,
         defaultJobOptions: OPCIONES_JOB_RESUMEN_SEMANAL,
       },
-      ...COLAS_DLQ.map((name) => ({ name }))
+      // Retención acotada: la DLQ no debe crecer sin límite (ver `RETENCION_DLQ`).
+      ...COLAS_DLQ.map((name) => ({ name, defaultJobOptions: OPCIONES_JOB_DLQ }))
     ),
     // WU-H (ADR-008 §4.4) + RNF-004 §4: observabilidad de las colas y sus DLQ en Bull-Board.
     BullBoardModule.forFeature(
@@ -62,6 +66,10 @@ const COLAS_DLQ = [
     DispositivosService,
     NotificationDispatcherService,
     PushNotificationProcessor,
+    // Adaptador de correo (Brevo con BREVO_API_KEY; si no, simulado). La factory se evalúa al
+    // arrancar y registra los problemas de configuración (ver common/config/correo.ts). El
+    // despachador lo consulta para saber si un correo de cuenta sale de verdad.
+    { provide: ADAPTADOR_CORREO, useFactory: () => crearAdaptadorCorreo() },
     EmailNotificationProcessor,
     ResumenSemanalSchedulerService,
     ResumenSemanalProcessor,

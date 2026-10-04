@@ -126,14 +126,35 @@ describe('WU-E (RF-011 RN-05): Alta manual entrega el enlace de activación', ()
   }
 
   it('devuelve el token de invitación con un mensaje honesto (sin afirmar envío de correo)', async () => {
+    // Sin bus de eventos no hay correo en camino: el mensaje no puede prometer un envío.
     const service = new AlumnosService(crearDbAltaManual(), cryptoServiceMock);
 
     const resultado = await service.crearAlumnoManual(COACH_USUARIO_ID, altaManualDto);
 
     expect(resultado.tokenInvitacion).toBe('raw-token-de-activacion-1234567890');
+    expect(resultado.correoEnviado).toBe(false);
     expect(resultado.mensaje).toContain('Comparte el enlace de activación');
     expect(resultado.mensaje.toLowerCase()).not.toContain('correo');
     expect(resultado.id).toBe(ALUMNO_PERFIL_ID);
+  });
+
+  it.each([
+    ['con el correo en camino → lo afirma y deja el enlace como respaldo', true],
+    ['en modo simulado (el correo no sale) → no afirma el envío', false],
+  ] as const)('%s', async (_caso, correoEnCamino) => {
+    const emisor = { emitAsync: async () => [{ encolado: true, correoEnCamino }] } as any;
+    const service = new AlumnosService(crearDbAltaManual(), cryptoServiceMock, emisor);
+
+    const resultado = await service.crearAlumnoManual(COACH_USUARIO_ID, altaManualDto);
+
+    expect(resultado.correoEnviado).toBe(correoEnCamino);
+    if (correoEnCamino) {
+      expect(resultado.mensaje).toContain('Le enviamos un correo');
+      expect(resultado.mensaje).toContain('compártele el enlace de activación');
+    } else {
+      expect(resultado.mensaje).toContain('Comparte el enlace de activación');
+      expect(resultado.mensaje.toLowerCase()).not.toContain('correo');
+    }
   });
 
   it('mantiene la unicidad de correo con 409', async () => {

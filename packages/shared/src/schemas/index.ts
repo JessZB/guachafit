@@ -64,6 +64,20 @@ export const EstablecerPasswordConTokenSchema = z.object({
 });
 
 /**
+ * Solicitud pública de recuperación de contraseña (`POST /auth/recuperar-password`).
+ * La respuesta es siempre la misma, exista o no el correo.
+ */
+export const SolicitarRecuperacionPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+/**
+ * Nueva contraseña con el enlace de recuperación (`POST /auth/restablecer-password`).
+ * Misma política de contraseña que la activación de la cuenta (reutiliza su contrato).
+ */
+export const RestablecerPasswordSchema = EstablecerPasswordConTokenSchema;
+
+/**
  * RF-010 RN-01 (WU Admin): página por defecto y techo duro del listado de entrenadores del panel
  * maestro (`GET /auth/entrenadores`). Mismo envelope paginado que el resto de listados del repo.
  */

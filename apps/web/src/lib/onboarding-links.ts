@@ -4,12 +4,38 @@
  * Centralizan la construcción de URLs públicas (deep link del coach y activación del alumno) para
  * que la UI nunca hardcodee un `coach_code` ni un origen distinto al real.
  */
+import { VIGENCIA_ENLACE_ACTIVACION_MS, textoVigencia } from '@guachafit/shared';
+
+/** Vigencia del enlace de activación para los textos ("48 horas"), desde la constante compartida. */
+export const VIGENCIA_ACTIVACION_TEXTO = textoVigencia(VIGENCIA_ENLACE_ACTIVACION_MS);
 
 export const MENSAJE_COACH_NO_DISPONIBLE =
   'El código de entrenador no es válido o no está disponible. Por favor contacta a tu coach.';
 
 export const MENSAJE_ACTIVACION_INVALIDA =
   'Este enlace ya no sirve: venció o ya se usó. Pídele uno nuevo a tu entrenador.';
+
+/**
+ * Tras el alta (alumno o entrenador) el servidor intenta enviar la bienvenida por correo. Solo se
+ * afirma el envío si la respuesta lo confirma (`correoEnviado`); si no (correo sin configurar, cola
+ * caída), compartir el enlace en pantalla es la vía principal, no un respaldo.
+ */
+export const MENSAJE_CORREO_BIENVENIDA_ENVIADO =
+  'Le enviamos un correo con el enlace. Si no le llega, compártele este enlace.';
+
+const MENSAJE_COMPARTIR_ENLACE: Record<'alumno' | 'entrenador', string> = {
+  alumno: 'Comparte este enlace con tu alumno para que cree su contraseña.',
+  entrenador: 'Comparte este enlace con el entrenador para que cree su contraseña.',
+};
+
+export function mensajeCorreoBienvenida(
+  correoEnviado: boolean | undefined,
+  destinatario: 'alumno' | 'entrenador'
+): string {
+  return correoEnviado === true
+    ? MENSAJE_CORREO_BIENVENIDA_ENVIADO
+    : MENSAJE_COMPARTIR_ENLACE[destinatario];
+}
 
 export const MINIMO_CARACTERES_PASSWORD = 8;
 export const MAXIMO_CARACTERES_PASSWORD = 100;
