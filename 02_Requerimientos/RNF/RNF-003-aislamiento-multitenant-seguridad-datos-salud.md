@@ -4,7 +4,7 @@ modulo: Seguridad
 categoria: seguridad-privacidad # seguridad-privacidad | rendimiento | arquitectura
 prioridad: alta
 estado: implementado
-fecha_verificacion: 2026-09-23
+fecha_verificacion: 2026-10-04
 requisito_origen: "[[RF-010-rbac-jerarquia-aislamiento-tenancy]]"
 metrica_objetivo: "0% fugas entre tenants (RLS estricto) / Dashboard p95 < 200ms"
 fecha_creacion: 2026-09-06
@@ -73,6 +73,13 @@ Establece los requerimientos de seguridad, privacidad y rendimiento asociados a 
 - La ficha médica y notas de salud (`lesiones`, `cirugias`, `patologias`) constituyen datos de categoría especial (sensibles bajo GDPR y estándares de protección biomédica).
 - **Control de Acceso Estricto:** La columna de notas de salud solo se expone en endpoints autorizados para el rol `ENTRENADOR` y jamás debe serializarse en los DTOs de respuesta destinados al frontend del alumno.
 - **Higiene de logout en dispositivos compartidos (WU22):** al cerrar sesión se eliminan los datos locales del usuario en IndexedDB/offline (cola outbox, rutina cacheada, check-ins de nutrición y catálogo de ejercicios) y las cachés runtime del Service Worker que contienen respuestas de API autenticadas (`api-cache`, `workbox-runtime-*`), conservando únicamente el precache del app shell (assets estáticos, sin datos de usuario). Las mutaciones pendientes de sincronizar se descartan a propósito, con rastro en consola: la privacidad en un dispositivo compartido prevalece sobre la pérdida de una mutación local (`clearOfflineData`/`limpiarCachesRuntime`, best-effort: un fallo de limpieza nunca rompe el logout).
+- **Implementado (2026-10-04, front módulos 1-2 `95d2e27`/`7f6c2a1`) — aislamiento por usuario en el dispositivo:**
+  - **Cambio de usuario:** el dispositivo recuerda el último usuario (`guachafit_ultimo_usuario_id`, `apps/web/src/lib/sesion-local.ts`). Si entra **otra persona** (o no había nadie registrado), se limpian caché de consultas, IndexedDB y cachés de API del usuario anterior **antes** de guardar la sesión nueva.
+  - **Cierre de sesión ordenado:** cancela las consultas en vuelo, retira los tokens y **espera** la limpieza antes de navegar a `/login`; un refresco que termina después del cierre se descarta.
+  - **Sesión vencida ≠ cierre manual:** si la sesión vence (refresh rechazado), la cola offline **se conserva**; si vuelve a entrar la misma persona se envía sola, y si entra otra se limpia por la regla anterior. El cierre de sesión manual sigue descartando los pendientes (con la confirmación previa de la web).
+  - **Caché runtime del Service Worker:** `NetworkFirst` con corte a 4 s y **sin rutas `/auth/`** (`apps/web/src/lib/api-cache-pattern.ts`): ninguna respuesta de autenticación queda en caché. Lectura segura de la sesión persistida: un `guachafit_user` corrupto ya no rompe el arranque.
+  - Evidencia: web 701 → **771** tests.
+- **Implementado (2026-10-04, LOTE API-3 `bc53864`):** los 403 de tenancy de `alumnos.service` quedan registrados en `auditoria_accesos_denegados` ([[RF-010-rbac-jerarquia-aislamiento-tenancy]] Escenario 2). Pendiente: el resto de servicios aún no audita sus rechazos de tenancy.
 
 ---
 

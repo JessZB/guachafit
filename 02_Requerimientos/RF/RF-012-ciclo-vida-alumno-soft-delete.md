@@ -4,7 +4,7 @@ modulo: Clientes
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-20
+fecha_verificacion: 2026-10-04
 problema_origen: "[[PROB-003-acceso-onboarding-dashboard-central]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -122,3 +122,4 @@ Then el sistema debe ejecutar PATCH /alumnos/:id/restaurar
 - Resuelto (2026-09-21): enforcement de acceso por estado implementado (`AlumnoHabilitadoGuard` + `@BloquearAlumnoEn`): la planificación responde 403 `ALUMNO_BLOQUEADO`, la app muestra la pantalla de bloqueo con acción "Reportar pago" y el coach puede suspender por pago.
 - Resuelto (2026-09-21): el soft delete revoca login y refresh de la cuenta vinculada (`auth.service`).
 - Siguen pendientes: motor automático de morosidad (crons) y las reglas finas de transición manual vs automática (§6).
+- Implementado (2026-10-04, LOTE API-1 `5bd50df`): un alumno con baja lógica (archivado, RN-02) que intenta entrar o renovar su sesión recibe un mensaje propio y claro: *"Tu cuenta está archivada. Contacta a tu entrenador."* (401), distinto del de cuenta desactivada (*"Tu cuenta está desactivada. Contacta a tu entrenador."*). En el login, el estado solo se informa si la contraseña es correcta (no revela que la cuenta existe). Evidencia: API 867 tras API-1.

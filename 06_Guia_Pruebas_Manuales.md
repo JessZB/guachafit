@@ -1,7 +1,7 @@
 ---
 id: GUIA-PRUEBAS
 titulo: "Guía de Pruebas Manuales — GUACHAFIT"
-fecha: 2026-09-24
+fecha: 2026-10-04
 estado: activo
 tags:
   - pruebas
@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** con pruebas automáticas en verde (**624** de la web + **832** del API, más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (**785** de la web + **986** del API, más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -23,12 +23,13 @@ tags:
 1. **Docker Desktop abierto** (Postgres, Redis y MinIO deben estar corriendo).
 2. **Base de datos al día** (solo si es la primera vez o hubo cambios de esquema):
    `pnpm --filter @guachafit/database db:migrate`
+   → Desde 2026-10-04 hay una migración nueva (`0014`, indicaciones del coach en la sesión del alumno). El API revisa al arrancar que no falten migraciones: en desarrollo solo avisa en la consola; en producción no arranca.
 3. **Datos de ejemplo** (⚠️ borra y recarga los datos):
    `pnpm --filter @guachafit/database db:seed`
    → Las credenciales de prueba están definidas en `packages/database/src/seed.ts`.
 4. **API**: `pnpm --filter @guachafit/api dev` → queda en `http://localhost:4000` (documentación en `/api/docs`).
 5. **Web**: `pnpm --filter @guachafit/web dev` → abre `http://localhost:3000`.
-6. **Modo demo** (sin tocar la base de datos): en el login hay botones **"Modo Coach"** y **"Modo Alumno"**. Aparece un banner de "Modo demo — datos de ejemplo". Ideal para recorrer pantallas rápido.
+6. **Modo demo** (sin tocar la base de datos, **solo en desarrollo**): en el login hay botones **"Modo Coach"** y **"Modo Alumno"**. Aparece un banner de "Modo demo — datos de ejemplo". Ideal para recorrer pantallas rápido.
 
 > **Tip para probar en el teléfono por WiFi:** por defecto no es accesible (Vite escucha solo en tu PC). Para probar la PWA de verdad usa **USB** (`adb reverse tcp:3000 tcp:3000` y abre `http://localhost:3000` en el teléfono) o un **túnel HTTPS** (cloudflared/ngrok). Por HTTP de la red local, los service workers no se activan.
 
@@ -46,6 +47,13 @@ tags:
 - [ ] **Navegar entre días de la semana:** consultar otro día **no borra** tu sesión planificada; "Entrenar este bloque hoy" crea/inicia la de ese bloque.
 - [ ] **Repetir un bloque ya completado:** crea una sesión nueva sin borrar el historial anterior.
 - [ ] **Sin conexión (modo avión):** sigues viendo la rutina guardada y puedes marcar series; aparece **"Sin conexión · datos guardados · actualizado hace X"**; al volver la red, se sincroniza solo. Si algo fue rechazado, el panel de sincronización lo explica y permite Reintentar/Descartar.
+- [ ] **Entrenamiento completo sin red (alumno):** con red, abre "Hoy" para que se guarde la rutina; activa modo avión → pulsa **"Comenzar a entrenar"**, marca 2-3 series y pulsa **"Finalizar"**. Todo responde al instante y ves el aviso de **datos guardados sin conexión**. Quita el modo avión: los cambios suben **en orden** (primero comenzar, luego series, al final finalizar) y la sesión queda "Completada" con sus series; el panel no muestra rechazos.
+- [ ] **Un solo toque:** "Hacer este entrenamiento hoy" inicia el entrenamiento con un único toque.
+- [ ] **Sesión en curso tras medianoche:** comienza un entrenamiento antes de las 00:00 (o cambia la hora del teléfono) y vuelve a abrir "Hoy" después de medianoche → sigue apareciendo **la sesión en curso** (no una vacía del día nuevo). Si en el teléfono solo hay datos de otro día, verás "Tu último entrenamiento guardado es del …".
+- [ ] **Serie rechazada con red:** si el servidor rechaza una serie, la casilla vuelve a su estado anterior y el error aparece **junto a esa serie**.
+- [ ] **Cambio atascado:** si un cambio falla 8 veces por error del servidor pasa a "rechazado" y deja de frenar a los demás; desde el panel puedes **Descartarlo**. Los cortes de red no cuentan como fallo.
+- [ ] **Indicaciones del coach:** si el coach puso notas técnicas o esfuerzo sugerido en la rutina/plantilla, el alumno ve **"Indicaciones de tu entrenador: …"** y el esfuerzo sugerido en el ejercicio (requiere la migración `0014`).
+- [ ] **Lenguaje claro:** en la pantalla del alumno no aparecen "RPE", "RIR" ni siglas: dice **esfuerzo**, **repeticiones**, **semana**. Los botones del cronómetro y de las series se tocan con comodidad (44px).
 
 ## 2. Seguimiento de Alumnos (entrenador)
 
@@ -85,20 +93,32 @@ tags:
 - [ ] Crear, editar y desactivar plantillas (con días, series, reps, peso, RPE y notas).
 - [ ] Buscador + filtro por nivel + estado.
 - [ ] En la ficha del alumno: **"Cargar desde Plantilla"** → elegir plantilla, ajustar cargas antes de confirmar, elegir **Reemplazar** o **Fusionar**.
+- [ ] **Asignación masiva (entrenador):** en la tarjeta de una plantilla pulsa **"Asignar a alumnos"** → busca por nombre (busca en el servidor, no solo en lo visible), usa **"Cargar más alumnos"**, marca varios (máximo 50) y asigna. Verás el resultado **por alumno** (asignado / motivo claro si falló). Con **Reemplazar**, antes de asignar pide confirmar que se sustituirá la rutina actual.
+- [ ] **Reintento en modo Añadir:** corta la red justo al asignar en modo **Añadir** (DevTools → Network → Offline) → aparece un aviso de que **no se sabe si se completó** y, al reintentar, pide confirmar antes (para no duplicar días).
+- [ ] **Tope de 7 días:** asigna en modo **Añadir** una plantilla a un alumno cuya rutina ya suma 7 días (o que los superaría) → se rechaza con *"La rutina de este alumno quedaría con más de 7 días. Usa «Reemplazar» o quita días antes de añadir."* y la rutina del alumno no cambia.
+- [ ] **Ejercicio desactivado nombrado:** crea una plantilla con un ejercicio propio, desactiva ese ejercicio del catálogo e intenta guardar o asignar la plantilla → el error **nombra el ejercicio** (*"Press X ya no está en tu lista de ejercicios. Quítalo o cámbialo por otro y vuelve a guardar."*).
+- [ ] **Editor seguro:** borrar un día o un ejercicio pide confirmación; cerrar la plantilla con cambios sin guardar avisa; sin conexión, "Guardar" queda deshabilitado con **"Necesitas internet para guardar"**; el lápiz de edición se ve siempre.
 
 ## 7. Altas, enlaces y accesos
 
 - [ ] **Alta manual**: al crear un alumno, la app te muestra un **enlace de activación copiable** ("Compártelo con tu alumno"). Ábrelo en una ventana de incógnito: crea la contraseña y entra. El enlace **sirve una sola vez**.
 - [ ] **Link de inscripción del coach**: la web te muestra tu enlace real (`/onboarding?coach=TU-CODIGO`). Pruébalo con un código inventado (dice "no válido") y con el real (muestra tu nombre y permite registrarse). Al registrarse alguien, te llega una notificación.
 - [ ] **Alumno suspendido/pausado**: al entrar, ve la pantalla de bloqueo con el mensaje correspondiente y botón **"Reportar pago"** (sus pagos y cuenta siguen accesibles).
-- [ ] **Alumno dado de baja**: ya **no puede iniciar sesión** (mensaje claro).
+- [ ] **Alumno dado de baja**: ya **no puede iniciar sesión**; con su contraseña correcta ve **"Tu cuenta está archivada. Contacta a tu entrenador."** (con una contraseña errónea solo ve "Correo o contraseña incorrectos.", que no revela si la cuenta existe).
 - [ ] **Admin** (`/admin`, solo superadmin): crear entrenador y ver el enlace de activación; abajo verás la **lista de entrenadores** con su cuenta (activa/deshabilitada), su licencia (activa/suspendida), su `coach_code` y su fecha de alta.
-- [ ] **Deshabilitar / Reactivar cuenta:** pulsa "Deshabilitar" en un coach de prueba → aparece una confirmación que explica el efecto; al confirmar, el aviso solo sale si el servidor aceptó. Luego entra con ese coach en una ventana de incógnito: verás **"Su cuenta se encuentra inactiva o bloqueada"**. Reactívalo desde el panel y podrá entrar de nuevo. Repite "Deshabilitar" dos veces: la segunda dice que ya estaba deshabilitado (sin error).
+- [ ] **Deshabilitar / Reactivar cuenta:** pulsa "Deshabilitar" en un coach de prueba → aparece una confirmación que explica el efecto; al confirmar, el aviso solo sale si el servidor aceptó. Luego entra con ese coach en una ventana de incógnito: verás **"Tu cuenta está desactivada. Contacta a tu entrenador."** (texto vigente desde 2026-10-04; antes "Su cuenta se encuentra inactiva o bloqueada"). Reactívalo desde el panel y podrá entrar de nuevo. Repite "Deshabilitar" dos veces: la segunda dice que ya estaba deshabilitado (sin error).
 - [ ] **Suspender / Activar licencia:** suspende la licencia de un coach → su login queda bloqueado con el mensaje de licencia y su enlace público (`/onboarding?coach=CODIGO`) deja de resolver. Actívala y ambos vuelven.
 - [ ] **Cascada al alumno — cuenta deshabilitada:** con un alumno de prueba vinculado al coach, deshabilita la cuenta del coach → **el alumno de ese coach no puede iniciar sesión** ("Tu entrenador no está disponible en este momento. Inténtalo de nuevo más tarde.") y el enlace público `/onboarding?coach=CODIGO` deja de resolver (mismo "no válido" que un código inventado). Reactiva la cuenta: el alumno vuelve a entrar y el enlace vuelve a resolver.
 - [ ] **Cascada al alumno — licencia suspendida:** repite lo anterior suspendiendo la licencia → el alumno recibe **el mismo mensaje** (no revela cuál de los dos cambios fue) y su enlace público deja de resolver. Al activar la licencia, ambos vuelven.
 - [ ] **Límite honesto de la sesión activa:** un coach (o un alumno de ese coach) que YA tenía sesión abierta sigue dentro hasta que la app vuelve a verificar (recarga, `/auth/me`, refresh o canje); como máximo 15 minutos, porque el token de acceso es corto. No es un bug.
-- [ ] **El superadmin sigue sin poder operar el negocio del coach** (recibe "no autorizado").
+- [ ] **El superadmin sigue sin poder operar el negocio del coach** (recibe "No tienes permiso para ver esta sección.").
+- [ ] **Registro público con WhatsApp (prospecto):** abre el enlace del coach en incógnito → el formulario llega **vacío** (sin teléfono ni fecha de ejemplo). Sin WhatsApp no deja enviar; si escribes el número con el código de país avisa que lo quites porque ya va en el prefijo. La edad se calcula en vivo y la fecha no admite días futuros. Al terminar, botón **"Ir a iniciar sesión"**; con un correo ya registrado aparece el enlace para iniciar sesión.
+- [ ] **Ruta `/registro`:** abre `http://localhost:3000/registro?coach_code=TU-CODIGO` → te lleva a `/onboarding` **con el código del coach ya cargado** (muestra su nombre).
+- [ ] **Login con correo con espacios:** escribe tu correo con un espacio al inicio o al final → entra igual. El botón del ojo muestra/oculta la contraseña. Si ya tienes sesión y abres `/login`, te redirige a tu inicio.
+- [ ] **Límite de intentos (429):** en incógnito, intenta 5 veces entrar con el mismo correo y una contraseña errónea; el **6.º intento** dentro del mismo minuto muestra **"Hiciste demasiados intentos. Espera un momento y vuelve a intentarlo."**. Pasado un minuto vuelve a dejar intentar.
+- [ ] **Sesión que vence y se renueva (cualquier rol):** con sesión abierta, en DevTools → Application → Local Storage cambia `guachafit_token` por un texto cualquiera y navega a otra pantalla → la app **sigue funcionando** (renovó la sesión sola, sin pedir login). Ahora cambia también `guachafit_refresh_token` y navega → te lleva a `/login` con el aviso **"Tu sesión venció. Inicia sesión de nuevo."**. Sin red, la sesión **no** se cierra.
+- [ ] **Pendientes offline al volver a entrar (alumno):** en modo avión marca series (quedan pendientes); deja vencer la sesión como en el paso anterior, recupera la red y entra **con el mismo alumno** → los pendientes se envían solos y el panel queda vacío.
+- [ ] **Otro usuario en el mismo dispositivo:** cierra sesión como alumno A y entra como alumno B (o como coach) → **no ves nada de A** (ni rutina guardada, ni pendientes, ni datos en caché). Si la sesión de A había vencido con pendientes y entra B, esos pendientes se borran del dispositivo (no se envían con la cuenta de B).
 
 ## 8. PWA, instalación y actualizaciones
 
@@ -113,6 +133,13 @@ tags:
 
 - [ ] **Tema claro**: todo legible (antes los estados eran ilegibles por contraste bajo). Alterna claro/oscuro/sistema.
 - [ ] **Teclado (desktop)**: Tab recorre; los modales atrapan el foco; Escape cierra y devuelve el foco; pestañas se mueven con flechas; el botón de sincronización de la cabecera responde a teclado.
+- [ ] **Diálogos de confirmación propios:** las confirmaciones (borrar día, reemplazar rutina, acciones del admin…) son diálogos de la app, no la ventana gris del navegador; Escape los cierra y el foco vuelve al botón.
+
+## 9.1. Errores y mensajes (todos los roles)
+
+- [ ] **Datos inválidos → mensaje claro:** envía un formulario con un dato fuera de rango (p. ej. un peso negativo) → el mensaje **nombra el campo** en español y no muestra textos como "Zod", "uuid", "null" o "token".
+- [ ] **Error 500 con referencia:** ante un fallo inesperado del servidor (p. ej. detén la base de datos y recarga una lista) el mensaje es **"Tuvimos un problema. Inténtalo de nuevo en unos minutos. (Ref. xxxxxxxx)"**; busca esa referencia en la consola del API: aparece junto al método y la ruta.
+- [ ] **Mensajes sin jerga y con tuteo:** recorre login, altas, plantillas, nutrición y pagos provocando errores: ningún mensaje trata de "usted" ni menciona tenant, JWT, token, refresh, roles en mayúsculas o identificadores internos.
 
 ## 10. Notificaciones (campana, preferencias y resumen semanal)
 
@@ -150,7 +177,7 @@ tags:
 
 **Alumno (`/app/nutricion`, "Mi Comida")**
 
-- [ ] **Ventana del check-in:** abre la pantalla antes de las 18:00 (hora de tu dispositivo): verás el banner **"El check-in aún no está abierto"** y el formulario deshabilitado; no se envía ni se encola nada (el día quedará "No reportado"). Después de las 18:00 el reporte se puede guardar y se refleja en el calendario.
+- [ ] **Ventana del check-in:** abre la pantalla antes de las 18:00 (hora de tu dispositivo): verás el banner **"El reporte aún no está abierto"** y el formulario deshabilitado; no se envía ni se encola nada (el día quedará "No reportado"). Después de las 18:00 el reporte se puede guardar y se refleja en el calendario.
 - [ ] **Metas visibles:** la tarjeta "Tus objetivos nutricionales" muestra las metas reales del coach (kcal, proteína, carbohidratos, grasas, agua) y sus recursos por enlace; si el coach no configuró metas, lo declara de forma honesta y puedes reportar igual.
 - [ ] **Reporte con fotos:** adjunta de 1 a 4 fotos (JPG/PNG/WebP); se comprimen en el dispositivo (WebP 1920 px / 0.85, con fallback JPEG) antes de subirse. Tras guardar, abre una miniatura para ver el visor (**Escape** cierra y devuelve el foco).
 - [ ] **Cola con fotos (sin conexión):** con fotos adjuntas y sin conexión, el reporte queda **guardado en el dispositivo** ("Guardado sin conexión · pendiente de envío (con fotos)"), el formulario se limpia y el día figura "Pendiente de sincronizar" (no se declara registrado). Al volver la red, el panel de sincronización (franja "1 cambio sin sincronizar" o campana del header) lo sube solo: primero las fotos y después el check-in. Si el envío falla por red, el panel lo muestra como **Reintentando** con la evidencia conservada ("conserva N foto(s)…"), y ofrece **Reintentar** y **Descartar**; al descartar se eliminan los blobs del dispositivo.
@@ -172,7 +199,10 @@ tags:
 - **Notificaciones**: proveedores reales de push/email (la entrega sigue **simulada por log**), cliente push del navegador (WebPush sin UI), recordatorio de check-in 06:00 con cron exacto por huso horario (el recordatorio **sí existe**: corre por barrido aproximado en UTC con cadencia de 15 min, que cae dentro de la hora local 6 para offsets de hora entera, media hora y 45 min; sin reemisión si el worker está caído toda la hora local 6) y alerta externa de colas/DLQ (Sentry/Datadog). La campana, las preferencias y el resumen semanal **ya existen** (sección 10).
 - **Nutrición**: los recursos educativos del coach pueden ser **enlaces o PDFs subidos** (validados por tipo, firma `%PDF-` y tamaño; se sirven con enlace firmado). Los reportes **con fotos** sin conexión se **encolan completos** (primero las fotos, después el check-in), con la evidencia visible, reintentable y descartable en el panel. La subida real está verificada contra MinIO; falta repetirla contra Cloudflare R2 con credenciales reales. El **borrado al quitar un recurso guardado ya existe**: al guardar metas, los PDFs sin referencia se eliminan de la bóveda (best-effort, verificado contra MinIO). Siguen sin existir la recolección de objetos nunca referenciados (subir sin guardar) y la serialización por alumno del ciclo de metas (carrera residual, [[ADR-015-borrado-best-effort-objetos-boveda]]).
 - **Antropometría**: los avisos al coach (check-in remoto recibido y ventana vencida) **ya existen** (sección 11); el único punto documentado es que `POST /antropometria/presigned-upload-url` no evalúa la ventana (la ventana se valida al registrar el check-in; el presencial sigue bloqueado al subir fotos).
-- **Admin**: planes/facturación de la plataforma y correo automático de bienvenida pendientes. La gestión de cuentas (deshabilitar/reactivar) y de licencias (suspender/activar) **ya existe** (sección 7).
+- **Admin / accesos**: planes/facturación de la plataforma, **correo automático de bienvenida** (coach y alumno) y **recuperación de contraseña** siguen pendientes (en curso en el lote API-4); por ahora las credenciales se entregan con el enlace copiable. La gestión de cuentas (deshabilitar/reactivar) y de licencias (suspender/activar) **ya existe** (sección 7).
+- **Una sola instancia del API**: el límite de intentos (429) y la protección contra envíos repetidos (idempotencia) viven en la memoria del proceso; si reinicias el API se reinician. No es un bug mientras haya un único servidor.
+- **Orden de envío en la pantalla de entrenamiento**: si un cambio se está enviando con red y justo se corta, otro cambio encolado después puede llegar antes (carrera conocida, preexistente). Si ves un rechazo raro en ese caso, anótalo con la hora.
+- **Auditoría de accesos entre coaches**: hoy solo queda registrada en la ficha de alumnos; otras pantallas aún no la registran.
 - **Listas**: los filtros de Conciliación/Evaluaciones/Pagos filtran solo la página visible (la UI lo dice); Plantillas no está paginada.
 - **Seguridad**: RLS **ya activo en las 6 tablas** — `rutinas`/`plantillas` (etapa 1), finanzas `planes_membresia`/`cuotas_membresia`/`transacciones_pago` (etapa 2, migración `0012`) y `perfiles_alumno` (etapa 3, migración `0013`), verificado E2E con el rol no-dueño `guachafit_app` (52/52 en la etapa 3, cero errores RLS). Lo único pendiente es el **rol de conexión (D2)**: en dev `DATABASE_URL` sigue apuntando al rol dueño, así que el blindaje no está activo en el entorno normal. Verificación disponible: arranca el API con `DATABASE_URL` del rol `guachafit_app` (así se validó la etapa 3: login, altas, directorio, entrenamiento, antropometría, nutrición y finanzas). Push del navegador no implementado.
 - **Extras**: iconos provisionales (mancuerna generada) — si hay logo oficial, se reemplazan; instalación real en dispositivo físico pendiente de tu prueba.

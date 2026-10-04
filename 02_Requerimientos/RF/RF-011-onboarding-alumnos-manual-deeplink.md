@@ -4,7 +4,7 @@ modulo: Onboarding
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-24
+fecha_verificacion: 2026-10-04
 problema_origen: "[[PROB-003-acceso-onboarding-dashboard-central]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -122,7 +122,7 @@ Then la aplicación debe navegar a "/coach/alumnos/al-001"
 
 ## 6. Casos Borde y Excepciones
 - **Enlace con Coach Code Inválido, Desactivado o Suspendido:** Si un usuario intenta registrarse con un `coach_code` que no existe, o cuyo entrenador tiene la cuenta deshabilitada o la licencia suspendida, el backend responde el mismo 404 uniforme que ante un código inexistente y el sistema muestra el mensaje amigable: *"El código de entrenador no es válido o no está disponible. Por favor contacta a tu coach."*
-- **Correo Electrónico Duplicado:** Si el email ya existe en la base de datos de la plataforma, el sistema debe indicar: *"Este correo ya se encuentra registrado. Si eres tú, inicia sesión o recupera tu contraseña."*
+- **Correo Electrónico Duplicado:** Si el email ya existe en la base de datos de la plataforma, el sistema debe indicar: *"Este correo ya se encuentra registrado. Si eres tú, inicia sesión o recupera tu contraseña."* (Nota 2026-10-04: el texto sigue vigente y la web añade un enlace "Ir a iniciar sesión"; la recuperación de contraseña que menciona **aún no existe**, está en curso en el LOTE API-4.)
 - **Alumno Sin Cuotas Emitidas en el Semáforo:** Si un alumno recién registrado no posee aún ninguna cuota emitida, el semáforo se mostrará en gris neutro con etiqueta "Sin Cuota Emitida".
 
 ---
@@ -133,3 +133,10 @@ Then la aplicación debe navegar a "/coach/alumnos/al-001"
 - Resuelto (2026-09-21): el alta manual entrega credenciales con token de un solo uso (TTL 48 h) y enlace copiable a la página pública `/activar`; el canje establece la contraseña (RN-05). Sigue pendiente el envío automático por correo transaccional.
 - Resuelto parcial (2026-09-21): "Sin cuota emitida" ya se rotula correctamente vía etiquetas centralizadas (`apps/web/src/lib/etiquetas-dominio.ts`). El estado de datos `Por Vencer` sigue sin existir.
 - Implementado (2026-09-24, unidad CASCADA-COACH): la resolución pública del `coach_code` y el registro público exigen un entrenador **operable** (cuenta habilitada + licencia vigente): un código inexistente, una cuenta deshabilitada y una licencia suspendida comparten la misma respuesta 404 uniforme en ambos flujos ([[ADR-016-cascada-acceso-coach-alumnos-autenticacion]]).
+- Implementado (2026-10-04, front módulos 1-2 `ea18172`) — registro público sin datos falsos:
+  - El formulario de `/onboarding` ya **no precarga teléfono ni fecha**: el campo **WhatsApp es obligatorio** (`apps/web/src/components/common/CampoWhatsapp.tsx`), con prefijo de país editable y aviso si el número incluye el código de país; la fecha de nacimiento es obligatoria con tope en la fecha local y la edad se calcula en vivo (RN-02).
+  - **Ruta `/registro`** (la de RN-06) redirige a `/onboarding` conservando el código del coach (`coach_code` → `coach`) (`apps/web/src/router.tsx`, `apps/web/src/lib/onboarding-links.ts`).
+  - Activación y registro con botón "Ir a iniciar sesión" y enlace ante correo ya registrado; diálogo de confirmación accesible en lugar de `window.confirm`, copia de enlaces con aviso si falla, etiquetas asociadas, autocompletado correcto y objetivos táctiles de 44px.
+- Implementado (2026-10-04, LOTE API-3 `bc53864`): el **alta manual y el registro público de alumno se crean en una sola transacción** (usuario + perfil): un fallo a mitad ya no deja cuentas a medias.
+- Pendiente explícito (2026-10-04): el **correo transaccional de bienvenida** (RN-05 / Escenario 1) y la recuperación de contraseña siguen **sin implementar**; están en curso en el LOTE API-4. Mientras tanto la entrega de credenciales es por enlace copiable (`/activar`).
+- Evidencia: web 701 → **771** tras los módulos 1-2 del front; API **986** tras API-3.

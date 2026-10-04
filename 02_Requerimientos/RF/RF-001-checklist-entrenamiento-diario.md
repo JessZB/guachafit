@@ -4,7 +4,7 @@ modulo: Entrenamiento
 prioridad: alta
 estado: implementado
 version_implementada: v1.3.0
-fecha_verificacion: 2026-09-21
+fecha_verificacion: 2026-10-04
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0
@@ -131,10 +131,12 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
 ### 7.3. Idempotencia de mutaciones de sesión
 - `X-Idempotency-Key` (opcional, generada por el cliente) en `entrenar-hoy`, `iniciar`, `sincronizar-series` y `finalizar`; el servidor deduplica por `operacion:alumnoId:key` y devuelve la respuesta original sin reprocesar.
 - **Limitación conocida:** la caché server-side es un `Map` en memoria, sin TTL ni garantía multi-instancia. Un reinicio del proceso o una segunda réplica pueden reprocesar la mutación; la protección de negocio definitiva es la máquina de estados de la sesión.
+- Resuelto parcial (2026-10-04, LOTE API-3 `bc53864`): el `Map` sin límite se reemplazó por `RegistroIdempotencia` (`apps/api/src/common/idempotencia/registro-idempotencia.ts`), compartido por entrenamiento, plantillas y pagos: TTL de 24 h por entrada, tope de 10 000 entradas (expulsa primero lo caducado y luego lo más antiguo), copia defensiva de la respuesta y **dedupe de envíos simultáneos** (un reintento concurrente con la misma clave espera a la primera ejecución en vez de repetirla). **Sigue pendiente:** el registro vive en la memoria del proceso; un reinicio o varias réplicas no lo comparten (válido solo con una instancia).
 
 ### 7.4. Cola offline (PWA)
 - Las mutaciones encoladas de forma durable se reintentan con backoff; los errores `4xx` se muestran como rechazadas (requieren acción del alumno) y los `5xx`/fallos de red se reintentan.
 - Cada ítem de la cola viaja con su propia `X-Idempotency-Key`, complementada por el dedupe server-side.
+- Actualizado (2026-10-04): ver §7.10 — orden causal por sesión, tope de 8 errores del servidor y conservación de la cola ante una sesión vencida.
 
 ### 7.5. Monitor semanal del coach (RN-03)
 - `GET /entrenador/monitor-adherencia?timezone=` evalúa la ventana Lunes 00:00 local → ahora.
@@ -142,7 +144,7 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
 - Orden por riesgo (rojo primero) y enlace al expediente del alumno vía `alumnoPerfilId`.
 
 ### 7.6. Límites conocidos de la entrega
-- Caché de idempotencia en memoria (§7.3).
+- Caché de idempotencia en memoria (§7.3): con TTL y tope desde 2026-10-04, pero sigue siendo por proceso (una sola instancia).
 - RLS multi-tenant por etapas: ver [[RNF-003-aislamiento-multitenant-seguridad-datos-salud]].
 - Verificación visual manual pendiente en algunas pantallas móviles (layout/accesibilidad del modal de video y hints); no afecta la funcionalidad.
 
@@ -158,3 +160,21 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
 - **Ergonomía móvil del checklist (resuelto):** steppers y objetivos táctiles con área ≥44px, inputs de peso/reps legibles, labels desde 11px e `inputMode` (`decimal`/`numeric`) según el campo; contraste AA en ambos temas.
 - **Estado offline honesto (resuelto):** cuando la PWA sirve datos desde caché, la UI lo declara como tal en lugar de presentar la copia como si estuviera en vivo.
 - **Aviso de frescura (resuelto):** la vista indica la antigüedad de la copia cacheada ("hace X") y no inventa una edad cuando no puede afirmarla; decisión en [[ADR-014-actualizaciones-guiadas-sw-frescura-offline]].
+
+### 7.10. Entrenamiento usable sin conexión, cola causal y datos íntegros (2026-10-04)
+- Implementado (2026-10-04, front módulos 1-2: `7f6c2a1` cola offline y `9390a4e` pantalla de entrenamiento):
+  - **Cola por sesión con orden causal** (`apps/web/src/lib/offline-sync.ts`, `offline-db.ts`): un fallo frena solo lo posterior de **esa** sesión de entrenamiento; "Finalizar" espera a que suban sus series; las series rechazadas porque la sesión aún no había empezado (`SESION_NO_INICIADA`) se reactivan solas tras iniciar.
+  - **Tope de reintentos:** tras **8 errores 5xx** el cambio pasa a "rechazado" y deja de bloquear al resto; los fallos de red no cuentan. El alumno puede **descartar** un cambio fallido; los motivos de rechazo se muestran legibles y sin direcciones técnicas (`SyncQueuePanel`).
+  - **Sesión vencida (401):** sin sesión la cola no se procesa; un 401 devuelve el cambio a pendiente sin penalizarlo y detiene el envío. Al volver a entrar **la misma persona**, los pendientes se envían solos (ver [[RF-010-rbac-jerarquia-aislamiento-tenancy]] y [[RNF-003-aislamiento-multitenant-seguridad-datos-salud]] §4).
+  - **Pantalla de entrenamiento** (`apps/web/src/pages/atleta/EntrenamientoPage.tsx`, textos en `apps/web/src/lib/entrenamiento-textos.ts`): envía o encola según haya pendientes del mismo entrenamiento; con red, una serie rechazada se revierte y muestra el error junto a ella. "Comenzar" guarda "en progreso" localmente antes de enviarse y los cambios de descanso se encolan en lugar de perderse.
+  - **Sesión de hoy por fecha local** (nueva tabla local de la semana, Dexie v2 aditiva): se muestra la sesión de la fecha local del dispositivo, o la que esté **en curso aunque haya pasado la medianoche**; si no hay ninguna, se indica la fecha del último guardado ("Tu último entrenamiento guardado es del …").
+  - Aviso de datos guardados sin conexión, "Hacer este entrenamiento hoy" inicia con **un solo toque**, cronómetro y controles con objetivos táctiles de 44px y etiquetas accesibles. Textos **sin jerga** para el alumno: "esfuerzo" en lugar de RPE/RIR, "repeticiones", "semana" (el modelo de datos sigue usando `rpe`).
+- Implementado (2026-10-04, LOTE API-3 `bc53864`):
+  - **Indicaciones técnicas y esfuerzo sugerido del coach llegan al alumno:** la rutina/plantilla copia sus notas técnicas y el esfuerzo sugerido a la sesión (migración `0014_ejercicios_sesion_indicaciones.sql`, columnas opcionales en `ejercicios_sesion`) y la pantalla del alumno los muestra.
+  - **Catálogo visible por coach:** rutinas, plantillas e instanciación de sesiones solo admiten ejercicios **globales o del propio coach** (`apps/api/src/modules/entrenamiento/catalogo-ejercicios.ts`); los privados de otro coach se bloquean y el error **nombra** los ejercicios que ya no están disponibles.
+  - Idempotencia con TTL y dedupe concurrente (§7.3). Códigos estables en `@guachafit/shared` (`SESION_NO_INICIADA`, `SESION_VACIA`) que la web usa para clasificar rechazos, con respaldo por texto (LOTE API-2 `eeec4e0`).
+- Límites honestos / pendientes:
+  - **Migración `0014` por aplicar** en los entornos (sin ella el API no arranca en producción: verifica migraciones pendientes al arrancar y solo avisa en desarrollo).
+  - Carrera de orden **preexistente** en `EntrenamientoPage`: un envío directo ya en vuelo puede llegar después de un cambio encolado posterior de la misma sesión; no se corrigió en este lote.
+  - Idempotencia en memoria del proceso (§7.3): válida con una sola instancia del API.
+- Evidencia: web 701 → **771** tests tras los módulos 1-2 del front (777 tras API-2 y **785** tras API-3); API **986** tras API-3 (852 antes del lote API-1).

@@ -5,7 +5,7 @@ categoria: consistencia-financiera # consistencia-financiera | seguridad | rendi
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-20
+fecha_verificacion: 2026-10-04
 requisito_origen: "[[RF-006-motor-bimonetario-liquidacion-abonos]]"
 metrica_objetivo: "100% precisión decimal (cero floating-point error) / Idempotencia estricta"
 fecha_creacion: 2026-09-06
@@ -76,3 +76,4 @@ El módulo de finanzas maneja saldos adeudados, deducciones de abonos y conversi
 - Conversión bimonetaria con punto flotante: sin garantía de precisión decimal estricta.
 - Idempotencia no persistente: no se garantiza la deduplicación de reportes de pago.
 - Sin detección de sobre-abono ni reconciliador de la invariante de saldo.
+- Implementado (2026-10-04, LOTE API-3 `bc53864`): la idempotencia en memoria de `finanzas.service` (antes un `Map` sin límite) usa el `RegistroIdempotencia` compartido con entrenamiento y plantillas: TTL de 24 h, tope de 10 000 entradas y **dedupe de envíos simultáneos** con la misma clave (`apps/api/src/common/idempotencia/registro-idempotencia.ts`). **Sigue pendiente** la idempotencia persistente: el registro vive en el proceso (un reinicio o varias réplicas no lo comparten). Evidencia: API **986** tras API-3.

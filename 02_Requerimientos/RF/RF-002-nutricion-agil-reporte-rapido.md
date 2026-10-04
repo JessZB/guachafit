@@ -4,7 +4,7 @@ modulo: Nutricion
 prioridad: alta
 estado: implementado
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-24
+fecha_verificacion: 2026-10-04
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0
@@ -102,7 +102,7 @@ Then el sistema debe persistir los totales numéricos asociados a la fecha
 ### RN-02 — Ventana del check-in (18:00–23:59 local)
 
 - La ventana se evalúa con la **zona IANA del alumno** (`timezoneCliente`, por defecto `America/Caracas`); fuera de ventana o con fecha distinta al día local → **400** con mensaje claro.
-- La UI evalúa la misma ventana con el reloj del dispositivo: muestra el banner "El check-in aún no está abierto" y no envía **ni encola** el reporte (el día quedará `No reportado`).
+- La UI evalúa la misma ventana con el reloj del dispositivo: muestra el banner "El reporte aún no está abierto" (texto vigente desde 2026-10-04; antes "El check-in aún no está abierto") y no envía **ni encola** el reporte (el día quedará `No reportado`).
 
 ### RN-03 — Diario fotográfico (1–4 platos)
 
@@ -120,6 +120,10 @@ Then el sistema debe persistir los totales numéricos asociados a la fecha
 - Semáforo 1-Tap con sus 3 estados; el guardado solo confirma con **2xx**. Un 409 refresca el día ya registrado sin encolarlo; la cola offline queda solo para fallos no concluyentes de red/5xx (`apps/web/src/lib/nutricion-checkin.ts`).
 - `No reportado` **derivado** para los días cerrados sin check-in, presente en la vista del alumno y en el calendario del coach (30 días). La alerta semanal viaja en el resumen del coach solo si N > 0; como [[RF-015-matriz-preferencias-usuario-canales]] no tiene categoría NUTRICION, se usa la fila "Resumen Semanal" + la copia In-App universal.
 - Pestaña `nutricion` de la ficha del coach (`?tab=nutricion`): calendario de 30 días, totales vs metas, semáforo de tolerancia, fotos y editor de metas.
+
+### Vocabulario y código de ventana (2026-10-04)
+
+- Implementado (2026-10-04, LOTE API-2 `eeec4e0`): el vocabulario de nutrición se unificó en **"reporte"** en los mensajes del API y de la web (p. ej. *"Puedes enviar el reporte de hoy entre las 18:00 y las 23:59 (hora de tu teléfono). Fuera de ese horario el día queda como «No reportado»."*, *"Ya registraste tu reporte de hoy."*, banner *"El reporte se habilita a las 18:00 (hora local)…"*). El rechazo por ventana/día local (RN-02) viaja con el código estable **`CHECKIN_FUERA_DE_VENTANA`** (`@guachafit/shared`), que la web usa para clasificarlo (`esRechazoVentanaCheckin`), con respaldo por texto para servidores anteriores. Evidencia: API **916** y web **777** tras API-2.
 
 ### Límites deliberados y notas honestas
 

@@ -4,7 +4,7 @@ modulo: Entrenamiento
 prioridad: media
 estado: implementado
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-20
+fecha_verificacion: 2026-10-04
 problema_origen: "[[PROB-003-acceso-onboarding-dashboard-central]]"
 fecha_creacion: 2026-09-13
 version: 1.0
@@ -82,3 +82,12 @@ Then el sistema debe clonar los 4 ejercicios a la rutina de Carlos
 - **UI:** página "Banco de Plantillas" (`/coach/plantillas`) y acción "Cargar desde Plantilla" en el Expediente 360°.
 - **Tests:** 19 pruebas dedicadas (`rf017-plantillas.spec.ts` y suites asociadas).
 - **Pendiente registrado (WU24–WU26):** la lista de plantillas aún no está paginada: `GET /plantillas` devuelve el catálogo completo del tenant y el filtro por nombre/nivel/estado es client-side. Se paginará cuando el volumen lo justifique (deuda declarada en [[03_Contratos_API_Especificacion]] §1.2).
+- Implementado (2026-10-04, front `92936a9`) — **asignación masiva desde la tarjeta de plantilla** ("Asignar a alumnos", `apps/web/src/components/entrenador/AsignacionMasivaPlantilla.tsx`, `apps/web/src/lib/asignacion-masiva.ts`): selección múltiple (máx. 50) con **búsqueda en el servidor** y "Cargar más alumnos", resultado por alumno con mensajes claros y **confirmación al reemplazar** la rutina. Ante un fallo de conexión ambiguo avisa que no se sabe si se completó y pide confirmar antes de reintentar en modo **Añadir** (FUSIONAR).
+- Implementado (2026-10-04, front `92936a9`) — editor más seguro: confirmación antes de borrar un día o un ejercicio, aviso de cambios sin guardar al cerrar la plantilla, edición bloqueada mientras se guarda, guardar deshabilitado sin conexión ("Necesitas internet para guardar") y aviso de datos guardados en la lista; lápiz de edición siempre visible, controles de 44px y textos sin jerga.
+- Implementado (2026-10-04, LOTE API-3 `bc53864`) — integridad:
+  - **Asignación idempotente:** `POST /plantillas/:id/asignar` acepta `X-Idempotency-Key`; misma clave + mismo cuerpo devuelve la respuesta original sin reaplicar (registro con TTL 24 h y dedupe de envíos simultáneos, ver [[RF-001-checklist-entrenamiento-diario]] §7.3).
+  - **FUSIONAR ("Añadir a la rutina actual") con tope de 7 días:** si la rutina quedaría con más de 7 días se rechaza con *"La rutina de este alumno quedaría con más de 7 días. Usa «Reemplazar» o quita días antes de añadir."*; los días añadidos no repiten el día sugerido ya ocupado y la lectura + escritura de la rutina corren en una transacción con bloqueo.
+  - **Precondición 1 aplicada:** rutinas, plantillas y sesiones solo aceptan ejercicios **globales o del propio coach**; el error **nombra** los ejercicios no disponibles (p. ej. *"Press X ya no está en tu lista de ejercicios. Quítalo o cámbialo por otro y vuelve a guardar."*).
+  - Las **notas técnicas y el esfuerzo sugerido** (RN-01) llegan a la sesión del alumno (migración `0014`, **por aplicar** en los entornos).
+- Límites honestos / pendientes (2026-10-04): la web envía una clave por intento (misma selección + mismo modo), pero el servidor la recuerda solo en memoria del proceso (se pierde al reiniciar y no se comparte entre réplicas), así que no es garantía: por eso la web sigue pidiendo confirmación antes de reintentar en modo Añadir tras un fallo ambiguo; sigue pendiente la paginación de `GET /plantillas`.
+- Evidencia: web **771** tras el front y **785** tras API-3; API **986** tras API-3.
