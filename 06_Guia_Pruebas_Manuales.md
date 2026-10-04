@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** con pruebas automáticas en verde (**797** de la web + **1087** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (**797** de la web + **1143** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -32,6 +32,14 @@ tags:
 6. **Modo demo** (sin tocar la base de datos, **solo en desarrollo**): en el login hay botones **"Modo Coach"** y **"Modo Alumno"**. Aparece un banner de "Modo demo — datos de ejemplo". Ideal para recorrer pantallas rápido.
 
 > **Tip para probar en el teléfono por WiFi:** por defecto no es accesible (Vite escucha solo en tu PC). Para probar la PWA de verdad usa **USB** (`adb reverse tcp:3000 tcp:3000` y abre `http://localhost:3000` en el teléfono) o un **túnel HTTPS** (cloudflared/ngrok). Por HTTP de la red local, los service workers no se activan.
+
+### 0.1. Validación de configuración de producción (deploy-05a `1e4d5d7`)
+
+Estas comprobaciones no necesitan la web: se hacen en una terminal con el API.
+
+- [ ] **Con valores de ejemplo, el API se niega a arrancar:** arranca el API con `NODE_ENV=production` y tu `.env` local de desarrollo (los mismos valores de `.env.example`: secretos JWT vacíos, `ENCRYPTION_KEY` de ejemplo, `STORAGE_*` de MinIO y `BULL_BOARD_PASS=cambia_esta_clave`; en PowerShell, `$env:NODE_ENV = "production"` en esa ventana antes del comando) → el API **no arranca** y muestra **un único error `[Configuración]`** que enumera **todos** los problemas, uno por línea (no solo el primero).
+- [ ] **Con valores válidos, arranca:** secretos JWT propios (`openssl rand -base64 48`), `ENCRYPTION_KEY` nueva de 64 caracteres hexadecimales (`openssl rand -hex 32`), `STORAGE_*` reales de R2, `CORS_ORIGINS` con el dominio de la web (sin `*`) y `BULL_BOARD_PASS` de ≥12 caracteres → el API arranca (con Postgres y Redis de Docker arriba y las migraciones al día). Si ya había fichas cifradas, la `ENCRYPTION_KEY` debe ser **la misma** con la que se cifraron: cambiarla las deja ilegibles.
+- [ ] **Swagger oculto en producción:** con `NODE_ENV=production`, `http://localhost:4000/api/docs` responde **404**; en desarrollo sigue disponible; con `SWAGGER_HABILITADO=true` en producción vuelve a verse.
 
 ---
 

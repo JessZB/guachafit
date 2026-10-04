@@ -125,27 +125,29 @@ Extraídas del código el 2026-10-04 (`apps/api/src`, `packages/database/src`).
 | Variable | Valor en producción | Qué pasa si falta |
 |---|---|---|
 | `NODE_ENV` | `production` | Se desactivan las protecciones de producción (secretos, migraciones). |
-| `JWT_SECRET` | Secreto largo y aleatorio (`openssl rand -base64 48`) | El API **no arranca**. Tampoco acepta el valor de ejemplo. |
-| `JWT_REFRESH_SECRET` | Otro secreto distinto, igual de largo | El API **no arranca**. |
+| `JWT_SECRET` | Secreto largo y aleatorio (`openssl rand -base64 48`). En `.env.example` queda **vacío**: en desarrollo el API usa secretos integrados. | El API **no arranca** en producción. Tampoco acepta los secretos de desarrollo integrados. |
+| `JWT_REFRESH_SECRET` | Otro secreto propio, largo y aleatorio. | El API **no arranca** en producción. |
 | `DATABASE_URL` | URL interna de Postgres (con el rol no dueño, ver §4) | Intenta `127.0.0.1` y falla. |
 | `REDIS_HOST` | Host interno de Redis en Coolify | Intenta `127.0.0.1`; colas y notificaciones fallan. |
 | `REDIS_PORT` | `6379` (o el que indique Coolify) | Usa `6379`. |
-| `ENCRYPTION_KEY` | 64 caracteres hexadecimales aleatorios (`openssl rand -hex 32`) | ⚠️ Usa **en silencio** una clave de desarrollo conocida. Configúrala **antes** de guardar datos; cambiarla después deja ilegibles los datos ya cifrados. |
+| `ENCRYPTION_KEY` | Exactamente 64 caracteres hexadecimales (`openssl rand -hex 32`). | El API **no arranca** en producción (es obligatoria); también rechaza la clave de ejemplo y las de un solo carácter repetido. Si ya hay fichas cifradas, mantén **la misma** clave con la que se cifraron (si la original tenía más de 64 caracteres, usa sus primeros 64): cambiarla deja ilegibles los registros existentes. |
 | `TRUST_PROXY` | Número de saltos de proxy (ver nota) | Todos los usuarios comparten la IP del proxy y el límite de intentos los bloquea juntos. `true` se rechaza. |
-| `CORS_ORIGINS` | Dominio de la web, p. ej. `https://app.tudominio.com` (varios separados por comas) | Solo se permite `http://localhost:3000`: la web no puede llamar al API. |
+| `CORS_ORIGINS` | Dominio de la web, p. ej. `https://app.tudominio.com` (varios separados por comas; cada uno debe empezar por `http://` o `https://` y `*` no se admite) | En producción el API **no arranca** (es obligatoria); fuera de producción se permite `http://localhost:3000`. |
 | `PORT` | `4000` (o el que configures en Coolify) | Usa `4000`. |
 
-**Almacenamiento de fotos — Cloudflare R2** ([[ADR-007-almacenamiento-fotos-privadas-cloudflare-r2-presigned-urls]])
+> **En producción, todos los problemas se reportan juntos (deploy-05a `1e4d5d7`):** al arrancar, el API reúne en un único error `[Configuración]` los problemas de los secretos JWT, `ENCRYPTION_KEY`, almacenamiento, `CORS_ORIGINS` y la contraseña de Bull-Board, con una línea por problema: corrígelos todos de una vez. Fuera de producción solo deja un aviso resumen —excepto una `ENCRYPTION_KEY` presente pero mal formada (debe ser hexadecimal y tener al menos 64 caracteres), que detiene el arranque en **cualquier** entorno.
 
-| Variable | Valor |
-|---|---|
-| `STORAGE_ENDPOINT` | Endpoint S3 de tu cuenta R2 (`https://<account-id>.r2.cloudflarestorage.com`) |
-| `STORAGE_BUCKET` | Nombre del bucket de fotos |
-| `STORAGE_ACCESS_KEY_ID` | Access key del token de API de R2 |
-| `STORAGE_SECRET_ACCESS_KEY` | Secret del token de API de R2 |
-| `STORAGE_REGION` | `auto` |
+**Almacenamiento de fotos — Cloudflare R2** ([[ADR-007-almacenamiento-fotos-privadas-cloudflare-r2-presigned-urls]]) — obligatorias en producción
 
-> ⚠️ Si faltan todas, el API **arranca igual** con un endpoint de marcador (solo un aviso en el log) y las fotos no funcionan. Revisa el log tras el primer despliegue.
+| Variable | Valor en producción | Qué pasa si falta |
+|---|---|---|
+| `STORAGE_ENDPOINT` | Endpoint S3 de tu cuenta R2 (`https://<account-id>.r2.cloudflarestorage.com`) | El API **no arranca**. |
+| `STORAGE_BUCKET` | Nombre del bucket de fotos | El API **no arranca**; también rechaza el valor de ejemplo `guachafit-r2-local`. |
+| `STORAGE_ACCESS_KEY_ID` | Access key del token de API de R2 | El API **no arranca**; también rechaza el ejemplo `minioadmin`. |
+| `STORAGE_SECRET_ACCESS_KEY` | Secret del token de API de R2 | El API **no arranca**; también rechaza el ejemplo `minioadmin`. |
+| `STORAGE_REGION` | `auto` | No se valida al arrancar. |
+
+> Con los valores de ejemplo de MinIO (los de `.env.example`) o con la variable ausente, en producción el API **no arranca**. Fuera de producción, sin ninguna configurada, arranca con un endpoint de marcador (solo un aviso en el log) y las fotos no funcionan.
 
 El código también acepta los nombres alternativos `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`, `STORAGE_BUCKET_NAME`, `STORAGE_FORCE_PATH_STYLE` y la familia histórica `R2_*`. Usa una sola familia.
 
@@ -153,10 +155,11 @@ El código también acepta los nombres alternativos `STORAGE_ACCESS_KEY`, `STORA
 
 | Variable | Uso | Por defecto |
 |---|---|---|
-| `BULL_BOARD_USER` / `BULL_BOARD_PASS` | Panel de colas en `/admin/queues` (Basic Auth) | Sin ambas, la ruta responde 404. Déjalas vacías salvo que necesites el panel. |
+| `BULL_BOARD_USER` / `BULL_BOARD_PASS` | Panel de colas en `/admin/queues` (Basic Auth). Si defines `BULL_BOARD_USER`, `BULL_BOARD_PASS` es obligatoria: al menos 12 caracteres y distinta del valor de ejemplo. | Sin ambas, la ruta responde 404. Déjalas vacías salvo que necesites el panel. |
 | `COBRANZA_BARRIDO_CRON` | Barrido de cobranza ([[RF-008-maquina-estados-cuota-recordatorios]]) | `0 9 * * *` (09:00 UTC) |
 | `RESUMEN_SEMANAL_CRON` | Resumen semanal del coach (RF-014) | `0 8 * * 1` (lunes 08:00 UTC) |
 | `ANTROPOMETRIA_RECORDATORIO_CRON` | Recordatorio de check-in antropométrico | `*/15 * * * *` |
+| `SWAGGER_HABILITADO` | `true` expone el Swagger UI en `/api/docs` en producción. | Fuera de producción el UI siempre está; en producción queda **oculto** (404) si falta. |
 
 **Correo — Brevo** ([[ADR-018-proveedor-correo-transaccional-brevo]]; existen desde API-4 `79ba082`, `apps/api/src/common/config/correo.ts`)
 
@@ -246,7 +249,10 @@ Coolify advierte que un backup exitoso solo prueba que se creó un archivo. Hay 
 
 - [ ] El panel de Coolify tiene cuenta de administrador y el puerto 8000 está cerrado.
 - [ ] Postgres y Redis **no** tienen puertos públicos.
-- [ ] `NODE_ENV=production`, `JWT_SECRET`, `JWT_REFRESH_SECRET` y `ENCRYPTION_KEY` tienen valores propios y aleatorios.
+- [ ] `NODE_ENV=production`, `JWT_SECRET`, `JWT_REFRESH_SECRET` y `ENCRYPTION_KEY` (64 hex exactos) tienen valores propios y aleatorios, **no** de ejemplo.
+- [ ] `STORAGE_ENDPOINT`, `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY_ID` y `STORAGE_SECRET_ACCESS_KEY` son los reales de Cloudflare R2 (no los de ejemplo de MinIO); `CORS_ORIGINS` lista los dominios reales de la web (con `http(s)://`, sin `*`); si hay panel de colas, `BULL_BOARD_PASS` tiene ≥12 caracteres y no es el valor de ejemplo.
+- [ ] El API arranca sin el error bloqueante `[Configuración] El API no puede arrancar…`.
+- [ ] Swagger: `/api/docs` responde **404** en producción (salvo `SWAGGER_HABILITADO=true`).
 - [ ] `pnpm db:migrate` se ejecutó y el API arrancó sin el error de migraciones.
 - [ ] `https://api.tudominio.com/api/v1` responde con HTTPS válido.
 - [ ] La web inicia sesión contra el API sin errores de CORS.
@@ -264,7 +270,7 @@ Coolify advierte que un backup exitoso solo prueba que se creó un archivo. Hay 
 
 | Síntoma | Causa probable | Qué hacer |
 |---|---|---|
-| El API no arranca: *Falta la variable de entorno JWT_SECRET* | Falta un secreto o tiene el valor de ejemplo | Configura `JWT_SECRET` / `JWT_REFRESH_SECRET` en Coolify y redespliega. |
+| El API no arranca: `[Configuración] El API no puede arrancar: se encontraron N problemas…` | Configuración crítica ausente, mal formada o de ejemplo (JWT, `ENCRYPTION_KEY`, `STORAGE_*`, `CORS_ORIGINS`, Bull-Board) | El error enumera **cada** problema en una línea; corrige todos y reinicia el API. |
 | El API no arranca: *Faltan migraciones…* | No se ejecutó `pnpm db:migrate` | Ejecuta las migraciones (§6) y reinicia el API. |
 | El API no arranca: *TRUST_PROXY no es válido* | Valor `true` o no numérico | Usa un número de saltos (p. ej. `2`) o una lista de IPs/subredes. |
 | Todos los usuarios quedan bloqueados a la vez tras intentos fallidos | `TRUST_PROXY` vacío o incorrecto | Ajusta `TRUST_PROXY` (§5.1) y repite la prueba de IP real. |
@@ -281,5 +287,5 @@ Si no sabes la causa: abre los **logs** de la aplicación en Coolify. Los mensaj
 ## Referencias
 
 - Decisiones: [[ADR-005-arquitectura-backend-monolito-modular-nestjs]], [[ADR-007-almacenamiento-fotos-privadas-cloudflare-r2-presigned-urls]], [[ADR-008-motor-colas-background-workers-bullmq]], [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]], [[ADR-017-despliegue-vps-coolify]], [[ADR-018-proveedor-correo-transaccional-brevo]].
-- Código: `apps/api/src/main.ts`, `apps/api/src/common/config/` (`secretos-jwt.ts`, `trust-proxy.ts`, `verificar-migraciones.ts`, `correo.ts`), `apps/api/src/modules/notificaciones/correo/`, `apps/api/src/modules/antropometria/r2-storage.service.ts`, `apps/api/src/common/bull-board-auth.middleware.ts`, `apps/api/src/common/services/crypto.service.ts`.
+- Código: `apps/api/src/main.ts`, `apps/api/src/common/config/` (`secretos-jwt.ts`, `validar-configuracion-produccion.ts`, `variables-almacenamiento.ts`, `trust-proxy.ts`, `verificar-migraciones.ts`, `correo.ts`), `apps/api/src/modules/notificaciones/correo/`, `apps/api/src/modules/antropometria/r2-storage.service.ts`, `apps/api/src/common/bull-board-auth.middleware.ts`, `apps/api/src/common/services/crypto.service.ts`.
 - Coolify: instalación (https://coolify.io/docs/get-started/installation), backups (https://coolify.io/docs/databases/backups), documentación general (https://coolify.io/docs).

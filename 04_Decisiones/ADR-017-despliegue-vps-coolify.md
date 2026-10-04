@@ -110,11 +110,15 @@ Fuera del VPS:
 - **Riesgo Mitigado:** costo descontrolado por servicios gestionados; configuración manual de HTTPS y despliegues propensa a errores.
 - **Riesgo Residual:** pérdida de datos si los backups no se configuran o no se prueban; falta de stock del plan elegido en el proveedor; caída total del backend ante una falla del VPS.
 
+### Implementación (2026-10-04, deploy-05a `1e4d5d7`)
+- **Validación de la configuración al arrancar:** el API reúne en un **único error `[Configuración]`** los problemas de la configuración crítica de producción —secretos JWT, `ENCRYPTION_KEY`, almacenamiento (`STORAGE_*`), `CORS_ORIGINS` y la contraseña de Bull-Board— y **no arranca** hasta corregirlos; fuera de producción deja un aviso resumen (una clave de cifrado mal formada falla en cualquier entorno). Detalle de reglas en [[04_Guia_Despliegue_VPS_Coolify]] §5.1.
+- **Pendiente en este lote:** el **5b** (Dockerfile, healthcheck de `/health` y migraciones en producción) y el **5c** (script del rol `guachafit_app`).
+
 ---
 
 ## 5. Trazabilidad y Referencias
 - Requerimientos asociados: [[RNF-001-almacenamiento-seguridad-fotos-progreso]], [[RNF-002-consistencia-financiera-idempotencia-pagos]], [[RNF-003-aislamiento-multitenant-seguridad-datos-salud]].
 - Decisiones relacionadas: [[ADR-005-arquitectura-backend-monolito-modular-nestjs]], [[ADR-007-almacenamiento-fotos-privadas-cloudflare-r2-presigned-urls]], [[ADR-008-motor-colas-background-workers-bullmq]], [[ADR-010-arquitectura-event-driven-notificaciones-multicanal]], [[ADR-018-proveedor-correo-transaccional-brevo]].
 - Guía operativa: [[04_Guia_Despliegue_VPS_Coolify]].
-- Implementación: `apps/api/src/main.ts`, `apps/api/src/common/config/secretos-jwt.ts`, `apps/api/src/common/config/trust-proxy.ts`, `apps/api/src/common/config/verificar-migraciones.ts`.
+- Implementación: `apps/api/src/main.ts`, `apps/api/src/common/config/secretos-jwt.ts`, `apps/api/src/common/config/validar-configuracion-produccion.ts`, `apps/api/src/common/config/variables-almacenamiento.ts`, `apps/api/src/common/config/trust-proxy.ts`, `apps/api/src/common/config/verificar-migraciones.ts`.
 - Documentación externa: Coolify — instalación y requisitos (https://coolify.io/docs/get-started/installation), backups de bases de datos (https://coolify.io/docs/databases/backups); precios de Hetzner Cloud consultados el 2026-10-04.

@@ -80,6 +80,12 @@ Establece los requerimientos de seguridad, privacidad y rendimiento asociados a 
   - **Caché runtime del Service Worker:** `NetworkFirst` con corte a 4 s y **sin rutas `/auth/`** (`apps/web/src/lib/api-cache-pattern.ts`): ninguna respuesta de autenticación queda en caché. Lectura segura de la sesión persistida: un `guachafit_user` corrupto ya no rompe el arranque.
   - Evidencia: web 701 → **771** tests.
 - **Implementado (2026-10-04, LOTE API-3 `bc53864`):** los 403 de tenancy de `alumnos.service` quedan registrados en `auditoria_accesos_denegados` ([[RF-010-rbac-jerarquia-aislamiento-tenancy]] Escenario 2). Pendiente: el resto de servicios aún no audita sus rechazos de tenancy.
+- **Implementado (2026-10-04, deploy-05a `1e4d5d7`) — endurecimiento de la clave de cifrado de fichas de salud:**
+  - **Fail-fast:** en producción, sin `ENCRYPTION_KEY` el API no arranca; el error indica generarla con `openssl rand -hex 32` (`apps/api/src/common/config/validar-configuracion-produccion.ts`, `apps/api/src/main.ts`).
+  - **Nunca más la clave de desarrollo publicada en el repositorio en silencio:** en producción se rechazan la clave de ejemplo y las claves formadas por un solo carácter repetido; una clave **presente pero mal formada** (no hexadecimal o con menos de 64 caracteres) detiene el arranque en **cualquier** entorno: `CryptoService` ya no cae a la clave conocida (`apps/api/src/common/services/crypto.service.ts`).
+  - **Compatibilidad de formato:** se usan exactamente 64 caracteres hexadecimales; si el valor original tenía más de 64, se usan sus primeros 64 (compatible con los datos ya cifrados y el seed), con aviso en el log.
+  - **Límite honesto — la rotación no está soportada:** cambiar la clave deja ilegibles las fichas cifradas (AES-256-GCM sin re-cifrado); el mensaje de arranque distingue un primer despliegue de uno con datos ya cifrados.
+  - Evidencia: API 1087 → **1143** tests aprobados (1 omitida), `tsc` y `nest build` en verde; web **797**.
 
 ---
 
