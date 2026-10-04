@@ -6,3 +6,4 @@ Contiene:
 1. [[01_Evaluacion_Stack_Tecnologico]]: Evaluación rigurosa de alternativas tecnológicas (*Trade-off Analysis*) y definición del stack tecnológico recomendado.
 2. [[02_Esquema_Base_de_Datos_PostgreSQL]]: Esquema relacional en PostgreSQL 16+, DDL completo, diagrama Entidad-Relación en Mermaid y mapeo de invariantes contables/temporales.
 3. [[03_Contratos_API_Especificacion]]: Contratos REST formales, DTOs, códigos de error y matriz de autorización RBAC para Entrenamiento, Antropometría y Conciliación Financiera.
+4. [[04_Guia_Despliegue_VPS_Coolify]]: Guía paso a paso para desplegar en un VPS con Coolify detrás de Cloudflare (variables de entorno, migraciones, backups y verificación). Decisión en [[ADR-017-despliegue-vps-coolify]].
