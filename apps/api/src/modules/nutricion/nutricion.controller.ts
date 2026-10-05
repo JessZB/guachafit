@@ -24,6 +24,7 @@ import {
   Rol,
   EstadoAlumno,
   CheckinNutricionalSchema,
+  ConsultaCheckinNutricionalHoySchema,
   FiltroCheckinsNutricionalesSchema,
   MetasNutricionalesSchema,
 } from '@guachafit/shared';
@@ -65,8 +66,14 @@ export class NutricionController {
     @Query('timezoneCliente') timezoneCliente?: string,
     @Res({ passthrough: true }) res?: any
   ) {
+    // LOTE API-N1: una fecha que no existe en el calendario es un 400 claro, nunca un 500.
+    const consulta = parsearContrato(ConsultaCheckinNutricionalHoySchema, { fecha });
     const alumnoId = req.user.sub;
-    const checkin = await this.nutricionService.obtenerCheckinHoy(alumnoId, fecha, timezoneCliente);
+    const checkin = await this.nutricionService.obtenerCheckinHoy(
+      alumnoId,
+      consulta.fecha,
+      timezoneCliente
+    );
     if (!checkin && res) {
       res.status(HttpStatus.NO_CONTENT);
       return null;

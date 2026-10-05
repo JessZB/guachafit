@@ -27,7 +27,9 @@ import { z } from 'zod';
 import {
   LoginUsuarioSchema,
   CrearPlantillaRutinaSchema,
+  CheckinNutricionalSchema,
   CODIGO_CHECKIN_FUERA_DE_VENTANA,
+  CODIGO_CHECKIN_YA_REGISTRADO,
   CODIGO_SESION_NO_INICIADA,
   CODIGO_SESION_VACIA,
 } from '@guachafit/shared';
@@ -115,6 +117,33 @@ describe('API-2 · traducirErrorValidacion (función pura)', () => {
   it('opción fuera de la lista → pide elegir una opción válida', () => {
     const error = primerError(z.object({ modalidad: z.enum(['a', 'b']) }), { modalidad: 'c' });
     expect(traducirErrorValidacion(error)).toBe('Revisa el campo «modalidad»: elige una opción válida.');
+  });
+
+  it('LOTE API-N1: los campos de nutrición tienen nombre legible', () => {
+    const etiquetas: Array<[string, string]> = [
+      ['notasAlumno', 'notas'],
+      ['fotosPlatos', 'fotos de platos'],
+      ['tipoComida', 'tipo de comida'],
+      ['aguaLitrosObjetivo', 'meta de agua'],
+      ['recursos', 'recursos'],
+      ['url', 'enlace'],
+      ['timezoneCliente', 'zona horaria'],
+    ];
+    for (const [campo, etiqueta] of etiquetas) {
+      const error = primerError(z.object({ [campo]: z.number() }), { [campo]: 'x' });
+      expect(traducirErrorValidacion(error), campo).toBe(`Revisa el campo «${etiqueta}»: no es válido.`);
+    }
+  });
+
+  it('LOTE API-N1: tipo de comida inválido dentro de una foto del reporte', () => {
+    const error = primerError(CheckinNutricionalSchema, {
+      fecha: '2026-09-06',
+      semaforo: 'cumplido',
+      fotosPlatos: [{ tipoComida: 'brunch', storageKey: 'comidas/a/2026-09-06/1.webp' }],
+    });
+    expect(traducirErrorValidacion(error)).toBe(
+      'Revisa el campo «tipo de comida»: elige una opción válida.'
+    );
   });
 
   it('nunca expone el JSON de Zod, rutas ni códigos internos, y pasa el filtro de la web', () => {
@@ -506,7 +535,12 @@ describe('API-2 · fuente única de jerga (common/errores/jerga.ts)', () => {
       'El monto debe estar en USD o VES.',
       'El RPE debe ser un número entre 1 y 10.',
       'GUACHAFIT no pudo guardar tu reporte.',
-      'La fecha del reporte no coincide con el día local de tu teléfono. Actualiza la pantalla.',
+      'Tu teléfono ya cambió de día. Actualiza la pantalla para ver el reporte de hoy.',
+      'No pudimos asociar la foto. Vuelve a subirla.',
+      'Escribe el agua en litros, entre 0 y 20, con hasta 2 decimales (ej. 2.5).',
+      'Tus notas pueden tener hasta 280 caracteres.',
+      'Puedes subir hasta 4 fotos por día.',
+      'Usa un enlace que empiece por http:// o https://.',
     ]) {
       expect(contieneJerga(claro), claro).toBe(false);
     }
@@ -530,7 +564,16 @@ describe('API-2 · compatibilidad con la web publicada (PWA con registerType "pr
   /** Clasificador por texto de la web anterior al código estable (`nutricion-checkin.ts`). */
   const CLASIFICADOR_VENTANA_WEB_ANTERIOR = /18:00|23:59|ventana|día local/i;
 
-  it('todo mensaje con code CHECKIN_FUERA_DE_VENTANA sigue siendo reconocido por la web anterior', () => {
+  /**
+   * LOTE API-N1: el aviso de "tu teléfono ya cambió de día" se reescribió en lenguaje claro y ya no
+   * menciona la ventana. Esa web anterior lo muestra como un rechazo genérico (con el mismo texto
+   * claro); la web vigente lo clasifica por `code`. El aviso de horario sigue reconocible.
+   */
+  const MENSAJES_SOLO_POR_CODIGO = [
+    'Tu teléfono ya cambió de día. Actualiza la pantalla para ver el reporte de hoy.',
+  ];
+
+  it('todo mensaje de horario con code CHECKIN_FUERA_DE_VENTANA sigue siendo reconocido por la web anterior', () => {
     const patron =
       /code:\s*CODIGO_CHECKIN_FUERA_DE_VENTANA,\s*message:\s*(['"`])([\s\S]*?)(?<!\\)\1/g;
     const mensajes = archivosFuente(RAIZ_API).flatMap((archivo) =>
@@ -538,7 +581,8 @@ describe('API-2 · compatibilidad con la web publicada (PWA con registerType "pr
     );
 
     expect(mensajes.length).toBeGreaterThanOrEqual(2);
-    for (const mensaje of mensajes) {
+    expect(mensajes).toEqual(expect.arrayContaining(MENSAJES_SOLO_POR_CODIGO));
+    for (const mensaje of mensajes.filter((m) => !MENSAJES_SOLO_POR_CODIGO.includes(m))) {
       expect(mensaje, mensaje).toMatch(CLASIFICADOR_VENTANA_WEB_ANTERIOR);
     }
   });
@@ -550,10 +594,12 @@ describe('API-2 · códigos estables en un solo lugar (@guachafit/shared)', () =
     expect(CODIGO_SESION_NO_INICIADA).toBe('SESION_NO_INICIADA');
     expect(CODIGO_SESION_VACIA).toBe('SESION_VACIA');
     expect(CODIGO_CHECKIN_FUERA_DE_VENTANA).toBe('CHECKIN_FUERA_DE_VENTANA');
+    expect(CODIGO_CHECKIN_YA_REGISTRADO).toBe('CHECKIN_YA_REGISTRADO');
   });
 
   it('ni el API ni la web redefinen esos códigos como literales', () => {
-    const literal = /(['"`])(SESION_NO_INICIADA|SESION_VACIA|CHECKIN_FUERA_DE_VENTANA)\1/;
+    const literal =
+      /(['"`])(SESION_NO_INICIADA|SESION_VACIA|CHECKIN_FUERA_DE_VENTANA|CHECKIN_YA_REGISTRADO)\1/;
     const copias = [...archivosFuente(RAIZ_API), ...archivosFuente(RAIZ_WEB)].filter((archivo) =>
       literal.test(sinComentarios(fs.readFileSync(archivo, 'utf8')))
     );

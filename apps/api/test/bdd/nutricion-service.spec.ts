@@ -15,6 +15,20 @@ import {
   SemaforoNutricional,
   TipoComida,
   EstadoAlumno,
+  CODIGO_CHECKIN_YA_REGISTRADO,
+  MENSAJE_CHECKIN_YA_REGISTRADO,
+  MENSAJE_FOTO_COMIDA_NO_ASOCIABLE,
+  MENSAJE_AGUA_LITROS,
+  AGUA_LITROS_MAXIMO,
+  MENSAJE_FECHA_CALENDARIO,
+  MENSAJE_RANGO_CHECKINS_EXCEDIDO,
+  MENSAJE_RANGO_FECHAS_INVERTIDO,
+  RANGO_MAXIMO_DIAS_CHECKINS_NUTRICIONALES,
+  MENSAJE_URL_RECURSO,
+  MENSAJE_NOTAS_ALUMNO_MAXIMO,
+  MENSAJE_MAX_FOTOS_PLATOS_DIA,
+  MAX_FOTOS_PLATOS_DIA,
+  CheckinNutricionalSchema,
 } from '@guachafit/shared';
 import {
   ConflictException,
@@ -232,6 +246,11 @@ describe('Módulo 3: Check-ins Nutricionales (NutricionService & NutricionContro
   const alumnoId1 = 'a1111111-1111-4111-8111-111111111111';
   const alumnoId2 = 'a2222222-2222-4222-8222-222222222222';
 
+  /** Clave real de foto de plato, como la emite el presign del módulo `comidas` (ADR-007). */
+  function claveFotoComida(alumnoId: string, n: number, fecha = '2026-09-06'): string {
+    return `comidas/${alumnoId}/${fecha}/aaaaaaaa-1111-4111-8111-00000000000${n}.webp`;
+  }
+
   /**
    * Instante UTC DENTRO de la ventana RN-02 para una fecha local dada en America/Caracas
    * (UTC-4): 22:00 local = 02:00 UTC del día siguiente.
@@ -352,10 +371,10 @@ describe('Módulo 3: Check-ins Nutricionales (NutricionService & NutricionContro
           fecha: '2026-09-06',
           semaforo: SemaforoNutricional.CUMPLIDO,
           fotosPlatos: [
-            { tipoComida: TipoComida.DESAYUNO, storageKey: 'r2/comidas/desayuno_1.webp' },
-            { tipoComida: TipoComida.ALMUERZO, storageKey: 'r2/comidas/almuerzo_1.webp' },
-            { tipoComida: TipoComida.CENA, storageKey: 'r2/comidas/cena_1.webp' },
-            { tipoComida: TipoComida.SNACK, storageKey: 'r2/comidas/snack_1.webp' },
+            { tipoComida: TipoComida.DESAYUNO, storageKey: claveFotoComida(alumnoId1, 1) },
+            { tipoComida: TipoComida.ALMUERZO, storageKey: claveFotoComida(alumnoId1, 2) },
+            { tipoComida: TipoComida.CENA, storageKey: claveFotoComida(alumnoId1, 3) },
+            { tipoComida: TipoComida.SNACK, storageKey: claveFotoComida(alumnoId1, 4) },
           ],
         },
         enVentanaCaracas('2026-09-06')
@@ -374,11 +393,11 @@ describe('Módulo 3: Check-ins Nutricionales (NutricionService & NutricionContro
             fecha: '2026-09-06',
             semaforo: SemaforoNutricional.CUMPLIDO,
             fotosPlatos: [
-              { tipoComida: TipoComida.DESAYUNO, storageKey: 'r2/f1.webp' },
-              { tipoComida: TipoComida.ALMUERZO, storageKey: 'r2/f2.webp' },
-              { tipoComida: TipoComida.CENA, storageKey: 'r2/f3.webp' },
-              { tipoComida: TipoComida.SNACK, storageKey: 'r2/f4.webp' },
-              { tipoComida: TipoComida.SNACK, storageKey: 'r2/f5.webp' },
+              { tipoComida: TipoComida.DESAYUNO, storageKey: claveFotoComida(alumnoId1, 1) },
+              { tipoComida: TipoComida.ALMUERZO, storageKey: claveFotoComida(alumnoId1, 2) },
+              { tipoComida: TipoComida.CENA, storageKey: claveFotoComida(alumnoId1, 3) },
+              { tipoComida: TipoComida.SNACK, storageKey: claveFotoComida(alumnoId1, 4) },
+              { tipoComida: TipoComida.SNACK, storageKey: claveFotoComida(alumnoId1, 5) },
             ],
           },
           enVentanaCaracas('2026-09-06')
@@ -660,7 +679,7 @@ describe('Módulo 3: Check-ins Nutricionales (NutricionService & NutricionContro
       });
     });
 
-    it('LOTE API-2: fecha distinta al día local → code estable y texto que la web anterior aún reconoce', async () => {
+    it('LOTE API-2 / API-N1: fecha distinta al día local → code estable y texto claro', async () => {
       let capturado: any;
       try {
         await nutricionService.registrarCheckinDiario(
@@ -676,10 +695,8 @@ describe('Módulo 3: Check-ins Nutricionales (NutricionService & NutricionContro
         statusCode: 400,
         // Literal a propósito: fija el contrato del cable con la web.
         code: 'CHECKIN_FUERA_DE_VENTANA',
-        message: 'La fecha del reporte no coincide con el día local de tu teléfono. Actualiza la pantalla.',
+        message: 'Tu teléfono ya cambió de día. Actualiza la pantalla para ver el reporte de hoy.',
       });
-      // Clasificador por texto de la web publicada antes del código estable (PWA `prompt`).
-      expect(capturado.getResponse().message).toMatch(/18:00|23:59|ventana|día local/i);
     });
 
     it('el controller propaga el rechazo de ventana del servicio', async () => {
@@ -744,7 +761,7 @@ describe('Módulo 3: Check-ins Nutricionales (NutricionService & NutricionContro
           { fecha: '2026-09-06', semaforo: SemaforoNutricional.PARCIAL },
           enVentanaCaracas('2026-09-06')
         )
-      ).rejects.toThrow('Ya registraste tu reporte de hoy.');
+      ).rejects.toThrow(MENSAJE_CHECKIN_YA_REGISTRADO);
     });
 
     it('debe permitir check-ins en fechas distintas para el mismo alumno', async () => {
@@ -1172,6 +1189,368 @@ describe('Módulo 3: Check-ins Nutricionales (NutricionService & NutricionContro
 
       // Sin verificación de la fila actual no se borra a ciegas.
       expect(r2Fake.eliminarObjeto).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('11. LOTE API-N1: integridad y seguridad del reporte (RF-002)', () => {
+    const MENSAJE_FOTO_AJENA = MENSAJE_FOTO_COMIDA_NO_ASOCIABLE;
+    const MENSAJE_AGUA = MENSAJE_AGUA_LITROS;
+    const MENSAJE_FECHA = MENSAJE_FECHA_CALENDARIO;
+
+    async function capturar(promesa: Promise<unknown>): Promise<any> {
+      try {
+        await promesa;
+      } catch (error) {
+        return error;
+      }
+      throw new Error('Se esperaba un rechazo');
+    }
+
+    describe('Criterio 1: la foto del plato debe ser del alumno autenticado', () => {
+      const clavesAjenas: Array<[string, string]> = [
+        ['de otro alumno', claveFotoComida(alumnoId2, 1)],
+        [
+          'de antropometría del mismo alumno',
+          `antropometria/${alumnoId1}/2026/aaaaaaaa-1111-4111-8111-000000000001.webp`,
+        ],
+        [
+          'de recursos del mismo alumno',
+          `nutricion-recursos/${alumnoId1}/2026/aaaaaaaa-1111-4111-8111-000000000001.pdf`,
+        ],
+        ['con estructura inválida', `comidas/${alumnoId1}/../otra/foto.webp`],
+        ['falsa sin prefijo', 'r2/f1.webp'],
+        ['demasiado larga', `comidas/${alumnoId1}/${'x'.repeat(260)}.webp`],
+      ];
+
+      for (const [caso, clave] of clavesAjenas) {
+        it(`rechaza una clave ${caso} con 400 claro: nada se guarda ni se firma`, async () => {
+          const r2Fake = { generarPresignedGetUrl: vi.fn(async () => 'https://r2.example/x') };
+          const servicio = new NutricionService(createMockDb(), r2Fake as any);
+
+          const error = await capturar(
+            servicio.registrarCheckinDiario(
+              alumnoId1,
+              {
+                fecha: '2026-09-06',
+                semaforo: SemaforoNutricional.CUMPLIDO,
+                fotosPlatos: [{ tipoComida: TipoComida.ALMUERZO, storageKey: clave }],
+              },
+              enVentanaCaracas('2026-09-06')
+            )
+          );
+
+          expect(error).toBeInstanceOf(BadRequestException);
+          expect(error.message).toBe(MENSAJE_FOTO_AJENA);
+          expect(mockCheckinsNutricionales).toHaveLength(0);
+          expect(mockFotosComida).toHaveLength(0);
+          expect(r2Fake.generarPresignedGetUrl).not.toHaveBeenCalled();
+        });
+      }
+
+      it('acepta la clave propia emitida por el presign de `comidas`', async () => {
+        const res = await nutricionService.registrarCheckinDiario(
+          alumnoId1,
+          {
+            fecha: '2026-09-06',
+            semaforo: SemaforoNutricional.CUMPLIDO,
+            fotosPlatos: [{ tipoComida: TipoComida.CENA, storageKey: claveFotoComida(alumnoId1, 1) }],
+          },
+          enVentanaCaracas('2026-09-06')
+        );
+        expect(res.checkin.fotosPlatos[0].storageKey).toBe(claveFotoComida(alumnoId1, 1));
+      });
+    });
+
+    describe('Criterio 2: doble POST concurrente → 409, no 500', () => {
+      function errorUnicidad(): Error {
+        return Object.assign(
+          new Error('duplicate key value violates unique constraint "uq_checkin_nutricional_diario"'),
+          { code: '23505', constraint_name: 'uq_checkin_nutricional_diario' }
+        );
+      }
+
+      it('la violación del índice único se traduce al mismo 409 de "ya registraste"', async () => {
+        const db = createMockDb();
+        db.transaction = vi.fn(async () => {
+          throw errorUnicidad();
+        });
+        const servicio = new NutricionService(db);
+
+        const error = await capturar(
+          servicio.registrarCheckinDiario(
+            alumnoId1,
+            { fecha: '2026-09-06', semaforo: SemaforoNutricional.CUMPLIDO },
+            enVentanaCaracas('2026-09-06')
+          )
+        );
+
+        expect(error).toBeInstanceOf(ConflictException);
+        expect(error.getResponse()).toMatchObject({
+          statusCode: 409,
+          code: CODIGO_CHECKIN_YA_REGISTRADO,
+          message: MENSAJE_CHECKIN_YA_REGISTRADO,
+        });
+      });
+
+      it('el 409 de la verificación previa lleva el mismo código y texto', async () => {
+        await nutricionService.registrarCheckinDiario(
+          alumnoId1,
+          { fecha: '2026-09-06', semaforo: SemaforoNutricional.CUMPLIDO },
+          enVentanaCaracas('2026-09-06')
+        );
+        const error = await capturar(
+          nutricionService.registrarCheckinDiario(
+            alumnoId1,
+            { fecha: '2026-09-06', semaforo: SemaforoNutricional.PARCIAL },
+            enVentanaCaracas('2026-09-06')
+          )
+        );
+        expect(error).toBeInstanceOf(ConflictException);
+        expect(error.getResponse()).toMatchObject({
+          statusCode: 409,
+          // Literal a propósito: fija el contrato del cable con la web.
+          code: 'CHECKIN_YA_REGISTRADO',
+          message: MENSAJE_CHECKIN_YA_REGISTRADO,
+        });
+      });
+
+      it('otro error de la base de datos no se disfraza de 409', async () => {
+        const db = createMockDb();
+        const caida = new Error('conexión perdida');
+        db.transaction = vi.fn(async () => {
+          throw caida;
+        });
+        const servicio = new NutricionService(db);
+
+        await expect(
+          servicio.registrarCheckinDiario(
+            alumnoId1,
+            { fecha: '2026-09-06', semaforo: SemaforoNutricional.CUMPLIDO },
+            enVentanaCaracas('2026-09-06')
+          )
+        ).rejects.toBe(caida);
+      });
+    });
+
+    describe('Criterio 3: validación sin 500 (agua, fechas reales y rango)', () => {
+      it('el agua del reporte acepta hasta 20 L y rechaza más con mensaje claro', async () => {
+        const ok = await nutricionService.registrarCheckinDiario(
+          alumnoId1,
+          { fecha: '2026-09-06', semaforo: SemaforoNutricional.CUMPLIDO, aguaLitros: '20' },
+          enVentanaCaracas('2026-09-06')
+        );
+        expect(ok.checkin.aguaLitros).toBe('20');
+
+        for (const agua of ['20.01', '99.99', '150', '2.555', 'dos']) {
+          const error = await capturar(
+            nutricionService.registrarCheckinDiario(
+              alumnoId1,
+              { fecha: '2026-09-07', semaforo: SemaforoNutricional.CUMPLIDO, aguaLitros: agua },
+              enVentanaCaracas('2026-09-07')
+            )
+          );
+          expect(error, agua).toBeInstanceOf(BadRequestException);
+          expect(error.message, agua).toBe(MENSAJE_AGUA);
+        }
+      });
+
+      it('la meta de agua del coach tiene el mismo tope y mensaje', async () => {
+        const error = await capturar(
+          nutricionService.definirMetasNutricionales(coachId1, alumnoId1, {
+            aguaLitrosObjetivo: '21',
+          })
+        );
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect(error.message).toBe(MENSAJE_AGUA);
+
+        await expect(
+          nutricionService.definirMetasNutricionales(coachId1, alumnoId1, {
+            aguaLitrosObjetivo: '20.00',
+          })
+        ).resolves.toEqual(expect.objectContaining({ aguaLitrosObjetivo: '20.00' }));
+      });
+
+      it('GET checkin/hoy rechaza fechas que no existen en el calendario (400, no 500)', async () => {
+        const req = { user: { sub: alumnoId1, rol: Rol.ALUMNO } };
+        for (const fecha of ['2026-02-31', 'abc', '2026-13-01', '2026-9-6']) {
+          const error = await capturar(nutricionController.obtenerCheckinHoy(req, fecha));
+          expect(error, fecha).toBeInstanceOf(BadRequestException);
+          expect(error.message, fecha).toBe(MENSAJE_FECHA);
+        }
+        // Una fecha real (29 de febrero de un año bisiesto) sigue funcionando.
+        await expect(nutricionController.obtenerCheckinHoy(req, '2028-02-29')).resolves.toBeNull();
+      });
+
+      it('la lista rechaza desde/hasta que no son fechas reales', async () => {
+        const req = { user: { sub: alumnoId1, rol: Rol.ALUMNO } };
+        for (const query of [
+          { desde: '2026-02-31', hasta: '2026-03-10' },
+          { desde: '2026-02-01', hasta: 'abc' },
+        ]) {
+          const error = await capturar(nutricionController.listarCheckins(req, alumnoId1, query));
+          expect(error, JSON.stringify(query)).toBeInstanceOf(BadRequestException);
+          expect(error.message).toBe(MENSAJE_FECHA);
+        }
+      });
+
+      it('la lista admite hasta 92 días y rechaza un rango mayor con mensaje claro', async () => {
+        const req = { user: { sub: alumnoId1, rol: Rol.ALUMNO } };
+        await expect(
+          nutricionController.listarCheckins(req, alumnoId1, {
+            desde: '2026-01-01',
+            hasta: sumarDiasCalendario('2026-01-01', 91),
+          })
+        ).resolves.toEqual([]);
+
+        const error = await capturar(
+          nutricionController.listarCheckins(req, alumnoId1, {
+            desde: '2026-01-01',
+            hasta: sumarDiasCalendario('2026-01-01', 92),
+          })
+        );
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect(error.message).toBe(MENSAJE_RANGO_CHECKINS_EXCEDIDO);
+
+        // El servicio aplica el mismo tope aunque se le llame sin pasar por el controller.
+        await expect(
+          nutricionService.listarCheckins(
+            coachId1,
+            alumnoId1,
+            { desde: '2025-01-01', hasta: '2026-01-01' },
+            Rol.ENTRENADOR
+          )
+        ).rejects.toThrow(BadRequestException);
+      });
+
+      it('la lista rechaza un rango invertido', async () => {
+        const req = { user: { sub: alumnoId1, rol: Rol.ALUMNO } };
+        const error = await capturar(
+          nutricionController.listarCheckins(req, alumnoId1, {
+            desde: '2026-03-10',
+            hasta: '2026-03-01',
+          })
+        );
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect(error.message).toBe(MENSAJE_RANGO_FECHAS_INVERTIDO);
+      });
+    });
+
+    describe('Ronda 1: una sola regla de fecha y textos derivados de las constantes', () => {
+      it('POST con una fecha que no existe en el calendario → 400 con la regla única de fecha', async () => {
+        for (const fecha of ['2026-02-31', '2026-13-01']) {
+          const error = await capturar(
+            nutricionService.registrarCheckinDiario(
+              alumnoId1,
+              { fecha, semaforo: SemaforoNutricional.CUMPLIDO },
+              enVentanaCaracas('2026-09-06')
+            )
+          );
+          expect(error, fecha).toBeInstanceOf(BadRequestException);
+          expect(error.message, fecha).toBe(MENSAJE_FECHA_CALENDARIO);
+        }
+      });
+
+      it('los textos de agua, rango y fotos salen de sus constantes', () => {
+        expect(MENSAJE_AGUA_LITROS).toContain(`entre 0 y ${AGUA_LITROS_MAXIMO}`);
+        expect(MENSAJE_RANGO_CHECKINS_EXCEDIDO).toContain(
+          `hasta ${RANGO_MAXIMO_DIAS_CHECKINS_NUTRICIONALES} días`
+        );
+        expect(MENSAJE_MAX_FOTOS_PLATOS_DIA).toContain(`hasta ${MAX_FOTOS_PLATOS_DIA} fotos`);
+        expect(MAX_FOTOS_PLATOS_DIA).toBe(4);
+      });
+
+      it('el tope de fotos del contrato es el mismo que el del servicio', () => {
+        expect(
+          CheckinNutricionalSchema.safeParse({
+            fecha: '2026-09-06',
+            semaforo: SemaforoNutricional.CUMPLIDO,
+            fotosPlatos: Array.from({ length: MAX_FOTOS_PLATOS_DIA + 1 }, (_, n) => ({
+              tipoComida: TipoComida.SNACK,
+              storageKey: claveFotoComida(alumnoId1, n),
+            })),
+          }).error?.issues[0].message
+        ).toBe(MENSAJE_MAX_FOTOS_PLATOS_DIA);
+      });
+    });
+
+    describe('Criterio 5: enlaces de recursos solo http/https', () => {
+      for (const url of [
+        'javascript:alert(1)',
+        'data:text/html,hola',
+        'ftp://r2.guachafit.test/lista.pdf',
+        'file:///etc/passwd',
+      ]) {
+        it(`rechaza ${url.split(':')[0]}: con mensaje claro`, async () => {
+          const error = await capturar(
+            nutricionService.definirMetasNutricionales(coachId1, alumnoId1, {
+              recursos: [{ titulo: 'Lista', url }],
+            })
+          );
+          expect(error).toBeInstanceOf(BadRequestException);
+          expect(error.message).toBe(MENSAJE_URL_RECURSO);
+          expect(mockMetasNutricionales).toHaveLength(0);
+        });
+      }
+
+      it('acepta http y https', async () => {
+        const guardadas = await nutricionService.definirMetasNutricionales(coachId1, alumnoId1, {
+          recursos: [
+            { titulo: 'Segura', url: 'https://r2.guachafit.test/lista.pdf' },
+            { titulo: 'Plana', url: 'http://guachafit.test/guia' },
+          ],
+        });
+        expect(guardadas.recursos).toHaveLength(2);
+      });
+    });
+
+    describe('Criterio 6: mensajes claros con tuteo', () => {
+      it('notas de más de 280 caracteres', async () => {
+        const error = await capturar(
+          nutricionService.registrarCheckinDiario(
+            alumnoId1,
+            {
+              fecha: '2026-09-06',
+              semaforo: SemaforoNutricional.CUMPLIDO,
+              notasAlumno: 'A'.repeat(281),
+            },
+            enVentanaCaracas('2026-09-06')
+          )
+        );
+        expect(error.message).toBe(MENSAJE_NOTAS_ALUMNO_MAXIMO);
+      });
+
+      it('más de 4 fotos por día', async () => {
+        const error = await capturar(
+          nutricionService.registrarCheckinDiario(
+            alumnoId1,
+            {
+              fecha: '2026-09-06',
+              semaforo: SemaforoNutricional.CUMPLIDO,
+              fotosPlatos: [1, 2, 3, 4, 5].map((n) => ({
+                tipoComida: TipoComida.SNACK,
+                storageKey: claveFotoComida(alumnoId1, n),
+              })),
+            },
+            enVentanaCaracas('2026-09-06')
+          )
+        );
+        expect(error.message).toBe(MENSAJE_MAX_FOTOS_PLATOS_DIA);
+      });
+
+      it('una clave de foto demasiado corta usa el mismo mensaje de foto', async () => {
+        const error = await capturar(
+          nutricionService.registrarCheckinDiario(
+            alumnoId1,
+            {
+              fecha: '2026-09-06',
+              semaforo: SemaforoNutricional.CUMPLIDO,
+              fotosPlatos: [{ tipoComida: TipoComida.SNACK, storageKey: 'abc' }],
+            },
+            enVentanaCaracas('2026-09-06')
+          )
+        );
+        expect(error.message).toBe(MENSAJE_FOTO_AJENA);
+      });
     });
   });
 });

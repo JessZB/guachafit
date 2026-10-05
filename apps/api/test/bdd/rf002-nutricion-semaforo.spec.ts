@@ -180,9 +180,7 @@ describe('RF-002: Módulo de Nutrición Ágil y Reporte Rápido', () => {
       const validacion = CheckinNutricionalSchema.safeParse(payloadExcesoFotos);
       expect(validacion.success).toBe(false);
       if (!validacion.success) {
-        expect(validacion.error.issues[0].message).toContain(
-          'No se permiten más de 4 fotografías de platos por día'
-        );
+        expect(validacion.error.issues[0].message).toBe('Puedes subir hasta 4 fotos por día.');
       }
     });
   });

@@ -24,11 +24,14 @@ import {
   MENSAJE_FOTOS_MAXIMO_ALCANZADO,
   MENSAJE_FOTOS_RECORTADAS,
   MENSAJE_REPORTE_NO_ENVIADO,
+  MENSAJE_REPORTE_CON_OTROS_DATOS,
+  coincideReporteServidorConPendiente,
 } from './nutricion-checkin';
 import { MENSAJE_RANGO_FOTOS_REPORTE, type OutboxMutation } from './offline-db';
 import { obtenerTimezoneDispositivo } from './date-format';
 import {
   CODIGO_CHECKIN_FUERA_DE_VENTANA,
+  MENSAJE_CHECKIN_YA_REGISTRADO,
   SemaforoNutricional,
   TipoComida,
 } from '@guachafit/shared';
@@ -185,7 +188,7 @@ describe('esRechazoVentanaCheckin (LOTE API-2: código estable con respaldo por 
     // Literal a propósito: fija el contrato del cable con el API.
     expect(CODIGO_CHECKIN_FUERA_DE_VENTANA).toBe('CHECKIN_FUERA_DE_VENTANA');
     expect(
-      esRechazoVentanaCheckin('La fecha del reporte no coincide con el día local de tu teléfono. Actualiza la pantalla.', 'CHECKIN_FUERA_DE_VENTANA')
+      esRechazoVentanaCheckin('Tu teléfono ya cambió de día. Actualiza la pantalla para ver el reporte de hoy.', 'CHECKIN_FUERA_DE_VENTANA')
     ).toBe(true);
   });
 
@@ -514,5 +517,144 @@ describe('textos del reporte (una sola redacción, sin códigos internos)', () =
 
   it('el rango de fotos es el mismo texto en el formulario y en la cola', () => {
     expect(MENSAJE_RANGO_FOTOS_REPORTE).toBe('Un reporte puede llevar de 1 a 4 fotos.');
+  });
+});
+
+describe('LOTE API-N1: 409 "ya registrado" al sincronizar la cola', () => {
+  const payload = {
+    fecha: '2026-09-21',
+    timezoneCliente: 'America/Caracas',
+    semaforo: SemaforoNutricional.PARCIAL,
+    aguaLitros: '2.5',
+    caloriasReportadas: 1800,
+    proteinaGramosReportada: 120,
+    notasAlumno: 'Cena fuera',
+  };
+
+  function servidor(parcial: Record<string, unknown> = {}) {
+    return {
+      semaforo: SemaforoNutricional.PARCIAL,
+      aguaLitros: '2.50',
+      caloriasReportadas: 1800,
+      proteinaGramosReportada: 120,
+      notasAlumno: 'Cena fuera',
+      fotosPlatos: [{}, {}],
+      ...parcial,
+    } as any;
+  }
+
+  it('el mismo reporte (reintento de un envío que sí llegó) coincide, aunque el agua venga como 2.50', () => {
+    expect(coincideReporteServidorConPendiente(servidor(), payload, 2)).toBe(true);
+  });
+
+  it('opcionales ausentes en el pendiente equivalen a vacíos en el servidor', () => {
+    expect(
+      coincideReporteServidorConPendiente(
+        servidor({
+          aguaLitros: null,
+          caloriasReportadas: null,
+          proteinaGramosReportada: null,
+          notasAlumno: null,
+          fotosPlatos: [],
+        }),
+        { fecha: '2026-09-21', semaforo: SemaforoNutricional.PARCIAL },
+        0
+      )
+    ).toBe(true);
+  });
+
+  it('cualquier dato distinto (semáforo, notas, calorías, proteína, agua o fotos) no coincide', () => {
+    const distintos = [
+      servidor({ semaforo: SemaforoNutricional.CUMPLIDO }),
+      servidor({ notasAlumno: 'Otra nota' }),
+      servidor({ caloriasReportadas: 1900 }),
+      servidor({ proteinaGramosReportada: 100 }),
+      servidor({ aguaLitros: '3.00' }),
+      servidor({ aguaLitros: null }),
+      servidor({ fotosPlatos: [{}] }),
+    ];
+    for (const reporte of distintos) {
+      expect(coincideReporteServidorConPendiente(reporte, payload, 2), JSON.stringify(reporte)).toBe(
+        false
+      );
+    }
+  });
+
+  it('el mensaje del rechazo es claro y dice que este reporte no se envió', () => {
+    expect(MENSAJE_REPORTE_CON_OTROS_DATOS).toBe(
+      'Ya tenías un reporte de hoy registrado con otros datos; este no se envió.'
+    );
+  });
+
+  it('buscar el pendiente detecta el reporte de hoy rechazado por traer otros datos', async () => {
+    const resultado = await buscarCheckinNutricionalPendiente('2026-09-21', 'alumno', async () => [
+      {
+        id: 7,
+        endpoint: '/nutricion/checkin-diario',
+        method: 'POST',
+        payload: { fecha: '2026-09-21' },
+        idempotencyKey: 'k',
+        description: 'Reporte',
+        status: 'rejected',
+        motivoRechazo: 'reporte-con-otros-datos',
+        createdAt: 1,
+        attempts: 1,
+      },
+    ]);
+    expect(resultado).toEqual({ tipo: 'rechazado-otros-datos' });
+  });
+
+  it('pantalla: synced → confirmando → registrado', () => {
+    const encolado = { estado: 'queued' as const, fotosEncoladas: 1, aviso: null };
+    const confirmando = siguienteEstadoReporte(encolado, { tipo: 'cola', resultado: { tipo: 'vacia' } });
+    expect(confirmando.estado).toBe('confirmando');
+    expect(siguienteEstadoReporte(confirmando, { tipo: 'carga', resultado: 'encontrado' })).toEqual({
+      estado: 'saved',
+      fotosEncoladas: 0,
+      aviso: null,
+    });
+  });
+
+  it('pantalla: rechazado por otros datos → muestra el reporte del servidor con el aviso de no enviado', () => {
+    const encolado = { estado: 'queued' as const, fotosEncoladas: 1, aviso: null };
+    const trasRechazo = siguienteEstadoReporte(encolado, {
+      tipo: 'cola',
+      resultado: { tipo: 'rechazado-otros-datos' },
+    });
+    expect(trasRechazo).toEqual({
+      estado: 'confirmando',
+      fotosEncoladas: 0,
+      aviso: MENSAJE_REPORTE_CON_OTROS_DATOS,
+    });
+    expect(siguienteEstadoReporte(trasRechazo, { tipo: 'carga', resultado: 'encontrado' })).toEqual({
+      estado: 'saved',
+      fotosEncoladas: 0,
+      aviso: MENSAJE_REPORTE_CON_OTROS_DATOS,
+    });
+  });
+
+  it('pantalla recién abierta con un rechazo de hoy ya en la cola → aviso junto al reporte registrado', () => {
+    const avisado = { estado: 'idle' as const, fotosEncoladas: 0, aviso: MENSAJE_REPORTE_CON_OTROS_DATOS };
+    const rechazo = { tipo: 'cola' as const, resultado: { tipo: 'rechazado-otros-datos' as const } };
+    const encontrado = { tipo: 'carga' as const, resultado: 'encontrado' as const };
+    const registrado = { estado: 'saved' as const, fotosEncoladas: 0, aviso: MENSAJE_REPORTE_CON_OTROS_DATOS };
+
+    // Orden 1: primero la cola, luego la carga del reporte del servidor.
+    const trasCola = siguienteEstadoReporte(ESTADO_REPORTE_INICIAL, rechazo);
+    expect(trasCola).toEqual(avisado);
+    expect(siguienteEstadoReporte(trasCola, encontrado)).toEqual(registrado);
+
+    // Orden 2: primero la carga (ya registrado), luego la cola.
+    const trasCarga = siguienteEstadoReporte(ESTADO_REPORTE_INICIAL, encontrado);
+    expect(trasCarga.aviso).toBeNull();
+    expect(siguienteEstadoReporte(trasCarga, rechazo)).toEqual(registrado);
+
+    // Releer la misma cola no vuelve a renderizar.
+    const conAviso = siguienteEstadoReporte(trasCarga, rechazo);
+    expect(siguienteEstadoReporte(conAviso, rechazo)).toBe(conAviso);
+  });
+
+  it('el aviso de ya registrado reutiliza el texto compartido', () => {
+    expect(MENSAJE_YA_REGISTRADO_HOY).toBe(MENSAJE_CHECKIN_YA_REGISTRADO);
   });
 });

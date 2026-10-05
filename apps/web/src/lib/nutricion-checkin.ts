@@ -17,6 +17,7 @@
 import {
   CODIGO_CHECKIN_FUERA_DE_VENTANA,
   CheckinNutricionalSchema,
+  MENSAJE_CHECKIN_YA_REGISTRADO,
   HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL,
   type CheckinNutricionalDetalleDTO,
   type CheckinNutricionalDTO,
@@ -39,7 +40,7 @@ export const MENSAJE_COLA_SIN_CONEXION =
 export const MENSAJE_COLA_SERVIDOR =
   'No pudimos confirmar el guardado con el servidor: tu reporte quedó en la cola y se enviará automáticamente.';
 
-export const MENSAJE_YA_REGISTRADO_HOY = 'Ya registraste tu reporte de hoy.';
+export const MENSAJE_YA_REGISTRADO_HOY = MENSAJE_CHECKIN_YA_REGISTRADO;
 
 /**
  * RF-002 §6/RN-02: mensaje claro cuando la ventana (o el día local) cerró antes de que la cola
@@ -321,9 +322,65 @@ export function valoresFormularioDesdeCheckin(
 export type ResultadoColaReporte =
   | { tipo: 'pendiente'; fotos: number }
   | { tipo: 'vacia' }
+  /** LOTE API-N1: el reporte de hoy no se envió porque el servidor ya tenía otro distinto. */
+  | { tipo: 'rechazado-otros-datos' }
   | { tipo: 'error' };
 
-const ENDPOINT_CHECKIN_DIARIO = '/nutricion/checkin-diario';
+/**
+ * LOTE API-N1: rechazo visible cuando el servidor ya tenía el reporte del día con otros datos (o
+ * no se pudo comprobar que fuera este). Los blobs locales se conservan hasta que el alumno decida.
+ */
+export const MENSAJE_REPORTE_CON_OTROS_DATOS =
+  'Ya tenías un reporte de hoy registrado con otros datos; este no se envió.';
+
+/** Texto opcional normalizado: ausente, `null` o vacío cuentan igual. */
+function textoOpcional(valor: string | null | undefined): string | null {
+  const limpio = valor?.trim();
+  return limpio ? limpio : null;
+}
+
+/** Número opcional normalizado (`null`/`undefined` → `null`). */
+function numeroOpcional(valor: number | null | undefined): number | null {
+  return valor ?? null;
+}
+
+/** Litros como número (2.5 y "2.50" son lo mismo); ausente → `null`. */
+function litrosOpcionales(valor: string | null | undefined): number | null {
+  const limpio = textoOpcional(valor);
+  return limpio === null ? null : Number(limpio);
+}
+
+/**
+ * LOTE API-N1 (función pura): ¿el reporte que el servidor ya tiene hoy es ESTE pendiente de la
+ * cola? Se usa tras un 409 "ya registrado" para distinguir un reintento cuyo éxito se perdió (los
+ * datos coinciden) de un reporte distinto que nunca llegó. Compara semáforo, notas, calorías,
+ * proteína, agua y cantidad de fotos.
+ */
+export function coincideReporteServidorConPendiente(
+  servidor: Pick<
+    CheckinNutricionalDetalleDTO,
+    | 'semaforo'
+    | 'notasAlumno'
+    | 'caloriasReportadas'
+    | 'proteinaGramosReportada'
+    | 'aguaLitros'
+    | 'fotosPlatos'
+  >,
+  pendiente: Partial<CheckinNutricionalDTO>,
+  fotosPendiente: number
+): boolean {
+  return (
+    servidor.semaforo === pendiente.semaforo &&
+    textoOpcional(servidor.notasAlumno) === textoOpcional(pendiente.notasAlumno) &&
+    numeroOpcional(servidor.caloriasReportadas) === numeroOpcional(pendiente.caloriasReportadas) &&
+    numeroOpcional(servidor.proteinaGramosReportada) ===
+      numeroOpcional(pendiente.proteinaGramosReportada) &&
+    litrosOpcionales(servidor.aguaLitros) === litrosOpcionales(pendiente.aguaLitros) &&
+    (servidor.fotosPlatos?.length ?? 0) === fotosPendiente
+  );
+}
+
+export const ENDPOINT_CHECKIN_DIARIO = '/nutricion/checkin-diario';
 
 /**
  * RF-002 §6: busca en la cola durable un reporte de `fecha` del alumno actual que todavía no
@@ -343,14 +400,21 @@ export async function buscarCheckinNutricionalPendiente(
   } catch {
     return { tipo: 'error' };
   }
+  const delDia = (item: OutboxMutation) =>
+    item.endpoint === ENDPOINT_CHECKIN_DIARIO &&
+    item.payload?.fecha === fecha &&
+    (!item.alumnoId || item.alumnoId === alumnoId);
   const pendiente = mutaciones.find(
     (item) =>
-      item.endpoint === ENDPOINT_CHECKIN_DIARIO &&
-      (item.status === 'pending' || item.status === 'syncing' || item.status === 'failed') &&
-      item.payload?.fecha === fecha &&
-      (!item.alumnoId || item.alumnoId === alumnoId)
+      delDia(item) &&
+      (item.status === 'pending' || item.status === 'syncing' || item.status === 'failed')
   );
-  return pendiente ? { tipo: 'pendiente', fotos: pendiente.fotos?.length ?? 0 } : { tipo: 'vacia' };
+  if (pendiente) return { tipo: 'pendiente', fotos: pendiente.fotos?.length ?? 0 };
+  const rechazadoOtrosDatos = mutaciones.some(
+    (item) =>
+      delDia(item) && item.status === 'rejected' && item.motivoRechazo === 'reporte-con-otros-datos'
+  );
+  return rechazadoOtrosDatos ? { tipo: 'rechazado-otros-datos' } : { tipo: 'vacia' };
 }
 
 // =============================================================================
@@ -410,12 +474,24 @@ export function siguienteEstadoReporte(
       if (resultado.tipo === 'vacia' && previo.estado === 'queued') {
         return { ...previo, estado: 'confirmando' };
       }
+      // LOTE API-N1: el pendiente de hoy no se envió (el servidor ya tenía otro reporte). Si se
+      // esperaba su envío, se consulta el del servidor; si no (pantalla recién abierta o ya
+      // registrado), solo se muestra el aviso junto al reporte.
+      if (resultado.tipo === 'rechazado-otros-datos') {
+        if (previo.estado === 'queued' || previo.estado === 'confirmando') {
+          return { estado: 'confirmando', fotosEncoladas: 0, aviso: MENSAJE_REPORTE_CON_OTROS_DATOS };
+        }
+        if (previo.aviso === MENSAJE_REPORTE_CON_OTROS_DATOS) return previo;
+        return { ...previo, aviso: MENSAJE_REPORTE_CON_OTROS_DATOS };
+      }
       // Cola ilegible: no se sabe si el pendiente salió; se conserva el estado.
       return previo;
     }
     case 'carga':
       if (evento.resultado === 'encontrado') {
-        return { estado: 'saved', fotosEncoladas: 0, aviso: null };
+        // Conserva el aviso de "este no se envió" que dejó un rechazo de hoy.
+        const aviso = previo.aviso === MENSAJE_REPORTE_CON_OTROS_DATOS ? previo.aviso : null;
+        return { estado: 'saved', fotosEncoladas: 0, aviso };
       }
       if (evento.resultado === 'sin-reporte' && previo.estado === 'confirmando') {
         return { estado: 'idle', fotosEncoladas: 0, aviso: MENSAJE_REPORTE_NO_ENVIADO };

@@ -4,6 +4,7 @@ import {
   CheckinNutricionalDetalleDTO,
   EjercicioCatalogoDetalleDTO,
   EstadoSesion,
+  MAX_FOTOS_PLATOS_DIA,
   type SemanaEntrenamientoProgresoDTO,
   type CheckinNutricionalDTO,
   type TipoComida,
@@ -20,8 +21,8 @@ import { generateIdempotencyKey } from './api-client';
  */
 export type OutboxStatus = 'pending' | 'syncing' | 'synced' | 'failed' | 'rejected';
 
-/** Máximo de fotografías de platos por reporte (RF-002 RN-03), espejo del contrato compartido. */
-export const MAX_FOTOS_CHECKIN_NUTRICIONAL = 4;
+/** Máximo de fotografías de platos por reporte (RF-002 RN-03): el mismo del contrato compartido. */
+export const MAX_FOTOS_CHECKIN_NUTRICIONAL = MAX_FOTOS_PLATOS_DIA;
 
 /** Rango de fotos de un reporte, mismo texto en el formulario y en la cola. */
 export const MENSAJE_RANGO_FOTOS_REPORTE = `Un reporte puede llevar de 1 a ${MAX_FOTOS_CHECKIN_NUTRICIONAL} fotos.`;
@@ -80,8 +81,13 @@ export interface OutboxMutation {
  * Causa de un rechazo local:
  * - `sesion-no-iniciada`: se reintenta solo cuando su causa desaparece.
  * - `tope-errores-servidor`: el servidor falló (5xx) demasiadas veces; espera al usuario.
+ * - `reporte-con-otros-datos`: el servidor ya tenía el reporte del día con datos distintos (o no
+ *   se pudo comprobar); este no se envió y espera la decisión del alumno.
  */
-export type MotivoRechazoCola = 'sesion-no-iniciada' | 'tope-errores-servidor';
+export type MotivoRechazoCola =
+  | 'sesion-no-iniciada'
+  | 'tope-errores-servidor'
+  | 'reporte-con-otros-datos';
 
 export interface OutboxSummary {
   pending: number;

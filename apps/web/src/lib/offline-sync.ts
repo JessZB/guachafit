@@ -1,5 +1,11 @@
 import { apiClient, generateIdempotencyKey, getAuthToken } from './api-client';
-import { CODIGO_SESION_NO_INICIADA, type PresignedUploadUrlResponseDTO } from '@guachafit/shared';
+import {
+  CODIGO_CHECKIN_YA_REGISTRADO,
+  CODIGO_SESION_NO_INICIADA,
+  type CheckinNutricionalDetalleDTO,
+  type CheckinNutricionalDTO,
+  type PresignedUploadUrlResponseDTO,
+} from '@guachafit/shared';
 import {
   accionSesionDeMutacion,
   devolverMutacionAPendiente,
@@ -17,12 +23,16 @@ import {
   subscribeToOutboxChanges,
   updateMutationPhotos,
   type FotoCheckinEnCola,
+  type MotivoRechazoCola,
   type OutboxMutation,
   type OutboxSummary,
 } from './offline-db';
 import {
+  coincideReporteServidorConPendiente,
+  ENDPOINT_CHECKIN_DIARIO,
   esRechazoVentanaCheckin,
   MENSAJE_DIA_CERRADO_REPORTE_CON_FOTOS,
+  MENSAJE_REPORTE_CON_OTROS_DATOS,
 } from './nutricion-checkin';
 import { queryClient } from './query-client';
 
@@ -165,6 +175,50 @@ function esRechazoPorSesionNoIniciada(item: OutboxMutation, err: unknown): boole
 }
 
 /**
+ * LOTE API-N1: 409 del POST del reporte diario con el código estable de "ya registrado". Se
+ * clasifica por el código (no por el texto) y solo para ese endpoint.
+ */
+function esReporteDiarioYaRegistrado(item: OutboxMutation, err: unknown): boolean {
+  return (
+    item.endpoint === ENDPOINT_CHECKIN_DIARIO &&
+    item.method === 'POST' &&
+    getErrorStatus(err) === 409 &&
+    getCodigoServidor(err) === CODIGO_CHECKIN_YA_REGISTRADO
+  );
+}
+
+/** Rechazo definitivo con su motivo local (lo lee el bucle de `processOutboxQueue`). */
+type ErrorRechazoCola = Error & { status: number; motivoRechazo: MotivoRechazoCola };
+
+function getMotivoRechazo(err: unknown): MotivoRechazoCola | null {
+  const motivo = (err as { motivoRechazo?: unknown } | null)?.motivoRechazo;
+  return motivo === 'reporte-con-otros-datos' ? motivo : null;
+}
+
+/**
+ * LOTE API-N1: tras un 409 "ya registrado" no se da nada por sincronizado a ciegas. Se consulta el
+ * reporte de hoy del servidor y se compara con el pendiente:
+ * - coincide → era el reintento de un envío que sí llegó (éxito perdido): termina sin error;
+ * - responde y difiere, o responde sin reporte → rechazo visible con mensaje claro;
+ * - la consulta falla (red, 5xx, sesión vencida…) → se relanza ese error: el bucle lo trata como
+ *   cualquier fallo del envío (reintento con backoff), sin decidir nada todavía.
+ * Los blobs locales NO se tocan salvo en el éxito: el alumno decide si descarta un rechazo.
+ */
+async function confirmarReporteYaRegistrado(item: OutboxMutation, fotosPendiente: number): Promise<void> {
+  const payload = (item.payload ?? {}) as Partial<CheckinNutricionalDTO>;
+  const consulta = new URLSearchParams({ fecha: String(payload.fecha ?? '') });
+  if (payload.timezoneCliente) consulta.set('timezoneCliente', payload.timezoneCliente);
+  const servidor = await apiClient<CheckinNutricionalDetalleDTO | null>(
+    `/nutricion/checkin/hoy?${consulta.toString()}`
+  );
+  if (servidor && coincideReporteServidorConPendiente(servidor, payload, fotosPendiente)) return;
+  const rechazo = new Error(MENSAJE_REPORTE_CON_OTROS_DATOS) as ErrorRechazoCola;
+  rechazo.status = 409;
+  rechazo.motivoRechazo = 'reporte-con-otros-datos';
+  throw rechazo;
+}
+
+/**
  * RF-002 §6/RN-03 — check-in nutricional CON fotos: sube primero los blobs pendientes
  * (presign del módulo `comidas` + PUT a R2) persistiendo cada storageKey al instante y, con
  * todas las claves, registra el check-in con el MISMO contrato que el flujo online.
@@ -243,7 +297,9 @@ async function processCheckinNutricionalConFotos(item: OutboxMutation): Promise<
       rechazo.status = 400;
       throw rechazo;
     }
-    throw err;
+    if (!esReporteDiarioYaRegistrado(item, err)) throw err;
+    // LOTE API-N1: solo cuenta como confirmado si el servidor tiene ESTE reporte.
+    await confirmarReporteYaRegistrado(item, fotosPlatos.length);
   }
 
   if (item.id !== undefined) {
@@ -298,13 +354,19 @@ export async function processOutboxQueue(): Promise<ProcessOutboxResult> {
           // Rama con evidencia fotográfica: sube los blobs y luego registra el check-in.
           await processCheckinNutricionalConFotos(item);
         } else {
-          await apiClient(item.endpoint, {
-            method: item.method,
-            body: JSON.stringify(item.payload),
-            // La MISMA key en cada reintento: el servidor puede deduplicar aunque el
-            // intento anterior haya llegado y la respuesta se haya perdido.
-            idempotencyKey: item.idempotencyKey || generateIdempotencyKey(),
-          });
+          try {
+            await apiClient(item.endpoint, {
+              method: item.method,
+              body: JSON.stringify(item.payload),
+              // La MISMA key en cada reintento: el servidor puede deduplicar aunque el
+              // intento anterior haya llegado y la respuesta se haya perdido.
+              idempotencyKey: item.idempotencyKey || generateIdempotencyKey(),
+            });
+          } catch (err) {
+            if (!esReporteDiarioYaRegistrado(item, err)) throw err;
+            // LOTE API-N1: solo cuenta como sincronizado si el servidor tiene ESTE reporte.
+            await confirmarReporteYaRegistrado(item, 0);
+          }
         }
         await markMutationSynced(item.id);
         processed++;
@@ -331,7 +393,7 @@ export async function processOutboxQueue(): Promise<ProcessOutboxResult> {
           await markMutationRejected(
             item.id,
             message,
-            esRechazoPorSesionNoIniciada(item, err) ? 'sesion-no-iniciada' : null
+            esRechazoPorSesionNoIniciada(item, err) ? 'sesion-no-iniciada' : getMotivoRechazo(err)
           );
           rejected++;
           console.warn(

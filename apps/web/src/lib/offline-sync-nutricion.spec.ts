@@ -1,8 +1,15 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SemaforoNutricional, TipoComida, type CheckinNutricionalDTO } from '@guachafit/shared';
+import {
+  CODIGO_CHECKIN_YA_REGISTRADO,
+  MENSAJE_CHECKIN_YA_REGISTRADO,
+  SemaforoNutricional,
+  TipoComida,
+  type CheckinNutricionalDTO,
+} from '@guachafit/shared';
 import { apiClient, setAuthToken } from './api-client';
 import { processOutboxQueue } from './offline-sync';
+import { MENSAJE_REPORTE_CON_OTROS_DATOS } from './nutricion-checkin';
 import {
   MAX_FOTOS_CHECKIN_NUTRICIONAL,
   MENSAJE_RANGO_FOTOS_REPORTE,
@@ -35,6 +42,11 @@ function setNavigatorOnline(online: boolean): void {
 
 function httpError(status: number, detail: string): Error & { status: number } {
   return Object.assign(new Error(detail), { status });
+}
+
+/** Error como el de `ApiError`: estado HTTP y cuerpo del servidor con su `code` estable. */
+function httpErrorConCodigo(status: number, message: string, code: string): Error & { status: number } {
+  return Object.assign(new Error(message), { status, problem: { statusCode: status, message, code } });
 }
 
 /** localStorage en memoria (entorno node): la cola solo se procesa con sesión activa. */
@@ -270,6 +282,156 @@ describe('offline-sync: check-in nutricional con fotos', () => {
     // El descarte manual elimina la fila completa: con ella, sus blobs.
     await discardMutation(id);
     expect(await offlineDb.outboxMutations.get(id)).toBeUndefined();
+  });
+
+  /** El reporte que el servidor ya tiene hoy, con los mismos datos del pendiente `payloadCheckin()`. */
+  function reporteServidorIgual(fotos: number) {
+    return {
+      id: 'checkin-1',
+      fecha: '2026-09-22',
+      semaforo: SemaforoNutricional.CUMPLIDO,
+      aguaLitros: null,
+      caloriasReportadas: null,
+      proteinaGramosReportada: null,
+      notasAlumno: 'Día de prueba',
+      fotosPlatos: Array.from({ length: fotos }, () => ({})),
+    };
+  }
+
+  function errorYaRegistrado() {
+    return httpErrorConCodigo(409, MENSAJE_CHECKIN_YA_REGISTRADO, CODIGO_CHECKIN_YA_REGISTRADO);
+  }
+
+  it('LOTE API-N1: 409 "ya registrado" y el servidor tiene ESTE reporte → sincronizado y blobs purgados', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(respuestaPutOk());
+    vi.stubGlobal('fetch', fetchMock);
+    mockedApiClient
+      .mockResolvedValueOnce({ uploadUrl: 'https://r2.test/put/1', storageKey: 'comidas/a/2026-09-22/1.webp' })
+      .mockRejectedValueOnce(errorYaRegistrado())
+      .mockResolvedValueOnce(reporteServidorIgual(1));
+
+    const id = await queueCheckinNutricionalConFotos(payloadCheckin(), fotosDePrueba(1), ALUMNO_ID);
+    const result = await processOutboxQueue();
+
+    expect(result).toMatchObject({ processed: 1, failed: 0, rejected: 0 });
+    expect(mockedApiClient.mock.calls[2][0]).toBe(
+      '/nutricion/checkin/hoy?fecha=2026-09-22&timezoneCliente=America%2FCaracas'
+    );
+    const row = await offlineDb.outboxMutations.get(id);
+    expect(row?.status).toBe('synced');
+    expect(row?.fotos).toEqual([]);
+  });
+
+  it('LOTE API-N1: 409 "ya registrado" con OTROS datos en el servidor → rechazado visible y blobs intactos', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(respuestaPutOk());
+    vi.stubGlobal('fetch', fetchMock);
+    mockedApiClient
+      .mockResolvedValueOnce({ uploadUrl: 'https://r2.test/put/1', storageKey: 'comidas/a/2026-09-22/1.webp' })
+      .mockRejectedValueOnce(errorYaRegistrado())
+      .mockResolvedValueOnce({ ...reporteServidorIgual(0), semaforo: SemaforoNutricional.NO_CUMPLIDO });
+
+    const id = await queueCheckinNutricionalConFotos(payloadCheckin(), fotosDePrueba(1), ALUMNO_ID);
+    const result = await processOutboxQueue();
+
+    expect(result).toMatchObject({ processed: 0, rejected: 1 });
+    const row = await offlineDb.outboxMutations.get(id);
+    expect(row?.status).toBe('rejected');
+    expect(row?.lastError).toBe(MENSAJE_REPORTE_CON_OTROS_DATOS);
+    expect(row?.motivoRechazo).toBe('reporte-con-otros-datos');
+    expect(row?.fotos).toHaveLength(1);
+    expect(row?.fotos?.[0].blob).toBeInstanceOf(Blob);
+    expect(await getRejectedMutations()).toHaveLength(1);
+  });
+
+  it('LOTE API-N1: 409 "ya registrado" y la consulta falla por red → reintentable (failed), ni synced ni rechazado', async () => {
+    const id = await queueOfflineMutation(
+      CHECKIN_ENDPOINT,
+      'POST',
+      payloadCheckin(),
+      'Reporte nutricional del día',
+      undefined,
+      { alumnoId: ALUMNO_ID }
+    );
+    mockedApiClient
+      .mockRejectedValueOnce(errorYaRegistrado())
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+    const result = await processOutboxQueue();
+
+    expect(result).toMatchObject({ processed: 0, failed: 1, rejected: 0 });
+    const row = await offlineDb.outboxMutations.get(id);
+    expect(row?.status).toBe('failed');
+    expect(row?.nextRetryAt).toBeGreaterThan(0);
+    expect(row?.motivoRechazo ?? null).toBeNull();
+  });
+
+  it('LOTE API-N1: 409 "ya registrado" y la consulta responde 5xx → reintentable y conserva las fotos', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(respuestaPutOk());
+    vi.stubGlobal('fetch', fetchMock);
+    mockedApiClient
+      .mockResolvedValueOnce({ uploadUrl: 'https://r2.test/put/1', storageKey: 'comidas/a/2026-09-22/1.webp' })
+      .mockRejectedValueOnce(errorYaRegistrado())
+      .mockRejectedValueOnce(httpError(503, 'Servicio no disponible'));
+
+    const id = await queueCheckinNutricionalConFotos(payloadCheckin(), fotosDePrueba(1), ALUMNO_ID);
+    const result = await processOutboxQueue();
+
+    expect(result).toMatchObject({ processed: 0, failed: 1, rejected: 0 });
+    const row = await offlineDb.outboxMutations.get(id);
+    expect(row?.status).toBe('failed');
+    expect(row?.fallosServidor).toBe(1);
+    expect(row?.fotos).toHaveLength(1);
+    expect(row?.fotos?.[0].blob).toBeInstanceOf(Blob);
+  });
+
+  it('LOTE API-N1: 409 "ya registrado" y el servidor responde sin reporte (204) → rechazado visible', async () => {
+    const id = await queueOfflineMutation(
+      CHECKIN_ENDPOINT,
+      'POST',
+      payloadCheckin(),
+      'Reporte nutricional del día',
+      undefined,
+      { alumnoId: ALUMNO_ID }
+    );
+    mockedApiClient.mockRejectedValueOnce(errorYaRegistrado()).mockResolvedValueOnce(null);
+
+    const result = await processOutboxQueue();
+
+    expect(result).toMatchObject({ processed: 0, rejected: 1 });
+    const row = await offlineDb.outboxMutations.get(id);
+    expect(row?.status).toBe('rejected');
+    expect(row?.lastError).toBe(MENSAJE_REPORTE_CON_OTROS_DATOS);
+    expect(row?.motivoRechazo).toBe('reporte-con-otros-datos');
+  });
+
+  it('LOTE API-N1: 409 "ya registrado" sin fotos y con los mismos datos → sincronizado', async () => {
+    const id = await queueOfflineMutation(
+      CHECKIN_ENDPOINT,
+      'POST',
+      payloadCheckin(),
+      'Reporte nutricional del día',
+      undefined,
+      { alumnoId: ALUMNO_ID }
+    );
+    mockedApiClient
+      .mockRejectedValueOnce(errorYaRegistrado())
+      .mockResolvedValueOnce(reporteServidorIgual(0));
+
+    const result = await processOutboxQueue();
+
+    expect(result).toMatchObject({ processed: 1, failed: 0, rejected: 0 });
+    expect((await offlineDb.outboxMutations.get(id))?.status).toBe('synced');
+  });
+
+  it('LOTE API-N1: un 409 con el mismo código en otro endpoint sigue siendo un rechazo visible', async () => {
+    const id = await queueOfflineMutation('/sesiones/s1/finalizar', 'POST', {}, 'Finalizar', 'key-x');
+    mockedApiClient.mockRejectedValueOnce(errorYaRegistrado());
+
+    const result = await processOutboxQueue();
+
+    expect(result).toMatchObject({ processed: 0, rejected: 1 });
+    expect((await offlineDb.outboxMutations.get(id))?.status).toBe('rejected');
+    expect(mockedApiClient).toHaveBeenCalledTimes(1);
   });
 
   it('las mutaciones sin fotos conservan el flujo existente (JSON directo, sin fetch a la bóveda)', async () => {

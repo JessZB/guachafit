@@ -28,6 +28,28 @@ export const DECIMAL_STRING_REGEX = /^\d+(\.\d{1,2})?$/;
 export const TASA_STRING_REGEX = /^\d+(\.\d{1,4})?$/;
 export const PERIODO_MES_REGEX = /^\d{4}-\d{2}$/;
 export const FECHA_CALENDARIO_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * LOTE API-N1: `true` solo si el texto es una fecha AAAA-MM-DD que existe en el calendario
+ * (rechaza `2026-02-31`, `2026-13-01` o `abc`). Aritmética UTC: no depende de la zona del equipo.
+ */
+export function esFechaCalendarioReal(valor: string): boolean {
+  if (!FECHA_CALENDARIO_REGEX.test(valor)) return false;
+  const [anio, mes, dia] = valor.split('-').map(Number);
+  const fecha = new Date(fechaCalendarioAMsUtc(valor));
+  return (
+    fecha.getUTCFullYear() === anio && fecha.getUTCMonth() === mes - 1 && fecha.getUTCDate() === dia
+  );
+}
+
+/**
+ * Milisegundos UTC de la medianoche de una fecha AAAA-MM-DD (sin validar que exista: `Date.UTC`
+ * desborda, p. ej. 2026-02-31 → 3 de marzo). Única conversión de fecha a instante de este archivo.
+ */
+export function fechaCalendarioAMsUtc(valor: string): number {
+  const [anio, mes, dia] = valor.split('-').map(Number);
+  return Date.UTC(anio, mes - 1, dia);
+}
 /**
  * WU-E (RF-011 RN-06): formato compartido del `coach_code` de captación.
  * Se usa al crear entrenadores y al resolver códigos públicos de deep link.
@@ -603,10 +625,46 @@ export const FinalizarSesionSchema = z.object({
   tipoCierre: z.nativeEnum(TipoCierreSesion).optional(),
 });
 
+/**
+ * LOTE API-N1: mensaje único cuando la foto de un plato no se puede asociar al reporte (clave
+ * vacía, demasiado larga, de otro módulo o de otro alumno). El API valida además que la clave sea
+ * del alumno autenticado (`comidas/{alumnoId}/…`); este contrato solo acota la forma.
+ */
+export const MENSAJE_FOTO_COMIDA_NO_ASOCIABLE = 'No pudimos asociar la foto. Vuelve a subirla.';
+
 export const FotoComidaInputSchema = z.object({
   tipoComida: z.nativeEnum(TipoComida),
-  storageKey: z.string().min(5, 'La clave de almacenamiento no es válida'),
+  storageKey: z
+    .string()
+    .min(5, MENSAJE_FOTO_COMIDA_NO_ASOCIABLE)
+    .max(255, MENSAJE_FOTO_COMIDA_NO_ASOCIABLE),
 });
+
+/** LOTE API-N1: tope razonable de agua (litros por día) para el reporte y la meta del coach. */
+export const AGUA_LITROS_MAXIMO = 20;
+export const MENSAJE_AGUA_LITROS = `Escribe el agua en litros, entre 0 y ${AGUA_LITROS_MAXIMO}, con hasta 2 decimales (ej. 2.5).`;
+
+/** RF-002 RN-03: máximo de fotos de platos por reporte diario (contrato, API y web). */
+export const MAX_FOTOS_PLATOS_DIA = 4;
+export const MENSAJE_MAX_FOTOS_PLATOS_DIA = `Puedes subir hasta ${MAX_FOTOS_PLATOS_DIA} fotos por día.`;
+
+/** RF-002: largo máximo de las notas del alumno en el reporte diario. */
+export const MAX_CARACTERES_NOTAS_ALUMNO = 280;
+export const MENSAJE_NOTAS_ALUMNO_MAXIMO = `Tus notas pueden tener hasta ${MAX_CARACTERES_NOTAS_ALUMNO} caracteres.`;
+
+/** Litros de agua como texto decimal (hasta 2 decimales) entre 0 y `AGUA_LITROS_MAXIMO`. */
+const aguaLitrosSchema = z
+  .string()
+  .regex(DECIMAL_STRING_REGEX, MENSAJE_AGUA_LITROS)
+  .refine((valor) => Number(valor) <= AGUA_LITROS_MAXIMO, MENSAJE_AGUA_LITROS);
+
+/** LOTE API-N1: fecha AAAA-MM-DD que existe en el calendario (no solo con la forma correcta). */
+export const MENSAJE_FECHA_CALENDARIO =
+  'La fecha no es válida. Usa el formato año-mes-día (por ejemplo, 2026-01-31)';
+const fechaCalendarioRealSchema = z
+  .string()
+  .regex(FECHA_CALENDARIO_REGEX, MENSAJE_FECHA_CALENDARIO)
+  .refine(esFechaCalendarioReal, MENSAJE_FECHA_CALENDARIO);
 
 /**
  * RF-002 RN-02: ventana local del check-in 1-Tap (18:00–23:59, hora del alumno).
@@ -621,15 +679,18 @@ export const TOLERANCIA_TOTALES_NUTRICIONAL_PCT = 10.0;
 
 export const CheckinNutricionalSchema = z.object({
   alumnoId: z.string().uuid('No encontramos ese alumno. Actualiza la pantalla e inténtalo de nuevo.').optional(),
-  fecha: z.string().regex(FECHA_CALENDARIO_REGEX, 'La fecha no es válida. Usa el formato año-mes-día (por ejemplo, 2026-01-31)'),
+  fecha: fechaCalendarioRealSchema,
   semaforo: z.nativeEnum(SemaforoNutricional),
-  aguaLitros: z.string().regex(DECIMAL_STRING_REGEX, 'El consumo de agua debe tener formato decimal con hasta 2 decimales').optional(),
+  aguaLitros: aguaLitrosSchema.optional(),
   caloriasReportadas: z.number().int().min(0).max(15000).optional(),
   proteinaGramosReportada: z.number().int().min(0).max(1000).optional(),
-  notasAlumno: z.string().max(280, 'Las notas del alumno no pueden exceder 280 caracteres').optional(),
+  notasAlumno: z
+    .string()
+    .max(MAX_CARACTERES_NOTAS_ALUMNO, MENSAJE_NOTAS_ALUMNO_MAXIMO)
+    .optional(),
   fotosPlatos: z
     .array(FotoComidaInputSchema)
-    .max(4, 'No se permiten más de 4 fotografías de platos por día')
+    .max(MAX_FOTOS_PLATOS_DIA, MENSAJE_MAX_FOTOS_PLATOS_DIA)
     .optional(),
   /**
    * RN-05/ADR-002: zona IANA del cliente para resolver el día local y la ventana horaria.
@@ -646,10 +707,18 @@ export const CheckinNutricionalSchema = z.object({
  * subido a la bóveda (`storageKey` con el prefijo `nutricion-recursos/{alumnoId}/…`). El módulo
  * de la API valida además que la clave pertenezca al alumno dueño de las metas (RNF-001).
  */
+export const MENSAJE_URL_RECURSO = 'Usa un enlace que empiece por http:// o https://.';
+
 export const RecursoNutricionalSchema = z
   .object({
     titulo: z.string().min(2, 'El título del recurso debe tener al menos 2 caracteres').max(120),
-    url: z.string().url('La URL del recurso no es válida').max(500).optional(),
+    // LOTE API-N1: solo enlaces web; `javascript:`, `data:`, `file:`… nunca llegan a un enlace.
+    url: z
+      .string()
+      .url(MENSAJE_URL_RECURSO)
+      .max(500)
+      .refine((valor) => /^https?:\/\//i.test(valor), MENSAJE_URL_RECURSO)
+      .optional(),
     storageKey: z
       .string()
       .min(5, 'La clave de almacenamiento no es válida')
@@ -677,10 +746,7 @@ export const MetasNutricionalesSchema = z
     proteinaGramosObjetivo: z.number().int().min(1).max(1000).optional(),
     carbohidratosGramosObjetivo: z.number().int().min(1).max(1500).optional(),
     grasasGramosObjetivo: z.number().int().min(1).max(1000).optional(),
-    aguaLitrosObjetivo: z
-      .string()
-      .regex(DECIMAL_STRING_REGEX, 'La meta de agua debe tener formato decimal con hasta 2 decimales')
-      .optional(),
+    aguaLitrosObjetivo: aguaLitrosSchema.optional(),
     recursos: z
       .array(RecursoNutricionalSchema)
       .max(10, 'No se permiten más de 10 recursos educativos por alumno')
@@ -699,11 +765,51 @@ export const FiltroSesionesAlumnoSchema = z.object({
   offset: z.number().int().min(0).optional().default(0),
 });
 
-export const FiltroCheckinsNutricionalesSchema = z.object({
-  alumnoId: z.string().uuid().optional(),
-  desde: z.string().regex(FECHA_CALENDARIO_REGEX).optional(),
-  hasta: z.string().regex(FECHA_CALENDARIO_REGEX).optional(),
-  semaforo: z.nativeEnum(SemaforoNutricional).optional(),
+/** LOTE API-N1: rango máximo (días, inclusivo) del historial de reportes nutricionales. */
+export const RANGO_MAXIMO_DIAS_CHECKINS_NUTRICIONALES = 92;
+export const MENSAJE_RANGO_CHECKINS_EXCEDIDO = `Puedes consultar hasta ${RANGO_MAXIMO_DIAS_CHECKINS_NUTRICIONALES} días a la vez. Elige un rango más corto.`;
+export const MENSAJE_RANGO_FECHAS_INVERTIDO =
+  'La fecha de inicio no puede ser posterior a la fecha de fin.';
+
+const MS_POR_DIA = 86_400_000;
+
+/** Días del rango inclusivo [desde, hasta] (fechas reales AAAA-MM-DD, aritmética UTC). */
+function diasDelRangoInclusivo(desde: string, hasta: string): number {
+  return Math.round((fechaCalendarioAMsUtc(hasta) - fechaCalendarioAMsUtc(desde)) / MS_POR_DIA) + 1;
+}
+
+export const FiltroCheckinsNutricionalesSchema = z
+  .object({
+    alumnoId: z.string().uuid().optional(),
+    desde: fechaCalendarioRealSchema.optional(),
+    hasta: fechaCalendarioRealSchema.optional(),
+    semaforo: z.nativeEnum(SemaforoNutricional).optional(),
+  })
+  .superRefine((filtro, ctx) => {
+    if (!filtro.desde || !filtro.hasta) return;
+    if (filtro.desde > filtro.hasta) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['desde'],
+        message: MENSAJE_RANGO_FECHAS_INVERTIDO,
+      });
+      return;
+    }
+    if (diasDelRangoInclusivo(filtro.desde, filtro.hasta) > RANGO_MAXIMO_DIAS_CHECKINS_NUTRICIONALES) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['hasta'],
+        message: MENSAJE_RANGO_CHECKINS_EXCEDIDO,
+      });
+    }
+  });
+
+/**
+ * LOTE API-N1: consulta del reporte del día (`GET /nutricion/checkin/hoy`). La `fecha` opcional
+ * debe existir en el calendario; sin ella el día se resuelve en la zona del alumno.
+ */
+export const ConsultaCheckinNutricionalHoySchema = z.object({
+  fecha: fechaCalendarioRealSchema.optional(),
 });
 
 

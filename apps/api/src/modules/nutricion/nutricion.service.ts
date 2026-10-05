@@ -10,7 +10,14 @@ import {
 } from '@nestjs/common';
 import { parsearContrato } from '../../common/errores/parsear-contrato';
 import { MENSAJE_SIN_ACCESO_ALUMNO } from '../../common/mensajes-acceso';
-import { CODIGO_CHECKIN_FUERA_DE_VENTANA } from '@guachafit/shared';
+import {
+  CODIGO_CHECKIN_FUERA_DE_VENTANA,
+  CODIGO_CHECKIN_YA_REGISTRADO,
+  MAX_FOTOS_PLATOS_DIA,
+  MENSAJE_CHECKIN_YA_REGISTRADO,
+  MENSAJE_FOTO_COMIDA_NO_ASOCIABLE,
+  MENSAJE_MAX_FOTOS_PLATOS_DIA,
+} from '@guachafit/shared';
 import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
 import {
   Database,
@@ -240,6 +247,43 @@ export function contarDiasNoReportados(
     .length;
 }
 
+/** Índice único de la unicidad diaria del reporte nutricional (DDL `checkins_nutricionales`). */
+const INDICE_UNICO_CHECKIN_DIARIO = 'uq_checkin_nutricional_diario';
+
+/**
+ * LOTE API-N1: `true` si el error de la base de datos es la violación del índice único del reporte
+ * diario (Postgres 23505). `postgres` expone `constraint_name`; `pg`, `constraint`. Se revisa también
+ * `cause` por si una capa intermedia envuelve el error original.
+ */
+export function esViolacionUnicidadCheckinDiario(error: unknown): boolean {
+  for (let actual = error, saltos = 0; actual && typeof actual === 'object' && saltos < 3; saltos++) {
+    const candidato = actual as {
+      code?: unknown;
+      constraint_name?: unknown;
+      constraint?: unknown;
+      cause?: unknown;
+    };
+    if (
+      candidato.code === '23505' &&
+      (candidato.constraint_name ?? candidato.constraint) === INDICE_UNICO_CHECKIN_DIARIO
+    ) {
+      return true;
+    }
+    actual = candidato.cause;
+  }
+  return false;
+}
+
+/** 409 del reporte ya registrado: mismo texto y código estable para ambos caminos (LOTE API-N1). */
+function conflictoCheckinYaRegistrado(): ConflictException {
+  return new ConflictException({
+    statusCode: 409,
+    error: 'Conflict',
+    code: CODIGO_CHECKIN_YA_REGISTRADO,
+    message: MENSAJE_CHECKIN_YA_REGISTRADO,
+  });
+}
+
 function toIsoUtcString(date: Date | string | null | undefined): string | null {
   if (!date) return null;
   const d = typeof date === 'string' ? new Date(date) : date;
@@ -305,7 +349,7 @@ export class NutricionService {
           statusCode: 400,
           error: 'Bad Request',
           code: CODIGO_CHECKIN_FUERA_DE_VENTANA,
-          message: 'La fecha del reporte no coincide con el día local de tu teléfono. Actualiza la pantalla.',
+          message: 'Tu teléfono ya cambió de día. Actualiza la pantalla para ver el reporte de hoy.',
         });
       }
       // LOTE API-2: código estable para la web (`offline-sync.ts`), sin depender del texto.
@@ -318,11 +362,19 @@ export class NutricionService {
       });
     }
 
-    // Regla RN-03: Máximo 4 fotos de platos por día
-    if (validado.fotosPlatos && validado.fotosPlatos.length > 4) {
-      throw new BadRequestException(
-        'Puedes subir hasta 4 fotos de platos por día.'
-      );
+    // Regla RN-03: máximo de fotos por día. Defensa en profundidad: el contrato ya lo limita con la
+    // misma constante y el mismo texto.
+    if (validado.fotosPlatos && validado.fotosPlatos.length > MAX_FOTOS_PLATOS_DIA) {
+      throw new BadRequestException(MENSAJE_MAX_FOTOS_PLATOS_DIA);
+    }
+
+    // LOTE API-N1 (RNF-001): cada foto debe ser del alumno autenticado. Una clave ajena nunca se
+    // guarda (y por eso nunca se firma al leer el reporte).
+    for (const foto of validado.fotosPlatos ?? []) {
+      if (!this.esClaveDeFotoComidaDelAlumno(foto.storageKey, alumnoId)) {
+        this.logger.warn(`Foto de plato rechazada: la clave no pertenece al alumno '${alumnoId}'.`);
+        throw new BadRequestException(MENSAJE_FOTO_COMIDA_NO_ASOCIABLE);
+      }
     }
 
     // Verificar unicidad diaria por (alumno_id, fecha)
@@ -338,41 +390,48 @@ export class NutricionService {
       .limit(1);
 
     if (existente) {
-      throw new ConflictException(
-        'Ya registraste tu reporte de hoy.'
-      );
+      throw conflictoCheckinYaRegistrado();
     }
 
-    // Insertar en transacción atómica
-    const checkinId = await this.db.transaction(async (tx) => {
-      const [nuevoCheckin] = await tx
-        .insert(checkinsNutricionales)
-        .values({
-          alumnoId,
-          fecha: validado.fecha,
-          semaforo: validado.semaforo,
-          caloriasReportadas: validado.caloriasReportadas ?? null,
-          proteinaGramosReportada: validado.proteinaGramosReportada ?? null,
-          aguaLitros: validado.aguaLitros ?? null,
-          notasAlumno: validado.notasAlumno ?? null,
-          createdAtUtc: new Date(),
-          updatedAtUtc: new Date(),
-        })
-        .returning();
-
-      if (validado.fotosPlatos && validado.fotosPlatos.length > 0) {
-        for (const f of validado.fotosPlatos) {
-          await tx.insert(fotosComida).values({
-            checkinId: nuevoCheckin.id,
-            tipoComida: f.tipoComida,
-            storageKey: f.storageKey,
+    // Insertar en transacción atómica. Un doble envío concurrente pasa la verificación previa y
+    // choca con el índice único: ese caso es el mismo 409, no un 500 (LOTE API-N1).
+    let checkinId: string;
+    try {
+      checkinId = await this.db.transaction(async (tx) => {
+        const [nuevoCheckin] = await tx
+          .insert(checkinsNutricionales)
+          .values({
+            alumnoId,
+            fecha: validado.fecha,
+            semaforo: validado.semaforo,
+            caloriasReportadas: validado.caloriasReportadas ?? null,
+            proteinaGramosReportada: validado.proteinaGramosReportada ?? null,
+            aguaLitros: validado.aguaLitros ?? null,
+            notasAlumno: validado.notasAlumno ?? null,
             createdAtUtc: new Date(),
-          });
-        }
-      }
+            updatedAtUtc: new Date(),
+          })
+          .returning();
 
-      return nuevoCheckin.id;
-    });
+        if (validado.fotosPlatos && validado.fotosPlatos.length > 0) {
+          for (const f of validado.fotosPlatos) {
+            await tx.insert(fotosComida).values({
+              checkinId: nuevoCheckin.id,
+              tipoComida: f.tipoComida,
+              storageKey: f.storageKey,
+              createdAtUtc: new Date(),
+            });
+          }
+        }
+
+        return nuevoCheckin.id;
+      });
+    } catch (error) {
+      if (esViolacionUnicidadCheckinDiario(error)) {
+        throw conflictoCheckinYaRegistrado();
+      }
+      throw error;
+    }
 
     const checkinDetalle = await this.obtenerCheckinPorId(checkinId);
 
@@ -506,8 +565,24 @@ export class NutricionService {
    * por el borrado post-replace (la tabla no tiene RLS; este guard es la frontera).
    */
   private esClaveDeRecursoDelAlumno(storageKey: string, alumnoId: string): boolean {
+    return this.esClaveDelAlumnoEnModulo(storageKey, alumnoId, 'nutricion-recursos');
+  }
+
+  /**
+   * LOTE API-N1 (RNF-001): guard de tenancy de una foto de plato: estructura válida y dentro del
+   * prefijo `comidas/{alumnoId}/` que emite el presign del módulo `comidas`.
+   */
+  private esClaveDeFotoComidaDelAlumno(storageKey: string, alumnoId: string): boolean {
+    return this.esClaveDelAlumnoEnModulo(storageKey, alumnoId, 'comidas');
+  }
+
+  private esClaveDelAlumnoEnModulo(
+    storageKey: string,
+    alumnoId: string,
+    modulo: 'comidas' | 'nutricion-recursos'
+  ): boolean {
     return (
-      storageKey.startsWith(`nutricion-recursos/${alumnoId}/`) &&
+      storageKey.startsWith(`${modulo}/${alumnoId}/`) &&
       R2StorageService.validarStorageKeyEstructura(storageKey)
     );
   }
@@ -723,16 +798,19 @@ export class NutricionService {
       await this.validarAlumnoDelCoach(entrenadorId, alumnoId);
     }
 
+    // LOTE API-N1: fechas reales y rango acotado (92 días) también para llamadas internas.
+    const filtroValidado = parsearContrato(FiltroCheckinsNutricionalesSchema, filtro ?? {});
+
     const conditions = [eq(checkinsNutricionales.alumnoId, alumnoId)];
 
-    if (filtro?.desde) {
-      conditions.push(gte(checkinsNutricionales.fecha, filtro.desde));
+    if (filtroValidado.desde) {
+      conditions.push(gte(checkinsNutricionales.fecha, filtroValidado.desde));
     }
-    if (filtro?.hasta) {
-      conditions.push(lte(checkinsNutricionales.fecha, filtro.hasta));
+    if (filtroValidado.hasta) {
+      conditions.push(lte(checkinsNutricionales.fecha, filtroValidado.hasta));
     }
-    if (filtro?.semaforo) {
-      conditions.push(eq(checkinsNutricionales.semaforo, filtro.semaforo));
+    if (filtroValidado.semaforo) {
+      conditions.push(eq(checkinsNutricionales.semaforo, filtroValidado.semaforo));
     }
 
     const rows = await this.db

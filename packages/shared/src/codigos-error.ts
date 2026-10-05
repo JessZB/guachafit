@@ -19,3 +19,12 @@ export const CODIGO_CHECKIN_FUERA_DE_VENTANA = 'CHECKIN_FUERA_DE_VENTANA';
  * vida (RF-012). La web muestra la pantalla informativa del bloqueo en vez de un error genérico.
  */
 export const CODIGO_ALUMNO_BLOQUEADO = 'ALUMNO_BLOQUEADO';
+
+/**
+ * LOTE API-N1: el alumno ya tiene el reporte nutricional de ese día (RF-002, unicidad diaria).
+ * Lo emite tanto la verificación previa como la violación del índice único en un doble envío
+ * concurrente. La web lo usa para dar por sincronizado un reintento cuyo éxito se perdió.
+ */
+export const CODIGO_CHECKIN_YA_REGISTRADO = 'CHECKIN_YA_REGISTRADO';
+/** Texto que acompaña a `CODIGO_CHECKIN_YA_REGISTRADO` (API y web usan este mismo texto). */
+export const MENSAJE_CHECKIN_YA_REGISTRADO = 'Ya registraste tu reporte de hoy.';

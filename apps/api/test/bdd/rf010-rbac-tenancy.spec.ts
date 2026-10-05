@@ -486,4 +486,95 @@ describe('RF-010 RN-01: verificación HTTP real (Nest + supertest)', () => {
       await app.close();
     });
   });
+
+  /**
+   * LOTE API-N1 (RF-002): el resto del módulo de nutrición. El superadmin no entra al negocio de
+   * metas ni al reporte del día, y un alumno no puede leer el historial de otro alumno.
+   */
+  describe('4. Nutrición: metas, reporte de hoy e historial (LOTE API-N1)', () => {
+    const OTRO_ALUMNO_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+    function servicioNutricionEspia() {
+      return {
+        obtenerMetasNutricionales: vi.fn(async () => null),
+        obtenerMetasDeAlumno: vi.fn(async () => null),
+        definirMetasNutricionales: vi.fn(async () => ({ id: 'metas-1' })),
+        obtenerCheckinHoy: vi.fn(async () => null),
+        registrarCheckinDiario: vi.fn(async () => ({ id: 'checkin-1' })),
+        listarCheckins: vi.fn(async () => []),
+      };
+    }
+
+    async function appNutricion(servicio: unknown) {
+      return crearApp({
+        controllers: [NutricionController],
+        providers: [
+          { provide: NutricionService, useValue: servicio },
+          { provide: DRIZZLE_DB, useValue: dbConPerfilActivo() },
+        ],
+      });
+    }
+
+    const rutasDeNegocio: Array<{ nombre: string; metodo: 'get' | 'put' | 'post'; ruta: string; cuerpo?: object }> = [
+      { nombre: 'GET /nutricion/metas', metodo: 'get', ruta: '/nutricion/metas' },
+      {
+        nombre: 'GET /nutricion/alumnos/:alumnoId/metas',
+        metodo: 'get',
+        ruta: `/nutricion/alumnos/${ALUMNO_USUARIO_ID}/metas`,
+      },
+      {
+        nombre: 'PUT /nutricion/alumnos/:alumnoId/metas',
+        metodo: 'put',
+        ruta: `/nutricion/alumnos/${ALUMNO_USUARIO_ID}/metas`,
+        cuerpo: { caloriasObjetivo: 2000 },
+      },
+      { nombre: 'GET /nutricion/checkin/hoy', metodo: 'get', ruta: '/nutricion/checkin/hoy' },
+      {
+        nombre: 'POST /nutricion/checkin-diario',
+        metodo: 'post',
+        ruta: '/nutricion/checkin-diario',
+        cuerpo: { fecha: '2026-09-21', semaforo: 'cumplido' },
+      },
+    ];
+
+    for (const { nombre, metodo, ruta, cuerpo } of rutasDeNegocio) {
+      it(`Superadmin → 403 en ${nombre} y el servicio nunca se invoca`, async () => {
+        const servicio = servicioNutricionEspia();
+        const app = await appNutricion(servicio);
+
+        const peticion = request(app.getHttpServer())
+          [metodo](ruta)
+          .set('Authorization', `Bearer ${token(Rol.SUPERADMIN, SUPERADMIN_ID)}`);
+        const res = await (cuerpo ? peticion.send(cuerpo) : peticion);
+
+        expect(res.status).toBe(403);
+        for (const espia of Object.values(servicio)) {
+          expect(espia).not.toHaveBeenCalled();
+        }
+
+        await app.close();
+      });
+    }
+
+    it('el alumno A no puede listar los reportes del alumno B → 403 con el servicio real', async () => {
+      const db: any = {
+        select: vi.fn(() => {
+          throw new Error('no debe consultar la base de datos');
+        }),
+        execute: async () => undefined,
+      };
+      db.transaction = async (cb: any) => cb(db);
+      const app = await appNutricion(new NutricionService(db));
+
+      const res = await request(app.getHttpServer())
+        .get(`/nutricion/alumnos/${OTRO_ALUMNO_ID}/checkins`)
+        .set('Authorization', `Bearer ${token(Rol.ALUMNO, ALUMNO_USUARIO_ID)}`);
+
+      expect(res.status).toBe(403);
+      expect(res.body.message).toBe('Solo puedes ver tus propios reportes.');
+      expect(db.select).not.toHaveBeenCalled();
+
+      await app.close();
+    });
+  });
 });
