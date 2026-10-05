@@ -4,7 +4,7 @@ modulo: Nutricion
 prioridad: alta
 estado: implementado
 version_implementada: v1.0.0
-fecha_verificacion: 2026-10-04
+fecha_verificacion: 2026-10-05
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0
@@ -44,6 +44,7 @@ Elimina la fricción cognitiva del registro gramo por gramo mediante un esquema 
   - `Cumplido`: El alumno siguió su pauta al $\ge 90\%$.
   - `Parcial`: Cumplió parcialmente (ej. buena proteína, pero excedió calorías).
   - `No cumplido`: Día libre o desviación total.
+  > **Aclaración (2026-10-05, decisión del dueño):** en la implementación el reporte diario se completa con **dos toques** (elegir color + "Guardar") y **ningún color viene preseleccionado**. Es una desviación consciente del "1 solo toque" literal de esta regla; ver [[#Accesibilidad del reporte y pendientes sin conexión (2026-10-05)]].
 - **RN-03 (Diario Fotográfico):** El alumno puede adjuntar entre 1 y 4 fotografías diarias correspondientes a sus comidas principales (desayuno, almuerzo, merienda, cena).
 - **RN-04 (Input Opcional de Totales):** Si el alumno ya utiliza herramientas externas (MyFitnessPal, FatSecret, Cronometer), dispone de un campo simple para transcribir únicamente los totales del día (Calorías totales y Proteínas en gramos) sin desglosar alimentos individuales.
 
@@ -124,6 +125,25 @@ Then el sistema debe persistir los totales numéricos asociados a la fecha
 ### Vocabulario y código de ventana (2026-10-04)
 
 - Implementado (2026-10-04, LOTE API-2 `eeec4e0`): el vocabulario de nutrición se unificó en **"reporte"** en los mensajes del API y de la web (p. ej. *"Puedes enviar el reporte de hoy entre las 18:00 y las 23:59 (hora de tu teléfono). Fuera de ese horario el día queda como «No reportado»."*, *"Ya registraste tu reporte de hoy."*, banner *"El reporte se habilita a las 18:00 (hora local)…"*). El rechazo por ventana/día local (RN-02) viaja con el código estable **`CHECKIN_FUERA_DE_VENTANA`** (`@guachafit/shared`), que la web usa para clasificarlo (`esRechazoVentanaCheckin`), con respaldo por texto para servidores anteriores. Evidencia: API **916** y web **777** tras API-2.
+
+### Accesibilidad del reporte y pendientes sin conexión (2026-10-05)
+
+- Implementado (2026-10-05, unidad `f827282`):
+  - **Decisión de producto (2026-10-05, del dueño):** el reporte diario mantiene **dos toques** (elegir color + "Guardar") y **ningún color viene preseleccionado**. Es una desviación consciente del "1-Tap" literal de RN-02 (aclarada en §4); se registra solo en este RF, sin ADR (es una decisión de producto/UX, no de arquitectura, y la carpeta de ADR no recoge decisiones de ese tipo).
+  - **Semáforo accesible:** agrupado con `fieldset`/`legend` y `aria-pressed` en cada color; pulsar "Guardar" sin color muestra el aviso *"Elige cómo te fue hoy con tu plan."* y lleva el foco al semáforo. Etiquetas asociadas en agua, calorías, proteína y notas; los errores de validación se traducen **por campo** (p. ej. *"Calorías: escribe un número entre 0 y 15000."*), nunca el texto de Zod en inglés.
+  - **Pendiente que sobrevive a la recarga:** la pantalla lee la cola offline **filtrada por el alumno actual**; el reporte pendiente se muestra como *"Guardado en tu dispositivo"* con el formulario bloqueado, pasa a un estado intermedio *"Comprobando si tu reporte quedó registrado…"* cuando sale de la cola y solo se declara registrado cuando el API lo confirma. Si el reporte no se pudo enviar, avisa: *"Tu reporte no se pudo enviar. Revisa tus cambios por enviar e inténtalo de nuevo."* ("Cambios por enviar").
+  - **Carga del reporte de hoy:** un fallo al consultarlo (distinto de "aún no hay reporte") muestra *"No pudimos cargar tu reporte de hoy. Revisa tu conexión e inténtalo de nuevo."* con botón **Reintentar**; los valores **0** se conservan al recargar (antes se ocultaban). Confirmaciones con `role="status"` (los errores con `role="alert"`), textos de al menos 12 px y sin jerga (RN-xx, códigos HTTP, "servidor").
+- **Límites (honestos):**
+  - Los tests son de **render a texto en Node** (no hay jsdom ni Testing Library): el foco real, el anuncio del lector de pantalla y la recarga con IndexedDB **no están probados en navegador** (casos manuales en [[06_Guia_Pruebas_Manuales]] §12).
+  - Si la cola offline es ilegible de forma persistente, el formulario queda bloqueado **sin mensaje específico**.
+  - Un reporte rechazado reabre el formulario; un segundo envío de un reporte que en realidad ya quedó registrado terminaría en **409** (pendiente del lote de API).
+- **Pendientes conocidos del módulo** (lote de API y panel del coach):
+  - El API acepta claves de fotos ajenas en `fotosPlatos`.
+  - Errores que hoy terminan en **500**: violación de unicidad (`23505`), agua ≥ 100 y fecha inválida.
+  - `timezoneCliente` es manipulable por el cliente.
+  - Aceptar reportes capturados dentro de la ventana y sincronizados tarde, mostrando al coach la hora de registro (decidido por el dueño; margen por confirmar).
+  - La tolerancia histórica se evalúa con las metas **actuales**, no con las vigentes ese día.
+- Evidencia: `apps/web/src/lib/nutricion-checkin.spec.ts`, `apps/web/src/components/nutricion/*.spec.ts` y `apps/web/src/pages/atleta/NutricionPage.spec.ts`; suite web **843** en verde, typecheck y build OK.
 
 ### Límites deliberados y notas honestas
 

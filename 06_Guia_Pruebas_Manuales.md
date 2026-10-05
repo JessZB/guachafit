@@ -1,7 +1,7 @@
 ---
 id: GUIA-PRUEBAS
 titulo: "Guía de Pruebas Manuales — GUACHAFIT"
-fecha: 2026-10-04
+fecha: 2026-10-05
 estado: activo
 tags:
   - pruebas
@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** con pruebas automáticas en verde (**797** de la web + **1157** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (**843** de la web + **1157** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -266,6 +266,14 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 - [ ] **Cola con fotos (sin conexión):** con fotos adjuntas y sin conexión, el reporte queda **guardado en el dispositivo** ("Guardado sin conexión · pendiente de envío (con fotos)"), el formulario se limpia y el día figura "Pendiente de sincronizar" (no se declara registrado). Al volver la red, el panel de sincronización (franja "1 cambio sin sincronizar" o campana del header) lo sube solo: primero las fotos y después el check-in. Si el envío falla por red, el panel lo muestra como **Reintentando** con la evidencia conservada ("conserva N foto(s)…"), y ofrece **Reintentar** y **Descartar**; al descartar se eliminan los blobs del dispositivo.
 - [ ] **Tolerancia:** con metas y totales reportados (kcal/proteína) verás "Dentro del margen (±10 %)", "Parcialmente dentro" o "Fuera del margen"; sin metas o sin totales dice **"Sin evaluar"** (nunca un OK falso).
 - [ ] **Fallos honestos:** un rechazo de negocio (4xx distinto de 409) se muestra tal cual sin encolar; si ya lo habías registrado hoy (409), refresca el reporte real del servidor en vez de encolarlo. Si el día/ventana cierra antes de que la cola suba las fotos, el rechazo dice "El día ya cerró: el reporte con fotos no pudo registrarse" y la evidencia permanece hasta que decidas descartarla.
+- [ ] **Sin color marcado (2026-10-05, `f827282`):** al abrir la pantalla dentro de la ventana, **ningún color** del semáforo viene marcado. El reporte se hace con **dos toques**: elegir color y pulsar **"Guardar"** (decisión del dueño).
+- [ ] **Guardar sin color:** pulsa "Guardar" sin elegir color → aparece **"Elige cómo te fue hoy con tu plan."** y el foco salta al semáforo (con teclado, el siguiente Tab sigue desde ahí).
+- [ ] **Pendiente que sobrevive a la recarga:** sin conexión (modo avión), elige un color y guarda → ves **"Guardado en tu dispositivo"**. Recarga la página (aún sin red): el aviso de pendiente **sigue ahí** y el formulario queda **bloqueado** (no deja enviar otro reporte del mismo día).
+- [ ] **Paso a registrado:** recupera la red → el aviso cambia a **"Comprobando si tu reporte quedó registrado…"** y, cuando se confirma, a **"✓ Reporte registrado para hoy (…)"**. Nunca dice "registrado" antes de esa confirmación.
+- [ ] **Reporte rechazado:** si el reporte encolado no se pudo enviar (p. ej. el día ya cerró al volver la red), verás **"Tu reporte no se pudo enviar. Revisa tus cambios por enviar e inténtalo de nuevo."** y el formulario se reabre; el detalle está en el panel de sincronización ("Cambios por enviar").
+- [ ] **Lector de pantalla:** con TalkBack/VoiceOver/NVDA, recorre el semáforo → anuncia el grupo ("¿Cómo te fue hoy con tu plan?") y, al elegir un color, que ese botón está **presionado**; las confirmaciones se leen sin interrumpir. Los campos de agua, calorías, proteína y notas anuncian su etiqueta, y un dato inválido muestra el error **nombrando el campo** (p. ej. "Calorías: escribe un número entre 0 y 15000.").
+- [ ] **Valores 0 tras recargar:** registra un reporte con agua, calorías o proteína en **0** y recarga → los ceros **se siguen viendo** (no quedan en blanco).
+- [ ] **Error al cargar el reporte de hoy:** con el API detenido, abre la pantalla → verás **"No pudimos cargar tu reporte de hoy. Revisa tu conexión e inténtalo de nuevo."** con botón **Reintentar**; arranca el API y pulsa Reintentar.
 - [ ] **Modo demo:** con "Modo Alumno" la ventana horaria no bloquea la simulación y el reporte, las metas y la tolerancia usan el fixture local.
 
 **Coach (ficha del alumno → pestaña Nutrición, `?tab=nutricion`)**
