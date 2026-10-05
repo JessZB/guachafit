@@ -5,6 +5,7 @@ import { apiClient, setAuthToken } from './api-client';
 import { processOutboxQueue } from './offline-sync';
 import {
   MAX_FOTOS_CHECKIN_NUTRICIONAL,
+  MENSAJE_RANGO_FOTOS_REPORTE,
   discardMutation,
   getRejectedMutations,
   offlineDb,
@@ -102,17 +103,32 @@ describe('offline-db: check-in nutricional con fotos en la cola', () => {
     expect(row?.payload.fotosPlatos).toBeUndefined();
   });
 
+  it('el reporte SIN fotos guarda el alumno dueño (sin cambiar el esquema local)', async () => {
+    const id = await queueOfflineMutation(
+      CHECKIN_ENDPOINT,
+      'POST',
+      payloadCheckin(),
+      'Reporte nutricional del día',
+      undefined,
+      { alumnoId: ALUMNO_ID }
+    );
+    const row = await offlineDb.outboxMutations.get(id);
+    expect(row?.alumnoId).toBe(ALUMNO_ID);
+    expect(row?.tipo).toBeUndefined();
+    expect(offlineDb.verno).toBe(2);
+  });
+
   it('rechaza encolar fuera del rango 1–4 fotos (RN-03)', async () => {
     await expect(
       queueCheckinNutricionalConFotos(payloadCheckin(), [], ALUMNO_ID)
-    ).rejects.toThrow(/entre 1 y 4/);
+    ).rejects.toThrow(MENSAJE_RANGO_FOTOS_REPORTE);
     await expect(
       queueCheckinNutricionalConFotos(
         payloadCheckin(),
         fotosDePrueba(MAX_FOTOS_CHECKIN_NUTRICIONAL + 1),
         ALUMNO_ID
       )
-    ).rejects.toThrow(/entre 1 y 4/);
+    ).rejects.toThrow(MENSAJE_RANGO_FOTOS_REPORTE);
   });
 });
 

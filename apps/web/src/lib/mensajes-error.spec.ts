@@ -10,6 +10,7 @@ import {
   MENSAJE_SIN_CONEXION,
   MENSAJE_SIN_PERMISO,
   traducirErrorHttp,
+  traducirIssuesValidacion,
 } from './mensajes-error';
 
 describe('mensajes-error: textos humanos para errores de la API', () => {
@@ -190,6 +191,30 @@ describe('mensajes-error: textos humanos para errores de la API', () => {
         MENSAJE_ERROR_GENERICO
       );
       expect(traducirErrorHttp(422, null, 'general')).toBe(MENSAJE_ERROR_GENERICO);
+    });
+  });
+
+  describe('traducirIssuesValidacion (errores de Zod del cliente)', () => {
+    const mensajes = { calorias: 'Calorías: escribe un número entre 0 y 15000.' };
+
+    it('traduce el primer issue por su campo, sin dejar pasar el texto en inglés de Zod', () => {
+      const texto = traducirIssuesValidacion(
+        [{ path: ['calorias'], message: 'Number must be less than or equal to 15000' }],
+        mensajes,
+        'Revisa los datos.'
+      );
+      expect(texto).toBe('Calorías: escribe un número entre 0 y 15000.');
+    });
+
+    it('sin traducción para el campo usa el texto por defecto (nunca el mensaje crudo)', () => {
+      expect(
+        traducirIssuesValidacion(
+          [{ path: ['otro'], message: 'Expected string, received number' }],
+          mensajes,
+          'Revisa los datos.'
+        )
+      ).toBe('Revisa los datos.');
+      expect(traducirIssuesValidacion([], mensajes, 'Revisa los datos.')).toBe('Revisa los datos.');
     });
   });
 });

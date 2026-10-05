@@ -56,6 +56,27 @@ export function describirRechazoCola(lastError: string | null | undefined): stri
   );
 }
 
+/** Forma mínima de un issue de validación (compatible con `ZodIssue`). */
+export interface IssueValidacion {
+  path: ReadonlyArray<string | number>;
+  message: string;
+}
+
+/**
+ * Validación en el cliente: el texto por defecto de Zod está en inglés y habla del tipo de dato,
+ * no del campo. Se traduce el primer issue por su campo; si el campo no tiene traducción se usa
+ * `porDefecto`. El mensaje crudo de Zod nunca llega a la pantalla.
+ */
+export function traducirIssuesValidacion(
+  issues: ReadonlyArray<IssueValidacion>,
+  mensajesPorCampo: Readonly<Record<string, string>>,
+  porDefecto: string
+): string {
+  const campo = issues[0]?.path[0];
+  if (campo === undefined) return porDefecto;
+  return mensajesPorCampo[String(campo)] ?? porDefecto;
+}
+
 /** Texto del servidor (`detail` RFC 7807 o `message` de NestJS); las listas de validación no cuentan. */
 export function extraerMensajeServidor(cuerpo: unknown): string | null {
   if (!cuerpo || typeof cuerpo !== 'object' || Array.isArray(cuerpo)) return null;

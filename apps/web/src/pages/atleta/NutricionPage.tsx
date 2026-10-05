@@ -1,18 +1,41 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useReducer, useRef } from 'react';
 import { useAuth } from '../../context/auth-context';
 import { apiClient, resolverUrlApi } from '../../lib/api-client';
 import { resolverBloqueoAlumno, type BloqueoAlumno } from '../../lib/acceso-alumno';
-import { queueOfflineMutation, queueCheckinNutricionalConFotos, type FotoCheckinEnCola } from '../../lib/offline-db';
+import {
+  queueOfflineMutation,
+  queueCheckinNutricionalConFotos,
+  subscribeToOutboxChanges,
+  MAX_FOTOS_CHECKIN_NUTRICIONAL,
+  type FotoCheckinEnCola,
+} from '../../lib/offline-db';
 import { BloqueoAlumnoPanel } from '../../components/common/BloqueoAlumnoPanel';
 import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import { VisorFoto } from '../../components/common/VisorFoto';
 import { MiniaturaFotoPlato } from '../../components/common/MiniaturaFotoPlato';
 import {
+  AvisosReporteNutricional,
+  type AvisoReporte,
+} from '../../components/nutricion/AvisosReporteNutricional';
+import { ErrorCargaReporteHoy } from '../../components/nutricion/ErrorCargaReporteHoy';
+import { SelectorSemaforo } from '../../components/nutricion/SelectorSemaforo';
+import {
+  buscarCheckinNutricionalPendiente,
+  clasificarErrorCargaReporteHoy,
   construirPayloadCheckinNutricional,
+  debeMostrarErrorCargaReporte,
+  siguienteEstadoReporte,
+  ESTADO_REPORTE_INICIAL,
+  type ErrorCargaReporte,
   decidirAccionErrorCheckinNutricional,
   evaluarVentanaCheckinLocal,
   obtenerStatusError,
+  valoresFormularioDesdeCheckin,
   MENSAJE_ANTES_DE_VENTANA,
+  MENSAJE_ELIGE_SEMAFORO,
+  MENSAJE_ERROR_SUBIDA_FOTO,
+  MENSAJE_FOTOS_MAXIMO_ALCANZADO,
+  MENSAJE_FOTOS_RECORTADAS,
 } from '../../lib/nutricion-checkin';
 import { comprimirImagenAWebp } from '../../lib/imagen-comprimida';
 import {
@@ -47,9 +70,6 @@ import {
 } from '@guachafit/shared';
 import {
   Utensils,
-  CheckCircle2,
-  AlertCircle,
-  XCircle,
   Droplets,
   Camera,
   Check,
@@ -63,15 +83,6 @@ import {
   Gauge,
   AlertTriangle,
 } from 'lucide-react';
-
-/**
- * Estado del guardado del reporte nutricional (RF-002).
- * - `saved`: 2xx del servidor (o reporte de hoy ya existente); único estado con "éxito".
- * - `queued`: encolado offline legítimo (sin conexión / error de red o 5xx); con fotos, la
- *   evidencia completa espera en la cola durable hasta que el servidor la confirme.
- * - `error`: rechazo de negocio (4xx distinto de 409), fallo de subida de fotos o de validación.
- */
-type EstadoReporteNutricional = 'idle' | 'saved' | 'queued' | 'error';
 
 /** Respuesta real del POST: el check-in hidratado + la tolerancia contra las metas del coach. */
 interface RespuestaCheckinNutricional extends ToleranciaNutricionalDTO {
@@ -114,19 +125,23 @@ export function NutricionPage() {
   // en sesión real, fuera de ventana no se envía ni se encola nada.
   const puedeReportar = isDemoMode || ventana.permitido;
 
-  const [semaforo, setSemaforo] = useState<SemaforoNutricional>(SemaforoNutricional.CUMPLIDO);
+  // Sin color preseleccionado: el alumno elige cómo le fue (si ya reportó hoy, se rehidrata).
+  const [semaforo, setSemaforo] = useState<SemaforoNutricional | null>(null);
   // D6: sin valores de fixture precargados en sesión real; el placeholder guía, no el dato.
   const [aguaLitros, setAguaLitros] = useState('');
   const [calorias, setCalorias] = useState('');
   const [proteina, setProteina] = useState('');
   const [notas, setNotas] = useState('');
-  const [estadoReporte, setEstadoReporte] = useState<EstadoReporteNutricional>('idle');
-  const [avisoReporte, setAvisoReporte] = useState<{
-    tono: 'info' | 'error';
-    texto: string;
-  } | null>(null);
-  // RF-002 §6: fotos que quedaron en la cola durable con el reporte encolado (0 = sin fotos).
-  const [fotosEncoladas, setFotosEncoladas] = useState(0);
+  // Estado del reporte de hoy (RF-002 §6): transición pura en `siguienteEstadoReporte`.
+  const [reporte, despacharReporte] = useReducer(siguienteEstadoReporte, ESTADO_REPORTE_INICIAL);
+  const estadoReporte = reporte.estado;
+  const fotosEncoladas = reporte.fotosEncoladas;
+  const [avisoReporte, setAvisoReporte] = useState<AvisoReporte | null>(null);
+  // Se intentó guardar sin elegir color: el error se muestra junto al semáforo, que recibe el foco.
+  const [errorSemaforo, setErrorSemaforo] = useState<string | null>(null);
+  const grupoSemaforoRef = useRef<HTMLFieldSetElement | null>(null);
+  // Fallo al consultar el reporte de hoy que NO es "aún no hay reporte": se muestra con reintento.
+  const [errorCargaReporte, setErrorCargaReporte] = useState<ErrorCargaReporte | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [existingCheckin, setExistingCheckin] = useState<CheckinNutricionalDetalleDTO | null>(null);
   // RF-012: alumno pausado no puede enviar reportes; la pantalla informativa reemplaza al formulario.
@@ -170,8 +185,9 @@ export function NutricionPage() {
   );
 
   const reporteRegistradoHoy = Boolean(existingCheckin) || estadoReporte === 'saved';
-  const reporteEncolado = estadoReporte === 'queued';
-  const formularioBloqueado = reporteRegistradoHoy || reporteEncolado;
+  const reporteEncolado = estadoReporte === 'queued' && !reporteRegistradoHoy;
+  const confirmandoEnvio = estadoReporte === 'confirmando' && !reporteRegistradoHoy;
+  const formularioBloqueado = reporteRegistradoHoy || reporteEncolado || confirmandoEnvio;
 
   const cargarReporteHoy = useCallback(async () => {
     try {
@@ -180,19 +196,48 @@ export function NutricionPage() {
       const data = await apiClient<CheckinNutricionalDetalleDTO | null>(
         `/nutricion/checkin/hoy?fecha=${hoyLocal}&timezoneCliente=${encodeURIComponent(timezoneCliente)}`
       );
-      if (data) {
-        setExistingCheckin(data);
-        setSemaforo(data.semaforo);
-        if (data.aguaLitros) setAguaLitros(data.aguaLitros);
-        if (data.caloriasReportadas) setCalorias(data.caloriasReportadas.toString());
-        if (data.proteinaGramosReportada) setProteina(data.proteinaGramosReportada.toString());
-        if (data.notasAlumno) setNotas(data.notasAlumno);
-        setEstadoReporte('saved');
+      setErrorCargaReporte(null);
+      if (!data) {
+        despacharReporte({ tipo: 'carga', resultado: 'sin-reporte' });
+        return;
       }
-    } catch {
-      // Sin reporte para hoy todavía (204) o sin conexión: no hay estado que reflejar.
+      // Rehidratación fiel: un 0 reportado se muestra como 0 (solo `null` queda vacío).
+      const valores = valoresFormularioDesdeCheckin(data);
+      setExistingCheckin(data);
+      setSemaforo(valores.semaforo);
+      setAguaLitros(valores.aguaLitros);
+      setCalorias(valores.calorias);
+      setProteina(valores.proteina);
+      setNotas(valores.notas);
+      despacharReporte({ tipo: 'carga', resultado: 'encontrado' });
+    } catch (err) {
+      // 404 = todavía no hay reporte; cualquier otro fallo se guarda y la pantalla decide si
+      // mostrarlo (`debeMostrarErrorCargaReporte`).
+      const error = clasificarErrorCargaReporteHoy(err, navigator.onLine);
+      setErrorCargaReporte(error);
+      despacharReporte({ tipo: 'carga', resultado: error ? 'error' : 'sin-reporte' });
     }
   }, [hoyLocal, timezoneCliente]);
+
+  /**
+   * RF-002 §6: el reporte encolado vive en la cola durable, no en memoria. Se lee al montar, cada
+   * vez que la cola cambia y justo después de encolar (por si la cola ya lo envió antes).
+   */
+  const sincronizarPendienteHoy = useCallback(async () => {
+    if (isDemoMode) return;
+    const resultado = await buscarCheckinNutricionalPendiente(hoyLocal, user?.id);
+    despacharReporte({ tipo: 'cola', resultado });
+  }, [isDemoMode, hoyLocal, user?.id]);
+
+  useEffect(() => {
+    void sincronizarPendienteHoy();
+    return subscribeToOutboxChanges(() => void sincronizarPendienteHoy());
+  }, [sincronizarPendienteHoy]);
+
+  // El pendiente salió de la cola: el formulario sigue bloqueado hasta saber si quedó registrado.
+  useEffect(() => {
+    if (estadoReporte === 'confirmando') void cargarReporteHoy();
+  }, [estadoReporte, cargarReporteHoy]);
 
   const cargarMetas = useCallback(async () => {
     // Modo demo explícito: metas de ejemplo solo con la bandera activa.
@@ -262,15 +307,15 @@ export function NutricionPage() {
     if (!archivos || archivos.length === 0) return;
     setFotosError(null);
 
-    const espacioDisponible = 4 - fotosPlatos.length;
+    const espacioDisponible = MAX_FOTOS_CHECKIN_NUTRICIONAL - fotosPlatos.length;
     if (espacioDisponible <= 0) {
-      setFotosError('Ya adjuntaste las 4 fotos del día (RN-03). Quita una para cambiarla.');
+      setFotosError(MENSAJE_FOTOS_MAXIMO_ALCANZADO);
       return;
     }
 
     const seleccionados = Array.from(archivos).slice(0, espacioDisponible);
     if (archivos.length > espacioDisponible) {
-      setFotosError('Solo se permiten 4 fotografías de platos por día (RN-03).');
+      setFotosError(MENSAJE_FOTOS_RECORTADAS);
     }
 
     setIsProcesandoFotos(true);
@@ -342,10 +387,8 @@ export function NutricionPage() {
         body: foto.archivo,
       });
       if (!respuesta.ok) {
-        throw new Error(
-          `No se pudo subir la foto de ${etiquetaTipoComida(foto.tipoComida).toLowerCase()} ` +
-            `(${respuesta.status}). Revisa tu conexión e inténtalo de nuevo.`
-        );
+        // Sin `status` HTTP: offline-sync lo trata como fallo de red y la evidencia se encola.
+        throw new Error(MENSAJE_ERROR_SUBIDA_FOTO);
       }
       claves.set(foto.id, presigned.storageKey);
     }
@@ -353,7 +396,9 @@ export function NutricionPage() {
   };
 
   /** Galería local del día en modo demo: las vistas previas elegidas son la evidencia visible. */
-  const construirCheckinDemo = (): CheckinNutricionalDetalleDTO => {
+  const construirCheckinDemo = (
+    semaforoElegido: SemaforoNutricional
+  ): CheckinNutricionalDetalleDTO => {
     const fotos: FotoComidaDetalleDTO[] = fotosPlatos.map((foto, indice) => ({
       id: `demo-foto-hoy-${indice}`,
       checkinId: 'demo-checkin-hoy',
@@ -366,7 +411,7 @@ export function NutricionPage() {
       id: 'demo-checkin-hoy',
       alumnoId: user?.id || 'demo-alumno',
       fecha: hoyLocal,
-      semaforo,
+      semaforo: semaforoElegido,
       caloriasReportadas: calorias ? Number(calorias) : null,
       proteinaGramosReportada: proteina ? Number(proteina) : null,
       aguaLitros: aguaLitros || null,
@@ -380,6 +425,11 @@ export function NutricionPage() {
   const handleSaveCheckin = async () => {
     // Defensivo: los controles ya están deshabilitados en estos estados.
     if (formularioBloqueado || !puedeReportar) return;
+    if (!semaforo) {
+      setErrorSemaforo(MENSAJE_ELIGE_SEMAFORO);
+      grupoSemaforoRef.current?.focus();
+      return;
+    }
 
     setIsLoading(true);
     setAvisoReporte(null);
@@ -402,7 +452,7 @@ export function NutricionPage() {
       );
     } catch (err: any) {
       setIsLoading(false);
-      setEstadoReporte('error');
+      despacharReporte({ tipo: 'rechazado' });
       setAvisoReporte({ tono: 'error', texto: err?.message || 'Revisa los datos del reporte.' });
       return;
     }
@@ -411,8 +461,8 @@ export function NutricionPage() {
     // llamar a la API real (el token demo es simbólico). La tolerancia del día se calcula contra
     // las metas demo con el mismo evaluador que usa el servidor.
     if (isDemoMode) {
-      setExistingCheckin(construirCheckinDemo());
-      setEstadoReporte('saved');
+      setExistingCheckin(construirCheckinDemo(semaforo));
+      despacharReporte({ tipo: 'guardado' });
       setIsLoading(false);
       return;
     }
@@ -448,17 +498,20 @@ export function NutricionPage() {
           throw new Error('No se pudo identificar tu sesión. Vuelve a iniciar sesión e inténtalo de nuevo.');
         }
         await queueCheckinNutricionalConFotos(payload, construirFotosEnCola(), user.id);
-        setFotosEncoladas(fotosPlatos.length);
         limpiarFormularioEncolado();
       } else {
         await queueOfflineMutation(
           '/nutricion/checkin-diario',
           'POST',
           payload,
-          'Reporte nutricional del día'
+          'Reporte nutricional del día',
+          undefined,
+          { alumnoId: user?.id }
         );
       }
-      setEstadoReporte('queued');
+      despacharReporte({ tipo: 'encolado', fotos: fotosPlatos.length });
+      // Carrera: si la cola ya lo envió antes de este punto, la relectura lo deja en confirmación.
+      void sincronizarPendienteHoy();
     };
 
     // Sin conexión: el reporte (con o sin fotos) va directo a la cola; nada toca la red.
@@ -466,7 +519,7 @@ export function NutricionPage() {
       try {
         await encolar();
       } catch (err: any) {
-        setEstadoReporte('error');
+        despacharReporte({ tipo: 'rechazado' });
         setAvisoReporte({
           tono: 'error',
           texto:
@@ -495,7 +548,7 @@ export function NutricionPage() {
         try {
           await encolar();
         } catch {
-          setEstadoReporte('error');
+          despacharReporte({ tipo: 'rechazado' });
           setAvisoReporte({
             tono: 'error',
             texto: 'No se pudo guardar el reporte en el dispositivo. Inténtalo de nuevo.',
@@ -524,7 +577,7 @@ export function NutricionPage() {
         body: JSON.stringify(payloadConFotos),
       });
       await cargarReporteHoy();
-      setEstadoReporte('saved');
+      despacharReporte({ tipo: 'guardado' });
     } catch (err) {
       // RF-012: el bloqueo de ciclo de vida tiene su propia pantalla (no es un error de datos).
       const bloqueoDetectado = resolverBloqueoAlumno(err);
@@ -538,7 +591,7 @@ export function NutricionPage() {
         try {
           await encolar();
         } catch {
-          setEstadoReporte('error');
+          despacharReporte({ tipo: 'rechazado' });
           setAvisoReporte({
             tono: 'error',
             texto: 'No se pudo guardar el reporte en el dispositivo. Inténtalo de nuevo.',
@@ -549,7 +602,7 @@ export function NutricionPage() {
         await cargarReporteHoy();
         setAvisoReporte({ tono: 'info', texto: decision.mensaje });
       } else {
-        setEstadoReporte('error');
+        despacharReporte({ tipo: 'rechazado' });
         setAvisoReporte({ tono: 'error', texto: decision.mensaje });
       }
     } finally {
@@ -575,6 +628,10 @@ export function NutricionPage() {
   );
   const diasNoReportadosSemana = contarNoReportados(calendarioSemana);
   const formularioDeshabilitado = formularioBloqueado || !puedeReportar;
+  const mostrarErrorCarga = !isDemoMode && debeMostrarErrorCargaReporte(estadoReporte, errorCargaReporte);
+  // Aviso del guardado (rechazo, 409…) o, si no hay, el que dejó la máquina de estados.
+  const avisoVisible: AvisoReporte | null =
+    avisoReporte ?? (reporte.aviso ? { tono: 'info', texto: reporte.aviso } : null);
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto pb-24 lg:pb-12">
@@ -582,7 +639,7 @@ export function NutricionPage() {
       <div className="p-6 rounded-3xl bg-card border border-border shadow-md space-y-2">
         <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
           <Utensils className="h-4 w-4" />
-          <span>Reporte Diario Ágil</span>
+          <span>Reporte de hoy</span>
         </div>
         <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
           Mi Comida de Hoy
@@ -592,10 +649,18 @@ export function NutricionPage() {
         </p>
       </div>
 
+      {/* Fallo al consultar el reporte de hoy (no "aún no hay reporte"), con reintento. */}
+      {mostrarErrorCarga && errorCargaReporte && (
+        <ErrorCargaReporteHoy
+          mensaje={errorCargaReporte.mensaje}
+          onReintentar={() => void cargarReporteHoy()}
+        />
+      )}
+
       {/* U4: estado honesto sin conexión. Con copia cacheada del check-in de hoy se avisa que
           es un dato guardado; sin ella, se declara el vacío en vez de simular normalidad. */}
       {!isDemoMode && existingCheckin && <AvisoDatosOffline url={urlCheckinHoy} />}
-      {!isDemoMode && !existingCheckin && !reporteEncolado && (
+      {!isDemoMode && !existingCheckin && !reporteEncolado && !confirmandoEnvio && (
         <AvisoDatosOffline url={urlCheckinHoy} variante="sin-datos" />
       )}
 
@@ -654,7 +719,7 @@ export function NutricionPage() {
                 key={objetivo.etiqueta}
                 className="p-3 rounded-2xl bg-secondary/40 border border-border"
               >
-                <span className="block text-[11px] font-semibold uppercase text-muted-foreground">
+                <span className="block text-xs font-semibold uppercase text-muted-foreground">
                   {objetivo.etiqueta}
                 </span>
                 <p className="text-base font-black font-mono text-foreground mt-0.5">
@@ -667,7 +732,7 @@ export function NutricionPage() {
 
         {!metasError && (metas?.recursos?.length ?? 0) > 0 && (
           <div className="space-y-1.5">
-            <span className="text-[11px] font-semibold uppercase text-muted-foreground">
+            <span className="text-xs font-semibold uppercase text-muted-foreground">
               Recursos de tu coach
             </span>
             <ul className="space-y-1.5">
@@ -741,85 +806,44 @@ export function NutricionPage() {
                 </li>
               )}
             </ul>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Margen de tolerancia: ±10 % de las metas de tu entrenador.
             </p>
           </div>
         )}
       </section>
 
-      {/* 1-Tap Traffic Light Buttons */}
-      <div className="space-y-3">
-        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">
-          Nivel de Apego al Plan Hoy
-        </label>
-        {reporteRegistradoHoy && (
-          <p className="px-1 text-[11px] text-muted-foreground">
-            Tu reporte de hoy ya quedó registrado. Solo lectura; podrás registrar el próximo mañana.
-          </p>
-        )}
-        <div className="grid grid-cols-3 gap-3">
-          {/* Cumplido */}
-          <button
-            type="button"
-            disabled={formularioDeshabilitado}
-            onClick={() => setSemaforo(SemaforoNutricional.CUMPLIDO)}
-            className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${
-              semaforo === SemaforoNutricional.CUMPLIDO
-                ? 'bg-success/20 border-success text-success shadow-lg shadow-success/20 scale-102'
-                : 'bg-card border-border hover:border-success/40 text-muted-foreground'
-            }`}
-          >
-            <CheckCircle2 className="h-8 w-8 mb-1 text-success" />
-            <span className="font-extrabold text-sm text-foreground">Cumplido</span>
-            <span className="text-[11px] text-muted-foreground mt-0.5">100% en macros</span>
-          </button>
-
-          {/* Parcial */}
-          <button
-            type="button"
-            disabled={formularioDeshabilitado}
-            onClick={() => setSemaforo(SemaforoNutricional.PARCIAL)}
-            className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${
-              semaforo === SemaforoNutricional.PARCIAL
-                ? 'bg-warning/20 border-warning text-warning shadow-lg shadow-warning/20 scale-102'
-                : 'bg-card border-border hover:border-warning/40 text-muted-foreground'
-            }`}
-          >
-            <AlertCircle className="h-8 w-8 mb-1 text-warning" />
-            <span className="font-extrabold text-sm text-foreground">Parcial</span>
-            <span className="text-[11px] text-muted-foreground mt-0.5">Desvío menor</span>
-          </button>
-
-          {/* No Cumplido */}
-          <button
-            type="button"
-            disabled={formularioDeshabilitado}
-            onClick={() => setSemaforo(SemaforoNutricional.NO_CUMPLIDO)}
-            className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${
-              semaforo === SemaforoNutricional.NO_CUMPLIDO
-                ? 'bg-destructive/20 border-destructive text-destructive shadow-lg shadow-destructive/20 scale-102'
-                : 'bg-card border-border hover:border-destructive/40 text-muted-foreground'
-            }`}
-          >
-            <XCircle className="h-8 w-8 mb-1 text-destructive" />
-            <span className="font-extrabold text-sm text-foreground">No Cumplido</span>
-            <span className="text-[11px] text-muted-foreground mt-0.5">Fuera de plan</span>
-          </button>
-        </div>
-      </div>
+      {/* Semáforo del día: grupo con nombre; cada opción anuncia si está elegida. */}
+      <SelectorSemaforo
+        valor={semaforo}
+        onCambiar={(valor) => {
+          setSemaforo(valor);
+          setErrorSemaforo(null);
+        }}
+        deshabilitado={formularioDeshabilitado}
+        error={errorSemaforo}
+        nota={
+          reporteRegistradoHoy
+            ? 'Tu reporte de hoy ya quedó registrado. Solo lectura; podrás registrar el próximo mañana.'
+            : null
+        }
+        refGrupo={grupoSemaforoRef}
+      />
 
       {/* Optional Details (Water, Calories, Notes) */}
       <div className="p-5 sm:p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4">
         <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
           <Droplets className="h-4 w-4 text-primary" />
-          <span>Hidratación y Macros Rápidos (Opcional)</span>
+          <span>Agua, calorías y proteína (opcional)</span>
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted-foreground">Agua (Litros)</label>
+            <label htmlFor="nutricion-agua" className="text-xs font-semibold text-muted-foreground">
+              Agua (Litros)
+            </label>
             <input
+              id="nutricion-agua"
               type="text"
               inputMode="decimal"
               disabled={formularioDeshabilitado}
@@ -831,8 +855,11 @@ export function NutricionPage() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted-foreground">Calorías (kcal)</label>
+            <label htmlFor="nutricion-calorias" className="text-xs font-semibold text-muted-foreground">
+              Calorías (kcal)
+            </label>
             <input
+              id="nutricion-calorias"
               type="text"
               inputMode="numeric"
               disabled={formularioDeshabilitado}
@@ -844,8 +871,11 @@ export function NutricionPage() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted-foreground">Proteína (g)</label>
+            <label htmlFor="nutricion-proteina" className="text-xs font-semibold text-muted-foreground">
+              Proteína (g)
+            </label>
             <input
+              id="nutricion-proteina"
               type="text"
               inputMode="numeric"
               disabled={formularioDeshabilitado}
@@ -859,10 +889,13 @@ export function NutricionPage() {
 
         <div className="space-y-1">
           <div className="flex justify-between items-center">
-            <label className="text-xs font-semibold text-muted-foreground">Notas breves</label>
-            <span className="text-[11px] text-muted-foreground">{notas.length}/280</span>
+            <label htmlFor="nutricion-notas" className="text-xs font-semibold text-muted-foreground">
+              Notas breves
+            </label>
+            <span className="text-xs text-muted-foreground">{notas.length}/280</span>
           </div>
           <textarea
+            id="nutricion-notas"
             rows={2}
             maxLength={280}
             disabled={formularioDeshabilitado}
@@ -881,12 +914,12 @@ export function NutricionPage() {
             <Camera className="h-4 w-4 text-primary" />
             <h3 className="font-bold text-sm text-foreground">Diario fotográfico del día</h3>
           </div>
-          <span className="text-[11px] font-semibold text-muted-foreground">
-            {fotosPlatos.length}/4 fotos
+          <span className="text-xs font-semibold text-muted-foreground">
+            {fotosPlatos.length}/{MAX_FOTOS_CHECKIN_NUTRICIONAL} fotos
           </span>
         </div>
         <p className="text-xs text-muted-foreground">
-          Adjunta de 1 a 4 fotos de tus comidas principales. Se optimizan en tu dispositivo antes de
+          Adjunta de 1 a {MAX_FOTOS_CHECKIN_NUTRICIONAL} fotos de tus comidas principales. Se optimizan en tu dispositivo antes de
           subirse.
         </p>
 
@@ -903,7 +936,7 @@ export function NutricionPage() {
             />
             <button
               type="button"
-              disabled={fotosPlatos.length >= 4 || isProcesandoFotos}
+              disabled={fotosPlatos.length >= MAX_FOTOS_CHECKIN_NUTRICIONAL || isProcesandoFotos}
               onClick={() => inputFotosRef.current?.click()}
               className="w-full min-h-11 py-2.5 px-4 rounded-xl bg-secondary border border-border text-foreground font-bold text-xs hover:bg-secondary/70 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -915,8 +948,8 @@ export function NutricionPage() {
               <span>
                 {isProcesandoFotos
                   ? 'Optimizando fotos…'
-                  : fotosPlatos.length >= 4
-                  ? 'Máximo de 4 fotos alcanzado'
+                  : fotosPlatos.length >= MAX_FOTOS_CHECKIN_NUTRICIONAL
+                  ? `Máximo de ${MAX_FOTOS_CHECKIN_NUTRICIONAL} fotos alcanzado`
                   : 'Añadir foto de una comida'}
               </span>
             </button>
@@ -968,7 +1001,7 @@ export function NutricionPage() {
                   ))}
                 </select>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-muted-foreground font-mono">
+                  <span className="text-xs text-muted-foreground font-mono">
                     {formatearPeso(foto.archivo.size)}
                   </span>
                   <button
@@ -990,6 +1023,7 @@ export function NutricionPage() {
       {/* Submit + avisos */}
       <div className="p-5 sm:p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4">
         <button
+          type="button"
           onClick={handleSaveCheckin}
           disabled={isLoading || formularioDeshabilitado}
           className="w-full min-h-11 py-3 px-4 rounded-xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1008,6 +1042,8 @@ export function NutricionPage() {
                 : 'Guardando…'
               : reporteRegistradoHoy
               ? 'Reporte de hoy ya registrado'
+              : confirmandoEnvio
+              ? 'Comprobando tu reporte…'
               : reporteEncolado
               ? fotosEncoladas > 0
                 ? 'Guardado sin conexión · pendiente de envío (con fotos)'
@@ -1018,37 +1054,19 @@ export function NutricionPage() {
           </span>
         </button>
 
-        {reporteRegistradoHoy && (
-          <p className="text-center text-xs text-success font-semibold">
-            ✓ Reporte registrado para hoy (
-            {formatFechaLargaCalendario(existingCheckin?.fecha ?? hoyLocal) ?? hoyLocal}).
-          </p>
-        )}
-
-        {reporteEncolado && (
-          <p className="text-center text-xs text-warning font-semibold">
-            ⏳ Guardado en tu dispositivo
-            {fotosEncoladas > 0
-              ? ` con ${fotosEncoladas} foto${fotosEncoladas === 1 ? '' : 's'}`
-              : ''}
-            . Se enviará automáticamente al recuperar la conexión; el día quedará registrado solo
-            cuando el servidor lo confirme.
-          </p>
-        )}
-
-        {avisoReporte && (
-          <p
-            role={avisoReporte.tono === 'error' ? 'alert' : undefined}
-            className={`text-center text-xs font-semibold ${
-              avisoReporte.tono === 'error' ? 'text-destructive' : 'text-warning'
-            }`}
-          >
-            {avisoReporte.texto}
-          </p>
-        )}
+        <AvisosReporteNutricional
+          reporteRegistradoHoy={reporteRegistradoHoy}
+          fechaRegistradaTexto={
+            formatFechaLargaCalendario(existingCheckin?.fecha ?? hoyLocal) ?? hoyLocal
+          }
+          reporteEncolado={reporteEncolado}
+          confirmando={confirmandoEnvio}
+          fotosEncoladas={fotosEncoladas}
+          aviso={avisoVisible}
+        />
 
         {isDemoMode && (
-          <p className="text-center text-[11px] text-muted-foreground">
+          <p className="text-center text-xs text-muted-foreground">
             Modo demo: el reporte es una simulación local con datos de ejemplo y no viaja a la API.
           </p>
         )}
@@ -1075,7 +1093,7 @@ export function NutricionPage() {
             ))}
           </ul>
           {totalesReportados.length > 0 && (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {totalesReportados.map((total) => `${total.etiqueta}: ${total.valor}`).join(' · ')}
             </p>
           )}
@@ -1088,7 +1106,7 @@ export function NutricionPage() {
           <div className="flex items-center justify-between gap-3">
             <h3 className="font-bold text-sm text-foreground">Tus últimos 7 días</h3>
             {diasNoReportadosSemana > 0 && (
-              <span className="text-[11px] font-semibold text-muted-foreground">
+              <span className="text-xs font-semibold text-muted-foreground">
                 {diasNoReportadosSemana} día{diasNoReportadosSemana === 1 ? '' : 's'} sin reporte
               </span>
             )}
@@ -1096,16 +1114,16 @@ export function NutricionPage() {
           <ul className="grid grid-cols-7 gap-1.5">
             {[...calendarioSemana].reverse().map((dia) => {
               // RF-002 §6: el día con reporte encolado no declara éxito ni "No reportado":
-              // queda pendiente de sincronizar hasta que el servidor lo confirme.
+              // queda pendiente de sincronizar hasta que quede confirmado.
               const etiqueta =
-                reporteEncolado && dia.fecha === hoyLocal
+                (reporteEncolado || confirmandoEnvio) && dia.fecha === hoyLocal
                   ? { texto: 'Pendiente de sincronizar', tono: 'warning' as const }
                   : etiquetaEstadoDia(dia.estado);
               return (
                 <li key={dia.fecha} className="text-center">
                   <span
                     title={`${formatFechaLargaCalendario(dia.fecha) ?? dia.fecha}: ${etiqueta.texto}`}
-                    className={`flex h-11 w-full items-center justify-center rounded-xl border text-[11px] font-bold ${
+                    className={`flex h-11 w-full items-center justify-center rounded-xl border text-xs font-bold ${
                       etiqueta.tono === 'success'
                         ? 'bg-success/15 text-success border-success/30'
                         : etiqueta.tono === 'warning'
@@ -1119,14 +1137,14 @@ export function NutricionPage() {
                   >
                     {dia.fecha.slice(8)}
                   </span>
-                  <span className="mt-0.5 block text-[11px] text-muted-foreground truncate">
+                  <span className="mt-0.5 block text-xs text-muted-foreground truncate">
                     {etiqueta.texto}
                   </span>
                 </li>
               );
             })}
           </ul>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Un día sin reporte no afecta tu racha de entrenamiento.
           </p>
         </section>

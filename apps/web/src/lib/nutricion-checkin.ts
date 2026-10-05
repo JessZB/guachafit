@@ -18,11 +18,19 @@ import {
   CODIGO_CHECKIN_FUERA_DE_VENTANA,
   CheckinNutricionalSchema,
   HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL,
+  type CheckinNutricionalDetalleDTO,
   type CheckinNutricionalDTO,
   type FotoComidaInputDTO,
   type SemaforoNutricional,
 } from '@guachafit/shared';
 import { fechaCalendarioLocal, obtenerTimezoneDispositivo } from './date-format';
+import { traducirIssuesValidacion } from './mensajes-error';
+import {
+  getActionableMutations,
+  MAX_FOTOS_CHECKIN_NUTRICIONAL,
+  MENSAJE_RANGO_FOTOS_REPORTE,
+  type OutboxMutation,
+} from './offline-db';
 import { normalizarEntradaDecimal } from './weight-unit';
 
 export const MENSAJE_COLA_SIN_CONEXION =
@@ -150,6 +158,35 @@ export interface EntradaCheckinNutricional {
   fotosPlatos?: FotoComidaInputDTO[];
 }
 
+/** Pregunta del semáforo del día (nombre accesible del grupo). */
+export const ETIQUETA_SEMAFORO = '¿Cómo te fue hoy con tu plan?';
+
+/** Pide elegir el semáforo antes de guardar (también traduce un semáforo inválido). */
+export const MENSAJE_ELIGE_SEMAFORO = 'Elige cómo te fue hoy con tu plan.';
+
+/** RN-03: máximo de fotos alcanzado al intentar agregar otra. */
+export const MENSAJE_FOTOS_MAXIMO_ALCANZADO = `Ya agregaste ${MAX_FOTOS_CHECKIN_NUTRICIONAL} fotos, el máximo del día. Quita una para cambiarla.`;
+
+/** RN-03: se eligieron más fotos de las que caben; se conservan las primeras. */
+export const MENSAJE_FOTOS_RECORTADAS = `Puedes subir hasta ${MAX_FOTOS_CHECKIN_NUTRICIONAL} fotos por día; agregamos las primeras.`;
+
+/** Fallo del PUT de una foto a la bóveda (sin exponer el código HTTP). */
+export const MENSAJE_ERROR_SUBIDA_FOTO =
+  'No pudimos subir la foto. Revisa tu conexión e inténtalo de nuevo.';
+
+/**
+ * Errores de validación del cliente traducidos por campo: el texto por defecto de Zod está en
+ * inglés ("Number must be less than…") y nunca debe llegar a la pantalla.
+ */
+const MENSAJES_VALIDACION_CHECKIN: Readonly<Record<string, string>> = {
+  semaforo: MENSAJE_ELIGE_SEMAFORO,
+  aguaLitros: 'Agua: escribe los litros con hasta 2 decimales, por ejemplo 2,5.',
+  caloriasReportadas: 'Calorías: escribe un número entre 0 y 15000.',
+  proteinaGramosReportada: 'Proteína: escribe los gramos con un número entre 0 y 1000.',
+  notasAlumno: 'Notas: usa como máximo 280 caracteres.',
+  fotosPlatos: MENSAJE_RANGO_FOTOS_REPORTE,
+};
+
 /** Entero opcional del formulario: vacío = sin dato; texto no entero = error visible. */
 function enteroOpcional(texto: string | undefined, etiqueta: string): number | undefined {
   if (texto === undefined) return undefined;
@@ -197,7 +234,199 @@ export function construirPayloadCheckinNutricional(
 
   const resultado = CheckinNutricionalSchema.safeParse(candidato);
   if (!resultado.success) {
-    throw new Error(resultado.error.issues[0]?.message ?? MENSAJE_ERROR_GENERICO);
+    throw new Error(
+      traducirIssuesValidacion(
+        resultado.error.issues,
+        MENSAJES_VALIDACION_CHECKIN,
+        MENSAJE_ERROR_GENERICO
+      )
+    );
   }
   return resultado.data;
+}
+
+// =============================================================================
+// ESTADO DEL REPORTE DE HOY (carga, rehidratación y pendiente en la cola)
+// =============================================================================
+
+export const MENSAJE_ERROR_CARGA_REPORTE_HOY =
+  'No pudimos cargar tu reporte de hoy. Revisa tu conexión e inténtalo de nuevo.';
+
+/** Fallo al consultar el reporte de hoy que NO es "todavía no hay reporte". */
+export interface ErrorCargaReporte {
+  mensaje: string;
+  /** El dispositivo estaba sin conexión al fallar la consulta. */
+  sinConexion: boolean;
+}
+
+/**
+ * Error al consultar el reporte de hoy:
+ * - 404/204: todavía no hay reporte; no es un error (`null`).
+ * - cualquier otro fallo: mensaje claro, recordando si fue sin conexión.
+ */
+export function clasificarErrorCargaReporteHoy(
+  err: unknown,
+  isOnline: boolean
+): ErrorCargaReporte | null {
+  const status = obtenerStatusError(err);
+  if (status === 404 || status === 204) return null;
+  return { mensaje: MENSAJE_ERROR_CARGA_REPORTE_HOY, sinConexion: !isOnline };
+}
+
+/**
+ * ¿Se muestra el error de carga con su Reintentar?
+ * - Nunca junto a un reporte registrado.
+ * - Mientras se confirma un envío, siempre: el formulario sigue bloqueado y reintentar es la salida.
+ * - En el resto, solo con conexión (sin ella ya lo explica el aviso de datos sin conexión).
+ */
+export function debeMostrarErrorCargaReporte(
+  estado: EstadoReporteNutricional,
+  error: ErrorCargaReporte | null
+): boolean {
+  if (!error || estado === 'saved') return false;
+  if (estado === 'confirmando') return true;
+  return !error.sinConexion;
+}
+
+/** Valores del formulario del alumno (texto libre) rehidratados desde el reporte guardado. */
+export interface ValoresFormularioCheckin {
+  semaforo: SemaforoNutricional;
+  aguaLitros: string;
+  calorias: string;
+  proteina: string;
+  notas: string;
+}
+
+/** Rehidrata el formulario sin ocultar los valores 0 reportados (solo `null` queda vacío). */
+export function valoresFormularioDesdeCheckin(
+  checkin: Pick<
+    CheckinNutricionalDetalleDTO,
+    'semaforo' | 'aguaLitros' | 'caloriasReportadas' | 'proteinaGramosReportada' | 'notasAlumno'
+  >
+): ValoresFormularioCheckin {
+  return {
+    semaforo: checkin.semaforo,
+    aguaLitros: checkin.aguaLitros ?? '',
+    calorias: checkin.caloriasReportadas != null ? String(checkin.caloriasReportadas) : '',
+    proteina:
+      checkin.proteinaGramosReportada != null ? String(checkin.proteinaGramosReportada) : '',
+    notas: checkin.notasAlumno ?? '',
+  };
+}
+
+/**
+ * Resultado de leer la cola durable: un fallo de lectura (IndexedDB) NO equivale a "no hay
+ * pendiente", así que se distingue explícitamente.
+ */
+export type ResultadoColaReporte =
+  | { tipo: 'pendiente'; fotos: number }
+  | { tipo: 'vacia' }
+  | { tipo: 'error' };
+
+const ENDPOINT_CHECKIN_DIARIO = '/nutricion/checkin-diario';
+
+/**
+ * RF-002 §6: busca en la cola durable un reporte de `fecha` del alumno actual que todavía no
+ * llegó (pendiente, enviándose o fallido con reintento automático). Sobrevive a recargas: la
+ * pantalla lo consulta al montar para mostrar el pendiente y no permitir encolar un duplicado.
+ * - Los rechazados quedan fuera: esperan una decisión del usuario en "Cambios por enviar".
+ * - Filas de otro alumno se ignoran; las antiguas sin `alumnoId` cuentan (no hay con qué filtrarlas).
+ */
+export async function buscarCheckinNutricionalPendiente(
+  fecha: string,
+  alumnoId: string | undefined,
+  leerCola: () => Promise<OutboxMutation[]> = getActionableMutations
+): Promise<ResultadoColaReporte> {
+  let mutaciones: OutboxMutation[];
+  try {
+    mutaciones = await leerCola();
+  } catch {
+    return { tipo: 'error' };
+  }
+  const pendiente = mutaciones.find(
+    (item) =>
+      item.endpoint === ENDPOINT_CHECKIN_DIARIO &&
+      (item.status === 'pending' || item.status === 'syncing' || item.status === 'failed') &&
+      item.payload?.fecha === fecha &&
+      (!item.alumnoId || item.alumnoId === alumnoId)
+  );
+  return pendiente ? { tipo: 'pendiente', fotos: pendiente.fotos?.length ?? 0 } : { tipo: 'vacia' };
+}
+
+// =============================================================================
+// MÁQUINA DE ESTADOS DEL REPORTE DE HOY
+// =============================================================================
+
+/**
+ * - `idle`: sin reporte; el formulario está abierto.
+ * - `saved`: confirmado por el servidor; único estado de éxito.
+ * - `queued`: espera en la cola del dispositivo; formulario bloqueado (sin duplicados).
+ * - `confirmando`: el pendiente salió de la cola y se consulta si quedó registrado; sigue bloqueado.
+ * - `error`: rechazo del envío directo; el formulario sigue abierto para corregir.
+ */
+export type EstadoReporteNutricional = 'idle' | 'saved' | 'queued' | 'confirmando' | 'error';
+
+export interface EstadoReporteHoy {
+  estado: EstadoReporteNutricional;
+  /** Fotos que acompañan al reporte pendiente (0 = sin fotos). */
+  fotosEncoladas: number;
+  /** Aviso informativo que deja una transición (p. ej. el pendiente no llegó a enviarse). */
+  aviso: string | null;
+}
+
+export type EventoReporteNutricional =
+  /** Lectura de la cola durable (al montar, al cambiar la cola o justo después de encolar). */
+  | { tipo: 'cola'; resultado: ResultadoColaReporte }
+  /** Consulta del reporte de hoy al servidor. */
+  | { tipo: 'carga'; resultado: 'encontrado' | 'sin-reporte' | 'error' }
+  | { tipo: 'encolado'; fotos: number }
+  | { tipo: 'guardado' }
+  | { tipo: 'rechazado' };
+
+export const ESTADO_REPORTE_INICIAL: EstadoReporteHoy = {
+  estado: 'idle',
+  fotosEncoladas: 0,
+  aviso: null,
+};
+
+export const MENSAJE_REPORTE_NO_ENVIADO =
+  'Tu reporte no se pudo enviar. Revisa tus cambios por enviar e inténtalo de nuevo.';
+
+/**
+ * Transición pura del estado del reporte de hoy. Devuelve el MISMO objeto cuando el evento no
+ * cambia nada (así React no vuelve a renderizar).
+ */
+export function siguienteEstadoReporte(
+  previo: EstadoReporteHoy,
+  evento: EventoReporteNutricional
+): EstadoReporteHoy {
+  switch (evento.tipo) {
+    case 'cola': {
+      const { resultado } = evento;
+      if (resultado.tipo === 'pendiente') {
+        if (previo.estado === 'saved') return previo;
+        return { estado: 'queued', fotosEncoladas: resultado.fotos, aviso: null };
+      }
+      if (resultado.tipo === 'vacia' && previo.estado === 'queued') {
+        return { ...previo, estado: 'confirmando' };
+      }
+      // Cola ilegible: no se sabe si el pendiente salió; se conserva el estado.
+      return previo;
+    }
+    case 'carga':
+      if (evento.resultado === 'encontrado') {
+        return { estado: 'saved', fotosEncoladas: 0, aviso: null };
+      }
+      if (evento.resultado === 'sin-reporte' && previo.estado === 'confirmando') {
+        return { estado: 'idle', fotosEncoladas: 0, aviso: MENSAJE_REPORTE_NO_ENVIADO };
+      }
+      return previo;
+    case 'encolado':
+      if (previo.estado === 'saved') return previo;
+      return { estado: 'queued', fotosEncoladas: evento.fotos, aviso: null };
+    case 'guardado':
+      return { estado: 'saved', fotosEncoladas: 0, aviso: null };
+    case 'rechazado':
+      return { estado: 'error', fotosEncoladas: 0, aviso: null };
+  }
 }

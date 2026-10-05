@@ -23,6 +23,9 @@ export type OutboxStatus = 'pending' | 'syncing' | 'synced' | 'failed' | 'reject
 /** Máximo de fotografías de platos por reporte (RF-002 RN-03), espejo del contrato compartido. */
 export const MAX_FOTOS_CHECKIN_NUTRICIONAL = 4;
 
+/** Rango de fotos de un reporte, mismo texto en el formulario y en la cola. */
+export const MENSAJE_RANGO_FOTOS_REPORTE = `Un reporte puede llevar de 1 a ${MAX_FOTOS_CHECKIN_NUTRICIONAL} fotos.`;
+
 /** Tipo discriminado de las mutaciones con procesamiento especial en `offline-sync`. */
 export type TipoMutacionCola = 'nutricion-checkin-fotos';
 
@@ -166,13 +169,16 @@ export async function queueOfflineMutation(
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   payload: any,
   description: string,
-  idempotencyKey?: string
+  idempotencyKey?: string,
+  opciones: { alumnoId?: string } = {}
 ): Promise<number> {
   const mutationId = await offlineDb.outboxMutations.add({
     endpoint,
     method,
     payload,
     description,
+    // Dueño de la mutación (campo no indexado: no cambia el esquema de IndexedDB).
+    ...(opciones.alumnoId ? { alumnoId: opciones.alumnoId } : {}),
     idempotencyKey: idempotencyKey || generateIdempotencyKey(),
     status: 'pending',
     createdAt: Date.now(),
@@ -203,9 +209,7 @@ export async function queueCheckinNutricionalConFotos(
   alumnoId: string
 ): Promise<number> {
   if (fotos.length === 0 || fotos.length > MAX_FOTOS_CHECKIN_NUTRICIONAL) {
-    throw new Error(
-      `Un reporte con fotos requiere entre 1 y ${MAX_FOTOS_CHECKIN_NUTRICIONAL} fotografías (RN-03).`
-    );
+    throw new Error(MENSAJE_RANGO_FOTOS_REPORTE);
   }
 
   const descripcion = `Reporte nutricional con ${fotos.length} foto${
