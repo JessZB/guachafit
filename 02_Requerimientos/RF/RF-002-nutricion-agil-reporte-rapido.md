@@ -141,9 +141,25 @@ Then el sistema debe persistir los totales numéricos asociados a la fecha
   - El API acepta claves de fotos ajenas en `fotosPlatos`.
   - Errores que hoy terminan en **500**: violación de unicidad (`23505`), agua ≥ 100 y fecha inválida.
   - `timezoneCliente` es manipulable por el cliente.
-  - Aceptar reportes capturados dentro de la ventana y sincronizados tarde, mostrando al coach la hora de registro (decidido por el dueño; margen por confirmar).
-  - La tolerancia histórica se evalúa con las metas **actuales**, no con las vigentes ese día.
+  - Aceptar reportes capturados dentro de la ventana y sincronizados tarde, mostrando al coach la hora de registro. Margen decidido por el dueño el 2026-10-05; ver [[#Editor de metas del entrenador (2026-10-05)]].
+  - La tolerancia histórica se evalúa con las metas **actuales**, no con las vigentes ese día (solución decidida por el dueño el 2026-10-05; ver la misma sección).
 - Evidencia: `apps/web/src/lib/nutricion-checkin.spec.ts`, `apps/web/src/components/nutricion/*.spec.ts` y `apps/web/src/pages/atleta/NutricionPage.spec.ts`; suite web **843** en verde, typecheck y build OK.
+
+### Editor de metas del entrenador (2026-10-05)
+
+- Implementado (2026-10-05, unidad `2319dff`):
+  - **Editar solo con metas cargadas:** el editor de metas no se puede abrir hasta que las metas del alumno carguen bien; el motivo se muestra junto al botón (*"Espera a que carguen las metas."* / *"No pudimos cargar las metas. Reintenta antes de editarlas."*). Así un guardado (PUT de reemplazo) no borra PDFs del alumno que no se conocían.
+  - **Confirmaciones:** antes de borrar PDFs para siempre (*"¿Borrar este PDF para siempre?"*), antes de cerrar con cambios sin guardar (*"¿Salir sin guardar?"*) y espera si hay una subida en curso (*"Espera a que termine de subirse el PDF."*). En modo demostración no se pide confirmación de borrado.
+  - **Formulario accesible:** etiquetas asociadas en metas y recursos; errores de validación traducidos **por campo**. Calorías y macros deben ser **enteros** (el contrato compartido usa `z.number().int()`): los decimales se rechazan con un mensaje claro en lugar de truncarse; el agua admite hasta 2 decimales; se acepta la coma decimal.
+  - **Mensajes al guardar:** sin conexión → los cambios no se guardaron; rechazo 4xx → no se guardaron; 5xx, tiempo agotado u otros → *"No pudimos confirmar si se guardaron tus cambios. Recarga las metas antes de volver a intentarlo."* Avisos con `role="status"`/`role="alert"`, textos de al menos 12 px y sin jerga ("check-in", "bóveda", códigos HTTP).
+  - **Decisiones del dueño (2026-10-05) sobre los pendientes del módulo** (por implementar en el lote de API):
+    - Reportes capturados dentro de la ventana y sincronizados tarde: se aceptan **hasta las 12:00 (hora local) del día siguiente**; después del mediodía se rechazan con un mensaje claro y el día queda **"No reportado"**. Al entrenador se le muestra la **hora de registro**.
+    - Tolerancia histórica: cada reporte guardará una **copia de las metas vigentes ese día**; los reportes anteriores a la migración se comparan con las metas actuales, indicándolo.
+- **Límites (honestos):**
+  - Sin jsdom no hay tests de interacción: clics, Escape con diálogos apilados y la transición de carga **no están probados en navegador** (casos manuales en [[06_Guia_Pruebas_Manuales]] §12).
+  - `cargarMetas` no descarta respuestas obsoletas al cambiar de alumno con una carga en vuelo (preexistente, ventana estrecha).
+  - El enlace externo de un recurso acepta esquemas como `javascript:` en el esquema compartido (preexistente, va al lote de API).
+- Evidencia: `apps/web/src/lib/editor-metas-nutricion.spec.ts`, `apps/web/src/lib/recursos-pdf.spec.ts`, `apps/web/src/components/entrenador/PanelNutricionAlumno.spec.ts` y `apps/web/src/components/entrenador/EditorMetasPiezas.spec.ts`; suite web **888** en verde, typecheck y build OK.
 
 ### Límites deliberados y notas honestas
 

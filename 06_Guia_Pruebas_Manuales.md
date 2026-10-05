@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** con pruebas automáticas en verde (**843** de la web + **1157** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (**888** de la web + **1157** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -281,7 +281,15 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 - [ ] **Calendario de 30 días:** los días cerrados sin check-in se muestran como **No reportado** (derivado, en gris); los reportados, con su semáforo real.
 - [ ] **Totales vs metas y semáforo:** el panel compara lo reportado contra las metas y clasifica la tolerancia; con datos faltantes dice "sin evaluar".
 - [ ] **Fotos del diario:** abre las miniaturas de cada día en el visor accesible (Escape cierra).
-- [ ] **Editor de metas:** define kcal, macros, agua y hasta 10 recursos por enlace o PDF subido; al guardar, el alumno ve las metas. Un alumno sin metas no muestra ceros fabricados (204 honesto). Al quitar un PDF y guardar, el archivo se **elimina de la bóveda** (borrado best-effort del servidor, sin aviso nuevo en la UI) y el enlace firmado anterior deja de servirse; un recurso por enlace externo solo deja de listarse.
+- [ ] **Editor de metas:** define kcal, macros, agua y hasta 10 recursos por enlace o PDF subido; al guardar, el alumno ve las metas. Un alumno sin metas no muestra ceros fabricados (204 honesto). Al quitar un PDF y guardar, el archivo se **elimina de la bóveda** (borrado best-effort del servidor; desde `2319dff` se pide confirmación antes, ver abajo) y el enlace firmado anterior deja de servirse; un recurso por enlace externo solo deja de listarse.
+- [ ] **Editar metas solo con metas cargadas (2026-10-05, `2319dff`):** mientras cargan las metas, el botón de editar está **deshabilitado** y dice **"Espera a que carguen las metas."**; con el API detenido, tras el error sigue deshabilitado con **"No pudimos cargar las metas. Reintenta antes de editarlas."**
+- [ ] **Quitar un PDF guardado:** quita un PDF ya guardado y pulsa Guardar → aparece **"¿Borrar este PDF para siempre?"** antes de guardar.
+- [ ] **Reemplazar un PDF:** cambia un PDF guardado por otro y guarda → también pide la confirmación de borrado.
+- [ ] **Cerrar con cambios sin guardar:** modifica algo y cierra con el fondo, la X, el botón Cerrar o Escape → aparece **"¿Salir sin guardar?"** en cada caso.
+- [ ] **Escape con confirmación abierta:** con el diálogo de confirmación encima del editor, pulsa Escape → solo se cierra el diálogo; el editor sigue abierto con tus cambios.
+- [ ] **Guardar con subida en curso:** pulsa Guardar mientras un PDF se está subiendo → verás **"Espera a que termine de subirse el PDF."**
+- [ ] **Decimales en calorías:** escribe calorías con decimales (p. ej. 2000,5) → mensaje claro de que debe ser un número entero (no se trunca en silencio).
+- [ ] **Guardar sin red:** sin conexión, pulsa Guardar → mensaje de que **no hay conexión y los cambios no se guardaron**.
 - [ ] **Paginación declarada:** el calendario trabaja sobre la ventana de 30 días con paginación en cliente (no es un listado server-paginado).
 - [ ] **Alerta semanal:** si hay días cerrados sin reporte, el resumen semanal del coach lo menciona (solo cuando el contador es mayor que 0; llega por la campana in-app — sección 10).
 
