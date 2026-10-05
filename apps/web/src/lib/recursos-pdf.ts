@@ -41,13 +41,17 @@ export function filaRecursoVacia(): FilaRecursoFormulario {
   };
 }
 
+/**
+ * Fila sin título, enlace ni PDF (ignorando espacios). Es la regla única de qué filas viajan en el
+ * payload: `construirRecursosParaGuardar` las omite y la numeración de los errores la respeta.
+ */
+export function filaRecursoSinContenido(fila: FilaRecursoFormulario): boolean {
+  return fila.titulo.trim() === '' && fila.url.trim() === '' && fila.storageKey.trim() === '';
+}
+
+/** Fila sin contenido y sin subida en curso (se puede descartar sin perder nada). */
 export function esFilaRecursoVacia(fila: FilaRecursoFormulario): boolean {
-  return (
-    fila.titulo.trim() === '' &&
-    fila.url.trim() === '' &&
-    fila.storageKey.trim() === '' &&
-    !fila.subiendo
-  );
+  return filaRecursoSinContenido(fila) && !fila.subiendo;
 }
 
 /** Mensaje de error si el archivo no es un PDF razonable; `null` si es válido. */
@@ -92,7 +96,7 @@ export function construirRecursosParaGuardar(
     const url = fila.url.trim();
     const storageKey = fila.storageKey.trim();
 
-    if (titulo === '' && url === '' && storageKey === '') continue;
+    if (filaRecursoSinContenido(fila)) continue;
 
     if (storageKey !== '') {
       recursos.push({ titulo, storageKey });

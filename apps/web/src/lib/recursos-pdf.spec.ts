@@ -3,6 +3,7 @@ import { MetasNutricionalesSchema, UUID_REGEX } from '@guachafit/shared';
 import {
   construirRecursosParaGuardar,
   esFilaRecursoVacia,
+  filaRecursoSinContenido,
   filaRecursoVacia,
   LIMITE_RECURSOS_EDUCATIVOS,
   TAMANO_MAXIMO_PDF_BYTES,
@@ -112,5 +113,12 @@ describe('RF-002 RN-01: recursos PDF del coach (validación y payload)', () => {
     expect(esFilaRecursoVacia(fila({ subiendo: true }))).toBe(false);
     expect(esFilaRecursoVacia(fila({ titulo: 'x' }))).toBe(false);
     expect(esFilaRecursoVacia(fila({ storageKey: STORAGE_KEY_PDF }))).toBe(false);
+  });
+
+  it('filaRecursoSinContenido ignora espacios y el estado de subida (es la regla del payload)', () => {
+    expect(filaRecursoSinContenido(fila({ titulo: '  ', url: ' ' }))).toBe(true);
+    expect(filaRecursoSinContenido(fila({ subiendo: true }))).toBe(true);
+    expect(filaRecursoSinContenido(fila({ url: 'https://x.com' }))).toBe(false);
+    expect(construirRecursosParaGuardar([fila({ titulo: '  ' })])).toEqual([]);
   });
 });
