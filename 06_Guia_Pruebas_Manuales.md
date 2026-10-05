@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** con pruebas automáticas en verde (**888** de la web + **1157** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (**904** de la web + **1192** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -274,6 +274,10 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 - [ ] **Lector de pantalla:** con TalkBack/VoiceOver/NVDA, recorre el semáforo → anuncia el grupo ("¿Cómo te fue hoy con tu plan?") y, al elegir un color, que ese botón está **presionado**; las confirmaciones se leen sin interrumpir. Los campos de agua, calorías, proteína y notas anuncian su etiqueta, y un dato inválido muestra el error **nombrando el campo** (p. ej. "Calorías: escribe un número entre 0 y 15000.").
 - [ ] **Valores 0 tras recargar:** registra un reporte con agua, calorías o proteína en **0** y recarga → los ceros **se siguen viendo** (no quedan en blanco).
 - [ ] **Error al cargar el reporte de hoy:** con el API detenido, abre la pantalla → verás **"No pudimos cargar tu reporte de hoy. Revisa tu conexión e inténtalo de nuevo."** con botón **Reintentar**; arranca el API y pulsa Reintentar.
+- [ ] **Clave de foto ajena (2026-10-05, `24609ba`):** con una herramienta HTTP (Postman, curl…) y el token de un alumno, envía el reporte con una `storageKey` de otro alumno (o de otro módulo) en `fotosPlatos` → **400** *"No pudimos asociar la foto. Vuelve a subirla."* y no se guarda nada.
+- [ ] **Doble toque rápido en Guardar:** pulsa "Guardar" dos veces muy rápido → queda **un solo reporte** y nunca aparece un error 500.
+- [ ] **Agua fuera de rango:** escribe **25** en agua y guarda → mensaje claro de que el agua va entre 0 y 20 litros (no un 500).
+- [ ] **Reporte offline con otros datos:** registra el reporte de hoy desde otro dispositivo; en este, sin conexión, guarda un reporte distinto (con fotos) y recupera la red → en "Cambios por enviar" aparece **"Ya tenías un reporte de hoy registrado con otros datos; este no se envió."**, las fotos se conservan y el aviso sigue al reabrir la pantalla. Si los datos coinciden, se da por enviado sin aviso.
 - [ ] **Modo demo:** con "Modo Alumno" la ventana horaria no bloquea la simulación y el reporte, las metas y la tolerancia usan el fixture local.
 
 **Coach (ficha del alumno → pestaña Nutrición, `?tab=nutricion`)**
@@ -290,6 +294,7 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 - [ ] **Guardar con subida en curso:** pulsa Guardar mientras un PDF se está subiendo → verás **"Espera a que termine de subirse el PDF."**
 - [ ] **Decimales en calorías:** escribe calorías con decimales (p. ej. 2000,5) → mensaje claro de que debe ser un número entero (no se trunca en silencio).
 - [ ] **Guardar sin red:** sin conexión, pulsa Guardar → mensaje de que **no hay conexión y los cambios no se guardaron**.
+- [ ] **Enlace `javascript:` en un recurso (2026-10-05, `24609ba`):** en el editor de metas, añade un recurso por enlace con `javascript:alert(1)` y guarda → se rechaza (solo enlaces `http://` o `https://`).
 - [ ] **Paginación declarada:** el calendario trabaja sobre la ventana de 30 días con paginación en cliente (no es un listado server-paginado).
 - [ ] **Alerta semanal:** si hay días cerrados sin reporte, el resumen semanal del coach lo menciona (solo cuando el contador es mayor que 0; llega por la campana in-app — sección 10).
 

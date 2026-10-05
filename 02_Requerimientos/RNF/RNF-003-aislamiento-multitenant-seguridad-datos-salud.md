@@ -4,7 +4,7 @@ modulo: Seguridad
 categoria: seguridad-privacidad # seguridad-privacidad | rendimiento | arquitectura
 prioridad: alta
 estado: implementado
-fecha_verificacion: 2026-10-04
+fecha_verificacion: 2026-10-05
 requisito_origen: "[[RF-010-rbac-jerarquia-aislamiento-tenancy]]"
 metrica_objetivo: "0% fugas entre tenants (RLS estricto) / Dashboard p95 < 200ms"
 fecha_creacion: 2026-09-06
@@ -93,6 +93,7 @@ Establece los requerimientos de seguridad, privacidad y rendimiento asociados a 
   - **Compatibilidad de formato:** se usan exactamente 64 caracteres hexadecimales; si el valor original tenía más de 64, se usan sus primeros 64 (compatible con los datos ya cifrados y el seed), con aviso en el log.
   - **Límite honesto — la rotación no está soportada:** cambiar la clave deja ilegibles las fichas cifradas (AES-256-GCM sin re-cifrado); el mensaje de arranque distingue un primer despliegue de uno con datos ya cifrados.
   - Evidencia: API 1087 → **1143** tests aprobados (1 omitida), `tsc` y `nest build` en verde; web **797**.
+- **Implementado (2026-10-05, unidad `24609ba`) — pertenencia de las fotos de comidas y autorización de nutrición:** el API solo acepta en el reporte nutricional claves de fotos del alumno autenticado (prefijo `comidas/{alumnoId}/`, estructura válida, máximo 255 caracteres); una clave ajena responde 400 y nunca se guarda ni se firma. Nuevos tests de autorización: el superadmin recibe 403 en metas, `checkin/hoy` y `checkin-diario`, y el alumno A no lista los reportes del alumno B. Límite honesto: las filas antiguas con claves ajenas guardadas antes del cambio no se sanean. Detalle en [[RF-002-nutricion-agil-reporte-rapido]]. Evidencia: API **1192** aprobados (1 omitida), web **904**.
 
 ---
 

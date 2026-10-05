@@ -136,13 +136,14 @@ Then el sistema debe persistir los totales numéricos asociados a la fecha
 - **Límites (honestos):**
   - Los tests son de **render a texto en Node** (no hay jsdom ni Testing Library): el foco real, el anuncio del lector de pantalla y la recarga con IndexedDB **no están probados en navegador** (casos manuales en [[06_Guia_Pruebas_Manuales]] §12).
   - Si la cola offline es ilegible de forma persistente, el formulario queda bloqueado **sin mensaje específico**.
-  - Un reporte rechazado reabre el formulario; un segundo envío de un reporte que en realidad ya quedó registrado terminaría en **409** (pendiente del lote de API).
+  - Un reporte rechazado reabre el formulario; un segundo envío de un reporte que en realidad ya quedó registrado terminaría en **409** (resuelto en `24609ba`: la cola compara con el reporte del servidor; ver [[#Integridad y seguridad del API (2026-10-05)]]).
 - **Pendientes conocidos del módulo** (lote de API y panel del coach):
-  - El API acepta claves de fotos ajenas en `fotosPlatos`.
-  - Errores que hoy terminan en **500**: violación de unicidad (`23505`), agua ≥ 100 y fecha inválida.
+  - ~~El API acepta claves de fotos ajenas en `fotosPlatos`.~~ **Resuelto** (2026-10-05, `24609ba`; ver [[#Integridad y seguridad del API (2026-10-05)]]).
+  - ~~Errores que hoy terminan en **500**: violación de unicidad (`23505`), agua ≥ 100 y fecha inválida.~~ **Resuelto** (2026-10-05, `24609ba`: 409 `CHECKIN_YA_REGISTRADO`, agua ≤ 20 L y fechas de calendario reales con 400 claro; ver [[#Integridad y seguridad del API (2026-10-05)]]).
+  - ~~Enlaces de recursos con esquemas como `javascript:`.~~ **Resuelto** (2026-10-05, `24609ba`: solo `http`/`https`; ver [[#Integridad y seguridad del API (2026-10-05)]]).
   - `timezoneCliente` es manipulable por el cliente.
-  - Aceptar reportes capturados dentro de la ventana y sincronizados tarde, mostrando al coach la hora de registro. Margen decidido por el dueño el 2026-10-05; ver [[#Editor de metas del entrenador (2026-10-05)]].
-  - La tolerancia histórica se evalúa con las metas **actuales**, no con las vigentes ese día (solución decidida por el dueño el 2026-10-05; ver la misma sección).
+  - Aceptar reportes capturados dentro de la ventana y sincronizados tarde (hasta el mediodía del día siguiente), mostrando al coach la hora de registro. Margen decidido por el dueño el 2026-10-05; ver [[#Editor de metas del entrenador (2026-10-05)]].
+  - La tolerancia histórica se evalúa con las metas **actuales**, no con las vigentes ese día: falta guardar una copia de las metas en cada reporte (solución decidida por el dueño el 2026-10-05; ver la misma sección).
 - Evidencia: `apps/web/src/lib/nutricion-checkin.spec.ts`, `apps/web/src/components/nutricion/*.spec.ts` y `apps/web/src/pages/atleta/NutricionPage.spec.ts`; suite web **843** en verde, typecheck y build OK.
 
 ### Editor de metas del entrenador (2026-10-05)
@@ -158,8 +159,24 @@ Then el sistema debe persistir los totales numéricos asociados a la fecha
 - **Límites (honestos):**
   - Sin jsdom no hay tests de interacción: clics, Escape con diálogos apilados y la transición de carga **no están probados en navegador** (casos manuales en [[06_Guia_Pruebas_Manuales]] §12).
   - `cargarMetas` no descarta respuestas obsoletas al cambiar de alumno con una carga en vuelo (preexistente, ventana estrecha).
-  - El enlace externo de un recurso acepta esquemas como `javascript:` en el esquema compartido (preexistente, va al lote de API).
+  - El enlace externo de un recurso acepta esquemas como `javascript:` en el esquema compartido (preexistente; resuelto en `24609ba`, ver [[#Integridad y seguridad del API (2026-10-05)]]).
 - Evidencia: `apps/web/src/lib/editor-metas-nutricion.spec.ts`, `apps/web/src/lib/recursos-pdf.spec.ts`, `apps/web/src/components/entrenador/PanelNutricionAlumno.spec.ts` y `apps/web/src/components/entrenador/EditorMetasPiezas.spec.ts`; suite web **888** en verde, typecheck y build OK.
+
+### Integridad y seguridad del API (2026-10-05)
+
+- Implementado (2026-10-05, unidad `24609ba`):
+  - **Fotos de comidas solo del propio alumno:** cada `storageKey` de `fotosPlatos` debe tener estructura válida, estar bajo el prefijo `comidas/{alumnoId}/` del alumno autenticado y medir como máximo 255 caracteres. Si no, el API responde **400** *"No pudimos asociar la foto. Vuelve a subirla."*; la clave ajena **nunca se guarda** y por eso nunca se firma al leer el reporte.
+  - **Doble envío concurrente:** la violación de unicidad (`23505`) del índice `uq_checkin_nutricional_diario` ya no es un 500: responde **409** con el código estable **`CHECKIN_YA_REGISTRADO`** (`@guachafit/shared`) y el texto *"Ya registraste tu reporte de hoy."*, igual que la verificación previa.
+  - **Límites de datos:** agua del reporte y meta de agua del coach **≤ 20 L** (hasta 2 decimales); fechas de **calendario reales** (se rechaza p. ej. `2026-02-31`) en el POST del reporte y en las consultas; historial de reportes **≤ 92 días** cuando llegan `desde` y `hasta`, y un rango invertido se rechaza. Todos con 400 y mensaje claro, nunca 500.
+  - **Enlaces de recursos:** solo `http://` o `https://` (`javascript:`, `data:`, `file:`… se rechazan con *"Usa un enlace que empiece por http:// o https://."*).
+  - **Cola offline ante 409 `CHECKIN_YA_REGISTRADO`:** la web no da nada por enviado a ciegas; consulta el reporte de hoy y lo compara con el pendiente (semáforo, notas, calorías, proteína, agua y número de fotos). Si coincide → enviado (era un reintento cuyo éxito se perdió). Si difiere o no hay reporte → **no enviado**, visible en "Cambios por enviar" con *"Ya tenías un reporte de hoy registrado con otros datos; este no se envió."* y las fotos **se conservan** hasta que el alumno decida. Si la consulta falla (red, 5xx) → reintento con backoff. El aviso también se muestra al reabrir la pantalla.
+  - **Tests de autorización:** el superadmin recibe **403** en metas, `checkin/hoy` y `checkin-diario`; el alumno A no puede listar los reportes del alumno B.
+- **Límites (honestos):**
+  - El guard no exige que la fecha contenida en la clave de la foto coincida con la del reporte.
+  - Las filas antiguas con claves ajenas guardadas antes de este cambio **no se sanean**.
+  - Una web anterior al LOTE API-2 mostraría el nuevo texto *"Tu teléfono ya cambió de día…"* como un rechazo genérico.
+  - El tope de 92 días no aplica si falta `desde` o `hasta`.
+- Evidencia: `apps/api/test/bdd/nutricion-service.spec.ts`, `apps/api/test/bdd/rf010-rbac-tenancy.spec.ts`, `apps/api/test/bdd/api2-errores-claros.spec.ts`, `apps/api/test/bdd/rf002-nutricion-semaforo.spec.ts`, `apps/web/src/lib/offline-sync-nutricion.spec.ts` y `apps/web/src/lib/nutricion-checkin.spec.ts`; API **1192** aprobados (1 omitida), web **904**; typecheck y build OK en shared, api y web.
 
 ### Límites deliberados y notas honestas
 
