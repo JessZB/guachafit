@@ -165,3 +165,44 @@ Reglas transversales del frontend, vinculantes para toda vista nueva (se revisan
 9. **Piso tipográfico de 11px:** ningún texto visible baja de 11px, en ningún tema ni viewport.
 10. **Contraste AA en AMBOS temas:** el color se consume exclusivamente desde tokens semánticos con variante claro/oscuro (`:root` / `.dark`) y contraste AA verificado en ambos; prohibido hardcodear paletas fijas sin variante de tema (los estados usan sus variantes `-strong`/`-foreground`).
 11. **Actualizaciones y datos offline con control del usuario:** la app nunca aplica una actualización del Service Worker ni recarga sin acción explícita del usuario; los datos servidos desde caché se señalan como offline con su antigüedad ("hace X"). Decisión en [[ADR-014-actualizaciones-guiadas-sw-frescura-offline]].
+
+---
+
+## 🤝 7. Flujo de Trabajo Claude Code + OpenCode (vigente desde 2026-10-06)
+
+> **Divide y vencerás:** Claude Code se concentra en escribir código de calidad y documentación; OpenCode escribe y ejecuta los tests y corre las revisiones. El dueño lanza OpenCode desde otra terminal. Para este proyecto, este flujo **prevalece** sobre la regla global `opencode-director` (allí OpenCode es el único escritor de código; aquí no).
+
+### 7.1. Roles
+
+| Rol | Hace | No hace |
+|---|---|---|
+| **Claude Code** (director y escritor) | Audita, aclara requisitos (una pregunta a la vez), escribe el código de producción (front, API, shared, migraciones) y el doc-sync del vault, redacta los prompts para OpenCode, verifica cada reporte contra el `git diff` y hace los commits. | No escribe ni ejecuta tests, no lanza sub-agentes de revisión (4R) ni de validación, no hace push. |
+| **OpenCode** (`opencode-go/deepseek-v4.1-flash#max`) | Escribe los tests (TDD, fase roja), ejecuta suites, typecheck y build, y hace las revisiones 4R y las validaciones acotadas. Siempre deja un reporte `.md`. | No toca código de producción (salvo que el prompt lo autorice de forma explícita), no hace commit ni push, no lee `.env`. |
+| **Dueño** | Ejecuta cada prompt en OpenCode, avisa cuando termina y decide producto. | — |
+
+### 7.2. Carpeta de prompts
+
+- Ruta: `.opencode-prompts/` en la raíz del repo (ignorada por git). Los reportes van en `.opencode-prompts/reportes/`.
+- Nombre: `<NN>-<lote>-<tipo>.md`, con `tipo` ∈ `tests`, `verificacion`, `review-risk`, `review-reliability`, `review-resilience`, `review-readability`, `validacion`. El reporte se llama igual con sufijo `.reporte.md`.
+- Comando que ejecuta el dueño desde la raíz del repo (Git Bash usa `opencode.cmd`; las comillas del modelo son obligatorias):
+  ```bash
+  opencode run -m "opencode-go/deepseek-v4.1-flash#max" --agent build --title "<NN>-<lote>-<tipo>" "Lee y ejecuta exactamente el prompt .opencode-prompts/<NN>-<lote>-<tipo>.md. Deja el reporte en la ruta que indica."
+  ```
+  Nunca `--share` ni `--auto`.
+
+### 7.3. Ciclo por lote
+
+1. **Auditoría y decisiones:** Claude audita el módulo y resuelve con el dueño las decisiones de producto.
+2. **Tests en rojo:** Claude genera el prompt `tests`. OpenCode escribe los tests de los criterios, los ejecuta, confirma que **fallan por la razón esperada** y lo reporta.
+3. **Implementación:** Claude escribe el código de producción hasta cumplir los criterios, sin tocar los tests salvo error evidente (que se reporta).
+4. **Verificación:** prompt `verificacion`. OpenCode corre la suite completa de los paquetes afectados, typecheck y build, y reporta los números (re-ejecuta una vez los tests HTTP intermitentes del API antes de darlos por fallidos).
+5. **Revisión:** prompts `review-*` de solo lectura. Riesgo medio: un enfoque (el del riesgo dominante). Auth, seguridad, permisos, datos o migraciones, o más de 400 líneas: los cuatro.
+6. **Corrección:** Claude corrige los hallazgos y, si hubo cambios, genera un prompt `validacion` (re-ejecuta las suites y confirma cada hallazgo como resuelto o no).
+7. **Cierre:** Claude verifica cada reporte contra el diff y hace el commit de código y su commit `docs(vault)` de doc-sync (ver §2.4). Commits convencionales en español, sin `Co-Authored-By` y sin push.
+8. **Limpieza:** con el lote cerrado, Claude borra los prompts y reportes del lote de `.opencode-prompts/` para dejar sitio a los siguientes.
+
+### 7.4. Contenido mínimo de cada prompt
+
+`Contexto` (repo, rama, requisito, commits de referencia) · `Objetivo` · `Superficie permitida` (archivos que puede crear o tocar) · `Prohibido` (`.env`, commit, push, dependencias nuevas, código de producción si no está autorizado) · `Tareas` · `Comandos de verificación` · `Reporte` (ruta exacta y formato).
+
+El reporte debe incluir: resumen, archivos tocados, comandos ejecutados con resultados observados (números), estado por criterio (CUMPLE / NO, con razón), hallazgos con severidad (BLOCKER / WARNING / SUGGESTION) y `archivo:línea`, y bloqueos. Nada se declara sin haberlo observado; Claude no acepta un reporte sin evidencia.
