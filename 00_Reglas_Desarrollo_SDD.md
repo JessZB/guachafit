@@ -178,17 +178,16 @@ Reglas transversales del frontend, vinculantes para toda vista nueva (se revisan
 |---|---|---|
 | **Claude Code** (director y escritor) | Audita, aclara requisitos (una pregunta a la vez), escribe el código de producción (front, API, shared, migraciones) y el doc-sync del vault, redacta los prompts para OpenCode, verifica cada reporte contra el `git diff` y hace los commits. | No escribe ni ejecuta tests, no lanza sub-agentes de revisión (4R) ni de validación, no hace push. |
 | **OpenCode** (`opencode-go/deepseek-v4.1-flash#max`) | Escribe los tests (TDD, fase roja), ejecuta suites, typecheck y build, y hace las revisiones 4R y las validaciones acotadas. Siempre deja un reporte `.md`. | No toca código de producción (salvo que el prompt lo autorice de forma explícita), no hace commit ni push, no lee `.env`. |
-| **Dueño** | Ejecuta cada prompt en OpenCode, avisa cuando termina y decide producto. | — |
+| **Dueño** | Ejecuta cada prompt en la TUI de OpenCode, avisa cuando termina y decide producto. | — |
 
 ### 7.2. Carpeta de prompts
 
 - Ruta: `.opencode-prompts/` en la raíz del repo (ignorada por git). Los reportes van en `.opencode-prompts/reportes/`.
 - Nombre: `<NN>-<lote>-<tipo>.md`, con `tipo` ∈ `tests`, `verificacion`, `review-risk`, `review-reliability`, `review-resilience`, `review-readability`, `validacion`. El reporte se llama igual con sufijo `.reporte.md`.
-- Comando que ejecuta el dueño desde la raíz del repo (Git Bash usa `opencode.cmd`; las comillas del modelo son obligatorias):
-  ```bash
-  opencode run -m "opencode-go/deepseek-v4.1-flash#max" --agent build --title "<NN>-<lote>-<tipo>" "Lee y ejecuta exactamente el prompt .opencode-prompts/<NN>-<lote>-<tipo>.md. Deja el reporte en la ruta que indica."
+- El dueño abre **OpenCode en modo interactivo (TUI)** en otra terminal, en la raíz del repo, con el modelo `opencode-go/deepseek-v4.1-flash#max`, para ver en vivo su razonamiento y lo que hace. Claude **no** ejecuta OpenCode ni entrega comandos `opencode run`; solo indica el archivo y la instrucción a pegar en la TUI:
+  ```text
+  Lee y ejecuta exactamente el prompt .opencode-prompts/<NN>-<lote>-<tipo>.md y deja el reporte en la ruta que indica.
   ```
-  Nunca `--share` ni `--auto`.
 
 ### 7.3. Ciclo por lote
 
