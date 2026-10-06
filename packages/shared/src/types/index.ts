@@ -6,6 +6,10 @@ import {
   EstablecerPasswordConTokenSchema,
   SolicitarRecuperacionPasswordSchema,
   RestablecerPasswordSchema,
+  ActualizarMiPerfilSchema,
+  CambiarPasswordSchema,
+  SolicitarCambioCorreoSchema,
+  ConfirmarCambioCorreoSchema,
   ListarEntrenadoresAdminQuerySchema,
   CambiarEstadoEntrenadorSchema,
   CambiarLicenciaEntrenadorSchema,
@@ -105,6 +109,50 @@ export type CrearEntrenadorDTO = z.infer<typeof CrearEntrenadorSchema>;
 export type EstablecerPasswordConTokenDTO = z.infer<typeof EstablecerPasswordConTokenSchema>;
 export type SolicitarRecuperacionPasswordDTO = z.infer<typeof SolicitarRecuperacionPasswordSchema>;
 export type RestablecerPasswordDTO = z.infer<typeof RestablecerPasswordSchema>;
+export type ActualizarMiPerfilDTO = z.infer<typeof ActualizarMiPerfilSchema>;
+export type CambiarPasswordDTO = z.infer<typeof CambiarPasswordSchema>;
+export type SolicitarCambioCorreoDTO = z.infer<typeof SolicitarCambioCorreoSchema>;
+export type ConfirmarCambioCorreoDTO = z.infer<typeof ConfirmarCambioCorreoSchema>;
+
+/**
+ * RF-018: perfil propio de cualquier rol (`GET /usuarios/me/perfil`). El alumno trae su ficha
+ * (documento y fecha de nacimiento solo de lectura); el entrenador, la suya; el superadmin no tiene
+ * ficha. Nunca incluye contraseñas ni hashes de tokens.
+ */
+export interface MiPerfilDTO {
+  id: string;
+  email: string;
+  rol: Rol;
+  /** Correo nuevo esperando confirmación (RF-018 RN-05) o `null`. */
+  correoPendiente: string | null;
+  correoPendienteExpiraUtc: string | null;
+  alumno: {
+    nombres: string;
+    apellidos: string;
+    telefonoWhatsapp: string;
+    tipoDocumento: TipoDocumento;
+    numeroDocumento: string;
+    fechaNacimiento: string;
+    zonaHoraria: string;
+  } | null;
+  entrenador: {
+    nombres: string;
+    apellidos: string;
+    nombreComercial: string | null;
+    telefonoContacto: string;
+  } | null;
+}
+
+/** RF-018 RN-04/RN-05: respuesta de `POST /usuarios/me/correo`. */
+export interface SolicitudCambioCorreoDTO {
+  mensaje: string;
+  correoPendiente: string;
+  expiraUtc: string;
+  /** `true` solo si el correo de confirmación quedó realmente en camino. */
+  correoEnviado: boolean;
+  /** Solo fuera de producción y si el correo no salió (pruebas sin proveedor). */
+  enlaceConfirmacion?: string;
+}
 export type ListarEntrenadoresAdminQueryDTO = z.infer<typeof ListarEntrenadoresAdminQuerySchema>;
 export type CambiarEstadoEntrenadorDTO = z.infer<typeof CambiarEstadoEntrenadorSchema>;
 export type CambiarLicenciaEntrenadorDTO = z.infer<typeof CambiarLicenciaEntrenadorSchema>;

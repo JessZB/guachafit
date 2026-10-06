@@ -12,6 +12,9 @@ export const VIGENCIA_ENLACE_ACTIVACION_MS = 48 * UNA_HORA_MS;
 /** Enlace para restablecer la contraseña: 1 hora. */
 export const VIGENCIA_ENLACE_RECUPERACION_MS = UNA_HORA_MS;
 
+/** RF-018 RN-05: enlace para confirmar el cambio de correo de acceso: 24 horas. */
+export const VIGENCIA_ENLACE_CAMBIO_CORREO_MS = 24 * UNA_HORA_MS;
+
 /** Vigencia legible para textos: `1 hora`, `48 horas`. */
 export function textoVigencia(ms: number): string {
   const horas = Math.round(ms / UNA_HORA_MS);

@@ -67,16 +67,19 @@ function InterruptorNotificacion({
       onClick={() => onCambiar(!activo)}
       className="h-11 min-w-[52px] inline-flex items-center justify-center rounded-xl transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-70"
     >
+      {/* El riel es un `span`: sin `inline-flex` sería un elemento en línea y no respetaría su
+          alto ni su ancho (el interruptor se veía deformado). Riel de 44×24 con 2px de holgura:
+          la perilla de 18px recorre 20px. */}
       <span
         aria-hidden="true"
-        className={`relative h-6 w-11 rounded-full border transition-colors ${
+        className={`inline-flex h-6 w-11 shrink-0 items-center rounded-full border p-0.5 transition-colors ${
           activo ? 'bg-primary border-primary' : 'bg-secondary border-border'
         }`}
       >
         <span
           aria-hidden="true"
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-xs transition-transform duration-150 ${
-            activo ? 'translate-x-[22px]' : 'translate-x-0.5'
+          className={`block h-[18px] w-[18px] rounded-full bg-white shadow-xs transition-transform duration-150 ${
+            activo ? 'translate-x-5' : 'translate-x-0'
           }`}
         />
       </span>

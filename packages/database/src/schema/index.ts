@@ -163,6 +163,11 @@ export const usuarios = pgTable('usuarios', {
   // Instante del último restablecimiento de contraseña. El refresh rechaza los tokens
   // emitidos antes (cierra las sesiones abiertas en su siguiente renovación).
   passwordCambiadaEn: timestamp('password_cambiada_en', { withTimezone: true }),
+  // RF-018 RN-05: cambio de correo pendiente de confirmar. Solo se guarda el hash SHA-256 del
+  // enlace de un solo uso (vence en 24 horas); hasta confirmarlo se sigue entrando con `email`.
+  correoPendiente: varchar('correo_pendiente', { length: 255 }),
+  tokenCambioCorreoHash: varchar('token_cambio_correo_hash', { length: 64 }),
+  tokenCambioCorreoExpira: timestamp('token_cambio_correo_expira', { withTimezone: true }),
   ultimoAccesoUtc: timestamp('ultimo_acceso_utc', { withTimezone: true }),
   timezone: varchar('timezone', { length: 64 }).default('America/Caracas').notNull(),
   temaUi: varchar('tema_ui', { length: 10 }).default('system').notNull(),

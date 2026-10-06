@@ -24,9 +24,13 @@ import { leerConfigCorreo, obtenerUrlWeb } from '../../src/common/config/correo'
 import { EmailNotificationProcessor } from '../../src/modules/notificaciones/processors/email-notification.processor';
 import { NotificationDispatcherService } from '../../src/modules/notificaciones/notification-dispatcher.service';
 import {
+  AvisoCorreoCambiadoEvent,
+  AvisoPasswordCambiadaEvent,
   BienvenidaAlumnoEvent,
+  ConfirmacionCambioCorreoEvent,
   PATRON_EVENTOS_CORREO_CUENTA,
   RecuperacionPasswordSolicitadaEvent,
+  TIPOS_CORREO_SEGURIDAD,
 } from '../../src/modules/notificaciones/events/eventos-correo-cuenta';
 import { LIMITADOR_WORKER_EMAIL } from '../../src/modules/notificaciones/notificaciones.config';
 import { contieneJerga } from '../../src/common/errores/jerga';
@@ -491,5 +495,106 @@ describe('API-4 · Despacho de correos de cuenta', () => {
     // El enlace no se retiene en Redis una vez entregado.
     expect(opciones.removeOnComplete).toBe(true);
     expect(opciones.attempts).toBe(4);
+  });
+
+  it('avisos sin enlace: dos AVISO_PASSWORD_CAMBIADA seguidos producen jobId distintos', async () => {
+    // W2 (03/05): con `token: ''` la huella era constante y BullMQ descartaba el segundo aviso.
+    const { dispatcher, emailQueue } = crearDispatcher();
+    const aviso = () =>
+      new AvisoPasswordCambiadaEvent({
+        tipo: 'AVISO_PASSWORD_CAMBIADA',
+        usuarioId: 'u-1',
+        email: 'ana@guachafit.com',
+        nombre: 'Ana',
+        token: '',
+      });
+
+    await dispatcher.alEventoCorreoCuenta(aviso());
+    await dispatcher.alEventoCorreoCuenta(aviso());
+
+    expect(emailQueue.add).toHaveBeenCalledTimes(2);
+    const idPrimero = emailQueue.add.mock.calls[0][2].jobId as string;
+    const idSegundo = emailQueue.add.mock.calls[1][2].jobId as string;
+    expect(idPrimero).toMatch(/^cuenta_AVISO_PASSWORD_CAMBIADA_u-1_aviso_[0-9a-f-]{36}$/);
+    expect(idSegundo).toMatch(/^cuenta_AVISO_PASSWORD_CAMBIADA_u-1_aviso_[0-9a-f-]{36}$/);
+    expect(idPrimero).not.toBe(idSegundo);
+  });
+
+  it('los correos con enlace mantienen la idempotencia por huella del código', async () => {
+    const { dispatcher, emailQueue } = crearDispatcher();
+    const recuperacion = (token: string) =>
+      new RecuperacionPasswordSolicitadaEvent({
+        tipo: 'RECUPERACION_PASSWORD',
+        usuarioId: 'u-1',
+        email: 'ana@guachafit.com',
+        nombre: 'Ana',
+        token,
+      });
+
+    await dispatcher.alEventoCorreoCuenta(recuperacion('codigo-1'));
+    await dispatcher.alEventoCorreoCuenta(recuperacion('codigo-1'));
+    await dispatcher.alEventoCorreoCuenta(recuperacion('codigo-2'));
+
+    const ids = emailQueue.add.mock.calls.map((llamada: any[]) => llamada[2].jobId as string);
+    expect(ids[0]).toBe(ids[1]);
+    expect(ids[2]).not.toBe(ids[0]);
+    expect(ids[0]).toMatch(/^cuenta_RECUPERACION_PASSWORD_u-1_[0-9a-f]{16}$/);
+  });
+
+  it('esCriticoSeguridad sale de TIPOS_CORREO_SEGURIDAD (los cuatro de seguridad, la bienvenida no)', async () => {
+    expect([...TIPOS_CORREO_SEGURIDAD]).toEqual([
+      'RECUPERACION_PASSWORD',
+      'CONFIRMACION_CAMBIO_CORREO',
+      'AVISO_CORREO_CAMBIADO',
+      'AVISO_PASSWORD_CAMBIADA',
+    ]);
+    const { dispatcher, emailQueue } = crearDispatcher();
+    const eventos = [
+      new RecuperacionPasswordSolicitadaEvent({
+        tipo: 'RECUPERACION_PASSWORD',
+        usuarioId: 'u-1',
+        email: 'ana@guachafit.com',
+        nombre: 'Ana',
+        token: 't1',
+      }),
+      new ConfirmacionCambioCorreoEvent({
+        tipo: 'CONFIRMACION_CAMBIO_CORREO',
+        usuarioId: 'u-1',
+        email: 'ana@guachafit.com',
+        nombre: 'Ana',
+        token: 't2',
+      }),
+      new AvisoCorreoCambiadoEvent({
+        tipo: 'AVISO_CORREO_CAMBIADO',
+        usuarioId: 'u-1',
+        email: 'ana@guachafit.com',
+        nombre: 'Ana',
+        token: '',
+        correoNuevo: 'nuevo@guachafit.com',
+      }),
+      new AvisoPasswordCambiadaEvent({
+        tipo: 'AVISO_PASSWORD_CAMBIADA',
+        usuarioId: 'u-1',
+        email: 'ana@guachafit.com',
+        nombre: 'Ana',
+        token: '',
+      }),
+      new BienvenidaAlumnoEvent({
+        tipo: 'BIENVENIDA_ALUMNO',
+        usuarioId: 'u-1',
+        email: 'ana@guachafit.com',
+        nombre: 'Ana',
+        token: 't3',
+      }),
+    ];
+
+    for (const evento of eventos) {
+      await dispatcher.alEventoCorreoCuenta(evento);
+    }
+
+    const criticos = emailQueue.add.mock.calls.map(
+      (llamada: any[]) => llamada[1].esCriticoSeguridad as boolean
+    );
+    expect(criticos).toEqual([true, true, true, true, false]);
   });
 });

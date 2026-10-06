@@ -25,11 +25,26 @@ export const TIPOS_CORREO_CUENTA = [
   'BIENVENIDA_ALUMNO',
   'BIENVENIDA_ENTRENADOR',
   'RECUPERACION_PASSWORD',
+  // RF-018: cambio de correo y de contraseña desde "Mi perfil".
+  'CONFIRMACION_CAMBIO_CORREO',
+  'AVISO_CORREO_CAMBIADO',
+  'AVISO_PASSWORD_CAMBIADA',
 ] as const;
 
 export type TipoCorreoCuenta = (typeof TIPOS_CORREO_CUENTA)[number];
 
-/** `true` si el `tipoEvento` de un job de correo es un correo de cuenta (lleva enlace con código). */
+/** Correos de cuenta críticos de seguridad (RF-015 RN-01: siempre por correo). */
+export const TIPOS_CORREO_SEGURIDAD: ReadonlySet<TipoCorreoCuenta> = new Set<TipoCorreoCuenta>([
+  'RECUPERACION_PASSWORD',
+  'CONFIRMACION_CAMBIO_CORREO',
+  'AVISO_CORREO_CAMBIADO',
+  'AVISO_PASSWORD_CAMBIADA',
+]);
+
+/**
+ * `true` si el `tipoEvento` de un job de correo es un correo de cuenta. Las bienvenidas, la
+ * recuperación y la confirmación de correo llevan enlace con código; los avisos de RF-018 no.
+ */
 export function esTipoCorreoCuenta(tipo: unknown): tipo is TipoCorreoCuenta {
   return typeof tipo === 'string' && (TIPOS_CORREO_CUENTA as readonly string[]).includes(tipo);
 }
@@ -39,7 +54,10 @@ export interface CorreoCuentaPayload {
   usuarioId: string;
   email: string;
   nombre: string | null;
+  /** Código en claro del enlace; vacío en los avisos de seguridad, que no llevan enlace. */
   token: string;
+  /** RF-018 RN-06: correo nuevo, para mencionarlo enmascarado en el aviso al correo anterior. */
+  correoNuevo?: string;
 }
 
 /**
@@ -81,6 +99,21 @@ export class BienvenidaEntrenadorEvent extends EventoCorreoCuenta {
 /** El usuario pidió restablecer su contraseña (enlace /restablecer). */
 export class RecuperacionPasswordSolicitadaEvent extends EventoCorreoCuenta {
   static readonly NOMBRE = 'correo-cuenta.recuperacion-password';
+}
+
+/** RF-018 RN-05: confirmar el correo nuevo (enlace /confirmar-correo, enviado al correo NUEVO). */
+export class ConfirmacionCambioCorreoEvent extends EventoCorreoCuenta {
+  static readonly NOMBRE = 'correo-cuenta.confirmacion-cambio-correo';
+}
+
+/** RF-018 RN-06: aviso de seguridad al correo ANTERIOR tras confirmar el cambio (sin enlace). */
+export class AvisoCorreoCambiadoEvent extends EventoCorreoCuenta {
+  static readonly NOMBRE = 'correo-cuenta.aviso-correo-cambiado';
+}
+
+/** RF-018 RN-08: aviso de seguridad tras cambiar la contraseña desde "Mi perfil" (sin enlace). */
+export class AvisoPasswordCambiadaEvent extends EventoCorreoCuenta {
+  static readonly NOMBRE = 'correo-cuenta.aviso-password-cambiada';
 }
 
 /**

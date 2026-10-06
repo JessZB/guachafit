@@ -1,7 +1,11 @@
 import { Injectable, Optional, Inject, Logger } from '@nestjs/common';
 import * as crypto from 'node:crypto';
 import * as bcrypt from 'bcryptjs';
-import { VIGENCIA_ENLACE_ACTIVACION_MS, VIGENCIA_ENLACE_RECUPERACION_MS } from '@guachafit/shared';
+import {
+  VIGENCIA_ENLACE_ACTIVACION_MS,
+  VIGENCIA_ENLACE_CAMBIO_CORREO_MS,
+  VIGENCIA_ENLACE_RECUPERACION_MS,
+} from '@guachafit/shared';
 import {
   ENCRYPTION_KEY_DESARROLLO,
   analizarClaveCifrado,
@@ -73,6 +77,17 @@ export class CryptoService {
     const rawToken = crypto.randomBytes(32).toString('hex');
     const tokenHash = this.hashSha256(rawToken);
     const expiresAt = new Date(Date.now() + VIGENCIA_ENLACE_RECUPERACION_MS);
+    return { rawToken, tokenHash, expiresAt };
+  }
+
+  /**
+   * RF-018 RN-05: código del enlace que confirma un cambio de correo (un solo uso, vigencia
+   * `VIGENCIA_ENLACE_CAMBIO_CORREO_MS`). Igual que la recuperación: solo se guarda su hash.
+   */
+  generarTokenCambioCorreo(): { rawToken: string; tokenHash: string; expiresAt: Date } {
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = this.hashSha256(rawToken);
+    const expiresAt = new Date(Date.now() + VIGENCIA_ENLACE_CAMBIO_CORREO_MS);
     return { rawToken, tokenHash, expiresAt };
   }
 

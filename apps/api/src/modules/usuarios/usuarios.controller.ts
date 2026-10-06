@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Patch,
+  Post,
+  Delete,
   Body,
   UseGuards,
   Req,
@@ -15,12 +17,64 @@ import { eq } from '@guachafit/database';
 import { DRIZZLE_DB } from '../../database/database.module';
 import { Database, usuarios } from '@guachafit/database';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { ActualizarTemaUiSchema } from '@guachafit/shared';
+import {
+  ActualizarMiPerfilSchema,
+  ActualizarTemaUiSchema,
+  CambiarPasswordSchema,
+  SolicitarCambioCorreoSchema,
+} from '@guachafit/shared';
+import { UsuariosService } from './usuarios.service';
+import { AuthService } from '../auth/auth.service';
+import { LimitarIntentosCuenta } from '../../common/guards/limite-intentos.guard';
 
 @Controller('usuarios')
 @UseGuards(JwtAuthGuard)
 export class UsuariosController {
-  constructor(@Inject(DRIZZLE_DB) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE_DB) private readonly db: Database,
+    // Tokens explícitos: los transformadores de test (esbuild) no emiten `design:paramtypes`.
+    @Inject(UsuariosService) private readonly usuariosService: UsuariosService,
+    @Inject(AuthService) private readonly authService: AuthService
+  ) {}
+
+  /** RF-018: perfil propio (datos editables y de solo lectura, correo pendiente). */
+  @Get('me/perfil')
+  async obtenerMiPerfil(@Req() req: any) {
+    return this.usuariosService.obtenerMiPerfil(req.user.sub);
+  }
+
+  /** RF-018 RN-01/RN-02: edita los datos permitidos para el rol (el id sale del token). */
+  @Patch('me/perfil')
+  @HttpCode(HttpStatus.OK)
+  async actualizarMiPerfil(@Req() req: any, @Body() body: unknown) {
+    const dto = parsearContrato(ActualizarMiPerfilSchema, body);
+    return this.usuariosService.actualizarMiPerfil(req.user.sub, dto);
+  }
+
+  /** RF-018 RN-08: cambio de contraseña con la actual; devuelve tokens nuevos. */
+  @Post('me/password')
+  @HttpCode(HttpStatus.OK)
+  @LimitarIntentosCuenta()
+  async cambiarPassword(@Req() req: any, @Body() body: unknown) {
+    const dto = parsearContrato(CambiarPasswordSchema, body);
+    return this.authService.cambiarPassword(req.user.sub, dto);
+  }
+
+  /** RF-018 RN-03..RN-05: pide el cambio de correo; envía el enlace al correo nuevo. */
+  @Post('me/correo')
+  @HttpCode(HttpStatus.OK)
+  @LimitarIntentosCuenta()
+  async solicitarCambioCorreo(@Req() req: any, @Body() body: unknown) {
+    const dto = parsearContrato(SolicitarCambioCorreoSchema, body);
+    return this.authService.solicitarCambioCorreo(req.user.sub, dto);
+  }
+
+  /** RF-018 RN-05: cancela el cambio de correo pendiente (idempotente). */
+  @Delete('me/correo-pendiente')
+  @HttpCode(HttpStatus.OK)
+  async cancelarCambioCorreo(@Req() req: any) {
+    return this.authService.cancelarCambioCorreoPendiente(req.user.sub);
+  }
 
   /**
    * Consulta del perfil y preferencias del usuario autenticado

@@ -11,14 +11,18 @@
  * - Bienvenida (alumno RF-011 RN-05 y entrenador RF-010 Escenario 1): `/activar?token=…`, la
  *   misma pantalla de activación que el enlace copiable.
  * - Recuperación de contraseña: `/restablecer?token=…`.
+ * - Confirmación del cambio de correo (RF-018): `/confirmar-correo?token=…`. Los avisos de
+ *   correo y de contraseña cambiados no llevan enlace con código.
  * Las vigencias salen de `@guachafit/shared` (misma fuente que `CryptoService` y la web).
  */
 import {
   VIGENCIA_ENLACE_ACTIVACION_MS,
+  VIGENCIA_ENLACE_CAMBIO_CORREO_MS,
   VIGENCIA_ENLACE_RECUPERACION_MS,
   textoVigencia,
 } from '@guachafit/shared';
 import { CorreoCuentaPayload } from '../events/eventos-correo-cuenta';
+import { enmascararCorreo } from '../../../common/enmascarar-correo.util';
 
 export interface CorreoArmado {
   asunto: string;
@@ -28,6 +32,7 @@ export interface CorreoArmado {
 
 const VIGENCIA_ACTIVACION = textoVigencia(VIGENCIA_ENLACE_ACTIVACION_MS);
 const VIGENCIA_RECUPERACION = textoVigencia(VIGENCIA_ENLACE_RECUPERACION_MS);
+const VIGENCIA_CAMBIO_CORREO = textoVigencia(VIGENCIA_ENLACE_CAMBIO_CORREO_MS);
 
 export function escaparHtml(texto: string): string {
   return texto
@@ -38,9 +43,12 @@ export function escaparHtml(texto: string): string {
     .replace(/'/g, '&#39;');
 }
 
-function construirEnlace(urlWeb: string, ruta: string, token: string): string {
+/** Enlace de un solo uso de la web (`/activar`, `/restablecer`, `/confirmar-correo`). */
+export function construirEnlaceConCodigo(urlWeb: string, ruta: string, token: string): string {
   return `${urlWeb.replace(/\/+$/, '')}${ruta}?token=${encodeURIComponent(token)}`;
 }
+
+const construirEnlace = construirEnlaceConCodigo;
 
 /**
  * Enlace de una notificación: rutas relativas de la web (`/app/pagos`) se vuelven absolutas; solo
@@ -170,6 +178,55 @@ export function plantillaRecuperacionPassword({ nombre, token, urlWeb }: DatosEn
   });
 }
 
+/** RF-018 RN-05: confirmar el correo nuevo (llega a la dirección NUEVA). */
+export function plantillaConfirmacionCambioCorreo({ nombre, token, urlWeb }: DatosEnlace): CorreoArmado {
+  return armar({
+    asunto: 'Confirma tu nuevo correo de GUACHAFIT',
+    saludo: saludo(nombre),
+    parrafos: [
+      'Pediste usar esta dirección como tu correo de acceso a GUACHAFIT.',
+      'Para confirmarla, usa el botón de abajo. Hasta que lo hagas, sigues entrando con tu correo anterior.',
+    ],
+    boton: { texto: 'Confirmar mi correo', url: construirEnlace(urlWeb, '/confirmar-correo', token) },
+    notas: [
+      `El enlace se usa una sola vez y vence en ${VIGENCIA_CAMBIO_CORREO}. Si vence, pide uno nuevo desde Mi perfil.`,
+      'Si no pediste este cambio, ignora este correo: no cambiará nada.',
+    ],
+  });
+}
+
+/** RF-018 RN-06: aviso al correo ANTERIOR cuando el cambio se confirma (sin enlace con código). */
+export function plantillaAvisoCorreoCambiado({
+  nombre,
+  correoNuevo,
+}: {
+  nombre: string | null | undefined;
+  correoNuevo: string | undefined;
+}): CorreoArmado {
+  return armar({
+    asunto: 'Tu correo de acceso a GUACHAFIT cambió',
+    saludo: saludo(nombre),
+    parrafos: [
+      correoNuevo
+        ? `Tu correo de acceso a GUACHAFIT cambió a ${enmascararCorreo(correoNuevo)}.`
+        : 'Tu correo de acceso a GUACHAFIT cambió.',
+      'Si no fuiste tú, contacta a tu entrenador cuanto antes.',
+    ],
+  });
+}
+
+/** RF-018 RN-08: aviso de seguridad tras cambiar la contraseña (sin enlace con código). */
+export function plantillaAvisoPasswordCambiada({ nombre }: { nombre: string | null | undefined }): CorreoArmado {
+  return armar({
+    asunto: 'Tu contraseña de GUACHAFIT cambió',
+    saludo: saludo(nombre),
+    parrafos: [
+      'La contraseña de tu cuenta de GUACHAFIT se cambió desde Mi perfil.',
+      'Si no fuiste tú, restablécela desde la pantalla de inicio de sesión y avisa a tu entrenador.',
+    ],
+  });
+}
+
 /** Avisos del despachador (pagos, recordatorios…) que llegan al worker sin HTML propio. */
 export function plantillaNotificacionGenerica({
   titulo,
@@ -201,5 +258,11 @@ export function construirCorreoCuenta(payload: CorreoCuentaPayload, urlWeb: stri
       return plantillaBienvenidaEntrenador(datos);
     case 'RECUPERACION_PASSWORD':
       return plantillaRecuperacionPassword(datos);
+    case 'CONFIRMACION_CAMBIO_CORREO':
+      return plantillaConfirmacionCambioCorreo(datos);
+    case 'AVISO_CORREO_CAMBIADO':
+      return plantillaAvisoCorreoCambiado({ nombre: payload.nombre, correoNuevo: payload.correoNuevo });
+    case 'AVISO_PASSWORD_CAMBIADA':
+      return plantillaAvisoPasswordCambiada({ nombre: payload.nombre });
   }
 }

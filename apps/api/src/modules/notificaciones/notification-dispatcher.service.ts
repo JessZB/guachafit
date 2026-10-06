@@ -34,13 +34,14 @@ import {
   PATRON_EVENTOS_CORREO_CUENTA,
   ResultadoDespachoCorreoCuenta,
   TIEMPO_MAX_ENCOLADO_CORREO_CUENTA_MS,
+  TIPOS_CORREO_SEGURIDAD,
 } from './events/eventos-correo-cuenta';
 import { construirCorreoCuenta } from './correo/plantillas-correo';
 import { ADAPTADOR_CORREO, AdaptadorCorreo } from './correo/adaptador-correo';
 import { leerConfigCorreo, obtenerUrlWeb } from '../../common/config/correo';
 import { esperarConLimite } from '../../common/esperar-con-limite.util';
 import { enmascararCorreo } from '../../common/enmascarar-correo.util';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   COLA_EMAIL,
   COLA_PUSH,
@@ -151,8 +152,12 @@ export class NotificationDispatcherService {
 
     const correo = construirCorreoCuenta(payload, obtenerUrlWeb());
     // Idempotencia por enlace: el mismo código no se encola dos veces; un enlace nuevo sí. El id
-    // lleva una huella del código, nunca el código en claro.
-    const huella = createHash('sha256').update(payload.token).digest('hex').slice(0, 16);
+    // lleva una huella del código, nunca el código en claro. Los avisos de seguridad sin enlace
+    // (RF-018) no tienen código: cada uno lleva un id propio para que BullMQ no descarte el
+    // segundo aviso por compartir id con uno anterior retenido.
+    const huella = payload.token
+      ? createHash('sha256').update(payload.token).digest('hex').slice(0, 16)
+      : `aviso_${randomUUID()}`;
 
     await this.emailQueue.add(
       'enviar-email',
@@ -164,7 +169,7 @@ export class NotificationDispatcherService {
         cuerpo: correo.texto,
         html: correo.html,
         tipoEvento: payload.tipo,
-        esCriticoSeguridad: payload.tipo === 'RECUPERACION_PASSWORD',
+        esCriticoSeguridad: TIPOS_CORREO_SEGURIDAD.has(payload.tipo),
       },
       {
         ...OPCIONES_JOB_EMAIL,

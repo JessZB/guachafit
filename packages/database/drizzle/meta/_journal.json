@@ -120,6 +120,13 @@
       "when": 1791252796372,
       "tag": "0016_nutricion_zona_captura_metas",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791320691018,
+      "tag": "0017_usuarios_cambio_correo",
+      "breakpoints": true
     }
   ]
 }

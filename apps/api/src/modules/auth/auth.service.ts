@@ -21,6 +21,7 @@ import {
   gt,
   lte,
   isNull,
+  ne,
   count,
   desc,
   asc,
@@ -40,11 +41,16 @@ import {
   MENSAJE_PASSWORD_ACTUALIZADA,
 } from '../../common/mensajes-acceso';
 import {
+  AvisoCorreoCambiadoEvent,
+  AvisoPasswordCambiadaEvent,
   BienvenidaEntrenadorEvent,
+  ConfirmacionCambioCorreoEvent,
   EventoCorreoCuenta,
   RecuperacionPasswordSolicitadaEvent,
   publicarCorreoCuenta,
 } from '../notificaciones/events/eventos-correo-cuenta';
+import { obtenerUrlWeb } from '../../common/config/correo';
+import { construirEnlaceConCodigo } from '../notificaciones/correo/plantillas-correo';
 import { enmascararCorreo } from '../../common/enmascarar-correo.util';
 import {
   LoginUsuarioDTO,
@@ -68,7 +74,32 @@ import {
   VIGENCIA_ENLACE_RECUPERACION_MS,
   EntrenadorCreadoDTO,
   ZONA_HORARIA_ALUMNO_POR_DEFECTO,
+  CambiarPasswordDTO,
+  SolicitarCambioCorreoDTO,
+  ConfirmarCambioCorreoDTO,
+  SolicitudCambioCorreoDTO,
+  MENSAJE_PASSWORD_ACTUAL_INCORRECTA,
+  MENSAJE_PASSWORD_NUEVA_IGUAL,
+  MENSAJE_CORREO_EN_USO,
+  MENSAJE_CORREO_IGUAL_AL_ACTUAL,
+  MENSAJE_ENLACE_CAMBIO_CORREO_INVALIDO,
+  MENSAJE_PASSWORD_CAMBIADA,
+  MENSAJE_CAMBIO_CORREO_CANCELADO,
+  mensajeCambioCorreoSolicitado,
+  mensajeCorreoConfirmado,
 } from '@guachafit/shared';
+
+/** Postgres: violación de unicidad (`usuarios.email` es UNIQUE). */
+const CODIGO_PG_UNICIDAD = '23505';
+
+/** `true` si el error (o su causa) es un 23505 de Postgres. */
+function esViolacionUnicidad(error: unknown): boolean {
+  for (let actual = error, saltos = 0; actual && typeof actual === 'object' && saltos < 3; saltos++) {
+    if ((actual as { code?: unknown }).code === CODIGO_PG_UNICIDAD) return true;
+    actual = (actual as { cause?: unknown }).cause;
+  }
+  return false;
+}
 
 /**
  * Recuperación: intervalo mínimo entre dos enlaces para la misma cuenta. Mientras el enlace
@@ -723,6 +754,279 @@ export class AuthService {
     }
 
     return { mensaje: MENSAJE_PASSWORD_ACTUALIZADA };
+  }
+
+  // ===========================================================================
+  // RF-018 "Mi perfil": contraseña y correo de acceso del propio usuario
+  // ===========================================================================
+
+  /**
+   * `POST /usuarios/me/password` (RF-018 RN-08).
+   *
+   * Exige la contraseña actual y una nueva distinta. Marca `passwordCambiadaEn` (el refresh
+   * rechaza las sesiones abiertas antes, salvo la actual, que recibe tokens nuevos emitidos en el
+   * mismo segundo) y avisa por correo.
+   *
+   * Quien rota la contraseña puede estar echando a un intruso: se anulan TODOS los enlaces que
+   * dan acceso a la cuenta y que el intruso pudo pedir con la sesión robada (recuperación y, sobre
+   * todo, un cambio de correo pendiente hacia su propio buzón, cuya confirmación es pública).
+   */
+  async cambiarPassword(
+    usuarioId: string,
+    dto: CambiarPasswordDTO
+  ): Promise<{ mensaje: string; accessToken: string; refreshToken: string }> {
+    const usuario = await this.usuarioConSesion(usuarioId);
+    await this.exigirPasswordActual(usuario.passwordHash, dto.passwordActual);
+    if (await this.cryptoService.comparePassword(dto.passwordNueva, usuario.passwordHash ?? '')) {
+      throw new BadRequestException(MENSAJE_PASSWORD_NUEVA_IGUAL);
+    }
+
+    const { entrenadorId, nombre } = await this.datosSesionDe(usuario);
+    const ahora = new Date();
+    const passwordHash = await this.cryptoService.hashPassword(dto.passwordNueva);
+    await this.db
+      .update(usuarios)
+      .set({
+        passwordHash,
+        passwordCambiadaEn: ahora,
+        tokenRecuperacionHash: null,
+        tokenRecuperacionExpira: null,
+        correoPendiente: null,
+        tokenCambioCorreoHash: null,
+        tokenCambioCorreoExpira: null,
+        updatedAtUtc: ahora,
+      })
+      .where(eq(usuarios.id, usuario.id));
+
+    const tokens = this.generateTokens({
+      sub: usuario.id,
+      email: usuario.email,
+      rol: usuario.rol as Rol,
+      entrenadorId,
+    });
+
+    await this.publicarCorreoCuenta(
+      AvisoPasswordCambiadaEvent.NOMBRE,
+      new AvisoPasswordCambiadaEvent({
+        tipo: 'AVISO_PASSWORD_CAMBIADA',
+        usuarioId: usuario.id,
+        email: usuario.email,
+        nombre,
+        token: '',
+      })
+    );
+
+    return { mensaje: MENSAJE_PASSWORD_CAMBIADA, ...tokens };
+  }
+
+  /**
+   * `POST /usuarios/me/correo` (RF-018 RN-04/RN-05).
+   *
+   * Con la contraseña actual correcta y un correo libre, guarda el correo pendiente con el hash de
+   * un enlace de un solo uso (24 h) y lo envía al correo NUEVO. Una solicitud nueva reemplaza a la
+   * anterior. El enlace copiable solo se devuelve fuera de producción y si el correo no salió: en
+   * producción devolverlo dejaría confirmar un correo ajeno.
+   */
+  async solicitarCambioCorreo(
+    usuarioId: string,
+    dto: SolicitarCambioCorreoDTO
+  ): Promise<SolicitudCambioCorreoDTO> {
+    const usuario = await this.usuarioConSesion(usuarioId);
+    const { nombre } = await this.datosSesionDe(usuario);
+    await this.exigirPasswordActual(usuario.passwordHash, dto.passwordActual);
+
+    const correoNuevo = dto.correoNuevo.trim().toLowerCase();
+    if (correoNuevo === usuario.email.trim().toLowerCase()) {
+      throw new BadRequestException(MENSAJE_CORREO_IGUAL_AL_ACTUAL);
+    }
+    await this.exigirCorreoLibre(correoNuevo, usuario.id);
+
+    const { rawToken, tokenHash, expiresAt } = this.cryptoService.generarTokenCambioCorreo();
+    await this.db
+      .update(usuarios)
+      .set({
+        correoPendiente: correoNuevo,
+        tokenCambioCorreoHash: tokenHash,
+        tokenCambioCorreoExpira: expiresAt,
+        updatedAtUtc: new Date(),
+      })
+      .where(eq(usuarios.id, usuario.id));
+
+    const correoEnviado = await this.publicarCorreoCuenta(
+      ConfirmacionCambioCorreoEvent.NOMBRE,
+      new ConfirmacionCambioCorreoEvent({
+        tipo: 'CONFIRMACION_CAMBIO_CORREO',
+        usuarioId: usuario.id,
+        email: correoNuevo,
+        nombre,
+        token: rawToken,
+      })
+    );
+
+    const respuesta: SolicitudCambioCorreoDTO = {
+      mensaje: mensajeCambioCorreoSolicitado(correoNuevo, correoEnviado),
+      correoPendiente: correoNuevo,
+      expiraUtc: expiresAt.toISOString(),
+      correoEnviado,
+    };
+    if (!correoEnviado && process.env.NODE_ENV !== 'production') {
+      respuesta.enlaceConfirmacion = construirEnlaceConCodigo(obtenerUrlWeb(), '/confirmar-correo', rawToken);
+    }
+    return respuesta;
+  }
+
+  /** `DELETE /usuarios/me/correo-pendiente` (RF-018 RN-05): idempotente. */
+  async cancelarCambioCorreoPendiente(usuarioId: string): Promise<{ mensaje: string }> {
+    await this.db
+      .update(usuarios)
+      .set({
+        correoPendiente: null,
+        tokenCambioCorreoHash: null,
+        tokenCambioCorreoExpira: null,
+        updatedAtUtc: new Date(),
+      })
+      .where(eq(usuarios.id, usuarioId));
+    return { mensaje: MENSAJE_CAMBIO_CORREO_CANCELADO };
+  }
+
+  /**
+   * `POST /auth/confirmar-cambio-correo` (RF-018 RN-05/RN-06), público.
+   *
+   * Busca el enlace por su hash y vigencia, comprueba que el correo pendiente siga libre y lo
+   * aplica con un UPDATE condicionado al hash (dos canjes simultáneos no lo usan dos veces). Avisa
+   * al correo ANTERIOR.
+   *
+   * - Misma regla de acceso que el resto de los enlaces (`verificarCuentaConAcceso`): una cuenta
+   *   deshabilitada, un alumno archivado o un coach sin licencia no confirman (enlace inválido).
+   * - Si otra cuenta toma el correo entre la comprobación y el UPDATE, el índice único responde
+   *   (23505) y se traduce al mismo 409 claro.
+   * - El enlace de recuperación pendiente se anula: viajó al buzón ANTERIOR, que ya no es el de
+   *   acceso.
+   */
+  async confirmarCambioCorreo(dto: ConfirmarCambioCorreoDTO): Promise<{ mensaje: string }> {
+    const tokenHash = this.cryptoService.hashSha256(dto.token);
+    const [usuario] = await this.db
+      .select()
+      .from(usuarios)
+      .where(
+        and(
+          eq(usuarios.tokenCambioCorreoHash, tokenHash),
+          gt(usuarios.tokenCambioCorreoExpira, new Date())
+        )
+      );
+
+    if (!usuario || !usuario.correoPendiente) {
+      throw new NotFoundException(MENSAJE_ENLACE_CAMBIO_CORREO_INVALIDO);
+    }
+
+    const correoNuevo = usuario.correoPendiente;
+    const correoAnterior = usuario.email;
+    await this.exigirCorreoLibre(correoNuevo, usuario.id);
+    let nombre: string | null;
+    try {
+      ({ nombre } = await this.verificarCuentaConAcceso(usuario));
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw new NotFoundException(MENSAJE_ENLACE_CAMBIO_CORREO_INVALIDO);
+      }
+      throw error;
+    }
+
+    let actualizados: { id: string }[];
+    try {
+      actualizados = await this.db
+        .update(usuarios)
+        .set({
+          email: correoNuevo,
+          correoPendiente: null,
+          tokenCambioCorreoHash: null,
+          tokenCambioCorreoExpira: null,
+          tokenRecuperacionHash: null,
+          tokenRecuperacionExpira: null,
+          updatedAtUtc: new Date(),
+        })
+        .where(and(eq(usuarios.id, usuario.id), eq(usuarios.tokenCambioCorreoHash, tokenHash)))
+        .returning({ id: usuarios.id });
+    } catch (error) {
+      if (esViolacionUnicidad(error)) {
+        throw new ConflictException(MENSAJE_CORREO_EN_USO);
+      }
+      throw error;
+    }
+
+    if (actualizados.length === 0) {
+      throw new NotFoundException(MENSAJE_ENLACE_CAMBIO_CORREO_INVALIDO);
+    }
+
+    await this.publicarCorreoCuenta(
+      AvisoCorreoCambiadoEvent.NOMBRE,
+      new AvisoCorreoCambiadoEvent({
+        tipo: 'AVISO_CORREO_CAMBIADO',
+        usuarioId: usuario.id,
+        email: correoAnterior,
+        nombre,
+        token: '',
+        correoNuevo,
+      })
+    );
+
+    return { mensaje: mensajeCorreoConfirmado(correoNuevo) };
+  }
+
+  /**
+   * Usuario de la sesión de "Mi perfil". Las reglas completas de acceso (alumno archivado, coach
+   * sin licencia, cascada del entrenador) ya las aplicaron el login y cada refresh antes de emitir
+   * este token; aquí solo se corta una cuenta que se deshabilitó o bloqueó después.
+   */
+  private async usuarioConSesion(usuarioId: string) {
+    const [usuario] = await this.db.select().from(usuarios).where(eq(usuarios.id, usuarioId));
+    if (!usuario || !usuario.activo || usuario.estado === EstadoUsuario.BLOQUEADO) {
+      throw new UnauthorizedException(MENSAJE_SESION_VENCIDA);
+    }
+    return usuario;
+  }
+
+  private async exigirPasswordActual(passwordHash: string | null, passwordActual: string) {
+    const coincide =
+      !!passwordHash && (await this.cryptoService.comparePassword(passwordActual, passwordHash));
+    if (!coincide) {
+      throw new BadRequestException(MENSAJE_PASSWORD_ACTUAL_INCORRECTA);
+    }
+  }
+
+  /** 409 si el correo ya es el de acceso de OTRA cuenta. */
+  private async exigirCorreoLibre(correo: string, usuarioId: string) {
+    const [ocupado] = await this.db
+      .select({ id: usuarios.id })
+      .from(usuarios)
+      .where(and(eq(usuarios.email, correo), ne(usuarios.id, usuarioId)));
+    if (ocupado) {
+      throw new ConflictException(MENSAJE_CORREO_EN_USO);
+    }
+  }
+
+  /**
+   * Datos para la sesión y los correos del usuario: `entrenadorId` del token y nombre para el
+   * saludo. Lectura del perfil propio (RLS self del alumno, RNF-003).
+   */
+  private async datosSesionDe(usuario: {
+    id: string;
+    rol: string;
+  }): Promise<{ entrenadorId: string | undefined; nombre: string | null }> {
+    if (usuario.rol === Rol.ALUMNO) {
+      const [perfil] = await this.withTenant({ usuarioId: usuario.id }, (tx) =>
+        tx.select().from(perfilesAlumno).where(eq(perfilesAlumno.usuarioId, usuario.id))
+      );
+      return { entrenadorId: perfil?.entrenadorId ?? undefined, nombre: perfil?.nombres ?? null };
+    }
+    if (usuario.rol === Rol.ENTRENADOR) {
+      const [perfil] = await this.db
+        .select({ nombres: perfilesEntrenador.nombres })
+        .from(perfilesEntrenador)
+        .where(eq(perfilesEntrenador.usuarioId, usuario.id));
+      return { entrenadorId: usuario.id, nombre: perfil?.nombres ?? null };
+    }
+    return { entrenadorId: undefined, nombre: null };
   }
 
   /**

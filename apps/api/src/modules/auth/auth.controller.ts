@@ -31,6 +31,7 @@ import {
   EstablecerPasswordConTokenSchema,
   SolicitarRecuperacionPasswordSchema,
   RestablecerPasswordSchema,
+  ConfirmarCambioCorreoSchema,
   RefreshTokenSchema,
   CrearEntrenadorSchema,
   ListarEntrenadoresAdminQuerySchema,
@@ -102,6 +103,18 @@ export class AuthController {
   async restablecerPassword(@Body() body: unknown) {
     const dto = parsearContrato(RestablecerPasswordSchema, body);
     return this.authService.restablecerPassword(dto);
+  }
+
+  /**
+   * RF-018 RN-05: confirma el cambio de correo con el enlace enviado al correo nuevo (un solo uso,
+   * 24 horas). Público: quien abre el enlace no necesita tener la sesión abierta.
+   */
+  @Post('confirmar-cambio-correo')
+  @HttpCode(HttpStatus.OK)
+  @LimitarIntentosPublico()
+  async confirmarCambioCorreo(@Body() body: unknown) {
+    const dto = parsearContrato(ConfirmarCambioCorreoSchema, body);
+    return this.authService.confirmarCambioCorreo(dto);
   }
 
   /**
