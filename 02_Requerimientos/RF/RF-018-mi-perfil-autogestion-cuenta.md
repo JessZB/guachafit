@@ -74,7 +74,11 @@ Hoy cada usuario depende de otra persona para corregir sus propios datos: el alu
 - **RN-08:** exige la contraseña actual y una nueva que cumpla la misma política que la recuperación de contraseña. Al cambiarla se marca `passwordCambiadaEn`: las demás sesiones se cierran al vencer su token de acceso (el refresh las rechaza), y la sesión actual recibe tokens nuevos para no salir. Se envía un aviso de seguridad por correo: *"Tu contraseña de GUACHAFIT cambió."*
 
 ### D. Organización de la pantalla
-- **RN-09:** "Mi perfil" se abre desde el menú de cada rol y se organiza en pestañas: **Datos**, **Seguridad** (correo y contraseña), **Notificaciones** (alumno y entrenador) y **Zona horaria** (alumno). La ruta actual de "Mis notificaciones" redirige a la pestaña Notificaciones para no romper enlaces (p. ej. "Configurar" de la campana).
+- **RN-09 (decisión del dueño, 2026-10-06: todo en "Ajustes"):** los ajustes personales se unifican en una pantalla **"Ajustes"** por rol, en lugar de "Mis notificaciones", con pestañas:
+  - **Alumno** (`/app/ajustes`): Perfil · Correo y contraseña · Notificaciones · Zona horaria.
+  - **Entrenador** (`/coach/ajustes`, la pantalla existente): Perfil · Correo y contraseña · Notificaciones · Planes · Tasas de cambio (las dos últimas ya existían).
+  - **Administrador** (`/admin/ajustes`): Correo y contraseña.
+  - La pestaña activa vive en la URL (`?tab=…`). `/app/preferencias` redirige a `/app/ajustes?tab=notificaciones` para no romper enlaces (p. ej. "Configurar" de la campana). La confirmación del correo nuevo es una pantalla pública: `/confirmar-correo?token=…`.
 - **RN-10 (Protección):** los endpoints de contraseña y de correo tienen límite de intentos (throttler) y nunca muestran texto técnico.
 
 ---
