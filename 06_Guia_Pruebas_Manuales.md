@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** con pruebas automáticas en verde (**919** de la web + **1244** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (**960** de la web + **1247** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -281,7 +281,9 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 - [ ] **Reporte offline aceptado a la mañana siguiente (2026-10-05, `0555dfe`):** sin conexión, guarda el reporte a las **23:50** (hora de la zona de tu perfil) y recupera la red a las **08:00** del día siguiente → el reporte **se acepta** con la fecha del día anterior.
 - [ ] **Reporte offline después del mediodía:** igual que el anterior, pero recupera la red a las **12:30** → rechazo con **"Este reporte llegó después del mediodía del día siguiente, así que ya no se puede registrar. El día quedó como «No reportado»."**, visible en **"Cambios por enviar"** y sin reintentos automáticos.
 - [ ] **Teléfono con la hora mal puesta:** adelanta o atrasa la hora del teléfono (desactiva la hora automática) y guarda un reporte → se acepta o rechaza según la **hora real** (la del servidor en la zona de tu perfil), no la del teléfono.
-- [ ] **Cambiar la zona del perfil (vía API):** con el token del alumno, `PATCH /alumnos/me/zona-horaria` con `{"zonaHoraria":"Europe/Madrid"}` → 200 y `GET /auth/me` devuelve esa zona; envía el reporte y comprueba que la ventana 18:00–23:59 se cuenta en **esa** zona. Una zona inventada → 400 *"Elige una zona horaria válida, por ejemplo America/Caracas."* (la UI de la web todavía evalúa la ventana con la hora del teléfono; el selector de zona llega en el lote de front).
+- [ ] **Cambiar la zona del perfil (vía API):** con el token del alumno, `PATCH /alumnos/me/zona-horaria` con `{"zonaHoraria":"Europe/Madrid"}` → 200 y `GET /auth/me` devuelve esa zona; envía el reporte y comprueba que la ventana 18:00–23:59 se cuenta en **esa** zona. Una zona inventada → 400 *"Elige una zona horaria válida, por ejemplo America/Caracas."*
+- [ ] **Elegir tu zona en la app (2026-10-06, `58c5d2c`):** en **"Mis notificaciones" → "Tu zona horaria"** elige "Hora de Madrid" y pulsa **"Guardar zona horaria"** → *"Zona horaria guardada."*; en Nutrición el aviso dice *"(hora de Madrid)"* y el reporte se abre a las 18:00 de Madrid. Sin conexión → *"No hay conexión a internet: la zona horaria no se guardó…"* y nada cambia.
+- [ ] **Ventana correcta recién iniciada la sesión:** con un alumno cuya zona del perfil difiere de la del teléfono, cierra sesión, inicia sesión y entra a Nutrición sin recargar → la ventana y el texto ya usan la zona del perfil.
 - [ ] **Metas del día conservadas (vía API):** registra un reporte, cambia las metas del alumno como coach y consulta los reportes → el reporte anterior conserva en `metasVigentes` las metas de su día (los reportes previos a la migración `0016` traen `null`).
 - [ ] **Modo demo:** con "Modo Alumno" la ventana horaria no bloquea la simulación y el reporte, las metas y la tolerancia usan el fixture local.
 
@@ -289,6 +291,8 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 
 - [ ] **Calendario de 30 días:** los días cerrados sin check-in se muestran como **No reportado** (derivado, en gris); los reportados, con su semáforo real.
 - [ ] **Totales vs metas y semáforo:** el panel compara lo reportado contra las metas y clasifica la tolerancia; con datos faltantes dice "sin evaluar".
+- [ ] **Hora de registro y meta del día (2026-10-06, `58c5d2c`):** cada día reportado muestra *"Registrado a las HH:mm"* en la zona del alumno (y *"· enviado al día siguiente"* si llegó tarde) y *"2100 de 2000 kcal"* con la meta de ese día; cambia las metas y comprueba que los días anteriores no cambian. Los reportes antiguos dicen *"Comparado con las metas actuales"*.
+- [ ] **Zona horaria del alumno:** la sección "Zona horaria del alumno" muestra su zona; cámbiala → *"Zona horaria guardada."* y el alumno ve la nueva ventana. Guarda y navega enseguida a otro alumno: la zona del primero **no** aparece en el segundo.
 - [ ] **Fotos del diario:** abre las miniaturas de cada día en el visor accesible (Escape cierra).
 - [ ] **Editor de metas:** define kcal, macros, agua y hasta 10 recursos por enlace o PDF subido; al guardar, el alumno ve las metas. Un alumno sin metas no muestra ceros fabricados (204 honesto). Al quitar un PDF y guardar, el archivo se **elimina de la bóveda** (borrado best-effort del servidor; desde `2319dff` se pide confirmación antes, ver abajo) y el enlace firmado anterior deja de servirse; un recurso por enlace externo solo deja de listarse.
 - [ ] **Editar metas solo con metas cargadas (2026-10-05, `2319dff`):** mientras cargan las metas, el botón de editar está **deshabilitado** y dice **"Espera a que carguen las metas."**; con el API detenido, tras el error sigue deshabilitado con **"No pudimos cargar las metas. Reintenta antes de editarlas."**
