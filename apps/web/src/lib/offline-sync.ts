@@ -2,6 +2,7 @@ import { apiClient, generateIdempotencyKey, getAuthToken } from './api-client';
 import {
   CODIGO_CHECKIN_YA_REGISTRADO,
   CODIGO_SESION_NO_INICIADA,
+  MENSAJE_CHECKIN_FUERA_DE_PLAZO,
   type CheckinNutricionalDetalleDTO,
   type CheckinNutricionalDTO,
   type PresignedUploadUrlResponseDTO,
@@ -29,7 +30,9 @@ import {
 } from './offline-db';
 import {
   coincideReporteServidorConPendiente,
+  cuerpoCheckinParaEnviar,
   ENDPOINT_CHECKIN_DIARIO,
+  esRechazoFueraDePlazoCheckin,
   esRechazoVentanaCheckin,
   MENSAJE_DIA_CERRADO_REPORTE_CON_FOTOS,
   MENSAJE_REPORTE_CON_OTROS_DATOS,
@@ -187,6 +190,25 @@ function esReporteDiarioYaRegistrado(item: OutboxMutation, err: unknown): boolea
   );
 }
 
+/**
+ * LOTE API-N2: el reporte del día llegó después de las 12:00 del día siguiente. Se convierte en un
+ * 400 con el texto compartido para que el bucle lo marque como rechazo definitivo visible (nunca
+ * un reintento) sin depender del texto del servidor.
+ */
+function rechazoReporteFueraDePlazo(item: OutboxMutation, err: unknown): (Error & { status: number }) | null {
+  if (item.endpoint !== ENDPOINT_CHECKIN_DIARIO || !esRechazoFueraDePlazoCheckin(err)) return null;
+  return Object.assign(new Error(MENSAJE_CHECKIN_FUERA_DE_PLAZO), { status: 400 });
+}
+
+/**
+ * LOTE API-N2: cuerpo del POST del reporte diario calculado al ENVIAR (agrega
+ * `segundosDesdeCaptura`); el resto de mutaciones viaja tal cual.
+ */
+function cuerpoAlEnviar(item: OutboxMutation, extra: Record<string, unknown> = {}): unknown {
+  if (item.endpoint !== ENDPOINT_CHECKIN_DIARIO || item.method !== 'POST') return item.payload;
+  return cuerpoCheckinParaEnviar({ ...(item.payload ?? {}), ...extra }, item.capturadoEnMs);
+}
+
 /** Rechazo definitivo con su motivo local (lo lee el bucle de `processOutboxQueue`). */
 type ErrorRechazoCola = Error & { status: number; motivoRechazo: MotivoRechazoCola };
 
@@ -281,13 +303,13 @@ async function processCheckinNutricionalConFotos(item: OutboxMutation): Promise<
   try {
     await apiClient(item.endpoint, {
       method: item.method,
-      body: JSON.stringify({
-        ...item.payload,
-        ...(fotosPlatos.length > 0 ? { fotosPlatos } : {}),
-      }),
+      body: JSON.stringify(cuerpoAlEnviar(item, fotosPlatos.length > 0 ? { fotosPlatos } : {})),
       idempotencyKey: item.idempotencyKey || generateIdempotencyKey(),
     });
   } catch (err) {
+    // LOTE API-N2: llegó después del plazo del día siguiente; la evidencia local se conserva.
+    const fueraDePlazo = rechazoReporteFueraDePlazo(item, err);
+    if (fueraDePlazo) throw fueraDePlazo;
     // RN-02: la ventana/día local cerró mientras la evidencia esperaba en la cola. Se marca
     // como rechazo definitivo con un mensaje claro (sin el tecnicismo del servidor).
     if (getErrorStatus(err) === 400 && esRechazoVentanaCheckin(getMensajeServidorCrudo(err), getCodigoServidor(err))) {
@@ -357,12 +379,14 @@ export async function processOutboxQueue(): Promise<ProcessOutboxResult> {
           try {
             await apiClient(item.endpoint, {
               method: item.method,
-              body: JSON.stringify(item.payload),
+              body: JSON.stringify(cuerpoAlEnviar(item)),
               // La MISMA key en cada reintento: el servidor puede deduplicar aunque el
               // intento anterior haya llegado y la respuesta se haya perdido.
               idempotencyKey: item.idempotencyKey || generateIdempotencyKey(),
             });
           } catch (err) {
+            const fueraDePlazo = rechazoReporteFueraDePlazo(item, err);
+            if (fueraDePlazo) throw fueraDePlazo;
             if (!esReporteDiarioYaRegistrado(item, err)) throw err;
             // LOTE API-N1: solo cuenta como sincronizado si el servidor tiene ESTE reporte.
             await confirmarReporteYaRegistrado(item, 0);

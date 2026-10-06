@@ -15,8 +15,10 @@
  * rechazar.
  */
 import {
+  CODIGO_CHECKIN_FUERA_DE_PLAZO,
   CODIGO_CHECKIN_FUERA_DE_VENTANA,
   CheckinNutricionalSchema,
+  MENSAJE_CHECKIN_FUERA_DE_PLAZO,
   MENSAJE_CHECKIN_YA_REGISTRADO,
   HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL,
   type CheckinNutricionalDetalleDTO,
@@ -56,7 +58,9 @@ export const MENSAJE_DIA_CERRADO_REPORTE_CON_FOTOS =
  */
 export function esRechazoVentanaCheckin(detalle: string, codigo?: unknown): boolean {
   if (codigo === CODIGO_CHECKIN_FUERA_DE_VENTANA) return true;
-  return /18:00|23:59|ventana|día local/i.test(detalle);
+  if (codigo === CODIGO_CHECKIN_FUERA_DE_PLAZO) return false;
+  // LOTE API-N2: "ya cambió" reconoce el aviso de día cambiado de la zona del perfil.
+  return /18:00|23:59|ventana|día local|ya cambió/i.test(detalle);
 }
 
 export const MENSAJE_ERROR_GENERICO =
@@ -70,6 +74,51 @@ export type AccionErrorCheckinNutricional = 'encolar' | 'refrescar' | 'mostrar_e
 export interface DecisionErrorCheckinNutricional {
   accion: AccionErrorCheckinNutricional;
   mensaje: string;
+}
+
+/**
+ * LOTE API-N2: el servidor recibió el reporte después de las 12:00 del día siguiente. Es un
+ * rechazo definitivo (no se reintenta) y se muestra con el texto compartido, no con el crudo.
+ */
+export function esRechazoFueraDePlazoCheckin(err: unknown): boolean {
+  const codigo = (err as { problem?: { code?: unknown } } | null)?.problem?.code;
+  return obtenerStatusError(err) === 400 && codigo === CODIGO_CHECKIN_FUERA_DE_PLAZO;
+}
+
+// =============================================================================
+// HORA DE CAPTURA (LOTE API-N2)
+// =============================================================================
+
+/**
+ * Segundos enteros transcurridos desde que el alumno tocó Guardar (`capturadoEnMs`) hasta el envío
+ * (`ahoraMs`). Solo se usa el reloj del teléfono para medir una DURACIÓN: el servidor la resta a su
+ * propia hora, así un reloj adelantado o atrasado no cambia la hora de captura. Si el reloj
+ * retrocedió entre ambos instantes, se envía 0.
+ */
+export function calcularSegundosDesdeCaptura(
+  capturadoEnMs: number,
+  ahoraMs: number = Date.now()
+): number {
+  return Math.max(0, Math.round((ahoraMs - capturadoEnMs) / 1000));
+}
+
+/**
+ * Cuerpo del POST del reporte en el MOMENTO de enviarlo (directo o desde la cola): agrega
+ * `segundosDesdeCaptura`. Un pendiente del formato anterior que guardó `capturadoEnUtc` en el
+ * payload se convierte a segundos (o se envía sin el campo si la hora no se puede leer); ese
+ * campo nunca viaja. Sin instante de captura, el cuerpo sale tal cual (cuenta la hora del servidor).
+ */
+export function cuerpoCheckinParaEnviar<T extends object>(
+  payload: T,
+  capturadoEnMs: number | undefined,
+  ahoraMs: number = Date.now()
+): Omit<T, 'capturadoEnUtc'> & { segundosDesdeCaptura?: number } {
+  const { capturadoEnUtc, ...resto } = payload as T & { capturadoEnUtc?: unknown };
+  const cuerpo = resto as Omit<T, 'capturadoEnUtc'>;
+  const capturaAnterior = typeof capturadoEnUtc === 'string' ? Date.parse(capturadoEnUtc) : NaN;
+  const captura = capturadoEnMs ?? (Number.isFinite(capturaAnterior) ? capturaAnterior : undefined);
+  if (captura === undefined) return cuerpo;
+  return { ...cuerpo, segundosDesdeCaptura: calcularSegundosDesdeCaptura(captura, ahoraMs) };
 }
 
 /** Status HTTP de un error tipo ApiError; 0 = sin respuesta (fallo de red/fetch). */
@@ -96,6 +145,10 @@ export function decidirAccionErrorCheckinNutricional(
 
   if (status === 409) {
     return { accion: 'refrescar', mensaje: MENSAJE_YA_REGISTRADO_HOY };
+  }
+
+  if (esRechazoFueraDePlazoCheckin(err)) {
+    return { accion: 'mostrar_error', mensaje: MENSAJE_CHECKIN_FUERA_DE_PLAZO };
   }
 
   if (status >= 400 && status < 500) {

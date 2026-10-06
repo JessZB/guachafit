@@ -248,6 +248,53 @@ describe('Ola 3: resumen semanal del coach', () => {
       expect(emitAsync).toHaveBeenCalledTimes(2);
     });
 
+    it('LOTE API-N2: los días sin reporte se calculan con la zona del perfil y el plazo del mediodía', async () => {
+      // ahora = 2026-09-22T08:00Z: 04:00 del 22 en Caracas (el 21 aún puede reportarse hasta las
+      // 12:00) y 17:00 del 22 en Tokio (el 21 ya cerró). Cada alumno cubre SUS 7 días cerrados:
+      //  - alumno-1 (Caracas): 14..20 → 0 sin reporte.
+      //  - alumno-2 (Tokio):   15..21 → 0 sin reporte.
+      // Con días UTC (15..21 para todos) alumno-1 tendría 1; con Caracas para todos, alumno-2 tendría 1.
+      const respuestas = respuestasDigest();
+      respuestas[1] = [
+        { usuarioId: 'alumno-1', entrenadorId: 'coach-1', zonaHoraria: 'America/Caracas' },
+        { usuarioId: 'alumno-2', entrenadorId: 'coach-1', zonaHoraria: 'Asia/Tokyo' },
+      ];
+      const dias = (desde: number, hasta: number) =>
+        Array.from({ length: hasta - desde + 1 }, (_, i) => `2026-09-${desde + i}`);
+      respuestas[4] = [
+        ...dias(14, 20).map((fecha) => ({ alumnoId: 'alumno-1', fecha })),
+        ...dias(15, 21).map((fecha) => ({ alumnoId: 'alumno-2', fecha })),
+      ];
+      const db = crearDbDigest(respuestas);
+      const emitAsync = vi.fn().mockResolvedValue([]);
+      const processor = new ResumenSemanalProcessor(db, { emitAsync } as any);
+
+      await processor.generarYDespachar(ahora);
+
+      const [, evento1] = emitAsync.mock.calls[0];
+      expect(evento1.payload.datosAdicionales.nutricionDiasNoReportados).toBe(0);
+      expect(evento1.payload.cuerpo).not.toContain('sin reporte nutricional');
+    });
+
+    it('LOTE API-N2: un alumno sin zona guardada usa la zona por defecto (Caracas)', async () => {
+      const respuestas = respuestasDigest();
+      respuestas[1] = [{ usuarioId: 'alumno-1', entrenadorId: 'coach-1', zonaHoraria: null }];
+      // Caracas a las 04:00 del 22: días cerrados 14..20 (el 21 sigue en plazo). Reportó 13..19
+      // → 1 sin reporte (el 20). Con días UTC (15..21) serían 2 (20 y 21).
+      respuestas[4] = Array.from({ length: 7 }, (_, i) => ({
+        alumnoId: 'alumno-1',
+        fecha: `2026-09-${13 + i}`,
+      }));
+      const db = crearDbDigest(respuestas);
+      const emitAsync = vi.fn().mockResolvedValue([]);
+      const processor = new ResumenSemanalProcessor(db, { emitAsync } as any);
+
+      await processor.generarYDespachar(ahora);
+
+      const [, evento1] = emitAsync.mock.calls[0];
+      expect(evento1.payload.datosAdicionales.nutricionDiasNoReportados).toBe(1);
+    });
+
     it('ignora jobs desconocidos sin emitir nada', async () => {
       const db = crearDbDigest([]);
       const emitAsync = vi.fn();

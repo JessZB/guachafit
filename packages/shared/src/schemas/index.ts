@@ -50,6 +50,39 @@ export function fechaCalendarioAMsUtc(valor: string): number {
   const [anio, mes, dia] = valor.split('-').map(Number);
   return Date.UTC(anio, mes - 1, dia);
 }
+
+/**
+ * LOTE API-N2 (RF-002, decisión del dueño 2026-10-05): zona horaria del perfil del alumno. Decide
+ * la ventana del reporte diario (18:00–23:59) y el plazo de recepción (12:00 del día siguiente).
+ * Los perfiles existentes y los nuevos arrancan en esta zona.
+ */
+export const ZONA_HORARIA_ALUMNO_POR_DEFECTO = 'America/Caracas';
+export const MENSAJE_ZONA_HORARIA_INVALIDA = `Elige una zona horaria válida, por ejemplo ${ZONA_HORARIA_ALUMNO_POR_DEFECTO}.`;
+/** Largo máximo de un identificador de zona IANA (columna `perfiles_alumno.zona_horaria`). */
+export const MAX_CARACTERES_ZONA_HORARIA = 64;
+
+/**
+ * `true` si el texto es una zona IANA que el motor `Intl` reconoce (p. ej. `Europe/Madrid`).
+ * Vacío o con espacios alrededor no es válido: se guarda exactamente lo que se validó.
+ */
+export function esZonaHorariaIanaValida(valor: string): boolean {
+  if (!valor || valor.trim() !== valor || valor.length > MAX_CARACTERES_ZONA_HORARIA) return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: valor });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const zonaHorariaSchema = z
+  .string({ required_error: MENSAJE_ZONA_HORARIA_INVALIDA, invalid_type_error: MENSAJE_ZONA_HORARIA_INVALIDA })
+  .refine(esZonaHorariaIanaValida, MENSAJE_ZONA_HORARIA_INVALIDA);
+
+/** LOTE API-N2: el alumno cambia su propia zona horaria (`PATCH /alumnos/me/zona-horaria`). */
+export const ActualizarZonaHorariaAlumnoSchema = z.object({
+  zonaHoraria: zonaHorariaSchema,
+});
 /**
  * WU-E (RF-011 RN-06): formato compartido del `coach_code` de captación.
  * Se usa al crear entrenadores y al resolver códigos públicos de deep link.
@@ -199,6 +232,8 @@ export const ActualizarPerfilAlumnoSchema = z.object({
     .regex(FECHA_CALENDARIO_REGEX, 'La fecha no es válida. Usa el formato año-mes-día (por ejemplo, 2026-01-31)')
     .optional()
     .nullable(),
+  /** LOTE API-N2: zona horaria del alumno (IANA). Omitida = no se cambia. */
+  zonaHoraria: zonaHorariaSchema.optional(),
 });
 
 /**
@@ -418,7 +453,7 @@ export const CrearSesionEntrenamientoSchema = z.object({
   alumnoId: z.string().uuid('No encontramos ese alumno. Actualiza la pantalla e inténtalo de nuevo.'),
   rutinaId: z.string().uuid('No encontramos esa rutina. Actualiza la pantalla e inténtalo de nuevo.').optional(),
   fechaProgramada: z.string().regex(FECHA_CALENDARIO_REGEX, 'La fecha no es válida. Usa el formato año-mes-día (por ejemplo, 2026-01-31)'),
-  timezoneCliente: z.string().min(2).max(64).default('America/Caracas'),
+  timezoneCliente: z.string().min(2).max(64).default(ZONA_HORARIA_ALUMNO_POR_DEFECTO),
   ejercicios: z.array(EjercicioPrescritoInputSchema).min(1, 'Debe incluir al menos un ejercicio en la sesión'),
 });
 
@@ -672,8 +707,18 @@ const fechaCalendarioRealSchema = z
  */
 export const HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL = 18;
 export const HORA_FIN_VENTANA_CHECKIN_NUTRICIONAL = 23;
-/** Zona por defecto del alumno cuando el cliente no informa la suya (RN-05/ADR-002). */
-export const TIMEZONE_NUTRICION_POR_DEFECTO = 'America/Caracas';
+/**
+ * LOTE API-N2: hora local (zona del perfil) del día SIGUIENTE a `fecha` hasta la que el servidor
+ * todavía recibe un reporte capturado a tiempo (captura offline tardía). Inclusiva: 12:00:00.
+ */
+export const HORA_LIMITE_RECEPCION_CHECKIN_DIA_SIGUIENTE = 12;
+/**
+ * LOTE API-N2: máximo de `segundosDesdeCaptura` (48 h). Un reporte guardado hace más tiempo ya
+ * venció de todas formas (el plazo cierra 18 h después del inicio de su ventana).
+ */
+export const MAX_SEGUNDOS_DESDE_CAPTURA_CHECKIN = 48 * 60 * 60;
+export const MENSAJE_SEGUNDOS_DESDE_CAPTURA_INVALIDO =
+  'No pudimos saber cuándo guardaste el reporte. Actualiza la pantalla e inténtalo de nuevo.';
 /** RF-002 Escenario 3: margen de tolerancia (±%) de los totales reportados contra las metas. */
 export const TOLERANCIA_TOTALES_NUTRICIONAL_PCT = 10.0;
 
@@ -693,10 +738,22 @@ export const CheckinNutricionalSchema = z.object({
     .max(MAX_FOTOS_PLATOS_DIA, MENSAJE_MAX_FOTOS_PLATOS_DIA)
     .optional(),
   /**
-   * RN-05/ADR-002: zona IANA del cliente para resolver el día local y la ventana horaria.
-   * Si se omite o es inválida, el servidor asume `TIMEZONE_NUTRICION_POR_DEFECTO`.
+   * @deprecated LOTE API-N2: sin efecto. La ventana y el plazo usan la zona del perfil del alumno;
+   * se acepta solo porque la web publicada lo envía y se retirará cuando deje de hacerlo.
    */
   timezoneCliente: z.string().min(2).max(64).optional(),
+  /**
+   * LOTE API-N2: segundos transcurridos entre el toque en Guardar y el envío, medidos por el
+   * teléfono. El servidor calcula la hora de captura como SU hora de recepción menos estos
+   * segundos, así un reloj del teléfono desajustado no cambia el resultado. Sin el campo, cuenta
+   * la hora del servidor.
+   */
+  segundosDesdeCaptura: z
+    .number({ invalid_type_error: MENSAJE_SEGUNDOS_DESDE_CAPTURA_INVALIDO })
+    .int(MENSAJE_SEGUNDOS_DESDE_CAPTURA_INVALIDO)
+    .min(0, MENSAJE_SEGUNDOS_DESDE_CAPTURA_INVALIDO)
+    .max(MAX_SEGUNDOS_DESDE_CAPTURA_CHECKIN, MENSAJE_SEGUNDOS_DESDE_CAPTURA_INVALIDO)
+    .optional(),
 });
 
 /**

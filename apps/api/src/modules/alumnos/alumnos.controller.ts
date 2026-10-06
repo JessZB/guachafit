@@ -28,6 +28,7 @@ import {
   RegistroPublicoAlumnoSchema,
   CambioEstadoAlumnoSchema,
   ActualizarPerfilAlumnoSchema,
+  ActualizarZonaHorariaAlumnoSchema,
   FiltroDirectorioAlumnosSchema,
   RestaurarAlumnoSchema,
   AltaManualAlumnoResultadoDTO,
@@ -102,6 +103,20 @@ export class AlumnosController {
     const dto = parsearContrato(CambioEstadoAlumnoSchema, body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.alumnosService.cambiarEstado(entrenadorId, alumnoId, dto);
+  }
+
+  /**
+   * LOTE API-N2 (RF-002): el alumno cambia su propia zona horaria (la que decide la ventana y el
+   * plazo del reporte nutricional). El perfil sale del token, nunca del cuerpo. La consulta propia
+   * viaja en `GET /auth/me` (`usuario.zonaHoraria`); el coach la gestiona en `PATCH /alumnos/:id`.
+   * Rol: Alumno
+   */
+  @Patch('me/zona-horaria')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ALUMNO)
+  async actualizarMiZonaHoraria(@Req() req: any, @Body() body: unknown) {
+    const dto = parsearContrato(ActualizarZonaHorariaAlumnoSchema, body);
+    return this.alumnosService.actualizarZonaHorariaPropia(req.user.sub, dto);
   }
 
   /**

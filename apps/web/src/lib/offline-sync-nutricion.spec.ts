@@ -1,7 +1,9 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  CODIGO_CHECKIN_FUERA_DE_PLAZO,
   CODIGO_CHECKIN_YA_REGISTRADO,
+  MENSAJE_CHECKIN_FUERA_DE_PLAZO,
   MENSAJE_CHECKIN_YA_REGISTRADO,
   SemaforoNutricional,
   TipoComida,
@@ -446,5 +448,110 @@ describe('offline-sync: check-in nutricional con fotos', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(JSON.parse(mockedApiClient.mock.calls[0][1]?.body as string)).toEqual({ series: [1] });
     expect(mockedApiClient.mock.calls[0][1]?.idempotencyKey).toBe('key-plana');
+  });
+});
+
+describe('LOTE API-N2: captura offline tardía en la cola', () => {
+  // El alumno tocó Guardar a las 22:00 de Caracas; la cola envía 12 h después. El reloj del
+  // teléfono solo se usa para medir cuánto tiempo pasó, nunca como hora absoluta.
+  const CAPTURA_MS = Date.parse('2026-09-23T02:00:00.000Z');
+  const ENVIO_MS = CAPTURA_MS + 12 * 3_600_000;
+
+  function errorFueraDePlazo() {
+    return httpErrorConCodigo(400, 'Texto del servidor', CODIGO_CHECKIN_FUERA_DE_PLAZO);
+  }
+
+  function cuerpoEnviado(indiceLlamada: number) {
+    return JSON.parse(mockedApiClient.mock.calls[indiceLlamada][1]?.body as string);
+  }
+
+  it('sin fotos: al enviar calcula los segundos transcurridos desde que se tocó Guardar', async () => {
+    await queueOfflineMutation(CHECKIN_ENDPOINT, 'POST', payloadCheckin(), 'Reporte', undefined, {
+      alumnoId: ALUMNO_ID,
+      capturadoEnMs: CAPTURA_MS,
+    });
+    mockedApiClient.mockResolvedValueOnce(null);
+    vi.spyOn(Date, 'now').mockReturnValue(ENVIO_MS);
+
+    await processOutboxQueue();
+
+    expect(cuerpoEnviado(0)).toEqual({ ...payloadCheckin(), segundosDesdeCaptura: 43_200 });
+  });
+
+  it('con fotos: los segundos se calculan al enviar el reporte, después de subir las fotos', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(respuestaPutOk()));
+    mockedApiClient
+      .mockResolvedValueOnce({ uploadUrl: 'https://r2.test/put/1', storageKey: 'comidas/a/2026-09-22/1.webp' })
+      .mockResolvedValueOnce(null);
+    await queueCheckinNutricionalConFotos(payloadCheckin(), fotosDePrueba(1), ALUMNO_ID, CAPTURA_MS);
+    vi.spyOn(Date, 'now').mockReturnValue(ENVIO_MS);
+
+    await processOutboxQueue();
+
+    const cuerpo = cuerpoEnviado(1);
+    expect(cuerpo.segundosDesdeCaptura).toBe(43_200);
+    expect(cuerpo.fotosPlatos).toHaveLength(1);
+    expect(cuerpo).not.toHaveProperty('capturadoEnUtc');
+  });
+
+  it('un pendiente del formato anterior (`capturadoEnUtc` en el payload) se envía en segundos', async () => {
+    await queueOfflineMutation(
+      CHECKIN_ENDPOINT,
+      'POST',
+      { ...payloadCheckin(), capturadoEnUtc: new Date(CAPTURA_MS).toISOString() },
+      'Reporte',
+      undefined,
+      { alumnoId: ALUMNO_ID }
+    );
+    mockedApiClient.mockResolvedValueOnce(null);
+    vi.spyOn(Date, 'now').mockReturnValue(ENVIO_MS);
+
+    await processOutboxQueue();
+
+    expect(cuerpoEnviado(0)).toEqual({ ...payloadCheckin(), segundosDesdeCaptura: 43_200 });
+  });
+
+  it('sin fotos: 400 CHECKIN_FUERA_DE_PLAZO → rechazo definitivo visible con el texto acordado, sin reintento', async () => {
+    const id = await queueOfflineMutation(CHECKIN_ENDPOINT, 'POST', payloadCheckin(), 'Reporte', undefined, {
+      alumnoId: ALUMNO_ID,
+      capturadoEnMs: CAPTURA_MS,
+    });
+    mockedApiClient.mockRejectedValueOnce(errorFueraDePlazo());
+
+    const result = await processOutboxQueue();
+
+    expect(result).toMatchObject({ processed: 0, failed: 0, rejected: 1 });
+    const row = await offlineDb.outboxMutations.get(id);
+    expect(row?.status).toBe('rejected');
+    expect(row?.lastError).toBe(MENSAJE_CHECKIN_FUERA_DE_PLAZO);
+
+    await processOutboxQueue();
+    expect(mockedApiClient).toHaveBeenCalledTimes(1);
+  });
+
+  it('con fotos: 400 CHECKIN_FUERA_DE_PLAZO → rechazo con el texto acordado (no el de ventana) y evidencia retenida', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(respuestaPutOk()));
+    mockedApiClient
+      .mockResolvedValueOnce({ uploadUrl: 'https://r2.test/put/1', storageKey: 'comidas/a/2026-09-22/1.webp' })
+      .mockRejectedValueOnce(errorFueraDePlazo());
+
+    const id = await queueCheckinNutricionalConFotos(payloadCheckin(), fotosDePrueba(1), ALUMNO_ID, CAPTURA_MS);
+    await processOutboxQueue();
+
+    const row = await offlineDb.outboxMutations.get(id);
+    expect(row?.status).toBe('rejected');
+    expect(row?.lastError).toBe(MENSAJE_CHECKIN_FUERA_DE_PLAZO);
+    expect(row?.fotos).toHaveLength(1);
+  });
+
+  it('las mutaciones que no son el reporte diario no reciben el campo', async () => {
+    await queueOfflineMutation('/sesiones/s1/series', 'PUT', { series: [1] }, 'Sync serie', 'key-x', {
+      capturadoEnMs: CAPTURA_MS,
+    });
+    mockedApiClient.mockResolvedValueOnce(null);
+
+    await processOutboxQueue();
+
+    expect(cuerpoEnviado(0)).toEqual({ series: [1] });
   });
 });

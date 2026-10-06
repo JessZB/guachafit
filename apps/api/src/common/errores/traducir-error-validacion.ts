@@ -78,6 +78,9 @@ const ETIQUETAS_CAMPO: Record<string, string> = {
   recursos: 'recursos',
   url: 'enlace',
   timezoneCliente: 'zona horaria',
+  // LOTE API-N2
+  zonaHoraria: 'zona horaria',
+  segundosDesdeCaptura: 'hora de captura',
   q: 'búsqueda',
   busqueda: 'búsqueda',
   coachCode: 'código del entrenador',

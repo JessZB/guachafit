@@ -2,13 +2,19 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   NutricionService,
   evaluarToleranciaNutricional,
-  evaluarVentanaCheckinNutricional,
-  resolverTimezoneNutricion,
-  sumarDiasCalendario,
-  enumerarFechasCalendario,
-  contarDiasNoReportados,
   MetasNutricionalesCoach,
 } from '../../src/modules/nutricion/nutricion.service';
+// Ronda 1 (LOTE API-N2): las reglas puras de tiempo viven en su propio módulo.
+import {
+  contarDiasNoReportados,
+  enumerarFechasCalendario,
+  evaluarRecepcionCheckinNutricional,
+  evaluarVentanaCheckinNutricional,
+  resolverTimezoneNutricion,
+  ultimoDiaNutricionalCerrado,
+} from '../../src/modules/nutricion/nutricion-tiempo.util';
+import { sumarDiasCalendario } from '../../src/common/adherencia.util';
+import { sumarDiasCalendario as sumarDiasCalendarioAntropometria } from '../../src/modules/antropometria/antropometria-periodicidad.util';
 import { NutricionController } from '../../src/modules/nutricion/nutricion.controller';
 import {
   Rol,
@@ -37,6 +43,15 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { getTableName } from '@guachafit/database';
+import {
+  CODIGO_CHECKIN_FUERA_DE_PLAZO,
+  CODIGO_CHECKIN_FUERA_DE_VENTANA,
+  MAX_SEGUNDOS_DESDE_CAPTURA_CHECKIN,
+  MENSAJE_CHECKIN_DIA_CAMBIADO,
+  MENSAJE_CHECKIN_FUERA_DE_PLAZO,
+  MENSAJE_CHECKIN_FUERA_DE_VENTANA,
+  MENSAJE_SEGUNDOS_DESDE_CAPTURA_INVALIDO,
+} from '@guachafit/shared';
 
 /**
  * RF-002 (WU RF-002a): metas del coach (RN-01), tolerancia ±10% REAL (Escenario 3), ventana
@@ -673,9 +688,10 @@ describe('Módulo 3: Check-ins Nutricionales (NutricionService & NutricionContro
       expect(capturado.getResponse()).toMatchObject({
         statusCode: 400,
         // Literal a propósito: fija el contrato del cable con la web.
+        // LOTE API-N2: la hora que cuenta es la de la zona del perfil (antes: "hora de tu teléfono").
         code: 'CHECKIN_FUERA_DE_VENTANA',
         message:
-          'Puedes enviar el reporte de hoy entre las 18:00 y las 23:59 (hora de tu teléfono). Fuera de ese horario el día queda como «No reportado».',
+          'Puedes enviar el reporte de hoy entre las 18:00 y las 23:59 (hora de la zona horaria de tu perfil). Fuera de ese horario el día queda como «No reportado».',
       });
     });
 
@@ -695,7 +711,8 @@ describe('Módulo 3: Check-ins Nutricionales (NutricionService & NutricionContro
         statusCode: 400,
         // Literal a propósito: fija el contrato del cable con la web.
         code: 'CHECKIN_FUERA_DE_VENTANA',
-        message: 'Tu teléfono ya cambió de día. Actualiza la pantalla para ver el reporte de hoy.',
+        message:
+          'El día de tu reporte ya cambió según la zona horaria de tu perfil. Actualiza la pantalla para ver el reporte de hoy.',
       });
     });
 
@@ -1274,7 +1291,9 @@ describe('Módulo 3: Check-ins Nutricionales (NutricionService & NutricionContro
         db.transaction = vi.fn(async () => {
           throw errorUnicidad();
         });
-        const servicio = new NutricionService(db);
+        // LOTE API-N2: la lectura de la zona del perfil (RLS) no pasa por la transacción que falla;
+        // así el fallo cae, como en producción, en la transacción del alta del reporte.
+        const servicio = new NutricionService(db, undefined, (async (_ctx: any, fn: any) => fn(db)) as any);
 
         const error = await capturar(
           servicio.registrarCheckinDiario(
@@ -1320,7 +1339,9 @@ describe('Módulo 3: Check-ins Nutricionales (NutricionService & NutricionContro
         db.transaction = vi.fn(async () => {
           throw caida;
         });
-        const servicio = new NutricionService(db);
+        // LOTE API-N2: la lectura de la zona del perfil (RLS) no pasa por la transacción que falla;
+        // así el fallo cae, como en producción, en la transacción del alta del reporte.
+        const servicio = new NutricionService(db, undefined, (async (_ctx: any, fn: any) => fn(db)) as any);
 
         await expect(
           servicio.registrarCheckinDiario(
@@ -1550,6 +1571,491 @@ describe('Módulo 3: Check-ins Nutricionales (NutricionService & NutricionContro
           )
         );
         expect(error.message).toBe(MENSAJE_FOTO_AJENA);
+      });
+    });
+  });
+
+  // ===========================================================================
+  // LOTE API-N2 (RF-002, decisiones del dueño 2026-10-05): zona horaria del PERFIL, captura
+  // offline tardía con plazo hasta las 12:00 del día siguiente y copia de metas por reporte.
+  // ===========================================================================
+  describe('12. LOTE API-N2: zona del perfil, captura offline tardía y metas del día', () => {
+    async function capturarRechazo(promesa: Promise<unknown>): Promise<any> {
+      try {
+        await promesa;
+      } catch (error) {
+        return error;
+      }
+      throw new Error('Se esperaba un rechazo y la operación terminó bien.');
+    }
+
+    describe('Criterio 2: la ventana usa la zona del perfil, no `timezoneCliente`', () => {
+      it('perfil en Madrid: a las 22:00 de Madrid se acepta aunque el cliente diga Caracas (16:00)', async () => {
+        mockPerfilesAlumno[0].zonaHoraria = 'Europe/Madrid';
+        const res = await nutricionService.registrarCheckinDiario(
+          alumnoId1,
+          {
+            fecha: '2026-09-06',
+            semaforo: SemaforoNutricional.CUMPLIDO,
+            timezoneCliente: 'America/Caracas',
+          },
+          new Date('2026-09-06T20:00:00.000Z')
+        );
+        expect(res.checkin.fecha).toBe('2026-09-06');
+        expect(res.checkin.zonaHoraria).toBe('Europe/Madrid');
+      });
+
+      it('perfil por defecto (Caracas): a las 16:00 de Caracas se rechaza aunque el cliente diga Madrid (22:00)', async () => {
+        const error = await capturarRechazo(
+          nutricionService.registrarCheckinDiario(
+            alumnoId1,
+            {
+              fecha: '2026-09-06',
+              semaforo: SemaforoNutricional.CUMPLIDO,
+              timezoneCliente: 'Europe/Madrid',
+            },
+            new Date('2026-09-06T20:00:00.000Z')
+          )
+        );
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect(error.getResponse()).toMatchObject({ code: CODIGO_CHECKIN_FUERA_DE_VENTANA });
+        expect(mockCheckinsNutricionales).toHaveLength(0);
+      });
+
+      it('el aviso de ventana ya no menciona la hora del teléfono (decide la zona del perfil)', async () => {
+        const error = await capturarRechazo(
+          nutricionService.registrarCheckinDiario(
+            alumnoId1,
+            { fecha: '2026-09-06', semaforo: SemaforoNutricional.CUMPLIDO },
+            new Date('2026-09-06T15:00:00.000Z')
+          )
+        );
+        expect(error.getResponse().message).toBe(MENSAJE_CHECKIN_FUERA_DE_VENTANA);
+        expect(MENSAJE_CHECKIN_FUERA_DE_VENTANA).toBe(
+          'Puedes enviar el reporte de hoy entre las 18:00 y las 23:59 (hora de la zona horaria de tu perfil). Fuera de ese horario el día queda como «No reportado».'
+        );
+      });
+
+      it('checkin/hoy sin fecha resuelve el día con la zona del perfil e ignora `timezoneCliente`', async () => {
+        mockPerfilesAlumno[0].zonaHoraria = 'Asia/Tokyo';
+        // 2026-09-06T14:00Z = 23:00 del 06 en Tokio.
+        await nutricionService.registrarCheckinDiario(
+          alumnoId1,
+          { fecha: '2026-09-06', semaforo: SemaforoNutricional.CUMPLIDO },
+          new Date('2026-09-06T14:00:00.000Z')
+        );
+        vi.useFakeTimers();
+        // 2026-09-06T16:00Z = 01:00 del 07 en Tokio; 12:00 del 06 en Caracas.
+        vi.setSystemTime(new Date('2026-09-06T16:00:00.000Z'));
+
+        // Con Caracas (lo que dice el cliente) habría encontrado el reporte del 06.
+        const hoy = await nutricionService.obtenerCheckinHoy(alumnoId1, undefined, 'America/Caracas');
+        expect(hoy).toBeNull();
+      });
+    });
+
+    describe('Criterio 3: captura offline tardía (`segundosDesdeCaptura`)', () => {
+      // Perfil en Caracas (UTC-4) por defecto. Día 2026-09-06:
+      //  - 22:00 locales = 2026-09-07T02:00Z (captura válida)
+      //  - 12:00 locales del 07 = 2026-09-07T16:00Z (límite de recepción)
+      // La hora de captura = recepción del SERVIDOR − segundosDesdeCaptura: el reloj del teléfono
+      // nunca interviene, así que un teléfono adelantado o atrasado no altera el resultado.
+      const capturaValida = '2026-09-07T02:00:00.000Z';
+      const HORA = 3600;
+
+      it('captura a las 22:00 y recepción a las 10:00 del día siguiente → se registra con su hora de captura', async () => {
+        const res = await nutricionService.registrarCheckinDiario(
+          alumnoId1,
+          {
+            fecha: '2026-09-06',
+            semaforo: SemaforoNutricional.PARCIAL,
+            segundosDesdeCaptura: 12 * HORA,
+          },
+          new Date('2026-09-07T14:00:00.000Z')
+        );
+        expect(res.checkin.capturadoEnUtc).toBe(capturaValida);
+        expect(mockCheckinsNutricionales[0].capturadoEnUtc).toEqual(new Date(capturaValida));
+      });
+
+      it('recepción exactamente a las 12:00:00 del día siguiente → todavía se acepta', async () => {
+        const res = await nutricionService.registrarCheckinDiario(
+          alumnoId1,
+          { fecha: '2026-09-06', semaforo: SemaforoNutricional.CUMPLIDO, segundosDesdeCaptura: 14 * HORA },
+          new Date('2026-09-07T16:00:00.000Z')
+        );
+        expect(res.checkin.capturadoEnUtc).toBe(capturaValida);
+      });
+
+      it('recepción a las 12:00:01 del día siguiente → 400 CHECKIN_FUERA_DE_PLAZO con el texto acordado', async () => {
+        const error = await capturarRechazo(
+          nutricionService.registrarCheckinDiario(
+            alumnoId1,
+            { fecha: '2026-09-06', semaforo: SemaforoNutricional.CUMPLIDO, segundosDesdeCaptura: 14 * HORA + 1 },
+            new Date('2026-09-07T16:00:01.000Z')
+          )
+        );
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect(error.getResponse()).toMatchObject({
+          statusCode: 400,
+          code: CODIGO_CHECKIN_FUERA_DE_PLAZO,
+          message:
+            'Este reporte llegó después del mediodía del día siguiente, así que ya no se puede registrar. El día quedó como «No reportado».',
+        });
+        expect(MENSAJE_CHECKIN_FUERA_DE_PLAZO).toBe(error.getResponse().message);
+        expect(mockCheckinsNutricionales).toHaveLength(0);
+      });
+
+      it('el plazo usa la zona del perfil: en Madrid las 12:00 del día siguiente son 10:00Z', async () => {
+        mockPerfilesAlumno[0].zonaHoraria = 'Europe/Madrid';
+        const error = await capturarRechazo(
+          nutricionService.registrarCheckinDiario(
+            alumnoId1,
+            {
+              fecha: '2026-09-06',
+              semaforo: SemaforoNutricional.CUMPLIDO,
+              // Recibido 12:30 en Madrid; capturado 14 h 30 min antes = 22:00 del 06 en Madrid.
+              segundosDesdeCaptura: 14 * HORA + 1800,
+            },
+            new Date('2026-09-07T10:30:00.000Z')
+          )
+        );
+        expect(error.getResponse()).toMatchObject({ code: CODIGO_CHECKIN_FUERA_DE_PLAZO });
+      });
+
+      it('captura fuera de 18:00–23:59 del día `fecha` → rechazo de ventana actual', async () => {
+        const error = await capturarRechazo(
+          nutricionService.registrarCheckinDiario(
+            alumnoId1,
+            {
+              fecha: '2026-09-06',
+              semaforo: SemaforoNutricional.CUMPLIDO,
+              segundosDesdeCaptura: 1.5 * HORA, // recibido 19:00 → capturado 17:30 en Caracas
+            },
+            new Date('2026-09-06T23:00:00.000Z')
+          )
+        );
+        expect(error.getResponse()).toMatchObject({
+          code: CODIGO_CHECKIN_FUERA_DE_VENTANA,
+          message: MENSAJE_CHECKIN_FUERA_DE_VENTANA,
+        });
+      });
+
+      it('captura en un día distinto a `fecha` → rechazo de día cambiado', async () => {
+        const error = await capturarRechazo(
+          nutricionService.registrarCheckinDiario(
+            alumnoId1,
+            {
+              fecha: '2026-09-05',
+              semaforo: SemaforoNutricional.CUMPLIDO,
+              segundosDesdeCaptura: HORA, // capturado 22:00 del 06
+            },
+            new Date('2026-09-07T03:00:00.000Z')
+          )
+        );
+        expect(error.getResponse()).toMatchObject({
+          code: CODIGO_CHECKIN_FUERA_DE_VENTANA,
+          message: MENSAJE_CHECKIN_DIA_CAMBIADO,
+        });
+      });
+
+      it('sin `segundosDesdeCaptura` se usa y se guarda la hora del servidor', async () => {
+        const ahora = enVentanaCaracas('2026-09-06');
+        const res = await nutricionService.registrarCheckinDiario(
+          alumnoId1,
+          { fecha: '2026-09-06', semaforo: SemaforoNutricional.CUMPLIDO },
+          ahora
+        );
+        expect(res.checkin.capturadoEnUtc).toBe(ahora.toISOString());
+      });
+
+      it('`segundosDesdeCaptura` = 0 equivale a la hora del servidor', async () => {
+        const ahora = enVentanaCaracas('2026-09-06');
+        const res = await nutricionService.registrarCheckinDiario(
+          alumnoId1,
+          { fecha: '2026-09-06', semaforo: SemaforoNutricional.CUMPLIDO, segundosDesdeCaptura: 0 },
+          ahora
+        );
+        expect(res.checkin.capturadoEnUtc).toBe(ahora.toISOString());
+      });
+
+      it('sin el campo, recibir al día siguiente sigue siendo el rechazo de día cambiado (comportamiento actual)', async () => {
+        const error = await capturarRechazo(
+          nutricionService.registrarCheckinDiario(
+            alumnoId1,
+            { fecha: '2026-09-06', semaforo: SemaforoNutricional.CUMPLIDO },
+            new Date('2026-09-07T14:00:00.000Z')
+          )
+        );
+        expect(error.getResponse()).toMatchObject({
+          code: CODIGO_CHECKIN_FUERA_DE_VENTANA,
+          message: MENSAJE_CHECKIN_DIA_CAMBIADO,
+        });
+      });
+
+      it.each([
+        ['negativo', -1],
+        ['con decimales', 1.5],
+        ['mayor que 48 h', MAX_SEGUNDOS_DESDE_CAPTURA_CHECKIN + 1],
+        ['texto', 'ayer'],
+      ])('`segundosDesdeCaptura` %s → 400 claro del contrato', async (_caso, valor) => {
+        const error = await capturarRechazo(
+          nutricionService.registrarCheckinDiario(
+            alumnoId1,
+            { fecha: '2026-09-06', semaforo: SemaforoNutricional.CUMPLIDO, segundosDesdeCaptura: valor } as any,
+            enVentanaCaracas('2026-09-06')
+          )
+        );
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect(error.message).toBe(MENSAJE_SEGUNDOS_DESDE_CAPTURA_INVALIDO);
+        expect(mockCheckinsNutricionales).toHaveLength(0);
+      });
+
+      it('el máximo es 48 h (172800 s) y se acepta en el contrato', () => {
+        expect(MAX_SEGUNDOS_DESDE_CAPTURA_CHECKIN).toBe(48 * HORA);
+        expect(
+          CheckinNutricionalSchema.safeParse({
+            fecha: '2026-09-06',
+            semaforo: SemaforoNutricional.CUMPLIDO,
+            segundosDesdeCaptura: MAX_SEGUNDOS_DESDE_CAPTURA_CHECKIN,
+          }).success
+        ).toBe(true);
+      });
+
+      it('evaluarRecepcionCheckinNutricional es pura y explica el motivo', () => {
+        expect(
+          evaluarRecepcionCheckinNutricional({
+            fecha: '2026-09-06',
+            zonaHoraria: 'America/Caracas',
+            recibidoEn: new Date('2026-09-07T16:00:01.000Z'),
+            segundosDesdeCaptura: 14 * HORA + 1,
+          })
+        ).toMatchObject({ permitido: false, motivo: 'FUERA_DE_PLAZO' });
+        const aceptada = evaluarRecepcionCheckinNutricional({
+          fecha: '2026-09-06',
+          zonaHoraria: 'America/Caracas',
+          recibidoEn: new Date('2026-09-07T03:00:00.000Z'),
+          segundosDesdeCaptura: HORA,
+        });
+        expect(aceptada.permitido).toBe(true);
+        expect(aceptada.capturadoEn.toISOString()).toBe(capturaValida);
+      });
+    });
+
+    describe('Ronda 1: bordes de tiempo con relojes fijos', () => {
+      /** Evalúa una captura al instante (sin desfase): recibido = capturado. */
+      function enInstante(fecha: string, instanteUtc: string, zonaHoraria = 'America/Caracas') {
+        return evaluarRecepcionCheckinNutricional({
+          fecha,
+          zonaHoraria,
+          recibidoEn: new Date(instanteUtc),
+        });
+      }
+
+      /** Captura a las 22:00 locales del día (instante UTC dado) y recepción en `recibidoUtc`. */
+      function capturadaYRecibida(
+        fecha: string,
+        capturaUtc: string,
+        recibidoUtc: string,
+        zonaHoraria: string
+      ) {
+        const segundos = (Date.parse(recibidoUtc) - Date.parse(capturaUtc)) / 1000;
+        return evaluarRecepcionCheckinNutricional({
+          fecha,
+          zonaHoraria,
+          recibidoEn: new Date(recibidoUtc),
+          segundosDesdeCaptura: segundos,
+        });
+      }
+
+      it('captura a las 18:00:00 y a las 23:59:59 se acepta; a las 17:59:59 se rechaza', () => {
+        expect(enInstante('2026-09-06', '2026-09-06T22:00:00.000Z').permitido).toBe(true);
+        expect(enInstante('2026-09-06', '2026-09-07T03:59:59.000Z').permitido).toBe(true);
+        expect(enInstante('2026-09-06', '2026-09-06T21:59:59.000Z')).toMatchObject({
+          permitido: false,
+          motivo: 'FUERA_DE_VENTANA',
+        });
+      });
+
+      it('recepción a las 12:00:00 del día siguiente se acepta; a las 12:00:01 queda fuera de plazo', () => {
+        expect(
+          capturadaYRecibida('2026-09-06', '2026-09-07T02:00:00.000Z', '2026-09-07T16:00:00.000Z', 'America/Caracas')
+            .permitido
+        ).toBe(true);
+        expect(
+          capturadaYRecibida('2026-09-06', '2026-09-07T02:00:00.000Z', '2026-09-07T16:00:01.000Z', 'America/Caracas')
+        ).toMatchObject({ permitido: false, motivo: 'FUERA_DE_PLAZO' });
+      });
+
+      it('una `fecha` futura (mañana) se rechaza aunque sea de noche', () => {
+        expect(enInstante('2026-09-07', '2026-09-07T02:00:00.000Z')).toMatchObject({
+          permitido: false,
+          motivo: 'FECHA_DISTINTA_AL_DIA_LOCAL',
+        });
+      });
+
+      it('ultimoDiaNutricionalCerrado: a las 12:00:00 ayer sigue abierto; a las 12:00:01 ya cerró', () => {
+        // 2026-09-22T16:00:00Z = 12:00:00 en Caracas.
+        expect(ultimoDiaNutricionalCerrado(new Date('2026-09-22T16:00:00.000Z'), 'America/Caracas')).toBe(
+          '2026-09-20'
+        );
+        expect(ultimoDiaNutricionalCerrado(new Date('2026-09-22T16:00:01.000Z'), 'America/Caracas')).toBe(
+          '2026-09-21'
+        );
+      });
+
+      it('una sola implementación de fechas: antropometría reexporta la común', () => {
+        expect(sumarDiasCalendarioAntropometria).toBe(sumarDiasCalendario);
+      });
+
+      describe('Europe/Madrid con horario de verano', () => {
+        it('marzo (29/03/2026, de UTC+1 a UTC+2): ventana y plazo siguen la hora local', () => {
+          // Día 28 (UTC+1): captura 22:00 = 21:00Z. Plazo: 12:00 del 29 (ya UTC+2) = 10:00Z.
+          expect(
+            capturadaYRecibida('2026-03-28', '2026-03-28T21:00:00.000Z', '2026-03-29T10:00:00.000Z', 'Europe/Madrid')
+              .permitido
+          ).toBe(true);
+          expect(
+            capturadaYRecibida('2026-03-28', '2026-03-28T21:00:00.000Z', '2026-03-29T10:00:01.000Z', 'Europe/Madrid')
+          ).toMatchObject({ permitido: false, motivo: 'FUERA_DE_PLAZO' });
+          // Día 29 (UTC+2): la ventana abre a las 18:00 = 16:00Z.
+          expect(enInstante('2026-03-29', '2026-03-29T16:00:00.000Z', 'Europe/Madrid').permitido).toBe(true);
+          expect(enInstante('2026-03-29', '2026-03-29T15:59:59.000Z', 'Europe/Madrid').permitido).toBe(false);
+          expect(ultimoDiaNutricionalCerrado(new Date('2026-03-29T10:00:00.000Z'), 'Europe/Madrid')).toBe(
+            '2026-03-27'
+          );
+          expect(ultimoDiaNutricionalCerrado(new Date('2026-03-29T10:00:01.000Z'), 'Europe/Madrid')).toBe(
+            '2026-03-28'
+          );
+        });
+
+        it('octubre (25/10/2026, de UTC+2 a UTC+1): ventana y plazo siguen la hora local', () => {
+          // Día 24 (UTC+2): captura 22:00 = 20:00Z. Plazo: 12:00 del 25 (ya UTC+1) = 11:00Z.
+          expect(
+            capturadaYRecibida('2026-10-24', '2026-10-24T20:00:00.000Z', '2026-10-25T11:00:00.000Z', 'Europe/Madrid')
+              .permitido
+          ).toBe(true);
+          expect(
+            capturadaYRecibida('2026-10-24', '2026-10-24T20:00:00.000Z', '2026-10-25T11:00:01.000Z', 'Europe/Madrid')
+          ).toMatchObject({ permitido: false, motivo: 'FUERA_DE_PLAZO' });
+          // Día 25 (UTC+1): la ventana abre a las 18:00 = 17:00Z.
+          expect(enInstante('2026-10-25', '2026-10-25T17:00:00.000Z', 'Europe/Madrid').permitido).toBe(true);
+          expect(enInstante('2026-10-25', '2026-10-25T16:59:59.000Z', 'Europe/Madrid').permitido).toBe(false);
+          expect(ultimoDiaNutricionalCerrado(new Date('2026-10-25T11:00:00.000Z'), 'Europe/Madrid')).toBe(
+            '2026-10-23'
+          );
+          expect(ultimoDiaNutricionalCerrado(new Date('2026-10-25T11:00:01.000Z'), 'Europe/Madrid')).toBe(
+            '2026-10-24'
+          );
+        });
+      });
+    });
+
+    describe('Criterio 4: copia de las metas vigentes en cada reporte', () => {
+      it('guarda las metas del alumno al registrar y no cambian si el coach las edita después', async () => {
+        await nutricionService.definirMetasNutricionales(coachId1, alumnoId1, {
+          caloriasObjetivo: 2000,
+          proteinaGramosObjetivo: 150,
+          carbohidratosGramosObjetivo: 250,
+          grasasGramosObjetivo: 60,
+          aguaLitrosObjetivo: '2.50',
+        });
+
+        const res = await nutricionService.registrarCheckinDiario(
+          alumnoId1,
+          { fecha: '2026-09-06', semaforo: SemaforoNutricional.CUMPLIDO, caloriasReportadas: 2100 },
+          enVentanaCaracas('2026-09-06')
+        );
+        const metasEsperadas = {
+          caloriasObjetivo: 2000,
+          proteinaGramosObjetivo: 150,
+          carbohidratosGramosObjetivo: 250,
+          grasasGramosObjetivo: 60,
+          aguaLitrosObjetivo: '2.50',
+        };
+        expect(res.checkin.metasVigentes).toEqual(metasEsperadas);
+        expect(mockCheckinsNutricionales[0].metasVigentes).toEqual(metasEsperadas);
+
+        await nutricionService.definirMetasNutricionales(coachId1, alumnoId1, { caloriasObjetivo: 3000 });
+
+        const lista = await nutricionService.listarCheckins(coachId1, alumnoId1, {}, Rol.ENTRENADOR);
+        expect(lista[0].metasVigentes).toEqual(metasEsperadas);
+      });
+
+      it('sin metas configuradas la copia queda en null', async () => {
+        const res = await nutricionService.registrarCheckinDiario(
+          alumnoId1,
+          { fecha: '2026-09-06', semaforo: SemaforoNutricional.CUMPLIDO },
+          enVentanaCaracas('2026-09-06')
+        );
+        expect(res.checkin.metasVigentes).toBeNull();
+        expect(mockCheckinsNutricionales[0].metasVigentes).toBeNull();
+      });
+    });
+
+    describe('Criterio 5: lecturas con hora de captura, metas del día y zona usada', () => {
+      it('checkin/hoy devuelve capturadoEnUtc, metasVigentes y zonaHoraria', async () => {
+        mockPerfilesAlumno[0].zonaHoraria = 'America/Bogota';
+        // 22:00 en Bogotá (UTC-5) del 06 = 2026-09-07T03:00Z
+        await nutricionService.registrarCheckinDiario(
+          alumnoId1,
+          { fecha: '2026-09-06', semaforo: SemaforoNutricional.CUMPLIDO },
+          new Date('2026-09-07T03:00:00.000Z')
+        );
+        const hoy = await nutricionService.obtenerCheckinHoy(alumnoId1, '2026-09-06');
+        expect(hoy).toMatchObject({
+          capturadoEnUtc: '2026-09-07T03:00:00.000Z',
+          metasVigentes: null,
+          zonaHoraria: 'America/Bogota',
+        });
+      });
+
+      it('la lista del coach y la del alumno incluyen los tres datos; los reportes antiguos quedan en null', async () => {
+        // Reporte antiguo (anterior a la migración): sin hora de captura ni copia de metas.
+        mockCheckinsNutricionales.push({
+          id: 'checkin-antiguo',
+          alumnoId: alumnoId1,
+          fecha: '2026-09-01',
+          semaforo: SemaforoNutricional.PARCIAL,
+          createdAtUtc: new Date('2026-09-02T02:00:00.000Z'),
+          updatedAtUtc: new Date('2026-09-02T02:00:00.000Z'),
+        });
+
+        const delCoach = await nutricionService.listarCheckins(coachId1, alumnoId1, {}, Rol.ENTRENADOR);
+        expect(delCoach[0]).toMatchObject({
+          capturadoEnUtc: null,
+          metasVigentes: null,
+          zonaHoraria: 'America/Caracas',
+        });
+
+        const delAlumno = await nutricionService.listarCheckins(
+          alumnoId1,
+          alumnoId1,
+          {},
+          Rol.ALUMNO,
+          alumnoId1
+        );
+        expect(delAlumno[0]).toMatchObject({
+          capturadoEnUtc: null,
+          metasVigentes: null,
+          zonaHoraria: 'America/Caracas',
+        });
+      });
+    });
+
+    describe('Criterio 6: último día cerrado según el plazo del día siguiente', () => {
+      it('antes de las 12:00 locales el día de ayer sigue abierto; después, queda cerrado', () => {
+        // 2026-09-22T08:00Z = 04:00 en Caracas → ayer (21) aún puede reportarse.
+        expect(ultimoDiaNutricionalCerrado(new Date('2026-09-22T08:00:00.000Z'), 'America/Caracas')).toBe(
+          '2026-09-20'
+        );
+        // 2026-09-22T16:00:01Z = 12:00:01 en Caracas → el 21 ya cerró.
+        expect(ultimoDiaNutricionalCerrado(new Date('2026-09-22T16:00:01.000Z'), 'America/Caracas')).toBe(
+          '2026-09-21'
+        );
+        // Mismo instante de las 08:00Z en Tokio (17:00 del 22) → el 21 ya cerró.
+        expect(ultimoDiaNutricionalCerrado(new Date('2026-09-22T08:00:00.000Z'), 'Asia/Tokyo')).toBe(
+          '2026-09-21'
+        );
       });
     });
   });

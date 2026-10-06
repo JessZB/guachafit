@@ -38,15 +38,17 @@ import {
 // engine importa y re-exporta el código real de producción (mismo criterio D9 que RN-02/RN-03
 // de entrenamiento): si la semántica cambia en src, estos tests fallan en lugar de enmascararlo.
 import {
+  evaluarToleranciaNutricional,
+  type MetasNutricionalesCoach,
+} from '../../../src/modules/nutricion/nutricion.service';
+import {
   contarDiasNoReportados,
   enumerarFechasCalendario,
-  evaluarToleranciaNutricional,
   evaluarVentanaCheckinNutricional,
   resolverTimezoneNutricion,
-  sumarDiasCalendario,
-  type MetasNutricionalesCoach,
   type ResultadoVentanaCheckinNutricional,
-} from '../../../src/modules/nutricion/nutricion.service';
+} from '../../../src/modules/nutricion/nutricion-tiempo.util';
+import { sumarDiasCalendario } from '../../../src/common/adherencia.util';
 
 export {
   evaluarCumplimientoRachaPorVolumen,

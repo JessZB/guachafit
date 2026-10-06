@@ -24,7 +24,12 @@ import {
   fechaAnteriorYyyyMmDd,
   instanteUtcDesdeMedianocheLocal,
   obtenerFechaLocalYyyyMmDd,
+  sumarDiasCalendario,
 } from '../../common/adherencia.util';
+
+// Ronda 1 (LOTE API-N2): una sola implementación de la aritmética de fechas de calendario; se
+// reexporta para los consumidores existentes de este módulo.
+export { sumarDiasCalendario };
 
 /** Zona por defecto del producto cuando el usuario no tiene una zona IANA válida (ADR-002). */
 export const TIMEZONE_ANTROPOMETRIA_POR_DEFECTO = 'America/Caracas';
@@ -55,14 +60,6 @@ export function resolverTimezoneAntropometria(timezone?: string | null): string 
   return timezone && esTimezoneIanaValida(timezone)
     ? timezone
     : TIMEZONE_ANTROPOMETRIA_POR_DEFECTO;
-}
-
-/** Suma (o resta) días a una fecha YYYY-MM-DD con aritmética UTC (sin TZ del servidor). */
-export function sumarDiasCalendario(fechaYyyyMmDd: string, dias: number): string {
-  const [y, m, d] = fechaYyyyMmDd.split('-').map(Number);
-  const fecha = new Date(Date.UTC(y, m - 1, d));
-  fecha.setUTCDate(fecha.getUTCDate() + dias);
-  return fecha.toISOString().split('T')[0];
 }
 
 /** Diferencia de días de calendario `hasta - desde` (firmada; nunca la del reloj del proceso). */

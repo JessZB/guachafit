@@ -38,7 +38,9 @@ import {
   BloqueDiaRutinaDTO,
   NivelObjetivoPlantilla,
   RecursoNutricionalDTO,
+  MetasVigentesCheckinDTO,
   PeriodicidadAntropometria,
+  ZONA_HORARIA_ALUMNO_POR_DEFECTO,
 } from '@guachafit/shared';
 
 // =============================================================================
@@ -229,6 +231,13 @@ export const perfilesAlumno = pgTable(
     rachaDias: integer('racha_dias').default(0).notNull(),
     /** Última fecha local (YYYY-MM-DD) en la que se incrementó la racha. */
     rachaUltimaFecha: date('racha_ultima_fecha'),
+    /**
+     * LOTE API-N2 (RF-002): zona horaria IANA del alumno. Decide la ventana del reporte nutricional
+     * (18:00–23:59) y el plazo de recepción (12:00 del día siguiente). La app valida el valor.
+     */
+    zonaHoraria: varchar('zona_horaria', { length: 64 })
+      .default(ZONA_HORARIA_ALUMNO_POR_DEFECTO)
+      .notNull(),
     deletedAtUtc: timestamp('deleted_at_utc', { withTimezone: true }),
     createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
     updatedAtUtc: timestamp('updated_at_utc', { withTimezone: true }).defaultNow().notNull(),
@@ -489,6 +498,13 @@ export const checkinsNutricionales = pgTable(
     proteinaGramosReportada: integer('proteina_gramos_reportada'),
     aguaLitros: numeric('agua_litros', { precision: 4, scale: 2 }),
     notasAlumno: varchar('notas_alumno', { length: 280 }),
+    /**
+     * LOTE API-N2: instante en que el alumno guardó el reporte en su teléfono (captura offline
+     * tardía) o la hora del servidor si no la informó. NULL en reportes anteriores.
+     */
+    capturadoEnUtc: timestamp('capturado_en_utc', { withTimezone: true }),
+    /** LOTE API-N2: copia de las metas vigentes al registrar. NULL sin metas o en reportes anteriores. */
+    metasVigentes: jsonb('metas_vigentes').$type<MetasVigentesCheckinDTO>(),
     createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
     updatedAtUtc: timestamp('updated_at_utc', { withTimezone: true }).defaultNow().notNull(),
   },

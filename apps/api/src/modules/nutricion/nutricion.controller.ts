@@ -54,8 +54,11 @@ export class NutricionController {
 
   /**
    * Consultar el reporte nutricional del día en curso para el alumno autenticado.
-   * `timezoneCliente` (RN-05/ADR-002) resuelve el día local cuando no se envía `fecha`.
+   * Sin `fecha`, el día local se resuelve con la zona del PERFIL del alumno (LOTE API-N2).
    * Rol: Alumno
+   *
+   * @param _timezoneCliente @deprecated Sin efecto (LOTE API-N2): decide la zona del perfil. Se
+   *   acepta porque la web publicada lo envía; se retirará cuando deje de hacerlo.
    */
   @Get('checkin/hoy')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -63,17 +66,13 @@ export class NutricionController {
   async obtenerCheckinHoy(
     @Req() req: any,
     @Query('fecha') fecha?: string,
-    @Query('timezoneCliente') timezoneCliente?: string,
+    @Query('timezoneCliente') _timezoneCliente?: string,
     @Res({ passthrough: true }) res?: any
   ) {
     // LOTE API-N1: una fecha que no existe en el calendario es un 400 claro, nunca un 500.
     const consulta = parsearContrato(ConsultaCheckinNutricionalHoySchema, { fecha });
     const alumnoId = req.user.sub;
-    const checkin = await this.nutricionService.obtenerCheckinHoy(
-      alumnoId,
-      consulta.fecha,
-      timezoneCliente
-    );
+    const checkin = await this.nutricionService.obtenerCheckinHoy(alumnoId, consulta.fecha);
     if (!checkin && res) {
       res.status(HttpStatus.NO_CONTENT);
       return null;

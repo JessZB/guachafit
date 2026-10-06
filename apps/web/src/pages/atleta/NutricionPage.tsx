@@ -23,6 +23,7 @@ import {
   buscarCheckinNutricionalPendiente,
   clasificarErrorCargaReporteHoy,
   construirPayloadCheckinNutricional,
+  cuerpoCheckinParaEnviar,
   debeMostrarErrorCargaReporte,
   siguienteEstadoReporte,
   ESTADO_REPORTE_INICIAL,
@@ -431,6 +432,10 @@ export function NutricionPage() {
       return;
     }
 
+    // LOTE API-N2: instante del toque en Guardar. Viaja como `segundosDesdeCaptura`, calculado al
+    // enviar (ahora o desde la cola), para que el servidor no dependa del reloj del teléfono.
+    const capturadoEnMs = Date.now();
+
     setIsLoading(true);
     setAvisoReporte(null);
     setFotosError(null);
@@ -497,7 +502,7 @@ export function NutricionPage() {
         if (!user?.id) {
           throw new Error('No se pudo identificar tu sesión. Vuelve a iniciar sesión e inténtalo de nuevo.');
         }
-        await queueCheckinNutricionalConFotos(payload, construirFotosEnCola(), user.id);
+        await queueCheckinNutricionalConFotos(payload, construirFotosEnCola(), user.id, capturadoEnMs);
         limpiarFormularioEncolado();
       } else {
         await queueOfflineMutation(
@@ -506,7 +511,7 @@ export function NutricionPage() {
           payload,
           'Reporte nutricional del día',
           undefined,
-          { alumnoId: user?.id }
+          { alumnoId: user?.id, capturadoEnMs }
         );
       }
       despacharReporte({ tipo: 'encolado', fotos: fotosPlatos.length });
@@ -574,7 +579,7 @@ export function NutricionPage() {
       // 2xx es el ÚNICO resultado que cuenta como éxito (RF-002: sin éxito fabricado).
       await apiClient<RespuestaCheckinNutricional>('/nutricion/checkin-diario', {
         method: 'POST',
-        body: JSON.stringify(payloadConFotos),
+        body: JSON.stringify(cuerpoCheckinParaEnviar(payloadConFotos, capturadoEnMs)),
       });
       await cargarReporteHoy();
       despacharReporte({ tipo: 'guardado' });

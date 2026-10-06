@@ -88,6 +88,35 @@ export function obtenerFechaLocalYyyyMmDd(
   }
 }
 
+/**
+ * Fecha y hora locales `YYYY-MM-DDTHH:mm:ss` de un instante en una zona IANA (h23). Al tener
+ * ancho fijo, dos valores de la misma zona se comparan como texto. Zona inválida o ausente → UTC.
+ */
+export function fechaHoraLocal(instante: Date, timezone?: string | null): string {
+  const tz = esTimezoneIanaValida(timezone) && timezone ? timezone : 'UTC';
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(instante);
+  const valor = (tipo: Intl.DateTimeFormatPartTypes) =>
+    partes.find((parte) => parte.type === tipo)?.value ?? '00';
+  return `${valor('year')}-${valor('month')}-${valor('day')}T${valor('hour')}:${valor('minute')}:${valor('second')}`;
+}
+
+/** Suma (o resta) días a una fecha YYYY-MM-DD con aritmética UTC (sin TZ del servidor). */
+export function sumarDiasCalendario(fechaYyyyMmDd: string, dias: number): string {
+  const [y, m, d] = fechaYyyyMmDd.split('-').map(Number);
+  const fecha = new Date(Date.UTC(y, m - 1, d));
+  fecha.setUTCDate(fecha.getUTCDate() + dias);
+  return fecha.toISOString().split('T')[0];
+}
+
 /** Resta días a una fecha YYYY-MM-DD (aritmética en UTC, sin depender de la TZ del servidor). */
 export function fechaAnteriorYyyyMmDd(fechaYyyyMmDd: string, dias = 1): string {
   const [y, m, d] = fechaYyyyMmDd.split('-').map(Number);

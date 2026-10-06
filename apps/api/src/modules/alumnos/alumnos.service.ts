@@ -55,6 +55,8 @@ import {
   RegistroPublicoAlumnoDTO,
   CambioEstadoAlumnoDTO,
   ActualizarPerfilAlumnoDTO,
+  ActualizarZonaHorariaAlumnoDTO,
+  ZONA_HORARIA_ALUMNO_POR_DEFECTO,
   PerfilAlumnoDetalleDTO,
   FiltroDirectorioAlumnosDTO,
   RestaurarAlumnoDTO,
@@ -190,6 +192,8 @@ export class AlumnosService {
       planActivoNombre: perfil.planActivoNombre ?? null,
       precioAcordadoOverride: perfil.precioAcordadoOverride ?? null,
       fichaSaludPrivada: fichaSalud,
+      // LOTE API-N2: zona que decide la ventana y el plazo del reporte nutricional.
+      zonaHoraria: perfil.zonaHoraria ?? ZONA_HORARIA_ALUMNO_POR_DEFECTO,
       deletedAtUtc: perfil.deletedAtUtc ? new Date(perfil.deletedAtUtc).toISOString() : null,
       createdAtUtc: perfil.createdAtUtc ? new Date(perfil.createdAtUtc).toISOString() : new Date().toISOString(),
     };
@@ -567,6 +571,7 @@ export class AlumnosService {
           periodicidadAntropometria: perfilesAlumno.periodicidadAntropometria,
           antropometriaInicio: perfilesAlumno.antropometriaInicio,
           tasaFijadaOverride: perfilesAlumno.tasaFijadaOverride,
+          zonaHoraria: perfilesAlumno.zonaHoraria,
           deletedAtUtc: perfilesAlumno.deletedAtUtc,
           createdAtUtc: perfilesAlumno.createdAtUtc,
         })
@@ -647,6 +652,10 @@ export class AlumnosService {
       }
       if (dto.tasaFijadaOverride !== undefined) {
         valoresAActualizar.tasaFijadaOverride = dto.tasaFijadaOverride || null;
+      }
+      // LOTE API-N2: la zona ya llega validada como IANA por el contrato.
+      if (dto.zonaHoraria !== undefined) {
+        valoresAActualizar.zonaHoraria = dto.zonaHoraria;
       }
       if (dto.fichaSaludPrivada !== undefined) {
         valoresAActualizar.fichaSaludPrivada =
@@ -907,6 +916,7 @@ export class AlumnosService {
               estadoActivacion: perfilesAlumno.estadoActivacion,
               modalidad: perfilesAlumno.modalidad,
               tasaFijadaOverride: perfilesAlumno.tasaFijadaOverride,
+              zonaHoraria: perfilesAlumno.zonaHoraria,
               deletedAtUtc: perfilesAlumno.deletedAtUtc,
               createdAtUtc: perfilesAlumno.createdAtUtc,
             })
@@ -1295,6 +1305,29 @@ export class AlumnosService {
   }
 
   /**
+   * LOTE API-N2 (RF-002): el alumno cambia SU zona horaria. El perfil se identifica por el usuario
+   * autenticado (nunca por un id del cuerpo) y la escritura corre con el contexto self, cubierta
+   * por la política `rls_perfiles_alumno_self_update`. Solo se escribe esta columna.
+   */
+  async actualizarZonaHorariaPropia(
+    usuarioId: string,
+    dto: ActualizarZonaHorariaAlumnoDTO
+  ): Promise<{ zonaHoraria: string }> {
+    const [fila] = await this.withTenant({ usuarioId }, (tx) =>
+      tx
+        .update(perfilesAlumno)
+        .set({ zonaHoraria: dto.zonaHoraria, updatedAtUtc: new Date() })
+        .where(eq(perfilesAlumno.usuarioId, usuarioId))
+        .returning({ zonaHoraria: perfilesAlumno.zonaHoraria })
+    );
+
+    if (!fila) {
+      throw new NotFoundException(MENSAJE_ALUMNO_NO_ENCONTRADO);
+    }
+    return { zonaHoraria: fila.zonaHoraria };
+  }
+
+  /**
    * Obtener perfil por ID con aislamiento de Tenancy
    */
   async obtenerPorId(alumnoId: string, actorUserId: string, actorRole: Rol, actorEntrenadorId?: string) {
@@ -1321,6 +1354,7 @@ export class AlumnosService {
             periodicidadAntropometria: perfilesAlumno.periodicidadAntropometria,
             antropometriaInicio: perfilesAlumno.antropometriaInicio,
             tasaFijadaOverride: perfilesAlumno.tasaFijadaOverride,
+            zonaHoraria: perfilesAlumno.zonaHoraria,
             deletedAtUtc: perfilesAlumno.deletedAtUtc,
             createdAtUtc: perfilesAlumno.createdAtUtc,
           })

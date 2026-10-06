@@ -75,6 +75,11 @@ export interface OutboxMutation {
    * mutación pasa a `rejected` para no bloquear su sesión para siempre. Opcional en filas antiguas.
    */
   fallosServidor?: number;
+  /**
+   * LOTE API-N2: instante (epoch ms del teléfono) en que el alumno tocó Guardar el reporte diario.
+   * Al enviar se convierte en `segundosDesdeCaptura`. Campo no indexado: no cambia el esquema.
+   */
+  capturadoEnMs?: number;
 }
 
 /**
@@ -176,7 +181,7 @@ export async function queueOfflineMutation(
   payload: any,
   description: string,
   idempotencyKey?: string,
-  opciones: { alumnoId?: string } = {}
+  opciones: { alumnoId?: string; capturadoEnMs?: number } = {}
 ): Promise<number> {
   const mutationId = await offlineDb.outboxMutations.add({
     endpoint,
@@ -185,6 +190,8 @@ export async function queueOfflineMutation(
     description,
     // Dueño de la mutación (campo no indexado: no cambia el esquema de IndexedDB).
     ...(opciones.alumnoId ? { alumnoId: opciones.alumnoId } : {}),
+    // LOTE API-N2: hora del toque en Guardar del reporte diario (no indexado).
+    ...(opciones.capturadoEnMs !== undefined ? { capturadoEnMs: opciones.capturadoEnMs } : {}),
     idempotencyKey: idempotencyKey || generateIdempotencyKey(),
     status: 'pending',
     createdAt: Date.now(),
@@ -208,11 +215,13 @@ export async function queueOfflineMutation(
  * @param payload cuerpo del check-in SIN `fotosPlatos`: las claves las compone el sincronizador.
  * @param fotos entre 1 y 4 fotografías comprimidas (RN-03) con su blob local.
  * @param alumnoId dueño de la evidencia; viaja para pedir el presign en el reintento.
+ * @param capturadoEnMs LOTE API-N2: instante del toque en Guardar (se envía como segundos).
  */
 export async function queueCheckinNutricionalConFotos(
   payload: CheckinNutricionalDTO,
   fotos: FotoCheckinEnCola[],
-  alumnoId: string
+  alumnoId: string,
+  capturadoEnMs?: number
 ): Promise<number> {
   if (fotos.length === 0 || fotos.length > MAX_FOTOS_CHECKIN_NUTRICIONAL) {
     throw new Error(MENSAJE_RANGO_FOTOS_REPORTE);
@@ -237,6 +246,7 @@ export async function queueCheckinNutricionalConFotos(
     tipo: 'nutricion-checkin-fotos',
     alumnoId,
     fotos,
+    ...(capturadoEnMs !== undefined ? { capturadoEnMs } : {}),
   });
   notifyOutboxChanged();
   return mutationId;

@@ -28,11 +28,13 @@ import {
   LoginUsuarioSchema,
   CrearPlantillaRutinaSchema,
   CheckinNutricionalSchema,
+  CODIGO_CHECKIN_FUERA_DE_PLAZO,
   CODIGO_CHECKIN_FUERA_DE_VENTANA,
   CODIGO_CHECKIN_YA_REGISTRADO,
   CODIGO_SESION_NO_INICIADA,
   CODIGO_SESION_VACIA,
 } from '@guachafit/shared';
+import * as compartido from '@guachafit/shared';
 import {
   traducirErrorValidacion,
   MENSAJE_VALIDACION_GENERICO,
@@ -128,6 +130,9 @@ describe('API-2 · traducirErrorValidacion (función pura)', () => {
       ['recursos', 'recursos'],
       ['url', 'enlace'],
       ['timezoneCliente', 'zona horaria'],
+      // LOTE API-N2
+      ['zonaHoraria', 'zona horaria'],
+      ['segundosDesdeCaptura', 'hora de captura'],
     ];
     for (const [campo, etiqueta] of etiquetas) {
       const error = primerError(z.object({ [campo]: z.number() }), { [campo]: 'x' });
@@ -565,25 +570,27 @@ describe('API-2 · compatibilidad con la web publicada (PWA con registerType "pr
   const CLASIFICADOR_VENTANA_WEB_ANTERIOR = /18:00|23:59|ventana|día local/i;
 
   /**
-   * LOTE API-N1: el aviso de "tu teléfono ya cambió de día" se reescribió en lenguaje claro y ya no
-   * menciona la ventana. Esa web anterior lo muestra como un rechazo genérico (con el mismo texto
-   * claro); la web vigente lo clasifica por `code`. El aviso de horario sigue reconocible.
+   * LOTE API-N1/N2: el aviso de "día cambiado" se reescribió en lenguaje claro y no menciona la
+   * ventana. La web anterior lo muestra como un rechazo genérico (con el mismo texto claro); la web
+   * vigente lo clasifica por `code`. El aviso de horario sigue reconocible por su "18:00".
    */
-  const MENSAJES_SOLO_POR_CODIGO = [
-    'Tu teléfono ya cambió de día. Actualiza la pantalla para ver el reporte de hoy.',
-  ];
+  const MENSAJES_SOLO_POR_CODIGO = ['MENSAJE_CHECKIN_DIA_CAMBIADO'];
 
   it('todo mensaje de horario con code CHECKIN_FUERA_DE_VENTANA sigue siendo reconocido por la web anterior', () => {
-    const patron =
-      /code:\s*CODIGO_CHECKIN_FUERA_DE_VENTANA,\s*message:\s*(['"`])([\s\S]*?)(?<!\\)\1/g;
-    const mensajes = archivosFuente(RAIZ_API).flatMap((archivo) =>
-      [...fs.readFileSync(archivo, 'utf8').matchAll(patron)].map((c) => c[2].replace(/\s+/g, ' '))
+    // Ronda 1 (LOTE API-N2): los textos son constantes compartidas (`MENSAJE_CHECKIN_*`); el API
+    // ya no los escribe como literales junto al código.
+    const patron = /code:\s*CODIGO_CHECKIN_FUERA_DE_VENTANA,\s*message:\s*([^,}\s]+)/g;
+    const usados = archivosFuente(RAIZ_API).flatMap((archivo) =>
+      [...fs.readFileSync(archivo, 'utf8').matchAll(patron)].map((c) => c[1])
     );
 
-    expect(mensajes.length).toBeGreaterThanOrEqual(2);
-    expect(mensajes).toEqual(expect.arrayContaining(MENSAJES_SOLO_POR_CODIGO));
-    for (const mensaje of mensajes.filter((m) => !MENSAJES_SOLO_POR_CODIGO.includes(m))) {
-      expect(mensaje, mensaje).toMatch(CLASIFICADOR_VENTANA_WEB_ANTERIOR);
+    expect(new Set(usados)).toEqual(
+      new Set(['MENSAJE_CHECKIN_FUERA_DE_VENTANA', 'MENSAJE_CHECKIN_DIA_CAMBIADO'])
+    );
+    for (const nombre of usados.filter((n) => !MENSAJES_SOLO_POR_CODIGO.includes(n))) {
+      const texto = (compartido as Record<string, unknown>)[nombre];
+      expect(texto, nombre).toMatch(CLASIFICADOR_VENTANA_WEB_ANTERIOR);
+      expect(texto, nombre).toContain('18:00');
     }
   });
 });
@@ -595,11 +602,13 @@ describe('API-2 · códigos estables en un solo lugar (@guachafit/shared)', () =
     expect(CODIGO_SESION_VACIA).toBe('SESION_VACIA');
     expect(CODIGO_CHECKIN_FUERA_DE_VENTANA).toBe('CHECKIN_FUERA_DE_VENTANA');
     expect(CODIGO_CHECKIN_YA_REGISTRADO).toBe('CHECKIN_YA_REGISTRADO');
+    // LOTE API-N2: plazo de recepción (12:00 del día siguiente).
+    expect(CODIGO_CHECKIN_FUERA_DE_PLAZO).toBe('CHECKIN_FUERA_DE_PLAZO');
   });
 
   it('ni el API ni la web redefinen esos códigos como literales', () => {
     const literal =
-      /(['"`])(SESION_NO_INICIADA|SESION_VACIA|CHECKIN_FUERA_DE_VENTANA|CHECKIN_YA_REGISTRADO)\1/;
+      /(['"`])(SESION_NO_INICIADA|SESION_VACIA|CHECKIN_FUERA_DE_VENTANA|CHECKIN_YA_REGISTRADO|CHECKIN_FUERA_DE_PLAZO)\1/;
     const copias = [...archivosFuente(RAIZ_API), ...archivosFuente(RAIZ_WEB)].filter((archivo) =>
       literal.test(sinComentarios(fs.readFileSync(archivo, 'utf8')))
     );

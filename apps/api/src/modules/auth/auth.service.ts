@@ -67,6 +67,7 @@ import {
   CambioLicenciaEntrenadorResultadoDTO,
   VIGENCIA_ENLACE_RECUPERACION_MS,
   EntrenadorCreadoDTO,
+  ZONA_HORARIA_ALUMNO_POR_DEFECTO,
 } from '@guachafit/shared';
 
 /**
@@ -294,6 +295,8 @@ export class AuthService {
     let modalidad: Modalidad | null = null;
     let periodicidadAntropometria: PeriodicidadAntropometria | null = null;
     let antropometriaInicio: string | null = null;
+    // LOTE API-N2: zona del perfil del alumno (ventana y plazo del reporte nutricional).
+    let zonaHoraria: string | null = null;
 
     if (usuario.rol === Rol.ENTRENADOR) {
       entrenadorId = usuario.id;
@@ -310,6 +313,7 @@ export class AuthService {
             modalidad: perfilesAlumno.modalidad,
             periodicidadAntropometria: perfilesAlumno.periodicidadAntropometria,
             antropometriaInicio: perfilesAlumno.antropometriaInicio,
+            zonaHoraria: perfilesAlumno.zonaHoraria,
             deletedAtUtc: perfilesAlumno.deletedAtUtc,
           })
           .from(perfilesAlumno)
@@ -321,6 +325,7 @@ export class AuthService {
         throw new UnauthorizedException(MENSAJE_CUENTA_ARCHIVADA);
       }
 
+      zonaHoraria = perfil ? perfil.zonaHoraria ?? ZONA_HORARIA_ALUMNO_POR_DEFECTO : null;
       entrenadorId = perfil?.entrenadorId;
       modalidad = perfil?.modalidad ?? null;
       // RF-003 RN-01 (WU RF-003b): el calendario viaja con la sesión para que la web del alumno
@@ -343,6 +348,7 @@ export class AuthService {
       modalidad,
       periodicidadAntropometria,
       antropometriaInicio,
+      zonaHoraria,
     };
   }
 

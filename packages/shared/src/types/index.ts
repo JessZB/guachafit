@@ -13,6 +13,7 @@ import {
   RegistroPublicoAlumnoSchema,
   CambioEstadoAlumnoSchema,
   ActualizarPerfilAlumnoSchema,
+  ActualizarZonaHorariaAlumnoSchema,
   FiltroDirectorioAlumnosSchema,
   RestaurarAlumnoSchema,
   CrearEjercicioCatalogoSchema,
@@ -111,6 +112,7 @@ export type AltaManualAlumnoDTO = z.infer<typeof AltaManualAlumnoSchema>;
 export type RegistroPublicoAlumnoDTO = z.infer<typeof RegistroPublicoAlumnoSchema>;
 export type CambioEstadoAlumnoDTO = z.infer<typeof CambioEstadoAlumnoSchema>;
 export type ActualizarPerfilAlumnoDTO = z.infer<typeof ActualizarPerfilAlumnoSchema>;
+export type ActualizarZonaHorariaAlumnoDTO = z.infer<typeof ActualizarZonaHorariaAlumnoSchema>;
 export type FiltroDirectorioAlumnosDTO = z.infer<typeof FiltroDirectorioAlumnosSchema>;
 export type RestaurarAlumnoDTO = z.infer<typeof RestaurarAlumnoSchema>;
 
@@ -234,6 +236,12 @@ export interface AuthUserDTO {
   periodicidadAntropometria?: PeriodicidadAntropometria | null;
   /** Ancla (YYYY-MM-DD, día local del alumno) del calendario de periodicidad antropométrica. */
   antropometriaInicio?: string | null;
+  /**
+   * LOTE API-N2: zona horaria (IANA) del perfil del alumno, la que decide la ventana y el plazo del
+   * reporte nutricional. `GET /auth/me` la re-resuelve del perfil; `null` para roles sin perfil de
+   * alumno.
+   */
+  zonaHoraria?: string | null;
 }
 
 export interface AuthTokensResponseDTO {
@@ -275,6 +283,11 @@ export interface PerfilAlumnoDetalleDTO {
   rachaDias?: number;
   /** Última fecha local (YYYY-MM-DD) en la que se incrementó la racha. */
   rachaUltimaFecha?: string | null;
+  /**
+   * LOTE API-N2: zona horaria (IANA) del alumno. El API la envía siempre en la ficha
+   * (`GET`/`PATCH /alumnos/:id`); opcional solo para datos de demostración anteriores.
+   */
+  zonaHoraria?: string;
   deletedAtUtc?: string | null;
   createdAtUtc: string;
 }
@@ -986,8 +999,32 @@ export interface CheckinNutricionalDetalleDTO {
   notasAlumno?: string | null;
   fotosPlatos: FotoComidaDetalleDTO[];
   alumnoNombre?: string;
+  /**
+   * LOTE API-N2: instante en que el alumno guardó el reporte en su teléfono (o la hora del servidor
+   * si no la informó). `null` en reportes anteriores a este dato.
+   */
+  capturadoEnUtc?: string | null;
+  /**
+   * LOTE API-N2: copia de las metas del alumno vigentes al registrar el reporte. `null` si no tenía
+   * metas o si el reporte es anterior a este dato (entonces se comparan las metas actuales).
+   */
+  metasVigentes?: MetasVigentesCheckinDTO | null;
+  /** LOTE API-N2: zona horaria del perfil con la que se interpretan la fecha y la ventana. */
+  zonaHoraria?: string;
   createdAtUtc: string;
   updatedAtUtc: string;
+}
+
+/**
+ * LOTE API-N2: metas copiadas en cada reporte diario (las del alumno al registrar). `null` en un
+ * objetivo = no estaba configurado.
+ */
+export interface MetasVigentesCheckinDTO {
+  caloriasObjetivo: number | null;
+  proteinaGramosObjetivo: number | null;
+  carbohidratosGramosObjetivo: number | null;
+  grasasGramosObjetivo: number | null;
+  aguaLitrosObjetivo: string | null;
 }
 
 /**

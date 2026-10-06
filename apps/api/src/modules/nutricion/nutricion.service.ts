@@ -11,9 +11,14 @@ import {
 import { parsearContrato } from '../../common/errores/parsear-contrato';
 import { MENSAJE_SIN_ACCESO_ALUMNO } from '../../common/mensajes-acceso';
 import {
+  CODIGO_CHECKIN_FUERA_DE_PLAZO,
   CODIGO_CHECKIN_FUERA_DE_VENTANA,
   CODIGO_CHECKIN_YA_REGISTRADO,
   MAX_FOTOS_PLATOS_DIA,
+  MENSAJE_CHECKIN_DIA_CAMBIADO,
+  MENSAJE_CHECKIN_FUERA_DE_PLAZO,
+  MENSAJE_CHECKIN_FUERA_DE_VENTANA,
+  MetasVigentesCheckinDTO,
   MENSAJE_CHECKIN_YA_REGISTRADO,
   MENSAJE_FOTO_COMIDA_NO_ASOCIABLE,
   MENSAJE_MAX_FOTOS_PLATOS_DIA,
@@ -47,18 +52,21 @@ import {
   FotoComidaDetalleDTO,
   FiltroCheckinsNutricionalesDTO,
   FiltroCheckinsNutricionalesSchema,
-  HORA_FIN_VENTANA_CHECKIN_NUTRICIONAL,
-  HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL,
   MetasNutricionalesDTO,
   MetasNutricionalesDetalleDTO,
   MetasNutricionalesSchema,
   RecursoNutricionalDTO,
   RecursoNutricionalDetalleDTO,
-  TIMEZONE_NUTRICION_POR_DEFECTO,
   TOLERANCIA_TOTALES_NUTRICIONAL_PCT,
   ToleranciaNutricionalDTO,
 } from '@guachafit/shared';
-import { esTimezoneIanaValida, obtenerFechaLocalYyyyMmDd } from '../../common/adherencia.util';
+import { obtenerFechaLocalYyyyMmDd } from '../../common/adherencia.util';
+import {
+  evaluarRecepcionCheckinNutricional,
+  resolverTimezoneNutricion,
+  type MotivoRechazoRecepcionCheckin,
+  type ResultadoVentanaCheckinNutricional,
+} from './nutricion-tiempo.util';
 import { R2StorageService } from '../antropometria/r2-storage.service';
 
 // =============================================================================
@@ -140,111 +148,6 @@ export function evaluarToleranciaNutricional(
     desviacionCaloriasPct,
     desviacionProteinasPct,
   };
-}
-
-// =============================================================================
-// VENTANA HORARIA DEL CHECK-IN (RF-002 RN-02)
-// =============================================================================
-
-export type MotivoFueraDeVentana = 'FUERA_DE_VENTANA' | 'FECHA_DISTINTA_AL_DIA_LOCAL';
-
-export interface ResultadoVentanaCheckinNutricional {
-  permitido: boolean;
-  /** Fecha local YYYY-MM-DD del alumno en el instante evaluado. */
-  fechaLocalHoy: string;
-  /** Hora local (0–23) del alumno en el instante evaluado. */
-  horaLocal: number;
-  /** Zona IANA efectivamente usada (la del cliente si es válida, si no la por defecto). */
-  timezone: string;
-  motivo?: MotivoFueraDeVentana;
-}
-
-/** Zona IANA válida del cliente o la zona por defecto del producto (RN-05/ADR-002). */
-export function resolverTimezoneNutricion(timezoneCliente?: string | null): string {
-  return timezoneCliente && esTimezoneIanaValida(timezoneCliente)
-    ? timezoneCliente
-    : TIMEZONE_NUTRICION_POR_DEFECTO;
-}
-
-/** Hora local 0–23 de un instante en una zona IANA (h23: medianoche = 00, nunca 24). */
-function obtenerHoraLocal(fecha: Date, timezone: string): number {
-  const partes = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    hour: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(fecha);
-  const hora = Number(partes.find((p) => p.type === 'hour')?.value ?? '0');
-  return Number.isFinite(hora) ? hora % 24 : 0;
-}
-
-/**
- * RF-002 RN-02: el check-in 1-Tap solo se habilita entre las 18:00 y las 23:59 (hora local del
- * alumno) y para el día local en curso. Fuera de esa ventana el día ya cerró: el reporte se
- * rechaza (el día quedará `No reportado` si nunca se registró), nunca se acepta tarde en
- * silencio.
- */
-export function evaluarVentanaCheckinNutricional(
-  fecha: string,
-  timezoneCliente?: string | null,
-  ahora: Date = new Date()
-): ResultadoVentanaCheckinNutricional {
-  const timezone = resolverTimezoneNutricion(timezoneCliente);
-  const fechaLocalHoy = obtenerFechaLocalYyyyMmDd(ahora, timezone);
-  const horaLocal = obtenerHoraLocal(ahora, timezone);
-
-  if (fecha !== fechaLocalHoy) {
-    return { permitido: false, fechaLocalHoy, horaLocal, timezone, motivo: 'FECHA_DISTINTA_AL_DIA_LOCAL' };
-  }
-
-  if (
-    horaLocal < HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL ||
-    horaLocal > HORA_FIN_VENTANA_CHECKIN_NUTRICIONAL
-  ) {
-    return { permitido: false, fechaLocalHoy, horaLocal, timezone, motivo: 'FUERA_DE_VENTANA' };
-  }
-
-  return { permitido: true, fechaLocalHoy, horaLocal, timezone };
-}
-
-// =============================================================================
-// "NO REPORTADO" DEL CALENDARIO NUTRICIONAL (RF-002 §6)
-// =============================================================================
-
-/** Suma (o resta) días a una fecha YYYY-MM-DD con aritmética UTC, sin TZ del servidor. */
-export function sumarDiasCalendario(fechaYyyyMmDd: string, dias: number): string {
-  const [y, m, d] = fechaYyyyMmDd.split('-').map(Number);
-  const fecha = new Date(Date.UTC(y, m - 1, d));
-  fecha.setUTCDate(fecha.getUTCDate() + dias);
-  return fecha.toISOString().split('T')[0];
-}
-
-/** Fechas YYYY-MM-DD del rango inclusivo [desde, hasta]. Vacío si el rango es inválido. */
-export function enumerarFechasCalendario(desde: string, hasta: string): string[] {
-  const fechas: string[] = [];
-  let actual = desde;
-  // Guard de rango invertido o malformado: nunca un bucle sin salida.
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(desde) || !/^\d{4}-\d{2}-\d{2}$/.test(hasta) || desde > hasta) {
-    return fechas;
-  }
-  while (actual <= hasta) {
-    fechas.push(actual);
-    actual = sumarDiasCalendario(actual, 1);
-  }
-  return fechas;
-}
-
-/**
- * RF-002 §6: cuenta los días CERRADOS del rango [desde, hasta] en los que el alumno no registró
- * el semáforo. El llamador decide qué días están cerrados (normalmente hasta ayer: el día en
- * curso sigue dentro de la ventana de las 18:00–23:59). `fechasReportadas` son YYYY-MM-DD.
- */
-export function contarDiasNoReportados(
-  desde: string,
-  hasta: string,
-  fechasReportadas: ReadonlySet<string>
-): number {
-  return enumerarFechasCalendario(desde, hasta).filter((fecha) => !fechasReportadas.has(fecha))
-    .length;
 }
 
 /** Índice único de la unicidad diaria del reporte nutricional (DDL `checkins_nutricionales`). */
@@ -338,28 +241,20 @@ export class NutricionService {
   }> {
     const validado = parsearContrato(CheckinNutricionalSchema, { ...input, alumnoId });
 
-    // Regla RN-02: ventana horaria local del alumno (18:00–23:59) y día local en curso.
-    const ventana = evaluarVentanaCheckinNutricional(validado.fecha, validado.timezoneCliente, ahora);
-    if (!ventana.permitido) {
-      if (ventana.motivo === 'FECHA_DISTINTA_AL_DIA_LOCAL') {
-        this.logger.warn(
-          `Check-in con fecha ${validado.fecha} fuera del día local ${ventana.fechaLocalHoy} (${ventana.timezone}).`
-        );
-        throw new BadRequestException({
-          statusCode: 400,
-          error: 'Bad Request',
-          code: CODIGO_CHECKIN_FUERA_DE_VENTANA,
-          message: 'Tu teléfono ya cambió de día. Actualiza la pantalla para ver el reporte de hoy.',
-        });
-      }
-      // LOTE API-2: código estable para la web (`offline-sync.ts`), sin depender del texto.
-      throw new BadRequestException({
-        statusCode: 400,
-        error: 'Bad Request',
-        code: CODIGO_CHECKIN_FUERA_DE_VENTANA,
-        message:
-          'Puedes enviar el reporte de hoy entre las 18:00 y las 23:59 (hora de tu teléfono). Fuera de ese horario el día queda como «No reportado».',
-      });
+    // LOTE API-N2: la zona que decide es la del PERFIL del alumno (`timezoneCliente` está
+    // @deprecated y no se usa).
+    const zonaHoraria = await this.obtenerZonaHorariaAlumno(alumnoId, { usuarioId: alumnoId });
+
+    // Reglas RN-02 + LOTE API-N2: captura (hora del servidor − segundos informados) en 18:00–23:59
+    // del día `fecha` y recepción hasta las 12:00 del día siguiente (todo en la zona del perfil).
+    const recepcion = evaluarRecepcionCheckinNutricional({
+      fecha: validado.fecha,
+      zonaHoraria,
+      recibidoEn: ahora,
+      segundosDesdeCaptura: validado.segundosDesdeCaptura,
+    });
+    if (!recepcion.permitido) {
+      throw this.rechazoDeRecepcion(recepcion.motivo, recepcion.ventana, validado.fecha);
     }
 
     // Regla RN-03: máximo de fotos por día. Defensa en profundidad: el contrato ya lo limita con la
@@ -393,6 +288,9 @@ export class NutricionService {
       throw conflictoCheckinYaRegistrado();
     }
 
+    // LOTE API-N2: copia de las metas vigentes al registrar (el coach puede cambiarlas después).
+    const metasVigentes = await this.obtenerMetasVigentes(alumnoId);
+
     // Insertar en transacción atómica. Un doble envío concurrente pasa la verificación previa y
     // choca con el índice único: ese caso es el mismo 409, no un 500 (LOTE API-N1).
     let checkinId: string;
@@ -408,6 +306,8 @@ export class NutricionService {
             proteinaGramosReportada: validado.proteinaGramosReportada ?? null,
             aguaLitros: validado.aguaLitros ?? null,
             notasAlumno: validado.notasAlumno ?? null,
+            capturadoEnUtc: recepcion.capturadoEn,
+            metasVigentes,
             createdAtUtc: new Date(),
             updatedAtUtc: new Date(),
           })
@@ -435,13 +335,12 @@ export class NutricionService {
 
     const checkinDetalle = await this.obtenerCheckinPorId(checkinId);
 
-    // RF-002 Escenario 3: metas REALES del coach (RN-01). Sin metas persistidas el resultado
-    // queda sin evaluar (campos `undefined`): nunca un falso "dentro del margen".
-    const metasCoach = await this.obtenerMetasNutricionales(alumnoId);
+    // RF-002 Escenario 3: metas REALES del coach (RN-01), las mismas copiadas en el reporte (LOTE
+    // API-N2). Sin metas el resultado queda sin evaluar (campos `undefined`): nunca un falso OK.
     const tolerancia = evaluarToleranciaNutricional(
       validado.caloriasReportadas,
       validado.proteinaGramosReportada,
-      metasCoach
+      metasVigentes
     );
 
     return {
@@ -449,6 +348,86 @@ export class NutricionService {
       dentroMargenTolerancia: tolerancia.dentroMargenTolerancia,
       desviacionCaloriasPct: tolerancia.desviacionCaloriasPct,
       desviacionProteinasPct: tolerancia.desviacionProteinasPct,
+    };
+  }
+
+  /**
+   * 400 con código estable para cada motivo de rechazo de la recepción (LOTE API-2 / API-N2): la
+   * web clasifica por `code`, nunca por el texto.
+   */
+  private rechazoDeRecepcion(
+    motivo: MotivoRechazoRecepcionCheckin,
+    ventana: ResultadoVentanaCheckinNutricional,
+    fecha: string
+  ): BadRequestException {
+    switch (motivo) {
+      case 'FUERA_DE_PLAZO':
+        this.logger.warn(`Check-in del ${fecha} recibido después del plazo (${ventana.timezone}).`);
+        return new BadRequestException({
+          statusCode: 400,
+          error: 'Bad Request',
+          code: CODIGO_CHECKIN_FUERA_DE_PLAZO,
+          message: MENSAJE_CHECKIN_FUERA_DE_PLAZO,
+        });
+      case 'FECHA_DISTINTA_AL_DIA_LOCAL':
+        this.logger.warn(
+          `Check-in con fecha ${fecha} fuera del día local ${ventana.fechaLocalHoy} (${ventana.timezone}).`
+        );
+        return new BadRequestException({
+          statusCode: 400,
+          error: 'Bad Request',
+          code: CODIGO_CHECKIN_FUERA_DE_VENTANA,
+          message: MENSAJE_CHECKIN_DIA_CAMBIADO,
+        });
+      case 'FUERA_DE_VENTANA':
+        // LOTE API-2: código estable para la web (`offline-sync.ts`), sin depender del texto.
+        return new BadRequestException({
+          statusCode: 400,
+          error: 'Bad Request',
+          code: CODIGO_CHECKIN_FUERA_DE_VENTANA,
+          message: MENSAJE_CHECKIN_FUERA_DE_VENTANA,
+        });
+      default: {
+        // Exhaustivo: un motivo nuevo sin su respuesta no compila.
+        const motivoSinRespuesta: never = motivo;
+        throw new Error(`Motivo de rechazo sin respuesta: ${String(motivoSinRespuesta)}`);
+      }
+    }
+  }
+
+  /**
+   * LOTE API-N2: zona horaria del perfil del alumno (o la zona por defecto si el perfil no existe o
+   * guarda un valor no válido). `perfiles_alumno` tiene RLS: se lee con el contexto del actor.
+   */
+  private async obtenerZonaHorariaAlumno(
+    alumnoId: string,
+    contexto: TenantRlsContext
+  ): Promise<string> {
+    const [perfil] = await this.withTenant(contexto, (tx) =>
+      tx
+        .select({ zonaHoraria: perfilesAlumno.zonaHoraria })
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.usuarioId, alumnoId))
+        .limit(1)
+    );
+    return resolverTimezoneNutricion(perfil?.zonaHoraria);
+  }
+
+  /** LOTE API-N2: metas del alumno a copiar en el reporte (`null` si no tiene metas). */
+  private async obtenerMetasVigentes(alumnoId: string): Promise<MetasVigentesCheckinDTO | null> {
+    const [fila] = await this.db
+      .select()
+      .from(metasNutricionales)
+      .where(eq(metasNutricionales.alumnoId, alumnoId))
+      .limit(1);
+
+    if (!fila) return null;
+    return {
+      caloriasObjetivo: fila.caloriasObjetivo ?? null,
+      proteinaGramosObjetivo: fila.proteinaGramosObjetivo ?? null,
+      carbohidratosGramosObjetivo: fila.carbohidratosGramosObjetivo ?? null,
+      grasasGramosObjetivo: fila.grasasGramosObjetivo ?? null,
+      aguaLitrosObjetivo: fila.aguaLitrosObjetivo ?? null,
     };
   }
 
@@ -667,8 +646,11 @@ export class NutricionService {
     }
   }
 
-  /** Tenancy: el alumno debe pertenecer a la cartera del coach autenticado. */
-  private async validarAlumnoDelCoach(coachId: string, alumnoId: string): Promise<void> {
+  /**
+   * Tenancy: el alumno debe pertenecer a la cartera del coach autenticado. Devuelve la zona
+   * horaria del perfil ya leído (LOTE API-N2) para no consultarlo dos veces.
+   */
+  private async validarAlumnoDelCoach(coachId: string, alumnoId: string): Promise<string> {
     // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura con el GUC del coach.
     const [perfil] = await this.withTenant({ entrenadorId: coachId }, (tx) =>
       tx
@@ -688,6 +670,7 @@ export class NutricionService {
         MENSAJE_SIN_ACCESO_ALUMNO
       );
     }
+    return resolverTimezoneNutricion(perfil.zonaHoraria);
   }
 
   /**
@@ -730,15 +713,18 @@ export class NutricionService {
 
   /**
    * Consultar el reporte nutricional del día en curso (o fecha indicada) para el alumno.
-   * Sin `fecha`, el día se resuelve en la zona local del alumno (RN-05/ADR-002), no en UTC.
+   * Sin `fecha`, el día se resuelve en la zona del PERFIL del alumno (LOTE API-N2), no en UTC.
    */
   async obtenerCheckinHoy(
     alumnoId: string,
-    fecha?: string,
-    timezoneCliente?: string
+    fecha?: string
   ): Promise<CheckinNutricionalDetalleDTO | null> {
     const targetFecha =
-      fecha || obtenerFechaLocalYyyyMmDd(new Date(), resolverTimezoneNutricion(timezoneCliente));
+      fecha ||
+      obtenerFechaLocalYyyyMmDd(
+        new Date(),
+        await this.obtenerZonaHorariaAlumno(alumnoId, { usuarioId: alumnoId })
+      );
 
     const [checkin] = await this.db
       .select()
@@ -794,9 +780,11 @@ export class NutricionService {
       throw new ForbiddenException('Solo puedes ver tus propios reportes.');
     }
 
-    if (callerRol === Rol.ENTRENADOR) {
-      await this.validarAlumnoDelCoach(entrenadorId, alumnoId);
-    }
+    // LOTE API-N2: cada reporte declara la zona del perfil con la que se interpreta su fecha.
+    const zonaHoraria =
+      callerRol === Rol.ENTRENADOR
+        ? await this.validarAlumnoDelCoach(entrenadorId, alumnoId)
+        : await this.obtenerZonaHorariaAlumno(alumnoId, { usuarioId: alumnoId });
 
     // LOTE API-N1: fechas reales y rango acotado (92 días) también para llamadas internas.
     const filtroValidado = parsearContrato(FiltroCheckinsNutricionalesSchema, filtro ?? {});
@@ -859,6 +847,9 @@ export class NutricionService {
       aguaLitros: r.aguaLitros,
       notasAlumno: r.notasAlumno,
       fotosPlatos: fotosMap.get(r.id) || [],
+      capturadoEnUtc: toIsoUtcString(r.capturadoEnUtc),
+      metasVigentes: r.metasVigentes ?? null,
+      zonaHoraria,
       createdAtUtc: toIsoUtcString(r.createdAtUtc)!,
       updatedAtUtc: toIsoUtcString(r.updatedAtUtc)!,
     }));
@@ -925,6 +916,9 @@ export class NutricionService {
         }))
       ),
       alumnoNombre,
+      capturadoEnUtc: toIsoUtcString(checkin.capturadoEnUtc),
+      metasVigentes: checkin.metasVigentes ?? null,
+      zonaHoraria: resolverTimezoneNutricion(perfilAlumno?.zonaHoraria),
       createdAtUtc: toIsoUtcString(checkin.createdAtUtc)!,
       updatedAtUtc: toIsoUtcString(checkin.updatedAtUtc)!,
     };

@@ -9,9 +9,11 @@
  * - Ventana: últimos 7 días UTC ([ahora - 7d, ahora]). Deliberadamente SIN huso por coach: el
  *   recordatorio antropométrico por huso IANA queda fuera del alcance de N1 (pendiente anotado).
  * - RF-002 §6 (WU RF-002a): además de adherencia y cobros, el digest alerta los días CERRADOS
- *   (hasta ayer) sin check-in nutricional de la cartera. La matriz RF-015 no define una categoría
- *   NUTRICION: la alerta viaja por la fila "Resumen Semanal" (Email/Push según preferencia) y la
- *   copia In-App universal del despachador, sin inventar categorías fuera del doc.
+ *   sin check-in nutricional de la cartera. LOTE API-N2: cada alumno cuenta SUS últimos 7 días
+ *   cerrados en la zona de su perfil, y un día cierra al vencer su plazo (12:00 del día siguiente).
+ *   La matriz RF-015 no define una categoría NUTRICION: la alerta viaja por la fila "Resumen
+ *   Semanal" (Email/Push según preferencia) y la copia In-App universal del despachador, sin
+ *   inventar categorías fuera del doc.
  * - Consultas en lote (una por métrica, no por coach) con agregación en memoria; las tablas
  *   financieras ya tienen RLS (etapa 2) y se leen con el bypass explícito `is_superadmin`, el
  *   mismo criterio de ruta de sistema que el barrido de cobranza.
@@ -51,16 +53,21 @@ import {
   EstadoSesion,
   EstadoUsuario,
 } from '@guachafit/shared';
-import { fechaAnteriorYyyyMmDd } from '../../../common/adherencia.util';
-// RF-002 §6: el cálculo de "no reportado" es puro y vive con el resto de reglas de nutrición
-// (misma semántica que usará la UI del calendario); no se re-implementa aquí.
-import { contarDiasNoReportados } from '../../nutricion/nutricion.service';
+// RF-002 §6: el cálculo de "no reportado" es puro y vive con las reglas de tiempo de nutrición
+// (`nutricion-tiempo.util.ts`); no se re-implementa aquí.
+import { sumarDiasCalendario } from '../../../common/adherencia.util';
+import {
+  contarDiasNoReportados,
+  ultimoDiaNutricionalCerrado,
+} from '../../nutricion/nutricion-tiempo.util';
 import { ResumenSemanalCoachEvent } from '../events/eventos-notificacion';
 import { COLA_RESUMEN_SEMANAL, nombreColaDlq } from '../notificaciones.config';
 import { JOB_GENERAR_RESUMEN_SEMANAL } from '../resumen-semanal.scheduler';
 import { moverJobADeadLetter } from '../dead-letter';
 
 export const MS_POR_DIA = 24 * 60 * 60 * 1000;
+/** RF-002 §6: días cerrados que revisa la alerta de "no reportado" del digest semanal. */
+const DIAS_VENTANA_NUTRICION = 7;
 
 export interface MetricasResumenSemanal {
   coachNombre: string;
@@ -167,6 +174,7 @@ export class ResumenSemanalProcessor extends WorkerHost {
         .select({
           usuarioId: perfilesAlumno.usuarioId,
           entrenadorId: perfilesAlumno.entrenadorId,
+          zonaHoraria: perfilesAlumno.zonaHoraria,
         })
         .from(perfilesAlumno)
         .where(
@@ -198,7 +206,27 @@ export class ResumenSemanalProcessor extends WorkerHost {
 
     // RF-002 §6: fechas con check-in por alumno para el cálculo de "no reportado".
     const fechasReportadasPorAlumno = new Map<string, Set<string>>();
-    const ayerYmd = fechaAnteriorYyyyMmDd(hastaYmd, 1);
+    // LOTE API-N2: rango de días CERRADOS por alumno en la zona de su perfil (7 días que terminan
+    // en el último día cuyo plazo de las 12:00 del día siguiente ya venció).
+    const rangoNutricionPorAlumno = new Map<string, { desde: string; hasta: string }>();
+    for (const alumno of alumnos) {
+      const hasta = ultimoDiaNutricionalCerrado(ahora, alumno.zonaHoraria);
+      rangoNutricionPorAlumno.set(alumno.usuarioId, {
+        desde: sumarDiasCalendario(hasta, -(DIAS_VENTANA_NUTRICION - 1)),
+        hasta,
+      });
+    }
+    // Una sola consulta para toda la cartera: la unión de los rangos (el filtro fino es por alumno).
+    // Neutros explícitos del mínimo y del máximo: la consulta solo corre con al menos un alumno, así
+    // que siempre quedan reemplazados por fechas reales.
+    const FECHA_NEUTRA_MINIMO = '9999-12-31';
+    const FECHA_NEUTRA_MAXIMO = '0000-01-01';
+    let desdeNutricionYmd = FECHA_NEUTRA_MINIMO;
+    let hastaNutricionYmd = FECHA_NEUTRA_MAXIMO;
+    for (const rango of rangoNutricionPorAlumno.values()) {
+      if (rango.desde < desdeNutricionYmd) desdeNutricionYmd = rango.desde;
+      if (rango.hasta > hastaNutricionYmd) hastaNutricionYmd = rango.hasta;
+    }
 
     if (alumnoIds.length > 0) {
       const completadas = await this.db
@@ -234,16 +262,16 @@ export class ResumenSemanalProcessor extends WorkerHost {
         programadasPorAlumno.set(fila.alumnoId, Number(fila.total));
       }
 
-      // RF-002 §6: check-ins de los días CERRADOS de la ventana. Hoy queda fuera del cálculo:
-      // su ventana de reporte (18:00–23:59 locales) todavía puede estar abierta.
+      // RF-002 §6: check-ins de los días CERRADOS de la ventana (unión de los rangos por alumno).
+      // Hoy, y ayer antes de las 12:00 locales, quedan fuera: todavía pueden llegar reportes.
       const checkinsNutricionalesVentana = await this.db
         .select({ alumnoId: checkinsNutricionales.alumnoId, fecha: checkinsNutricionales.fecha })
         .from(checkinsNutricionales)
         .where(
           and(
             inArray(checkinsNutricionales.alumnoId, alumnoIds),
-            gte(checkinsNutricionales.fecha, desdeYmd),
-            lte(checkinsNutricionales.fecha, ayerYmd)
+            gte(checkinsNutricionales.fecha, desdeNutricionYmd),
+            lte(checkinsNutricionales.fecha, hastaNutricionYmd)
           )
         );
 
@@ -271,9 +299,11 @@ export class ResumenSemanalProcessor extends WorkerHost {
     // RF-002 §6: días cerrados sin reporte por coach (alerta del resumen semanal).
     const nutricionNoReportadosPorCoach = new Map<string, number>();
     for (const [alumnoId, entrenadorId] of coachPorAlumno) {
+      // Ambos mapas salen de la misma lista `alumnos`: todo alumno de la cartera tiene su rango.
+      const rango = rangoNutricionPorAlumno.get(alumnoId)!;
       const noReportados = contarDiasNoReportados(
-        desdeYmd,
-        ayerYmd,
+        rango.desde,
+        rango.hasta,
         fechasReportadasPorAlumno.get(alumnoId) ?? new Set()
       );
       if (noReportados > 0) {

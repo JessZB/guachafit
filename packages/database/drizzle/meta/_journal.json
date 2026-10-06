@@ -113,6 +113,13 @@
       "when": 1791143031440,
       "tag": "0015_usuarios_recuperacion_password",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791252796372,
+      "tag": "0016_nutricion_zona_captura_metas",
+      "breakpoints": true
     }
   ]
 }

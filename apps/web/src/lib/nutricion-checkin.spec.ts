@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  calcularSegundosDesdeCaptura,
   construirPayloadCheckinNutricional,
+  cuerpoCheckinParaEnviar,
   decidirAccionErrorCheckinNutricional,
   esRechazoVentanaCheckin,
   evaluarVentanaCheckinLocal,
@@ -30,7 +32,11 @@ import {
 import { MENSAJE_RANGO_FOTOS_REPORTE, type OutboxMutation } from './offline-db';
 import { obtenerTimezoneDispositivo } from './date-format';
 import {
+  CODIGO_CHECKIN_FUERA_DE_PLAZO,
   CODIGO_CHECKIN_FUERA_DE_VENTANA,
+  MENSAJE_CHECKIN_DIA_CAMBIADO,
+  MENSAJE_CHECKIN_FUERA_DE_PLAZO,
+  MENSAJE_CHECKIN_FUERA_DE_VENTANA,
   MENSAJE_CHECKIN_YA_REGISTRADO,
   SemaforoNutricional,
   TipoComida,
@@ -656,5 +662,89 @@ describe('LOTE API-N1: 409 "ya registrado" al sincronizar la cola', () => {
 
   it('el aviso de ya registrado reutiliza el texto compartido', () => {
     expect(MENSAJE_YA_REGISTRADO_HOY).toBe(MENSAJE_CHECKIN_YA_REGISTRADO);
+  });
+});
+
+describe('LOTE API-N2: hora de captura y plazo del día siguiente', () => {
+  // Ronda 1: el teléfono envía cuánto tiempo pasó desde la captura (no la hora de su reloj); el
+  // servidor resta esos segundos a su propia hora, así un reloj desajustado no altera nada.
+  it('el cuerpo validado no lleva hora de captura del reloj del teléfono', () => {
+    const payload = construirPayloadCheckinNutricional(
+      { semaforo: SemaforoNutricional.CUMPLIDO },
+      new Date('2026-09-22T01:30:00.000Z')
+    ) as Record<string, unknown>;
+    expect(payload).not.toHaveProperty('capturadoEnUtc');
+    expect(payload).not.toHaveProperty('segundosDesdeCaptura');
+  });
+
+  it('calcularSegundosDesdeCaptura redondea y nunca es negativo', () => {
+    const captura = Date.parse('2026-09-22T01:30:00.000Z');
+    expect(calcularSegundosDesdeCaptura(captura, captura + 1_499)).toBe(1);
+    expect(calcularSegundosDesdeCaptura(captura, captura + 1_500)).toBe(2);
+    expect(calcularSegundosDesdeCaptura(captura, captura + 12 * 3_600_000)).toBe(43_200);
+    // El reloj del teléfono retrocedió (cambio manual de hora): se envía 0.
+    expect(calcularSegundosDesdeCaptura(captura, captura - 60_000)).toBe(0);
+  });
+
+  it('al enviar se agregan los segundos transcurridos desde que se tocó Guardar', () => {
+    const payload = construirPayloadCheckinNutricional(
+      { semaforo: SemaforoNutricional.CUMPLIDO },
+      new Date('2026-09-22T01:30:00.000Z')
+    );
+    const captura = Date.parse('2026-09-22T01:30:00.000Z');
+    const cuerpo = cuerpoCheckinParaEnviar(payload, captura, captura + 90_000);
+    expect(cuerpo).toEqual({ ...payload, segundosDesdeCaptura: 90 });
+  });
+
+  it('sin instante de captura guardado el cuerpo sale sin el campo (cuenta la hora del servidor)', () => {
+    const payload = construirPayloadCheckinNutricional(
+      { semaforo: SemaforoNutricional.CUMPLIDO },
+      new Date('2026-09-22T01:30:00.000Z')
+    );
+    expect(cuerpoCheckinParaEnviar(payload, undefined, Date.now())).toEqual(payload);
+  });
+
+  it('un pendiente del formato anterior (`capturadoEnUtc`) se convierte a segundos y no reenvía la hora', () => {
+    const anterior = {
+      fecha: '2026-09-21',
+      semaforo: SemaforoNutricional.CUMPLIDO,
+      capturadoEnUtc: '2026-09-22T01:30:00.000Z',
+    };
+    const cuerpo = cuerpoCheckinParaEnviar(anterior, undefined, Date.parse('2026-09-22T02:00:00.000Z'));
+    expect(cuerpo).toEqual({
+      fecha: '2026-09-21',
+      semaforo: SemaforoNutricional.CUMPLIDO,
+      segundosDesdeCaptura: 1_800,
+    });
+  });
+
+  it('un `capturadoEnUtc` ilegible del formato anterior se descarta (cuenta la hora del servidor)', () => {
+    const cuerpo = cuerpoCheckinParaEnviar(
+      { fecha: '2026-09-21', semaforo: SemaforoNutricional.CUMPLIDO, capturadoEnUtc: 'ayer' },
+      undefined,
+      Date.now()
+    );
+    expect(cuerpo).toEqual({ fecha: '2026-09-21', semaforo: SemaforoNutricional.CUMPLIDO });
+  });
+
+  it('el nuevo aviso de "día cambiado" se reconoce también por el texto (respaldo sin código)', () => {
+    expect(esRechazoVentanaCheckin(MENSAJE_CHECKIN_DIA_CAMBIADO)).toBe(true);
+    expect(esRechazoVentanaCheckin(MENSAJE_CHECKIN_FUERA_DE_VENTANA)).toBe(true);
+  });
+
+  it('400 CHECKIN_FUERA_DE_PLAZO es un rechazo definitivo visible con el texto acordado (sin cola)', () => {
+    const error = Object.assign(new Error('Texto distinto del servidor'), {
+      status: 400,
+      problem: { statusCode: 400, message: 'Texto distinto del servidor', code: CODIGO_CHECKIN_FUERA_DE_PLAZO },
+    });
+    const decision = decidirAccionErrorCheckinNutricional(error, true);
+    expect(decision).toEqual({ accion: 'mostrar_error', mensaje: MENSAJE_CHECKIN_FUERA_DE_PLAZO });
+    expect(MENSAJE_CHECKIN_FUERA_DE_PLAZO).toBe(
+      'Este reporte llegó después del mediodía del día siguiente, así que ya no se puede registrar. El día quedó como «No reportado».'
+    );
+  });
+
+  it('el plazo vencido no se confunde con el rechazo de ventana', () => {
+    expect(esRechazoVentanaCheckin(MENSAJE_CHECKIN_FUERA_DE_PLAZO, CODIGO_CHECKIN_FUERA_DE_PLAZO)).toBe(false);
   });
 });
