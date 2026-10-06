@@ -239,7 +239,7 @@ Orden obligatorio (deploy-05b `de2975b`): las migraciones se ejecutan **antes** 
    ```
 3. Espera el cierre `Todas las migraciones fueron aplicadas con éxito` y arranca (o reinicia) el API.
 4. Para que el API pueda hacer esta comprobación, su rol necesita `USAGE` sobre el esquema `drizzle` y `SELECT` sobre `drizzle.__drizzle_migrations` (lo otorga `crear-rol-app.sql`, §4.1). Sin ese permiso el API solo **avisa** en el log —no bloquea— y dirige a ese script.
-5. La migración más reciente es **`0015_usuarios_recuperacion_password.sql`** (API-4 `79ba082`): añade 3 columnas opcionales a `usuarios` (`token_recuperacion_hash`, `token_recuperacion_expira`, `password_cambiada_en`) para la recuperación de contraseña. Es aditiva; sin ella el API no arranca en producción.
+5. La migración más reciente es **`0016_nutricion_zona_captura_metas.sql`** (LOTE API-N2 `0555dfe`): añade `perfiles_alumno.zona_horaria` (`NOT NULL`, por defecto `'America/Caracas'`) y en `checkins_nutricionales` las columnas opcionales `capturado_en_utc` y `metas_vigentes` ([[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]]). Es aditiva y no requiere volver a otorgar permisos al rol `guachafit_app` (los GRANT son por tabla); sin ella el API no arranca en producción. La anterior, **`0015_usuarios_recuperacion_password.sql`** (API-4 `79ba082`), añade 3 columnas opcionales a `usuarios` (`token_recuperacion_hash`, `token_recuperacion_expira`, `password_cambiada_en`) para la recuperación de contraseña.
 
 > ⚠️ **No verificado:** dónde se configura el comando previo al despliegue en Coolify (opción tipo *Pre-deployment Command*); consulta https://coolify.io/docs. Si no existe, ejecuta la migración a mano (paso 2) **antes** de iniciar el contenedor nuevo.
 

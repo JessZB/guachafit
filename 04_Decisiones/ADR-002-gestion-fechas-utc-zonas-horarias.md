@@ -86,3 +86,4 @@ Adoptamos el patrón estándar de la industria: **"Almacenamiento Estricto en UT
 - Requerimientos asociados:
   - [[RF-001-checklist-entrenamiento-diario]]
   - [[RF-003-checkin-antropometrico-rbac-hibrido]]
+- **Excepción para el reporte de nutrición (2026-10-05, `0555dfe`):** [[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]] (la ventana 18:00–23:59 se evalúa con la zona horaria guardada en el **perfil del alumno**, no con la enviada por el cliente; la hora de captura la calcula el servidor restando `segundosDesdeCaptura` a su hora de recepción).

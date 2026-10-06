@@ -102,7 +102,7 @@ Then el sistema debe persistir los totales numéricos asociados a la fecha
 
 ### RN-02 — Ventana del check-in (18:00–23:59 local)
 
-- La ventana se evalúa con la **zona IANA del alumno** (`timezoneCliente`, por defecto `America/Caracas`); fuera de ventana o con fecha distinta al día local → **400** con mensaje claro.
+- La ventana se evalúa con la **zona IANA del alumno** (`timezoneCliente`, por defecto `America/Caracas`); fuera de ventana o con fecha distinta al día local → **400** con mensaje claro. **Desde 2026-10-05 (`0555dfe`)** la zona que decide es la **del perfil del alumno** y `timezoneCliente` queda obsoleto y sin efecto; ver [[#Zona horaria del perfil, reportes tardíos y copia de metas (2026-10-05)]].
 - La UI evalúa la misma ventana con el reloj del dispositivo: muestra el banner "El reporte aún no está abierto" (texto vigente desde 2026-10-04; antes "El check-in aún no está abierto") y no envía **ni encola** el reporte (el día quedará `No reportado`).
 
 ### RN-03 — Diario fotográfico (1–4 platos)
@@ -141,9 +141,10 @@ Then el sistema debe persistir los totales numéricos asociados a la fecha
   - ~~El API acepta claves de fotos ajenas en `fotosPlatos`.~~ **Resuelto** (2026-10-05, `24609ba`; ver [[#Integridad y seguridad del API (2026-10-05)]]).
   - ~~Errores que hoy terminan en **500**: violación de unicidad (`23505`), agua ≥ 100 y fecha inválida.~~ **Resuelto** (2026-10-05, `24609ba`: 409 `CHECKIN_YA_REGISTRADO`, agua ≤ 20 L y fechas de calendario reales con 400 claro; ver [[#Integridad y seguridad del API (2026-10-05)]]).
   - ~~Enlaces de recursos con esquemas como `javascript:`.~~ **Resuelto** (2026-10-05, `24609ba`: solo `http`/`https`; ver [[#Integridad y seguridad del API (2026-10-05)]]).
-  - `timezoneCliente` es manipulable por el cliente.
-  - Aceptar reportes capturados dentro de la ventana y sincronizados tarde (hasta el mediodía del día siguiente), mostrando al coach la hora de registro. Margen decidido por el dueño el 2026-10-05; ver [[#Editor de metas del entrenador (2026-10-05)]].
-  - La tolerancia histórica se evalúa con las metas **actuales**, no con las vigentes ese día: falta guardar una copia de las metas en cada reporte (solución decidida por el dueño el 2026-10-05; ver la misma sección).
+  - ~~`timezoneCliente` es manipulable por el cliente.~~ **Resuelto** (2026-10-05, `0555dfe`: decide la zona del perfil del alumno y `timezoneCliente` no tiene efecto; ver [[#Zona horaria del perfil, reportes tardíos y copia de metas (2026-10-05)]]).
+  - ~~Aceptar reportes capturados dentro de la ventana y sincronizados tarde (hasta el mediodía del día siguiente).~~ **Resuelto en el API** (2026-10-05, `0555dfe`; ver la misma sección). Sigue abierto en la UI: mostrar al coach la **hora de registro**.
+  - ~~La tolerancia histórica se evalúa con las metas **actuales**: falta guardar una copia de las metas en cada reporte.~~ **Resuelto en el API** (2026-10-05, `0555dfe`: copia `metas_vigentes` por reporte; ver la misma sección). Sigue abierto en la UI: que el historial evalúe la tolerancia con las metas del día.
+  - UI pendiente del lote de front: selector de zona horaria, meta del día y ventana local de la web calculada con la zona del perfil.
 - Evidencia: `apps/web/src/lib/nutricion-checkin.spec.ts`, `apps/web/src/components/nutricion/*.spec.ts` y `apps/web/src/pages/atleta/NutricionPage.spec.ts`; suite web **843** en verde, typecheck y build OK.
 
 ### Editor de metas del entrenador (2026-10-05)
@@ -177,6 +178,28 @@ Then el sistema debe persistir los totales numéricos asociados a la fecha
   - Una web anterior al LOTE API-2 mostraría el nuevo texto *"Tu teléfono ya cambió de día…"* como un rechazo genérico.
   - El tope de 92 días no aplica si falta `desde` o `hasta`.
 - Evidencia: `apps/api/test/bdd/nutricion-service.spec.ts`, `apps/api/test/bdd/rf010-rbac-tenancy.spec.ts`, `apps/api/test/bdd/api2-errores-claros.spec.ts`, `apps/api/test/bdd/rf002-nutricion-semaforo.spec.ts`, `apps/web/src/lib/offline-sync-nutricion.spec.ts` y `apps/web/src/lib/nutricion-checkin.spec.ts`; API **1192** aprobados (1 omitida), web **904**; typecheck y build OK en shared, api y web.
+
+### Zona horaria del perfil, reportes tardíos y copia de metas (2026-10-05)
+
+- **Decisiones del dueño (2026-10-05):**
+  - La ventana 18:00–23:59 se calcula con la **zona horaria del perfil del alumno** (por defecto `America/Caracas`), no con la del teléfono. El alumno la cambia con `PATCH /alumnos/me/zona-horaria` y su entrenador con `PATCH /alumnos/:id` (campo `zonaHoraria`). `timezoneCliente` queda **obsoleto y sin efecto** (se acepta solo porque la web publicada lo envía).
+  - Un reporte **capturado dentro de la ventana** se acepta si llega **hasta las 12:00 del día siguiente** (inclusive); después se rechaza y el día queda **"No reportado"** (no se acepta marcándolo como "tardío").
+  - Decisión de diseño y alternativas descartadas en [[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]].
+- Implementado (2026-10-05, unidad `0555dfe`):
+  - **Migración `0016_nutricion_zona_captura_metas.sql` (aditiva):** `perfiles_alumno.zona_horaria` (`varchar(64)`, `NOT NULL`, por defecto `'America/Caracas'`) y en `checkins_nutricionales` las columnas `capturado_en_utc` y `metas_vigentes` (`jsonb`), ambas `NULL` en los reportes anteriores.
+  - **Zona del perfil:** se valida como zona IANA real (*"Elige una zona horaria válida, por ejemplo America/Caracas."*). `GET /auth/me` la devuelve en `usuario.zonaHoraria` y la ficha del alumno (`GET`/`PATCH /alumnos/:id`) en `zonaHoraria`. El cambio propio identifica el perfil por el token (nunca por el cuerpo) y escribe solo esa columna con el contexto RLS propio (`rls_perfiles_alumno_self_update`).
+  - **Hora de captura sin depender del reloj del teléfono:** la web guarda el instante del toque en "Guardar" y, **al enviar** (directo o desde la cola), manda `segundosDesdeCaptura` (entero, 0–48 h). El API calcula **captura = su hora de recepción − segundos** y la guarda en `capturado_en_utc`; sin el campo, cuenta la hora del servidor. Un teléfono con la hora adelantada o atrasada no cambia el resultado: solo mide una duración.
+  - **Reglas (todas en la zona del perfil, `nutricion-tiempo.util.ts`):** la captura debe caer en 18:00–23:59 del día del reporte; la recepción debe llegar como máximo a las **12:00:00 del día siguiente**. Si no, **400** con código estable **`CHECKIN_FUERA_DE_PLAZO`** y el texto *"Este reporte llegó después del mediodía del día siguiente, así que ya no se puede registrar. El día quedó como «No reportado»."* La web lo trata como **rechazo definitivo**: visible en "Cambios por enviar" con ese texto y **sin reintento**.
+  - **Mensajes de ventana:** *"Puedes enviar el reporte de hoy entre las 18:00 y las 23:59 (hora de la zona horaria de tu perfil). Fuera de ese horario el día queda como «No reportado»."* y, con el día cambiado, *"El día de tu reporte ya cambió según la zona horaria de tu perfil. Actualiza la pantalla para ver el reporte de hoy."* (ambos con `CHECKIN_FUERA_DE_VENTANA`).
+  - **Copia de metas por reporte:** al registrar se copian las metas vigentes del alumno en `metas_vigentes` (`null` si no tenía metas) y la tolerancia se evalúa con esa copia. Las lecturas del reporte devuelven `capturadoEnUtc`, `metasVigentes` y `zonaHoraria`; los reportes anteriores traen `null`.
+  - **Resumen semanal del coach:** los días "No reportado" se cuentan por alumno con **la zona de su perfil** (sus últimos 7 días cerrados); "ayer" cuenta como cerrado **solo pasado el mediodía local**, porque hasta entonces todavía puede llegar por la cola.
+- **Límites (honestos):**
+  - El servidor **confía en `segundosDesdeCaptura`**: un cliente podría declarar una captura anterior a la real. Como máximo gana unas **~18 h** de retraso (de las 18:00 al mediodía siguiente), que es el margen decidido.
+  - Los **perfiles existentes quedan en Caracas**: un alumno en otra zona debe cambiarla (hoy vía API; el selector en la UI llega en el siguiente lote de front).
+  - Un alumno **pausado** también puede cambiar su zona.
+  - La web redondea a segundos: la captura puede moverse **hasta 0,5 s** en los bordes de la ventana o del plazo.
+  - Quedan para el lote de front: la tolerancia del historial con las metas del día, y en la UI la hora de registro, la meta del día, el selector de zona y la ventana local de la web con la zona del perfil (hoy la web sigue evaluando la ventana con el reloj del dispositivo).
+- Evidencia: `apps/api/test/bdd/nutricion-service.spec.ts`, `apps/api/test/bdd/lote-api-n2-zona-horaria.spec.ts`, `apps/api/test/bdd/rf014-resumen-semanal.spec.ts`, `apps/api/test/bdd/api2-errores-claros.spec.ts`, `apps/web/src/lib/nutricion-checkin.spec.ts` y `apps/web/src/lib/offline-sync-nutricion.spec.ts`; API **1244** aprobados (1 omitida), web **919**. Migración `0016` aplicada y verificada en la BD de desarrollo (columnas, valor por defecto, privilegios del rol `guachafit_app` y self-update por RLS).
 
 ### Límites deliberados y notas honestas
 

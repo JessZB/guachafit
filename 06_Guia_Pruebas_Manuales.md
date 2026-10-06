@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** con pruebas automáticas en verde (**904** de la web + **1192** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (**919** de la web + **1244** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -278,6 +278,11 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 - [ ] **Doble toque rápido en Guardar:** pulsa "Guardar" dos veces muy rápido → queda **un solo reporte** y nunca aparece un error 500.
 - [ ] **Agua fuera de rango:** escribe **25** en agua y guarda → mensaje claro de que el agua va entre 0 y 20 litros (no un 500).
 - [ ] **Reporte offline con otros datos:** registra el reporte de hoy desde otro dispositivo; en este, sin conexión, guarda un reporte distinto (con fotos) y recupera la red → en "Cambios por enviar" aparece **"Ya tenías un reporte de hoy registrado con otros datos; este no se envió."**, las fotos se conservan y el aviso sigue al reabrir la pantalla. Si los datos coinciden, se da por enviado sin aviso.
+- [ ] **Reporte offline aceptado a la mañana siguiente (2026-10-05, `0555dfe`):** sin conexión, guarda el reporte a las **23:50** (hora de la zona de tu perfil) y recupera la red a las **08:00** del día siguiente → el reporte **se acepta** con la fecha del día anterior.
+- [ ] **Reporte offline después del mediodía:** igual que el anterior, pero recupera la red a las **12:30** → rechazo con **"Este reporte llegó después del mediodía del día siguiente, así que ya no se puede registrar. El día quedó como «No reportado»."**, visible en **"Cambios por enviar"** y sin reintentos automáticos.
+- [ ] **Teléfono con la hora mal puesta:** adelanta o atrasa la hora del teléfono (desactiva la hora automática) y guarda un reporte → se acepta o rechaza según la **hora real** (la del servidor en la zona de tu perfil), no la del teléfono.
+- [ ] **Cambiar la zona del perfil (vía API):** con el token del alumno, `PATCH /alumnos/me/zona-horaria` con `{"zonaHoraria":"Europe/Madrid"}` → 200 y `GET /auth/me` devuelve esa zona; envía el reporte y comprueba que la ventana 18:00–23:59 se cuenta en **esa** zona. Una zona inventada → 400 *"Elige una zona horaria válida, por ejemplo America/Caracas."* (la UI de la web todavía evalúa la ventana con la hora del teléfono; el selector de zona llega en el lote de front).
+- [ ] **Metas del día conservadas (vía API):** registra un reporte, cambia las metas del alumno como coach y consulta los reportes → el reporte anterior conserva en `metasVigentes` las metas de su día (los reportes previos a la migración `0016` traen `null`).
 - [ ] **Modo demo:** con "Modo Alumno" la ventana horaria no bloquea la simulación y el reporte, las metas y la tolerancia usan el fixture local.
 
 **Coach (ficha del alumno → pestaña Nutrición, `?tab=nutricion`)**
@@ -295,6 +300,7 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 - [ ] **Decimales en calorías:** escribe calorías con decimales (p. ej. 2000,5) → mensaje claro de que debe ser un número entero (no se trunca en silencio).
 - [ ] **Guardar sin red:** sin conexión, pulsa Guardar → mensaje de que **no hay conexión y los cambios no se guardaron**.
 - [ ] **Enlace `javascript:` en un recurso (2026-10-05, `24609ba`):** en el editor de metas, añade un recurso por enlace con `javascript:alert(1)` y guarda → se rechaza (solo enlaces `http://` o `https://`).
+- [ ] **Zona del alumno desde el coach (2026-10-05, `0555dfe`, vía API):** con el token del entrenador, `PATCH /alumnos/:id` con `{"zonaHoraria":"America/Bogota"}` → 200 y la ficha devuelve la zona nueva; con el token de **otro** entrenador, el mismo PATCH → **403** y la zona no cambia.
 - [ ] **Paginación declarada:** el calendario trabaja sobre la ventana de 30 días con paginación en cliente (no es un listado server-paginado).
 - [ ] **Alerta semanal:** si hay días cerrados sin reporte, el resumen semanal del coach lo menciona (solo cuando el contador es mayor que 0; llega por la campana in-app — sección 10).
 

@@ -126,7 +126,7 @@ GUACHAFIT/
 │   ├── RF/                       # RF-001 al RF-017 (Gherkin)
 │   └── RNF/                      # RNF-001 al RNF-004 (Métricas y SLOs)
 ├── 03_Dominio/                   # Entidades y Agregados DDD
-├── 04_Decisiones/                # ADR-001 al ADR-018
+├── 04_Decisiones/                # ADR-001 al ADR-019
 ├── 05_Arquitectura/              # Especificación técnica, DDL y contratos API
 ├── apps/                         # Aplicaciones ejecutables
 │   ├── api/                      # Backend NestJS + Drizzle + BullMQ
@@ -146,7 +146,7 @@ GUACHAFIT/
 ## 🔗 5. Trazabilidad
 - Ecosistema de Requerimientos: [[RF-001-checklist-entrenamiento-diario]] al [[RF-017-banco-plantillas-rutinas-entrenamiento]].
 - Atributos de Calidad: [[RNF-001-almacenamiento-seguridad-fotos-progreso]] al [[RNF-004-resiliencia-notificaciones-idempotencia-fallbacks]].
-- Decisiones Arquitecturales: [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-018-proveedor-correo-transaccional-brevo]] (incluye [[ADR-017-despliegue-vps-coolify]], [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]], [[ADR-012-modo-demo-explicito-datos-sinteticos]] y [[ADR-013-paginacion-server-side-stack-listas]]).
+- Decisiones Arquitecturales: [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]] (incluye [[ADR-018-proveedor-correo-transaccional-brevo]], [[ADR-017-despliegue-vps-coolify]], [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]], [[ADR-012-modo-demo-explicito-datos-sinteticos]] y [[ADR-013-paginacion-server-side-stack-listas]]).
 
 ---
 
