@@ -214,6 +214,9 @@ export class AuthService {
     // RF-003 RN-03/RN-04 (WU RF-003a): la modalidad del alumno viaja en la sesión para que la web
     // bloquee el formulario antropométrico sin una petición extra.
     let modalidad: Modalidad | null = null;
+    // ADR-019: la zona del perfil viaja con la sesión (como en `/auth/me`) para que la web cuente
+    // la ventana del reporte nutricional con la misma zona que el servidor desde el primer render.
+    let zonaHoraria: string | null = null;
 
     if (usuario.rol === Rol.ENTRENADOR) {
       entrenadorId = usuario.id;
@@ -235,6 +238,7 @@ export class AuthService {
 
       entrenadorId = perfil?.entrenadorId;
       modalidad = perfil?.modalidad ?? null;
+      zonaHoraria = perfil ? perfil.zonaHoraria ?? ZONA_HORARIA_ALUMNO_POR_DEFECTO : null;
 
       // RF-010 §6 (CASCADA-COACH): la sesión del alumno depende de que su entrenador esté
       // operable. Filas legacy sin coach no pagan el chequeo ni cambian de comportamiento.
@@ -268,6 +272,7 @@ export class AuthService {
         rol: usuario.rol as Rol,
         entrenadorId,
         modalidad,
+        zonaHoraria,
       },
     };
   }
@@ -385,6 +390,9 @@ export class AuthService {
     // La resolución del perfil ocurre ANTES de escribir: un alumno archivado no activa su cuenta.
     let entrenadorId: string | undefined;
     let modalidad: Modalidad | null = null;
+    // ADR-019: la zona del perfil viaja con la sesión (como en `/auth/me`) para que la web cuente
+    // la ventana del reporte nutricional con la misma zona que el servidor desde el primer render.
+    let zonaHoraria: string | null = null;
     if (usuario.rol === Rol.ENTRENADOR) {
       // RF-010 §6: una licencia suspendida tampoco puede canjear la invitación (el canje emite
       // tokens; sería una tercera vía de sesión sin el ciclo de verificación).
@@ -402,6 +410,7 @@ export class AuthService {
 
       entrenadorId = perfil?.entrenadorId;
       modalidad = perfil?.modalidad ?? null;
+      zonaHoraria = perfil ? perfil.zonaHoraria ?? ZONA_HORARIA_ALUMNO_POR_DEFECTO : null;
 
       // RF-010 §6 (CASCADA-COACH): el canje emite sesión, así que también exige un entrenador
       // operable; el token no se consume cuando la cascada bloquea.
@@ -442,6 +451,7 @@ export class AuthService {
         rol: usuario.rol as Rol,
         entrenadorId,
         modalidad,
+        zonaHoraria,
       },
     };
   }

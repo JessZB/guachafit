@@ -32,7 +32,8 @@ import {
   evaluarVentanaCheckinLocal,
   obtenerStatusError,
   valoresFormularioDesdeCheckin,
-  MENSAJE_ANTES_DE_VENTANA,
+  textoHorarioCheckin,
+  zonaPerfilEfectiva,
   MENSAJE_ELIGE_SEMAFORO,
   MENSAJE_ERROR_SUBIDA_FOTO,
   MENSAJE_FOTOS_MAXIMO_ALCANZADO,
@@ -53,7 +54,6 @@ import {
 } from '../../lib/nutricion-metas';
 import { checkinsNutricionalesDemo, crearMetasNutricionalesDemo } from '../../lib/demo-nutricion';
 import {
-  fechaCalendarioLocal,
   formatFechaLargaCalendario,
   obtenerTimezoneDispositivo,
   sumarDiasCalendario,
@@ -119,9 +119,12 @@ export function NutricionPage() {
     return () => window.clearInterval(intervalo);
   }, []);
 
-  const hoyLocal = fechaCalendarioLocal(ahora);
+  // ADR-019: el día y la ventana se cuentan con la zona horaria del PERFIL, resuelta igual que en el
+  // servidor (sin zona válida, la zona por defecto), para que pantalla, texto y API coincidan.
+  const zonaPerfil = zonaPerfilEfectiva(user?.zonaHoraria);
+  const ventana = evaluarVentanaCheckinLocal(ahora, zonaPerfil);
+  const hoyLocal = ventana.fechaLocalHoy;
   const timezoneCliente = useMemo(() => obtenerTimezoneDispositivo(), []);
-  const ventana = evaluarVentanaCheckinLocal(ahora);
   // En modo demo la simulación no se bloquea por horario (el banner demo declara el contexto);
   // en sesión real, fuera de ventana no se envía ni se encola nada.
   const puedeReportar = isDemoMode || ventana.permitido;
@@ -679,7 +682,10 @@ export function NutricionPage() {
           <Clock className="h-5 w-5 shrink-0 mt-0.5" />
           <div className="space-y-1">
             <p className="text-sm font-bold text-foreground">El reporte aún no está abierto</p>
-            <p className="text-xs text-muted-foreground">{MENSAJE_ANTES_DE_VENTANA}</p>
+            <p className="text-xs text-muted-foreground">
+              {textoHorarioCheckin(zonaPerfil)} Cuando abra, marca tu semáforo y guarda tu día; fuera
+              de ese horario el día queda como &quot;No reportado&quot;.
+            </p>
           </div>
         </div>
       )}

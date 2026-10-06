@@ -4,12 +4,16 @@ import {
   contarNoReportados,
   crearCalendarioNutricional,
   derivarEstadoDiaNutricional,
+  describirComparacionMeta,
+  describirRegistroCheckin,
   etiquetaEstadoDia,
   etiquetaSemaforoNutricional,
   etiquetaTipoComida,
+  evaluarToleranciaDia,
   evaluarToleranciaNutricionalLocal,
   formatearDesviacionPct,
   metasConfiguradas,
+  notaBaseTolerancia,
   resumenMetas,
   resumenTotalesReportados,
 } from './nutricion-metas';
@@ -19,6 +23,7 @@ import {
   TipoComida,
   type CheckinNutricionalDetalleDTO,
   type MetasNutricionalesDetalleDTO,
+  type MetasVigentesCheckinDTO,
 } from '@guachafit/shared';
 
 function metas(parcial: Partial<MetasNutricionalesDetalleDTO> = {}): MetasNutricionalesDetalleDTO {
@@ -197,5 +202,154 @@ describe('calendario nutricional y estado derivado "No reportado" (RF-002 §6)',
       EstadoDiaNutricional.NO_REPORTADO,
     ]);
     expect(contarNoReportados(calendario)).toBe(2);
+  });
+});
+
+describe('LOTE F3: evaluarToleranciaDia (tolerancia con las metas del día del reporte)', () => {
+  function metasVigentes(parcial: Partial<MetasVigentesCheckinDTO> = {}): MetasVigentesCheckinDTO {
+    return {
+      caloriasObjetivo: null,
+      proteinaGramosObjetivo: null,
+      carbohidratosGramosObjetivo: null,
+      grasasGramosObjetivo: null,
+      aguaLitrosObjetivo: null,
+      ...parcial,
+    };
+  }
+
+  const metasDelDia = metasVigentes({ caloriasObjetivo: 2000, proteinaGramosObjetivo: 160 });
+
+  it('con metas vigentes copiadas en el reporte las usa aunque las actuales sean distintas', () => {
+    const resultado = evaluarToleranciaDia(
+      { caloriasReportadas: 2100, proteinaGramosReportada: 160, metasVigentes: metasDelDia },
+      metas({ caloriasObjetivo: 2500, proteinaGramosObjetivo: 200 })
+    );
+    expect(resultado.base).toBe('metas_del_dia');
+    expect(resultado.tolerancia.desviacionCaloriasPct).toBe(5);
+    expect(resultado.tolerancia.desviacionProteinasPct).toBe(0);
+    expect(resultado.tolerancia.dentroMargenTolerancia).toBe(true);
+    expect(resultado.caloriasMeta).toBe(2000);
+    expect(resultado.proteinaMeta).toBe(160);
+  });
+
+  it('sin metas vigentes compara con las metas actuales y lo declara', () => {
+    const resultado = evaluarToleranciaDia(
+      { caloriasReportadas: 2100, proteinaGramosReportada: 160, metasVigentes: null },
+      metas({ caloriasObjetivo: 2500, proteinaGramosObjetivo: 200 })
+    );
+    expect(resultado.base).toBe('metas_actuales');
+    expect(resultado.tolerancia.desviacionCaloriasPct).toBe(-16);
+    expect(resultado.tolerancia.dentroMargenTolerancia).toBe(false);
+    expect(resultado.caloriasMeta).toBe(2500);
+    expect(resultado.proteinaMeta).toBe(200);
+  });
+
+  it('usa el criterio ±10 % de evaluarToleranciaNutricionalLocal (borde dentro y fuera)', () => {
+    const enElBorde = evaluarToleranciaDia(
+      { caloriasReportadas: 2200, proteinaGramosReportada: null, metasVigentes: metasDelDia },
+      null
+    );
+    expect(enElBorde.base).toBe('metas_del_dia');
+    expect(enElBorde.tolerancia.desviacionCaloriasPct).toBe(10);
+    expect(enElBorde.tolerancia.dentroMargenTolerancia).toBe(true);
+
+    const apenasFuera = evaluarToleranciaDia(
+      { caloriasReportadas: 2201, proteinaGramosReportada: null, metasVigentes: metasDelDia },
+      null
+    );
+    expect(apenasFuera.tolerancia.desviacionCaloriasPct).toBe(10.05);
+    expect(apenasFuera.tolerancia.dentroMargenTolerancia).toBe(false);
+  });
+
+  it('sin metas vigentes ni actuales queda "sin_metas", sin tolerancia y sin metas', () => {
+    const resultado = evaluarToleranciaDia(
+      { caloriasReportadas: 2100, proteinaGramosReportada: 160, metasVigentes: null },
+      null
+    );
+    expect(resultado.base).toBe('sin_metas');
+    expect(resultado.tolerancia).toEqual({});
+    expect(resultado.caloriasMeta).toBeNull();
+    expect(resultado.proteinaMeta).toBeNull();
+  });
+});
+
+describe('LOTE F3: notaBaseTolerancia (aviso de comparación con metas actuales)', () => {
+  it('solo con base "metas_actuales" advierte que se comparó con las metas de hoy', () => {
+    expect(notaBaseTolerancia('metas_actuales')).toBe('Comparado con las metas actuales');
+    expect(notaBaseTolerancia('metas_del_dia')).toBeNull();
+    expect(notaBaseTolerancia('sin_metas')).toBeNull();
+  });
+});
+
+describe('LOTE F3: describirRegistroCheckin (hora de captura y envío al día siguiente)', () => {
+  it('sin hora de captura (null o ausente) no hay nada que describir', () => {
+    expect(
+      describirRegistroCheckin(
+        { fecha: '2026-10-05', capturadoEnUtc: null, createdAtUtc: '2026-10-06T03:51:00Z' },
+        'America/Caracas'
+      )
+    ).toBeNull();
+    expect(
+      describirRegistroCheckin(
+        { fecha: '2026-10-05', createdAtUtc: '2026-10-06T03:51:00Z' },
+        'America/Caracas'
+      )
+    ).toBeNull();
+  });
+
+  it('con recepción el mismo día local indica la hora de captura', () => {
+    expect(
+      describirRegistroCheckin(
+        {
+          fecha: '2026-10-05',
+          capturadoEnUtc: '2026-10-06T03:50:00Z',
+          createdAtUtc: '2026-10-06T03:51:00Z',
+        },
+        'America/Caracas'
+      )
+    ).toBe('Registrado a las 23:50');
+  });
+
+  it('si llegó al día siguiente local lo declara', () => {
+    expect(
+      describirRegistroCheckin(
+        {
+          fecha: '2026-10-05',
+          capturadoEnUtc: '2026-10-06T03:50:00Z',
+          createdAtUtc: '2026-10-06T12:00:00Z',
+        },
+        'America/Caracas'
+      )
+    ).toBe('Registrado a las 23:50 · enviado al día siguiente');
+  });
+
+  it('con una hora de captura ilegible no describe nada (sin lanzar)', () => {
+    expect(
+      describirRegistroCheckin(
+        { fecha: '2026-10-05', capturadoEnUtc: 'no-es-fecha', createdAtUtc: '2026-10-06T03:51:00Z' },
+        'America/Caracas'
+      )
+    ).toBeNull();
+  });
+
+  it('con una hora de llegada ilegible muestra la captura sin afirmar "enviado al día siguiente"', () => {
+    expect(
+      describirRegistroCheckin(
+        { fecha: '2026-10-05', capturadoEnUtc: '2026-10-06T03:50:00Z', createdAtUtc: 'no-es-fecha' },
+        'America/Caracas'
+      )
+    ).toBe('Registrado a las 23:50');
+  });
+});
+
+describe('LOTE F3: describirComparacionMeta', () => {
+  it('con meta compara reportado y meta con la unidad', () => {
+    expect(describirComparacionMeta(2100, 2000, 'kcal')).toBe('2100 de 2000 kcal');
+  });
+
+  it('sin meta muestra solo lo reportado; sin reportado no muestra nada', () => {
+    expect(describirComparacionMeta(2100, null, 'kcal')).toBe('2100 kcal');
+    expect(describirComparacionMeta(null, 2000, 'kcal')).toBeNull();
+    expect(describirComparacionMeta(undefined, 2000, 'kcal')).toBeNull();
   });
 });

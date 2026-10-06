@@ -39,6 +39,11 @@ interface AuthContextType {
   login: (credentials: LoginUsuarioDTO) => Promise<void>;
   demoLogin: (rol: Rol) => void;
   logout: () => Promise<void>;
+  /**
+   * ADR-019: refleja en la sesión la zona horaria recién guardada en el perfil. Solo se aplica si
+   * la sesión sigue siendo del mismo usuario que la guardó.
+   */
+  actualizarZonaHoraria: (zonaHoraria: string, usuarioId: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -294,6 +299,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         demoLogin,
         logout,
+        actualizarZonaHoraria: (zonaHoraria: string, usuarioId: string) =>
+          setUser((actual) => (actual && actual.id === usuarioId ? { ...actual, zonaHoraria } : actual)),
       }}
     >
       {children}

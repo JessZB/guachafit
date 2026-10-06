@@ -17,7 +17,7 @@
  * declarada de 30 días y se pagina en cliente con `Paginacion`, cuyo copy declara el alcance.
  * Los datos demo solo se consumen con `isDemoMode` (ADR-012).
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiClient } from '../../lib/api-client';
 import { Paginacion } from '../common/Paginacion';
 import { VisorFoto } from '../common/VisorFoto';
@@ -30,8 +30,11 @@ import {
   contarNoReportados,
   etiquetaEstadoDia,
   etiquetaTipoComida,
-  evaluarToleranciaNutricionalLocal,
+  describirComparacionMeta,
+  describirRegistroCheckin,
+  evaluarToleranciaDia,
   formatearDesviacionPct,
+  notaBaseTolerancia,
   metasConfiguradas,
   resumenMetas,
   type DiaCalendarioNutricional,
@@ -62,8 +65,11 @@ import { DialogoConfirmacion } from '../common/DialogoConfirmacion';
 import { CampoMeta } from './CampoMeta';
 import { FilaRecursoEditor } from './FilaRecursoEditor';
 import { AvisosEditorMetas } from './AvisosEditorMetas';
+import { ZonaHorariaPerfil } from '../common/ZonaHorariaPerfil';
+import { horaDeZona, partesEnZona } from '../../lib/zona-horaria';
+import { HORARIO_VENTANA_CHECKIN, zonaPerfilEfectiva } from '../../lib/nutricion-checkin';
 import { checkinsNutricionalesDemo, crearMetasNutricionalesDemo } from '../../lib/demo-nutricion';
-import { fechaCalendarioLocal, formatFechaLargaCalendario, sumarDiasCalendario, ultimosDiasCalendario } from '../../lib/date-format';
+import { formatFechaLargaCalendario, sumarDiasCalendario, ultimosDiasCalendario } from '../../lib/date-format';
 import { pluralizar } from '../../lib/pluralizar';
 import {
   EstadoDiaNutricional,
@@ -78,6 +84,7 @@ import {
   Activity,
   AlertTriangle,
   Camera,
+  Clock,
   ExternalLink,
   FileText,
   Gauge,
@@ -92,7 +99,12 @@ import {
 export interface PanelNutricionAlumnoProps {
   /** `usuarios.id` del alumno: clave real de check-ins y del presign (no el id del perfil). */
   alumnoUsuarioId: string;
+  /** Id del perfil (`PATCH /alumnos/:id`); sin él no se ofrece cambiar la zona horaria. */
+  alumnoPerfilId?: string;
   alumnoNombre?: string | null;
+  /** ADR-019: zona horaria del perfil del alumno. */
+  zonaHoraria?: string | null;
+  onZonaHorariaGuardada?: (zonaHoraria: string) => void;
   isDemoMode: boolean;
 }
 
@@ -111,10 +123,16 @@ const tonoDe = (tono: string): string => CLASES_TONO[tono] ?? CLASES_TONO.neutra
 
 export function PanelNutricionAlumno({
   alumnoUsuarioId,
+  alumnoPerfilId,
   alumnoNombre,
+  zonaHoraria,
+  onZonaHorariaGuardada,
   isDemoMode,
 }: PanelNutricionAlumnoProps) {
-  const hoyLocal = fechaCalendarioLocal();
+  // ADR-019: "hoy" del alumno, el calendario y las horas de registro se cuentan en la zona de su
+  // perfil (resuelta como en el servidor), no en la del entrenador.
+  const zonaHorariaAlumno = zonaPerfilEfectiva(zonaHoraria);
+  const hoyLocal = partesEnZona(new Date(), zonaHorariaAlumno).fecha;
 
   const [metas, setMetas] = useState<MetasNutricionalesDetalleDTO | null>(null);
   /** `true` tras una carga exitosa (incluido "sin metas"): sin ella no se conoce qué PDFs hay. */
@@ -185,7 +203,14 @@ export function PanelNutricionAlumno({
     onCerrar: solicitarCerrarEditor,
   });
 
+  // Solo la carga más reciente escribe el estado: al cambiar de alumno con una carga en vuelo, la
+  // respuesta tardía del anterior se descarta.
+  const turnoMetasRef = useRef(0);
+  const turnoCheckinsRef = useRef(0);
+
   const cargarMetas = useCallback(async () => {
+    const turno = ++turnoMetasRef.current;
+    const vigente = () => turno === turnoMetasRef.current;
     if (isDemoMode) {
       setMetas(crearMetasNutricionalesDemo(alumnoUsuarioId));
       setMetasError(null);
@@ -199,20 +224,24 @@ export function PanelNutricionAlumno({
       const data = await apiClient<MetasNutricionalesDetalleDTO | null>(
         `/nutricion/alumnos/${alumnoUsuarioId}/metas`
       );
+      if (!vigente()) return;
       setMetas(data ?? null);
       setIsMetasCargadas(true);
     } catch (err: any) {
+      if (!vigente()) return;
       setMetas(null);
       setIsMetasCargadas(false);
       setMetasError(
         err?.message || 'No se pudieron cargar las metas del alumno. Inténtalo de nuevo.'
       );
     } finally {
-      setIsCargandoMetas(false);
+      if (vigente()) setIsCargandoMetas(false);
     }
   }, [alumnoUsuarioId, isDemoMode]);
 
   const cargarCheckins = useCallback(async () => {
+    const turno = ++turnoCheckinsRef.current;
+    const vigente = () => turno === turnoCheckinsRef.current;
     if (isDemoMode) {
       setCheckins(checkinsNutricionalesDemo(alumnoUsuarioId));
       setCheckinsError(null);
@@ -225,14 +254,16 @@ export function PanelNutricionAlumno({
       const data = await apiClient<CheckinNutricionalDetalleDTO[]>(
         `/nutricion/alumnos/${alumnoUsuarioId}/checkins?desde=${desde}&hasta=${hoyLocal}`
       );
+      if (!vigente()) return;
       setCheckins(Array.isArray(data) ? data : []);
     } catch (err: any) {
+      if (!vigente()) return;
       setCheckins([]);
       setCheckinsError(
         err?.message || 'No se pudieron cargar los reportes del alumno. Inténtalo de nuevo.'
       );
     } finally {
-      setIsCargandoCheckins(false);
+      if (vigente()) setIsCargandoCheckins(false);
     }
   }, [alumnoUsuarioId, isDemoMode, hoyLocal]);
 
@@ -568,6 +599,34 @@ export function PanelNutricionAlumno({
       </section>
 
       {/* ------------------------------------------------------------------ */}
+      {/* Zona horaria del alumno (ADR-019)                                    */}
+      {/* ------------------------------------------------------------------ */}
+      <section
+        aria-labelledby="titulo-zona-horaria-alumno"
+        className="p-5 sm:p-6 rounded-3xl bg-card border border-border shadow-xs space-y-3"
+      >
+        <div className="flex items-center gap-2">
+          <Clock className="h-4 w-4 text-primary" />
+          <h3 id="titulo-zona-horaria-alumno" className="font-bold text-sm text-foreground">
+            Zona horaria del alumno
+          </h3>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Su reporte se abre de {HORARIO_VENTANA_CHECKIN} en {horaDeZona(zonaHorariaAlumno)}, y las
+          horas de registro se muestran en esa zona.
+        </p>
+        {alumnoPerfilId && (
+          <ZonaHorariaPerfil
+            id="zona-horaria-alumno"
+            zonaActual={zonaHorariaAlumno}
+            endpoint={`/alumnos/${alumnoPerfilId}`}
+            modoDemo={isDemoMode}
+            onGuardada={onZonaHorariaGuardada}
+          />
+        )}
+      </section>
+
+      {/* ------------------------------------------------------------------ */}
       {/* Calendario de reportes (últimos 30 días)                             */}
       {/* ------------------------------------------------------------------ */}
       <section className="p-5 sm:p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4">
@@ -610,6 +669,7 @@ export function PanelNutricionAlumno({
                 key={dia.fecha}
                 dia={dia}
                 metas={metas}
+                zonaHoraria={zonaHorariaAlumno}
                 onVerFoto={(foto) => setFotoVisor({ foto, fecha: dia.fecha })}
               />
             ))}
@@ -801,22 +861,25 @@ export function PanelNutricionAlumno({
 function FilaDiaNutricional({
   dia,
   metas,
+  zonaHoraria,
   onVerFoto,
 }: {
   dia: DiaCalendarioNutricional;
   metas: MetasNutricionalesDetalleDTO | null;
+  zonaHoraria: string;
   onVerFoto: (foto: FotoComidaDetalleDTO) => void;
 }) {
   const etiqueta = etiquetaEstadoDia(dia.estado);
   const checkin = dia.checkin;
-  const tolerancia = checkin
-    ? evaluarToleranciaNutricionalLocal(
-        checkin.caloriasReportadas,
-        checkin.proteinaGramosReportada,
-        metas
-      )
-    : null;
+  // ADR-019: cada día se evalúa con las metas vigentes ese día (copia del reporte) o, en reportes
+  // anteriores a la copia, con las actuales, y se dice cuál.
+  const evaluacion = checkin ? evaluarToleranciaDia(checkin, metas) : null;
+  const tolerancia = evaluacion?.tolerancia ?? null;
   const clasificacion = tolerancia ? clasificarTolerancia(tolerancia) : null;
+  const notaBase = evaluacion ? notaBaseTolerancia(evaluacion.base) : null;
+  const registro = checkin
+    ? describirRegistroCheckin(checkin, checkin.zonaHoraria ?? zonaHoraria)
+    : null;
 
   return (
     <li className="p-3.5 rounded-2xl bg-secondary/30 border border-border/70 space-y-2">
@@ -843,7 +906,7 @@ function FilaDiaNutricional({
         <p className="text-xs text-muted-foreground">
           {dia.estado === EstadoDiaNutricional.NO_REPORTADO
             ? 'Sin reporte ese día. No penaliza la racha de entrenamiento; cuenta en el resumen semanal.'
-            : 'El día sigue en curso: el reporte se habilita de 18:00 a 23:59 (hora local del alumno).'}
+            : `El día sigue en curso: el reporte se habilita de ${HORARIO_VENTANA_CHECKIN} (${horaDeZona(zonaHoraria)}).`}
         </p>
       )}
 
@@ -853,9 +916,8 @@ function FilaDiaNutricional({
             <span>
               Calorías:{' '}
               <span className="font-mono font-bold text-foreground">
-                {checkin.caloriasReportadas ?? '—'}
-              </span>{' '}
-              / {metas?.caloriasObjetivo ?? '—'} kcal
+                {describirComparacionMeta(checkin.caloriasReportadas, evaluacion?.caloriasMeta ?? null, 'kcal') ?? '—'}
+              </span>
               {tolerancia?.desviacionCaloriasPct !== undefined && (
                 <span className="ml-1 font-mono">({formatearDesviacionPct(tolerancia.desviacionCaloriasPct)})</span>
               )}
@@ -863,15 +925,26 @@ function FilaDiaNutricional({
             <span>
               Proteína:{' '}
               <span className="font-mono font-bold text-foreground">
-                {checkin.proteinaGramosReportada ?? '—'}
-              </span>{' '}
-              / {metas?.proteinaGramosObjetivo ?? '—'} g
+                {describirComparacionMeta(checkin.proteinaGramosReportada, evaluacion?.proteinaMeta ?? null, 'g') ?? '—'}
+              </span>
               {tolerancia?.desviacionProteinasPct !== undefined && (
                 <span className="ml-1 font-mono">({formatearDesviacionPct(tolerancia.desviacionProteinasPct)})</span>
               )}
             </span>
             {checkin.aguaLitros && <span>Agua: {checkin.aguaLitros} L</span>}
           </div>
+
+          {(registro || notaBase) && (
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              {registro && (
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="h-3.5 w-3.5" />
+                  {registro}
+                </span>
+              )}
+              {notaBase && <span className="italic">{notaBase}</span>}
+            </div>
+          )}
 
           {checkin.fotosPlatos.length > 0 && (
             <ul className="flex flex-wrap gap-2">

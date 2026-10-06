@@ -470,11 +470,13 @@ describe('WU-E (RF-011 RN-05 / RF-012): establecerPasswordConToken', () => {
     tokenInvitacionExpira: new Date(Date.now() + 3600 * 1000),
   };
 
-  it('token válido de alumno activo: guarda la contraseña, consume el token y devuelve sesión', async () => {
+  it('token válido de alumno activo: guarda la contraseña, consume el token y devuelve sesión con la zona del perfil', async () => {
     const { db, store } = crearDbAuth(usuarioAlumnoBase, {
       id: ALUMNO_PERFIL_ID,
       usuarioId: ALUMNO_USUARIO_ID,
       entrenadorId: COACH_USUARIO_ID,
+      // ADR-019: la zona del perfil viaja en la sesión del canje (como en el login y `/auth/me`).
+      zonaHoraria: 'Europe/Madrid',
       deletedAtUtc: null,
     });
     const crypto = {
@@ -491,9 +493,31 @@ describe('WU-E (RF-011 RN-05 / RF-012): establecerPasswordConToken', () => {
     expect(resultado.accessToken).toBeTruthy();
     expect(resultado.refreshToken).toBeTruthy();
     expect(resultado.usuario.entrenadorId).toBe(COACH_USUARIO_ID);
+    expect(resultado.usuario.zonaHoraria).toBe('Europe/Madrid');
     expect(store.usuario.passwordHash).toBe('hash-nueva-clave-2026');
     expect(store.usuario.tokenInvitacionHash).toBeNull();
     expect(store.usuario.tokenInvitacionExpira).toBeNull();
+  });
+
+  it('token válido de un alumno sin zona en el perfil: la sesión recibe America/Caracas', async () => {
+    const { db } = crearDbAuth(usuarioAlumnoBase, {
+      id: ALUMNO_PERFIL_ID,
+      usuarioId: ALUMNO_USUARIO_ID,
+      entrenadorId: COACH_USUARIO_ID,
+      deletedAtUtc: null,
+    });
+    const crypto = {
+      hashSha256: (token: string) => `sha256-${token}`,
+      hashPassword: async (password: string) => `hash-${password}`,
+    } as any;
+    const service = new AuthService(db, crypto);
+
+    const resultado = await service.establecerPasswordConToken({
+      token: 'token-valido',
+      password: 'nueva-clave-2026',
+    });
+
+    expect(resultado.usuario.zonaHoraria).toBe('America/Caracas');
   });
 
   it('token expirado (sin coincidencia vigente): 404 y no escribe contraseña', async () => {

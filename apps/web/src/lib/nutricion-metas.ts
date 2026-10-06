@@ -21,6 +21,7 @@ import {
   type ToleranciaNutricionalDTO,
 } from '@guachafit/shared';
 import type { EtiquetaVisual, TonoSemaforo } from './adherencia';
+import { esInstanteValido, formatearHoraEnZona, partesEnZona } from './zona-horaria';
 
 // =============================================================================
 // ETIQUETAS HUMANAS
@@ -117,6 +118,76 @@ export function evaluarToleranciaNutricionalLocal(
     desviacionCaloriasPct,
     desviacionProteinasPct,
   };
+}
+
+/** Con qué metas se evaluó un día: las copiadas en el reporte o, en reportes antiguos, las actuales. */
+export type BaseTolerancia = 'metas_del_dia' | 'metas_actuales' | 'sin_metas';
+
+export interface ToleranciaDia {
+  tolerancia: ToleranciaNutricionalDTO;
+  base: BaseTolerancia;
+  caloriasMeta: number | null;
+  proteinaMeta: number | null;
+}
+
+/**
+ * Tolerancia ±10 % de un día del historial (ADR-019): con las metas vigentes ese día cuando el
+ * reporte trae su copia; si no (reportes anteriores a la copia), con las metas actuales.
+ */
+export function evaluarToleranciaDia(
+  checkin: Pick<
+    CheckinNutricionalDetalleDTO,
+    'caloriasReportadas' | 'proteinaGramosReportada' | 'metasVigentes'
+  >,
+  metasActuales: Pick<MetasNutricionalesDetalleDTO, 'caloriasObjetivo' | 'proteinaGramosObjetivo'> | null
+): ToleranciaDia {
+  const base: BaseTolerancia = checkin.metasVigentes
+    ? 'metas_del_dia'
+    : metasActuales
+      ? 'metas_actuales'
+      : 'sin_metas';
+  const metasUsadas = checkin.metasVigentes ?? metasActuales;
+  return {
+    tolerancia: evaluarToleranciaNutricionalLocal(
+      checkin.caloriasReportadas,
+      checkin.proteinaGramosReportada,
+      metasUsadas
+    ),
+    base,
+    caloriasMeta: metasUsadas?.caloriasObjetivo ?? null,
+    proteinaMeta: metasUsadas?.proteinaGramosObjetivo ?? null,
+  };
+}
+
+/** Aviso visible cuando un día se comparó con las metas de hoy en vez de las de ese día. */
+export function notaBaseTolerancia(base: BaseTolerancia): string | null {
+  return base === 'metas_actuales' ? 'Comparado con las metas actuales' : null;
+}
+
+/**
+ * Hora en que el alumno registró el reporte, en la zona de su perfil; si llegó al servidor un día
+ * local posterior al del reporte (sincronizado tarde), lo dice. Sin hora de registro: `null`.
+ */
+export function describirRegistroCheckin(
+  checkin: Pick<CheckinNutricionalDetalleDTO, 'fecha' | 'capturadoEnUtc' | 'createdAtUtc'>,
+  zona: string
+): string | null {
+  // Un instante ilegible no debe tumbar el historial: sin hora válida no se describe nada.
+  if (!esInstanteValido(checkin.capturadoEnUtc)) return null;
+  const registro = `Registrado a las ${formatearHoraEnZona(checkin.capturadoEnUtc, zona)}`;
+  if (!esInstanteValido(checkin.createdAtUtc)) return registro;
+  const fechaRecepcion = partesEnZona(new Date(checkin.createdAtUtc), zona).fecha;
+  return fechaRecepcion > checkin.fecha ? `${registro} · enviado al día siguiente` : registro;
+}
+
+/** "2100 de 2000 kcal"; sin meta, solo lo reportado; sin reportado, nada. */
+export function describirComparacionMeta(
+  reportado: number | null | undefined,
+  meta: number | null,
+  unidad: string
+): string | null {
+  if (reportado === null || reportado === undefined) return null;
+  return meta === null ? `${reportado} ${unidad}` : `${reportado} de ${meta} ${unidad}`;
 }
 
 export type NivelTolerancia = 'verde' | 'ambar' | 'rojo' | 'sin_evaluar';

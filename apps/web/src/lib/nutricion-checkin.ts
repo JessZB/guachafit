@@ -9,10 +9,9 @@
  * - Otros 4xx (400/422) son rechazos del negocio: se muestran tal cual, sin éxito ni cola.
  * - Errores de red (sin status) o 5xx conservan la cola offline legítima: el outbox reintenta.
  *
- * Además centraliza el contrato de envío: `fecha` LOCAL del dispositivo (nunca UTC, que a
- * partir de las 20:00 en Caracas adelantaría el día) + `timezoneCliente` (RN-05/ADR-002), y la
- * ventana horaria RN-02 evaluada en la misma zona para no encolar un reporte que la API va a
- * rechazar.
+ * Además centraliza el contrato de envío: `fecha` LOCAL en la zona horaria del perfil (nunca
+ * UTC, que a partir de las 20:00 en Caracas adelantaría el día; ADR-019) y la ventana horaria RN-02
+ * evaluada en esa misma zona para no encolar un reporte que la API va a rechazar.
  */
 import {
   CODIGO_CHECKIN_FUERA_DE_PLAZO,
@@ -35,6 +34,12 @@ import {
   type OutboxMutation,
 } from './offline-db';
 import { normalizarEntradaDecimal } from './weight-unit';
+import {
+  esZonaHorariaValida,
+  horaDeZona,
+  partesEnZona,
+  ZONA_HORARIA_POR_DEFECTO,
+} from './zona-horaria';
 
 export const MENSAJE_COLA_SIN_CONEXION =
   'Sin conexión: tu reporte quedó guardado en el dispositivo y se enviará automáticamente al recuperar la señal.';
@@ -172,26 +177,46 @@ export function decidirAccionErrorCheckinNutricional(
 export interface ResultadoVentanaCheckinLocal {
   /** `true` si el día local en curso ya entró en la ventana 18:00–23:59. */
   permitido: boolean;
-  /** Fecha local YYYY-MM-DD del dispositivo, la misma que viaja como `fecha`. */
+  /** Fecha local YYYY-MM-DD en la zona evaluada, la misma que viaja como `fecha`. */
   fechaLocalHoy: string;
-  /** Hora local 0–23 del dispositivo. */
+  /** Hora local 0–23 en la zona evaluada. */
   horaLocal: number;
   motivo?: 'ANTES_DE_VENTANA';
 }
 
 /**
- * Evalúa la ventana RN-02 con el reloj/zona del DISPOSITIVO, que es la misma zona que viaja en
- * `timezoneCliente`. Evita encolar o enviar un reporte que el servidor rechazará con 400.
+ * Evalúa la ventana RN-02 con la zona del PERFIL del alumno (ADR-019), la misma con la que decide
+ * el servidor. Evita encolar o enviar un reporte que el servidor rechazará con 400. Sin zona válida
+ * usa la del dispositivo (compatibilidad); la pantalla siempre pasa una zona resuelta con
+ * `zonaPerfilEfectiva` para coincidir con el servidor.
  */
 export function evaluarVentanaCheckinLocal(
-  ahora: Date = new Date()
+  ahora: Date = new Date(),
+  zonaHoraria?: string | null
 ): ResultadoVentanaCheckinLocal {
-  const fechaLocalHoy = fechaCalendarioLocal(ahora);
-  const horaLocal = ahora.getHours();
+  const enZona = esZonaHorariaValida(zonaHoraria) ? partesEnZona(ahora, zonaHoraria) : null;
+  const fechaLocalHoy = enZona ? enZona.fecha : fechaCalendarioLocal(ahora);
+  const horaLocal = enZona ? enZona.hora : ahora.getHours();
   if (horaLocal < HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL) {
     return { permitido: false, fechaLocalHoy, horaLocal, motivo: 'ANTES_DE_VENTANA' };
   }
   return { permitido: true, fechaLocalHoy, horaLocal };
+}
+
+/** Ventana del reporte para mostrar en textos: "18:00 a 23:59". */
+export const HORARIO_VENTANA_CHECKIN = `${HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL}:00 a 23:59`;
+
+/**
+ * Zona con la que decide el servidor: la del perfil si es válida; si falta o no es válida, la zona
+ * por defecto del producto (la misma que aplica el API).
+ */
+export function zonaPerfilEfectiva(zonaHoraria?: string | null): string {
+  return esZonaHorariaValida(zonaHoraria) ? zonaHoraria : ZONA_HORARIA_POR_DEFECTO;
+}
+
+/** Horario del reporte explicado con la zona del perfil, p. ej. "(hora de Caracas)". */
+export function textoHorarioCheckin(zonaHoraria?: string | null): string {
+  return `Puedes enviar tu reporte de ${HORARIO_VENTANA_CHECKIN} (${horaDeZona(zonaPerfilEfectiva(zonaHoraria))}).`;
 }
 
 // =============================================================================

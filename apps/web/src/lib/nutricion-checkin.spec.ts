@@ -6,6 +6,7 @@ import {
   decidirAccionErrorCheckinNutricional,
   esRechazoVentanaCheckin,
   evaluarVentanaCheckinLocal,
+  HORARIO_VENTANA_CHECKIN,
   MENSAJE_ANTES_DE_VENTANA,
   MENSAJE_COLA_SERVIDOR,
   MENSAJE_COLA_SIN_CONEXION,
@@ -28,6 +29,8 @@ import {
   MENSAJE_REPORTE_NO_ENVIADO,
   MENSAJE_REPORTE_CON_OTROS_DATOS,
   coincideReporteServidorConPendiente,
+  textoHorarioCheckin,
+  zonaPerfilEfectiva,
 } from './nutricion-checkin';
 import { MENSAJE_RANGO_FOTOS_REPORTE, type OutboxMutation } from './offline-db';
 import { obtenerTimezoneDispositivo } from './date-format';
@@ -746,5 +749,90 @@ describe('LOTE API-N2: hora de captura y plazo del día siguiente', () => {
 
   it('el plazo vencido no se confunde con el rechazo de ventana', () => {
     expect(esRechazoVentanaCheckin(MENSAJE_CHECKIN_FUERA_DE_PLAZO, CODIGO_CHECKIN_FUERA_DE_PLAZO)).toBe(false);
+  });
+});
+
+describe('LOTE F3: ventana horaria con la zona del perfil (RF-002 RN-02 / ADR-019)', () => {
+  it('con America/Caracas la ventana se evalúa con esa zona y respeta 18:00–23:59', () => {
+    const antes = evaluarVentanaCheckinLocal(new Date('2026-10-05T21:59:59Z'), 'America/Caracas');
+    expect(antes.permitido).toBe(false);
+    expect(antes.motivo).toBe('ANTES_DE_VENTANA');
+    expect(antes.fechaLocalHoy).toBe('2026-10-05');
+    expect(antes.horaLocal).toBe(17);
+
+    const borde = evaluarVentanaCheckinLocal(new Date('2026-10-05T22:00:00Z'), 'America/Caracas');
+    expect(borde.permitido).toBe(true);
+    expect(borde.motivo).toBeUndefined();
+    expect(borde.fechaLocalHoy).toBe('2026-10-05');
+    expect(borde.horaLocal).toBe(18);
+
+    const ultima = evaluarVentanaCheckinLocal(new Date('2026-10-06T03:59:00Z'), 'America/Caracas');
+    expect(ultima.permitido).toBe(true);
+    expect(ultima.fechaLocalHoy).toBe('2026-10-05');
+    expect(ultima.horaLocal).toBe(23);
+  });
+
+  it('a las 18:00 de Madrid ya se puede reportar aunque el dispositivo vaya en otra hora', () => {
+    const madrid = evaluarVentanaCheckinLocal(new Date('2026-10-05T16:00:00Z'), 'Europe/Madrid');
+    expect(madrid.permitido).toBe(true);
+    expect(madrid.fechaLocalHoy).toBe('2026-10-05');
+    expect(madrid.horaLocal).toBe(18);
+  });
+});
+
+describe('LOTE F3: textoHorarioCheckin (la ventana explicada con la zona del perfil)', () => {
+  it('nombra la hora local de la zona del perfil', () => {
+    expect(textoHorarioCheckin('America/Caracas')).toBe(
+      'Puedes enviar tu reporte de 18:00 a 23:59 (hora de Caracas).'
+    );
+    expect(textoHorarioCheckin('Europe/Madrid')).toBe(
+      'Puedes enviar tu reporte de 18:00 a 23:59 (hora de Madrid).'
+    );
+  });
+
+  it('sin zona (o null) usa Caracas por defecto', () => {
+    expect(textoHorarioCheckin()).toBe(
+      'Puedes enviar tu reporte de 18:00 a 23:59 (hora de Caracas).'
+    );
+    expect(textoHorarioCheckin(null)).toBe(
+      'Puedes enviar tu reporte de 18:00 a 23:59 (hora de Caracas).'
+    );
+  });
+
+  it('no filtra jerga: ni "teléfono", ni "UTC", ni el identificador IANA crudo', () => {
+    for (const texto of [
+      textoHorarioCheckin('America/Caracas'),
+      textoHorarioCheckin('Europe/Madrid'),
+      textoHorarioCheckin(null),
+    ]) {
+      expect(texto).not.toMatch(/teléfono/i);
+      expect(texto).not.toMatch(/UTC/);
+      expect(texto).not.toMatch(/America\/|Europe\//);
+    }
+  });
+});
+
+describe('LOTE F3: zonaPerfilEfectiva y HORARIO_VENTANA_CHECKIN (una sola zona de respaldo)', () => {
+  it('con una zona IANA válida devuelve la del perfil, no la del dispositivo', () => {
+    expect(zonaPerfilEfectiva('Europe/Madrid')).toBe('Europe/Madrid');
+    expect(zonaPerfilEfectiva('America/Bogota')).toBe('America/Bogota');
+  });
+
+  it('sin zona, con null o con una zona inválida cae a America/Caracas, como el servidor', () => {
+    expect(zonaPerfilEfectiva(null)).toBe('America/Caracas');
+    expect(zonaPerfilEfectiva(undefined)).toBe('America/Caracas');
+    expect(zonaPerfilEfectiva('Foo/Bar')).toBe('America/Caracas');
+    // Con espacios alrededor tampoco es válida: el respaldo nunca es la del dispositivo.
+    expect(zonaPerfilEfectiva(' Europe/Madrid')).toBe('America/Caracas');
+  });
+
+  it('la ventana visible acordada es "18:00 a 23:59"', () => {
+    expect(HORARIO_VENTANA_CHECKIN).toBe('18:00 a 23:59');
+  });
+
+  it('textoHorarioCheckin con una zona inválida nombra Caracas (coincide con la evaluación)', () => {
+    expect(textoHorarioCheckin('Foo/Bar')).toBe(
+      'Puedes enviar tu reporte de 18:00 a 23:59 (hora de Caracas).'
+    );
   });
 });

@@ -71,6 +71,8 @@ describe('WU RF-003a: modalidad del alumno en el DTO de sesión', () => {
       usuarioId: ALUMNO_ID,
       entrenadorId: COACH_ID,
       modalidad: Modalidad.REMOTO,
+      // ADR-019: la zona del perfil viaja en la sesión (login y canje), como en `/auth/me`.
+      zonaHoraria: 'Europe/Madrid',
       deletedAtUtc: null,
     };
 
@@ -86,7 +88,7 @@ describe('WU RF-003a: modalidad del alumno en el DTO de sesión', () => {
     authController = new AuthController(authService);
   });
 
-  it('login del alumno incluye `modalidad` y `entrenadorId` en `usuario`', async () => {
+  it('login del alumno incluye `modalidad`, `entrenadorId` y la `zonaHoraria` de su perfil', async () => {
     const resultado = await authService.login({
       email: 'alumno@guachafit.com',
       password: 'secreto-123',
@@ -99,7 +101,35 @@ describe('WU RF-003a: modalidad del alumno en el DTO de sesión', () => {
       rol: Rol.ALUMNO,
       entrenadorId: COACH_ID,
       modalidad: Modalidad.REMOTO,
+      zonaHoraria: 'Europe/Madrid',
     });
+  });
+
+  it('login del alumno sin zona en su perfil recibe `America/Caracas` (el respaldo del servidor)', async () => {
+    for (const zonaDelPerfil of [null, undefined]) {
+      filaPerfil = {
+        usuarioId: ALUMNO_ID,
+        entrenadorId: COACH_ID,
+        modalidad: Modalidad.REMOTO,
+        zonaHoraria: zonaDelPerfil,
+        deletedAtUtc: null,
+      };
+      respuestasSelect = [
+        [filaUsuario],
+        [filaPerfil],
+        [{ activo: true, estadoLicencia: EstadoLicencia.ACTIVA }],
+      ];
+      // Cada iteración necesita su propio db: el mock consume `respuestasSelect` por índice
+      // y no se reinicia entre logins dentro del mismo test.
+      const servicio = new AuthService(crearDbAuth(), mockCryptoService as any);
+
+      const resultado = await servicio.login({
+        email: 'alumno@guachafit.com',
+        password: 'secreto-123',
+      });
+
+      expect(resultado.usuario.zonaHoraria).toBe('America/Caracas');
+    }
   });
 
   it('login del entrenador expone `modalidad: null` (no tiene perfil de alumno)', async () => {
@@ -114,6 +144,18 @@ describe('WU RF-003a: modalidad del alumno en el DTO de sesión', () => {
 
     expect(resultado.usuario.entrenadorId).toBe(COACH_ID);
     expect(resultado.usuario.modalidad).toBeNull();
+  });
+
+  it('login del entrenador devuelve `zonaHoraria: null` (no tiene perfil de alumno)', async () => {
+    filaUsuario = { ...filaUsuario, id: COACH_ID, rol: Rol.ENTRENADOR, email: 'coach@guachafit.com' };
+    respuestasSelect = [[filaUsuario], [{ estadoLicencia: EstadoLicencia.ACTIVA }]];
+
+    const resultado = await authService.login({
+      email: 'coach@guachafit.com',
+      password: 'secreto-123',
+    });
+
+    expect(resultado.usuario.zonaHoraria).toBeNull();
   });
 
   it('`/auth/me` responde el envelope `{ usuario }` con la modalidad del perfil actual', async () => {
