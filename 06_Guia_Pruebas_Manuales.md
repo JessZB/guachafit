@@ -14,7 +14,7 @@ tags:
 
 > **Para qué sirve:** probar a mano todo lo construido sin perder de vista ningún cambio. Cada punto dice **qué hacer** y **qué deberías ver**. Si algo no coincide, anótalo con el formato del final (y captura de pantalla).
 >
-> **Estado del código:** con pruebas automáticas en verde (**960** de la web + **1247** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
+> **Estado del código:** con pruebas automáticas en verde (**960** de la web + **1324** del API (1 omitida), más 1 E2E de bóveda que corre solo con MinIO arriba). Lo de abajo es lo que las pruebas automáticas **no pueden** ver: la vivencia real.
 
 ---
 
@@ -202,6 +202,18 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 - [ ] **Pedir dos veces en menos de 15 minutos:** pide el enlace, y antes de 15 minutos pídelo otra vez → la pantalla es la misma, pero **no llega un segundo correo** y el **primer enlace sigue sirviendo**. Pasados 15 minutos sí llega uno nuevo y el anterior deja de servir.
 - [ ] **Límite de pedidos:** pide el enlace para el mismo correo más de 3 veces seguidas → al 4.º aparece **"Hiciste demasiados intentos. Espera un momento y vuelve a intentarlo."** (3 cada 15 min por red + correo y 3 por hora para el mismo correo desde cualquier red).
 - [ ] **La otra sesión deja de renovarse:** abre sesión con la misma cuenta en otro navegador (B); en el navegador A restablece la contraseña. En B la app sigue funcionando **hasta 15 minutos** (límite conocido: el acceso ya emitido no se corta); cuando necesita renovar la sesión, te lleva a `/login` con **"Tu sesión venció. Inicia sesión de nuevo."**. Para no esperar: en B cambia `guachafit_token` en Local Storage por un texto cualquiera y navega → pide login.
+
+**"Mi perfil" vía API (RF-018, 2026-10-06, `68d9287`)** — la pantalla web llega en el siguiente lote; mientras tanto, con el token de la sesión (Swagger, Bruno o `curl`):
+
+- [ ] **Ver mi perfil:** `GET /usuarios/me/perfil` → tu correo y tu ficha (el alumno ve documento y fecha de nacimiento); nunca contraseñas ni hashes.
+- [ ] **Editar datos:** `PATCH /usuarios/me/perfil` con `{"telefono":"+584141112233"}` → 200 y el teléfono cambia (el entrenador lo ve en la ficha del alumno). Con `{"numeroDocumento":"1"}` → 400; un alumno con `{"nombreComercial":"x"}` → *"Ese dato no se puede cambiar desde tu perfil."*.
+- [ ] **Cambiar la contraseña:** `POST /usuarios/me/password` con la actual mal → *"Tu contraseña actual no es correcta."*; con la nueva igual a la actual → *"La contraseña nueva debe ser distinta de la actual."*; bien → *"Tu contraseña se cambió."*, tokens nuevos y llega el correo *"Tu contraseña de GUACHAFIT cambió"*. Otra sesión abierta deja de renovarse.
+- [ ] **Cambiar el correo:** `POST /usuarios/me/correo` con un correo libre y la contraseña actual → llega *"Confirma tu nuevo correo de GUACHAFIT"* al correo NUEVO (sin Brevo, en desarrollo, la respuesta trae `enlaceConfirmacion`). Antes de confirmar sigues entrando con el correo anterior. `POST /auth/confirmar-cambio-correo` con el `token` del enlace → *"Tu correo de acceso ahora es …"* y al correo ANTERIOR llega *"Tu correo de acceso a GUACHAFIT cambió"* con el nuevo enmascarado. El mismo enlace otra vez → *"El enlace no es válido o venció. Pide uno nuevo desde Mi perfil."*.
+- [ ] **Correo ocupado o igual:** con el correo de otra cuenta → *"Ese correo ya está en uso."*; con el tuyo → *"Ese ya es tu correo de acceso."*.
+- [ ] **Cambio pendiente anulado por la contraseña:** pide un cambio de correo y, antes de confirmarlo, cambia la contraseña → el enlace ya no sirve.
+- [ ] **Cancelar:** `DELETE /usuarios/me/correo-pendiente` → *"Cancelaste el cambio de correo."* y el enlace deja de servir.
+- [ ] **Límite:** 6 intentos seguidos de cambio de contraseña (o de correo) en 15 minutos → el 6.º responde *"Hiciste demasiados intentos. Espera un momento y vuelve a intentarlo."*.
+- [ ] **Migración `0017`:** con Docker arriba, `pnpm --filter @guachafit/database db:migrate` y comprueba en `psql` las columnas `correo_pendiente`, `token_cambio_correo_hash` y `token_cambio_correo_expira` de `usuarios` (pendiente de verificar).
 
 ## 8. PWA, instalación y actualizaciones
 

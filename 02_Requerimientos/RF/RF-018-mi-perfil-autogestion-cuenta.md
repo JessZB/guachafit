@@ -3,7 +3,8 @@ id: RF-018
 modulo: Cuenta
 prioridad: alta
 estado: aprobado
-estado_implementacion: pendiente
+estado_implementacion: parcial
+fecha_verificacion: 2026-10-06
 problema_origen: "[[PROB-003-acceso-onboarding-dashboard-central]]"
 fecha_creacion: 2026-10-06
 version: 1.0
@@ -138,5 +139,21 @@ Then ve "El enlace no es válido o venció. Pide uno nuevo desde Mi perfil."
 ---
 
 ## 7. Estado real de implementación
-- Pendiente. Ya existen y se reutilizarán: `PATCH /alumnos/me/zona-horaria` ([[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]]), `PATCH /usuarios/me/preferencias` ([[RF-015-matriz-preferencias-usuario-canales]]), los correos de invitación y recuperación con Brevo ([[ADR-018-proveedor-correo-transaccional-brevo]]) y `passwordCambiadaEn` (cierre de sesiones al cambiar la contraseña).
-- Requiere: endpoints de perfil propio (lectura y edición de datos, contraseña, solicitud/confirmación/cancelación de cambio de correo) y una migración aditiva en `usuarios` para el correo pendiente y su token (hash y vencimiento).
+
+### API (2026-10-06)
+- Implementado (2026-10-06, unidad `68d9287`):
+  - **Datos:** `GET /usuarios/me/perfil` devuelve `MiPerfilDTO` (correo, rol, correo pendiente y su vencimiento, ficha del alumno o del entrenador; nunca contraseñas ni hashes). `PATCH /usuarios/me/perfil` con contrato **estricto** (`nombres`, `apellidos`, `telefono`, `nombreComercial`): el alumno escribe con su contexto propio (RLS self de `perfiles_alumno`); `nombreComercial` en un alumno o cualquier campo en el superadmin → 400 *"Ese dato no se puede cambiar desde tu perfil."*; ficha ausente → 404.
+  - **Contraseña:** `POST /usuarios/me/password` exige la actual y una nueva distinta (misma política que la recuperación); marca `passwordCambiadaEn`, devuelve tokens nuevos para la sesión actual y **anula** el enlace de recuperación y cualquier **cambio de correo pendiente** (quien rota la contraseña puede estar echando a un intruso que pidió el cambio a su buzón). Aviso de seguridad por correo.
+  - **Correo:** `POST /usuarios/me/correo` exige la actual; correo ya en uso → 409 *"Ese correo ya está en uso."*; igual al actual → 400. Guarda el correo pendiente con el **hash SHA-256** de un enlace de un solo uso (24 h) y lo envía al correo NUEVO (`/confirmar-correo?token=…`). El enlace copiable solo se devuelve **fuera de producción** y si el correo no salió. `DELETE /usuarios/me/correo-pendiente` lo cancela (idempotente). `POST /auth/confirmar-cambio-correo` (público) aplica el cambio con un UPDATE condicionado al hash, exige la misma regla de acceso que los demás enlaces (cuenta deshabilitada, alumno archivado o coach sin licencia → enlace inválido), traduce una carrera por el índice único (23505) a 409, anula el enlace de recuperación del buzón anterior y avisa al correo ANTERIOR con el nuevo enmascarado.
+  - **Protección:** 5 intentos por usuario cada 15 minutos en contraseña y correo (`LimitarIntentosCuenta`); la confirmación pública usa el límite de `restablecer-password`. Los avisos de seguridad sin enlace llevan un identificador propio en la cola (no se descartan por repetidos) y se marcan como críticos.
+  - **Migración `0017_usuarios_cambio_correo.sql`:** `usuarios.correo_pendiente`, `token_cambio_correo_hash` y `token_cambio_correo_expira` (aditivas y opcionales; `usuarios` sin RLS y GRANT por tabla).
+- **Límites (honestos):**
+  - La migración `0017` **no se aplicó ni verificó** contra la BD de desarrollo (Docker apagado durante la validación); solo por lectura del SQL, el journal y el snapshot.
+  - Cancelar un cambio de correo no pide la contraseña (solo reduce el riesgo).
+  - Con Redis caído un aviso de seguridad se pierde (queda una advertencia en el log); el cambio ya se aplicó.
+  - Los límites de intentos viven en memoria: con varias instancias del API cada una cuenta por separado.
+  - Las sesiones de otros dispositivos siguen hasta 15 minutos tras cambiar la contraseña (el token de acceso emitido no se corta; deja de renovarse).
+- Evidencia: `apps/api/test/bdd/rf018-mi-perfil-datos.spec.ts`, `apps/api/test/bdd/rf018-mi-perfil-seguridad.spec.ts`, `apps/api/test/bdd/api4-correo-real.spec.ts` y `arranque-migraciones-pendientes.spec.ts`; API **1324** aprobados (1 omitida), web **960**; typecheck y build de API y web en verde. Revisado con los 4 enfoques (riesgo, fiabilidad, resiliencia, legibilidad) y validado tras las correcciones.
+
+### Pendiente
+- **Web:** pantalla "Mi perfil" con pestañas (Datos, Seguridad, Notificaciones, Zona horaria) para los tres roles, la ruta pública `/confirmar-correo`, la redirección de "Mis notificaciones" y el aviso previo de RN-03. El entrenador ya tiene sus notificaciones en **Ajustes → Notificaciones** (`/coach/ajustes?tab=notificaciones`); la matriz de notificaciones usa `GET/PUT /notificaciones/preferencias` ([[RF-015-matriz-preferencias-usuario-canales]]).

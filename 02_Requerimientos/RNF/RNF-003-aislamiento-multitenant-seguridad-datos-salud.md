@@ -4,7 +4,7 @@ modulo: Seguridad
 categoria: seguridad-privacidad # seguridad-privacidad | rendimiento | arquitectura
 prioridad: alta
 estado: implementado
-fecha_verificacion: 2026-10-05
+fecha_verificacion: 2026-10-06
 requisito_origen: "[[RF-010-rbac-jerarquia-aislamiento-tenancy]]"
 metrica_objetivo: "0% fugas entre tenants (RLS estricto) / Dashboard p95 < 200ms"
 fecha_creacion: 2026-09-06
@@ -95,6 +95,7 @@ Establece los requerimientos de seguridad, privacidad y rendimiento asociados a 
   - Evidencia: API 1087 → **1143** tests aprobados (1 omitida), `tsc` y `nest build` en verde; web **797**.
 - **Implementado (2026-10-05, unidad `24609ba`) — pertenencia de las fotos de comidas y autorización de nutrición:** el API solo acepta en el reporte nutricional claves de fotos del alumno autenticado (prefijo `comidas/{alumnoId}/`, estructura válida, máximo 255 caracteres); una clave ajena responde 400 y nunca se guarda ni se firma. Nuevos tests de autorización: el superadmin recibe 403 en metas, `checkin/hoy` y `checkin-diario`, y el alumno A no lista los reportes del alumno B. Límite honesto: las filas antiguas con claves ajenas guardadas antes del cambio no se sanean. Detalle en [[RF-002-nutricion-agil-reporte-rapido]]. Evidencia: API **1192** aprobados (1 omitida), web **904**.
 - **Implementado (2026-10-05, unidad `0555dfe`) — autorización del cambio de zona horaria del alumno:** la zona del perfil (`perfiles_alumno.zona_horaria`, migración `0016`) decide la ventana del reporte nutricional, así que solo la pueden cambiar **el propio alumno** (`PATCH /alumnos/me/zona-horaria`: el perfil sale del token, nunca del cuerpo, y la escritura corre con el contexto propio bajo la política RLS `rls_perfiles_alumno_self_update`, solo sobre esa columna) o **su entrenador** (`PATCH /alumnos/:id`, con la tenancy de la ficha); otro entrenador recibe **403** y no se escribe nada, y los demás roles reciben 403 en la ruta propia. Sin cambios de RLS ni de permisos: las políticas son por fila y los GRANT de `guachafit_app` por tabla. Detalle en [[RF-002-nutricion-agil-reporte-rapido]] y [[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]]. Evidencia: `apps/api/test/bdd/lote-api-n2-zona-horaria.spec.ts`; API **1244** aprobados (1 omitida), web **919**; migración `0016` verificada en la BD de desarrollo (privilegios del rol `guachafit_app` y self-update por RLS).
+- **Implementado (2026-10-06, unidad `68d9287`) — "Mi perfil" ([[RF-018-mi-perfil-autogestion-cuenta]]):** cada usuario solo lee y edita su propio perfil (el id sale del token; contrato estricto que no admite documento, fecha de nacimiento, correo ni ids); el alumno escribe con su contexto propio bajo la RLS self de `perfiles_alumno`. Cambiar contraseña o correo exige la contraseña actual; el enlace de confirmación del correo nuevo se guarda solo como hash, es de un solo uso y nunca se devuelve en producción; cambiar la contraseña anula los enlaces de recuperación y de cambio de correo pendientes. Sin cambios de RLS ni de permisos (`usuarios` no tiene RLS; GRANT por tabla). Evidencia: `apps/api/test/bdd/rf018-mi-perfil-datos.spec.ts` y `rf018-mi-perfil-seguridad.spec.ts`; API **1324** aprobados (1 omitida).
 
 ---
 
