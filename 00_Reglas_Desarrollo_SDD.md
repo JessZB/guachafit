@@ -123,7 +123,7 @@ GUACHAFIT/
 ├── 00_Reglas_Desarrollo_SDD.md   # Este documento de gobernanza
 ├── 01_Problemas/                 # Problemáticas de negocio (PROB-001..004)
 ├── 02_Requerimientos/            # Requerimientos funcionales y no funcionales
-│   ├── RF/                       # RF-001 al RF-017 (Gherkin)
+│   ├── RF/                       # RF-001 al RF-018 (Gherkin)
 │   └── RNF/                      # RNF-001 al RNF-004 (Métricas y SLOs)
 ├── 03_Dominio/                   # Entidades y Agregados DDD
 ├── 04_Decisiones/                # ADR-001 al ADR-019
@@ -144,7 +144,7 @@ GUACHAFIT/
 ---
 
 ## 🔗 5. Trazabilidad
-- Ecosistema de Requerimientos: [[RF-001-checklist-entrenamiento-diario]] al [[RF-017-banco-plantillas-rutinas-entrenamiento]].
+- Ecosistema de Requerimientos: [[RF-001-checklist-entrenamiento-diario]] al [[RF-018-mi-perfil-autogestion-cuenta]].
 - Atributos de Calidad: [[RNF-001-almacenamiento-seguridad-fotos-progreso]] al [[RNF-004-resiliencia-notificaciones-idempotencia-fallbacks]].
 - Decisiones Arquitecturales: [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]] (incluye [[ADR-018-proveedor-correo-transaccional-brevo]], [[ADR-017-despliegue-vps-coolify]], [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]], [[ADR-012-modo-demo-explicito-datos-sinteticos]] y [[ADR-013-paginacion-server-side-stack-listas]]).
 

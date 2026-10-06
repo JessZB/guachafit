@@ -1,0 +1,142 @@
+---
+id: RF-018
+modulo: Cuenta
+prioridad: alta
+estado: aprobado
+estado_implementacion: pendiente
+problema_origen: "[[PROB-003-acceso-onboarding-dashboard-central]]"
+fecha_creacion: 2026-10-06
+version: 1.0
+tags:
+  - requerimiento
+  - rf
+  - sdd
+  - cuenta
+  - perfil
+  - seguridad
+  - ux
+---
+
+# RF-018: "Mi perfil" — Autogestión de la Cuenta para Todos los Roles
+
+## 1. Contexto y Justificación
+Hoy cada usuario depende de otra persona para corregir sus propios datos: el alumno no puede cambiar su teléfono ni su contraseña sin pasar por la recuperación, nadie puede cambiar su correo de acceso, y los ajustes personales están dispersos (las notificaciones en "Mis notificaciones" y la zona horaria del reporte de nutrición en la misma pantalla, solo para el alumno).
+
+- **Objetivo:** una sección única **"Mi perfil"**, disponible para el alumno, el entrenador y el administrador, donde cada usuario consulta y edita sus datos básicos, su correo de acceso, su contraseña, sus notificaciones y (el alumno) su zona horaria.
+- **Valor aportado:** menos fricción y menos peticiones al entrenador para datos triviales, correo de acceso verificado y ajustes personales en un solo lugar.
+- **Trazabilidad:** amplía el acceso autogestionado de [[PROB-003-acceso-onboarding-dashboard-central]] y reubica la matriz de [[RF-015-matriz-preferencias-usuario-canales]] y la zona horaria de [[RF-002-nutricion-agil-reporte-rapido]] / [[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]].
+
+---
+
+## 2. Actores Involucrados
+- **Alumno:** edita nombres, apellidos y teléfono de WhatsApp; ve su documento de identidad y fecha de nacimiento; cambia correo, contraseña, notificaciones y zona horaria.
+- **Entrenador:** edita nombres, apellidos, nombre comercial y teléfono de contacto; cambia correo, contraseña y notificaciones.
+- **Administrador (superadmin):** cambia correo y contraseña (no tiene ficha con nombre ni teléfono).
+- **Sistema:** valida, envía los correos de confirmación y de aviso (Brevo, [[ADR-018-proveedor-correo-transaccional-brevo]]) y protege la sesión.
+
+---
+
+## 3. Precondiciones
+1. El usuario está autenticado.
+2. Para cambiar el correo o la contraseña, conoce su contraseña actual.
+3. Para confirmar un cambio de correo, tiene acceso al buzón del correo nuevo.
+
+---
+
+## 4. Reglas de Negocio (Business Rules)
+
+### A. Datos editables por rol (decisión del dueño, 2026-10-06)
+
+| Dato | Alumno | Entrenador | Administrador |
+| :--- | :---: | :---: | :---: |
+| Nombres y apellidos | Edita | Edita | — |
+| Teléfono (WhatsApp del alumno / contacto del entrenador) | Edita | Edita | — |
+| Nombre comercial | — | Edita | — |
+| Documento de identidad | **Solo lectura** | — | — |
+| Fecha de nacimiento | **Solo lectura** | — | — |
+| Correo de acceso | Edita con confirmación (§B) | Edita con confirmación (§B) | Edita con confirmación (§B) |
+| Contraseña | Edita (§C) | Edita (§C) | Edita (§C) |
+| Notificaciones | Edita ([[RF-015-matriz-preferencias-usuario-canales]]) | Edita (RF-015) | — |
+| Zona horaria | Edita ([[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]]) | — | — |
+
+- **RN-01 (Identidad del alumno):** el documento de identidad y la fecha de nacimiento se muestran pero no se editan desde "Mi perfil"; la pantalla indica *"Si necesitas corregirlos, pídeselo a tu entrenador."* El entrenador los sigue editando desde la ficha del alumno, como hoy.
+- **RN-02 (Validación):** nombres y apellidos de 2 a 100 caracteres; nombre comercial hasta 150; teléfono de 8 a 30 caracteres. Mismas reglas que los esquemas compartidos vigentes; un campo no permitido para el rol se rechaza con 400 y mensaje claro.
+
+### B. Cambio de correo de acceso (decisión del dueño, 2026-10-06)
+- **RN-03 (Aviso previo):** antes de enviar, la pantalla avisa: *"Te enviaremos un correo de confirmación a la dirección nueva para comprobar que existe. Hasta que lo confirmes, seguirás entrando con tu correo actual."*
+- **RN-04 (Solicitud):** el usuario escribe el correo nuevo y su **contraseña actual**. Si la contraseña no coincide → 400 claro, sin enviar nada. Si el correo ya pertenece a otra cuenta → 409 *"Ese correo ya está en uso."* (el usuario está autenticado y probó su contraseña).
+- **RN-05 (Confirmación):** se envía un **enlace de un solo uso** al correo NUEVO, válido **24 horas**. El cambio se aplica solo al abrir el enlace. Una solicitud nueva reemplaza a la anterior. Mientras tanto, la pantalla muestra *"Pendiente de confirmar: <correo nuevo>"* con la opción de **reenviar** o **cancelar**.
+- **RN-06 (Aviso al correo anterior):** al confirmarse, el correo ANTERIOR recibe *"Tu correo de acceso a GUACHAFIT cambió a <correo nuevo enmascarado>. Si no fuiste tú, contacta a tu entrenador."* Es una notificación de seguridad: obligatoria por correo ([[RF-015-matriz-preferencias-usuario-canales]] RN-01).
+- **RN-07 (Sin proveedor de correo):** sin Brevo configurado (desarrollo), el API devuelve el enlace en la respuesta para poder probarlo, igual que la invitación y la recuperación de contraseña.
+
+### C. Cambio de contraseña
+- **RN-08:** exige la contraseña actual y una nueva que cumpla la misma política que la recuperación de contraseña. Al cambiarla se marca `passwordCambiadaEn`: las demás sesiones se cierran al vencer su token de acceso (el refresh las rechaza), y la sesión actual recibe tokens nuevos para no salir. Se envía un aviso de seguridad por correo: *"Tu contraseña de GUACHAFIT cambió."*
+
+### D. Organización de la pantalla
+- **RN-09:** "Mi perfil" se abre desde el menú de cada rol y se organiza en pestañas: **Datos**, **Seguridad** (correo y contraseña), **Notificaciones** (alumno y entrenador) y **Zona horaria** (alumno). La ruta actual de "Mis notificaciones" redirige a la pestaña Notificaciones para no romper enlaces (p. ej. "Configurar" de la campana).
+- **RN-10 (Protección):** los endpoints de contraseña y de correo tienen límite de intentos (throttler) y nunca muestran texto técnico.
+
+---
+
+## 5. Criterios de Aceptación (Given-When-Then / Gherkin)
+
+### Escenario 1: Alumno corrige su teléfono
+```gherkin
+Given un alumno autenticado en "Mi perfil" > Datos
+When cambia su teléfono de WhatsApp a un número válido y guarda
+Then el perfil queda con el teléfono nuevo
+  And su entrenador lo ve en la ficha del alumno
+  And el documento de identidad y la fecha de nacimiento siguen visibles y sin poder editarse
+```
+
+### Escenario 2: Cambio de correo con confirmación
+```gherkin
+Given un entrenador autenticado en "Mi perfil" > Seguridad
+When escribe un correo nuevo libre y su contraseña actual correcta
+Then ve el aviso de que se enviará un correo de confirmación al correo nuevo
+  And el correo nuevo recibe un enlace válido 24 horas
+  And sigue iniciando sesión con su correo actual hasta confirmar
+When abre el enlace
+Then su correo de acceso pasa a ser el nuevo
+  And el correo anterior recibe un aviso de seguridad
+```
+
+### Escenario 3: Cambio de correo con contraseña incorrecta
+```gherkin
+Given un usuario autenticado
+When pide cambiar su correo con una contraseña actual incorrecta
+Then recibe un mensaje claro de contraseña incorrecta
+  And no se envía ningún correo ni cambia nada
+```
+
+### Escenario 4: Cambio de contraseña
+```gherkin
+Given un usuario autenticado en dos dispositivos
+When cambia su contraseña desde uno de ellos indicando la actual correcta
+Then sigue con la sesión abierta en ese dispositivo
+  And el otro dispositivo pierde la sesión al renovar su token
+  And recibe un aviso de seguridad por correo
+```
+
+### Escenario 5: Enlace de confirmación vencido o reutilizado
+```gherkin
+Given un enlace de cambio de correo vencido, cancelado o ya usado
+When el usuario lo abre
+Then ve "El enlace no es válido o venció. Pide uno nuevo desde Mi perfil."
+  And el correo de acceso no cambia
+```
+
+---
+
+## 6. Casos Borde y Excepciones
+- **Correo nuevo igual al actual:** 400 *"Ese ya es tu correo de acceso."*
+- **El correo nuevo lo toma otra cuenta antes de confirmar:** al abrir el enlace → 409 *"Ese correo ya está en uso."* y el cambio no se aplica.
+- **Alumno archivado o cuenta deshabilitada:** no puede iniciar sesión, por lo tanto no accede a "Mi perfil"; un enlace de confirmación pendiente no reactiva nada.
+- **Sin conexión:** "Mi perfil" no usa la cola offline; guardar sin red muestra un mensaje claro y no cambia nada.
+- **Modo demo:** los guardados se simulan en pantalla y lo indican.
+
+---
+
+## 7. Estado real de implementación
+- Pendiente. Ya existen y se reutilizarán: `PATCH /alumnos/me/zona-horaria` ([[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]]), `PATCH /usuarios/me/preferencias` ([[RF-015-matriz-preferencias-usuario-canales]]), los correos de invitación y recuperación con Brevo ([[ADR-018-proveedor-correo-transaccional-brevo]]) y `passwordCambiadaEn` (cierre de sesiones al cambiar la contraseña).
+- Requiere: endpoints de perfil propio (lectura y edición de datos, contraseña, solicitud/confirmación/cancelación de cambio de correo) y una migración aditiva en `usuarios` para el correo pendiente y su token (hash y vencimiento).
