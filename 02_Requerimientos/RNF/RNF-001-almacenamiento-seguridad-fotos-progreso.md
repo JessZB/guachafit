@@ -5,7 +5,7 @@ categoria: seguridad # seguridad | rendimiento | disponibilidad
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-24
+fecha_verificacion: 2026-10-08
 requisito_origen: "[[RF-003-checkin-antropometrico-rbac-hibrido]]"
 metrica_objetivo: "p95 < 800ms subida / URLs firmadas TTL < 15 min"
 fecha_creacion: 2026-09-05
@@ -65,7 +65,15 @@ Las fotografías de control corporal y progreso físico constituyen datos biomé
 ## 7. Estado real de implementación
 
 - TTL de URLs presignadas y subida directa a storage (direct-to-storage) implementados.
-- Compresión en el cliente sin evidencia de implementación.
-- Cifrado en reposo (SSE-S3 / SSE-KMS) sin evidencia.
+- **Compresión en el cliente:** implementada en `apps/web/src/lib/imagen-comprimida.ts` (WebP, lado mayor 1920 px, calidad 85 %, fallback JPEG). La usan las fotos de platos, los comprobantes de pago y, desde 2026-10-08 (`affec1f`), las fotos del check-in antropométrico.
+- **Reintentos de subida (§5):** las fotos del check-in antropométrico reintentan hasta 3 veces (esperas de 1 s y 2 s) con una URL de subida nueva en cada intento; el PUT tiene un plazo de 30 s y se puede cancelar (`apps/web/src/lib/antropometria-fotos.ts`). Las fotos de platos reintentan desde la cola offline. No hay subida reanudable por partes (las fotos comprimidas pesan < 1 MB).
+- **Cifrado en reposo:** Cloudflare R2 cifra todos los objetos en reposo con AES-256 por defecto (garantía del proveedor; no es configurable ni se verificó desde la cuenta). El MinIO local de desarrollo no cifra.
+- **Tenancy de las fotos antropométricas (2026-10-08):** el check-in solo acepta claves `antropometria/{alumnoId}/…` con estructura válida (400 si no), y las lecturas (detalle, evolución, comparador) no firman claves de otro alumno. Antes se aceptaba cualquier clave.
 - Validación de `storageKey` implementada: estructura estricta por módulo (`validarStorageKeyEstructura`) y, en los recursos de nutrición, tenancy por prefijo del alumno (`nutricion-recursos/{alumnoId}/`, clave ajena → 400). Verificada en las suites `rnf001-r2-storage` y `nutricion-service`.
 - Borrado de objetos implementado: `R2StorageService.eliminarObjeto` (`DeleteObject` idempotente; valida la estructura de la clave y no lanza si es inválida; early-return en modo mock; un fallo de red se propaga al llamador). Ciclo de vida **best-effort post-commit** en el PUT-replace de metas de nutrición ([[RF-002-nutricion-agil-reporte-rapido]]), con re-lectura anti-race y respuesta intacta ante fallos. Decisión y límites en [[ADR-015-borrado-best-effort-objetos-boveda]].
+
+### Pendiente
+- **Objetos huérfanos de antropometría:** una foto subida y luego quitada, o un check-in que no se envía, deja el objeto en la bóveda. Falta un barrido o una regla de ciclo de vida (patrón de [[ADR-015-borrado-best-effort-objetos-boveda]]).
+- **Caché del service worker:** las respuestas GET de antropometría (con `presignedGetUrl` de 15 min) se guardan hasta 24 h en la caché runtime; el cierre de sesión la purga. Convendría excluir esas respuestas.
+- **Metadatos EXIF:** si el navegador no puede re-codificar la imagen, se sube el archivo original (con sus metadatos, p. ej. GPS).
+- **Verificación del SLO:** sin pruebas de carga k6 (§6) ni medición de p95 de subida.

@@ -4,7 +4,7 @@ modulo: Antropometria
 prioridad: media
 estado: implementado
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-22
+fecha_verificacion: 2026-10-08
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0
@@ -101,3 +101,4 @@ Then el sistema debe presentar ambas imágenes alineadas lado a lado o con slide
 1. El filtrado de rango es **client-side** sobre la serie completa; el parámetro `?periodo=` del backend existe pero queda sin usar a propósito (el gráfico y los deltas usan la copia local filtrada).
 2. `fotoDisponible` no forma parte del tipo compartido (`packages/shared`); el cliente lo normaliza al construir la comparativa.
 3. El fixture demo se amplió a 6 tomas relativas a "ahora" para que todos los rangos tengan datos; solo se consume con `isDemoMode`.
+4. **(2026-10-08, `affec1f`)** Hasta este lote no había forma de subir fotos desde la web, así que la galería y el comparador solo mostraban fotos de demostración o de datos sembrados. Ahora el alumno online y el entrenador las adjuntan en el check-in ([[RF-003-checkin-antropometrico-rbac-hibrido]], fotos opcionales). RN-03: el detalle, la evolución y el comparador no firman fotos cuya clave no pertenezca al alumno; en el comparador esa perspectiva queda como "Foto no disponible para esta fecha".

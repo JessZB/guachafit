@@ -4,7 +4,7 @@ modulo: Antropometria
 prioridad: alta
 estado: implementado
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-23
+fecha_verificacion: 2026-10-08
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0
@@ -127,3 +127,15 @@ Then debe interceptar la solicitud mediante la política RBAC
 - **Presigned uploads sin gateo de ventana:** la ventana se valida al registrar el check-in (y el presencial sigue bloqueado al subir fotos de antropometría), pero `POST /antropometria/presigned-upload-url` no evalúa la ventana. Es una decisión de UX: la subida de fotos ocurre antes de completar el formulario y el check-in fuera de ventana sigue rechazándose con 400.
 
 Con los tres criterios pendientes cerrados (Escenario 2, §6 y Escenario 3), el frontmatter pasa a `estado: implementado`; el núcleo del flujo (modelo, ventana, periodicidad, recordatorio, RBAC, conciliación y avisos al coach) queda implementado y verificado.
+
+### Fotos del check-in (2026-10-08, `affec1f`)
+
+- **Hueco corregido:** hasta este lote la web no permitía subir fotos de control (el contrato las admitía, pero no había pantalla), así que el Escenario 2 ("adjunta sus 3 fotos") y la auditoría de fotos del coach solo funcionaban con datos de demostración.
+- **Decisión del dueño (2026-10-08) — RN-02:** las fotos (frontal, lateral, posterior) son **opcionales**. El check-in se basa en las medidas; las fotos sirven para que alumno y entrenador vean el progreso. Se puede enviar con 0 a 3 fotos y como máximo una por ángulo (`MENSAJE_FOTOS_ANGULO_REPETIDO`).
+- **Web:** casillas Frontal / Lateral / Posterior en el check-in del alumno online (`/app/progreso`) y en "Registrar Control en Sala" del entrenador. Cada foto se comprime (WebP 1920 px, 85 %) y se sube al elegirla, con su estado visible (subiendo, lista con miniatura y "Quitar", o error con "Reintentar"); quitarla durante la subida la cancela. Un aviso nombra las que faltan y recuerda que son opcionales. El botón de enviar espera a que terminen las subidas. En modo demo el selector queda deshabilitado y lo dice.
+- **Seguridad (RNF-001):** el API rechaza con 400 (`MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA`) toda foto cuya clave no sea `antropometria/{alumnoId}/…` con la estructura del presign, antes de guardar nada. Antes se aceptaba cualquier texto, lo que permitía registrar la clave de una foto ajena y leerla con la URL firmada. Además, el detalle, la evolución y el comparador ya no firman fotos con clave ajena (defensa ante filas antiguas).
+- Evidencia: `apps/web/src/lib/antropometria-fotos.spec.ts`, `components/antropometria/SelectorFotosCheckin.spec.tsx`, `pages/atleta/ProgresoPage.fotos.interaccion.spec.tsx`, `pages/entrenador/AlumnoDetallePage.control-sala.interaccion.spec.tsx`, `apps/api/test/bdd/antropometria-service.spec.ts`; web **1115** aprobados, API **1334** (1 omitida); typecheck y build en verde. Revisado con los 4 enfoques y validado tras las correcciones (19 resueltos, 7 en seguimiento).
+
+### Pendiente
+- **Fotos huérfanas:** una foto subida y luego quitada, o un check-in que no se llega a enviar, deja el objeto en la bóveda (no hay borrado ni barrido). Ver [[RNF-001-almacenamiento-seguridad-fotos-progreso]].
+- **Modo demo del alumno:** enviar el check-in en demostración llama al API real con el token ficticio (el del coach sí simula en local).
