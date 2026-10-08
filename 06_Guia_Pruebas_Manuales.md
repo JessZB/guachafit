@@ -213,6 +213,8 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 - [ ] **Confirmar sin red:** abre el enlace con la red cortada (DevTools → Offline) → mensaje de sin conexión con **"Reintentar"**; vuelve la red y pulsa Reintentar → se confirma.
 - [ ] **Cambiar la contraseña:** con un cambio de correo pendiente, cambia la contraseña → *"Tu contraseña se cambió."*, sigues con la sesión abierta y el pendiente desaparece de la pantalla.
 - [ ] **Sin conexión:** con la red cortada, guardar perfil, contraseña o correo → *"No hay conexión a internet: no se guardó nada…"* y lo escrito se conserva.
+- [ ] **Red lenta (2026-10-08, `6b52187`):** en DevTools → Network, crea un perfil con mucha latencia (p. ej. 20 000 ms) y guarda el perfil → a los 15 s el botón se libera y aparece *"No pudimos confirmar si se guardó: la conexión tardó demasiado. Recarga antes de volver a intentarlo."*. En el cambio de contraseña el aviso dice qué hacer si la sesión se cierra después. Lo mismo en Zona horaria y Notificaciones.
+- [ ] **Cambiar de pestaña mientras guarda:** con la red lenta, cambia la contraseña y pasa a Perfil antes de que responda; vuelve a Correo y contraseña → se ve el resultado. Las contraseñas que habías escrito ya no están (el correo nuevo sí).
 - [ ] **Modo demo:** los guardados dicen que es una demostración (no fingen persistencia).
 
 **"Mi perfil" vía API (RF-018, 2026-10-06, `68d9287`)** — con el token de la sesión (Swagger, Bruno o `curl`):

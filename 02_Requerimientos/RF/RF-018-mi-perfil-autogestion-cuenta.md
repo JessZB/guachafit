@@ -169,8 +169,16 @@ Then ve "El enlace no es válido o venció. Pide uno nuevo desde Ajustes."
   - **Modo demo:** los guardados se simulan y lo dicen.
 - Evidencia: `apps/web/src/lib/ajustes.spec.ts`, `lib/mi-perfil.spec.ts`, `components/ajustes/PiezasAjustes.spec.ts`, `lib/api-client-sesion.spec.ts`, `lib/notificaciones-in-app.spec.ts`; web **1033** aprobados, API **1324** (1 omitida); typecheck y build en verde. Revisado con los 4 enfoques y validado tras las correcciones (17 de 17).
 
+### Web · pendientes cerrados (2026-10-08, `6b52187`)
+- **Migración `0017` verificada** contra la BD local (Docker): `usuarios.correo_pendiente` varchar(255), `token_cambio_correo_hash` varchar(64) y `token_cambio_correo_expira` timestamptz, todas opcionales, sin índices (igual que el SQL).
+- **Tiempo límite de los guardados:** perfil, contraseña, correo (pedir y cancelar), zona horaria y notificaciones esperan como máximo 15 s (`OPCIONES_GUARDADO_AJUSTES`; opción `tiempoLimiteMs` del cliente de API). Al vencer se cancela la petición y se ve *"No pudimos confirmar si se guardó: la conexión tardó demasiado. Recarga antes de volver a intentarlo."* (no dice "no se guardó": el servidor pudo haberlo procesado). En el cambio de contraseña el aviso es propio, porque si el servidor sí la cambió este dispositivo no recibió los tokens nuevos (RN-08): *"…Si en unos minutos se cierra tu sesión, entra con la contraseña nueva; si no, sigue valiendo la anterior."*
+- **Cambio de pestaña con un guardado en vuelo:** Perfil y Correo y contraseña quedan siempre montadas (la inactiva oculta); al volver se ve el resultado. Las contraseñas escritas se borran al ocultar la pestaña (el correo nuevo se conserva) y el aviso de datos guardados se muestra una sola vez.
+- **Pruebas de interacción** (jsdom + Testing Library, solo desarrollo; los specs `*.spec.tsx` declaran `// @vitest-environment jsdom`): Ajustes del alumno, del entrenador y del superadministrador, `/confirmar-correo`, la redirección de `/app/preferencias`, zona horaria y matriz de notificaciones.
+- Evidencia: `apps/web/src/lib/api-client-tiempo-limite.spec.ts`, `components/ajustes/PantallaAjustes.interaccion.spec.tsx`, `pages/entrenador/AjustesPage.interaccion.spec.tsx` y demás `*.interaccion.spec.tsx`; web **1068** aprobados (87 archivos), API **1324** (1 omitida); typecheck y build en verde. Revisado con los 4 enfoques y validado tras las correcciones (14 resueltos, 7 en seguimiento).
+
 ### Pendiente
-- Verificar la migración `0017` contra la BD (Docker).
-- Si se cambia de pestaña con un guardado en vuelo, el resultado (éxito o error) no se muestra al volver.
-- Las peticiones de guardado no tienen tiempo límite: con una red que no responde, el botón queda en "guardando" hasta que el navegador corta.
-- Las pruebas son de funciones y marcado; no hay pruebas de interacción de las pantallas (sin jsdom).
+- En Notificaciones, Zona horaria, Planes y Tasas, si se cambia de pestaña con un guardado en vuelo el resultado no se muestra al volver (esas pestañas se desmontan).
+- La carga del perfil (`GET /usuarios/me/perfil`) no tiene tiempo límite: con una red que no responde queda en "Cargando tu perfil…".
+- Ajustes del entrenador: las pestañas Planes, Tasas y Notificaciones apuntan (`aria-controls`) a un panel que no existe mientras no están activas.
+- `jsdom` 30 pide Node ≥ 22.22.2 y el repo no declara versión mínima de Node (solo afecta a las pruebas).
+- Mantenibilidad: los paneles Perfil/Correo y contraseña se repiten en `PantallaAjustes` y en el `AjustesPage` del entrenador, y los specs de interacción repiten mocks y datos de prueba.
