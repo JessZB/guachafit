@@ -132,6 +132,11 @@ async function ejecutarRefresco(): Promise<ResultadoRefresco> {
   const cuerpo = await leerCuerpoJson(respuesta);
 
   if (respuesta.status === 401 || respuesta.status === 403) {
+    // Mientras el refresco viajaba, otra pestaña (o un cambio de contraseña, RF-018 RN-08) guardó
+    // tokens nuevos: el rechazo es del refresh token viejo y no debe cerrar la sesión vigente.
+    if (getRefreshToken() !== refreshToken) {
+      return { ok: false, motivo: 'descartado' };
+    }
     const mensajeServidor = extraerMensajeServidor(cuerpo.datos);
     return {
       ok: false,
@@ -303,8 +308,11 @@ async function apiClientBase<T>(endpoint: string, options: RequestOptions = {}):
           notificarSesionExpirada(resultado.mensaje);
           throw new ApiError(response.status, problem, resultado.mensaje);
         }
-        // La sesión se cerró durante el refresco: no se renueva ni se fuerza otro cierre.
+        // Los tokens cambiaron durante el refresco: con una sesión vigente se reintenta con ella;
+        // si la sesión se cerró, no se renueva ni se fuerza otro cierre.
         if (resultado.motivo === 'descartado') {
+          const tokenVigente = getAuthToken();
+          if (tokenVigente && tokenVigente !== tokenEnviado) return reintentar();
           throw new ApiError(response.status, problem, MENSAJE_SESION_VENCIDA);
         }
         // Fallo temporal del servidor al renovar: no se cierra la sesión.

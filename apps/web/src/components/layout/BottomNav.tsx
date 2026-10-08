@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Users,
   ShieldCheck,
+  Settings,
 } from 'lucide-react';
 
 export function BottomNav() {
@@ -29,6 +30,7 @@ export function BottomNav() {
 
   const adminLinks = [
     { to: '/admin', label: 'Admin', icon: ShieldCheck, isCenter: true },
+    { to: '/admin/ajustes', label: 'Ajustes', icon: Settings },
   ];
 
   const links = isSuperadmin ? adminLinks : isCoach ? coachLinks : athleteLinks;

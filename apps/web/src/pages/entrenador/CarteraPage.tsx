@@ -468,7 +468,7 @@ export function CarteraPage() {
                   </p>
                   {/* U2 (Ola 4): destino real como botón táctil (≥44px), no un enlace de 15px */}
                   <Link
-                    to="/coach/ajustes"
+                    to="/coach/ajustes?tab=tasas"
                     className="inline-flex min-h-11 items-center gap-1 rounded-xl border border-primary/25 bg-primary/10 px-3 text-xs font-bold text-primary hover:bg-primary/20 transition-colors focus-visible:outline-2 focus-visible:outline-primary"
                   >
                     Ajustes → Tasas

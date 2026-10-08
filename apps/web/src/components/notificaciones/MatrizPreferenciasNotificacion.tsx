@@ -1,9 +1,9 @@
 /**
  * RF-015 (Ola 3 · N2b): matriz de preferencias de notificación por categoría y canal.
  *
- * Componente compartido por la pestaña "Notificaciones" del coach (`AjustesPage`) y la pantalla
- * "Mis notificaciones" del alumno (`/app/preferencias`): la matriz que pinta viene del API
- * (`matriz` + `canalesObligatorios`), así que ambos roles ven exactamente lo que su contrato define.
+ * Componente compartido por la pestaña "Notificaciones" de Ajustes (alumno `/app/ajustes`, coach
+ * `/coach/ajustes`; RF-018 RN-09): la matriz que pinta viene del API (`matriz` +
+ * `canalesObligatorios`), así que ambos roles ven exactamente lo que su contrato define.
  *
  * Reglas visibles:
  * - **RN-01**: los canales obligatorios van marcados, deshabilitados y con la nota del doc.

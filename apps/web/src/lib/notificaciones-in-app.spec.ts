@@ -173,7 +173,7 @@ describe('notificaciones-in-app: resolución del linkAccion a rutas reales', () 
   });
 
   it('el destino de "Configurar" depende del rol y no existe para el superadmin', () => {
-    expect(rutaConfiguracionNotificaciones(Rol.ALUMNO)).toBe('/app/preferencias');
+    expect(rutaConfiguracionNotificaciones(Rol.ALUMNO)).toBe('/app/ajustes?tab=notificaciones');
     expect(rutaConfiguracionNotificaciones(Rol.ENTRENADOR)).toBe(
       '/coach/ajustes?tab=notificaciones'
     );

@@ -14,6 +14,7 @@ import {
   type NotificacionInAppDTO,
 } from '@guachafit/shared';
 import { formatearEdadFrescura } from './frescura-cache';
+import { rutaAjustes } from './ajustes';
 
 /** Categoría de presentación de una notificación: decide icono, tono y etiqueta. */
 export type CategoriaVisualNotificacion =
@@ -193,6 +194,8 @@ const RUTAS_WEB_ALUMNO = new Set([
   '/app/nutricion',
   '/app/progreso',
   '/app/pagos',
+  '/app/ajustes',
+  // Redirige a `/app/ajustes?tab=notificaciones` (RF-018 RN-09); se conserva por enlaces viejos.
   '/app/preferencias',
 ]);
 
@@ -256,12 +259,10 @@ export function resolverRutaNotificacion(
 /**
  * Destino del enlace "Configurar" del panel de la campana según el rol.
  *
- * El alumno tiene su propia pantalla (`/app/preferencias`); el coach configura desde la pestaña
- * "Notificaciones" de Ajustes. El superadmin no tiene acceso a esas superficies: `null` para no
- * pintar un enlace muerto.
+ * Alumno y coach configuran desde la pestaña "Notificaciones" de su pantalla Ajustes (RF-018
+ * RN-09). El superadmin no recibe estas notificaciones: `null` para no pintar un enlace muerto.
  */
 export function rutaConfiguracionNotificaciones(rol: Rol | string | null | undefined): string | null {
-  if (rol === Rol.ALUMNO) return '/app/preferencias';
-  if (rol === Rol.ENTRENADOR) return '/coach/ajustes?tab=notificaciones';
-  return null;
+  if (rol !== Rol.ALUMNO && rol !== Rol.ENTRENADOR) return null;
+  return rutaAjustes(rol, 'notificaciones');
 }

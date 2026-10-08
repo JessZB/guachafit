@@ -198,6 +198,44 @@ describe('api-client: renovación de sesión ante 401 (A1)', () => {
     expect(manejadorSesion).toHaveBeenCalledWith(MENSAJE_SESION_VENCIDA);
   });
 
+  it('si otro contexto guardó tokens nuevos durante el refresco, el rechazo no cierra la sesión y reintenta con el token vigente (C5)', async () => {
+    setAuthToken('access-viejo');
+    setRefreshToken('refresh-viejo-123');
+
+    let liberarRefresh: () => void = () => undefined;
+    const refreshPendiente = new Promise<void>((resolve) => {
+      liberarRefresh = resolve;
+    });
+
+    const fetchMock = stubFetchCon(async (url, init) => {
+      if (url.includes('/auth/refresh')) {
+        await refreshPendiente;
+        return respuestaJson(401, { statusCode: 401, message: 'Refresh token expirado o inválido.' });
+      }
+      return headersDe(init)['Authorization'] === 'Bearer access-nuevo'
+        ? respuestaJson(200, { ok: true })
+        : respuestaJson(401, { statusCode: 401, message: 'Unauthorized' });
+    });
+
+    const promesa = apiClient.get<{ ok: boolean }>('/alumnos');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Otra pestaña (o el cambio de contraseña, RN-08) ya guardó tokens nuevos mientras viajaba.
+    setAuthToken('access-nuevo');
+    setRefreshToken('refresh-nuevo-123');
+    liberarRefresh();
+
+    await expect(promesa).resolves.toEqual({ ok: true });
+    expect(manejadorSesion).not.toHaveBeenCalled();
+    expect(getAuthToken()).toBe('access-nuevo');
+    expect(getRefreshToken()).toBe('refresh-nuevo-123');
+
+    // La petición original se hizo con el token viejo y se reintentó con el vigente.
+    const llamadasAlumnos = llamadasA(fetchMock, '/alumnos');
+    expect(llamadasAlumnos).toHaveLength(2);
+    expect(headersDe(llamadasAlumnos[0][1])['Authorization']).toBe('Bearer access-viejo');
+    expect(headersDe(llamadasAlumnos[1][1])['Authorization']).toBe('Bearer access-nuevo');
+  });
+
   it('si el refresco es rechazado con un mensaje amigable (cascada), lo usa como aviso', async () => {
     setAuthToken('access-viejo');
     setRefreshToken('refresh-viejo-123');

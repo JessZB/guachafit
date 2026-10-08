@@ -228,7 +228,7 @@ export function CoachMenuPage() {
 
         {/* TARJETA 7: Planes y Tasa de Cambio */}
         <Link
-          to="/coach/ajustes"
+          to="/coach/ajustes?tab=planes"
           className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
         >
           <div>
@@ -237,7 +237,7 @@ export function CoachMenuPage() {
                 <SlidersHorizontal className="h-6 w-6" />
               </div>
               <span className="text-[11px] font-medium text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md">
-                Configuración
+                Ajustes
               </span>
             </div>
             <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">

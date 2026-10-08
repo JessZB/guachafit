@@ -137,7 +137,7 @@ describe('RF-018 · A · contratos compartidos de seguridad', () => {
     expect(MENSAJE_CORREO_EN_USO).toBe('Ese correo ya está en uso.');
     expect(MENSAJE_CORREO_IGUAL_AL_ACTUAL).toBe('Ese ya es tu correo de acceso.');
     expect(MENSAJE_ENLACE_CAMBIO_CORREO_INVALIDO).toBe(
-      'El enlace no es válido o venció. Pide uno nuevo desde Mi perfil.'
+      'El enlace no es válido o venció. Pide uno nuevo desde Ajustes.'
     );
     expect(MENSAJE_DATO_NO_EDITABLE).toBe('Ese dato no se puede cambiar desde tu perfil.');
   });

@@ -6,6 +6,17 @@ import { triggerHaptic } from '../../lib/haptics';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import { useTabsAccesibles } from '../../lib/use-tabs-accesibles';
 import { MatrizPreferenciasNotificacion } from '../../components/notificaciones/MatrizPreferenciasNotificacion';
+import { ContenidoConPerfil } from '../../components/ajustes/ContenidoConPerfil';
+import { SeccionCorreoPassword } from '../../components/ajustes/SeccionCorreoPassword';
+import { SeccionPerfil } from '../../components/ajustes/SeccionPerfil';
+import { useMiPerfil } from '../../lib/use-mi-perfil';
+import {
+  etiquetaPestanaAjustes,
+  pestanaAjustesDesdeUrl,
+  pestanasAjustes,
+  type PestanaAjustes,
+} from '../../lib/ajustes';
+import { Rol } from '@guachafit/shared';
 import {
   PlanMembresiaDetalleDTO,
   TasaCambioVigenteDTO,
@@ -19,34 +30,38 @@ import {
   CheckCircle,
   AlertCircle,
   TrendingUp,
-  RefreshCw,
   Calculator,
   ArrowRightLeft,
   X,
   ShieldCheck,
   Power,
   BellRing,
+  UserRound,
+  KeyRound,
 } from 'lucide-react';
 
-type TabType = 'planes' | 'tasas' | 'notificaciones';
+type TabType = PestanaAjustes;
 
-/** Claves de las pestañas en orden visual (N2b suma "Notificaciones"). */
-const CLAVES_TABS: readonly TabType[] = ['planes', 'tasas', 'notificaciones'];
+/**
+ * Claves de las pestañas en orden visual. RF-018 RN-09 unifica aquí los ajustes personales del
+ * coach (Perfil y Correo y contraseña) con los de su negocio (Planes y Tasas).
+ */
+const CLAVES_TABS = pestanasAjustes(Rol.ENTRENADOR);
 
 export function AjustesPage() {
-  const { isDemoMode } = useAuth();
-  // N2b: la pestaña activa vive en la URL (`?tab=notificaciones`) para que la campana pueda
-  // enlazar directo a la matriz de preferencias del coach.
+  const { user, isDemoMode } = useAuth();
+  // La pestaña activa vive en la URL (`?tab=…`) para que la campana pueda enlazar directo a la
+  // matriz de preferencias del coach.
   const [searchParams, setSearchParams] = useSearchParams();
-  const tabParam = searchParams.get('tab');
-  const activeTab: TabType = CLAVES_TABS.includes(tabParam as TabType)
-    ? (tabParam as TabType)
-    : 'planes';
+  const activeTab = pestanaAjustesDesdeUrl(Rol.ENTRENADOR, searchParams.get('tab'));
 
   const setActiveTab = (tab: TabType) => {
     triggerHaptic('light');
-    setSearchParams(tab === 'planes' ? {} : { tab }, { replace: true });
+    setSearchParams(tab === CLAVES_TABS[0] ? {} : { tab }, { replace: true });
   };
+
+  // RF-018: perfil propio para las pestañas Perfil y Correo y contraseña.
+  const miPerfil = useMiPerfil(user, isDemoMode);
 
   const tabs = useTabsAccesibles<TabType>({
     claves: CLAVES_TABS,
@@ -374,10 +389,10 @@ export function AjustesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl lg:text-3xl font-black tracking-tight text-foreground">
-            Configuración
+            Ajustes
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Administra tus planes de membresía, las tasas de cambio y tus notificaciones.
+            Tu perfil, tu acceso, tus notificaciones, tus planes de membresía y las tasas de cambio.
           </p>
         </div>
 
@@ -396,33 +411,31 @@ export function AjustesPage() {
       {/* Tabs Selector (N2b: patrón APG de pestañas con flechas + roving tabindex) */}
       <div
         {...tabs.propsTablist}
-        aria-label="Secciones de configuración"
+        aria-label="Secciones de ajustes"
         className="flex items-center gap-2 border-b border-border/80 pb-3 overflow-x-auto"
       >
         <button
-          {...tabs.propsTab('planes')}
+          {...tabs.propsTab('perfil')}
           className={`min-h-11 sm:min-h-0 py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === 'planes'
+            activeTab === 'perfil'
               ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
               : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
           }`}
         >
-          <CreditCard className="h-4 w-4" />
-          <span className="sm:hidden">Planes ({planes.length})</span>
-          <span className="hidden sm:inline">Planes & Membresías ({planes.length})</span>
+          <UserRound className="h-4 w-4" />
+          <span>{etiquetaPestanaAjustes('perfil')}</span>
         </button>
 
         <button
-          {...tabs.propsTab('tasas')}
+          {...tabs.propsTab('seguridad')}
           className={`min-h-11 sm:min-h-0 py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === 'tasas'
+            activeTab === 'seguridad'
               ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
               : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
           }`}
         >
-          <DollarSign className="h-4 w-4" />
-          <span className="sm:hidden">Tasas</span>
-          <span className="hidden sm:inline">Tasas de Cambio & Divisas</span>
+          <KeyRound className="h-4 w-4" />
+          <span>{etiquetaPestanaAjustes('seguridad')}</span>
         </button>
 
         <button
@@ -434,12 +447,69 @@ export function AjustesPage() {
           }`}
         >
           <BellRing className="h-4 w-4" />
-          <span>Notificaciones</span>
+          <span>{etiquetaPestanaAjustes('notificaciones')}</span>
+        </button>
+
+        <button
+          {...tabs.propsTab('planes')}
+          className={`min-h-11 sm:min-h-0 py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'planes'
+              ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
+              : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <CreditCard className="h-4 w-4" />
+          <span>
+            {etiquetaPestanaAjustes('planes')} ({planes.length})
+          </span>
+        </button>
+
+        <button
+          {...tabs.propsTab('tasas')}
+          className={`min-h-11 sm:min-h-0 py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'tasas'
+              ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
+              : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <DollarSign className="h-4 w-4" />
+          <span>{etiquetaPestanaAjustes('tasas')}</span>
         </button>
       </div>
 
       {/* ===================================================================== */}
-      {/* PESTAÑA 1: CATÁLOGO DE PLANES                                         */}
+      {/* RF-018: PERFIL Y CORREO Y CONTRASEÑA                                  */}
+      {/* ===================================================================== */}
+      {(activeTab === 'perfil' || activeTab === 'seguridad') && (
+        <div {...tabs.propsPanel(activeTab)} className="space-y-6 animate-in fade-in-50 duration-200">
+          <ContenidoConPerfil
+            perfil={miPerfil.perfil}
+            cargando={miPerfil.cargando}
+            error={miPerfil.error}
+            isDemoMode={isDemoMode}
+            onReintentar={() => void miPerfil.recargar()}
+          >
+            {(perfil) =>
+              activeTab === 'perfil' ? (
+                <SeccionPerfil
+                  perfil={perfil}
+                  isDemoMode={isDemoMode}
+                  onActualizado={miPerfil.setPerfil}
+                />
+              ) : (
+                <SeccionCorreoPassword
+                  perfil={perfil}
+                  isDemoMode={isDemoMode}
+                  onRecargarPerfil={() => void miPerfil.recargar()}
+                />
+              )
+            }
+          </ContenidoConPerfil>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* PESTAÑA: CATÁLOGO DE PLANES                                         */}
       {/* ===================================================================== */}
       {activeTab === 'planes' && (
         <div {...tabs.propsPanel('planes')} className="space-y-4 animate-in fade-in-50 duration-200">
@@ -563,7 +633,7 @@ export function AjustesPage() {
       )}
 
       {/* ===================================================================== */}
-      {/* PESTAÑA 2: TASAS DE CAMBIO & DIVISAS                                   */}
+      {/* PESTAÑA: TASAS DE CAMBIO & DIVISAS                                   */}
       {/* ===================================================================== */}
       {activeTab === 'tasas' && (
         <div
@@ -826,7 +896,7 @@ export function AjustesPage() {
       )}
 
       {/* ===================================================================== */}
-      {/* PESTAÑA 3 (N2b): PREFERENCIAS DE NOTIFICACIÓN (RF-015 §B)              */}
+      {/* PESTAÑA (N2b): PREFERENCIAS DE NOTIFICACIÓN (RF-015 §B)              */}
       {/* ===================================================================== */}
       {activeTab === 'notificaciones' && (
         <div

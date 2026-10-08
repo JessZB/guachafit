@@ -59,9 +59,16 @@ const ProgresoPage = lazy(() =>
 const PagosPage = lazy(() =>
   import('./pages/atleta/PagosPage').then((m) => ({ default: m.PagosPage }))
 );
-// N2b (RF-015): preferencias de notificación del alumno (matriz §A con bloqueos RN-01/RN-02).
-const PreferenciasPage = lazy(() =>
-  import('./pages/atleta/PreferenciasPage').then((m) => ({ default: m.PreferenciasPage }))
+// RF-018 RN-09: "Ajustes" del alumno (perfil, acceso, notificaciones y zona horaria).
+const AjustesAlumnoPage = lazy(() =>
+  import('./pages/atleta/AjustesAlumnoPage').then((m) => ({ default: m.AjustesAlumnoPage }))
+);
+const AjustesAdminPage = lazy(() =>
+  import('./pages/admin/AjustesAdminPage').then((m) => ({ default: m.AjustesAdminPage }))
+);
+// RF-018 RN-05: confirmación pública del correo nuevo.
+const ConfirmarCorreoPage = lazy(() =>
+  import('./pages/auth/ConfirmarCorreoPage').then((m) => ({ default: m.ConfirmarCorreoPage }))
 );
 
 // Lazy Coach Pages
@@ -167,6 +174,14 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    path: '/confirmar-correo',
+    element: (
+      <Suspense fallback={<PublicFallback />}>
+        <ConfirmarCorreoPage />
+      </Suspense>
+    ),
+  },
+  {
     path: '/',
     element: <RootRedirect />,
   },
@@ -199,8 +214,13 @@ export const router = createBrowserRouter([
             element: <PagosPage />,
           },
           {
+            path: '/app/ajustes',
+            element: <AjustesAlumnoPage />,
+          },
+          {
+            // RF-018 RN-09: la antigua "Mis notificaciones" vive ahora en Ajustes.
             path: '/app/preferencias',
-            element: <PreferenciasPage />,
+            element: <Navigate to="/app/ajustes?tab=notificaciones" replace />,
           },
         ],
       },
@@ -269,6 +289,10 @@ export const router = createBrowserRouter([
           {
             path: '/admin',
             element: <AdminPage />,
+          },
+          {
+            path: '/admin/ajustes',
+            element: <AjustesAdminPage />,
           },
         ],
       },

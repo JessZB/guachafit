@@ -142,7 +142,7 @@ export const MENSAJE_PASSWORD_NUEVA_IGUAL = 'La contraseña nueva debe ser disti
 export const MENSAJE_CORREO_EN_USO = 'Ese correo ya está en uso.';
 export const MENSAJE_CORREO_IGUAL_AL_ACTUAL = 'Ese ya es tu correo de acceso.';
 export const MENSAJE_ENLACE_CAMBIO_CORREO_INVALIDO =
-  'El enlace no es válido o venció. Pide uno nuevo desde Mi perfil.';
+  'El enlace no es válido o venció. Pide uno nuevo desde Ajustes.';
 export const MENSAJE_PASSWORD_CAMBIADA = 'Tu contraseña se cambió.';
 export const MENSAJE_CAMBIO_CORREO_CANCELADO = 'Cancelaste el cambio de correo.';
 export const MENSAJE_CUENTA_NO_ENCONTRADA = 'No encontramos tu cuenta.';
