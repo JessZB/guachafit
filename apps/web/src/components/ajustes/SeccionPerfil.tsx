@@ -5,6 +5,7 @@ import {
   cambiosPerfil,
   formularioDesdePerfil,
   mensajeErrorAjustes,
+  OPCIONES_GUARDADO_AJUSTES,
   validarFormularioPerfil,
   type ErroresPerfil,
   type FormularioPerfil,
@@ -66,7 +67,11 @@ export function SeccionPerfil({
     }
     setGuardando(true);
     try {
-      const actualizado = await apiClient.patch<MiPerfilDTO>('/usuarios/me/perfil', cambios);
+      const actualizado = await apiClient.patch<MiPerfilDTO>(
+        '/usuarios/me/perfil',
+        cambios,
+        OPCIONES_GUARDADO_AJUSTES
+      );
       onActualizado(actualizado);
       // Lo guardado pasa a ser el formulario (ya normalizado por el servidor).
       setValores(formularioDesdePerfil(actualizado));

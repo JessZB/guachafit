@@ -14,7 +14,7 @@ import {
   type ActualizarMiPerfilDTO,
   type MiPerfilDTO,
 } from '@guachafit/shared';
-import { ApiError, ErrorDeConexion } from './api-client';
+import { ApiError, ErrorDeConexion, ErrorTiempoAgotado, MENSAJE_TIEMPO_AGOTADO } from './api-client';
 import { esMensajeAmigable } from './mensajes-error';
 
 export interface FormularioPerfil {
@@ -156,16 +156,35 @@ export function mensajeConfirmacionCorreo(estado: EstadoErrorConfirmacionCorreo)
   }
 }
 
+/**
+ * Plazo de los guardados de Ajustes (perfil, contraseña, correo, zona horaria, notificaciones):
+ * con una red que no responde el botón no queda indefinidamente en "guardando".
+ */
+export const TIEMPO_LIMITE_GUARDADO_AJUSTES_MS = 15000;
+
+/** Opciones de `apiClient` de todo guardado de Ajustes. */
+export const OPCIONES_GUARDADO_AJUSTES = { tiempoLimiteMs: TIEMPO_LIMITE_GUARDADO_AJUSTES_MS };
+
+/**
+ * Plazo vencido al cambiar la contraseña: si el servidor sí la cambió, este dispositivo no recibió
+ * los tokens nuevos y su sesión se cerrará al renovarse (RN-08). Recargar no lo aclara, así que
+ * se dice qué esperar y con qué contraseña entrar.
+ */
+export const MENSAJE_PASSWORD_TIEMPO_AGOTADO =
+  'No pudimos confirmar si tu contraseña cambió: la conexión tardó demasiado. Si en unos minutos se cierra tu sesión, entra con la contraseña nueva; si no, sigue valiendo la anterior.';
+
 /** Mensaje de un guardado de Ajustes que falló sin conexión (no se encola: RF-018 §6). */
 export const MENSAJE_AJUSTES_SIN_CONEXION =
   'No hay conexión a internet: no se guardó nada. Revisa tu red e inténtalo de nuevo.';
 
 /**
- * Mensaje claro de un error al guardar en Ajustes: sin conexión, el aviso honesto; si el error
- * trae un mensaje pensado para el usuario, ese; si no, `porDefecto` (nunca texto técnico).
+ * Mensaje claro de un error al guardar en Ajustes: sin conexión o tiempo agotado, el aviso honesto
+ * de cada caso; si el error trae un mensaje pensado para el usuario, ese; si no, `porDefecto`
+ * (nunca texto técnico).
  */
 export function mensajeErrorAjustes(error: unknown, porDefecto: string): string {
   if (error instanceof ErrorDeConexion) return MENSAJE_AJUSTES_SIN_CONEXION;
+  if (error instanceof ErrorTiempoAgotado) return MENSAJE_TIEMPO_AGOTADO;
   const mensaje = error instanceof Error ? error.message : null;
   return esMensajeAmigable(mensaje) ? mensaje.trim() : porDefecto;
 }

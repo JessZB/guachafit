@@ -9,8 +9,10 @@ export default defineConfig({
     },
   },
   test: {
+    // Entorno `node` por defecto (funciones y `renderToStaticMarkup`). Los specs de interacción
+    // (`*.spec.tsx` con Testing Library) declaran `// @vitest-environment jsdom` en su 1.ª línea.
     environment: 'node',
-    include: ['src/**/*.spec.ts'],
+    include: ['src/**/*.spec.ts', 'src/**/*.spec.tsx'],
     globals: false,
   },
 });

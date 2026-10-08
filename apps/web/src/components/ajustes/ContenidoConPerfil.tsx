@@ -7,7 +7,8 @@ import { AvisoDatosOffline } from '../common/AvisoDatosOffline';
 /**
  * RF-018: estados de carga del perfil propio, compartidos por las pantallas de Ajustes de todos
  * los roles. Cargando, error con "Reintentar" o el contenido; sin conexión avisa que lo que se ve
- * es la copia guardada (puede no ser la última).
+ * es la copia guardada (puede no ser la última). Con `mostrarAvisoOffline = false` (panel oculto)
+ * el aviso no se monta, así la pantalla tiene uno solo.
  */
 export function ContenidoConPerfil({
   perfil,
@@ -15,6 +16,7 @@ export function ContenidoConPerfil({
   error,
   isDemoMode,
   onReintentar,
+  mostrarAvisoOffline = true,
   children,
 }: {
   perfil: MiPerfilDTO | null;
@@ -22,6 +24,7 @@ export function ContenidoConPerfil({
   error: string | null;
   isDemoMode: boolean;
   onReintentar: () => void;
+  mostrarAvisoOffline?: boolean;
   children: (perfil: MiPerfilDTO) => ReactNode;
 }) {
   if (cargando && !perfil) {
@@ -51,7 +54,9 @@ export function ContenidoConPerfil({
   }
   return (
     <>
-      {!isDemoMode && <AvisoDatosOffline url={resolverUrlApi('/usuarios/me/perfil')} />}
+      {!isDemoMode && mostrarAvisoOffline && (
+        <AvisoDatosOffline url={resolverUrlApi('/usuarios/me/perfil')} />
+      )}
       {children(perfil)}
     </>
   );

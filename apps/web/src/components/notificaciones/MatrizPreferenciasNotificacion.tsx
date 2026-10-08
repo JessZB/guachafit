@@ -20,7 +20,8 @@ import {
   type CategoriaPreferenciasDTO,
   type PreferenciasNotificacionDTO,
 } from '@guachafit/shared';
-import { ApiError, apiClient } from '../../lib/api-client';
+import { ApiError, apiClient, ErrorTiempoAgotado } from '../../lib/api-client';
+import { OPCIONES_GUARDADO_AJUSTES } from '../../lib/mi-perfil';
 import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
@@ -188,6 +189,7 @@ export function MatrizPreferenciasNotificacion({
         : payload;
 
       const res = await apiClient<PreferenciasNotificacionDTO>('/notificaciones/preferencias', {
+        ...OPCIONES_GUARDADO_AJUSTES,
         method: 'PUT',
         body: JSON.stringify(cuerpo),
       });
@@ -209,7 +211,9 @@ export function MatrizPreferenciasNotificacion({
         setConfirmacionFinanzasAbierta(true);
       } else {
         setErrorGuardado(
-          error instanceof ApiError
+          error instanceof ErrorTiempoAgotado
+            ? error.message
+            : error instanceof ApiError
             ? error.problem?.detail ||
                 error.problem?.message ||
                 error.message ||

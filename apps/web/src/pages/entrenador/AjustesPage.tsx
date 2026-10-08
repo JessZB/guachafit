@@ -480,17 +480,24 @@ export function AjustesPage() {
       {/* ===================================================================== */}
       {/* RF-018: PERFIL Y CORREO Y CONTRASEÑA                                  */}
       {/* ===================================================================== */}
-      {(activeTab === 'perfil' || activeTab === 'seguridad') && (
-        <div {...tabs.propsPanel(activeTab)} className="space-y-6 animate-in fade-in-50 duration-200">
+      {/* Siempre montadas (la inactiva con `hidden`): un guardado en vuelo no pierde su resultado. */}
+      {(['perfil', 'seguridad'] as const).map((pestana) => (
+        <div
+          key={pestana}
+          {...tabs.propsPanel(pestana)}
+          hidden={activeTab !== pestana}
+          className="space-y-6 animate-in fade-in-50 duration-200"
+        >
           <ContenidoConPerfil
             perfil={miPerfil.perfil}
             cargando={miPerfil.cargando}
             error={miPerfil.error}
             isDemoMode={isDemoMode}
             onReintentar={() => void miPerfil.recargar()}
+            mostrarAvisoOffline={activeTab === pestana}
           >
             {(perfil) =>
-              activeTab === 'perfil' ? (
+              pestana === 'perfil' ? (
                 <SeccionPerfil
                   perfil={perfil}
                   isDemoMode={isDemoMode}
@@ -501,12 +508,13 @@ export function AjustesPage() {
                   perfil={perfil}
                   isDemoMode={isDemoMode}
                   onRecargarPerfil={() => void miPerfil.recargar()}
+                  visible={activeTab === pestana}
                 />
               )
             }
           </ContenidoConPerfil>
         </div>
-      )}
+      ))}
 
       {/* ===================================================================== */}
       {/* PESTAÑA: CATÁLOGO DE PLANES                                         */}

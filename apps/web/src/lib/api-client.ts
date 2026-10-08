@@ -44,6 +44,20 @@ export class ErrorDeConexion extends TypeError {
   }
 }
 
+export const MENSAJE_TIEMPO_AGOTADO =
+  'No pudimos confirmar si se guardó: la conexión tardó demasiado. Recarga antes de volver a intentarlo.';
+
+/**
+ * RF-018: la petición superó `tiempoLimiteMs` y se canceló. El servidor pudo haberla procesado,
+ * por eso el mensaje no dice "no se guardó" sino que pide recargar antes de repetir.
+ */
+export class ErrorTiempoAgotado extends Error {
+  constructor() {
+    super(MENSAJE_TIEMPO_AGOTADO);
+    this.name = 'ErrorTiempoAgotado';
+  }
+}
+
 function leerStorage(clave: string): string | null {
   try {
     return localStorage.getItem(clave);
@@ -199,6 +213,11 @@ export interface RequestOptions extends RequestInit {
   skipAuth?: boolean;
   /** Uso interno: la petición ya se reintentó tras renovar la sesión (solo un reintento). */
   reintentoTrasRefresco?: boolean;
+  /**
+   * Límite total de la operación (incluye una renovación de sesión y su reintento). Al vencer se
+   * cancela el `fetch` y se lanza `ErrorTiempoAgotado`. Sin valor no hay límite.
+   */
+  tiempoLimiteMs?: number;
 }
 
 async function leerCuerpoJson(response: Response): Promise<{ esJson: boolean; datos: unknown }> {
@@ -344,21 +363,51 @@ async function apiClientBase<T>(endpoint: string, options: RequestOptions = {}):
   }
 }
 
-export const apiClient = Object.assign(apiClientBase, {
+/**
+ * RF-018: aplica `tiempoLimiteMs` sobre toda la operación. La señal de quien llama se encadena:
+ * si la aborta, se propaga su `AbortError` intacto; solo el vencimiento del plazo lanza
+ * `ErrorTiempoAgotado` (se rechaza al vencer, aunque una renovación de sesión siga en curso).
+ */
+function peticion<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+  const { tiempoLimiteMs, signal: senalExterna, ...resto } = options;
+  if (!tiempoLimiteMs || tiempoLimiteMs <= 0) {
+    return apiClientBase<T>(endpoint, { ...resto, signal: senalExterna });
+  }
+
+  const controlador = new AbortController();
+  const alAbortarExterna = () => controlador.abort(senalExterna?.reason);
+  if (senalExterna?.aborted) alAbortarExterna();
+  else senalExterna?.addEventListener('abort', alAbortarExterna, { once: true });
+
+  return new Promise<T>((resolver, rechazar) => {
+    const temporizador = setTimeout(() => {
+      rechazar(new ErrorTiempoAgotado());
+      controlador.abort();
+    }, tiempoLimiteMs);
+    apiClientBase<T>(endpoint, { ...resto, signal: controlador.signal })
+      .then(resolver, rechazar)
+      .finally(() => {
+        clearTimeout(temporizador);
+        senalExterna?.removeEventListener('abort', alAbortarExterna);
+      });
+  });
+}
+
+export const apiClient = Object.assign(peticion, {
   get: <T>(endpoint: string, options: RequestOptions = {}) =>
-    apiClientBase<T>(endpoint, { ...options, method: 'GET' }),
+    peticion<T>(endpoint, { ...options, method: 'GET' }),
   post: <T>(endpoint: string, body?: any, options: RequestOptions = {}) =>
-    apiClientBase<T>(endpoint, {
+    peticion<T>(endpoint, {
       ...options,
       method: 'POST',
       body: body !== undefined ? JSON.stringify(body) : undefined,
     }),
   patch: <T>(endpoint: string, body?: any, options: RequestOptions = {}) =>
-    apiClientBase<T>(endpoint, {
+    peticion<T>(endpoint, {
       ...options,
       method: 'PATCH',
       body: body !== undefined ? JSON.stringify(body) : undefined,
     }),
   delete: <T>(endpoint: string, options: RequestOptions = {}) =>
-    apiClientBase<T>(endpoint, { ...options, method: 'DELETE' }),
+    peticion<T>(endpoint, { ...options, method: 'DELETE' }),
 });

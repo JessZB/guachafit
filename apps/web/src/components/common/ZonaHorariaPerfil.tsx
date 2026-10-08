@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { apiClient, ApiError, ErrorDeConexion } from '../../lib/api-client';
+import { apiClient, ApiError, ErrorDeConexion, ErrorTiempoAgotado } from '../../lib/api-client';
+import { OPCIONES_GUARDADO_AJUSTES } from '../../lib/mi-perfil';
 import { listarZonasHorarias, ZONA_HORARIA_POR_DEFECTO } from '../../lib/zona-horaria';
 import { SelectorZonaHoraria } from './SelectorZonaHoraria';
 
@@ -63,13 +64,14 @@ export function ZonaHorariaPerfil({
     const vigente = () => montadoRef.current && destinoRef.current === destino;
     setGuardando(true);
     try {
-      await apiClient.patch(destino, { zonaHoraria: valor });
+      await apiClient.patch(destino, { zonaHoraria: valor }, OPCIONES_GUARDADO_AJUSTES);
       if (!vigente()) return;
       onGuardada?.(valor);
       setExito(MENSAJE_GUARDADA);
     } catch (err) {
       if (!vigente()) return;
       if (err instanceof ErrorDeConexion) setError(MENSAJE_SIN_CONEXION_ZONA);
+      else if (err instanceof ErrorTiempoAgotado) setError(err.message);
       else if (err instanceof ApiError && err.status < 500) setError(err.message);
       else setError(MENSAJE_ERROR_ZONA);
     } finally {

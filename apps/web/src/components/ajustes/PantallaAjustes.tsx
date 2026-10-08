@@ -19,6 +19,9 @@ import { SeccionPerfil } from './SeccionPerfil';
  * RF-018 RN-09: pantalla "Ajustes" de un rol. Pinta las pestañas del rol (la activa vive en
  * `?tab=`), las secciones comunes (Perfil y Correo y contraseña) y delega el resto en
  * `renderPestana` (notificaciones, zona horaria, planes, tasas).
+ *
+ * Perfil y Correo y contraseña quedan siempre montadas (la inactiva con `hidden`): un guardado en
+ * vuelo no pierde su resultado ni lo escrito al cambiar de pestaña.
  */
 export function PantallaAjustes({
   descripcion,
@@ -51,7 +54,34 @@ export function PantallaAjustes({
     document.getElementById(idTabActiva)?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
   }, [idTabActiva]);
 
-  const necesitaPerfil = activa === 'perfil' || activa === 'seguridad';
+  const contenidoPestana = (pestana: PestanaAjustes, visible: boolean) => {
+    if (pestana !== 'perfil' && pestana !== 'seguridad') {
+      return visible ? renderPestana?.(pestana) : null;
+    }
+    return (
+      <ContenidoConPerfil
+        perfil={perfil}
+        cargando={cargando}
+        error={error}
+        isDemoMode={isDemoMode}
+        onReintentar={() => void recargar()}
+        mostrarAvisoOffline={visible}
+      >
+        {(datos) =>
+          pestana === 'perfil' ? (
+            <SeccionPerfil perfil={datos} isDemoMode={isDemoMode} onActualizado={setPerfil} />
+          ) : (
+            <SeccionCorreoPassword
+              perfil={datos}
+              isDemoMode={isDemoMode}
+              onRecargarPerfil={() => void recargar()}
+              visible={visible}
+            />
+          )
+        }
+      </ContenidoConPerfil>
+    );
+  };
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto pb-24 lg:pb-12 animate-in fade-in duration-200">
@@ -88,30 +118,20 @@ export function PantallaAjustes({
       )}
 
       {/* Con una sola pestaña (superadmin) no hay tablist: el panel no se etiqueta con un tab. */}
-      <div {...(pestanas.length > 1 ? tabs.propsPanel(activa) : {})} className="space-y-6">
-        {necesitaPerfil && (
-          <ContenidoConPerfil
-            perfil={perfil}
-            cargando={cargando}
-            error={error}
-            isDemoMode={isDemoMode}
-            onReintentar={() => void recargar()}
+      {pestanas.length > 1 ? (
+        pestanas.map((pestana) => (
+          <div
+            key={pestana}
+            {...tabs.propsPanel(pestana)}
+            hidden={pestana !== activa}
+            className="space-y-6"
           >
-            {(datos) =>
-              activa === 'perfil' ? (
-                <SeccionPerfil perfil={datos} isDemoMode={isDemoMode} onActualizado={setPerfil} />
-              ) : (
-                <SeccionCorreoPassword
-                  perfil={datos}
-                  isDemoMode={isDemoMode}
-                  onRecargarPerfil={() => void recargar()}
-                />
-              )
-            }
-          </ContenidoConPerfil>
-        )}
-        {!necesitaPerfil && renderPestana?.(activa)}
-      </div>
+            {contenidoPestana(pestana, pestana === activa)}
+          </div>
+        ))
+      ) : (
+        <div className="space-y-6">{contenidoPestana(activa, true)}</div>
+      )}
     </div>
   );
 }
