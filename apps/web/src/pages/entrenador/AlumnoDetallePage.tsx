@@ -40,7 +40,10 @@ import {
   TABS_FICHA_ALUMNO,
   type TabFichaAlumno,
 } from '../../lib/alumno-detalle-tab';
-import { construirPayloadCheckinAntropometrico } from '../../lib/antropometria-checkin';
+import {
+  construirPayloadCheckinAntropometrico,
+  fechaLocalHoy,
+} from '../../lib/antropometria-checkin';
 import { calcularEstadoVentanaCheckinAntropometrico } from '../../lib/antropometria-ventana';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import { useTabsAccesibles } from '../../lib/use-tabs-accesibles';
@@ -85,7 +88,9 @@ import {
   EvolucionCorporalDTO,
   UUID_REGEX,
   PeriodicidadAntropometria,
+  type FotoAntropometriaInputDTO,
 } from '@guachafit/shared';
+import { SelectorFotosCheckin } from '../../components/antropometria/SelectorFotosCheckin';
 import {
   decidirGuardadoPlanTarifa,
   overrideDemoAlumno,
@@ -390,6 +395,11 @@ export function AlumnoDetallePage() {
   const [antroMuslo, setAntroMuslo] = useState('58.0');
   const [antroNotas, setAntroNotas] = useState('');
   const [isSavingAntro, setIsSavingAntro] = useState(false);
+  // RF-003 RN-02: fotos del control en sala (opcionales); el selector se monta vacío con el modal.
+  const [fotosAntro, setFotosAntro] = useState<{
+    fotos: FotoAntropometriaInputDTO[];
+    subiendo: boolean;
+  }>({ fotos: [], subiendo: false });
   // N3: el control antropométrico solo se declara guardado con 2xx del endpoint real.
   const [antroErrorMsg, setAntroErrorMsg] = useState<string | null>(null);
   // N3: error honesto al re-consultar los controles reales del alumno (nunca lista "vaciada" en silencio).
@@ -1512,16 +1522,26 @@ export function AlumnoDetallePage() {
       return;
     }
 
+    if (fotosAntro.subiendo) {
+      setAntroErrorMsg('Espera a que terminen de subirse las fotos.');
+      return;
+    }
+
     setIsSavingAntro(true);
     try {
-      const payload = construirPayloadCheckinAntropometrico(alumno.usuarioId, {
-        pesoKg: antroPeso,
-        porcentajeGrasa: antroGrasa,
-        cinturaCm: antroCintura,
-        brazoCm: antroBrazo,
-        pechoCm: antroPecho,
-        musloCm: antroMuslo,
-      });
+      const payload = construirPayloadCheckinAntropometrico(
+        alumno.usuarioId,
+        {
+          pesoKg: antroPeso,
+          porcentajeGrasa: antroGrasa,
+          cinturaCm: antroCintura,
+          brazoCm: antroBrazo,
+          pechoCm: antroPecho,
+          musloCm: antroMuslo,
+        },
+        fechaLocalHoy(),
+        fotosAntro.fotos
+      );
       const creado = await apiClient<ControlAntropometricoDetalleDTO>('/antropometria/checkin', {
         method: 'POST',
         body: JSON.stringify(payload),
@@ -3741,9 +3761,23 @@ export function AlumnoDetallePage() {
                 </div>
               </div>
 
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground">
+                  Fotos de progreso (opcionales)
+                </p>
+                {isDemoMode && (
+                  <p className="text-[11px] text-muted-foreground">En la demostración no se suben fotos.</p>
+                )}
+                <SelectorFotosCheckin
+                  alumnoId={alumno?.usuarioId ?? ''}
+                  onCambio={setFotosAntro}
+                  deshabilitado={isDemoMode || isSavingAntro || !alumno?.usuarioId}
+                />
+              </div>
+
               <button
                 type="submit"
-                disabled={isSavingAntro}
+                disabled={isSavingAntro || fotosAntro.subiendo}
                 className="w-full py-3 px-4 rounded-xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-md shadow-primary/20 active:scale-98 transition-all disabled:opacity-50 mt-2 cursor-pointer"
               >
                 {isSavingAntro ? 'Guardando medidas...' : 'Guardar Control Antropométrico'}

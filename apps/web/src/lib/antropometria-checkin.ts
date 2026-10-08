@@ -11,15 +11,14 @@
  * los 4 pliegues cutáneos. `brazoCm`/`musloCm` se mantienen como ALIAS LEGADOS (el servidor les da
  * precedencia al modelo nuevo); aquí se envían tal cual si el formulario los usa.
  *
- * Fotos: el contrato admite `fotos: [{ angulo, storageKey }]` obtenidas vía
- * `POST /antropometria/presigned-upload-url`, pero la UX de captura/subida todavía no existe
- * en estas páginas: se omite `fotos` en lugar de inventar una subida o mandar un array vacío
- * que sugiera un contrato inexistente.
+ * Fotos (opcionales, máximo una por ángulo): `fotos: [{ angulo, storageKey }]` con las claves que
+ * devolvió la subida (`lib/antropometria-fotos.ts`). Sin fotos se omite la clave `fotos`.
  */
 import {
   CheckinAntropometricoSchema,
   type CheckinAntropometricoDTO,
   type EvolucionCorporalDTO,
+  type FotoAntropometriaInputDTO,
 } from '@guachafit/shared';
 import { normalizarEntradaDecimal } from './weight-unit';
 import { fechaCalendarioLocal } from './date-format';
@@ -232,16 +231,18 @@ export function obtenerUltimaMedicionReal(
  *   `presigned-upload-url`), no el id de `perfiles_alumno`.
  * @param medidas textos del formulario (se recortan y se normaliza la coma decimal).
  * @param fechaEvaluacion fecha local YYYY-MM-DD; por defecto hoy.
+ * @param fotos fotos ya subidas (opcionales); con `[]` el payload no lleva `fotos`.
  * @throws Error con el primer mensaje de validación del contrato compartido.
  */
 export function construirPayloadCheckinAntropometrico(
   alumnoId: string,
   medidas: MedidasCheckinAntropometrico,
-  fechaEvaluacion: string = fechaLocalHoy()
+  fechaEvaluacion: string = fechaLocalHoy(),
+  fotos: FotoAntropometriaInputDTO[] = []
 ): CheckinAntropometricoDTO {
-  const resultado = CheckinAntropometricoSchema.safeParse(
-    construirCandidato(alumnoId, medidas, fechaEvaluacion)
-  );
+  const candidato = construirCandidato(alumnoId, medidas, fechaEvaluacion);
+  if (fotos.length > 0) candidato.fotos = fotos;
+  const resultado = CheckinAntropometricoSchema.safeParse(candidato);
   if (!resultado.success) {
     throw new Error(resultado.error.issues[0]?.message ?? 'Datos de check-in inválidos.');
   }

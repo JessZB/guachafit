@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { AnguloFoto, CheckinAntropometricoSchema } from '@guachafit/shared';
+import type { FotoAntropometriaInputDTO } from '@guachafit/shared';
+import * as contratosFotosShared from '@guachafit/shared';
 import {
   construirPayloadCheckinAntropometrico,
   fechaLocalHoy,
@@ -7,6 +10,26 @@ import {
 } from './antropometria-checkin';
 
 const ALUMNO_ID = 'a3333333-3333-4333-8333-333333333333';
+
+// ---------------------------------------------------------------------------
+// RF-003 "fotos del check-in" (contratos 1, 2 y 10)
+// ---------------------------------------------------------------------------
+
+const UUID_FOTO = '00000000-0000-4000-8000-0000000000ab';
+const MENSAJE_FOTOS_ANGULO_REPETIDO_ESPERADO =
+  'Adjunta como máximo una foto por ángulo (frontal, lateral y posterior).';
+const MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA_ESPERADO =
+  'Una de las fotos no es válida. Vuelve a subirla.';
+
+/**
+ * El contrato 10 amplía `construirPayloadCheckinAntropometrico` con un 4.º parámetro `fotos`:
+ * la firma de producción ya lo declara, así que se llama directamente (sin cast).
+ */
+/** Foto de contrato con clave distinguible por sufijo (solo importa el ángulo repetido). */
+const fotoDe = (angulo: AnguloFoto, sufijo: string): FotoAntropometriaInputDTO => ({
+  angulo,
+  storageKey: `antropometria/${ALUMNO_ID}/2026/${UUID_FOTO}${sufijo}.webp`,
+});
 
 describe('construirPayloadCheckinAntropometrico (RF-003: contrato del check-in real)', () => {
   it('construye el payload mínimo válido con alumnoId y fechaEvaluacion del contrato', () => {
@@ -21,7 +44,7 @@ describe('construirPayloadCheckinAntropometrico (RF-003: contrato del check-in r
     expect(payload.pesoKg).toBe('74.50');
     expect(payload.porcentajeGrasa).toBeUndefined();
     expect(payload.perimetros).toBeUndefined();
-    // La UX de fotos no existe todavía: nunca se inventa una subida ni un array vacío.
+    // Sin fotos no se inventa una subida ni un array vacío.
     expect('fotos' in payload).toBe(false);
   });
 
@@ -115,6 +138,27 @@ describe('construirPayloadCheckinAntropometrico (RF-003: contrato del check-in r
         '2026-09-20'
       )
     ).toThrowError(/pliegue del tríceps debe estar entre 1.00 mm y 100.00 mm/i);
+  });
+
+  it('contrato 10: con fotos no vacío el payload las incluye tal cual', () => {
+    const fotos: FotoAntropometriaInputDTO[] = [fotoDe(AnguloFoto.LATERAL, '-l')];
+
+    const payload = construirPayloadCheckinAntropometrico(ALUMNO_ID, { pesoKg: '74.50' }, '2026-09-20', fotos);
+
+    expect(payload.fotos).toEqual(fotos);
+  });
+
+  it('contrato 10: con [] omite la clave fotos y los llamadores de 3 argumentos siguen igual', () => {
+    const conArrayVacio = construirPayloadCheckinAntropometrico(ALUMNO_ID, { pesoKg: '74.50' }, '2026-09-20', []);
+
+    expect('fotos' in conArrayVacio).toBe(false);
+
+    const deTresArgumentos = construirPayloadCheckinAntropometrico(
+      ALUMNO_ID,
+      { pesoKg: '74.50' },
+      '2026-09-20'
+    );
+    expect('fotos' in deTresArgumentos).toBe(false);
   });
 });
 
@@ -239,5 +283,60 @@ describe('fechaLocalHoy', () => {
 
   it('rellena mes y día con cero a la izquierda', () => {
     expect(fechaLocalHoy(new Date(2026, 0, 5, 8, 0, 0))).toBe('2026-01-05');
+  });
+});
+
+describe('RF-003 fotos: contrato compartido (contratos 1 y 2)', () => {
+  const base = { alumnoId: ALUMNO_ID, fechaEvaluacion: '2026-09-20', pesoKg: '74.50' };
+
+  it('contrato 1: rechaza dos fotos del mismo ángulo con MENSAJE_FOTOS_ANGULO_REPETIDO', () => {
+    const resultado = CheckinAntropometricoSchema.safeParse({
+      ...base,
+      fotos: [fotoDe(AnguloFoto.FRONTAL, '-a'), fotoDe(AnguloFoto.FRONTAL, '-b')],
+    });
+
+    expect(resultado.success).toBe(false);
+    if (!resultado.success) {
+      expect(resultado.error.issues.map((issue) => issue.message)).toContain(
+        MENSAJE_FOTOS_ANGULO_REPETIDO_ESPERADO
+      );
+    }
+  });
+
+  it('contrato 1: acepta 0, 1, 2 y 3 fotos de ángulos distintos', () => {
+    expect(CheckinAntropometricoSchema.safeParse({ ...base, fotos: [] }).success).toBe(true);
+    expect(
+      CheckinAntropometricoSchema.safeParse({ ...base, fotos: [fotoDe(AnguloFoto.FRONTAL, '-1')] })
+        .success
+    ).toBe(true);
+    expect(
+      CheckinAntropometricoSchema.safeParse({
+        ...base,
+        fotos: [fotoDe(AnguloFoto.FRONTAL, '-1'), fotoDe(AnguloFoto.LATERAL, '-2')],
+      }).success
+    ).toBe(true);
+    expect(
+      CheckinAntropometricoSchema.safeParse({
+        ...base,
+        fotos: [
+          fotoDe(AnguloFoto.FRONTAL, '-1'),
+          fotoDe(AnguloFoto.LATERAL, '-2'),
+          fotoDe(AnguloFoto.POSTERIOR, '-3'),
+        ],
+      }).success
+    ).toBe(true);
+  });
+
+  it('contrato 1: acepta omitir fotos', () => {
+    expect(CheckinAntropometricoSchema.safeParse(base).success).toBe(true);
+  });
+
+  it('contrato 2: exporta las constantes con el texto exacto', () => {
+    const exportadas = contratosFotosShared as unknown as Record<string, unknown>;
+
+    expect(exportadas.MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA).toBe(
+      MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA_ESPERADO
+    );
+    expect(exportadas.MENSAJE_FOTOS_ANGULO_REPETIDO).toBe(MENSAJE_FOTOS_ANGULO_REPETIDO_ESPERADO);
   });
 });

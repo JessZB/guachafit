@@ -20,6 +20,7 @@ import {
   ComparativaAngularDTO,
   FotoAntropometriaDetalleDTO,
   PerimetrosCorporalesDTO,
+  MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA,
 } from '@guachafit/shared';
 import { ForbiddenException, BadRequestException, NotFoundException } from '@nestjs/common';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
@@ -151,6 +152,17 @@ export class AntropometriaTestEngine {
       fechaAprobacionUtc = nowIso;
     } else {
       throw new ForbiddenException('Rol no autorizado para registrar evaluaciones antropométricas.');
+    }
+
+    // 3. Validación de la bóveda (RNF-001, alineada con el servicio real): cada foto debe ser un
+    // objeto de la bóveda de antropometría de ESTE alumno, con la estructura que emite el presign.
+    const fotoInvalida = (validado.fotos ?? []).some(
+      (foto) =>
+        !foto.storageKey.toLowerCase().startsWith(`antropometria/${validado.alumnoId.toLowerCase()}/`) ||
+        !R2StorageService.validarStorageKeyEstructura(foto.storageKey)
+    );
+    if (fotoInvalida) {
+      throw new BadRequestException(MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA);
     }
 
     const controlId = customId ?? `ctrl-${randomUUID()}`;

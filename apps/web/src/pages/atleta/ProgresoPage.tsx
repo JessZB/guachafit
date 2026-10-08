@@ -6,6 +6,7 @@ import { BloqueoAlumnoPanel } from '../../components/common/BloqueoAlumnoPanel';
 import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import {
   construirPayloadCheckinAntropometrico,
+  fechaLocalHoy,
   obtenerUltimaMedicionReal,
   validarMedidasCheckinAntropometrico,
   type CampoMedidaCheckinAntropometrico,
@@ -32,8 +33,10 @@ import {
   EvolucionCorporalDTO,
   ControlAntropometricoDetalleDTO,
   FotoAntropometriaDetalleDTO,
+  type FotoAntropometriaInputDTO,
   Modalidad,
 } from '@guachafit/shared';
+import { SelectorFotosCheckin } from '../../components/antropometria/SelectorFotosCheckin';
 import {
   TrendingUp,
   Camera,
@@ -120,6 +123,12 @@ export function ProgresoPage() {
   const [suprailiacoMm, setSuprailiacoMm] = useState(() => (isDemoMode ? '9.80' : ''));
   const [abdominalMm, setAbdominalMm] = useState(() => (isDemoMode ? '14.20' : ''));
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // RF-003 RN-02: fotos del check-in (opcionales). `claveFotos` vuelve a montar el selector vacío.
+  const [fotosCheckin, setFotosCheckin] = useState<{
+    fotos: FotoAntropometriaInputDTO[];
+    subiendo: boolean;
+  }>({ fotos: [], subiendo: false });
+  const [claveFotos, setClaveFotos] = useState(0);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   // Validación inline: los mensajes por campo se muestran al escribir o tras intentar enviar.
   const [intentoEnvio, setIntentoEnvio] = useState(false);
@@ -303,6 +312,10 @@ export function ProgresoPage() {
       );
       return;
     }
+    if (fotosCheckin.subiendo) {
+      setSubmitError('Espera a que terminen de subirse las fotos.');
+      return;
+    }
     setIntentoEnvio(true);
     if (Object.keys(erroresMedidas).length > 0) {
       setSubmitError('Revisa los campos marcados antes de enviar tu check-in.');
@@ -326,7 +339,7 @@ export function ProgresoPage() {
         subescapularMm,
         suprailiacoMm,
         abdominalMm,
-      });
+      }, fechaLocalHoy(), fotosCheckin.fotos);
       await apiClient<ControlAntropometricoDetalleDTO>('/antropometria/checkin', {
         method: 'POST',
         body: JSON.stringify(payload),
@@ -340,6 +353,7 @@ export function ProgresoPage() {
       ).catch(() => null);
       if (evolucionActualizada) setEvolucion(evolucionActualizada);
 
+      setClaveFotos((clave) => clave + 1);
       setSubmitSuccess(true);
       setTimeout(() => {
         setSubmitSuccess(false);
@@ -924,6 +938,21 @@ export function ProgresoPage() {
                     </div>
                   </div>
 
+                  <div className="space-y-2">
+                    <p className="text-xs font-bold text-foreground">Fotos de progreso (opcionales)</p>
+                    {isDemoMode && (
+                      <p className="text-[11px] text-muted-foreground">
+                        En la demostración no se suben fotos.
+                      </p>
+                    )}
+                    <SelectorFotosCheckin
+                      key={claveFotos}
+                      alumnoId={user?.id ?? ''}
+                      onCambio={setFotosCheckin}
+                      deshabilitado={isDemoMode || isSubmitting || !user?.id}
+                    />
+                  </div>
+
                   <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border/80 text-xs text-muted-foreground space-y-1">
                     <div className="flex items-center gap-1.5 font-bold text-foreground">
                       <Lock className="h-3.5 w-3.5 text-primary" />
@@ -946,7 +975,7 @@ export function ProgresoPage() {
 
                   <button
                     type="submit"
-                    disabled={isSubmitting || !estadoVentana.permiteRegistrar}
+                    disabled={isSubmitting || fotosCheckin.subiendo || !estadoVentana.permiteRegistrar}
                     className="w-full min-h-11 py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
                   >
                     <span>{isSubmitting ? 'Enviando...' : 'Enviar Evaluación al Coach'}</span>

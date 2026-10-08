@@ -68,15 +68,15 @@ describe('RF-003: Check-in Antropométrico y Auditoría RBAC Híbrida (Presencia
         fotos: [
           {
             angulo: AnguloFoto.FRONTAL,
-            storageKey: `antropometria/${alumnoPresencialId}/2026/foto-frontal-1.webp`,
+            storageKey: `antropometria/${alumnoPresencialId}/2026/11111111-1111-4111-8111-000000000001.webp`,
           },
           {
             angulo: AnguloFoto.LATERAL,
-            storageKey: `antropometria/${alumnoPresencialId}/2026/foto-lateral-1.webp`,
+            storageKey: `antropometria/${alumnoPresencialId}/2026/11111111-1111-4111-8111-000000000002.webp`,
           },
           {
             angulo: AnguloFoto.POSTERIOR,
-            storageKey: `antropometria/${alumnoPresencialId}/2026/foto-posterior-1.webp`,
+            storageKey: `antropometria/${alumnoPresencialId}/2026/11111111-1111-4111-8111-000000000003.webp`,
           },
         ],
         observacionesCoach: 'Medición tomada en consulta con cáliper Harpenden y cinta ergonómica.',
@@ -186,11 +186,11 @@ describe('RF-003: Check-in Antropométrico y Auditoría RBAC Híbrida (Presencia
         fotos: [
           {
             angulo: AnguloFoto.FRONTAL,
-            storageKey: `antropometria/${alumnoRemotoId}/2026/foto-maria-f.webp`,
+            storageKey: `antropometria/${alumnoRemotoId}/2026/11111111-1111-4111-8111-000000000011.webp`,
           },
           {
             angulo: AnguloFoto.LATERAL,
-            storageKey: `antropometria/${alumnoRemotoId}/2026/foto-maria-l.webp`,
+            storageKey: `antropometria/${alumnoRemotoId}/2026/11111111-1111-4111-8111-000000000012.webp`,
           },
         ],
       };

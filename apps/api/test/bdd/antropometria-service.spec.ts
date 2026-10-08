@@ -513,7 +513,7 @@ describe('Módulo 4: Control Antropométrico & Bóveda R2 (AntropometriaService 
         fotos: [
           {
             angulo: AnguloFoto.FRONTAL,
-            storageKey: `antropometria/${alumnoPresencialId}/2026/f1.webp`,
+            storageKey: `antropometria/${alumnoPresencialId}/2026/11111111-1111-4111-8111-000000000001.webp`,
           },
         ],
       };
@@ -895,11 +895,11 @@ describe('Módulo 4: Control Antropométrico & Bóveda R2 (AntropometriaService 
           fotos: [
             {
               angulo: AnguloFoto.FRONTAL,
-              storageKey: `antropometria/${alumnoRemotoId}/2026/ctrl1-front.webp`,
+              storageKey: `antropometria/${alumnoRemotoId}/2026/11111111-1111-4111-8111-000000000011.webp`,
             },
             {
               angulo: AnguloFoto.LATERAL,
-              storageKey: `antropometria/${alumnoRemotoId}/2026/ctrl1-lat.webp`,
+              storageKey: `antropometria/${alumnoRemotoId}/2026/11111111-1111-4111-8111-000000000012.webp`,
             },
           ],
         },
@@ -916,7 +916,7 @@ describe('Módulo 4: Control Antropométrico & Bóveda R2 (AntropometriaService 
           fotos: [
             {
               angulo: AnguloFoto.FRONTAL,
-              storageKey: `antropometria/${alumnoRemotoId}/2026/ctrl2-front.webp`,
+              storageKey: `antropometria/${alumnoRemotoId}/2026/11111111-1111-4111-8111-000000000021.webp`,
             },
           ],
         },
@@ -1176,6 +1176,319 @@ describe('Módulo 4: Control Antropométrico & Bóveda R2 (AntropometriaService 
       expect(registro.perimetros?.musloCm).toBe('57.00');
       // Sin pliegues el bloque queda nulo (no se inventan ceros).
       expect(registro.pliegues).toBeNull();
+    });
+  });
+
+  // ===========================================================================
+  // RF-003 "fotos del check-in" (contratos 3-7: el servicio valida la bóveda del alumno)
+  // ===========================================================================
+  describe('RF-003 fotos del check-in: validación de storageKey y ángulo repetido', () => {
+    const UUID_CLAVE = '00000000-0000-4000-8000-0000000000ab';
+    const MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA_ESPERADO =
+      'Una de las fotos no es válida. Vuelve a subirla.';
+    const MENSAJE_FOTOS_ANGULO_REPETIDO_ESPERADO =
+      'Adjunta como máximo una foto por ángulo (frontal, lateral y posterior).';
+
+    /** Clave con la estructura completa y el prefijo del alumno indicado. */
+    const clavePropia = (alumnoId: string) =>
+      `antropometria/${alumnoId}/2026/${UUID_CLAVE}.webp`;
+
+    async function capturarError(promesa: Promise<unknown>): Promise<unknown> {
+      try {
+        await promesa;
+        return null;
+      } catch (error) {
+        return error;
+      }
+    }
+
+    /** El rechazo del contrato no puede dejar filas en ninguna de las dos tablas. */
+    function expectNadaInsertado(): void {
+      expect(mockControlesAntropometricos).toHaveLength(0);
+      expect(mockFotosAntropometria).toHaveLength(0);
+    }
+
+    it('contrato 3 (ALUMNO online): clave de otro alumno → 400 del contrato y sin insertar', async () => {
+      const err = await capturarError(
+        antropometriaService.registrarCheckin(
+          { id: alumnoRemotoId, rol: Rol.ALUMNO },
+          {
+            alumnoId: alumnoRemotoId,
+            fechaEvaluacion: '2026-09-06',
+            pesoKg: '65.00',
+            fotos: [{ angulo: AnguloFoto.FRONTAL, storageKey: clavePropia(alumnoPresencialId) }],
+          }
+        )
+      );
+
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as Error).message).toBe(MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA_ESPERADO);
+      expectNadaInsertado();
+    });
+
+    it('contrato 3 (ENTRENADOR): clave de otro alumno → mismo 400 y sin insertar', async () => {
+      const err = await capturarError(
+        antropometriaService.registrarCheckin(
+          { id: coachId, rol: Rol.ENTRENADOR, entrenadorId: coachId },
+          {
+            alumnoId: alumnoPresencialId,
+            fechaEvaluacion: '2026-09-06',
+            pesoKg: '80.00',
+            fotos: [{ angulo: AnguloFoto.LATERAL, storageKey: clavePropia(alumnoRemotoId) }],
+          }
+        )
+      );
+
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as Error).message).toBe(MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA_ESPERADO);
+      expectNadaInsertado();
+    });
+
+    it('contrato 3: claves de otro módulo o texto arbitrario → 400 y sin insertar', async () => {
+      const caller = { id: alumnoRemotoId, rol: Rol.ALUMNO };
+      const base = { alumnoId: alumnoRemotoId, fechaEvaluacion: '2026-09-06', pesoKg: '65.00' };
+
+      const errComida = await capturarError(
+        antropometriaService.registrarCheckin(caller, {
+          ...base,
+          fotos: [
+            {
+              angulo: AnguloFoto.FRONTAL,
+              storageKey: `comidas/${alumnoRemotoId}/2026/${UUID_CLAVE}.webp`,
+            },
+          ],
+        })
+      );
+      expect(errComida).toBeInstanceOf(BadRequestException);
+      expect((errComida as Error).message).toBe(MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA_ESPERADO);
+
+      const errTexto = await capturarError(
+        antropometriaService.registrarCheckin(caller, {
+          ...base,
+          fotos: [{ angulo: AnguloFoto.FRONTAL, storageKey: 'clave-arbitraria' }],
+        })
+      );
+      expect(errTexto).toBeInstanceOf(BadRequestException);
+      expect((errTexto as Error).message).toBe(MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA_ESPERADO);
+
+      expectNadaInsertado();
+    });
+
+    it('contrato 4: prefijo correcto con extensión no permitida (.png) → 400 y sin insertar', async () => {
+      const err = await capturarError(
+        antropometriaService.registrarCheckin(
+          { id: alumnoRemotoId, rol: Rol.ALUMNO },
+          {
+            alumnoId: alumnoRemotoId,
+            fechaEvaluacion: '2026-09-06',
+            pesoKg: '65.00',
+            fotos: [
+              {
+                angulo: AnguloFoto.POSTERIOR,
+                storageKey: `antropometria/${alumnoRemotoId}/2026/${UUID_CLAVE}.png`,
+              },
+            ],
+          }
+        )
+      );
+
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as Error).message).toBe(MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA_ESPERADO);
+      expectNadaInsertado();
+    });
+
+    it('contrato 4: prefijo correcto con UUID mal formado → mismo 400 y sin insertar', async () => {
+      const err = await capturarError(
+        antropometriaService.registrarCheckin(
+          { id: alumnoRemotoId, rol: Rol.ALUMNO },
+          {
+            alumnoId: alumnoRemotoId,
+            fechaEvaluacion: '2026-09-06',
+            pesoKg: '65.00',
+            fotos: [
+              {
+                angulo: AnguloFoto.POSTERIOR,
+                storageKey: `antropometria/${alumnoRemotoId}/2026/no-es-uuid.webp`,
+              },
+            ],
+          }
+        )
+      );
+
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as Error).message).toBe(MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA_ESPERADO);
+      expectNadaInsertado();
+    });
+
+    it('contrato 5: claves válidas del propio alumno guardan control y fotos como hasta ahora', async () => {
+      const clave = clavePropia(alumnoRemotoId);
+
+      const registro = await antropometriaService.registrarCheckin(
+        { id: alumnoRemotoId, rol: Rol.ALUMNO },
+        {
+          alumnoId: alumnoRemotoId,
+          fechaEvaluacion: '2026-09-06',
+          pesoKg: '65.00',
+          fotos: [{ angulo: AnguloFoto.LATERAL, storageKey: clave }],
+        },
+        'ctrl-fotos-clave-valida'
+      );
+
+      expect(registro.fotos).toHaveLength(1);
+      expect(registro.fotos[0]?.angulo).toBe(AnguloFoto.LATERAL);
+      expect(registro.fotos[0]?.storageKey).toBe(clave);
+      expect(mockControlesAntropometricos).toHaveLength(1);
+      expect(mockFotosAntropometria).toHaveLength(1);
+    });
+
+    it('contrato 6: dos fotos del mismo ángulo → 400 del contrato y sin insertar', async () => {
+      const err = await capturarError(
+        antropometriaService.registrarCheckin(
+          { id: alumnoRemotoId, rol: Rol.ALUMNO },
+          {
+            alumnoId: alumnoRemotoId,
+            fechaEvaluacion: '2026-09-06',
+            pesoKg: '65.00',
+            fotos: [
+              { angulo: AnguloFoto.POSTERIOR, storageKey: clavePropia(alumnoRemotoId) },
+              {
+                angulo: AnguloFoto.POSTERIOR,
+                storageKey: `antropometria/${alumnoRemotoId}/2026/00000000-0000-4000-8000-0000000000cd.webp`,
+              },
+            ],
+          }
+        )
+      );
+
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as Error).message).toBe(MENSAJE_FOTOS_ANGULO_REPETIDO_ESPERADO);
+      expectNadaInsertado();
+    });
+
+    it('contrato 7: alumnoId en mayúsculas con claves del presign en minúsculas guarda el check-in', async () => {
+      const alumnoMayusculas = alumnoRemotoId.toUpperCase();
+      // Postgres resuelve los uuid sin distinguir caja; el mock compara texto, así que se registra
+      // el mismo perfil con el id en mayúsculas para modelar esa semántica.
+      mockPerfilesAlumno.push({
+        id: 'prof-2-mayusculas',
+        usuarioId: alumnoMayusculas,
+        entrenadorId: coachId,
+        nombres: 'Laura',
+        apellidos: 'Remota',
+        modalidad: Modalidad.REMOTO,
+        estadoActivacion: EstadoAlumno.ACTIVO,
+      });
+
+      const clave = clavePropia(alumnoRemotoId);
+      const registro = await antropometriaService.registrarCheckin(
+        { id: coachId, rol: Rol.ENTRENADOR, entrenadorId: coachId },
+        {
+          alumnoId: alumnoMayusculas,
+          fechaEvaluacion: '2026-09-06',
+          pesoKg: '65.00',
+          fotos: [{ angulo: AnguloFoto.FRONTAL, storageKey: clave }],
+        },
+        '00000000-0000-4000-8000-0000000000e1'
+      );
+
+      expect(registro.fotos).toHaveLength(1);
+      expect(registro.fotos[0]?.storageKey).toBe(clave);
+      expect(mockControlesAntropometricos).toHaveLength(1);
+      expect(mockFotosAntropometria).toHaveLength(1);
+    });
+
+    it('contrato 7: una foto con clave de otro alumno no aparece en obtenerEvolucion ni se firma', async () => {
+      const clavePropiaFoto = clavePropia(alumnoRemotoId);
+      await antropometriaService.registrarCheckin(
+        { id: coachId, rol: Rol.ENTRENADOR, entrenadorId: coachId },
+        {
+          alumnoId: alumnoRemotoId,
+          fechaEvaluacion: '2026-09-06',
+          pesoKg: '65.00',
+          fotos: [{ angulo: AnguloFoto.FRONTAL, storageKey: clavePropiaFoto }],
+        },
+        '00000000-0000-4000-8000-0000000000e2'
+      );
+
+      // Fila previa al guard de escritura: clave de la bóveda de OTRO alumno.
+      const claveAjena = `antropometria/${alumnoPresencialId}/2026/${UUID_CLAVE}.webp`;
+      mockFotosAntropometria.push({
+        id: 'foto-ajena-lectura',
+        controlId: '00000000-0000-4000-8000-0000000000e2',
+        angulo: AnguloFoto.LATERAL,
+        storageKey: claveAjena,
+        createdAtUtc: new Date(),
+      });
+
+      const firma = vi.spyOn(r2StorageService, 'generarPresignedGetUrl');
+      try {
+        const evolucion = await antropometriaService.obtenerEvolucion(alumnoRemotoId, undefined, {
+          id: alumnoRemotoId,
+          rol: Rol.ALUMNO,
+        });
+
+        const fotos = evolucion.evaluaciones[0]?.fotos ?? [];
+        expect(fotos.map((foto) => foto.storageKey)).toEqual([clavePropiaFoto]);
+        const clavesFirmadas = firma.mock.calls.map(([clave]) => clave);
+        expect(clavesFirmadas).toContain(clavePropiaFoto);
+        expect(clavesFirmadas).not.toContain(claveAjena);
+      } finally {
+        firma.mockRestore();
+      }
+    });
+
+    it('contrato 7: en el comparador, una foto con clave ajena deja fotoDisponible = false y no se firma', async () => {
+      const clavePropiaFoto = clavePropia(alumnoRemotoId);
+      await antropometriaService.registrarCheckin(
+        { id: coachId, rol: Rol.ENTRENADOR, entrenadorId: coachId },
+        {
+          alumnoId: alumnoRemotoId,
+          fechaEvaluacion: '2026-01-01',
+          pesoKg: '70.00',
+          fotos: [{ angulo: AnguloFoto.FRONTAL, storageKey: clavePropiaFoto }],
+        },
+        '00000000-0000-4000-8000-0000000000c1'
+      );
+      await antropometriaService.registrarCheckin(
+        { id: coachId, rol: Rol.ENTRENADOR, entrenadorId: coachId },
+        {
+          alumnoId: alumnoRemotoId,
+          fechaEvaluacion: '2026-03-01',
+          pesoKg: '66.50',
+        },
+        '00000000-0000-4000-8000-0000000000c2'
+      );
+
+      const claveAjena = `antropometria/${alumnoPresencialId}/2026/${UUID_CLAVE}.webp`;
+      mockFotosAntropometria.push({
+        id: 'foto-ajena-comparador',
+        controlId: '00000000-0000-4000-8000-0000000000c2',
+        angulo: AnguloFoto.FRONTAL,
+        storageKey: claveAjena,
+        createdAtUtc: new Date(),
+      });
+
+      const firma = vi.spyOn(r2StorageService, 'generarPresignedGetUrl');
+      try {
+        const comp = await antropometriaService.obtenerComparativaFotografica(
+          alumnoRemotoId,
+          {
+            controlIdA: '00000000-0000-4000-8000-0000000000c1',
+            controlIdB: '00000000-0000-4000-8000-0000000000c2',
+            angulo: AnguloFoto.FRONTAL,
+          },
+          { id: alumnoRemotoId, rol: Rol.ALUMNO }
+        );
+
+        expect(comp.fotoDisponible).toBe(false);
+        expect(comp.fotoA).not.toBeNull();
+        expect(comp.fotoB).toBeNull();
+        const clavesFirmadas = firma.mock.calls.map(([clave]) => clave);
+        expect(clavesFirmadas).toContain(clavePropiaFoto);
+        expect(clavesFirmadas).not.toContain(claveAjena);
+      } finally {
+        firma.mockRestore();
+      }
     });
   });
 });

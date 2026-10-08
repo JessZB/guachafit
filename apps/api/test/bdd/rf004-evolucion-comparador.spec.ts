@@ -48,7 +48,7 @@ describe('RF-004: Visualización de Evolución Corporal y Comparador Fotográfic
           fotos: [
             {
               angulo: AnguloFoto.FRONTAL,
-              storageKey: `antropometria/${alumnoId}/2026/ctrl1-frontal.webp`,
+              storageKey: `antropometria/${alumnoId}/2026/11111111-1111-4111-8111-000000000101.webp`,
             },
           ],
         },
@@ -121,7 +121,7 @@ describe('RF-004: Visualización de Evolución Corporal y Comparador Fotográfic
           fotos: [
             {
               angulo: AnguloFoto.FRONTAL,
-              storageKey: `antropometria/${alumnoId}/2026/ctrl5-frontal.webp`,
+              storageKey: `antropometria/${alumnoId}/2026/11111111-1111-4111-8111-000000000105.webp`,
             },
           ],
         },
@@ -182,11 +182,11 @@ describe('RF-004: Visualización de Evolución Corporal y Comparador Fotográfic
           fotos: [
             {
               angulo: AnguloFoto.FRONTAL,
-              storageKey: `antropometria/${alumnoId}/2026/ctrlA-frontal.webp`,
+              storageKey: `antropometria/${alumnoId}/2026/11111111-1111-4111-8111-000000000201.webp`,
             },
             {
               angulo: AnguloFoto.LATERAL,
-              storageKey: `antropometria/${alumnoId}/2026/ctrlA-lateral.webp`,
+              storageKey: `antropometria/${alumnoId}/2026/11111111-1111-4111-8111-000000000202.webp`,
             },
           ],
         },
@@ -205,11 +205,11 @@ describe('RF-004: Visualización de Evolución Corporal y Comparador Fotográfic
           fotos: [
             {
               angulo: AnguloFoto.FRONTAL,
-              storageKey: `antropometria/${alumnoId}/2026/ctrlB-frontal.webp`,
+              storageKey: `antropometria/${alumnoId}/2026/11111111-1111-4111-8111-000000000203.webp`,
             },
             {
               angulo: AnguloFoto.LATERAL,
-              storageKey: `antropometria/${alumnoId}/2026/ctrlB-lateral.webp`,
+              storageKey: `antropometria/${alumnoId}/2026/11111111-1111-4111-8111-000000000204.webp`,
             },
           ],
         },
@@ -236,11 +236,11 @@ describe('RF-004: Visualización de Evolución Corporal y Comparador Fotográfic
       expect(comparativa.fotoDisponible).toBe(true);
 
       expect(comparativa.fotoA).not.toBeNull();
-      expect(comparativa.fotoA?.storageKey).toBe(`antropometria/${alumnoId}/2026/ctrlA-lateral.webp`);
+      expect(comparativa.fotoA?.storageKey).toBe(`antropometria/${alumnoId}/2026/11111111-1111-4111-8111-000000000202.webp`);
       expect(comparativa.fotoA?.presignedGetUrl).toContain('X-Amz-Expires=900');
 
       expect(comparativa.fotoB).not.toBeNull();
-      expect(comparativa.fotoB?.storageKey).toBe(`antropometria/${alumnoId}/2026/ctrlB-lateral.webp`);
+      expect(comparativa.fotoB?.storageKey).toBe(`antropometria/${alumnoId}/2026/11111111-1111-4111-8111-000000000204.webp`);
       expect(comparativa.fotoB?.presignedGetUrl).toContain('X-Amz-Expires=900');
 
       // And mostrar la fecha y peso correspondiente a cada una de las dos tomas
@@ -297,7 +297,7 @@ describe('RF-004: Visualización de Evolución Corporal y Comparador Fotográfic
           fotos: [
             {
               angulo: AnguloFoto.FRONTAL,
-              storageKey: `antropometria/${alumnoId}/2026/ctrlX-frontal.webp`,
+              storageKey: `antropometria/${alumnoId}/2026/11111111-1111-4111-8111-000000000301.webp`,
             },
           ],
         },
@@ -315,11 +315,11 @@ describe('RF-004: Visualización de Evolución Corporal y Comparador Fotográfic
           fotos: [
             {
               angulo: AnguloFoto.FRONTAL,
-              storageKey: `antropometria/${alumnoId}/2026/ctrlY-frontal.webp`,
+              storageKey: `antropometria/${alumnoId}/2026/11111111-1111-4111-8111-000000000302.webp`,
             },
             {
               angulo: AnguloFoto.POSTERIOR,
-              storageKey: `antropometria/${alumnoId}/2026/ctrlY-posterior.webp`,
+              storageKey: `antropometria/${alumnoId}/2026/11111111-1111-4111-8111-000000000303.webp`,
             },
           ],
         },
@@ -341,7 +341,7 @@ describe('RF-004: Visualización de Evolución Corporal y Comparador Fotográfic
       // And fotoA es null mientras que fotoB sí existe con su URL firmada
       expect(comparativa.fotoA).toBeNull();
       expect(comparativa.fotoB).not.toBeNull();
-      expect(comparativa.fotoB?.storageKey).toBe(`antropometria/${alumnoId}/2026/ctrlY-posterior.webp`);
+      expect(comparativa.fotoB?.storageKey).toBe(`antropometria/${alumnoId}/2026/11111111-1111-4111-8111-000000000303.webp`);
 
       // And los metadatos de peso y fecha siguen estando disponibles para comparación analítica
       expect(comparativa.controlA.pesoKg).toBe('80.00');

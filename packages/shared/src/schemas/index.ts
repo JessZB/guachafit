@@ -943,6 +943,16 @@ export const FotoAntropometriaInputSchema = z.object({
   storageKey: z.string().min(5, 'La clave de almacenamiento no es válida'),
 });
 
+/** RF-003 RN-02: las fotos del check-in son opcionales, pero como máximo una por ángulo. */
+export const MENSAJE_FOTOS_ANGULO_REPETIDO =
+  'Adjunta como máximo una foto por ángulo (frontal, lateral y posterior).';
+
+/**
+ * RNF-001: la clave de una foto no pertenece a la bóveda de antropometría del alumno (o no tiene
+ * la estructura que emite el presign). El API la rechaza antes de guardar nada.
+ */
+export const MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA = 'Una de las fotos no es válida. Vuelve a subirla.';
+
 /**
  * RF-003 §6: medida decimal con rango de saneamiento.
  *
@@ -1068,6 +1078,10 @@ export const CheckinAntropometricoSchema = z.object({
   fotos: z
     .array(FotoAntropometriaInputSchema)
     .max(3, 'No se permiten más de 3 fotografías corporales de progreso por evaluación')
+    .refine(
+      (fotos) => new Set(fotos.map((foto) => foto.angulo)).size === fotos.length,
+      MENSAJE_FOTOS_ANGULO_REPETIDO
+    )
     .optional(),
   observacionesCoach: z.string().max(1000).optional(),
 });

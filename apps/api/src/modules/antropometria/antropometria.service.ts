@@ -36,6 +36,7 @@ import {
   EstadoMedicion,
   CheckinAntropometricoDTO,
   CheckinAntropometricoSchema,
+  MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA,
   ConciliarAntropometriaDTO,
   ConciliarAntropometriaSchema,
   PresignedUploadUrlDTO,
@@ -80,6 +81,17 @@ function toIsoUtcString(date: Date | string | null | undefined): string | null {
 
 /** LOTE API-2: control antropométrico inexistente o de otro alumno (sin mostrar identificadores). */
 const MENSAJE_CONTROL_NO_ENCONTRADO = 'No encontramos esa medición. Actualiza la pantalla.';
+
+/**
+ * RNF-001: la clave es un objeto de la bóveda de antropometría de ESE alumno, con la estructura que
+ * emite el presign. Sin distinguir mayúsculas: el contrato acepta UUID en cualquier caja.
+ */
+function esClaveFotoDelAlumno(storageKey: string, alumnoId: string): boolean {
+  return (
+    storageKey.toLowerCase().startsWith(`antropometria/${alumnoId.toLowerCase()}/`) &&
+    R2StorageService.validarStorageKeyEstructura(storageKey)
+  );
+}
 
 @Injectable()
 export class AntropometriaService {
@@ -182,6 +194,16 @@ export class AntropometriaService {
     // RBAC primero: un alumno solo registra sus propias métricas (y su contexto RLS es self).
     if (caller.rol === Rol.ALUMNO && caller.id !== validado.alumnoId) {
       throw new ForbiddenException('No puedes registrar medidas para otro alumno.');
+    }
+
+    // RNF-001: cada foto debe ser un objeto de la bóveda de antropometría de ESTE alumno, con la
+    // estructura que emite el presign. Sin esto, una clave ajena guardada en el control permitiría
+    // leer la foto de otro alumno con la URL firmada de lectura.
+    const fotoInvalida = (validado.fotos ?? []).some(
+      (foto) => !esClaveFotoDelAlumno(foto.storageKey, validado.alumnoId)
+    );
+    if (fotoInvalida) {
+      throw new BadRequestException(MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA);
     }
 
     // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura con el contexto del actor.
@@ -637,7 +659,7 @@ export class AntropometriaService {
       throw new BadRequestException('Solo es posible comparar fotográficamente evaluaciones en estado Aprobado.');
     }
 
-    const [fotoARaw] = await this.db
+    const [fotoAGuardada] = await this.db
       .select()
       .from(fotosAntropometria)
       .where(
@@ -648,7 +670,7 @@ export class AntropometriaService {
       )
       .limit(1);
 
-    const [fotoBRaw] = await this.db
+    const [fotoBGuardada] = await this.db
       .select()
       .from(fotosAntropometria)
       .where(
@@ -658,6 +680,11 @@ export class AntropometriaService {
         )
       )
       .limit(1);
+
+    // Defensa en profundidad (RNF-001): una clave guardada antes de validar la escritura que no
+    // pertenezca al alumno no se firma; esa perspectiva queda como "foto no disponible".
+    const fotoARaw = this.fotoFirmable(fotoAGuardada, alumnoId);
+    const fotoBRaw = this.fotoFirmable(fotoBGuardada, alumnoId);
 
     let fotoA: FotoAntropometriaDetalleDTO | null = null;
     let fotoB: FotoAntropometriaDetalleDTO | null = null;
@@ -827,6 +854,21 @@ export class AntropometriaService {
   // HELPERS PRIVADOS DE HIDRATACIÓN
   // ---------------------------------------------------------------------------
 
+  /**
+   * RNF-001: devuelve la foto solo si su clave pertenece a la bóveda de antropometría del alumno.
+   * Una fila con clave ajena (aceptada antes de validar la escritura) no se firma y se registra
+   * sin datos del alumno ni la clave, para poder sanearla.
+   */
+  private fotoFirmable<T extends { id: string; storageKey: string }>(
+    foto: T | undefined,
+    alumnoId: string
+  ): T | undefined {
+    if (!foto) return undefined;
+    if (esClaveFotoDelAlumno(foto.storageKey, alumnoId)) return foto;
+    this.logger.warn(`Foto antropométrica ${foto.id} con clave fuera de la bóveda de su alumno: no se firma.`);
+    return undefined;
+  }
+
   private async hidratarControl(
     control: any,
     cargarFotos = true,
@@ -840,8 +882,10 @@ export class AntropometriaService {
         .where(eq(fotosAntropometria.controlId, control.id))
         .orderBy(asc(fotosAntropometria.createdAtUtc));
 
+      // Defensa en profundidad (RNF-001): solo se firman claves de la bóveda de este alumno.
+      const firmables = fotosRows.filter((f) => this.fotoFirmable(f, control.alumnoId));
       fotos = await Promise.all(
-        fotosRows.map(async (f) => ({
+        firmables.map(async (f) => ({
           id: f.id,
           controlId: f.controlId,
           angulo: f.angulo,
