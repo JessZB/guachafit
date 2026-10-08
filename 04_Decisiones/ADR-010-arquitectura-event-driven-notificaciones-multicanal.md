@@ -114,7 +114,7 @@ Adoptamos la **Opción C**.
   (RN-02). El In-App sigue siendo universal.
 - **UI (N2b):** campana In-App con panel accesible (badge, agrupado Hoy/Ayer, marcar leídas,
   navegación por clic) y preferencias por rol: coach en la pestaña Notificaciones de Ajustes
-  (`?tab=notificaciones`), alumno en `/app/preferencias`.
+  (`?tab=notificaciones`), alumno en la pestaña Notificaciones de su Ajustes (`/app/ajustes?tab=notificaciones`; `/app/preferencias` redirige, RF-018).
 - **Digest semanal:** job repetible `notificaciones:resumen-semanal` (lunes 08:00 UTC por defecto,
   env `RESUMEN_SEMANAL_CRON`) con DLQ propia y copia In-App garantizada.
 - Suites en verde: API 621 · web 465.

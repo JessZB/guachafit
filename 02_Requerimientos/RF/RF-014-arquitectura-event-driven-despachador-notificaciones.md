@@ -126,7 +126,7 @@ Then el Despachador NO debe enviar trabajos a las colas de Push ni Email
   navega al destino, "Marcar todas como leídas", paginación "Ver más" y enlace "Configurar mis
   notificaciones"; consume la API In-App paginada de N1.
 - **Preferencias por rol (N2b):** coach en Ajustes → pestaña Notificaciones
-  (`?tab=notificaciones`); alumno en `/app/preferencias` ("Mis Notificaciones"). Matriz completa por
+  (`?tab=notificaciones`); alumno en Ajustes → Notificaciones (`/app/ajustes?tab=notificaciones`; antes `/app/preferencias`, que redirige; RF-018). Matriz completa por
   rol, candados de Seguridad (RN-01) y modal de confirmación de Finanzas (RN-02); modo demo con
   fixtures.
 - **Matriz RF-015 completa (N2a):** migración `0008` (16 booleanos), `GET/PUT

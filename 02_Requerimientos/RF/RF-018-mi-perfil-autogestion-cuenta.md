@@ -3,8 +3,8 @@ id: RF-018
 modulo: Cuenta
 prioridad: alta
 estado: aprobado
-estado_implementacion: parcial
-fecha_verificacion: 2026-10-06
+estado_implementacion: implementado
+fecha_verificacion: 2026-10-08
 problema_origen: "[[PROB-003-acceso-onboarding-dashboard-central]]"
 fecha_creacion: 2026-10-06
 version: 1.0
@@ -60,7 +60,7 @@ Hoy cada usuario depende de otra persona para corregir sus propios datos: el alu
 | Notificaciones | Edita ([[RF-015-matriz-preferencias-usuario-canales]]) | Edita (RF-015) | — |
 | Zona horaria | Edita ([[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]]) | — | — |
 
-- **RN-01 (Identidad del alumno):** el documento de identidad y la fecha de nacimiento se muestran pero no se editan desde "Mi perfil"; la pantalla indica *"Si necesitas corregirlos, pídeselo a tu entrenador."* El entrenador los sigue editando desde la ficha del alumno, como hoy.
+- **RN-01 (Identidad del alumno):** el documento de identidad y la fecha de nacimiento se muestran pero no se editan desde Ajustes; la pantalla indica *"Si necesitas corregirlos, pídeselo a tu entrenador."* El entrenador los sigue editando desde la ficha del alumno, como hoy.
 - **RN-02 (Validación):** nombres y apellidos de 2 a 100 caracteres; nombre comercial hasta 150; teléfono de 8 a 30 caracteres. Mismas reglas que los esquemas compartidos vigentes; un campo no permitido para el rol se rechaza con 400 y mensaje claro.
 
 ### B. Cambio de correo de acceso (decisión del dueño, 2026-10-06)
@@ -87,7 +87,7 @@ Hoy cada usuario depende de otra persona para corregir sus propios datos: el alu
 
 ### Escenario 1: Alumno corrige su teléfono
 ```gherkin
-Given un alumno autenticado en "Mi perfil" > Datos
+Given un alumno autenticado en Ajustes > Perfil
 When cambia su teléfono de WhatsApp a un número válido y guarda
 Then el perfil queda con el teléfono nuevo
   And su entrenador lo ve en la ficha del alumno
@@ -96,7 +96,7 @@ Then el perfil queda con el teléfono nuevo
 
 ### Escenario 2: Cambio de correo con confirmación
 ```gherkin
-Given un entrenador autenticado en "Mi perfil" > Seguridad
+Given un entrenador autenticado en Ajustes > Correo y contraseña
 When escribe un correo nuevo libre y su contraseña actual correcta
 Then ve el aviso de que se enviará un correo de confirmación al correo nuevo
   And el correo nuevo recibe un enlace válido 24 horas
@@ -127,7 +127,7 @@ Then sigue con la sesión abierta en ese dispositivo
 ```gherkin
 Given un enlace de cambio de correo vencido, cancelado o ya usado
 When el usuario lo abre
-Then ve "El enlace no es válido o venció. Pide uno nuevo desde Mi perfil."
+Then ve "El enlace no es válido o venció. Pide uno nuevo desde Ajustes."
   And el correo de acceso no cambia
 ```
 
@@ -136,8 +136,8 @@ Then ve "El enlace no es válido o venció. Pide uno nuevo desde Mi perfil."
 ## 6. Casos Borde y Excepciones
 - **Correo nuevo igual al actual:** 400 *"Ese ya es tu correo de acceso."*
 - **El correo nuevo lo toma otra cuenta antes de confirmar:** al abrir el enlace → 409 *"Ese correo ya está en uso."* y el cambio no se aplica.
-- **Alumno archivado o cuenta deshabilitada:** no puede iniciar sesión, por lo tanto no accede a "Mi perfil"; un enlace de confirmación pendiente no reactiva nada.
-- **Sin conexión:** "Mi perfil" no usa la cola offline; guardar sin red muestra un mensaje claro y no cambia nada.
+- **Alumno archivado o cuenta deshabilitada:** no puede iniciar sesión, por lo tanto no accede a Ajustes; un enlace de confirmación pendiente no reactiva nada.
+- **Sin conexión:** Ajustes no usa la cola offline; guardar sin red muestra un mensaje claro y no cambia nada.
 - **Modo demo:** los guardados se simulan en pantalla y lo indican.
 
 ---
@@ -159,5 +159,18 @@ Then ve "El enlace no es válido o venció. Pide uno nuevo desde Mi perfil."
   - Las sesiones de otros dispositivos siguen hasta 15 minutos tras cambiar la contraseña (el token de acceso emitido no se corta; deja de renovarse).
 - Evidencia: `apps/api/test/bdd/rf018-mi-perfil-datos.spec.ts`, `apps/api/test/bdd/rf018-mi-perfil-seguridad.spec.ts`, `apps/api/test/bdd/api4-correo-real.spec.ts` y `arranque-migraciones-pendientes.spec.ts`; API **1324** aprobados (1 omitida), web **960**; typecheck y build de API y web en verde. Revisado con los 4 enfoques (riesgo, fiabilidad, resiliencia, legibilidad) y validado tras las correcciones.
 
+### Web (2026-10-08, `d5f53ae`)
+- **Implementado:**
+  - **Pantallas (RN-09):** Ajustes del alumno (`/app/ajustes`, reemplaza a "Mis notificaciones"; `/app/preferencias` redirige a `?tab=notificaciones`), del entrenador (`/coach/ajustes`, ahora abre en Perfil; el menú y Cartera enlazan a `?tab=planes` y `?tab=tasas`) y del administrador (`/admin/ajustes`, solo Correo y contraseña). "Ajustes" en la barra lateral, la barra inferior y los menús de todos los roles. Pestañas con el patrón accesible (flechas, Inicio/Fin) en el mismo orden que se ven.
+  - **Perfil:** solo envía lo que cambió; el documento (`V-24123456`) y la fecha de nacimiento del alumno se ven como texto con el aviso de RN-01. Una recarga del perfil no borra lo que el usuario está escribiendo y los campos se bloquean mientras se guarda. Sin conexión se muestra el aviso de datos guardados (la copia puede no ser la última).
+  - **Correo y contraseña:** aviso previo de RN-03; pendiente con reenviar (pide la contraseña actual) y cancelar, que no se cruzan entre sí. Al cambiar la contraseña la sesión del dispositivo guarda los tokens nuevos y, si había un cambio de correo pendiente, la pantalla lo quita (RN-08). El enlace copiable de desarrollo solo aparece si el API lo devuelve.
+  - **`/confirmar-correo` (pública):** confirma una sola vez al abrirse, sin enviar la sesión abierta; quita el token de la URL (no queda en el historial ni en el Referer) y recuerda el resultado en la pestaña, así recargar no muestra un falso "enlace vencido". Ante un fallo de red o del servidor ofrece "Reintentar".
+  - **Sesión con varias pestañas:** si una renovación con el refresh token viejo es rechazada cuando otra pestaña ya guardó tokens nuevos, no se cierra la sesión: la petición se reintenta con el token vigente.
+  - **Modo demo:** los guardados se simulan y lo dicen.
+- Evidencia: `apps/web/src/lib/ajustes.spec.ts`, `lib/mi-perfil.spec.ts`, `components/ajustes/PiezasAjustes.spec.ts`, `lib/api-client-sesion.spec.ts`, `lib/notificaciones-in-app.spec.ts`; web **1033** aprobados, API **1324** (1 omitida); typecheck y build en verde. Revisado con los 4 enfoques y validado tras las correcciones (17 de 17).
+
 ### Pendiente
-- **Web:** pantalla "Mi perfil" con pestañas (Datos, Seguridad, Notificaciones, Zona horaria) para los tres roles, la ruta pública `/confirmar-correo`, la redirección de "Mis notificaciones" y el aviso previo de RN-03. El entrenador ya tiene sus notificaciones en **Ajustes → Notificaciones** (`/coach/ajustes?tab=notificaciones`); la matriz de notificaciones usa `GET/PUT /notificaciones/preferencias` ([[RF-015-matriz-preferencias-usuario-canales]]).
+- Verificar la migración `0017` contra la BD (Docker).
+- Si se cambia de pestaña con un guardado en vuelo, el resultado (éxito o error) no se muestra al volver.
+- Las peticiones de guardado no tienen tiempo límite: con una red que no responde, el botón queda en "guardando" hasta que el navegador corta.
+- Las pruebas son de funciones y marcado; no hay pruebas de interacción de las pantallas (sin jsdom).

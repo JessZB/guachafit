@@ -134,8 +134,9 @@ Then el sistema debe generar el reporte consolidado de ingresos de la semana y c
 - **Preferencias del coach:** pestaña **Notificaciones** en Ajustes (`/coach/ajustes?tab=notificaciones`),
   con la matriz del §B, switches por canal, candado de Seguridad (RN-01) y modal de confirmación de
   Finanzas (RN-02).
-- **Preferencias del alumno:** pantalla **"Mis Notificaciones"** en `/app/preferencias` (matriz del §A),
-  accesible desde el menú del alumno.
+- **Preferencias del alumno:** pestaña **Notificaciones** de **Ajustes** (`/app/ajustes?tab=notificaciones`,
+  matriz del §A), accesible desde el menú del alumno. Desde 2026-10-08 (RF-018 RN-09) reemplaza a la
+  pantalla "Mis Notificaciones"; `/app/preferencias` redirige ahí.
 - **Componente compartido:** `MatrizPreferenciasNotificacion` consume `GET/PUT
   /notificaciones/preferencias`, pinta `canalesObligatorios` como candados, aplica el copy de RN-02,
   muestra estados de carga/error/éxito y usa fixtures en modo demo (sin persistir).
