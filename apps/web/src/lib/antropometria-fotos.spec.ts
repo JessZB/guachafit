@@ -12,6 +12,10 @@
  *      propagación de `ApiError`, 4xx sin reintento, 5xx agotado, respuesta incompleta sin reintento,
  *      tiempo agotado del PUT y cancelación por `signal`).
  * - 9: `avisoFotosFaltantes` (texto humano con orden canónico de ángulos).
+ *
+ * Ampliado (prompt 01 RNF-001 "privacidad de fotos", contratos 1-5): una foto que el compresor
+ * devuelve SIN recodificar (el MISMO objeto `archivo`) nunca se sube, aunque sea WebP o JPEG. El
+ * mock del compresor devuelve un archivo NUEVO para no chocar con esa regla.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { AnguloFoto } from '@guachafit/shared';
@@ -19,7 +23,12 @@ import { ApiError, ErrorDeConexion, ErrorTiempoAgotado } from './api-client';
 import type { DepsSubirFoto } from './antropometria-fotos';
 
 vi.mock('./imagen-comprimida', () => ({
-  comprimirImagenAWebp: vi.fn(async (archivo: File) => archivo),
+  // El compresor real devuelve un `File` NUEVO cuando recodifica; solo entrega el MISMO objeto en
+  // sus rutas de degradación (sin contexto 2D o sin codificador WebP/JPEG).
+  comprimirImagenAWebp: vi.fn(
+    async (archivo: File) =>
+      new File([archivo], 'progreso-comprimido.webp', { type: 'image/webp' })
+  ),
 }));
 
 const ALUMNO_ID = 'a3333333-3333-4333-8333-333333333333';
@@ -39,6 +48,10 @@ const mensajePutFallidoEsperado = (status: number) =>
   `No se pudo subir la foto (${status}). Revisa tu conexión e inténtalo de nuevo.`;
 const mensajeAlmacenamientoEsperado = (status: number) =>
   `No se pudo subir la foto (${status}): el almacenamiento no respondió bien. Inténtalo de nuevo en unos minutos.`;
+
+/** Contratos 1-2 (RNF-001): texto exacto, duplicado local para que la prueba falle con un motivo claro. */
+const MENSAJE_FOTO_SIN_RECODIFICAR_ESPERADO =
+  'Este navegador no pudo preparar la foto. Prueba con otro navegador actualizado.';
 
 function archivoWebp(): File {
   return new File(['foto'], 'progreso.webp', { type: 'image/webp' });
@@ -91,6 +104,32 @@ describe('contrato 7: prepararFotoAntropometria', () => {
     const llamadas = vi.mocked(comprimirImagenAWebp).mock.calls;
     expect(llamadas).toHaveLength(1);
     expect(llamadas[0]?.[0]).toBe(archivo);
+  });
+});
+
+describe('contratos 1-2 (RNF-001): una foto sin recodificar NUNCA se sube', () => {
+  it('contrato 1: exporta MENSAJE_FOTO_SIN_RECODIFICAR con el texto exacto', async () => {
+    const modulo = await moduloFotos();
+
+    expect(modulo.MENSAJE_FOTO_SIN_RECODIFICAR).toBe(MENSAJE_FOTO_SIN_RECODIFICAR_ESPERADO);
+  });
+
+  it('contrato 2: si el compresor devuelve el MISMO archivo WebP, lanza MENSAJE_FOTO_SIN_RECODIFICAR', async () => {
+    const { prepararFotoAntropometria } = await moduloFotos();
+    const archivo = archivoWebp();
+
+    await expect(
+      prepararFotoAntropometria(archivo, vi.fn(async () => archivo))
+    ).rejects.toThrow(MENSAJE_FOTO_SIN_RECODIFICAR_ESPERADO);
+  });
+
+  it('contrato 2: si el compresor devuelve el MISMO archivo JPEG, lanza MENSAJE_FOTO_SIN_RECODIFICAR', async () => {
+    const { prepararFotoAntropometria } = await moduloFotos();
+    const archivo = new File(['foto'], 'progreso.jpg', { type: 'image/jpeg' });
+
+    await expect(
+      prepararFotoAntropometria(archivo, vi.fn(async () => archivo))
+    ).rejects.toThrow(MENSAJE_FOTO_SIN_RECODIFICAR_ESPERADO);
   });
 });
 

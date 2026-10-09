@@ -37,6 +37,52 @@ export function buildApiCachePattern(apiUrl?: string | null): RegExp {
 }
 
 /**
+ * RNF-001: plugin de Workbox que guarda las respuestas JSON de la API SIN enlaces firmados. En la
+ * copia guardada queda en `''` todo texto que sea un enlace firmado de la bóveda (lleva
+ * `X-Amz-Signature`), se llame `presignedGetUrl` (fotos corporales), `fotoUrl` (platos),
+ * `comprobanteUrl` (pagos) o como sea; también todo `presignedGetUrl`. La pantalla sigue
+ * funcionando sin conexión (muestra "Sin imagen") y un enlace de lectura nunca vive 24 h en Cache
+ * Storage. Lo que no es JSON (o no se puede leer) se guarda tal cual. El `content-length` del
+ * original no se copia: el cuerpo saneado mide distinto.
+ *
+ * Workbox copia `cacheWillUpdate` al service worker como texto: debe ser una función flecha
+ * autocontenida, sin referencias a nada de este módulo.
+ */
+export const pluginSinUrlsFirmadas = {
+  cacheWillUpdate: async ({ response }: { response: Response }): Promise<Response> => {
+    const tipo = response.headers.get('content-type') ?? '';
+    if (response.status === 0 || !tipo.includes('application/json')) return response;
+    let cuerpo: unknown;
+    try {
+      cuerpo = await response.clone().json();
+    } catch {
+      return response;
+    }
+    const limpiar = (valor: unknown): unknown => {
+      if (Array.isArray(valor)) return valor.map(limpiar);
+      if (valor && typeof valor === 'object') {
+        const salida: Record<string, unknown> = {};
+        for (const [clave, dato] of Object.entries(valor as Record<string, unknown>)) {
+          const firmado =
+            typeof dato === 'string' &&
+            (clave === 'presignedGetUrl' || dato.includes('X-Amz-Signature='));
+          salida[clave] = firmado ? '' : limpiar(dato);
+        }
+        return salida;
+      }
+      return valor;
+    };
+    const headers = new Headers(response.headers);
+    headers.delete('content-length');
+    return new Response(JSON.stringify(limpiar(cuerpo)), {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  },
+};
+
+/**
  * D4: regla `runtimeCaching` de Workbox para la API. `NetworkFirst` con corte a los 4 segundos:
  * con red lenta (gimnasio) se sirve la copia guardada en lugar de dejar la pantalla esperando.
  */
@@ -56,6 +102,7 @@ export function construirRuntimeCachingApi(apiUrl?: string | null) {
         cacheableResponse: {
           statuses: [0, 200],
         },
+        plugins: [pluginSinUrlsFirmadas],
       },
     },
   ];

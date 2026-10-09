@@ -120,7 +120,10 @@ export async function comprimirImagenAWebp(
     }
   });
 
-  const comprimido = blob ?? (await convertirAJpeg(lienzo, calidad));
+  // Un navegador sin codificador WebP (Safari) no devuelve `null`: entrega un PNG, como manda el
+  // estándar. Solo un WebP real se acepta; cualquier otra cosa pasa al respaldo JPEG.
+  const comprimido =
+    blob?.type === 'image/webp' ? blob : await convertirAJpeg(lienzo, calidad);
 
   // Ni WebP ni JPEG disponibles: se sube el original (no se inventa un archivo vacío).
   if (!comprimido) return archivo;

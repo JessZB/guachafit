@@ -340,18 +340,21 @@ export function ProgresoPage() {
         suprailiacoMm,
         abdominalMm,
       }, fechaLocalHoy(), fotosCheckin.fotos);
-      await apiClient<ControlAntropometricoDetalleDTO>('/antropometria/checkin', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
+      // En la demostración el envío se simula en local (el payload igual se valida arriba).
+      if (!isDemoMode) {
+        await apiClient<ControlAntropometricoDetalleDTO>('/antropometria/checkin', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
 
-      // Refresco real (sin tirar el estado de éxito): el check-in remoto queda PENDIENTE de
-      // aprobación, así que la curva de evolución puede no cambiar todavía; se re-consulta
-      // igualmente para no mostrar datos obsoletos si el coach ya aprobó otros controles.
-      const evolucionActualizada = await apiClient<EvolucionCorporalDTO>(
-        `/antropometria/evolucion/${user.id}`
-      ).catch(() => null);
-      if (evolucionActualizada) setEvolucion(evolucionActualizada);
+        // Refresco real (sin tirar el estado de éxito): el check-in remoto queda PENDIENTE de
+        // aprobación, así que la curva de evolución puede no cambiar todavía; se re-consulta
+        // igualmente para no mostrar datos obsoletos si el coach ya aprobó otros controles.
+        const evolucionActualizada = await apiClient<EvolucionCorporalDTO>(
+          `/antropometria/evolucion/${user.id}`
+        ).catch(() => null);
+        if (evolucionActualizada) setEvolucion(evolucionActualizada);
+      }
 
       setClaveFotos((clave) => clave + 1);
       setSubmitSuccess(true);
@@ -699,7 +702,9 @@ export function ProgresoPage() {
                   <CheckCircle2 className="h-12 w-12 text-success mx-auto" />
                   <h4 className="font-bold text-base text-foreground">¡Mediciones Guardadas!</h4>
                   <p className="text-xs text-muted-foreground">
-                    Tus datos fueron enviados a tu entrenador para auditoría y validación.
+                    {isDemoMode
+                      ? 'En la demostración no se envía nada a tu entrenador.'
+                      : 'Tus datos fueron enviados a tu entrenador para auditoría y validación.'}
                   </p>
                 </div>
               ) : (

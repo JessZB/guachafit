@@ -31,6 +31,8 @@ const ESPERAS_REINTENTO_MS = [1000, 2000];
 const MAX_INTENTOS = ESPERAS_REINTENTO_MS.length + 1;
 
 export const MENSAJE_FOTO_FORMATO = 'No se pudo procesar la imagen. Prueba con una foto JPG o WebP.';
+export const MENSAJE_FOTO_SIN_RECODIFICAR =
+  'Este navegador no pudo preparar la foto. Prueba con otro navegador actualizado.';
 export const MENSAJE_FOTO_SIN_CONEXION =
   'No se pudo subir la foto: revisa tu conexión e inténtalo de nuevo.';
 export const MENSAJE_FOTO_TIEMPO_AGOTADO =
@@ -48,12 +50,19 @@ export function mensajeFotoAlmacenamiento(status: number): string {
   return `No se pudo subir la foto (${status}): el almacenamiento no respondió bien. Inténtalo de nuevo en unos minutos.`;
 }
 
-/** Deja la foto en un MIME firmable (WebP comprimido o JPEG). */
+/**
+ * Deja la foto en un MIME firmable (WebP comprimido o JPEG). El compresor devuelve el MISMO archivo
+ * solo cuando el navegador no pudo recodificarlo: ese original conserva sus metadatos (p. ej. la
+ * ubicación GPS de la cámara), así que una foto corporal nunca se sube sin recodificar (RNF-001).
+ */
 export async function prepararFotoAntropometria(
   archivo: File,
   comprimir: (archivo: File) => Promise<File> = comprimirImagenAWebp
 ): Promise<File> {
   const preparado = await comprimir(archivo);
+  if (preparado === archivo) {
+    throw new Error(MENSAJE_FOTO_SIN_RECODIFICAR);
+  }
   if (!MIMES_FOTO_FIRMABLES.includes(preparado.type)) {
     throw new Error(MENSAJE_FOTO_FORMATO);
   }
