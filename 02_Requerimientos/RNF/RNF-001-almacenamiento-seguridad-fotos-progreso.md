@@ -5,7 +5,7 @@ categoria: seguridad # seguridad | rendimiento | disponibilidad
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-10-08
+fecha_verificacion: 2026-10-09
 requisito_origen: "[[RF-003-checkin-antropometrico-rbac-hibrido]]"
 metrica_objetivo: "p95 < 800ms subida / URLs firmadas TTL < 15 min"
 fecha_creacion: 2026-09-05
@@ -72,8 +72,14 @@ Las fotografías de control corporal y progreso físico constituyen datos biomé
 - Validación de `storageKey` implementada: estructura estricta por módulo (`validarStorageKeyEstructura`) y, en los recursos de nutrición, tenancy por prefijo del alumno (`nutricion-recursos/{alumnoId}/`, clave ajena → 400). Verificada en las suites `rnf001-r2-storage` y `nutricion-service`.
 - Borrado de objetos implementado: `R2StorageService.eliminarObjeto` (`DeleteObject` idempotente; valida la estructura de la clave y no lanza si es inválida; early-return en modo mock; un fallo de red se propaga al llamador). Ciclo de vida **best-effort post-commit** en el PUT-replace de metas de nutrición ([[RF-002-nutricion-agil-reporte-rapido]]), con re-lectura anti-race y respuesta intacta ante fallos. Decisión y límites en [[ADR-015-borrado-best-effort-objetos-boveda]].
 
+### Privacidad de las fotos (2026-10-09, `84643ef`)
+- **Sin metadatos en las fotos corporales:** si el navegador no pudo recodificar la foto (el compresor devuelve el original, que conserva su EXIF con la ubicación GPS), la subida se rechaza con *"Este navegador no pudo preparar la foto. Prueba con otro navegador actualizado."*. En el camino normal la recodificación ya elimina los metadatos.
+- **Fotos en iPhone (Safari):** Safari no codifica WebP y, como manda el estándar, entrega un PNG en vez de fallar; antes ese PNG pasaba y las validaciones de formato rechazaban toda foto (antropometría, platos y comprobantes). Ahora solo se acepta un WebP real y si no se usa el respaldo JPEG.
+- **Caché del service worker sin enlaces firmados:** la caché runtime de la API (24 h, necesaria para ver la evolución sin conexión) guarda las respuestas JSON con todo enlace firmado vaciado: `presignedGetUrl` y cualquier texto con `X-Amz-Signature` (`fotoUrl` de platos, `comprobanteUrl` de pagos…). Sin conexión, las fotos se ven como "Sin imagen". Plugin `pluginSinUrlsFirmadas` en `apps/web/src/lib/api-cache-pattern.ts`, serializado al SW (verificado en `dist/sw.js`).
+- Evidencia: `apps/web/src/lib/imagen-comprimida.spec.ts`, `lib/antropometria-fotos.spec.ts`, `lib/api-cache-pattern.privacidad.spec.ts`; web **1134** aprobados; typecheck y build en verde. Revisado con los 4 enfoques y validado.
+
 ### Pendiente
-- **Objetos huérfanos de antropometría:** una foto subida y luego quitada, o un check-in que no se envía, deja el objeto en la bóveda. Falta un barrido o una regla de ciclo de vida (patrón de [[ADR-015-borrado-best-effort-objetos-boveda]]).
-- **Caché del service worker:** las respuestas GET de antropometría (con `presignedGetUrl` de 15 min) se guardan hasta 24 h en la caché runtime; el cierre de sesión la purga. Convendría excluir esas respuestas.
-- **Metadatos EXIF:** si el navegador no puede re-codificar la imagen, se sube el archivo original (con sus metadatos, p. ej. GPS).
+- **Objetos huérfanos de antropometría:** una foto subida y luego quitada, o un check-in que no se envía, deja el objeto en la bóveda (privado y sin enlace firmado, pero sin borrar). Falta un barrido o una regla de ciclo de vida (patrón de [[ADR-015-borrado-best-effort-objetos-boveda]]).
+- **Metadatos en comprobantes y fotos de platos:** sus subidas no rechazan todavía el original sin recodificar.
 - **Verificación del SLO:** sin pruebas de carga k6 (§6) ni medición de p95 de subida.
+- **Menores (revisión 2026-10-09):** tras el error "no pudo preparar la foto", el botón "Reintentar" no puede funcionar en el mismo navegador; el saneado de la caché pierde una clave literal `__proto__` (el API no la emite); faltan pruebas de bordes del plugin (array vacío, valor no texto).

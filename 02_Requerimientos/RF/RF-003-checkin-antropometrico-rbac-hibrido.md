@@ -4,7 +4,7 @@ modulo: Antropometria
 prioridad: alta
 estado: implementado
 version_implementada: v1.0.0
-fecha_verificacion: 2026-10-08
+fecha_verificacion: 2026-10-09
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0
@@ -138,4 +138,4 @@ Con los tres criterios pendientes cerrados (Escenario 2, §6 y Escenario 3), el 
 
 ### Pendiente
 - **Fotos huérfanas:** una foto subida y luego quitada, o un check-in que no se llega a enviar, deja el objeto en la bóveda (no hay borrado ni barrido). Ver [[RNF-001-almacenamiento-seguridad-fotos-progreso]].
-- **Modo demo del alumno:** enviar el check-in en demostración llama al API real con el token ficticio (el del coach sí simula en local).
+- **Modo demo:** resuelto el 2026-10-09 (`84643ef`) para el check-in, que ahora se simula en local y lo dice; en la demostración, el título "¡Mediciones Guardadas!" convive con el aviso "En la demostración no se envía nada a tu entrenador." (podría ser más claro). Las pantallas de Nutrición y Pagos del alumno en demo siguen llamando al API.
