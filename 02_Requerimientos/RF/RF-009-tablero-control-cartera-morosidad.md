@@ -132,5 +132,13 @@ Then el sistema debe crear una transacción con estado "Aprobado"
 - Header `x-idempotency-key`: un doble clic con la misma clave devuelve el mismo cobro.
 - Evidencia: `rf005-rf009-m5l1-correcciones.spec.ts` (C6, C7), `rf011-rf012-alumnos-edge-cases.spec.ts`.
 
+### Cobro en sala en la web (2026-10-10, `e0747e2`)
+- **Ficha y Control de Cobros:** el cobro es solo en efectivo (el método sale de la moneda; se retiraron Pago Móvil, Zelle, transferencia y el campo de referencia) y lleva la fecha del día LOCAL (antes, de noche en Caracas salía el día siguiente).
+- **Doble cobro:** cada alumno tiene una clave de idempotencia que se conserva hasta un cobro confirmado. Un reintento, o cerrar y reabrir el modal tras una respuesta perdida, no cobra dos veces.
+- **Alumno sin plan:** se muestra el mensaje con "Asignar plan" (en la ficha lleva a la pestaña resumen con el foco en el selector; en Control de Cobros es un enlace a la ficha).
+- **Modo demo:** el cobro de la ficha ya no llama al API.
+- Evidencia: `apps/web/src/lib/cobro-sala.spec.ts`, `pages/entrenador/AlumnoDetallePage.cobro-sala.interaccion.spec.tsx`, `CarteraPage.cobro.interaccion.spec.tsx`, `CarteraPage.correcciones-1b.interaccion.spec.tsx`; web **1207**.
+
 ### Pendiente
-- **Web (lote 1B):** el modal de cobro aún no envía `x-idempotency-key` ni muestra el próximo vencimiento; PagosPage, conciliación (confirmación y reversión), saldo a favor y anulación de cuotas siguen pendientes del módulo 5.
+- **Próximo vencimiento en Control de Cobros:** la fila aún no lo muestra (la API de cartera no lo envía); solo se ve en la ficha.
+- PagosPage del alumno, conciliación (confirmación y reversión), saldo a favor y anulación de cuotas siguen pendientes del módulo 5.

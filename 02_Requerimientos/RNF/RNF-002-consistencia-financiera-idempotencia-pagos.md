@@ -5,7 +5,7 @@ categoria: consistencia-financiera # consistencia-financiera | seguridad | rendi
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-10-09
+fecha_verificacion: 2026-10-10
 requisito_origen: "[[RF-006-motor-bimonetario-liquidacion-abonos]]"
 metrica_objetivo: "100% precisión decimal (cero floating-point error) / Idempotencia estricta"
 fecha_creacion: 2026-09-06
@@ -85,6 +85,10 @@ El módulo de finanzas maneja saldos adeudados, deducciones de abonos y conversi
 - **Cuotas:** el bloqueo de la fila del alumno (`FOR UPDATE`) serializa el barrido, la asignación de plan y el cobro en sala; el índice `uq_cuota_cliente_plan_periodo` es la última barrera, y su choque responde 409.
 - Evidencia: `rf007-indice-referencias.e2e.spec.ts`, `rf005-rf009-m5l1-correcciones.spec.ts`; API **1447** aprobados (6 omitidos), web **1134**.
 
+### Clave del cobro en sala desde la web (2026-10-10, `e0747e2`)
+- El `apiClient` ya enviaba `X-Idempotency-Key` en los POST de `/finanzas/`, pero una clave NUEVA por llamada, así que un doble envío no se deduplicaba. Ahora la ficha y Control de Cobros pasan una clave por alumno que solo se renueva tras un cobro confirmado.
+
 ### Pendiente
 - Idempotencia persistente (sigue en memoria del proceso).
+- El `PUT`/`DELETE` de suscripciones no lleva clave de idempotencia; la web lo compensa reconciliando con un `GET` tras un fallo.
 - Detección de sobre-abono y reconciliador de la invariante de saldo.

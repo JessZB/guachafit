@@ -4,7 +4,7 @@ modulo: Finanzas
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-10-09
+fecha_verificacion: 2026-10-10
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -108,7 +108,17 @@ Then el monto total a pagar debe ser exactamente de $40.00 USD
 - **Hidratación:** el "plan activo" de directorio y expediente sale primero de la suscripción (precio del override de ese mismo plan).
 - Evidencia: `rf005-rf008-suscripcion-ciclo.spec.ts`, `rf005-rf008-suscripcion-servicio.spec.ts`, `rf005-rf009-m5l1-correcciones.spec.ts`; API **1447** aprobados (6 omitidos).
 
+### Plan del alumno en la ficha (2026-10-10, `e0747e2`)
+- **Tarjeta "Plan Comercial & Tarifa":** el plan sale de la suscripción (`GET /finanzas/suscripciones`; sin plan responde vacío y se muestra "Sin plan asignado").
+  - El primer plan pide la **fecha de inicio**, con el "hoy" del alumno (su zona) por defecto y el mismo rango que la API. La ayuda dice cada cuánto vencen las cuotas.
+  - Con plan vigente se ve "Próxima cuota: vence el DD/MM/AAAA" y **Quitar plan** (con confirmación). Cambiar de plan aplica desde la próxima cuota, sin fecha.
+  - Si la suscripción no carga, se avisa y el selector queda bloqueado (nunca se asigna un plan por error).
+- **El override ya no asigna el plan:** solo guarda el precio acordado y la tasa especial. Un precio sin plan pide elegir un plan; dejar el plan vacío no borra el precio acordado.
+- **Orden de escritura:** al asignar el primer plan, la tarifa se guarda ANTES del `PUT`, porque la API emite la primera cuota en ese momento (así sale con el precio acordado o como becado).
+- **Fallos:** si el override no carga, la tarifa no se toca (el campo vacío borraría el precio real). Tras un fallo de `PUT`/`DELETE` la tarjeta y el selector se alinean con el servidor. Los avisos y el éxito nombran exactamente lo que se guardó.
+- Evidencia: `apps/web/src/lib/suscripcion-alumno.spec.ts`, `plan-tarifa.spec.ts`, `pages/entrenador/AlumnoDetallePage.suscripcion.interaccion.spec.tsx`, `AlumnoDetallePage.correcciones-1b.interaccion.spec.tsx`; web **1207** aprobados. Revisado con los 4 enfoques y validado en dos rondas.
+
 ### Pendiente
-- **Ficha del alumno (web, lote 1B):** elegir la fecha de inicio y usar `PUT`/`DELETE /finanzas/suscripciones`; hoy la ficha sigue asignando el plan por el override. El `GET` sin plan responde un cuerpo vacío (`null`), que la web debe manejar.
+- **Precio residual tras reconciliar:** si "Quitar plan" se aplicó en el servidor pero su respuesta se perdió, el campo "Precio Acordado" conserva el valor y el siguiente guardado pide "Elige un plan…" hasta vaciarlo. En modo demo, el éxito del guardado sigue con el texto fijo "Expediente, plan y tarifa…".
 - **Ruta heredada `POST /finanzas/cuotas/emitir`:** sigue disponible sin la regla de solape.
 - Editor de `beneficiosPersonalizados` en la UI (la API los persiste y los devuelve, pero la ficha no los edita) y selección de "fuente de cambio particular" por cliente (hoy la tasa especial es un valor fijo).

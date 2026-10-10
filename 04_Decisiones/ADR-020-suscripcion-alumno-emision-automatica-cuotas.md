@@ -90,6 +90,7 @@ El plan asignado vive en el **perfil del alumno** como una suscripción, y las c
 - Implementación (2026-10-09, `ee23aef`):
   - `apps/api/src/modules/finanzas/suscripcion-ciclo.ts`, `finanzas.service.ts`, `finanzas.controller.ts`, `billing-scheduler.service.ts`, `billing-reminder.processor.ts` y `cobranza-hitos.ts`;
   - `packages/database/drizzle/0018_suscripcion_alumno_referencias.sql`.
+- Web (2026-10-10, `e0747e2`): `apps/web/src/lib/suscripcion-alumno.ts`, `apps/web/src/lib/cobro-sala.ts`, `apps/web/src/pages/entrenador/AlumnoDetallePage.tsx` y `CarteraPage.tsx`. La ficha escribe la tarifa ANTES del `PUT` del primer plan para que la cuota emitida en ese momento use el precio acordado.
 - Evidencia:
   - tests: `apps/api/test/bdd/rf005-rf008-suscripcion-ciclo.spec.ts`, `rf005-rf008-suscripcion-servicio.spec.ts`, `rf005-rf009-m5l1-correcciones.spec.ts` y `rf007-indice-referencias.e2e.spec.ts` (PostgreSQL real, 5/5);
   - API **1447** aprobados (6 omitidos) y web **1134**;
