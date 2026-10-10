@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { apiClient } from '../../lib/api-client';
+import { apiClient, generateIdempotencyKey } from '../../lib/api-client';
 import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
 import {
@@ -75,10 +75,10 @@ import {
   TipoDocumento,
   EstadoAlumno,
   EstadoSesion,
-  MetodoPago,
   Moneda,
   PlanMembresiaDetalleDTO,
   OverridePlanDetalleDTO,
+  type SuscripcionAlumnoDTO,
   SesionEntrenamientoDetalleDTO,
   EjercicioCatalogoDetalleDTO,
   GuardarRutinaSemanalDTO,
@@ -97,6 +97,15 @@ import {
   textoPrecioVigente,
   type DecisionPlanTarifa,
 } from '../../lib/plan-tarifa';
+import {
+  decidirGuardadoSuscripcion,
+  esErrorSinPlanAsignado,
+  rangoFechaInicioSuscripcion,
+  suscripcionDemoAlumno,
+  textoProximaCuota,
+} from '../../lib/suscripcion-alumno';
+import { construirPayloadCobroSala } from '../../lib/cobro-sala';
+import { partesEnZona } from '../../lib/zona-horaria';
 import {
   ArrowLeft,
   User,
@@ -350,6 +359,10 @@ export function AlumnoDetallePage() {
   const [overridesAlumno, setOverridesAlumno] = useState<OverridePlanDetalleDTO[]>([]);
   const [overrideError, setOverrideError] = useState<string | null>(null);
   const [isGuardandoPlan, setIsGuardandoPlan] = useState(false);
+  // M5-L1B (ADR-020): el plan del alumno es su suscripción; de ella salen las cuotas.
+  const [suscripcion, setSuscripcion] = useState<SuscripcionAlumnoDTO | null>(null);
+  const [suscripcionError, setSuscripcionError] = useState<string | null>(null);
+  const [fechaInicioPlan, setFechaInicioPlan] = useState(() => fechaCalendarioLocal());
   const [ultimaSesion, setUltimaSesion] = useState<SesionEntrenamientoDetalleDTO | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -378,9 +391,16 @@ export function AlumnoDetallePage() {
   const [isCobroModalOpen, setIsCobroModalOpen] = useState(false);
   const [cobroMonto, setCobroMonto] = useState('40.00');
   const [cobroMoneda, setCobroMoneda] = useState<Moneda>(Moneda.USD);
-  const [cobroMetodo, setCobroMetodo] = useState<MetodoPago>(MetodoPago.EFECTIVO_USD);
-  const [cobroReferencia, setCobroReferencia] = useState('');
   const [cobroNotas, setCobroNotas] = useState('');
+  // M5-L1B (RNF-002): clave de idempotencia del cobro en sala de este alumno.
+  // La clave se renueva SOLO tras un cobro confirmado: si la respuesta se perdió, cerrar y
+  // reabrir el modal reintenta con la misma clave y la API no cobra dos veces.
+  const [claveCobro, setClaveCobro] = useState(() => generateIdempotencyKey());
+  const temporizadorCobroRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // "Asignar plan" desde el cobro lleva el foco al selector de plan de la pestaña resumen.
+  const refSelectorPlan = useRef<HTMLSelectElement>(null);
+  const [enfocarSelectorPlan, setEnfocarSelectorPlan] = useState(false);
+  const [cobroSinPlan, setCobroSinPlan] = useState(false);
   const [isSubmittingCobro, setIsSubmittingCobro] = useState(false);
   const [cobroSuccessMsg, setCobroSuccessMsg] = useState<string | null>(null);
   const [cobroErrorMsg, setCobroErrorMsg] = useState<string | null>(null);
@@ -561,6 +581,14 @@ export function AlumnoDetallePage() {
       setAntropometriaInicio(demoPerfil.antropometriaInicio ?? '');
       setFichaSaludPrivada(demoPerfil.fichaSaludPrivada || '');
       setSelectedPlanId(demoPerfil.planActivoId || '');
+      setSuscripcion(
+        suscripcionDemoAlumno(fechaCalendarioLocal(), {
+          id: 'plan-presencial',
+          nombre: 'Presencial Completo Sala',
+          duracionMeses: 1,
+        })
+      );
+      setSuscripcionError(null);
       setPrecioOverride('35.00');
       setTasaFijadaOverride('65.0000');
       setOverridesAlumno([overrideDemoAlumno()]);
@@ -715,8 +743,6 @@ export function AlumnoDetallePage() {
       setAntropometriaInicio(perfilRes.antropometriaInicio ?? '');
       setTasaFijadaOverride(perfilRes.tasaFijadaOverride || '');
       setFichaSaludPrivada(perfilRes.fichaSaludPrivada || '');
-      setSelectedPlanId(perfilRes.planActivoId || '');
-      setPrecioOverride(perfilRes.precioAcordadoOverride || '');
 
       // WU25b: cada listado paginado arranca en la página 1 y el total cacheado de controles se
       // invalida (el expediente puede haber cambiado entre cargas).
@@ -737,7 +763,11 @@ export function AlumnoDetallePage() {
       setPlanesCatalogo(Array.isArray(planesRes) ? planesRes : []);
 
       // 3b. WU-J (RF-005): override vigente real del alumno (precio/tasa pactados).
-      await cargarOverrides(perfilRes.usuarioId);
+      const overridesCargados = await cargarOverrides(perfilRes.usuarioId);
+
+      // 3c. M5-L1B: plan asignado (suscripción). El selector parte de ella, nunca del plan
+      // deducido del override: así guardar el expediente no asigna un plan sin querer.
+      await cargarSuscripcion(perfilRes.usuarioId, overridesCargados, perfilRes.zonaHoraria);
 
       // 4. Última sesión: sin dato => sin tarjeta de "último entrenamiento" (nunca fabricada).
       const sesionRes = await apiClient<SesionEntrenamientoDetalleDTO>(
@@ -782,6 +812,25 @@ export function AlumnoDetallePage() {
     loadData();
   }, [id, isDemoMode]);
 
+  // M5-L1B: el cierre automático del modal de cobro no dispara tras salir de la ficha.
+  useEffect(
+    () => () => {
+      if (temporizadorCobroRef.current) clearTimeout(temporizadorCobroRef.current);
+    },
+    []
+  );
+
+  // M5-L1B: tras "Asignar plan" el foco va al selector de plan (el disparador del modal ya no
+  // existe en la pestaña resumen). Se difiere para ganarle a la restauración de foco del diálogo.
+  useEffect(() => {
+    if (!enfocarSelectorPlan || activeTab !== 'resumen') return;
+    const temporizador = setTimeout(() => {
+      refSelectorPlan.current?.focus();
+      setEnfocarSelectorPlan(false);
+    }, 0);
+    return () => clearTimeout(temporizador);
+  }, [enfocarSelectorPlan, activeTab]);
+
   /**
    * RF-004 RN-01: serie completa del gráfico del tab Antropometría (sin `controlesLimit`, el
    * endpoint devuelve la serie entera). Solo se consulta al abrir el tab; un fallo se declara
@@ -819,6 +868,14 @@ export function AlumnoDetallePage() {
     };
   }, [activeTab, alumno?.usuarioId, isDemoMode]);
 
+  /**
+   * M5-L1B: "hoy" en la zona del alumno, la misma con la que la API valida la fecha de inicio
+   * (sin zona, la del perfil por defecto). Evita bordes desplazados un día si el entrenador está
+   * en otra zona.
+   */
+  const hoyDelAlumno = (zona: string | null | undefined = alumno?.zonaHoraria): string =>
+    partesEnZona(new Date(), zona).fecha;
+
   /** WU-J (RF-005): override vigente (el más reciente) y plan elegido del catálogo. */
   const overrideVigente = overridesAlumno.length > 0 ? overridesAlumno[0] : null;
   const planSeleccionado = planesCatalogo.find((plan) => plan.id === selectedPlanId) ?? null;
@@ -827,17 +884,72 @@ export function AlumnoDetallePage() {
    * WU-J (RF-005): carga los overrides del alumno. Un fallo NO se disfraza de "sin override":
    * se expone `overrideError` y la tarjeta lo advierte (nunca se afirma un estado falso).
    */
-  const cargarOverrides = async (clienteUsuarioId: string) => {
+  const cargarOverrides = async (clienteUsuarioId: string): Promise<OverridePlanDetalleDTO[]> => {
     setOverrideError(null);
     try {
       const res = await apiClient<OverridePlanDetalleDTO[]>(
         `/finanzas/planes/override?clienteId=${clienteUsuarioId}`
       );
-      setOverridesAlumno(Array.isArray(res) ? res : []);
+      const overrides = Array.isArray(res) ? res : [];
+      setOverridesAlumno(overrides);
+      return overrides;
     } catch (err: any) {
       setOverrideError(
         err?.message || 'No se pudo cargar el override vigente del alumno.'
       );
+      return [];
+    }
+  };
+
+  /**
+   * M5-L1B: carga la suscripción (plan asignado). Sin plan la API responde vacío (`null`). Un
+   * fallo NO se trata como "sin plan": se avisa y el selector queda bloqueado, para no asignar
+   * por error un plan a quien ya lo tiene.
+   */
+  const cargarSuscripcion = async (
+    clienteUsuarioId: string,
+    overrides: OverridePlanDetalleDTO[],
+    zonaAlumno: string | null | undefined
+  ) => {
+    setSuscripcionError(null);
+    setFechaInicioPlan(hoyDelAlumno(zonaAlumno));
+    try {
+      const res = await apiClient<SuscripcionAlumnoDTO | null>(
+        `/finanzas/suscripciones/${clienteUsuarioId}`
+      );
+      const vigente = res?.planId ? res : null;
+      setSuscripcion(vigente);
+      setSelectedPlanId(vigente?.planId ?? '');
+      setPrecioOverride(
+        overrides.find((o) => o.planId === vigente?.planId)?.precioAcordadoUsd ?? ''
+      );
+    } catch {
+      setSuscripcion(null);
+      setSelectedPlanId('');
+      setPrecioOverride('');
+      setSuscripcionError(
+        'No se pudo cargar el plan del alumno. Recarga la página para verlo o cambiarlo.'
+      );
+    }
+  };
+
+  /**
+   * M5-L1B: tras un fallo de PUT/DELETE, vuelve a leer la suscripción. Si el servidor sí aplicó
+   * el cambio (respuesta perdida), la tarjeta muestra el estado real y el reintento no choca con
+   * un 400/404. El selector se alinea con el servidor: si conservara la elección anterior, el
+   * siguiente guardado podría reasignar un plan recién quitado (y emitir su cuota).
+   */
+  const reconciliarSuscripcion = async (clienteUsuarioId: string) => {
+    try {
+      const res = await apiClient<SuscripcionAlumnoDTO | null>(
+        `/finanzas/suscripciones/${clienteUsuarioId}`
+      );
+      const vigente = res?.planId ? res : null;
+      setSuscripcion(vigente);
+      setSelectedPlanId(vigente?.planId ?? '');
+      setFechaInicioPlan(hoyDelAlumno());
+    } catch {
+      // Sin respuesta no se afirma nada nuevo: se conserva el estado anterior.
     }
   };
 
@@ -1082,13 +1194,33 @@ export function AlumnoDetallePage() {
     setSaveSuccessMsg(null);
     setSaveErrorMsg(null);
 
-    // WU-J (RF-005): se decide ANTES de escribir nada (validación local de precio/tasa).
-    const decisionPlanTarifa = decidirGuardadoPlanTarifa({
-      planSeleccionadoId: selectedPlanId,
-      precioAcordado: precioOverride,
-      tasaEspecial: tasaFijadaOverride,
-      overridesVigentes: overridesAlumno,
-    });
+    // M5-L1B: plan (suscripción) y tarifa (override) se deciden ANTES de escribir nada. Si la
+    // suscripción no cargó, el plan no se toca.
+    const decisionSuscripcion = suscripcionError
+      ? ({ accion: 'ninguna' } as const)
+      : decidirGuardadoSuscripcion({
+          suscripcionActual: suscripcion,
+          planSeleccionadoId: selectedPlanId,
+          fechaInicio: fechaInicioPlan,
+          hoyLocal: hoyDelAlumno(),
+        });
+
+    if (decisionSuscripcion.accion === 'error') {
+      setSaveErrorMsg(decisionSuscripcion.mensaje);
+      setIsSavingPerfil(false);
+      return;
+    }
+
+    // WU-J (RF-005): se decide ANTES de escribir nada (validación local de precio/tasa). Si el
+    // override no cargó, la tarifa no se toca: el campo vacío borraría el precio acordado real.
+    const decisionPlanTarifa: DecisionPlanTarifa = overrideError
+      ? { accion: 'ninguna' }
+      : decidirGuardadoPlanTarifa({
+          planSeleccionadoId: selectedPlanId,
+          precioAcordado: precioOverride,
+          tasaEspecial: tasaFijadaOverride,
+          overridesVigentes: overridesAlumno,
+        });
 
     if (decisionPlanTarifa.accion === 'error') {
       setSaveErrorMsg(decisionPlanTarifa.mensaje);
@@ -1117,6 +1249,24 @@ export function AlumnoDetallePage() {
     // MODO DEMO EXPLÍCITO: el guardado vive en estado local, sin llamadas reales (el banner
     // demo visible lo declara). Nunca se declara éxito de un servidor que no respondió.
     if (isDemoMode) {
+      if (decisionSuscripcion.accion !== 'ninguna') {
+        const planDemo = planesCatalogo.find((p) => p.id === decisionSuscripcion.payload.planId);
+        setSuscripcion((prev) => {
+          const base =
+            prev ??
+            suscripcionDemoAlumno(fechaCalendarioLocal(), {
+              id: decisionSuscripcion.payload.planId,
+              nombre: planDemo?.nombre ?? 'Plan',
+              duracionMeses: planDemo?.duracionMeses ?? 1,
+            });
+          return {
+            ...base,
+            planId: decisionSuscripcion.payload.planId,
+            planNombre: planDemo?.nombre ?? base.planNombre,
+            duracionMeses: planDemo?.duracionMeses ?? base.duracionMeses,
+          };
+        });
+      }
       if (decisionPlanTarifa.accion !== 'ninguna') {
         aplicarDecisionPlanTarifaDemo(decisionPlanTarifa);
         const planDemo = planesCatalogo.find((p) => p.id === selectedPlanId) ?? null;
@@ -1147,22 +1297,73 @@ export function AlumnoDetallePage() {
       const res = await apiClient.patch<PerfilAlumnoDetalleDTO>(`/alumnos/${id}`, payload);
       setAlumno((prev) => (prev ? { ...prev, ...res } : res));
 
-      // RF-005: el plan y la tarifa se persisten por los endpoints de override (upsert/borrado),
-      // la única vía que alimenta la precedencia RN-03 al emitir cuotas.
       setIsGuardandoPlan(true);
-      const resultadoPlan = await aplicarDecisionPlanTarifa(
-        decisionPlanTarifa,
-        alumno?.usuarioId ?? res.usuarioId
-      );
-      if (!resultadoPlan.ok) {
-        // Honestidad: el expediente SÍ se guardó; el plan/tarifa no. Se dice exactamente eso.
-        setSaveErrorMsg(
-          `Los datos del expediente se guardaron, pero no se pudo guardar el plan y la tarifa: ${resultadoPlan.error}`
-        );
-        return;
+      const clienteUsuarioId = alumno?.usuarioId ?? res.usuarioId;
+
+      /** Plan (suscripción): de ella salen las cuotas. Devuelve el error o `null`. */
+      const guardarSuscripcion = async (): Promise<string | null> => {
+        if (decisionSuscripcion.accion === 'ninguna') return null;
+        try {
+          const vigente = await apiClient.put<SuscripcionAlumnoDTO>(
+            `/finanzas/suscripciones/${clienteUsuarioId}`,
+            decisionSuscripcion.payload
+          );
+          setSuscripcion(vigente);
+          return null;
+        } catch (err: any) {
+          await reconciliarSuscripcion(clienteUsuarioId);
+          return err?.message || 'inténtalo de nuevo.';
+        }
+      };
+
+      // Honestidad: cada aviso nombra exactamente lo que se guardó y lo que no.
+      if (decisionSuscripcion.accion === 'asignar') {
+        // Primer plan: la API emite la primera cuota DENTRO del PUT con el precio vigente en ese
+        // instante, así que la tarifa (precio acordado o becado) se escribe ANTES.
+        const resultadoTarifa = await aplicarDecisionPlanTarifa(decisionPlanTarifa, clienteUsuarioId);
+        if (!resultadoTarifa.ok) {
+          setSaveErrorMsg(
+            `Los datos del expediente se guardaron, pero no se pudo guardar la tarifa acordada y por eso no se asignó el plan: ${resultadoTarifa.error}`
+          );
+          return;
+        }
+        const errorPlan = await guardarSuscripcion();
+        if (errorPlan) {
+          setSaveErrorMsg(
+            decisionPlanTarifa.accion === 'ninguna'
+              ? `Los datos del expediente se guardaron, pero no se pudo guardar el plan: ${errorPlan}`
+              : `Los datos del expediente y la tarifa se guardaron, pero no se pudo guardar el plan: ${errorPlan}`
+          );
+          return;
+        }
+      } else {
+        const errorPlan = await guardarSuscripcion();
+        if (errorPlan) {
+          setSaveErrorMsg(
+            `Los datos del expediente se guardaron, pero no se pudo guardar el plan: ${errorPlan}`
+          );
+          return;
+        }
+        // RF-005: la tarifa (precio acordado y tasa especial) se persiste por los endpoints de
+        // override, la vía que alimenta la precedencia RN-03 al emitir cuotas.
+        const resultadoTarifa = await aplicarDecisionPlanTarifa(decisionPlanTarifa, clienteUsuarioId);
+        if (!resultadoTarifa.ok) {
+          setSaveErrorMsg(
+            decisionSuscripcion.accion === 'ninguna'
+              ? `Los datos del expediente se guardaron, pero no se pudo guardar la tarifa: ${resultadoTarifa.error}`
+              : `Los datos del expediente y el plan se guardaron, pero no se pudo guardar la tarifa: ${resultadoTarifa.error}`
+          );
+          return;
+        }
       }
 
-      setSaveSuccessMsg('Expediente, plan y tarifa actualizados con éxito.');
+      // El éxito nombra solo lo que se escribió de verdad.
+      const partes = ['Expediente'];
+      if (decisionSuscripcion.accion !== 'ninguna') partes.push('plan');
+      if (decisionPlanTarifa.accion !== 'ninguna') partes.push('tarifa');
+      const listado =
+        partes.length === 1 ? partes[0] : `${partes.slice(0, -1).join(', ')} y ${partes[partes.length - 1]}`;
+      setSaveSuccessMsg(`${listado} ${partes.length === 1 ? 'actualizado' : 'actualizados'} con éxito.`);
       setTimeout(() => setSaveSuccessMsg(null), 2500);
     } catch (err: any) {
       // D5: el expediente solo cambia con respuesta OK; nunca éxito falso ni mutación local.
@@ -1299,6 +1500,46 @@ export function AlumnoDetallePage() {
     } else if (decision.accion === 'eliminar_override') {
       setOverridesAlumno([]);
     }
+  };
+
+  /** M5-L1B: quitar el plan (suscripción). Deja de generar cuotas; las emitidas no cambian. */
+  const handleQuitarPlan = () => {
+    if (!alumno || !suscripcion) return;
+    setConfirmacionFicha({
+      ...separarPreguntaYDetalle(
+        '¿Quitar el plan de este alumno? Dejarán de generarse sus cuotas. Las cuotas ya emitidas no cambian.'
+      ),
+      boton: 'Quitar plan',
+      accion: quitarPlanConfirmado,
+    });
+  };
+
+  const quitarPlanConfirmado = async () => {
+    if (!alumno || !suscripcion) return;
+    setSaveSuccessMsg(null);
+    setSaveErrorMsg(null);
+
+    if (!isDemoMode) {
+      try {
+        await apiClient.delete(`/finanzas/suscripciones/${alumno.usuarioId}`);
+      } catch (err: any) {
+        await reconciliarSuscripcion(alumno.usuarioId);
+        setSaveErrorMsg(err?.message || 'No se pudo quitar el plan. Inténtalo de nuevo.');
+        return;
+      }
+    }
+
+    setSuscripcion(null);
+    setSelectedPlanId('');
+    // Sin plan no hay precio acordado que guardar (el override sigue y se quita aparte).
+    setPrecioOverride('');
+    setFechaInicioPlan(hoyDelAlumno());
+    setSaveSuccessMsg(
+      isDemoMode
+        ? 'Plan quitado: no se generarán más cuotas para este alumno (demo).'
+        : 'Plan quitado: no se generarán más cuotas para este alumno.'
+    );
+    setTimeout(() => setSaveSuccessMsg(null), 2500);
   };
 
   /** WU-J (RF-005): quitar el override vigente (el alumno vuelve al catálogo). */
@@ -1457,26 +1698,45 @@ export function AlumnoDetallePage() {
     setIsSubmittingCobro(true);
     setCobroSuccessMsg(null);
     setCobroErrorMsg(null);
+    setCobroSinPlan(false);
 
-    const payload = {
-      montoOriginal: cobroMonto,
-      monedaOriginal: cobroMoneda,
-      metodoPago: cobroMetodo,
-      fechaOperacion: new Date().toISOString().split('T')[0],
-      referenciaBancaria: cobroReferencia.trim() || undefined,
-      notas: cobroNotas.trim() || undefined,
-    };
+    // M5-L1B: solo efectivo (método según la moneda) y fecha del día LOCAL.
+    const payload = construirPayloadCobroSala({
+      monto: cobroMonto,
+      moneda: cobroMoneda,
+      notas: cobroNotas,
+      hoyLocal: fechaCalendarioLocal(),
+    });
+
+    // MODO DEMO EXPLÍCITO: sin llamadas reales; el éxito dice que es una demostración.
+    if (isDemoMode) {
+      setCobroSuccessMsg(
+        `Cobro de ${payload.montoOriginal} ${payload.monedaOriginal} registrado (demo): no se envió nada al servidor.`
+      );
+      setIsSubmittingCobro(false);
+      temporizadorCobroRef.current = setTimeout(() => {
+        setIsCobroModalOpen(false);
+        setCobroSuccessMsg(null);
+      }, 1500);
+      return;
+    }
 
     try {
-      await apiClient.post(`/finanzas/clientes/${id}/cobro-directo-inteligente`, payload);
+      await apiClient.post(`/finanzas/clientes/${id}/cobro-directo-inteligente`, payload, {
+        idempotencyKey: claveCobro,
+      });
       setCobroSuccessMsg('Cobro directo registrado y liquidado con éxito.');
-      setTimeout(() => {
+      // Cobro confirmado: el siguiente cobro de este alumno usará una clave nueva.
+      setClaveCobro(generateIdempotencyKey());
+      temporizadorCobroRef.current = setTimeout(() => {
+        temporizadorCobroRef.current = null;
         setIsCobroModalOpen(false);
         setCobroSuccessMsg(null);
         loadData();
       }, 1500);
     } catch (err: any) {
       // D5: sin éxito falso ni transacción optimista; el cobro solo existe si el server lo aceptó.
+      setCobroSinPlan(esErrorSinPlanAsignado(err));
       setCobroErrorMsg(
         err?.message || 'No se pudo registrar el cobro. Verifica los datos e inténtalo de nuevo.'
       );
@@ -2307,18 +2567,14 @@ export function AlumnoDetallePage() {
                     <CreditCard className="h-4 w-4 text-primary" />
                     <h3 className="font-extrabold text-sm text-foreground">Plan Comercial & Tarifa (RF-005)</h3>
                   </div>
-                  {/* D6/WU-J: el badge dice la verdad: override real, catálogo real o sin dato. */}
-                  {overrideVigente ? (
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase">
-                      Override activo
-                    </span>
-                  ) : overrideError ? (
+                  {/* M5-L1B: el badge dice la verdad sobre el plan (suscripción) o que no hay dato. */}
+                  {suscripcionError ? (
                     <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase">
                       Sin dato
                     </span>
-                  ) : alumno?.planActivoNombre ? (
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase">
-                      Precio del catálogo
+                  ) : suscripcion ? (
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase">
+                      Plan asignado
                     </span>
                   ) : (
                     <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase">
@@ -2326,6 +2582,16 @@ export function AlumnoDetallePage() {
                     </span>
                   )}
                 </div>
+
+                {suscripcionError && (
+                  <p
+                    role="alert"
+                    className="text-[11px] font-bold text-destructive flex items-start gap-1.5"
+                  >
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    {suscripcionError}
+                  </p>
+                )}
 
                 {overrideError && (
                   <p
@@ -2378,7 +2644,9 @@ export function AlumnoDetallePage() {
                   <div className="space-y-1">
                     <label className="text-xs font-semibold text-muted-foreground">Plan Asignado del Catálogo</label>
                     <select
+                      ref={refSelectorPlan}
                       value={selectedPlanId}
+                      disabled={Boolean(suscripcionError)}
                       onChange={(e) => {
                         const nuevoPlanId = e.target.value;
                         setSelectedPlanId(nuevoPlanId);
@@ -2392,9 +2660,10 @@ export function AlumnoDetallePage() {
                           setTasaFijadaOverride(overrideDelPlan.tasaFijadaOverride);
                         }
                       }}
-                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary disabled:opacity-60"
                     >
-                      <option value="">Seleccionar Plan Comercial...</option>
+                      {/* Con plan vigente no hay opción vacía: quitarlo es "Quitar plan". */}
+                      {!suscripcion && <option value="">Elige un plan…</option>}
                       {planesCatalogo.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.nombre} (${p.precioBaseUsd} USD)
@@ -2421,6 +2690,60 @@ export function AlumnoDetallePage() {
                     )}
                   </div>
 
+                  {/* M5-L1B (ADR-020): la suscripción genera las cuotas. Primer plan → fecha de
+                      inicio (hoy por defecto); con plan vigente → próxima cuota y "Quitar plan". */}
+                  {suscripcion ? (
+                    <div className="rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-bold text-foreground">
+                          {textoProximaCuota(suscripcion)}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleQuitarPlan}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-destructive hover:underline cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          Quitar plan
+                        </button>
+                      </div>
+                      {selectedPlanId && selectedPlanId !== suscripcion.planId && (
+                        <p className="text-[11px] text-muted-foreground">
+                          El plan nuevo se cobra desde la próxima cuota; el día de vencimiento no
+                          cambia.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    !suscripcionError &&
+                    selectedPlanId && (
+                      <div className="space-y-1">
+                        <label
+                          htmlFor="ficha-plan-fecha-inicio"
+                          className="text-xs font-semibold text-muted-foreground"
+                        >
+                          Fecha de inicio
+                        </label>
+                        <input
+                          id="ficha-plan-fecha-inicio"
+                          type="date"
+                          value={fechaInicioPlan}
+                          min={rangoFechaInicioSuscripcion(hoyDelAlumno()).minimo}
+                          max={rangoFechaInicioSuscripcion(hoyDelAlumno()).maximo}
+                          onChange={(e) => setFechaInicioPlan(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          Ese día vence la primera cuota; las siguientes vencen cada{' '}
+                          {planSeleccionado && planSeleccionado.duracionMeses > 1
+                            ? `${planSeleccionado.duracionMeses} meses`
+                            : 'mes'}
+                          . Si vence en 5 días o menos, la cuota se genera al guardar.
+                        </p>
+                      </div>
+                    )
+                  )}
+
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-muted-foreground">
@@ -2429,6 +2752,7 @@ export function AlumnoDetallePage() {
                       <input
                         type="text"
                         value={precioOverride}
+                        disabled={Boolean(overrideError)}
                         onChange={(e) => setPrecioOverride(e.target.value)}
                         placeholder="Vacío = precio del plan"
                         className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground font-mono font-bold focus:outline-hidden focus:border-primary"
@@ -2646,6 +2970,10 @@ export function AlumnoDetallePage() {
                     planSeleccionado?.precioBaseUsd ??
                     planesCatalogo.find((p) => p.id === alumno?.planActivoId)?.precioBaseUsd;
                   if (precioEfectivo) setCobroMonto(precioEfectivo);
+                  if (temporizadorCobroRef.current) clearTimeout(temporizadorCobroRef.current);
+                  setCobroSuccessMsg(null);
+                  setCobroErrorMsg(null);
+                  setCobroSinPlan(false);
                   setIsCobroModalOpen(true);
                 }}
                 className="py-2.5 px-4 rounded-xl bg-success-strong hover:bg-success-strong/90 text-white font-black text-xs shadow-md shadow-success-strong/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-success"
@@ -3564,11 +3892,25 @@ export function AlumnoDetallePage() {
                   >
                     <AlertCircle className="h-4 w-4 shrink-0" />
                     <span>{cobroErrorMsg}</span>
+                    {cobroSinPlan && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCobroModalOpen(false);
+                          setEnfocarSelectorPlan(true);
+                          cambiarTab('resumen');
+                        }}
+                        className="ml-auto shrink-0 font-bold underline hover:no-underline cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+                      >
+                        Asignar plan
+                      </button>
+                    )}
                   </div>
                 )}
                 <form onSubmit={handleRegistrarCobro} className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Registra un cobro de cuota recibido en sala. El pago se marcará como <strong>auto-aprobado</strong> y se liquidará inmediatamente.
+                  Registra un cobro en <strong>efectivo</strong> recibido en sala. Se aplica a la
+                  cuota pendiente más antigua (o adelanta la próxima) y queda aprobado al instante.
                 </p>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -3595,34 +3937,6 @@ export function AlumnoDetallePage() {
                       <option value={Moneda.VES}>VES (Bs)</option>
                     </select>
                   </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-muted-foreground">Método de Pago</label>
-                  <select
-                    value={cobroMetodo}
-                    onChange={(e) => setCobroMetodo(e.target.value as MetodoPago)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
-                  >
-                    <option value={MetodoPago.EFECTIVO_USD}>Efectivo USD</option>
-                    <option value={MetodoPago.PAGO_MOVIL}>Pago Móvil (VES)</option>
-                    <option value={MetodoPago.EFECTIVO_VES}>Efectivo VES</option>
-                    <option value={MetodoPago.ZELLE}>Zelle</option>
-                    <option value={MetodoPago.TRANSFERENCIA_BANCARIA}>Transferencia Bancaria</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-muted-foreground">
-                    Referencia / Comprobante (Opcional)
-                  </label>
-                  <input
-                    type="text"
-                    value={cobroReferencia}
-                    onChange={(e) => setCobroReferencia(e.target.value)}
-                    placeholder="ej. 6 últimos dígitos o 'Efectivo en mostrador'"
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
-                  />
                 </div>
 
                 <div className="space-y-1">

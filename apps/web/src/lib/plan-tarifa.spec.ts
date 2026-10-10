@@ -78,17 +78,14 @@ describe('WU-J: helpers de plan y tarifa (RF-005)', () => {
     expect(decision.accion).toBe('ninguna');
   });
 
-  it('sin plan seleccionado pero con override vigente lo elimina (vuelve al catálogo)', () => {
+  it('C · sin plan seleccionado ya no elimina overrides (se quitan con el botón Quitar override)', () => {
     const decision = decidirGuardadoPlanTarifa({
       planSeleccionadoId: '',
       precioAcordado: '',
       tasaEspecial: '',
       overridesVigentes: [override({ id: 'override-a' }), override({ id: 'override-b' })],
     });
-    expect(decision.accion).toBe('eliminar_override');
-    if (decision.accion === 'eliminar_override') {
-      expect(decision.overridesAEliminar).toEqual(['override-a', 'override-b']);
-    }
+    expect(decision.accion).toBe('ninguna');
   });
 
   it('con plan seleccionado y sin cambios reales no escribe nada', () => {
@@ -184,5 +181,51 @@ describe('WU-J: helpers de plan y tarifa (RF-005)', () => {
     expect(demo.precioAcordadoUsd).toBe('35.00');
     expect(demo.planPrecioBaseUsd).toBe('40.00');
     expect(esOverrideBecado(demo)).toBe(false);
+  });
+});
+
+/**
+ * M5-L1B (contrato C): el override deja de asignar el plan; solo guarda precio y tasa.
+ * Los overrides vigentes ya no se eliminan por "plan vacío" (eso vive en el botón
+ * "Quitar override"); con plan elegido y precio/tasa vacíos, el guardado los retira todos.
+ */
+describe('M5-L1B · contrato C: el override ya no asigna el plan', () => {
+  it('C · sin plan y con precio acordado exige elegir un plan', () => {
+    const decision = decidirGuardadoPlanTarifa({
+      planSeleccionadoId: '',
+      precioAcordado: '35.00',
+      tasaEspecial: '',
+      overridesVigentes: [override({ id: 'override-a' })],
+    });
+    expect(decision).toEqual({
+      accion: 'error',
+      mensaje: 'Elige un plan para fijar un precio acordado.',
+    });
+  });
+
+  it('C · con plan elegido y precio/tasa vacíos elimina TODOS los overrides vigentes', () => {
+    const decision = decidirGuardadoPlanTarifa({
+      planSeleccionadoId: 'plan-1',
+      precioAcordado: '',
+      tasaEspecial: '',
+      overridesVigentes: [
+        override({ id: 'override-a', planId: 'plan-1' }),
+        override({ id: 'override-b', planId: 'plan-2' }),
+      ],
+    });
+    expect(decision.accion).toBe('eliminar_override');
+    if (decision.accion === 'eliminar_override') {
+      expect([...decision.overridesAEliminar].sort()).toEqual(['override-a', 'override-b']);
+    }
+  });
+
+  it('C · con plan elegido, precio/tasa vacíos y sin overrides no escribe nada', () => {
+    const decision = decidirGuardadoPlanTarifa({
+      planSeleccionadoId: 'plan-1',
+      precioAcordado: '',
+      tasaEspecial: '',
+      overridesVigentes: [],
+    });
+    expect(decision.accion).toBe('ninguna');
   });
 });

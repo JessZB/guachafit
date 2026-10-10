@@ -1,6 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { apiClient } from '../../lib/api-client';
+import { apiClient, generateIdempotencyKey } from '../../lib/api-client';
+import { construirPayloadCobroSala } from '../../lib/cobro-sala';
+import { esErrorSinPlanAsignado } from '../../lib/suscripcion-alumno';
 import { useAuth } from '../../context/auth-context';
 import { useValorDebounced } from '../../lib/use-valor-debounced';
 import { usePaginacionServidor } from '../../lib/use-paginacion-servidor';
@@ -11,7 +13,7 @@ import { MetricCard } from '../../components/common/MetricCard';
 import { TablaCartera } from '../../components/entrenador/TablaCartera';
 import { crearCarteraDemo } from '../../lib/demo-cartera';
 import { pluralizar } from '../../lib/pluralizar';
-import { formatFechaHoraLocal } from '../../lib/date-format';
+import { fechaCalendarioLocal, formatFechaHoraLocal } from '../../lib/date-format';
 import {
   PESTANAS_CARTERA,
   contadorPestana,
@@ -41,16 +43,17 @@ import {
   X,
 } from 'lucide-react';
 
-/** Fecha local de hoy en formato calendario `YYYY-MM-DD` (mismo default del esquema de cobro). */
-function hoyYyyyMmDd(): string {
-  return new Date().toISOString().split('T')[0];
-}
-
 interface EstadoCobro {
   fila: FilaCarteraDTO;
   monto: string;
   moneda: Moneda;
   fechaOperacion: string;
+  /**
+   * M5-L1B (RNF-002): clave de idempotencia del cobro de este alumno. Se conserva hasta un cobro
+   * confirmado (también si se cierra y reabre el modal), así un reintento tras una respuesta
+   * perdida no cobra dos veces.
+   */
+  claveIdempotencia: string;
 }
 
 export function CarteraPage() {
@@ -82,6 +85,9 @@ export function CarteraPage() {
   const [cobro, setCobro] = useState<EstadoCobro | null>(null);
   const [enviandoCobro, setEnviandoCobro] = useState(false);
   const [errorCobro, setErrorCobro] = useState<string | null>(null);
+  const [cobroSinPlan, setCobroSinPlan] = useState(false);
+  /** Claves pendientes por alumno (`alumnoUsuarioId`); se borran al confirmar el cobro. */
+  const clavesCobroPendientesRef = useRef(new Map<string, string>());
   const [exitoCobro, setExitoCobro] = useState<string | null>(null);
 
   const cargarPagina = useCallback(
@@ -231,14 +237,25 @@ export function CarteraPage() {
     }
   };
 
+  const claveCobroPendiente = (alumnoUsuarioId: string): string => {
+    const pendientes = clavesCobroPendientesRef.current;
+    const existente = pendientes.get(alumnoUsuarioId);
+    if (existente) return existente;
+    const nueva = generateIdempotencyKey();
+    pendientes.set(alumnoUsuarioId, nueva);
+    return nueva;
+  };
+
   const abrirCobro = (fila: FilaCarteraDTO) => {
     setErrorCobro(null);
+    setCobroSinPlan(false);
     setExitoCobro(null);
     setCobro({
       fila,
       monto: fila.saldoPendienteUsd ?? '',
       moneda: Moneda.USD,
-      fechaOperacion: hoyYyyyMmDd(),
+      fechaOperacion: fechaCalendarioLocal(),
+      claveIdempotencia: claveCobroPendiente(fila.alumnoUsuarioId),
     });
   };
 
@@ -265,6 +282,7 @@ export function CarteraPage() {
     }
     setEnviandoCobro(true);
     setErrorCobro(null);
+    setCobroSinPlan(false);
 
     if (isDemoMode) {
       setCobradosDemo((actuales) =>
@@ -284,19 +302,25 @@ export function CarteraPage() {
         `/finanzas/clientes/${cobro.fila.alumnoUsuarioId}/cobro-directo-inteligente`,
         {
           method: 'POST',
-          body: JSON.stringify({
-            montoOriginal: cobro.monto,
-            monedaOriginal: cobro.moneda,
-            metodoPago: cobro.moneda === Moneda.VES ? 'efectivo_ves' : 'efectivo_usd',
-            fechaOperacion: cobro.fechaOperacion,
-          }),
+          body: JSON.stringify(
+            construirPayloadCobroSala({
+              monto: cobro.monto,
+              moneda: cobro.moneda,
+              hoyLocal: cobro.fechaOperacion,
+            })
+          ),
+          idempotencyKey: cobro.claveIdempotencia,
         }
       );
+      // Cobro confirmado: el próximo cobro de este alumno usará una clave nueva. El mensaje no
+      // repite el monto del formulario: un reintento idempotente devuelve el cobro original.
+      clavesCobroPendientesRef.current.delete(cobro.fila.alumnoUsuarioId);
       setExitoCobro(
-        `Cobro de ${cobro.monto} ${cobro.moneda} registrado y auto-aprobado. El saldo del alumno quedó actualizado.`
+        `Cobro registrado y auto-aprobado para ${cobro.fila.alumnoNombre}. El saldo del alumno quedó actualizado.`
       );
       recargar();
     } catch (err: any) {
+      setCobroSinPlan(esErrorSinPlanAsignado(err));
       setErrorCobro(
         err?.message || 'No se pudo registrar el cobro. Revisa los datos e inténtalo de nuevo.'
       );
@@ -709,6 +733,14 @@ export function CarteraPage() {
               >
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{errorCobro}</span>
+                {cobroSinPlan && cobro.fila.alumnoPerfilId && (
+                  <Link
+                    to={`/coach/alumnos/${cobro.fila.alumnoPerfilId}?tab=resumen`}
+                    className="ml-auto shrink-0 underline hover:no-underline focus-visible:outline-2 focus-visible:outline-primary"
+                  >
+                    Asignar plan
+                  </Link>
+                )}
               </div>
             )}
 

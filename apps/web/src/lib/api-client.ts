@@ -408,6 +408,12 @@ export const apiClient = Object.assign(peticion, {
       method: 'PATCH',
       body: body !== undefined ? JSON.stringify(body) : undefined,
     }),
+  put: <T>(endpoint: string, body?: any, options: RequestOptions = {}) =>
+    peticion<T>(endpoint, {
+      ...options,
+      method: 'PUT',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
   delete: <T>(endpoint: string, options: RequestOptions = {}) =>
     peticion<T>(endpoint, { ...options, method: 'DELETE' }),
 });

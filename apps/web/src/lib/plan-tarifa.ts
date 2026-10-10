@@ -7,6 +7,8 @@
  * - RN-03: lo que el coach guarda aquí es exactamente lo que el servidor aplicará al emitir la
  *   cuota (override > precio del catálogo); por eso el payload viaja SIEMPRE con el valor
  *   explícito (o `null` para volver a heredar el catálogo).
+ * - M5-L1B: el override ya NO asigna el plan (eso es la suscripción, `lib/suscripcion-alumno.ts`);
+ *   solo guarda precio acordado y tasa especial del plan elegido.
  * - El formulario nunca inventa valores: campo vacío = `null` (hereda), nunca 0 por defecto.
  */
 import type { OverridePlanDetalleDTO, PlanMembresiaDetalleDTO } from '@guachafit/shared';
@@ -61,13 +63,13 @@ export function normalizarTasaEspecial(valor: string): string {
 }
 
 /**
- * Decide qué hacer con el plan y la tarifa al guardar la ficha.
+ * Decide qué hacer con la tarifa (override) al guardar la ficha.
  *
- * - Sin plan seleccionado: si había override asignado, se elimina (el alumno vuelve al catálogo);
- *   si no, no hay nada que hacer en esta tarjeta (la tasa suelta se guarda por el PATCH legado).
- * - Con plan seleccionado: se crea/actualiza el override del plan elegido y se eliminan los
- *   overrides de OTROS planes (el plan activo del alumno es único en la UI).
- * - Si ya existe un override para ese plan y nada cambió, no se escribe nada.
+ * - Sin plan seleccionado: no se toca ningún override (se quitan con "Quitar override"); un
+ *   precio acordado sin plan es un error. La tasa suelta se guarda por el PATCH legado.
+ * - Con plan seleccionado y sin precio ni tasa: no hace falta override; se eliminan los vigentes.
+ * - Con plan seleccionado y precio o tasa: se crea/actualiza el override del plan elegido y se
+ *   eliminan los de OTROS planes. Si nada cambió, no se escribe nada.
  */
 export function decidirGuardadoPlanTarifa(entrada: EntradaPlanTarifa): DecisionPlanTarifa {
   const planId = entrada.planSeleccionadoId.trim();
@@ -90,6 +92,12 @@ export function decidirGuardadoPlanTarifa(entrada: EntradaPlanTarifa): DecisionP
   }
 
   if (planId.length === 0) {
+    return precio.length > 0
+      ? { accion: 'error', mensaje: 'Elige un plan para fijar un precio acordado.' }
+      : { accion: 'ninguna' };
+  }
+
+  if (precio.length === 0 && tasa.length === 0) {
     return overrides.length > 0
       ? { accion: 'eliminar_override', overridesAEliminar: overrides.map((o) => o.id) }
       : { accion: 'ninguna' };
