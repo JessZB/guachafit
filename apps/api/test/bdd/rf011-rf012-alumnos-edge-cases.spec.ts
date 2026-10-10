@@ -1322,7 +1322,7 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
         ).rejects.toThrow(BadRequestException);
 
         await expect(
-          finanzasController.cobroDirectoInteligente(req, 'invalido-no-uuid', {
+          finanzasController.cobroDirectoInteligente(req, 'invalido-no-uuid', undefined, {
             montoOriginal: '40.00',
             monedaOriginal: Moneda.USD,
           })
@@ -1337,7 +1337,7 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
         ).rejects.toThrow(NotFoundException);
 
         await expect(
-          finanzasController.cobroDirectoInteligente(req, NON_EXISTENT_UUID, {
+          finanzasController.cobroDirectoInteligente(req, NON_EXISTENT_UUID, undefined, {
             montoOriginal: '40.00',
             monedaOriginal: Moneda.USD,
           })
@@ -1353,7 +1353,7 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
         ).rejects.toThrow(ForbiddenException);
 
         await expect(
-          finanzasController.cobroDirectoInteligente(reqCoachA, ALUMNO_B1_PERFIL_ID, {
+          finanzasController.cobroDirectoInteligente(reqCoachA, ALUMNO_B1_PERFIL_ID, undefined, {
             montoOriginal: '45.00',
             monedaOriginal: Moneda.USD,
           })
@@ -1365,7 +1365,7 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
 
         // Alejandro no tiene cuotas emitidas ni override en overridesClientePlan
         await expect(
-          finanzasController.cobroDirectoInteligente(req, ALUMNO_A1_PERFIL_ID, {
+          finanzasController.cobroDirectoInteligente(req, ALUMNO_A1_PERFIL_ID, undefined, {
             montoOriginal: '45.00',
             monedaOriginal: Moneda.USD,
           })
@@ -1376,7 +1376,7 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
         const req = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
 
         await expect(
-          finanzasController.cobroDirectoInteligente(req, ALUMNO_A1_PERFIL_ID, {
+          finanzasController.cobroDirectoInteligente(req, ALUMNO_A1_PERFIL_ID, undefined, {
             montoOriginal: '45.00',
             monedaOriginal: Moneda.USD,
             metodoPago: MetodoPago.PAGO_MOVIL,
@@ -1399,8 +1399,12 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
         expect(historial.transacciones.length).toBe(0);
       });
 
-      it('debe ejecutar exitosamente el cobro directo inteligente cuando el alumno tiene un plan asignado (override)', async () => {
-        // Asignar plan al alumno mediante override
+      it('debe ejecutar exitosamente el cobro directo inteligente cuando el alumno tiene un plan en su suscripción', async () => {
+        // M5-L1 §G3: el plan asignado vive en la SUSCRIPCIÓN del alumno (planSuscritoId +
+        // cicloAncla + proximoCorte); el override solo acuerda el precio (RN-03).
+        mockPerfilesAlumno[0].planSuscritoId = PLAN_COACH_A_ID;
+        mockPerfilesAlumno[0].cicloAncla = '2026-10-01';
+        mockPerfilesAlumno[0].proximoCorte = '2026-11-01';
         mockOverridesClientePlan.push({
           id: 'override-1',
           planId: PLAN_COACH_A_ID,
@@ -1410,7 +1414,7 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
 
         const req = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
 
-        const resultado = await finanzasController.cobroDirectoInteligente(req, ALUMNO_A1_PERFIL_ID, {
+        const resultado = await finanzasController.cobroDirectoInteligente(req, ALUMNO_A1_PERFIL_ID, undefined, {
           montoOriginal: '45.00',
           monedaOriginal: Moneda.USD,
           metodoPago: MetodoPago.EFECTIVO_USD,
@@ -1444,7 +1448,7 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
 
         const req = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
 
-        const resultado = await finanzasController.cobroDirectoInteligente(req, ALUMNO_A1_PERFIL_ID, {
+        const resultado = await finanzasController.cobroDirectoInteligente(req, ALUMNO_A1_PERFIL_ID, undefined, {
           montoOriginal: '45.00',
           monedaOriginal: Moneda.USD,
           metodoPago: MetodoPago.EFECTIVO_USD,

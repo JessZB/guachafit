@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import * as jwt from 'jsonwebtoken';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -797,6 +797,9 @@ function crearFinanzasFake() {
     proyectarVES: vi.fn((saldo: string, tasa: string) =>
       (Number(saldo) * Number(tasa)).toFixed(2)
     ),
+    // M5-L1 (H2 de fiabilidad): el barrido diario llama a `emitirCuotasProgramadas` ANTES del
+    // barrido de estados; sin este método el TypeError quedaba enmascarado en los logs.
+    emitirCuotasProgramadas: vi.fn(async () => ({ evaluadas: 0, emitidas: 0, omitidas: 0 })),
   } as any;
 }
 
@@ -1040,6 +1043,55 @@ describe('RNF-003/ADR-011 (etapa 2): tablas financieras siempre dentro de withTe
       expect.any(Function)
     );
     expect(superficie.llamadasDb).not.toContain('cuotas_membresia');
+  });
+
+  it('C10: el fake de Finanzas cubre TODOS los métodos del servicio real usados por esta suite', async () => {
+    // Proxy que registra cada método accedido y falla si falta en el fake: la suite usa el fake
+    // como FinanzasService en CarteraService y BillingReminderProcessor.
+    const accedidos = new Set<string>();
+    const fake = crearFinanzasFake();
+    const fakeEspiado = new Proxy(fake, {
+      get(objetivo, prop, receptor) {
+        if (typeof prop === 'string' && prop !== 'then') accedidos.add(prop);
+        const valor = Reflect.get(objetivo, prop, receptor);
+        if (valor === undefined && typeof prop === 'string' && prop !== 'then' && !(prop in objetivo)) {
+          throw new Error(`Método ausente en el fake de FinanzasService: ${prop}`);
+        }
+        return valor;
+      },
+    });
+
+    const superficie = crearSuperficieFinanciera(filasFinanzasBase());
+    const cartera = new CarteraService(
+      superficie.db,
+      fakeEspiado,
+      undefined,
+      superficie.withTenant
+    );
+    await cartera.obtenerCartera(COACH_ID, { pestana: 'mora' } as any);
+
+    const processor = new BillingReminderProcessor(
+      superficie.db,
+      { emitAsync: vi.fn(async () => []) } as any,
+      fakeEspiado,
+      { add: vi.fn() } as any,
+      superficie.withTenant
+    );
+    await processor.procesarBarridoDiario(new Date('2026-09-20T00:00:00Z'));
+    await processor.procesarRecordatorio({
+      data: { cuotaId: CUOTA_FIN_ID, hito: 'T_MINUS_1' },
+    } as any);
+
+    // Todos los métodos usados por la suite existen en el servicio real (sin drift de nombres)…
+    const prototipoReal = FinanzasService.prototype as unknown as Record<string, unknown>;
+    for (const metodo of accedidos) {
+      expect(typeof prototipoReal[metodo], `${metodo} debe existir en FinanzasService`).toBe(
+        'function'
+      );
+    }
+    // …y el barrido ejercitó la emisión nueva (antes ausente en el fake y enmascarada en logs).
+    expect(accedidos.has('emitirCuotasProgramadas')).toBe(true);
+    expect(fake.emitirCuotasProgramadas).toHaveBeenCalledTimes(1);
   });
 
   it('el resumen semanal (digest de sistema) lee cobros y cartera con bypass is_superadmin', async () => {
@@ -1849,5 +1901,70 @@ describe('RNF-003/ADR-011 (etapa 3): contrato de la migración 0013 (perfiles_al
     const anterior = journal.entries.find((e: any) => e.idx === 12);
     expect(entrada?.when).toBeGreaterThan(anterior?.when);
     expect(entrada?.when).toBeLessThanOrEqual(Date.now());
+  });
+});
+
+/**
+ * M5-L1 §D (RF-007 / RNF-002): contrato de la migración 0018.
+ *
+ * El índice único global `uq_transaccion_idempotencia (metodo_pago, referencia_bancaria,
+ * fecha_operacion)` se sustituye por uno POR ENTRENADOR y PARCIAL (solo métodos electrónicos,
+ * referencias no nulas y transacciones no rechazadas), y `perfiles_alumno` gana las columnas de
+ * suscripción. En fase roja este bloque FALLA porque la migración 0018 aún no existe.
+ */
+describe('M5-L1 §D: contrato de la migración 0018 (referencias por entrenador y suscripción)', () => {
+  const drizzleDir = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../../../packages/database/drizzle'
+  );
+  const archivos0018 = readdirSync(drizzleDir).filter((archivo) => /^0018_.+\.sql$/.test(archivo));
+  const sql =
+    archivos0018.length === 1 ? readFileSync(path.join(drizzleDir, archivos0018[0]), 'utf8') : '';
+  const esquemaSrc = readFileSync(path.resolve(drizzleDir, '../src/schema/index.ts'), 'utf8');
+  const bloqueIndice =
+    sql.match(/CREATE UNIQUE INDEX[^;]*uq_transaccion_referencia_entrenador[\s\S]*?;/i)?.[0] ?? '';
+
+  it('existe exactamente un archivo de migración 0018_*.sql', () => {
+    expect(archivos0018).toHaveLength(1);
+  });
+
+  it('perfiles_alumno gana las 3 columnas anulables de suscripción', () => {
+    expect(sql).toMatch(/plan_suscrito_id/);
+    expect(sql).toMatch(/ciclo_ancla/);
+    expect(sql).toMatch(/proximo_corte/);
+  });
+
+  it('elimina el índice global uq_transaccion_idempotencia', () => {
+    expect(sql).toMatch(/DROP INDEX (IF EXISTS )?"?uq_transaccion_idempotencia"?/i);
+  });
+
+  it('crea uq_transaccion_referencia_entrenador sobre (entrenador_id, metodo_pago, referencia_bancaria, fecha_operacion)', () => {
+    expect(bloqueIndice).not.toBe('');
+    expect(bloqueIndice).toMatch(/entrenador_id/);
+    expect(bloqueIndice).toMatch(/metodo_pago/);
+    expect(bloqueIndice).toMatch(/referencia_bancaria/);
+    expect(bloqueIndice).toMatch(/fecha_operacion/);
+  });
+
+  it('el índice nuevo es PARCIAL: excluye efectivo y transacciones rechazadas', () => {
+    expect(bloqueIndice).toMatch(/WHERE[\s\S]*IS NOT NULL/i);
+    expect(bloqueIndice).toMatch(/efectivo_usd/);
+    expect(bloqueIndice).toMatch(/efectivo_ves/);
+    expect(bloqueIndice).toMatch(/estado_conciliacion"?\s*<>\s*'rechazado'/i);
+  });
+
+  it('limpia la referencia centinela COBRO_DIRECTO_SALA a NULL', () => {
+    expect(sql).toMatch(
+      /UPDATE\s+"?transacciones_pago"?\s+SET\s+"?referencia_bancaria"?\s*=\s*NULL/i
+    );
+    expect(sql).toMatch(/COBRO_DIRECTO_SALA/);
+  });
+
+  it('el esquema TS declara las columnas y el índice nuevo, y ya no declara el viejo', () => {
+    expect(esquemaSrc).toMatch(/plan_suscrito_id/);
+    expect(esquemaSrc).toMatch(/ciclo_ancla/);
+    expect(esquemaSrc).toMatch(/proximo_corte/);
+    expect(esquemaSrc).toContain('uq_transaccion_referencia_entrenador');
+    expect(esquemaSrc).not.toContain('uq_transaccion_idempotencia');
   });
 });

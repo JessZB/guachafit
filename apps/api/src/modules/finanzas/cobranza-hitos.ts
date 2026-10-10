@@ -10,9 +10,17 @@
  * Redis real del proyecto. Se adopta el formato del diagrama del propio ADR-008 §3
  * (`cuota_{id}_T-5`) con separador `_`, que es determinista, seguro y estable.
  *
- * Los offsets se calculan SIEMPRE contra `fecha_corte_utc` en milisegundos UTC (ADR-002), sin
- * depender de la zona horaria del proceso.
+ * Con la zona del alumno (M5-L1), cada hito sale a las 09:00 locales del día `fecha local del
+ * corte + offset`, respetando el horario de verano. Sin zona (ruta heredada) se mantiene el
+ * cálculo previo: `fecha_corte_utc + offset` en milisegundos UTC (ADR-002). Ninguno de los dos
+ * depende de la zona horaria del proceso.
  */
+import {
+  instanteUtcDesdeHoraLocal,
+  obtenerFechaLocalYyyyMmDd,
+  sumarDiasCalendario,
+} from '../../common/adherencia.util';
+
 export const HITOS_COBRANZA = ['T_MINUS_5', 'T_MINUS_1', 'T_ZERO', 'T_PLUS_2'] as const;
 
 export type HitoCobranza = (typeof HITOS_COBRANZA)[number];
@@ -46,7 +54,38 @@ export function construirJobIdCobranza(cuotaId: string, hito: HitoCobranza): str
   return `cuota_${cuotaId}_hito_${hito}`;
 }
 
-/** Timestamp UTC exacto del hito: `fecha_corte_utc + offsetDias`. */
-export function calcularTimestampHito(fechaCorteUtc: Date, hito: HitoCobranza): Date {
-  return new Date(fechaCorteUtc.getTime() + OFFSET_DIAS_HITO[hito] * MS_POR_DIA);
+/** Hora local a la que sale cada recordatorio de cobro (RF-008 §4.B: 09:00 del alumno). */
+export const HORA_LOCAL_RECORDATORIO = 9;
+
+/** Día local (`YYYY-MM-DD`) en que cae el hito para un alumno de esa zona. */
+export function calcularDiaLocalHito(
+  fechaCorteUtc: Date,
+  hito: HitoCobranza,
+  zonaHoraria: string
+): string {
+  return sumarDiasCalendario(
+    obtenerFechaLocalYyyyMmDd(fechaCorteUtc, zonaHoraria),
+    OFFSET_DIAS_HITO[hito]
+  );
+}
+
+/**
+ * Timestamp UTC del hito.
+ * - Con `zonaHoraria` (M5-L1): 09:00 locales del día `fecha local del corte + offsetDias`,
+ *   también en los días de cambio de horario.
+ * - Sin zona: `fecha_corte_utc + offsetDias` exacto (comportamiento previo).
+ */
+export function calcularTimestampHito(
+  fechaCorteUtc: Date,
+  hito: HitoCobranza,
+  zonaHoraria?: string
+): Date {
+  if (!zonaHoraria) {
+    return new Date(fechaCorteUtc.getTime() + OFFSET_DIAS_HITO[hito] * MS_POR_DIA);
+  }
+  return instanteUtcDesdeHoraLocal(
+    calcularDiaLocalHito(fechaCorteUtc, hito, zonaHoraria),
+    HORA_LOCAL_RECORDATORIO,
+    zonaHoraria
+  );
 }

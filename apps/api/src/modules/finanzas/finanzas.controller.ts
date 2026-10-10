@@ -34,6 +34,7 @@ import {
   CobroDirectoSchema,
   CobroDirectoInteligenteSchema,
   ConciliarTransaccionSchema,
+  AsignarSuscripcionSchema,
   LIMITE_BANDEJA_CONCILIACION_POR_DEFECTO,
   LIMITE_BANDEJA_CONCILIACION_MAXIMO,
   LIMITE_TRANSACCIONES_HISTORIAL_MAXIMO,
@@ -211,6 +212,57 @@ export class FinanzasController {
   }
 
   /**
+   * Plan asignado al alumno y su ciclo de cobro (M5-L1, RF-005 / RF-008); `null` si no tiene.
+   * Rol: Entrenador
+   */
+  @Get('suscripciones/:clienteId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR)
+  async obtenerSuscripcion(@Req() req: any, @Param('clienteId') clienteId: string) {
+    if (!UUID_REGEX.test(clienteId)) {
+      throw new BadRequestException(MENSAJE_ALUMNO_NO_ENCONTRADO);
+    }
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    return this.finanzasService.obtenerSuscripcion(entrenadorId, clienteId);
+  }
+
+  /**
+   * Asigna o cambia el plan del alumno; sus cuotas se emiten solas desde entonces (M5-L1).
+   * `fechaInicio` solo se envía con el primer plan.
+   * Rol: Entrenador
+   */
+  @Put('suscripciones/:clienteId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR)
+  async asignarSuscripcion(
+    @Req() req: any,
+    @Param('clienteId') clienteId: string,
+    @Body() body: unknown
+  ) {
+    if (!UUID_REGEX.test(clienteId)) {
+      throw new BadRequestException(MENSAJE_ALUMNO_NO_ENCONTRADO);
+    }
+    const dto = parsearContrato(AsignarSuscripcionSchema, body);
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    return this.finanzasService.asignarSuscripcion(entrenadorId, clienteId, dto);
+  }
+
+  /**
+   * Quita el plan del alumno: deja de renovarse; las cuotas emitidas no cambian (M5-L1).
+   * Rol: Entrenador
+   */
+  @Delete('suscripciones/:clienteId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR)
+  async quitarSuscripcion(@Req() req: any, @Param('clienteId') clienteId: string) {
+    if (!UUID_REGEX.test(clienteId)) {
+      throw new BadRequestException(MENSAJE_ALUMNO_NO_ENCONTRADO);
+    }
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    return this.finanzasService.quitarSuscripcion(entrenadorId, clienteId);
+  }
+
+  /**
    * Emisión de cuota mensual / periódica para un alumno
    * Rol: Entrenador
    */
@@ -365,7 +417,8 @@ export class FinanzasController {
   }
 
   /**
-   * Cobro directo inteligente en sala (1 paso): si no hay cuota del mes, la emite automáticamente
+   * Cobro directo inteligente en sala (1 paso): cobra la cuota abierta más antigua o adelanta la
+   * próxima de la suscripción. `x-idempotency-key` evita cobrar dos veces ante un doble clic.
    * Rol: Entrenador
    */
   @Post('clientes/:clienteId/cobro-directo-inteligente')
@@ -375,6 +428,7 @@ export class FinanzasController {
   async cobroDirectoInteligente(
     @Req() req: any,
     @Param('clienteId') clienteId: string,
+    @Headers('x-idempotency-key') idempotencyHeader: string | undefined,
     @Body() body: unknown
   ) {
     if (!UUID_REGEX.test(clienteId)) {
@@ -382,6 +436,11 @@ export class FinanzasController {
     }
     const dto = parsearContrato(CobroDirectoInteligenteSchema, body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.finanzasService.cobroDirectoInteligente(entrenadorId, clienteId, dto);
+    return this.finanzasService.cobroDirectoInteligente(
+      entrenadorId,
+      clienteId,
+      dto,
+      idempotencyHeader
+    );
   }
 }

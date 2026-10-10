@@ -1191,6 +1191,16 @@ export const CrearOverridePlanSchema = z.object({
   motivoOverride: z.string().max(500).nullable().optional(),
 });
 
+/**
+ * M5-L1 (RF-005 / RF-008): asignación del plan de un alumno. Las cuotas se emiten solas a partir
+ * de esta suscripción. `fechaInicio` (día local del alumno) solo se envía al asignar el primer
+ * plan: fija el día de vencimiento de todos los ciclos; en un cambio de plan se omite.
+ */
+export const AsignarSuscripcionSchema = z.object({
+  planId: z.string().uuid('Elige un plan de tu catálogo.'),
+  fechaInicio: fechaCalendarioRealSchema.optional(),
+});
+
 export const EmitirCuotaSchema = z.object({
   clienteId: z.string().uuid(),
   planId: z.string().uuid(),

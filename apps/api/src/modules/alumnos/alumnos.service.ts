@@ -1190,13 +1190,14 @@ export class AlumnosService {
   /**
    * RF-005: hidrata el "plan activo" y el precio acordado de un lote de alumnos.
    *
-   * Semántica (no hay columna de plan asignado en `perfiles_alumno`; el plan se deriva de datos
-   * reales, nunca de un valor inventado):
-   * 1. Override vigente del alumno (el más reciente si tuviera varios): define plan activo,
-   *    nombre del plan y `precioAcordadoUsd` (puede ser 0.00 en becados).
+   * Semántica (el plan sale de datos reales, nunca de un valor inventado):
+   * 0. Suscripción del alumno (`perfiles_alumno.plan_suscrito_id`, M5-L1): es el plan asignado y
+   *    gana sobre todo lo demás; el precio acordado sale del override de ESE plan (o `null`).
+   * 1. Sin suscripción, override vigente del alumno (el más reciente si tuviera varios): define
+   *    plan activo, nombre del plan y `precioAcordadoUsd` (puede ser 0.00 en becados).
    * 2. Sin override: el plan de la ÚLTIMA cuota emitida por el coach (la deuda vigente describe
    *    el plan contratado). `precioAcordadoOverride` queda `null` (hereda precio del catálogo).
-   * 3. Sin override ni cuotas: sin plan (los campos quedan `null` y la UI dice "Sin plan asignado").
+   * 3. Sin nada de lo anterior: sin plan (los campos quedan `null` y la UI dice "Sin plan asignado").
    *
    * El aislamiento de tenant se garantiza filtrando por los planes y cuotas del propio entrenador;
    * se resuelve con consultas en lote (sin N+1) sobre las tablas `overrides_cliente_plan`,
@@ -1243,6 +1244,34 @@ export class AlumnosService {
         )
       )
       .orderBy(desc(overridesClientePlan.updatedAtUtc), desc(overridesClientePlan.id));
+
+    // 0. Suscripción del alumno (M5-L1): el plan asignado gana sobre override y última cuota.
+    const suscripciones = await tx
+      .select({
+        usuarioId: perfilesAlumno.usuarioId,
+        planSuscritoId: perfilesAlumno.planSuscritoId,
+      })
+      .from(perfilesAlumno)
+      .where(
+        and(
+          inArray(perfilesAlumno.usuarioId, ids),
+          eq(perfilesAlumno.entrenadorId, entrenadorId),
+          isNotNull(perfilesAlumno.planSuscritoId)
+        )
+      );
+
+    for (const suscripcion of suscripciones) {
+      const plan = suscripcion.planSuscritoId ? planesPorId.get(suscripcion.planSuscritoId) : null;
+      if (!plan) continue;
+      const overrideDelPlan = overrides.find(
+        (override) => override.clienteId === suscripcion.usuarioId && override.planId === plan.id
+      );
+      planesActivos.set(suscripcion.usuarioId, {
+        planActivoId: plan.id,
+        planActivoNombre: plan.nombre,
+        precioAcordadoOverride: overrideDelPlan?.precioAcordadoUsd ?? null,
+      });
+    }
 
     for (const override of overrides) {
       if (planesActivos.has(override.clienteId)) continue;

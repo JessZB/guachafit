@@ -61,6 +61,7 @@ import {
   CobroDirectoSchema,
   CobroDirectoInteligenteSchema,
   ConciliarTransaccionSchema,
+  AsignarSuscripcionSchema,
   PreferenciasNotificacionSchema,
   RegistrarDispositivoSchema,
   ActualizarTemaUiSchema,
@@ -223,6 +224,7 @@ export type ReportarPagoDTO = z.infer<typeof ReportarPagoSchema>;
 export type CobroDirectoDTO = z.infer<typeof CobroDirectoSchema>;
 export type CobroDirectoInteligenteDTO = z.infer<typeof CobroDirectoInteligenteSchema>;
 export type ConciliarTransaccionDTO = z.infer<typeof ConciliarTransaccionSchema>;
+export type AsignarSuscripcionDTO = z.infer<typeof AsignarSuscripcionSchema>;
 /** WU-I (RF-009): filtros server-side del tablero de cartera (`q`, `pestana`, `limit`, `offset`). */
 export type FiltroCarteraDTO = z.infer<typeof FiltroCarteraSchema>;
 
@@ -615,6 +617,22 @@ export interface EliminarOverridePlanResultadoDTO {
   id: string;
   eliminado: boolean;
   mensaje: string;
+}
+
+/**
+ * M5-L1 (RF-005 / RF-008): plan asignado a un alumno y su ciclo de cobro. Las fechas son días
+ * locales del alumno (`YYYY-MM-DD`): `fechaInicio` fija el día de vencimiento y `proximoCorte`
+ * es el vencimiento de la próxima cuota que se emitirá sola. `cuotaEmitidaId` solo viene en la
+ * respuesta de la asignación que emitió una cuota.
+ */
+export interface SuscripcionAlumnoDTO {
+  clienteId: string;
+  planId: string;
+  planNombre: string;
+  duracionMeses: number;
+  fechaInicio: string;
+  proximoCorte: string;
+  cuotaEmitidaId: string | null;
 }
 
 export interface TransaccionPagoDetalleDTO {

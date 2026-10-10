@@ -21,9 +21,12 @@ import {
   JOB_BARRIDO_ESTADOS,
   JOB_RECORDATORIO_CUOTA,
   JOB_SCHEDULER_BARRIDO_ID,
+  calcularDiaLocalHito,
   calcularTimestampHito,
   construirJobIdCobranza,
 } from './cobranza-hitos';
+import { esperarConLimite } from '../../common/esperar-con-limite.util';
+import { obtenerFechaLocalYyyyMmDd } from '../../common/adherencia.util';
 
 /**
  * Reintentos y retención de los jobs de cobranza (ADR-008 §3.3 + observabilidad Bull-Board):
@@ -37,9 +40,17 @@ export const OPCIONES_JOBS_COBRANZA = {
   removeOnFail: 500,
 };
 
+/**
+ * Tope de espera de cada llamada a la cola. Con Redis caído (`maxRetriesPerRequest: null`) BullMQ
+ * no responde nunca: sin este tope, emitir una cuota o cobrar en sala se quedaría colgado.
+ */
+export const TIEMPO_MAX_COLA_COBRANZA_MS = 3000;
+
 export interface CuotaParaProgramar {
   id: string;
   fechaCorteUtc: Date;
+  /** Zona IANA del alumno: con ella los hitos salen a las 09:00 locales (RF-008 §4.B). */
+  zonaHoraria?: string;
 }
 
 @Injectable()
@@ -91,6 +102,12 @@ export class BillingSchedulerService implements OnModuleInit {
    *
    * Un hito cuyo timestamp ya pasó al momento de emitir se omite deliberadamente: enviar
    * "vence en 5 días" cuando faltan 3 (o cuando ya venció) sería un mensaje incorrecto.
+   * Excepción (con zona): si el hito cae HOY en el día local del alumno y solo pasó su hora
+   * (09:00), se envía ya; el mensaje sigue siendo cierto y así no se pierde el T-5 de una cuota
+   * emitida esa misma tarde.
+   *
+   * Si la cola no responde a tiempo o falla, deja de intentar el resto (Redis caído) y devuelve
+   * los hitos que sí quedaron agendados. Nunca lanza.
    */
   async programarRecordatoriosCuota(
     cuota: CuotaParaProgramar,
@@ -99,24 +116,43 @@ export class BillingSchedulerService implements OnModuleInit {
     const programados: HitoCobranza[] = [];
 
     for (const hito of HITOS_COBRANZA) {
-      const timestampHito = calcularTimestampHito(cuota.fechaCorteUtc, hito);
-      const delay = timestampHito.getTime() - ahora.getTime();
+      const timestampHito = calcularTimestampHito(cuota.fechaCorteUtc, hito, cuota.zonaHoraria);
+      let delay = timestampHito.getTime() - ahora.getTime();
 
-      if (delay <= 0) continue;
+      if (delay <= 0) {
+        const esHoyLocal =
+          cuota.zonaHoraria !== undefined &&
+          calcularDiaLocalHito(cuota.fechaCorteUtc, hito, cuota.zonaHoraria) ===
+            obtenerFechaLocalYyyyMmDd(ahora, cuota.zonaHoraria);
+        if (!esHoyLocal) continue;
+        delay = 0;
+      }
 
-      await this.cobranzaQueue.add(
-        JOB_RECORDATORIO_CUOTA,
-        {
-          cuotaId: cuota.id,
-          hito,
-          timestampHitoUtc: timestampHito.toISOString(),
-        },
-        {
-          ...OPCIONES_JOBS_COBRANZA,
-          jobId: construirJobIdCobranza(cuota.id, hito),
-          delay,
-        }
+      const resultado = await esperarConLimite(
+        this.cobranzaQueue.add(
+          JOB_RECORDATORIO_CUOTA,
+          {
+            cuotaId: cuota.id,
+            hito,
+            timestampHitoUtc: timestampHito.toISOString(),
+          },
+          {
+            ...OPCIONES_JOBS_COBRANZA,
+            jobId: construirJobIdCobranza(cuota.id, hito),
+            delay,
+          }
+        ),
+        TIEMPO_MAX_COLA_COBRANZA_MS
       );
+
+      if (!resultado.ok) {
+        this.logger.warn(
+          `No se pudieron agendar los recordatorios de la cuota ${cuota.id} desde ${hito}: ${describirFallo(
+            resultado
+          )}`
+        );
+        break;
+      }
 
       programados.push(hito);
     }
@@ -134,24 +170,36 @@ export class BillingSchedulerService implements OnModuleInit {
    * Cancela los 4 jobs de recordatorio de una cuota (ADR-008 §3.2).
    *
    * `Queue.remove` devuelve 0 si el job no existe y puede lanzar si el job está activo/locked;
-   * cada hito se intenta de forma independiente para que un fallo no bloquee el resto.
+   * cada hito se intenta de forma independiente para que un fallo no bloquee el resto. Si la cola
+   * no responde a tiempo (Redis caído) se deja de intentar: el procesador descarta igualmente el
+   * recordatorio de una cuota ya saldada.
    */
   async cancelarRecordatoriosCuota(cuotaId: string): Promise<number> {
     let eliminados = 0;
 
     for (const hito of HITOS_COBRANZA) {
       const jobId = construirJobIdCobranza(cuotaId, hito);
-      try {
-        eliminados += await this.cobranzaQueue.remove(jobId);
-      } catch (error) {
-        this.logger.warn(
-          `No se pudo cancelar el job '${jobId}': ${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
+      const resultado = await esperarConLimite(
+        this.cobranzaQueue.remove(jobId),
+        TIEMPO_MAX_COLA_COBRANZA_MS
+      );
+      if (resultado.ok) {
+        eliminados += resultado.valor;
+        continue;
       }
+      this.logger.warn(`No se pudo cancelar el job '${jobId}': ${describirFallo(resultado)}`);
+      if (resultado.motivo === 'tiempo') break;
     }
 
     return eliminados;
   }
+}
+
+function describirFallo(
+  resultado: { ok: false; motivo: 'tiempo' } | { ok: false; motivo: 'error'; error: unknown }
+): string {
+  if (resultado.motivo === 'tiempo') {
+    return `la cola no respondió en ${TIEMPO_MAX_COLA_COBRANZA_MS} ms`;
+  }
+  return resultado.error instanceof Error ? resultado.error.message : String(resultado.error);
 }

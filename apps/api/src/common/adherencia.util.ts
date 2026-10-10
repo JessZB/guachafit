@@ -223,9 +223,22 @@ export function instanteUtcDesdeMedianocheLocal(
   fechaYyyyMmDd: string,
   timezone?: string | null
 ): Date {
+  return instanteUtcDesdeHoraLocal(fechaYyyyMmDd, 0, timezone);
+}
+
+/**
+ * Instante UTC de las `hora`:00 locales de `fechaYyyyMmDd` en la zona indicada (zona inválida
+ * → UTC). El offset se toma a esa misma hora, así que respeta el horario de verano aunque el
+ * cambio ocurra de madrugada ese día.
+ */
+export function instanteUtcDesdeHoraLocal(
+  fechaYyyyMmDd: string,
+  hora: number,
+  timezone?: string | null
+): Date {
   const tz = esTimezoneIanaValida(timezone) ? timezone! : 'UTC';
   const [y, m, d] = fechaYyyyMmDd.split('-').map(Number);
-  const baseUtcMs = Date.UTC(y, m - 1, d, 0, 0, 0);
+  const baseUtcMs = Date.UTC(y, m - 1, d, hora, 0, 0);
   let ts = baseUtcMs;
   for (let i = 0; i < 2; i++) {
     ts = baseUtcMs - obtenerOffsetMinutos(new Date(ts), tz) * 60000;

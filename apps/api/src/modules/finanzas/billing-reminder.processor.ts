@@ -7,8 +7,10 @@
  *    dominio `RecordatorioCuotaEvent` (RF-014 RN-01) que el `NotificationDispatcherService`
  *    escucha para persistir In-App y encolar Push/Email según la matriz RF-015. Si ya está
  *    saldada, termina sin enviar.
- * 2. `barrido-estados` (repeatable diario): aplica la máquina de estados real
- *    (`calcularEstadoBarrido`) a TODAS las cuotas de TODOS los tenants.
+ * 2. `barrido-estados` (repeatable diario): primero emite las cuotas de las suscripciones que
+ *    entran en su ventana de 5 días (M5-L1, `FinanzasService.emitirCuotasProgramadas`) y luego
+ *    aplica la máquina de estados real (`calcularEstadoBarrido`) a TODAS las cuotas de TODOS los
+ *    tenants.
  *
  * RUTA DE SISTEMA (tenancy): `cuotas_membresia` tiene RLS habilitado (migración 0012, etapa 2).
  * Este worker barre las cuotas de TODOS los tenants, así que corre con el bypass explícito
@@ -57,6 +59,8 @@ export interface ResultadoBarrido {
   actualizadas: number;
   porVencer: number;
   vencidas: number;
+  /** M5-L1: cuotas emitidas automáticamente por las suscripciones antes del barrido de estados. */
+  cuotasEmitidas: number;
 }
 
 interface DatosRecordatorio {
@@ -250,6 +254,20 @@ export class BillingReminderProcessor extends WorkerHost {
    * máquina pura y solo se persiste el cambio real de estado.
    */
   async procesarBarridoDiario(ahora: Date = new Date()): Promise<ResultadoBarrido> {
+    // M5-L1 (RF-005 / RF-008): primero se emiten las cuotas de las suscripciones que entran en su
+    // ventana de 5 días, así el barrido de estados ya las evalúa. Un fallo general de la emisión
+    // no impide el barrido de estados (cada alumno ya se aísla dentro de la emisión).
+    let cuotasEmitidas = 0;
+    try {
+      cuotasEmitidas = (await this.finanzasService.emitirCuotasProgramadas(ahora)).emitidas;
+    } catch (error) {
+      this.logger.error(
+        `No se pudo ejecutar la emisión automática de cuotas: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+
     // RUTA DE SISTEMA (RNF-003/ADR-011): barrido transversal de TODOS los tenants con el bypass
     // explícito `is_superadmin`. Lectura + actualizaciones en UNA transacción (no N transacciones).
     const resumen = await this.withTenant({ isSuperadmin: true }, async (tx) => {
@@ -273,6 +291,7 @@ export class BillingReminderProcessor extends WorkerHost {
         actualizadas: 0,
         porVencer: 0,
         vencidas: 0,
+        cuotasEmitidas,
       };
 
       for (const fila of filas) {
@@ -302,7 +321,8 @@ export class BillingReminderProcessor extends WorkerHost {
     });
 
     this.logger.log(
-      `Barrido diario de cuotas: ${resumen.evaluadas} evaluadas, ${resumen.actualizadas} actualizadas ` +
+      `Barrido diario de cuotas: ${resumen.cuotasEmitidas} emitidas, ${resumen.evaluadas} evaluadas, ` +
+        `${resumen.actualizadas} actualizadas ` +
         `(${resumen.porVencer} por vencer, ${resumen.vencidas} vencidas).`
     );
 

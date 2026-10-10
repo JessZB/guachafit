@@ -243,6 +243,17 @@ export const perfilesAlumno = pgTable(
     zonaHoraria: varchar('zona_horaria', { length: 64 })
       .default(ZONA_HORARIA_ALUMNO_POR_DEFECTO)
       .notNull(),
+    /**
+     * M5-L1 (RF-005 / RF-008): suscripción del alumno. Las cuotas se emiten solas a partir de ella.
+     * - `plan_suscrito_id`: plan asignado (NULL = sin plan, no se emiten cuotas).
+     * - `ciclo_ancla`: día local de inicio; fija el día de vencimiento de cada ciclo.
+     * - `proximo_corte`: vencimiento (día local) de la próxima cuota a emitir.
+     */
+    planSuscritoId: uuid('plan_suscrito_id').references(() => planesMembresia.id, {
+      onDelete: 'restrict',
+    }),
+    cicloAncla: date('ciclo_ancla'),
+    proximoCorte: date('proximo_corte'),
     deletedAtUtc: timestamp('deleted_at_utc', { withTimezone: true }),
     createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
     updatedAtUtc: timestamp('updated_at_utc', { withTimezone: true }).defaultNow().notNull(),
@@ -726,11 +737,13 @@ export const transaccionesPago = pgTable(
     updatedAtUtc: timestamp('updated_at_utc', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
-    idempotenciaIndex: uniqueIndex('uq_transaccion_idempotencia').on(
-      table.metodoPago,
-      table.referenciaBancaria,
-      table.fechaOperacion
-    ),
+    // M5-L1 (RF-007 / RNF-002): una referencia bancaria no se repite DENTRO de la cartera de un
+    // entrenador. El efectivo no lleva referencia y un pago rechazado puede reenviarse.
+    referenciaEntrenadorIndex: uniqueIndex('uq_transaccion_referencia_entrenador')
+      .on(table.entrenadorId, table.metodoPago, table.referenciaBancaria, table.fechaOperacion)
+      .where(
+        sql`${table.referenciaBancaria} IS NOT NULL AND ${table.metodoPago} NOT IN ('efectivo_usd', 'efectivo_ves') AND ${table.estadoConciliacion} <> 'rechazado'`
+      ),
   })
 );
 

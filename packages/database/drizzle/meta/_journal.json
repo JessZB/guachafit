@@ -127,6 +127,13 @@
       "when": 1791320691018,
       "tag": "0017_usuarios_cambio_correo",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791567723572,
+      "tag": "0018_suscripcion_alumno_referencias",
+      "breakpoints": true
     }
   ]
 }

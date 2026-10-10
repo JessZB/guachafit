@@ -95,11 +95,13 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
           else if (texto.includes('is null')) op = 'isNull';
           else if (esNotIn) op = 'notIn';
           else if (esIn) op = 'in';
+          // M5-L1: `<>`/`!=` se evalúan ANTES que los comparadores simples (el '<' de '<>'
+          // no debe interpretarse como 'lt': bug latente que vaciaba el filtro `ne`).
+          else if (texto.includes('<>') || texto.includes('!=')) op = 'ne';
           else if (comparador === '>=') op = 'gte';
           else if (comparador === '<=') op = 'lte';
           else if (comparador === '>') op = 'gt';
           else if (comparador === '<') op = 'lt';
-          else if (texto.includes('<>') || texto.includes('!=')) op = 'ne';
 
           if (op === 'isNull' || op === 'isNotNull') {
             conditions.push({ column: chunk.name, value: null, op });
@@ -2036,6 +2038,355 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
         '11111111-2222-4333-8444-555555555555'
       );
       expect(eliminado.eliminado).toBe(true);
+    });
+  });
+
+  // ===========================================================================
+  // M5-L1 §G: CORRECCIONES DE COMPORTAMIENTO (RF-005 / RF-007 / RNF-002)
+  // ===========================================================================
+  describe('11. M5-L1 §G: cobro directo, referencias duplicadas y cobro inteligente', () => {
+    // El mock histórico NO persiste los INSERT (sus tests solo miran el retorno). §G1 y §G3
+    // necesitan que la transacción/cuota emitida pueda RE-LEERSE en la misma llamada: se envuelve
+    // `insert` para escribirlo también en el store real.
+    beforeEach(() => {
+      mockDb.insert.mockImplementation((tabla: any) => ({
+        values: (vals: any) => {
+          const registro = {
+            id: vals.id || `uuid-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            ...vals,
+            createdAtUtc: vals.createdAtUtc || new Date(),
+            updatedAtUtc: vals.updatedAtUtc || new Date(),
+          };
+          getTablaCruda(getTableName(tabla)).push(registro);
+          return {
+            returning: vi.fn().mockResolvedValue([registro]),
+            then: (resolve: any) => resolve([registro]),
+          };
+        },
+      }));
+    });
+
+    function cuotaAbierta(overrides: Record<string, any> = {}) {
+      mockCuotasMembresia = [
+        {
+          id: 'cuota-m5l1',
+          clienteId: 'alumno-uuid-1',
+          entrenadorId: 'coach-uuid-1',
+          planId: 'plan-uuid-1',
+          periodo: '2026-10',
+          montoTotalUsd: '40.00',
+          montoAbonadoUsd: '0.00',
+          saldoPendienteUsd: '40.00',
+          fechaEmisionUtc: new Date(),
+          fechaCorteUtc: new Date('2026-11-01T03:59:59.999Z'),
+          estado: EstadoCuota.EMITIDA,
+          createdAtUtc: new Date('2026-10-01T00:00:00Z'),
+          ...overrides,
+        },
+      ];
+    }
+
+    function txConReferencia(overrides: Record<string, any> = {}) {
+      return {
+        id: `tx-m5l1-${Math.random().toString(36).slice(2, 8)}`,
+        cuotaId: 'cuota-m5l1',
+        clienteId: 'alumno-uuid-1',
+        entrenadorId: 'coach-uuid-1',
+        registradoPor: 'alumno-uuid-1',
+        montoOriginal: '1500.00',
+        monedaOriginal: Moneda.VES,
+        tasaCambioFijada: '60.0000',
+        montoEquivalenteUsd: '25.00',
+        metodoPago: MetodoPago.PAGO_MOVIL,
+        referenciaBancaria: 'ref-m5l1',
+        fechaOperacion: '2026-10-05',
+        estadoConciliacion: EstadoConciliacion.PENDIENTE,
+        motivoRechazo: null,
+        fechaReporteUtc: new Date(),
+        fechaConciliacionUtc: null,
+        createdAtUtc: new Date(),
+        updatedAtUtc: new Date(),
+        ...overrides,
+      };
+    }
+
+    it('§G1: cobroDirecto sin referencia persiste null (nunca COBRO_DIRECTO_SALA)', async () => {
+      cuotaAbierta();
+
+      const res = await finanzasService.cobroDirecto('cuota-m5l1', 'coach-uuid-1', {
+        montoOriginal: '40.00',
+        monedaOriginal: Moneda.USD,
+        metodoPago: MetodoPago.EFECTIVO_USD,
+        fechaOperacion: '2026-10-09',
+      });
+
+      expect(res.transaccion.referenciaBancaria).toBeNull();
+      expect(mockTransaccionesPago[0].referenciaBancaria).toBeNull();
+    });
+
+    it('§G2: una referencia idéntica de OTRO entrenador no bloquea el reporte', async () => {
+      cuotaAbierta();
+      mockTransaccionesPago = [
+        txConReferencia({
+          id: 'tx-otro-coach',
+          entrenadorId: 'coach-uuid-2',
+          clienteId: 'alumno-ajeno',
+        }),
+      ];
+
+      const res = await finanzasService.reportarPago('cuota-m5l1', 'alumno-uuid-1', {
+        montoOriginal: '1500.00',
+        monedaOriginal: Moneda.VES,
+        metodoPago: MetodoPago.PAGO_MOVIL,
+        referenciaBancaria: 'ref-m5l1',
+        fechaOperacion: '2026-10-05',
+      });
+
+      expect(res.esDuplicadoIdempotente).toBe(false);
+      expect(res.transaccion.referenciaBancaria).toBe('ref-m5l1');
+    });
+
+    it('§G2: un pago RECHAZADO con la misma referencia puede reenviarse', async () => {
+      cuotaAbierta();
+      mockTransaccionesPago = [
+        txConReferencia({
+          estadoConciliacion: EstadoConciliacion.RECHAZADO,
+          motivoRechazo: 'Fondos no recibidos',
+        }),
+      ];
+
+      const res = await finanzasService.reportarPago('cuota-m5l1', 'alumno-uuid-1', {
+        montoOriginal: '1500.00',
+        monedaOriginal: Moneda.VES,
+        metodoPago: MetodoPago.PAGO_MOVIL,
+        referenciaBancaria: 'ref-m5l1',
+        fechaOperacion: '2026-10-05',
+      });
+
+      expect(res.esDuplicadoIdempotente).toBe(false);
+    });
+
+    it('§G2: el 23505 de uq_transaccion_referencia_entrenador se mapea a ConflictException', async () => {
+      cuotaAbierta();
+      const error23505 = Object.assign(
+        new Error(
+          'duplicate key value violates unique constraint "uq_transaccion_referencia_entrenador"'
+        ),
+        { code: '23505', constraint_name: 'uq_transaccion_referencia_entrenador' }
+      );
+      const insertOriginal = mockDb.insert.getMockImplementation()!;
+      mockDb.insert.mockImplementation((tabla: any) => {
+        if (getTableName(tabla) === 'transacciones_pago') {
+          return { values: () => ({ returning: () => Promise.reject(error23505) }) };
+        }
+        return insertOriginal(tabla);
+      });
+
+      await expect(
+        finanzasService.reportarPago('cuota-m5l1', 'alumno-uuid-1', {
+          montoOriginal: '1500.00',
+          monedaOriginal: Moneda.VES,
+          metodoPago: MetodoPago.PAGO_MOVIL,
+          referenciaBancaria: 'ref-nueva-m5l1',
+          fechaOperacion: '2026-10-05',
+        })
+      ).rejects.toThrow(
+        'Esta referencia ya ha sido registrada previamente para este método y fecha de operación.'
+      );
+    });
+
+    it('§G2: el 23505 anidado en `cause` (constraint) también se mapea', async () => {
+      cuotaAbierta();
+      const errorEnvuelto = new Error('fallo al insertar transacción', {
+        cause: Object.assign(new Error('unique violation'), {
+          code: '23505',
+          constraint: 'uq_transaccion_referencia_entrenador',
+        }),
+      });
+      const insertOriginal = mockDb.insert.getMockImplementation()!;
+      mockDb.insert.mockImplementation((tabla: any) => {
+        if (getTableName(tabla) === 'transacciones_pago') {
+          return { values: () => ({ returning: () => Promise.reject(errorEnvuelto) }) };
+        }
+        return insertOriginal(tabla);
+      });
+
+      await expect(
+        finanzasService.reportarPago('cuota-m5l1', 'alumno-uuid-1', {
+          montoOriginal: '1500.00',
+          monedaOriginal: Moneda.VES,
+          metodoPago: MetodoPago.PAGO_MOVIL,
+          referenciaBancaria: 'ref-nueva-m5l1',
+          fechaOperacion: '2026-10-05',
+        })
+      ).rejects.toThrow(
+        'Esta referencia ya ha sido registrada previamente para este método y fecha de operación.'
+      );
+    });
+
+    it('§G2: cualquier otro error de inserción se propaga sin cambios', async () => {
+      cuotaAbierta();
+      const errorGenerico = new Error('fallo de red de base de datos');
+      const insertOriginal = mockDb.insert.getMockImplementation()!;
+      mockDb.insert.mockImplementation((tabla: any) => {
+        if (getTableName(tabla) === 'transacciones_pago') {
+          return { values: () => ({ returning: () => Promise.reject(errorGenerico) }) };
+        }
+        return insertOriginal(tabla);
+      });
+
+      const capturado = await finanzasService
+        .reportarPago('cuota-m5l1', 'alumno-uuid-1', {
+          montoOriginal: '1500.00',
+          monedaOriginal: Moneda.VES,
+          metodoPago: MetodoPago.PAGO_MOVIL,
+          referenciaBancaria: 'ref-nueva-m5l1',
+          fechaOperacion: '2026-10-05',
+        })
+        .then(
+          () => null,
+          (error: unknown) => error
+        );
+
+      expect(capturado).toBeInstanceOf(Error);
+      expect(capturado).not.toBeInstanceOf(ConflictException);
+      expect((capturado as Error).message).toBe('fallo de red de base de datos');
+    });
+
+    it('§G3: cobroDirectoInteligente usa la cuota abierta MÁS ANTIGUA por fecha de corte', async () => {
+      mockCuotasMembresia = [
+        {
+          id: 'cuota-reciente',
+          clienteId: 'alumno-uuid-1',
+          entrenadorId: 'coach-uuid-1',
+          planId: 'plan-uuid-1',
+          periodo: '2026-10',
+          montoTotalUsd: '40.00',
+          montoAbonadoUsd: '0.00',
+          saldoPendienteUsd: '40.00',
+          fechaEmisionUtc: new Date('2026-09-01T00:00:00Z'),
+          fechaCorteUtc: new Date('2026-10-01T03:59:59.999Z'),
+          estado: EstadoCuota.EMITIDA,
+          createdAtUtc: new Date('2026-09-01T00:00:00Z'),
+        },
+        {
+          id: 'cuota-antigua',
+          clienteId: 'alumno-uuid-1',
+          entrenadorId: 'coach-uuid-1',
+          planId: 'plan-uuid-1',
+          periodo: '2026-08',
+          montoTotalUsd: '40.00',
+          montoAbonadoUsd: '0.00',
+          saldoPendienteUsd: '40.00',
+          fechaEmisionUtc: new Date('2026-08-01T00:00:00Z'),
+          fechaCorteUtc: new Date('2026-09-01T03:59:59.999Z'),
+          estado: EstadoCuota.VENCIDA,
+          createdAtUtc: new Date('2026-08-01T00:00:00Z'),
+        },
+      ];
+
+      const res = await finanzasService.cobroDirectoInteligente('coach-uuid-1', 'alumno-uuid-1', {
+        montoOriginal: '40.00',
+        monedaOriginal: Moneda.USD,
+        metodoPago: MetodoPago.EFECTIVO_USD,
+        fechaOperacion: '2026-10-09',
+      });
+
+      expect(res.cuota.id).toBe('cuota-antigua');
+    });
+
+    it('§G3: cobroDirectoInteligente ignora las cuotas ANULADA al elegir la abierta', async () => {
+      mockCuotasMembresia = [
+        {
+          id: 'cuota-anulada',
+          clienteId: 'alumno-uuid-1',
+          entrenadorId: 'coach-uuid-1',
+          planId: 'plan-uuid-1',
+          periodo: '2026-10',
+          montoTotalUsd: '40.00',
+          montoAbonadoUsd: '0.00',
+          saldoPendienteUsd: '40.00',
+          fechaEmisionUtc: new Date('2026-09-01T00:00:00Z'),
+          fechaCorteUtc: new Date('2026-10-01T03:59:59.999Z'),
+          estado: EstadoCuota.ANULADA,
+          createdAtUtc: new Date('2026-09-10T00:00:00Z'),
+        },
+        {
+          id: 'cuota-emitida',
+          clienteId: 'alumno-uuid-1',
+          entrenadorId: 'coach-uuid-1',
+          planId: 'plan-uuid-1',
+          periodo: '2026-08',
+          montoTotalUsd: '40.00',
+          montoAbonadoUsd: '0.00',
+          saldoPendienteUsd: '40.00',
+          fechaEmisionUtc: new Date('2026-08-01T00:00:00Z'),
+          fechaCorteUtc: new Date('2026-09-01T03:59:59.999Z'),
+          estado: EstadoCuota.EMITIDA,
+          createdAtUtc: new Date('2026-08-01T00:00:00Z'),
+        },
+      ];
+
+      const res = await finanzasService.cobroDirectoInteligente('coach-uuid-1', 'alumno-uuid-1', {
+        montoOriginal: '40.00',
+        monedaOriginal: Moneda.USD,
+        metodoPago: MetodoPago.EFECTIVO_USD,
+        fechaOperacion: '2026-10-09',
+      });
+
+      expect(res.cuota.id).toBe('cuota-emitida');
+      expect(res.cuota.estado).toBe(EstadoCuota.AL_DIA);
+    });
+
+    it('§G3: sin cuota abierta y CON suscripción emite por adelantado la cuota de proximoCorte', async () => {
+      mockPerfilesAlumno[0].planSuscritoId = 'plan-uuid-1';
+      mockPerfilesAlumno[0].cicloAncla = '2026-10-01';
+      mockPerfilesAlumno[0].proximoCorte = '2026-12-01';
+      mockCuotasMembresia = [];
+
+      const res = await finanzasService.cobroDirectoInteligente('coach-uuid-1', 'alumno-uuid-1', {
+        montoOriginal: '50.00',
+        monedaOriginal: Moneda.USD,
+        metodoPago: MetodoPago.EFECTIVO_USD,
+        fechaOperacion: '2026-10-09',
+      });
+
+      expect(mockCuotasMembresia).toHaveLength(1);
+      expect(mockCuotasMembresia[0].periodo).toBe('2026-12');
+      expect(new Date(mockCuotasMembresia[0].fechaCorteUtc).toISOString()).toBe(
+        '2026-12-02T03:59:59.999Z'
+      );
+      expect(mockPerfilesAlumno[0].proximoCorte).toBe('2027-01-01');
+      expect(res.cuota.id).toBe(mockCuotasMembresia[0].id);
+      expect(res.cuota.estado).toBe(EstadoCuota.AL_DIA);
+    });
+
+    it('§G3: sin cuota abierta y SIN suscripción → 400 con el mensaje nuevo (camino viejo eliminado)', async () => {
+      mockOverridesClientePlan.push({
+        id: 'override-camino-viejo',
+        planId: 'plan-uuid-1',
+        clienteId: 'alumno-uuid-1',
+        precioAcordadoUsd: '40.00',
+        tasaFijadaOverride: null,
+        beneficiosPersonalizados: null,
+        motivoOverride: null,
+        createdAtUtc: new Date(),
+        updatedAtUtc: new Date(),
+      });
+      mockCuotasMembresia = [];
+
+      await expect(
+        finanzasService.cobroDirectoInteligente('coach-uuid-1', 'alumno-uuid-1', {
+          montoOriginal: '40.00',
+          monedaOriginal: Moneda.USD,
+          metodoPago: MetodoPago.EFECTIVO_USD,
+          fechaOperacion: '2026-10-09',
+        })
+      ).rejects.toThrow(
+        'Este alumno no tiene un plan asignado. Asígnale un plan en su ficha para registrar el cobro.'
+      );
+
+      expect(mockCuotasMembresia).toHaveLength(0);
     });
   });
 });

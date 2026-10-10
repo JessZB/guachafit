@@ -15,6 +15,7 @@ import {
   JOB_BARRIDO_ESTADOS,
   JOB_RECORDATORIO_CUOTA,
   JOB_SCHEDULER_BARRIDO_ID,
+  calcularTimestampHito,
   construirJobIdCobranza,
 } from '../../src/modules/finanzas/cobranza-hitos';
 import { RecordatorioCuotaEvent } from '../../src/modules/notificaciones/events/eventos-notificacion';
@@ -169,6 +170,61 @@ describe('RF-008 WU-H: BillingSchedulerService (cola mock)', () => {
       });
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // M5-L1 §B (RF-008 §4.B): los recordatorios salen a las 09:00 LOCALES del alumno.
+  // ---------------------------------------------------------------------------
+  describe('M5-L1 §B: recordatorios a las 09:00 locales del alumno', () => {
+    it('calcularTimestampHito fija 09:00 locales del día del hito cuando recibe zona horaria', () => {
+      // Corte 2026-10-16T03:59:59.999Z = 2026-10-15 23:59:59.999 en America/Caracas.
+      const corteCaracas = new Date('2026-10-16T03:59:59.999Z');
+
+      expect(calcularTimestampHito(corteCaracas, 'T_MINUS_5', 'America/Caracas').toISOString()).toBe(
+        '2026-10-10T13:00:00.000Z'
+      );
+      expect(calcularTimestampHito(corteCaracas, 'T_MINUS_1', 'America/Caracas').toISOString()).toBe(
+        '2026-10-14T13:00:00.000Z'
+      );
+      expect(calcularTimestampHito(corteCaracas, 'T_ZERO', 'America/Caracas').toISOString()).toBe(
+        '2026-10-15T13:00:00.000Z'
+      );
+      expect(calcularTimestampHito(corteCaracas, 'T_PLUS_2', 'America/Caracas').toISOString()).toBe(
+        '2026-10-17T13:00:00.000Z'
+      );
+    });
+
+    it('sin zona horaria conserva el comportamiento actual (offset exacto sobre el corte)', () => {
+      expect(calcularTimestampHito(fechaCorteUtc, 'T_MINUS_1').toISOString()).toBe(
+        '2026-09-14T23:59:59.000Z'
+      );
+    });
+
+    it('programarRecordatoriosCuota usa la zona horaria del alumno para el delay de cada hito', async () => {
+      const programados = await scheduler.programarRecordatoriosCuota(
+        { id: cuotaId, fechaCorteUtc, zonaHoraria: 'America/Caracas' },
+        ahora
+      );
+
+      expect(programados).toEqual(['T_MINUS_5', 'T_MINUS_1', 'T_ZERO', 'T_PLUS_2']);
+
+      const esperados = [
+        { hito: 'T_MINUS_5', aLas09Local: '2026-09-10T13:00:00.000Z' },
+        { hito: 'T_MINUS_1', aLas09Local: '2026-09-14T13:00:00.000Z' },
+        { hito: 'T_ZERO', aLas09Local: '2026-09-15T13:00:00.000Z' },
+        { hito: 'T_PLUS_2', aLas09Local: '2026-09-17T13:00:00.000Z' },
+      ] as const;
+
+      for (const esperado of esperados) {
+        expect(mockQueue.add).toHaveBeenCalledWith(
+          JOB_RECORDATORIO_CUOTA,
+          expect.objectContaining({ cuotaId, hito: esperado.hito }),
+          expect.objectContaining({
+            delay: new Date(esperado.aLas09Local).getTime() - ahora.getTime(),
+          })
+        );
+      }
+    });
+  });
 });
 
 /**
@@ -234,6 +290,10 @@ describe('RF-008 WU-H: BillingReminderProcessor (DB y despachador mock)', () => 
       proyectarVES: vi.fn((usd: string, tasa: string) =>
         (Number(usd) * Number(tasa)).toFixed(2)
       ),
+      // M5-L1 §E5: el barrido diario emite primero las cuotas programadas de las suscripciones.
+      emitirCuotasProgramadas: vi
+        .fn()
+        .mockResolvedValue({ evaluadas: 0, emitidas: 0, omitidas: 0 }),
     };
   });
 
@@ -377,10 +437,31 @@ describe('RF-008 WU-H: BillingReminderProcessor (DB y despachador mock)', () => 
         actualizadas: 2,
         porVencer: 1,
         vencidas: 2,
+        cuotasEmitidas: 0,
       });
       expect(updates).toHaveLength(2);
       expect(updates[0].set.estado).toBe(EstadoCuota.POR_VENCER);
       expect(updates[1].set.estado).toBe(EstadoCuota.VENCIDA);
+    });
+
+    it('M5-L1 §E5: emite las cuotas programadas ANTES del barrido y reporta cuotasEmitidas', async () => {
+      const ahoraBarrido = new Date('2026-10-09T12:00:00.000Z');
+      mockFinanzas.emitirCuotasProgramadas.mockResolvedValueOnce({
+        evaluadas: 3,
+        emitidas: 2,
+        omitidas: 1,
+      });
+      const { db } = crearDbMock([]);
+      const processor = crearProcessor(db);
+
+      const resultado = await processor.procesarBarridoDiario(ahoraBarrido);
+
+      expect(mockFinanzas.emitirCuotasProgramadas).toHaveBeenCalledWith(ahoraBarrido);
+      expect(resultado).toMatchObject({ cuotasEmitidas: 2 });
+      // La emisión de cuotas ocurre ANTES de la lectura de cuotas del barrido de estados.
+      expect(mockFinanzas.emitirCuotasProgramadas.mock.invocationCallOrder[0]).toBeLessThan(
+        db.select.mock.invocationCallOrder[0]
+      );
     });
 
     it('ignora jobs desconocidos sin romper el worker', async () => {
