@@ -4,7 +4,7 @@ modulo: Finanzas
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-21
+fecha_verificacion: 2026-10-09
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -45,7 +45,7 @@ Estandariza la oferta de servicios del entrenador en paquetes comerciales defini
   - `Descripción`: Alcance general del plan.
   - `Beneficios (Checklist)`: Lista de ítems incluidos (ej. *Rutina interactiva*, *Guía nutricional*, *1 Check-in quincenal*, *Acceso libre a sala*).
   - `Precio Base USD`: Monto numérico mayor a 0 con 2 decimales.
-  - `Duración del Ciclo`: Periodo de facturación (`Mensual` = 30 días, `Bimestral` = 60 días, `Trimestral` = 90 días, `Personalizado`).
+  - `Duración del Ciclo`: Periodo de facturación en **meses de calendario** (`Mensual` = 1, `Bimestral` = 2, `Trimestral` = 3, `Personalizado` = N), anclados al día de inicio del alumno (decisión del dueño 2026-10-09, [[ADR-020-suscripcion-alumno-emision-automatica-cuotas]]).
 - **RN-02 (Sobrescritura por Cliente - Override):** El entrenador puede asignar a un cliente específico un plan estándar con uno o varios de los siguientes overrides:
   - `Precio Acordado USD`: Reemplaza el precio base del catálogo para ese cliente.
   - `Beneficios Personalizados`: Permite agregar o quitar ítems del checklist de beneficios.
@@ -100,4 +100,15 @@ Then el monto total a pagar debe ser exactamente de $40.00 USD
 - Resuelto (2026-09-21, WU-J): precedencia RN-03 real al emitir cuota — `emitirCuota` resuelve `precio_acordado_usd` del override del alumno > `precio_base_usd` del plan del catálogo; el monto del DTO quedó como contrato legado opcional que ya NO decide el monto.
 - Resuelto (2026-09-21, WU-J): estado `Becado / $0` — un override de precio 0.00 emite la cuota por $0.00 en estado `al_dia`, sin recordatorios de cobro (RF-005 §6). RN-01 exige precio base > 0.00 en el catálogo (el becado se expresa con override, nunca con un plan de $0).
 - Resuelto (2026-09-21, WU-J): la API hidrata `planActivoId`, `planActivoNombre` y `precioAcordadoOverride` (override vigente o, en su defecto, plan de la última cuota) en el directorio y en el expediente del alumno; la ficha permite asignar plan, fijar precio acordado y tasa especial, ver el override vigente y quitarlo con feedback honesto (solo 2xx).
-- Pendiente: editor de `beneficiosPersonalizados` en la UI (la API los persiste y los devuelve, pero la ficha no los edita) y selección de "fuente de cambio particular" por cliente (hoy la tasa especial es un valor fijo).
+### Suscripción del alumno y emisión automática (2026-10-09, `ee23aef`)
+- **Plan asignado persistido:** `perfiles_alumno.plan_suscrito_id`, `ciclo_ancla` y `proximo_corte` (migración `0018`). Contrato `GET`/`PUT`/`DELETE /finanzas/suscripciones/:clienteId` (rol Entrenador; otro coach, inexistente o archivado → 404).
+- **Primer plan:** exige fecha de inicio entre hace 30 y dentro de 60 días (*"Elige una fecha de inicio entre el DD/MM/AAAA y el DD/MM/AAAA."*) y que no caiga en un periodo ya cubierto (*"Este alumno ya tiene cubierto hasta el DD/MM/AAAA. Elige esa fecha o una posterior, o cambia el plan sin quitarlo."*). Si el primer vencimiento está a 5 días o menos, la cuota sale en el acto.
+- **Cambio de plan:** aplica desde la próxima cuota, sin mover el día de vencimiento. Plan inexistente → 404; desactivado → 400.
+- **Cuotas automáticas:** se emiten 5 días antes de cada vencimiento, que cae al inicio del periodo cubierto; la precedencia RN-03 (override > catálogo) y el becado ($0.00 → `al_dia`) se mantienen. Detalle en [[ADR-020-suscripcion-alumno-emision-automatica-cuotas]].
+- **Hidratación:** el "plan activo" de directorio y expediente sale primero de la suscripción (precio del override de ese mismo plan).
+- Evidencia: `rf005-rf008-suscripcion-ciclo.spec.ts`, `rf005-rf008-suscripcion-servicio.spec.ts`, `rf005-rf009-m5l1-correcciones.spec.ts`; API **1447** aprobados (6 omitidos).
+
+### Pendiente
+- **Ficha del alumno (web, lote 1B):** elegir la fecha de inicio y usar `PUT`/`DELETE /finanzas/suscripciones`; hoy la ficha sigue asignando el plan por el override. El `GET` sin plan responde un cuerpo vacío (`null`), que la web debe manejar.
+- **Ruta heredada `POST /finanzas/cuotas/emitir`:** sigue disponible sin la regla de solape.
+- Editor de `beneficiosPersonalizados` en la UI (la API los persiste y los devuelve, pero la ficha no los edita) y selección de "fuente de cambio particular" por cliente (hoy la tasa especial es un valor fijo).

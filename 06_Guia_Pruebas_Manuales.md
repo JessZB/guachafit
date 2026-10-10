@@ -137,6 +137,9 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 - [ ] **Registrar cobro** desde la fila: al liquidar, el alumno sale de mora.
 - [ ] **Recordatorios automáticos (por debajo):** emite una cuota desde la ficha y revisa `http://localhost:4000/admin/queues` (si configuraste `BULL_BOARD_USER`/`BULL_BOARD_PASS` en `apps/api/.env`): verás los 4 avisos agendados en la cola "cobranza"; al pagar todo, desaparecen.
 - [ ] **Estado "Por Vencer"**: una cuota a ≤5 días del corte se pinta como preventiva y **no** cuenta como mora.
+- [ ] **Plan del alumno y cuotas automáticas (API, 2026-10-09, `ee23aef`):** la ficha web aún no lo usa (lote 1B); se prueba con la API (Bruno/curl con el token del coach). `PUT /finanzas/suscripciones/<alumnoId>` con `{"planId": "<plan>", "fechaInicio": "<hoy>"}` → responde con `proximoCorte` un mes después y `cuotaEmitidaId` (la cuota de hoy ya aparece en Control de Cobros). Repite el `PUT` con otra `fechaInicio` → 400 "La fecha de inicio solo se elige al asignar el plan por primera vez…". `DELETE` y luego `PUT` con una fecha dentro del mes ya cobrado → 400 "Este alumno ya tiene cubierto hasta el …".
+- [ ] **Cobro en sala sin cuota abierta:** con el alumno suscrito y todo pagado, "Registrar cobro" adelanta y cobra la próxima cuota. Un alumno sin plan → "Este alumno no tiene un plan asignado…".
+- [ ] **Dos cobros en efectivo el mismo día:** registra dos cobros en efectivo (a dos alumnos) el mismo día: ambos se guardan (antes el segundo fallaba).
 
 ## 5. Directorio de Alumnos
 

@@ -4,7 +4,7 @@ modulo: Finanzas
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-20
+fecha_verificacion: 2026-10-09
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -111,3 +111,12 @@ Then la transacción debe transicionar a estado "Rechazado"
 - Sin reversión administrativa de un pago aprobado por error (caso borde del requisito).
 - El comprobante es opcional en la implementación, aunque RN-02 lo define obligatorio.
 - Entrega de notificaciones simulada: no hay envío push/email real verificado.
+
+### Referencias duplicadas por entrenador (2026-10-09, `ee23aef`)
+- El índice único era GLOBAL `(metodo_pago, referencia_bancaria, fecha_operacion)`: mezclaba referencias de entrenadores distintos y, como el cobro en sala guardaba la referencia fija `COBRO_DIRECTO_SALA`, el segundo cobro en efectivo del día fallaba en toda la plataforma.
+- Ahora es `uq_transaccion_referencia_entrenador`, **por entrenador y parcial**: solo referencias no nulas, de métodos electrónicos y de pagos no rechazados (un pago rechazado puede reenviarse con la misma referencia). El efectivo no guarda referencia y el centinela se limpió a `NULL` (migración `0018`).
+- Un duplicado responde 409 *"Esta referencia ya ha sido registrada previamente para este método y fecha de operación."*, tanto en la comprobación previa como si dos envíos simultáneos chocan con el índice (23505).
+- Evidencia: `rf007-indice-referencias.e2e.spec.ts` contra PostgreSQL real (**5/5**), `finanzas-service.spec.ts`.
+
+### Pendiente
+- Reversión administrativa de un pago aprobado por error; el comprobante sigue siendo opcional.

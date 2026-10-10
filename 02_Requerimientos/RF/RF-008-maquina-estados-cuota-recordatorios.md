@@ -4,7 +4,7 @@ modulo: Finanzas
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-20
+fecha_verificacion: 2026-10-09
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -112,9 +112,17 @@ Then el estado de la cuota debe transicionar a "Vencida / En Mora"
 - Semáforo: `POR_VENCER` es preventivo (ámbar) y nunca cuenta como mora; la regla única de mora lo excluye y el dashboard lo mantiene fuera de "Alumnos en Mora".
 - Recordatorio manual un clic (RF-009 RN-02): despacho inmediato con cooldown anti-spam, independiente del cronograma automático.
 
+### Emisión automática y recordatorios a las 09:00 locales (2026-10-09, `ee23aef`)
+- **Renovación resuelta:** el barrido diario emite primero la cuota de cada alumno activo con plan cuyo vencimiento está a 5 días o menos (y avanza su ciclo) y después evalúa los estados. Una cuota `VENCIDA` sigue con su saldo; la del periodo siguiente se emite aparte. Alumnos pausados, suspendidos o archivados no generan cuotas; al volver se emite solo la del ciclo en curso. Detalle en [[ADR-020-suscripcion-alumno-emision-automatica-cuotas]].
+- **Hora local real (§4.B):** los hitos de las cuotas emitidas por suscripción salen a las 09:00 de la zona del alumno, también en días de cambio de horario. Si la cuota se emite el mismo día local de un hito cuya hora ya pasó (p. ej. el T-5 por la tarde), se envía de inmediato en vez de perderse.
+- **Redis caído:** agendar o cancelar recordatorios espera como máximo 3 s por llamada; el barrido de estados ya no se congela.
+- Evidencia: `rf008-wu-h-scheduler.spec.ts`, `rf005-rf009-m5l1-correcciones.spec.ts` (C1–C3, C8); API **1447** aprobados.
+
 **Pendiente:**
 
-- Renovación automática de periodo / avance de corte: no definida en este RF. El barrido no inventa un nuevo periodo: `VENCIDA` persiste con la misma `fecha_corte_utc` y el saldo acumulado hasta que un pago la liquide o un humano la anule.
+- **Reconciliación de recordatorios:** si Redis falla al emitir, los recordatorios de esa cuota no se reprograman solos.
+- **Ruta heredada `POST /finanzas/cuotas/emitir`:** agenda los hitos a la hora exacta del corte (sin zona).
+- **Barrido con Redis caído:** suma hasta 3 s por alumno con cuota en ventana.
 
 **Nota técnica verificada — formato de `jobId`:**
 

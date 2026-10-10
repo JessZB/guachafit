@@ -5,7 +5,7 @@ categoria: consistencia-financiera # consistencia-financiera | seguridad | rendi
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-10-04
+fecha_verificacion: 2026-10-09
 requisito_origen: "[[RF-006-motor-bimonetario-liquidacion-abonos]]"
 metrica_objetivo: "100% precisión decimal (cero floating-point error) / Idempotencia estricta"
 fecha_creacion: 2026-09-06
@@ -49,7 +49,8 @@ El módulo de finanzas maneja saldos adeudados, deducciones de abonos y conversi
 
 ## 4. Idempotencia y Prevención de Doble Gasto
 - **Clave de Idempotencia en Pagos:** La inserción de un reporte de pago debe estar protegida por un índice único compuesto en base de datos:
-  $$\text{UNIQUE}(\text{metodo\_pago}, \text{referencia\_bancaria}, \text{fecha\_operacion})$$
+  $$\text{UNIQUE}(\text{entrenador\_id}, \text{metodo\_pago}, \text{referencia\_bancaria}, \text{fecha\_operacion})$$
+  Parcial (2026-10-09): solo referencias no nulas, de métodos electrónicos y de pagos no rechazados. Ver [[RF-007-reporte-pagos-bandeja-conciliacion]].
 - Si un usuario pulsa repetidamente el botón *"Enviar Comprobante"* debido a lag de red, el sistema debe retornar el registro existente sin generar múltiples transacciones pendientes.
 
 ---
@@ -77,3 +78,13 @@ El módulo de finanzas maneja saldos adeudados, deducciones de abonos y conversi
 - Idempotencia no persistente: no se garantiza la deduplicación de reportes de pago.
 - Sin detección de sobre-abono ni reconciliador de la invariante de saldo.
 - Implementado (2026-10-04, LOTE API-3 `bc53864`): la idempotencia en memoria de `finanzas.service` (antes un `Map` sin límite) usa el `RegistroIdempotencia` compartido con entrenamiento y plantillas: TTL de 24 h, tope de 10 000 entradas y **dedupe de envíos simultáneos** con la misma clave (`apps/api/src/common/idempotencia/registro-idempotencia.ts`). **Sigue pendiente** la idempotencia persistente: el registro vive en el proceso (un reinicio o varias réplicas no lo comparten). Evidencia: API **986** tras API-3.
+
+### Referencias por entrenador, cobro en sala idempotente y cuotas sin duplicar (2026-10-09, `ee23aef`)
+- **Índice de referencias** `uq_transaccion_referencia_entrenador` (migración `0018`): por entrenador y parcial; el 23505 se traduce a 409 con mensaje claro. Verificado contra PostgreSQL real (E2E **5/5**).
+- **Cobro en sala:** `x-idempotency-key` con el mismo `RegistroIdempotencia` (clave por entrenador y alumno).
+- **Cuotas:** el bloqueo de la fila del alumno (`FOR UPDATE`) serializa el barrido, la asignación de plan y el cobro en sala; el índice `uq_cuota_cliente_plan_periodo` es la última barrera, y su choque responde 409.
+- Evidencia: `rf007-indice-referencias.e2e.spec.ts`, `rf005-rf009-m5l1-correcciones.spec.ts`; API **1447** aprobados (6 omitidos), web **1134**.
+
+### Pendiente
+- Idempotencia persistente (sigue en memoria del proceso).
+- Detección de sobre-abono y reconciliador de la invariante de saldo.

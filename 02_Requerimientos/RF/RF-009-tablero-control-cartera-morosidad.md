@@ -3,7 +3,7 @@ id: RF-009
 modulo: Finanzas
 prioridad: alta
 estado: aprobado
-estado_implementacion: implementado
+estado_implementacion: parcial
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -124,4 +124,13 @@ Then el sistema debe crear una transacción con estado "Aprobado"
 
 - **Unidades mezcladas en los contadores:** "En Mora" y "Próximos a Vencer" cuentan ALUMNOS (`count(distinct cliente_id)`), "Pendiente de Revisión" cuenta PAGOS y "Al Día" cuenta CUOTAS del periodo. No son magnitudes sumables entre sí, y el contador de "Al Día" puede repetir alumno si tiene dos planes cubiertos.
 - **Pestaña "Próximos a Vencer" y mensaje manual:** esa pestaña ofrece Recordatorio / Registrar cobro / Ver ficha, pero NO "Ver Historial de Pagos" (§4.B lo lista). Además, el mensaje manual no incluye los datos bancarios del coach porque no están persistidos en el modelo; el compositor no los inventa (queda pendiente el modelo de datos).
-- La "Próxima fecha de facturación" de la tabla §4.B no existe como dato persistido: la columna muestra el corte real del ciclo ya cubierto, sin inventar una fecha futura.
+- La "Próxima fecha de facturación" de la tabla §4.B no existe como dato persistido: la columna muestra el corte real del ciclo ya cubierto, sin inventar una fecha futura. (Desde `ee23aef` el dato existe en `perfiles_alumno.proximo_corte`; falta mostrarlo.)
+
+### Cobro en sala con la suscripción (2026-10-09, `ee23aef`)
+- `POST /finanzas/clientes/:clienteId/cobro-directo-inteligente` cobra la **cuota abierta más antigua**; sin cuota abierta, **adelanta la próxima** de la suscripción. Sin plan asignado → 400 *"Este alumno no tiene un plan asignado. Asígnale un plan en su ficha para registrar el cobro."* (ya no inventa una cuota con el override).
+- Solo efectivo, validado antes de emitir nada; alumno archivado → 404; la fila del alumno se bloquea frente al barrido; un choque de cuota → 409.
+- Header `x-idempotency-key`: un doble clic con la misma clave devuelve el mismo cobro.
+- Evidencia: `rf005-rf009-m5l1-correcciones.spec.ts` (C6, C7), `rf011-rf012-alumnos-edge-cases.spec.ts`.
+
+### Pendiente
+- **Web (lote 1B):** el modal de cobro aún no envía `x-idempotency-key` ni muestra el próximo vencimiento; PagosPage, conciliación (confirmación y reversión), saldo a favor y anulación de cuotas siguen pendientes del módulo 5.
