@@ -118,7 +118,9 @@ Then el monto total a pagar debe ser exactamente de $40.00 USD
 - **Fallos:** si el override no carga, la tarifa no se toca (el campo vacío borraría el precio real). Tras un fallo de `PUT`/`DELETE` la tarjeta y el selector se alinean con el servidor. Los avisos y el éxito nombran exactamente lo que se guardó.
 - Evidencia: `apps/web/src/lib/suscripcion-alumno.spec.ts`, `plan-tarifa.spec.ts`, `pages/entrenador/AlumnoDetallePage.suscripcion.interaccion.spec.tsx`, `AlumnoDetallePage.correcciones-1b.interaccion.spec.tsx`; web **1207** aprobados. Revisado con los 4 enfoques y validado en dos rondas.
 
+### Sin emisión manual (2026-10-10, `68457a6`)
+- **Decisión del dueño:** se retira `POST /finanzas/cuotas/emitir`. Las cuotas solo se emiten desde la suscripción del alumno, así que la regla de solape y la zona horaria se aplican siempre. RN-03 (override > catálogo) y el becado siguen cubiertos por la emisión por suscripción.
+
 ### Pendiente
 - **Precio residual tras reconciliar:** si "Quitar plan" se aplicó en el servidor pero su respuesta se perdió, el campo "Precio Acordado" conserva el valor y el siguiente guardado pide "Elige un plan…" hasta vaciarlo. En modo demo, el éxito del guardado sigue con el texto fijo "Expediente, plan y tarifa…".
-- **Ruta heredada `POST /finanzas/cuotas/emitir`:** sigue disponible sin la regla de solape.
 - Editor de `beneficiosPersonalizados` en la UI (la API los persiste y los devuelve, pero la ficha no los edita) y selección de "fuente de cambio particular" por cliente (hoy la tasa especial es un valor fijo).

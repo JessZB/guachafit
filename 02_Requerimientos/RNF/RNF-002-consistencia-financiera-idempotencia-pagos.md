@@ -88,7 +88,8 @@ El módulo de finanzas maneja saldos adeudados, deducciones de abonos y conversi
 ### Clave del cobro en sala desde la web (2026-10-10, `e0747e2`)
 - El `apiClient` ya enviaba `X-Idempotency-Key` en los POST de `/finanzas/`, pero una clave NUEVA por llamada, así que un doble envío no se deduplicaba. Ahora la ficha y Control de Cobros pasan una clave por alumno que solo se renueva tras un cobro confirmado.
 
+**Decisión cerrada (2026-10-10):** el `PUT`/`DELETE` de suscripciones no lleva clave de idempotencia. Un reintento es seguro porque la web vuelve a consultar la suscripción tras un fallo y la API rechaza un segundo "primer plan" (400) o un `DELETE` sin plan (404). Un detector único de violaciones 23505 (`common/violacion-unicidad.util.ts`, `68457a6`) traduce los choques de índice a 409 en finanzas, auth y nutrición.
+
 ### Pendiente
-- Idempotencia persistente (sigue en memoria del proceso).
-- El `PUT`/`DELETE` de suscripciones no lleva clave de idempotencia; la web lo compensa reconciliando con un `GET` tras un fallo.
+- Idempotencia persistente (sigue en memoria del proceso; no se necesita mientras haya una sola instancia del API).
 - Detección de sobre-abono y reconciliador de la invariante de saldo.

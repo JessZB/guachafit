@@ -4,7 +4,7 @@ modulo: Finanzas
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-10-09
+fecha_verificacion: 2026-10-10
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -118,11 +118,19 @@ Then el estado de la cuota debe transicionar a "Vencida / En Mora"
 - **Redis caído:** agendar o cancelar recordatorios espera como máximo 3 s por llamada; el barrido de estados ya no se congela.
 - Evidencia: `rf008-wu-h-scheduler.spec.ts`, `rf005-rf009-m5l1-correcciones.spec.ts` (C1–C3, C8); API **1447** aprobados.
 
-**Pendiente:**
+### Reposición de recordatorios y Redis caído (2026-10-10, `68457a6`)
+- **Reposición diaria:** al final del barrido, `reconciliarRecordatorios` vuelve a agendar los hitos FUTUROS de las cuotas abiertas (BullMQ ignora los que ya existen, así que no duplica). No repone el hito del mismo día, para no repetir un aviso que quizá ya salió. Antes de empezar sondea la cola por si una emisión del mismo barrido la dejó en pausa.
+- **Alumnos inactivos (decisión del dueño):** archivados, pausados o suspendidos no reciben recordatorios automáticos. Se excluyen en la reposición y se revalidan al enviar cada aviso (`alumno_inactivo`). Su deuda sigue en Control de Cobros.
+- **Redis caído:** tras un tiempo agotado (3 s), la cola queda en pausa 60 s; el barrido espera una sola vez, no 3 s por alumno. La pausa se avisa una vez por ventana.
+- **Aviso tardío:** si un aviso llega con más de 24 h de retraso respecto a su hora (un `add` que quedó encolado mientras Redis estaba caído), se descarta (`hito_obsoleto`).
+- **Emisión manual retirada:** ya no existe la ruta que agendaba los hitos sin zona.
+- Evidencia: `m5p1-reconciliar-recordatorios.spec.ts`, `m5p1-procesador-recordatorios.spec.ts`, `m5p1-scheduler-pausa-hitos.spec.ts`, `m5p1-barrido-recordatorios.spec.ts`; API **1491** aprobados (6 omitidos). Revisado con los 4 enfoques y validado.
 
-- **Reconciliación de recordatorios:** si Redis falla al emitir, los recordatorios de esa cuota no se reprograman solos.
-- **Ruta heredada `POST /finanzas/cuotas/emitir`:** agenda los hitos a la hora exacta del corte (sin zona).
-- **Barrido con Redis caído:** suma hasta 3 s por alumno con cuota en ventana.
+**Límites aceptados:**
+
+- La pausa es por proceso (sin coordinar réplicas) y puede dar falsos negativos si Redis solo estaba lento. Un hito del mismo día omitido en esa ventana no se repone.
+- La reposición es lineal (hasta 4 `add` por cuota abierta y día); si la cartera crece, conviene acotarla o usar `addBulk`.
+- Si el alumno cambia de zona horaria entre un aviso fallido y la reposición, ese aviso podría contarse como repuesto sin enviarse (teórico, ventana de horas).
 
 **Nota técnica verificada — formato de `jobId`:**
 

@@ -65,7 +65,7 @@ tags:
 ---
 
 ## 5. Operaciones de Negocio (Comportamientos / Métodos)
-- `emitirCuota(clienteId, plan, fechaCorte)`: Crea la cuota con saldo total inicial.
+- `emitir (por suscripción)`: la crea el barrido diario (o la asignación del primer plan, o el cobro en sala por adelantado) desde la suscripción del alumno, con saldo total inicial ([[ADR-020-suscripcion-alumno-emision-automatica-cuotas]]). No existe emisión manual.
 - `registrarReportePago()`: Cambia temporalmente el estado a `PendienteRevision` para pausar recordatorios agresivos de cobro.
 - `aplicarAbonoAprobado(montoCreditoUsd, transaccionId)`:
   - Incrementa `monto_abonado_usd`.

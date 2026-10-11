@@ -73,14 +73,14 @@ El plan asignado vive en el **perfil del alumno** como una suscripción, y las c
 
 ### Consecuencias Negativas (Costos y Trade-offs)
 - **T1 — Cambio de duración:** `Mensual = 30 días` de RF-005 RN-01 pasa a ser un mes de calendario.
-- **T2 — Recordatorios perdidos:** si Redis falla al emitir, los recordatorios de esa cuota no se reprograman solos (no hay reconciliación). La cuota y sus estados sí quedan correctos.
-- **T3 — Barrido con Redis caído:** cada alumno con cuota en ventana puede sumar hasta 3 s de espera antes de que el barrido llegue a los estados.
-- **T4 — Ruta heredada:** `POST /finanzas/cuotas/emitir` sigue existiendo, con recordatorios a la hora exacta del corte (sin zona) y sin la regla de solape.
+- **T2 — Recordatorios perdidos (mitigado, `68457a6`):** la reposición diaria vuelve a agendar los hitos futuros; solo un hito del mismo día perdido no se repone.
+- **T3 — Barrido con Redis caído (mitigado, `68457a6`):** tras un tiempo agotado la cola queda en pausa 60 s; el barrido espera una sola vez.
+- **T4 — Ruta heredada (cerrado, `68457a6`):** `POST /finanzas/cuotas/emitir` se retiró por decisión del dueño; toda cuota sale de la suscripción.
 - **T5 — Idempotencia en memoria:** la del cobro en sala vive en el proceso, igual que la del reporte de pago ([[RNF-002-consistencia-financiera-idempotencia-pagos]]).
 
 ### Riesgos Mitigados y Residuales
 - **Riesgo Mitigado:** cuotas que no se emiten, cuotas duplicadas por carreras entre el barrido y el cobro en sala, doble cobro por doble clic, dos cuotas del mismo mes al reasignar un plan.
-- **Riesgo Residual:** T2 y T4.
+- **Riesgo Residual:** el hito del mismo día no reponible (T2) y la pausa por proceso, sin coordinar réplicas (T3).
 
 ---
 

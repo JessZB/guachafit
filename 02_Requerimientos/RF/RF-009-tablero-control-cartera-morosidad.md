@@ -139,6 +139,10 @@ Then el sistema debe crear una transacción con estado "Aprobado"
 - **Modo demo:** el cobro de la ficha ya no llama al API.
 - Evidencia: `apps/web/src/lib/cobro-sala.spec.ts`, `pages/entrenador/AlumnoDetallePage.cobro-sala.interaccion.spec.tsx`, `CarteraPage.cobro.interaccion.spec.tsx`, `CarteraPage.correcciones-1b.interaccion.spec.tsx`; web **1207**.
 
+### Cartera y cobro en sala (2026-10-10, `68457a6`)
+- La API de cartera envía `proximoCorte` (próximo vencimiento de la suscripción, o `null` sin plan) en las 4 pestañas. Las uniones con el perfil exigen además el mismo entrenador (defensa en profundidad, RNF-003).
+- El cobro en sala y el historial usan la búsqueda única del alumno: otro coach o un alumno inexistente → 404 "Este alumno no está en tu lista." (antes 403). El coach sí ve el historial de un alumno archivado.
+
 ### Pendiente
-- **Próximo vencimiento en Control de Cobros:** la fila aún no lo muestra (la API de cartera no lo envía); solo se ve en la ficha.
+- **Próximo vencimiento en Control de Cobros:** la API ya lo envía; falta mostrarlo en la tabla (lote web P2).
 - PagosPage del alumno, conciliación (confirmación y reversión), saldo a favor y anulación de cuotas siguen pendientes del módulo 5.
