@@ -48,11 +48,15 @@ export function CampoPesoPrescrito({
     emitir(componerPesoPrescrito({ modo: 'numero', numero: filtrado, textoCorporal: '' }));
   };
 
+  // Número que había antes de activar "Peso corporal": desactivarlo lo recupera.
+  const numeroPrevio = useRef('');
   const alternarCorporal = () => {
     if (esCorporal) {
-      setBorrador('');
-      emitir('');
+      const recuperado = numeroPrevio.current;
+      setBorrador(recuperado);
+      emitir(componerPesoPrescrito({ modo: 'numero', numero: recuperado, textoCorporal: '' }));
     } else {
+      numeroPrevio.current = borrador;
       emitir(componerPesoPrescrito({ modo: 'corporal', numero: '', textoCorporal: '' }));
     }
   };

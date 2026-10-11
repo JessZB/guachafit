@@ -17,8 +17,20 @@ const PESO_PARCIAL = /^\d+([.,]\d{0,2})?$/;
 const REPS_PARCIAL = /^(0|[1-9]\d{0,2})$/;
 /** 1–9 con un decimal opcional 0 o 5 ('8', '8,', '8.5'), o 10 sin decimales. */
 const RPE_PARCIAL = /^(10|[1-9]([.,][05]?)?)$/;
-/** Número, rango a medio escribir ('8-', '8-10') o segundos ('45 ', '45 s', '45s'). */
-const REPS_PRESCRITAS_PARCIAL = /^([1-9]\d{0,2})(-([1-9]\d{0,2})?| ?s?)$/;
+/** Número, rango a medio escribir ('8-', '8 - 10') o segundos ('45 ', '45 s', '45s'). */
+const REPS_PRESCRITAS_PARCIAL = /^([1-9]\d{0,2})( ?- ?([1-9]\d{0,2})?| ?s?)$/;
+
+/**
+ * Filtro común: acepta el texto nuevo si es un estado válido. Si el anterior NO lo era (un
+ * valor guardado antes de los filtros, p. ej. '10-12 reps' o '1200'), deja además borrar
+ * libremente para que el campo no quede bloqueado; el rechazo final lo hace la validación
+ * al guardar.
+ */
+function filtrar(nuevo: string, anterior: string, esValido: (texto: string) => boolean): string {
+  if (nuevo === '' || esValido(nuevo)) return nuevo;
+  if (!esValido(anterior) && nuevo.length < anterior.length) return nuevo;
+  return anterior;
+}
 
 /** Tope del peso en la unidad visible: 999 kg o su equivalente en lb (2202.42). */
 export function pesoMaximoEnUnidad(unidad: UnidadPeso): number {
@@ -27,16 +39,21 @@ export function pesoMaximoEnUnidad(unidad: UnidadPeso): number {
 
 /** Peso real del alumno o carga numérica del coach, en la unidad visible. */
 export function filtrarEntradaPeso(nuevo: string, anterior: string, unidad: UnidadPeso): string {
-  if (nuevo === '') return '';
-  if (!PESO_PARCIAL.test(nuevo)) return anterior;
-  return Number(nuevo.replace(',', '.')) <= pesoMaximoEnUnidad(unidad) ? nuevo : anterior;
+  const maximo = pesoMaximoEnUnidad(unidad);
+  return filtrar(
+    nuevo,
+    anterior,
+    (texto) => PESO_PARCIAL.test(texto) && Number(texto.replace(',', '.')) <= maximo
+  );
 }
 
 /** Repeticiones hechas por el alumno (0–200). */
 export function filtrarEntradaReps(nuevo: string, anterior: string): string {
-  if (nuevo === '') return '';
-  if (!REPS_PARCIAL.test(nuevo)) return anterior;
-  return Number(nuevo) <= LIMITES_SERIE.repsMax ? nuevo : anterior;
+  return filtrar(
+    nuevo,
+    anterior,
+    (texto) => REPS_PARCIAL.test(texto) && Number(texto) <= LIMITES_SERIE.repsMax
+  );
 }
 
 /** Número de series de un ajuste (1–50, como `AjusteEjercicioPlantillaSchema.series`). */
@@ -47,16 +64,18 @@ export function filtrarEntradaSeries(nuevo: string, anterior: string): string {
 
 /** Esfuerzo (1–10 en pasos de 0,5), del alumno o prescrito por el coach. */
 export function filtrarEntradaRpe(nuevo: string, anterior: string): string {
-  if (nuevo === '') return '';
-  return RPE_PARCIAL.test(nuevo) ? nuevo : anterior;
+  return filtrar(nuevo, anterior, (texto) => RPE_PARCIAL.test(texto));
 }
 
 /** Repeticiones que prescribe el coach: número, rango o segundos; cada número de 1 a 200. */
 export function filtrarEntradaRepsPrescritas(nuevo: string, anterior: string): string {
-  if (nuevo === '') return '';
-  if (!REPS_PRESCRITAS_PARCIAL.test(nuevo)) return anterior;
-  const numeros = nuevo.match(/\d+/g) ?? [];
-  return numeros.every((n) => Number(n) <= LIMITES_SERIE.repsMax) ? nuevo : anterior;
+  return filtrar(
+    nuevo,
+    anterior,
+    (texto) =>
+      REPS_PRESCRITAS_PARCIAL.test(texto) &&
+      (texto.match(/\d+/g) ?? []).every((n) => Number(n) <= LIMITES_SERIE.repsMax)
+  );
 }
 
 function esRepeticionValida(texto: string): boolean {
@@ -101,7 +120,12 @@ export function interpretarPesoPrescrito(texto: string): PesoPrescritoInterpreta
   if (valor === '') return { modo: 'numero', numero: '', textoCorporal: '' };
   const kg = extraerPesoKgDeTexto(valor);
   if (kg === null) return { modo: 'corporal', numero: '', textoCorporal: valor };
-  return { modo: 'numero', numero: String(kg), textoCorporal: '' };
+  // Texto antiguo con un número fuera de rango ('500-1200 kg'): se muestra ese número, para
+  // que coincida con el aviso de tope al guardar y el coach sepa qué corregir.
+  const fueraDeRango = (valor.match(/\d+(?:[.,]\d+)?/g) ?? [])
+    .map((n) => Number(n.replace(',', '.')))
+    .find((n) => n > LIMITES_SERIE.pesoKgMax);
+  return { modo: 'numero', numero: String(fueraDeRango ?? kg), textoCorporal: '' };
 }
 
 /** Valor de la carga prescrita listo para el formulario (y para el contrato). */

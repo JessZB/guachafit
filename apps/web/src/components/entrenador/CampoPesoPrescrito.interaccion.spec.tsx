@@ -130,3 +130,30 @@ describe('CampoPesoPrescrito · C5: entrada filtrada e interruptor "Peso corpora
     expect(etiqueta.className).not.toMatch(/text-\[1[01]px\]/);
   });
 });
+
+describe('CampoPesoPrescrito · S3/S6: número recuperado y resincronización del borrador', () => {
+  it('S3: con valor "60", activar y desactivar "Peso corporal" termina en onChange("60") y el input muestra 60', () => {
+    const { onChange } = renderizarCampo('60');
+    const interruptor = interruptorCorporal();
+
+    fireEvent.click(interruptor);
+    expect(onChange).toHaveBeenLastCalledWith('Corporal');
+
+    fireEvent.click(interruptor);
+
+    expect(onChange).toHaveBeenLastCalledWith('60');
+    expect(inputNumerico().value).toBe('60');
+  });
+
+  it('S6: rerender con "80" en la misma instancia resincroniza el input, y con "Corporal" activa el interruptor', () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<CampoPesoPrescrito valor="60" onChange={onChange} />);
+    expect(inputNumerico().value).toBe('60');
+
+    rerender(<CampoPesoPrescrito valor="80" onChange={onChange} />);
+    expect(inputNumerico().value).toBe('80');
+
+    rerender(<CampoPesoPrescrito valor="Corporal" onChange={onChange} />);
+    expect(estaActivado(interruptorCorporal())).toBe(true);
+  });
+});

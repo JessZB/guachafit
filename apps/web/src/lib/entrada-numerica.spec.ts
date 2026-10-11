@@ -151,3 +151,41 @@ describe('C3 · componerPesoPrescrito: valor listo para el formulario', () => {
     expect(componerPesoPrescrito({ modo: 'numero', numero: '', textoCorporal: '' })).toBe('');
   });
 });
+
+describe('S1 · con un anterior no válido (legacy), el borrado libre se acepta', () => {
+  it('reps prescritas: acortar el legacy "10-12 reps" a "10-12 rep" se acepta', () => {
+    expect(filtrarEntradaRepsPrescritas('10-12 rep', '10-12 reps')).toBe('10-12 rep');
+  });
+
+  it('peso: escribir "120" desde el legacy "1200" se acepta', () => {
+    expect(filtrarEntradaPeso('120', '1200', 'kg')).toBe('120');
+  });
+
+  it('esfuerzo: acortar el legacy "7-8" a "7-" se acepta', () => {
+    expect(filtrarEntradaRpe('7-', '7-8')).toBe('7-');
+  });
+
+  it('control: con anterior no válido, un texto más largo e inválido devuelve el anterior', () => {
+    expect(filtrarEntradaRepsPrescritas('10-12 repsx', '10-12 reps')).toBe('10-12 reps');
+  });
+});
+
+describe('S2 · repeticiones prescritas: espacios alrededor del guion mientras se escribe', () => {
+  it.each(['8 -', '8 - ', '8 - 1', '8 - 10'])('acepta "%s"', (nuevo) => {
+    expect(filtrarEntradaRepsPrescritas(nuevo, '8')).toBe(nuevo);
+  });
+
+  it.each(['8 - 201', '8 --'])('sigue rechazando "%s" y devuelve el anterior', (nuevo) => {
+    expect(filtrarEntradaRepsPrescritas(nuevo, '8')).toBe('8');
+  });
+});
+
+describe('S5 · interpretarPesoPrescrito: muestra el número fuera de rango cuando lo hay', () => {
+  it('"500-1200 kg" devuelve numero "1200", para coincidir con el aviso de tope', () => {
+    expect(interpretarPesoPrescrito('500-1200 kg')).toEqual({
+      modo: 'numero',
+      numero: '1200',
+      textoCorporal: '',
+    });
+  });
+});
