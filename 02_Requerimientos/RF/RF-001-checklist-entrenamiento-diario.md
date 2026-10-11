@@ -4,7 +4,7 @@ modulo: Entrenamiento
 prioridad: alta
 estado: implementado
 version_implementada: v1.3.0
-fecha_verificacion: 2026-10-04
+fecha_verificacion: 2026-10-11
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0
@@ -178,3 +178,14 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
   - Carrera de orden **preexistente** en `EntrenamientoPage`: un envío directo ya en vuelo puede llegar después de un cambio encolado posterior de la misma sesión; no se corrigió en este lote.
   - Idempotencia en memoria del proceso (§7.3): válida con una sola instancia del API.
 - Evidencia: web 701 → **771** tests tras los módulos 1-2 del front (777 tras API-2 y **785** tras API-3); API **986** tras API-3 (852 antes del lote API-1).
+
+### 7.11. Límites de las series (2026-10-11, `c6a0e34` y `05d42bd`)
+- **Decisión del dueño (2026-10-10/11):** una serie solo acepta datos que pertenezcan a su campo. **Peso** de 0 a 999 kg con 2 decimales como máximo; **repeticiones** de 0 a 200 (las prescritas, de 1 a 200); **esfuerzo** de 1 a 10 en pasos de 0,5 (`8` y `8.5` sí; `8.3`, `0` y `11` no). Aplica igual a lo que registra el alumno y a lo que prescribe el entrenador.
+- **Mecanismo:** fuente única en `@guachafit/shared` (`LIMITES_SERIE`, `esPesoKgValido`, `esRpeValido`, `extraerPesoKgDeTexto` y los mensajes `MENSAJE_PESO_FUERA_DE_RANGO`, `MENSAJE_ESFUERZO_INVALIDO`, `MENSAJE_REPS_FUERA_DE_RANGO`). Se aplica en `RegistrarSerieSchema` (y por tanto en `PUT /sesiones/{id}/series`), `SeriePrescritaInputSchema`, `AjusteEjercicioPlantillaSchema` y en el texto libre de `BloqueDiaRutinaSchema`: `"Corporal"`, `"8-10"` o `"45s"` siguen siendo válidos, pero ningún número del texto de carga puede pasar de 999 ni ninguno del de repeticiones de 200. El API responde **400** con el mensaje del campo y no escribe nada.
+- **Coma decimal coherente:** el esfuerzo `"8,5"` y la carga `"60,5 kg"` prescritos llegan al alumno como 8.5 y 60.50 kg (antes se truncaban a 8.0 y 60.00): la materialización usa `extraerPesoKgDeTexto`, la misma función que valida el contrato.
+- **Límites:** los datos guardados antes de este cambio no se sanean (no hay migración); una rutina o plantilla antigua con un esfuerzo fuera de rango falla al **volver a guardarla** hasta corregir el valor, y al materializarse un esfuerzo no numérico queda vacío.
+- **Evidencia:** spec `apps/api/test/bdd/e2-limites-serie.spec.ts` 95/95; API **1613** pasados y 7 omitidos; web **1212**; typecheck del API y de la web sin errores; revisión de fiabilidad sin bloqueos (sus hallazgos de API, resueltos en `05d42bd`).
+
+### Pendiente
+- **Lote E3 (web):** los inputs de la web todavía validan con las reglas viejas (el alumno puede escribir esfuerzo 0 o 8.3 y peso 1200; el editor de rutina de la ficha no valida el esfuerzo) y el API ahora los rechaza con 400; en modo offline, ese cambio queda "rechazado" en la cola. Se resuelve filtrando al teclear con los límites compartidos. **No desplegar la API de este cambio sin el lote E3.**
+- **Lote E3 (web):** el 400 de una rutina o plantilla no dice qué ejercicio falló; la web marcará el campo antes de enviar.

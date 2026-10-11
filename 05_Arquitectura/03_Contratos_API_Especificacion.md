@@ -404,7 +404,7 @@ Permite almacenar la preferencia de visualización en la cuenta del usuario para
   - `409 Conflict` si existe un entrenamiento `en_progreso` de otro bloque (no se permiten dos sesiones activas).
   - `iniciarInmediato: true` (repetir un bloque ya completado) crea/arranca la sesión directamente en `en_progreso`.
 - **Inicio explícito:** `POST /sesiones/{id}/iniciar` (Rol `alumno`, `X-Idempotency-Key`). Cuerpo `{ "timezoneCliente": "America/Caracas", "fechaInicioUtc?": "..." }`. Transiciona `planificada → en_progreso` y captura `fecha_inicio_utc` en UTC (RN-05).
-- **Sincronización batch de series:** `PUT /sesiones/{id}/series` (Rol `alumno`, `X-Idempotency-Key`). Cuerpo `{ "series": [{ "serieId", "repsLogradas", "pesoKg"?, "rpe"?, "descansoSegundos"?, "completada", "timestampCompletadaUtc"? }] }`; compatible con la cola offline.
+- **Sincronización batch de series:** `PUT /sesiones/{id}/series` (Rol `alumno`, `X-Idempotency-Key`). Cuerpo `{ "series": [{ "serieId", "repsLogradas", "pesoKg"?, "rpe"?, "descansoSegundos"?, "completada", "timestampCompletadaUtc"? }] }`; compatible con la cola offline. Límites (2026-10-11): `pesoKg` de 0 a 999 kg con hasta 2 decimales, `repsLogradas` de 0 a 200 y `rpe` de 1 a 10 en pasos de 0,5 (`LIMITES_SERIE` en `@guachafit/shared`); fuera de rango, 400 con el mensaje del campo.
 - **Finalización:** `POST /sesiones/{id}/finalizar` (Rol `alumno`, `X-Idempotency-Key`).
   - **Cuerpo:** `{ "notasAlumno"?, "fechaFinUtc"? ("...Z"), "tipoCierre"? }` con `tipoCierre ∈ COMPLETADA | DESCANSADA | INCOMPLETA`.
   - Evalúa la racha por volumen prescrito (`ratioVolumenPct >= 70%`, con fallback cualitativo) y responde `{ sesion, cumpleReglaRacha, nuevaRacha, duracionMinutos, volumenTotalKg }`.
@@ -455,7 +455,7 @@ Permite almacenar la preferencia de visualización en la cuenta del usuario para
   ```
 - `GET /plantillas/{id}` / `PATCH /plantillas/{id}` / `DELETE /plantillas/{id}`: detalle, edición y desactivación (soft delete vía `activa`). `404 Not Found` si la plantilla pertenece a otro tenant.
 - `POST /plantillas/{id}/asignar`: asignación individual o masiva con copia profunda (deep clone).
-  - **Cuerpo:** `{ "alumnoIds": ["<uuid>", "..."], "modo": "REEMPLAZAR | FUSIONAR", "ajustes?": [{ "diaId", "ejercicioId? | nombre?", "pesoPrescritoKg?", "series?", "reps?", "rpe?" }] }` (máx. 50 alumnos y 100 ajustes por solicitud).
+  - **Cuerpo:** `{ "alumnoIds": ["<uuid>", "..."], "modo": "REEMPLAZAR | FUSIONAR", "ajustes?": [{ "diaId", "ejercicioId? | nombre?", "pesoPrescritoKg?", "series?", "reps?", "rpe?" }] }` (máx. 50 alumnos y 100 ajustes por solicitud). `pesoPrescritoKg` de 0 a 999 y `rpe` de 1 a 10 en pasos de 0,5; los bloques de rutinas y plantillas aplican los mismos topes a los números de su texto libre de carga y repeticiones (2026-10-11).
   - **Respuesta (`200 OK`):** reporte parcial por alumno; el fallo de un alumno no aborta el resto.
     ```json
     {
