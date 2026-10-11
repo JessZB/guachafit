@@ -98,7 +98,7 @@ Then el saldo pendiente del cliente en USD debe permanecer inalterado en $25.00 
 
 - Motor bimonetario (USD maestro / Bs. dinámico) implementado y funcional en los flujos principales.
 - Resuelto (2026-09-21): eliminada la tasa default `65.0000` fabricada. Sin tasa configurada la API devuelve `null` (fuente `sin_configurar`) y errores de negocio claros; la UI muestra "Sin tasa configurada" en lugar de proyectar un valor ficticio.
-- RN-05: resuelto el 2026-10-11 en la API (`afd3f7c`, ver abajo); falta mostrarlo en la web.
+- RN-05: resuelto el 2026-10-11 en la API (`afd3f7c`) y en la web (`b975905`), ver abajo.
 - Conversión con punto flotante: sin garantía de precisión decimal estricta en todos los caminos.
 - Idempotencia débil: con clave nueva, un pago duplicado responde 409 en lugar de reutilizar el registro; el índice único es cross-tenant.
 
@@ -113,10 +113,22 @@ Then el saldo pendiente del cliente en USD debe permanecer inalterado en $25.00 
   - Rechazar un pago de una cuota que otro pago ya saldó la deja al día (antes la marcaba parcial).
 - **Invariante (RNF-002):** suma de pagos aprobados = suma de lo abonado a las cuotas − saldo a favor aplicado + saldo a favor vigente + excedente. Verificada en los caminos de código y con datos reales.
 - **Concurrencia:** aprobar o cobrar bloquea la cuota y después el perfil. Ninguna ruta que bloquea el perfil (asignar o quitar el plan, la emisión, el cobro inteligente) bloquea después una cuota existente, así que no hay deadlock. Regla documentada en `acreditarSaldoAFavor`.
-- **Límites:** no se recalculan pagos históricos con abonado por encima del total (no hay datos de producción). La web todavía no muestra el saldo a favor ni avisa del excedente antes de aprobar: es el lote siguiente.
+- **Límites:** no se recalculan pagos históricos con abonado por encima del total (no hay datos de producción).
 - Evidencia: `apps/api/test/bdd/rf006-saldo-favor.spec.ts` (43 casos) y `rf006-saldo-favor-concurrencia.e2e.spec.ts` (Postgres real: dos aprobaciones simultáneas y 15 carreras aprobación↔emisión sin `40P01`). API **1629** aprobados (12 omitidos), web **1212**; typecheck y build en verde; migración `0019` aplicada en desarrollo. Revisado con los 4 enfoques y validado.
 
+### Saldo a favor en la web (2026-10-11, `b975905`)
+- **Alumno (Pagos):** con saldo a favor ve "Saldo a favor: X USD (≈ Bs. Y)" y "Se aplicará automáticamente a tu próxima cuota." (región viva para lectores de pantalla). La cuota indica "De esta cuota, X USD se cubrieron con tu saldo a favor.".
+- **Entrenador:**
+  - **Conciliación:** si el pago excede lo que debe su cuota, la tarjeta avisa antes de aprobar: "Este pago excede la deuda de la cuota en X USD; quedarán como saldo a favor del alumno.". Al aprobar, el éxito dice "Pago aprobado y descontado de la cuota." (antes "…deuda maestra") más el excedente real que devuelve el API.
+  - **Cobro en sala** (Control de Cobros y ficha): el éxito añade "X USD quedaron como saldo a favor del alumno." con el dato del API.
+  - **Ficha y tabla de cartera:** muestran el saldo a favor ("A favor: X USD").
+- **Decisiones y límites:**
+  - El aviso previo de Conciliación es una foto de la bandeja: si otro pago de la misma cuota se aprobó desde otro dispositivo, puede quedar corto. El mensaje final siempre usa el excedente real del API.
+  - El cobro en sala avisa **después** de cobrar y no antes: el cobro inteligente puede adelantar una cuota cuyo monto la web no conoce, y en bolívares depende de la tasa, así que antes no se puede asegurar el monto.
+  - Los montos se comparan en centavos; coinciden con los del API para todo valor de 2 decimales (lo que guardan las columnas).
+- Evidencia: `apps/web/src/lib/saldo-a-favor.spec.ts` y los specs `*.saldo-favor.interaccion.spec.tsx` de Pagos, Conciliación, Control de Cobros y la ficha, más `TablaCartera.spec.ts`; web en verde; revisado (fiabilidad) y validado.
+
 ### Pendiente
-- Mostrar el saldo a favor en la web (alumno y entrenador) y avisar del excedente antes de aprobar o cobrar.
+- La demo de Conciliación llama al API al aprobar (existía antes; el PATCH se emite antes de la rama demo).
 - Conversión con punto flotante en la proyección a Bs (ver arriba).
 - `ReportarPagoSchema` sin tope superior de monto.

@@ -145,4 +145,4 @@ Then el sistema debe crear una transacción con estado "Aprobado"
 
 ### Pendiente
 - **Próximo vencimiento en Control de Cobros:** la API ya lo envía; falta mostrarlo en la tabla (lote web P2).
-- PagosPage del alumno, conciliación (confirmación y reversión) y anulación de cuotas siguen pendientes del módulo 5. Saldo a favor: la API lo resolvió el 2026-10-11 (`afd3f7c`; la fila de cartera trae `saldoAFavorUsd`), falta mostrarlo en la web ([[RF-006-motor-bimonetario-liquidacion-abonos]]).
+- PagosPage del alumno, conciliación (confirmación y reversión) y anulación de cuotas siguen pendientes del módulo 5. Saldo a favor: resuelto el 2026-10-11 en la API (`afd3f7c`) y en la web (`b975905`: "A favor: X USD" en la tabla y la ficha; aviso del excedente al aprobar y tras cobrar en sala), ver [[RF-006-motor-bimonetario-liquidacion-abonos]].
