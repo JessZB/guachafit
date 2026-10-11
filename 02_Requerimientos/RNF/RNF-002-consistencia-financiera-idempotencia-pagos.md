@@ -5,7 +5,7 @@ categoria: consistencia-financiera # consistencia-financiera | seguridad | rendi
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-10-10
+fecha_verificacion: 2026-10-11
 requisito_origen: "[[RF-006-motor-bimonetario-liquidacion-abonos]]"
 metrica_objetivo: "100% precisión decimal (cero floating-point error) / Idempotencia estricta"
 fecha_creacion: 2026-09-06
@@ -89,6 +89,10 @@ El módulo de finanzas maneja saldos adeudados, deducciones de abonos y conversi
 - El `apiClient` ya enviaba `X-Idempotency-Key` en los POST de `/finanzas/`, pero una clave NUEVA por llamada, así que un doble envío no se deduplicaba. Ahora la ficha y Control de Cobros pasan una clave por alumno que solo se renueva tras un cobro confirmado.
 
 **Decisión cerrada (2026-10-10):** el `PUT`/`DELETE` de suscripciones no lleva clave de idempotencia. Un reintento es seguro porque la web vuelve a consultar la suscripción tras un fallo y la API rechaza un segundo "primer plan" (400) o un `DELETE` sin plan (404). Un detector único de violaciones 23505 (`common/violacion-unicidad.util.ts`, `68457a6`) traduce los choques de índice a 409 en finanzas, auth y nutrición.
+
+### Reversión e índice de referencias (2026-10-11, `4878d7e`)
+- La reversión de un pago aprobado ([[RF-007-reporte-pagos-bandeja-conciliacion]]) corre en una transacción con bloqueo pesimista en el orden de la aprobación (transacción → cuota → perfil) y mantiene la invariante de saldo. Si el saldo a favor que generó el pago ya se gastó, responde 409 sin cambios: nunca hay saldo negativo.
+- El índice único parcial de referencias (`uq_transaccion_referencia_entrenador`, migración `0021`) solo cuenta pagos `pendiente` o `aprobado`. Un pago rechazado o revertido libera su referencia.
 
 ### Pendiente
 - Idempotencia persistente (sigue en memoria del proceso; no se necesita mientras haya una sola instancia del API).

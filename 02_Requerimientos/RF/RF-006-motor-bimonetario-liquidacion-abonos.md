@@ -128,6 +128,8 @@ Then el saldo pendiente del cliente en USD debe permanecer inalterado en $25.00 
   - Los montos se comparan en centavos; coinciden con los del API para todo valor de 2 decimales (lo que guardan las columnas).
 - Evidencia: `apps/web/src/lib/saldo-a-favor.spec.ts` y los specs `*.saldo-favor.interaccion.spec.tsx` de Pagos, Conciliación, Control de Cobros y la ficha, más `TablaCartera.spec.ts`; web en verde; revisado (fiabilidad) y validado.
 
+- **Reversión (2026-10-11, `4878d7e`):** revertir un pago aprobado retira del saldo a favor el excedente que ese pago generó. Si ya se aplicó a otra cuota, la reversión se bloquea ([[RF-007-reporte-pagos-bandeja-conciliacion]]).
+
 ### Pendiente
 - La demo de Conciliación llama al API al aprobar (existía antes; el PATCH se emite antes de la rama demo).
 - Conversión con punto flotante en la proyección a Bs (ver arriba).

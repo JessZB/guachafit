@@ -4,7 +4,7 @@ modulo: Finanzas
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-10-09
+fecha_verificacion: 2026-10-11
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -118,5 +118,24 @@ Then la transacción debe transicionar a estado "Rechazado"
 - Un duplicado responde 409 *"Esta referencia ya ha sido registrada previamente para este método y fecha de operación."*, tanto en la comprobación previa como si dos envíos simultáneos chocan con el índice (23505).
 - Evidencia: `rf007-indice-referencias.e2e.spec.ts` contra PostgreSQL real (**5/5**), `finanzas-service.spec.ts`.
 
+### Reversión de un pago aprobado por error, API (2026-10-11, `4878d7e`)
+- **Decisión del dueño (2026-10-11):** solo el **entrenador dueño** puede revertir un pago **aprobado** (de la bandeja o un cobro en sala), en cualquier momento y con **motivo obligatorio**. La reversión deshace exactamente la aprobación; si el saldo a favor que generó ese pago ya se aplicó a otra cuota, se bloquea. El pago queda **Revertido** con su motivo, sin borrarse.
+- **Mecanismo:**
+  - `POST /finanzas/transacciones/:id/revertir` con `{ motivo }` (`RevertirPagoSchema`); un id mal formado da 404.
+  - `revertirTransaccion` bloquea en el orden de la aprobación (transacción → cuota → perfil). Devuelve a la cuota lo aplicado y retira del saldo a favor el excedente de ese pago.
+  - Si el saldo a favor no alcanza, responde 409: "No se puede revertir este pago: el saldo a favor que generó ya se aplicó a otra cuota.". Un pago que no está aprobado da 409: "Solo se puede revertir un pago aprobado.".
+  - El estado de la cuota sale de la misma regla que el rechazo (`estadoCuotaTrasRetirarAbono`): otro pago en revisión → pendiente de revisión; saldada → al día; con abono → parcial; si no, vencida o emitida según el corte. En pagos anteriores a la `0019` (abonado por encima del total) el pendiente se recalcula desde el total.
+  - Migración `0020`: estado `revertido`, `motivo_reversion` y `fecha_reversion_utc`. Los agregados de recaudado solo suman pagos aprobados, así que un pago revertido deja de contar.
+  - **Decisión del dueño (2026-10-11):** un pago revertido **libera su referencia**, igual que uno rechazado (RN-05). Si el entrenador revirtió por error, el alumno reenvía el mismo comprobante y se aprueba de nuevo desde la bandeja. Migración `0021`: el índice único parcial de referencias solo cuenta pagos `pendiente` o `aprobado`. Se nombran en positivo porque un predicado de índice no admite casts y el migrador no deja usar `revertido` en la misma transacción que lo crea.
+  - El alumno recibe "Tu entrenador revirtió un pago" con el monto, el motivo y que el monto vuelve a figurar como pendiente. Si la cuota vuelve a tener deuda, sus recordatorios se agendan en el acto.
+- Evidencia: `apps/api/test/bdd/rf007-reversion-pago-aprobado.spec.ts` (44 casos) y `rf007-reversion-concurrencia.e2e.spec.ts` (Postgres real: reversión frente a emisión sin saldo negativo ni `40P01`, y referencia liberada y reaprobada). La `0020` y la `0021` se aplicaron en un mismo run sobre una BD vacía. API **1674** aprobados (17 omitidos). Revisado con los 4 enfoques y validado; el BLOCKER del `jobId` del aviso y el de la `0021` (cast no inmutable) quedaron corregidos.
+
+### Pagos con fecha anterior: reglas aprobadas (2026-10-11, pendiente de implementar)
+- El cobro en sala tendrá un campo de fecha (hoy por defecto y como máximo). La API rechazará fechas futuras en el cobro en sala y en el reporte del alumno (hoy acepta cualquier fecha).
+- En bolívares se usa la tasa vigente al registrar (no hay histórico de tasas por día) y el modal la muestra para que el entrenador la confirme.
+- El recaudado del mes (KPI-01) sigue contando por fecha de registro, no de pago.
+
 ### Pendiente
-- Reversión administrativa de un pago aprobado por error; el comprobante sigue siendo opcional.
+- Web de la reversión: confirmación al aprobar o rechazar en Conciliación y botón "Revertir pago" con motivo.
+- El comprobante sigue siendo opcional.
+- Implementar los pagos con fecha anterior (ver arriba).
