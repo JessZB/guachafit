@@ -165,6 +165,7 @@ Reglas transversales del frontend, vinculantes para toda vista nueva (se revisan
 9. **Piso tipográfico de 11px:** ningún texto visible baja de 11px, en ningún tema ni viewport.
 10. **Contraste AA en AMBOS temas:** el color se consume exclusivamente desde tokens semánticos con variante claro/oscuro (`:root` / `.dark`) y contraste AA verificado en ambos; prohibido hardcodear paletas fijas sin variante de tema (los estados usan sus variantes `-strong`/`-foreground`).
 11. **Actualizaciones y datos offline con control del usuario:** la app nunca aplica una actualización del Service Worker ni recarga sin acción explícita del usuario; los datos servidos desde caché se señalan como offline con su antigüedad ("hace X"). Decisión en [[ADR-014-actualizaciones-guiadas-sw-frescura-offline]].
+12. **Peso tipográfico máximo 700 (desde 2026-10-10):** ningún texto usa pesos 800 ni 900 (`font-black`, `font-extrabold`, `font-[800\|900]`, `font-weight: 800/900`). La jerarquía se construye con 700 (`font-bold`, títulos y cifras clave), 600 (`font-semibold`), 500 (`font-medium`, etiquetas) y 400 (cuerpo). Lo vigila el test guardián `apps/web/src/estilo-tipografia.spec.ts`, que falla y lista cada archivo y línea si aparece un peso prohibido.
 
 ---
 
