@@ -64,6 +64,8 @@ import {
   type UnidadPeso,
 } from '../../lib/weight-unit';
 import { filtrarEntradaPeso, filtrarEntradaReps, filtrarEntradaRpe } from '../../lib/entrada-numerica';
+import { VistaPreviaSesion } from '../../components/atleta/VistaPreviaSesion';
+import { FilaSerieCompletada } from '../../components/atleta/FilaSerieCompletada';
 import {
   Dumbbell,
   Play,
@@ -452,8 +454,9 @@ function pesoPrescritoConCarga(serie: SerieRegistroDetalleDTO): string | null {
 function validarSerieParaEnviar(
   serie: SerieRegistroDetalleDTO
 ): { campo: 'pesoKg' | 'rpe' | 'repsLogradas'; mensaje: string } | null {
-  const pesoNormalizado = normalizarKgParaContrato(serie.pesoKg);
-  if (pesoNormalizado === null) {
+  // RN-01: el peso es opcional; solo un texto presente y no representable es inválido.
+  const sinPeso = serie.pesoKg === null || serie.pesoKg === undefined || serie.pesoKg === '';
+  if (!sinPeso && normalizarKgParaContrato(serie.pesoKg) === null) {
     return { campo: 'pesoKg', mensaje: 'Peso inválido: corrige el valor (ej. 28.5)' };
   }
   const errorReps = validarReps(serie.repsLogradas ?? serie.repsObjetivo);
@@ -534,6 +537,17 @@ export function EntrenamientoPage() {
   const [ultimoGuardadoOtroDia, setUltimoGuardadoOtroDia] = useState<string | null>(null);
   // C9/D4: "Comenzar" deshabilitado con indicador mientras se guarda y envía.
   const [isStarting, setIsStarting] = useState(false);
+  // Lote E4: series completadas que el alumno abrió para corregir (el resto se ve compacto).
+  const [seriesEnCorreccion, setSeriesEnCorreccion] = useState<Set<string>>(() => new Set());
+  const abrirCorreccionSerie = (serieId: string) =>
+    setSeriesEnCorreccion((previas) => new Set(previas).add(serieId));
+  const cerrarCorreccionSerie = (serieId: string) =>
+    setSeriesEnCorreccion((previas) => {
+      if (!previas.has(serieId)) return previas;
+      const siguientes = new Set(previas);
+      siguientes.delete(serieId);
+      return siguientes;
+    });
 
   // RF-012: bloqueo por ciclo de vida (pausado / suspendido por pago / archivado). Cuando la API
   // responde 403 ALUMNO_BLOQUEADO, la pantalla informativa sustituye al checklist.
@@ -1157,6 +1171,7 @@ export function EntrenamientoPage() {
 
     serie.completada = willBeCompleted;
     if (willBeCompleted) {
+      cerrarCorreccionSerie(serie.id); // al volver a completarla se compacta de nuevo
       serie.timestampCompletadaUtc = new Date().toISOString();
       triggerHaptic('success');
 
@@ -2159,23 +2174,6 @@ export function EntrenamientoPage() {
         </div>
 
         {/* Action Button: Start or Finish */}
-        {isPlanned && (
-          <button
-            type="button"
-            onClick={handleStartSession}
-            disabled={isStarting}
-            aria-busy={isStarting}
-            className="w-full min-h-11 py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-lg shadow-primary/25 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-          >
-            {isStarting ? (
-              <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-            ) : (
-              <Play className="h-5 w-5 fill-primary-foreground" aria-hidden="true" />
-            )}
-            <span>{isStarting ? 'Comenzando...' : 'Comenzar a entrenar'}</span>
-          </button>
-        )}
-
         {isInProgress && (
           <div className="flex flex-col gap-3 pt-1">
             <div className="text-xs text-muted-foreground flex items-center gap-2">
@@ -2271,7 +2269,21 @@ export function EntrenamientoPage() {
         )}
       </div>
 
-      {/* Exercises List */}
+      {/* Lote E4: antes de iniciar, vista previa sin inputs; después, las tarjetas de registro. */}
+      {isPlanned ? (
+        <VistaPreviaSesion
+          sesion={sesion}
+          unidadPeso={unidadPeso}
+          rpeSugeridoPorEjercicio={Object.fromEntries(
+            sesion.ejercicios.map((ej) => [
+              ej.id,
+              resolverRpeSugerido(ej, rpeSugeridoPorEjercicio[ej.id]),
+            ])
+          )}
+          onIniciar={handleStartSession}
+          iniciando={isStarting}
+        />
+      ) : (
       <div className="space-y-4">
         {sesion.ejercicios.map((ejercicioSesion, ejIdx) => {
           const prescripcion = calcularResumenPrescripcion(ejercicioSesion);
@@ -2411,6 +2423,17 @@ export function EntrenamientoPage() {
                     ? borradorReps
                     : String(serie.repsLogradas ?? serie.repsObjetivo);
                 const prescritoSerie = pesoPrescritoConCarga(serie);
+
+                if (serie.completada && !seriesEnCorreccion.has(serie.id) && !errorSerie) {
+                  return (
+                    <FilaSerieCompletada
+                      key={serie.id}
+                      serie={serie}
+                      unidadPeso={unidadPeso}
+                      onCorregir={() => abrirCorreccionSerie(serie.id)}
+                    />
+                  );
+                }
 
                 return (
                 <div
@@ -2619,6 +2642,7 @@ export function EntrenamientoPage() {
           );
         })}
       </div>
+      )}
 
       {/* Modal de Finalización y Feedback al Coach */}
       {isFinishModalOpen && (
