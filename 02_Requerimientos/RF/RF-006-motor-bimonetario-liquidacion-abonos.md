@@ -4,7 +4,7 @@ modulo: Finanzas
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-09-20
+fecha_verificacion: 2026-10-11
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -98,6 +98,25 @@ Then el saldo pendiente del cliente en USD debe permanecer inalterado en $25.00 
 
 - Motor bimonetario (USD maestro / Bs. dinámico) implementado y funcional en los flujos principales.
 - Resuelto (2026-09-21): eliminada la tasa default `65.0000` fabricada. Sin tasa configurada la API devuelve `null` (fuente `sin_configurar`) y errores de negocio claros; la UI muestra "Sin tasa configurada" en lugar de proyectar un valor ficticio.
-- RN-05 ausente: el remanente de un abono en exceso no se registra como saldo a favor para el siguiente ciclo.
+- RN-05: resuelto el 2026-10-11 en la API (`afd3f7c`, ver abajo); falta mostrarlo en la web.
 - Conversión con punto flotante: sin garantía de precisión decimal estricta en todos los caminos.
 - Idempotencia débil: con clave nueva, un pago duplicado responde 409 en lugar de reutilizar el registro; el índice único es cross-tenant.
+
+### Saldo a favor en la API (2026-10-11, `afd3f7c`)
+- **Decisión del dueño (2026-10-10):** el excedente de un pago aprobado o de un cobro en sala por encima de la deuda queda como **saldo a favor** del alumno (USD) y se aplica automáticamente a la próxima cuota que se emita. Antes se perdía: el abonado superaba el total y el saldo pendiente se cortaba en 0.
+- **Mecanismo:**
+  - Migración `0019`: `perfiles_alumno.saldo_a_favor_usd` (no negativo), `cuotas_membresia.saldo_a_favor_aplicado_usd` y `transacciones_pago.excedente_usd`. Son columnas y no un método de pago nuevo: los pagos siguen siendo solo dinero recibido, así que el recaudado (KPI-01, historial, resumen semanal) no cambia.
+  - `repartirAbono` divide cada abono aprobado o cobrado entre lo que debía la cuota y el excedente. La cuota nunca acumula por encima de su total; el excedente se acredita al perfil del alumno del mismo entrenador, con la fila bloqueada (`FOR UPDATE`).
+  - Al emitirse una cuota (`aplicarSaldoAFavorACuota`), el saldo se descuenta. Si la cubre entera nace **al día** y sin recordatorios de cobro; si la cubre en parte, nace **abonada (parcial)**. El becado no consume saldo.
+  - Avisos al alumno: el cobro en sala y el pago aprobado dicen qué parte se aplicó a la cuota y qué parte quedó a favor.
+  - Bandeja (`saldoPendienteCuotaUsd`), historial (`saldoAFavorUsd`) y cartera (`saldoAFavorUsd`) exponen los datos.
+  - Rechazar un pago de una cuota que otro pago ya saldó la deja al día (antes la marcaba parcial).
+- **Invariante (RNF-002):** suma de pagos aprobados = suma de lo abonado a las cuotas − saldo a favor aplicado + saldo a favor vigente + excedente. Verificada en los caminos de código y con datos reales.
+- **Concurrencia:** aprobar o cobrar bloquea la cuota y después el perfil. Ninguna ruta que bloquea el perfil (asignar o quitar el plan, la emisión, el cobro inteligente) bloquea después una cuota existente, así que no hay deadlock. Regla documentada en `acreditarSaldoAFavor`.
+- **Límites:** no se recalculan pagos históricos con abonado por encima del total (no hay datos de producción). La web todavía no muestra el saldo a favor ni avisa del excedente antes de aprobar: es el lote siguiente.
+- Evidencia: `apps/api/test/bdd/rf006-saldo-favor.spec.ts` (43 casos) y `rf006-saldo-favor-concurrencia.e2e.spec.ts` (Postgres real: dos aprobaciones simultáneas y 15 carreras aprobación↔emisión sin `40P01`). API **1629** aprobados (12 omitidos), web **1212**; typecheck y build en verde; migración `0019` aplicada en desarrollo. Revisado con los 4 enfoques y validado.
+
+### Pendiente
+- Mostrar el saldo a favor en la web (alumno y entrenador) y avisar del excedente antes de aprobar o cobrar.
+- Conversión con punto flotante en la proyección a Bs (ver arriba).
+- `ReportarPagoSchema` sin tope superior de monto.

@@ -96,3 +96,7 @@ El plan asignado vive en el **perfil del alumno** como una suscripción, y las c
   - API **1447** aprobados (6 omitidos) y web **1134**;
   - migración `0018` aplicada y verificada en la BD de desarrollo;
   - revisado con los 4 enfoques y validado.
+
+## Actualización 2026-10-11: saldo a favor en la emisión (`afd3f7c`)
+- La emisión automática aplica el saldo a favor del alumno ([[RF-006-motor-bimonetario-liquidacion-abonos]] RN-05) a la cuota nueva, en la misma transacción y con la fila del alumno bloqueada. Una cuota cubierta entera nace al día y no agenda recordatorios.
+- Regla de bloqueos: las rutas que bloquean el perfil del alumno (asignar o quitar el plan, la emisión, el cobro inteligente) solo insertan cuotas nuevas; nunca bloquean ni actualizan una cuota existente después del perfil.

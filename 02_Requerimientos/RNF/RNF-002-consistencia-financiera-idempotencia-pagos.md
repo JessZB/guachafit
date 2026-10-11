@@ -92,4 +92,4 @@ El módulo de finanzas maneja saldos adeudados, deducciones de abonos y conversi
 
 ### Pendiente
 - Idempotencia persistente (sigue en memoria del proceso; no se necesita mientras haya una sola instancia del API).
-- Detección de sobre-abono y reconciliador de la invariante de saldo.
+- Reconciliador periódico de la invariante de saldo. La detección de sobre-abono quedó resuelta el 2026-10-11 (`afd3f7c`): el excedente va al saldo a favor y la cuota nunca acumula por encima de su total ([[RF-006-motor-bimonetario-liquidacion-abonos]]).
