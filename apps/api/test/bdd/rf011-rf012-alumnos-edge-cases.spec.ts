@@ -1344,20 +1344,22 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
         ).rejects.toThrow(NotFoundException);
       });
 
-      it('Aislamiento Multi-inquilino: Entrenador no puede consultar ni cobrar a alumno de otro entrenador', async () => {
+      it('Aislamiento Multi-inquilino: el entrenador ajeno ve el 404 unificado (consultar y cobrar a alumno de otro entrenador)', async () => {
+        // M5 P1 (C4, ajuste autorizado): ambos caminos usan la búsqueda UNIFICADA del perfil
+        // de cartera y responden 404 MENSAJE_ALUMNO_FUERA_DE_LISTA (antes 403).
         const reqCoachA = { user: { sub: COACH_A_ID, rol: Rol.ENTRENADOR, entrenadorId: COACH_A_ID } };
 
         // Coach A intentando acceder a Beatriz (Coach B)
         await expect(
           finanzasController.obtenerHistorialCliente(reqCoachA, ALUMNO_B1_PERFIL_ID)
-        ).rejects.toThrow(ForbiddenException);
+        ).rejects.toThrow(NotFoundException);
 
         await expect(
           finanzasController.cobroDirectoInteligente(reqCoachA, ALUMNO_B1_PERFIL_ID, undefined, {
             montoOriginal: '45.00',
             monedaOriginal: Moneda.USD,
           })
-        ).rejects.toThrow(ForbiddenException);
+        ).rejects.toThrow(NotFoundException);
       });
 
       it('debe arrojar BadRequestException (400) si el alumno no tiene cuota abierta previa ni plan asignado', async () => {

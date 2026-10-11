@@ -11,7 +11,6 @@ import {
 import {
   MENSAJE_ALUMNO_FUERA_DE_LISTA,
   MENSAJE_ALUMNO_NO_ENCONTRADO,
-  MENSAJE_SIN_ACCESO_ALUMNO,
 } from '../../common/mensajes-acceso';
 
 /** Cuota o pago inexistente (o de otro coach), en lenguaje claro y con tuteo. */
@@ -34,6 +33,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { R2StorageService } from '../antropometria/r2-storage.service';
 import { BillingSchedulerService } from './billing-scheduler.service';
 import { RegistroIdempotencia } from '../../common/idempotencia/registro-idempotencia';
+import { esViolacionUnicidad } from '../../common/violacion-unicidad.util';
 import { obtenerFechaLocalYyyyMmDd, sumarDiasCalendario } from '../../common/adherencia.util';
 import {
   calcularSiguienteCorte,
@@ -69,6 +69,7 @@ import {
   sql,
   count,
   sum,
+  gt,
   gte,
   lt,
   planesMembresia,
@@ -89,7 +90,6 @@ import {
   CrearPlanMembresiaDTO,
   ActualizarPlanMembresiaDTO,
   CrearOverridePlanDTO,
-  EmitirCuotaDTO,
   ActualizarTasaCambioDTO,
   CalcularConversionDTO,
   ReportarPagoDTO,
@@ -200,30 +200,6 @@ export function assertBalanceInvariant(
         `no coincide con Total (${montoTotalUsd}) - Abonado (${montoAbonadoUsd}).`
     );
   }
-}
-
-/**
- * M5-L1 (RF-007 / RNF-002): `true` si el error es la violación (Postgres 23505) del índice único
- * `indice`. `postgres` expone `constraint_name`; `pg`, `constraint`. Se revisa también `cause`
- * por si una capa intermedia envuelve el error original.
- */
-function esViolacionIndiceUnico(error: unknown, indice: string): boolean {
-  for (let actual = error, saltos = 0; actual && typeof actual === 'object' && saltos < 3; saltos++) {
-    const candidato = actual as {
-      code?: unknown;
-      constraint_name?: unknown;
-      constraint?: unknown;
-      cause?: unknown;
-    };
-    if (
-      candidato.code === '23505' &&
-      (candidato.constraint_name ?? candidato.constraint) === indice
-    ) {
-      return true;
-    }
-    actual = candidato.cause;
-  }
-  return false;
 }
 
 /** El efectivo no lleva referencia bancaria: nunca participa en la detección de duplicados. */
@@ -1000,6 +976,9 @@ export class FinanzasService {
   // ===========================================================================
   // 4. EMISIÓN Y GESTIÓN DE CUOTAS (RF-008, RNF-002)
   // ===========================================================================
+  // Las cuotas solo se emiten desde la suscripción del alumno (sección 4b, ADR-020). La emisión
+  // manual `POST /finanzas/cuotas/emitir` se retiró (decisión del dueño, 2026-10-10): saltaba la
+  // regla del solape y podía crear cuotas fuera del ciclo.
 
   /**
    * RF-005 RN-03 (Precedencia de Valores) — corazón de este requerimiento:
@@ -1043,154 +1022,6 @@ export class FinanzasService {
     throw new BadRequestException(
       'El plan no tiene un precio base mayor a 0.00. Para un alumno becado o un acuerdo de intercambio, asígnale un precio especial de 0.00.'
     );
-  }
-
-  async emitirCuota(entrenadorId: string, dto: EmitirCuotaDTO): Promise<CuotaDetalleDTO> {
-    // Contrato legado: si un cliente aún envía un monto explícito, debe ser > 0.00. El monto
-    // real de la cuota NO se toma de aquí (RF-005 RN-03, ver resolución tras validar el plan).
-    if (dto.montoTotalUsd !== undefined && toCents(dto.montoTotalUsd) <= 0) {
-      throw new BadRequestException('El monto total de la cuota debe ser estrictamente mayor a 0.00 USD.');
-    }
-
-    // RNF-003/ADR-011 (etapa 2): validaciones + alta de `cuotas_membresia` (RLS) en UNA
-    // transacción con el GUC del coach. Los recordatorios (Redis) se agendan DESPUÉS del commit.
-    const { cuota, plan, alumno, esBecado } = await this.withTenant(
-      { entrenadorId },
-      async (tx) => {
-        const clienteUsuarioId = await this.resolveClienteUsuarioId(dto.clienteId, tx);
-
-        // Validar alumno
-        const [alumno] = await tx
-          .select()
-          .from(perfilesAlumno)
-          .where(
-            and(
-              eq(perfilesAlumno.usuarioId, clienteUsuarioId),
-              eq(perfilesAlumno.entrenadorId, entrenadorId)
-            )
-          );
-
-        if (!alumno) {
-          throw new NotFoundException(MENSAJE_ALUMNO_FUERA_DE_LISTA);
-        }
-
-        // Validar plan
-        const [plan] = await tx
-          .select()
-          .from(planesMembresia)
-          .where(
-            and(eq(planesMembresia.id, dto.planId), eq(planesMembresia.entrenadorId, entrenadorId))
-          );
-
-        if (!plan) {
-          throw new NotFoundException('Ese plan no está en tu catálogo. Actualiza la pantalla.');
-        }
-
-        // Validar unicidad (clienteId, planId, periodo)
-        const [existente] = await tx
-          .select()
-          .from(cuotasMembresia)
-          .where(
-            and(
-              eq(cuotasMembresia.clienteId, clienteUsuarioId),
-              eq(cuotasMembresia.planId, dto.planId),
-              eq(cuotasMembresia.periodo, dto.periodo)
-            )
-          );
-
-        if (existente) {
-          throw new ConflictException(
-            `Ya existe una cuota emitida para este alumno y plan en el periodo ${dto.periodo}.`
-          );
-        }
-
-        // RF-005 RN-03: override del alumno > precio base del catálogo (ver resolverMontoCuota).
-        const { montoTotal, esBecado } = await this.resolverMontoCuota(tx, plan, clienteUsuarioId);
-
-        const montoAbonado = '0.00';
-        const saldoPendiente = montoTotal;
-
-        assertBalanceInvariant(montoTotal, montoAbonado, saldoPendiente);
-
-        const nowUtc = new Date();
-        const fechaEmision = dto.fechaEmisionUtc ? new Date(dto.fechaEmisionUtc) : nowUtc;
-        const fechaCorte = new Date(dto.fechaCorteUtc);
-
-        const [cuota] = await tx
-          .insert(cuotasMembresia)
-          .values({
-            clienteId: clienteUsuarioId,
-            entrenadorId,
-            planId: dto.planId,
-            periodo: dto.periodo,
-            montoTotalUsd: montoTotal,
-            montoAbonadoUsd: montoAbonado,
-            saldoPendienteUsd: saldoPendiente,
-            fechaEmisionUtc: fechaEmision,
-            fechaCorteUtc: fechaCorte,
-            // RF-005 §6: la cuota del becado nace Al Día (no hay deuda que cobrar).
-            estado: esBecado ? EstadoCuota.AL_DIA : EstadoCuota.EMITIDA,
-            notas: dto.notas || null,
-            createdAtUtc: nowUtc,
-            updatedAtUtc: nowUtc,
-          })
-          .returning();
-
-        return { cuota, plan, alumno, esBecado };
-      }
-    );
-
-    // WU-H (RF-008 §4.B / ADR-008): agenda los recordatorios T-5, T-1, T (corte) y T+2 contra
-    // `fecha_corte_utc`. La cuota YA quedó emitida: un fallo de Redis no revierte la emisión.
-    // Un becado no genera recordatorios: no hay deuda pendiente que cobrar.
-    if (this.billingSchedulerService && !esBecado) {
-      try {
-        await this.billingSchedulerService.programarRecordatoriosCuota({
-          id: cuota.id,
-          fechaCorteUtc: cuota.fechaCorteUtc,
-        });
-      } catch (error) {
-        this.logger.error(
-          `No se pudieron programar los recordatorios de la cuota ${cuota.id}: ${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
-      }
-    }
-
-    // Calcular proyección en Bs solo con tasa real: sin tasa configurada se omite el dato
-    // en vez de inventar un valor (la emisión en USD no requiere tasa).
-    // RNF-003/ADR-011 (etapa 3): la tasa override lee `perfiles_alumno` (RLS); transacción con
-    // el GUC del coach.
-    const tasa = await this.withTenant({ entrenadorId }, (tx) =>
-      this.obtenerTasaVigente(entrenadorId, cuota.clienteId, tx)
-    );
-    const saldoPendienteVes = tasa.tasaEfectiva
-      ? this.proyectarVES(cuota.saldoPendienteUsd, tasa.tasaEfectiva)
-      : undefined;
-
-    return {
-      id: cuota.id,
-      clienteId: cuota.clienteId,
-      entrenadorId: cuota.entrenadorId,
-      planId: cuota.planId,
-      periodo: cuota.periodo,
-      montoTotalUsd: cuota.montoTotalUsd,
-      montoAbonadoUsd: cuota.montoAbonadoUsd,
-      saldoPendienteUsd: cuota.saldoPendienteUsd,
-      saldoPendienteVes,
-      tasaAplicada: tasa.tasaEfectiva ?? undefined,
-      fechaEmisionUtc: cuota.fechaEmisionUtc.toISOString(),
-      fechaCorteUtc: cuota.fechaCorteUtc.toISOString(),
-      estado: cuota.estado,
-      notas: cuota.notas,
-      esBecado,
-      planNombre: plan.nombre,
-      clienteNombre: `${alumno.nombres} ${alumno.apellidos}`,
-      transacciones: [],
-      createdAtUtc: cuota.createdAtUtc.toISOString(),
-      updatedAtUtc: cuota.updatedAtUtc.toISOString(),
-    };
   }
 
   // ===========================================================================
@@ -1429,18 +1260,86 @@ export class FinanzasService {
   }
 
   /**
-   * Perfil del alumno dentro de la cartera del coach (acepta `usuarioId` o id de perfil). Un
-   * alumno de otro coach, inexistente o archivado responde el mismo 404. Con `bloquear`, la fila
-   * queda tomada (`FOR UPDATE`) hasta el fin de la transacción.
+   * Reposición diaria de recordatorios (RF-008): vuelve a agendar los hitos FUTUROS de las cuotas
+   * abiertas. Repara los recordatorios que no se agendaron porque Redis falló al emitir. BullMQ
+   * ignora un `jobId` que ya existe, así que no duplica avisos; con `incluirMismoDia: false`
+   * tampoco repite el aviso de hoy si ya salió.
    *
-   * Pendiente conocido: `obtenerHistorialCliente` y `cobroDirectoInteligente` todavía usan su
-   * propia búsqueda (403 para otro coach); se unificarán en un lote posterior.
+   * Solo alumnos ACTIVOS: archivados, pausados o suspendidos no reciben recordatorios automáticos
+   * (decisión del dueño, 2026-10-10); su deuda sigue visible en Control de Cobros.
+   *
+   * Empieza levantando la pausa de la cola: si una emisión de este mismo barrido la abrió y Redis
+   * ya volvió, la reparación no se aplaza un día. Si sigue caído, el primer intento la reabre.
+   *
+   * Límite aceptado: no repone un hito del mismo día (no repetir un aviso que quizá ya salió) y el
+   * volumen es lineal (hasta 4 `add` por cuota abierta y día).
+   *
+   * RUTA DE SISTEMA: lectura transversal con `is_superadmin` (solo lectura; el planificador no
+   * toca la base de datos).
+   */
+  async reconciliarRecordatorios(
+    ahora: Date = new Date()
+  ): Promise<{ evaluadas: number; agendadas: number }> {
+    if (!this.billingSchedulerService) return { evaluadas: 0, agendadas: 0 };
+    this.billingSchedulerService.reanudarCola();
+
+    // Una cuota vencida hace más de 3 días ya no tiene hitos futuros (el último es T+2).
+    const limiteCorte = new Date(ahora.getTime() - 3 * 24 * 60 * 60 * 1000);
+    const cuotas = await this.withTenant({ isSuperadmin: true }, (tx) =>
+      tx
+        .select({
+          id: cuotasMembresia.id,
+          fechaCorteUtc: cuotasMembresia.fechaCorteUtc,
+          zonaHoraria: perfilesAlumno.zonaHoraria,
+        })
+        .from(cuotasMembresia)
+        .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId))
+        .where(
+          and(
+            notInArray(cuotasMembresia.estado, [EstadoCuota.AL_DIA, EstadoCuota.ANULADA]),
+            gt(cuotasMembresia.saldoPendienteUsd, '0'),
+            gt(cuotasMembresia.fechaCorteUtc, limiteCorte),
+            isNull(perfilesAlumno.deletedAtUtc),
+            eq(perfilesAlumno.estadoActivacion, EstadoAlumno.ACTIVO)
+          )
+        )
+    );
+
+    let agendadas = 0;
+    for (const cuota of cuotas) {
+      const hitos = await this.billingSchedulerService.programarRecordatoriosCuota(
+        {
+          id: cuota.id,
+          fechaCorteUtc: cuota.fechaCorteUtc,
+          zonaHoraria: cuota.zonaHoraria || ZONA_HORARIA_ALUMNO_POR_DEFECTO,
+        },
+        ahora,
+        { incluirMismoDia: false }
+      );
+      if (hitos.length > 0) agendadas += 1;
+    }
+
+    this.logger.log(
+      `Reposición de recordatorios: ${cuotas.length} cuotas abiertas evaluadas, ${agendadas} con hitos futuros agendados.`
+    );
+    return { evaluadas: cuotas.length, agendadas };
+  }
+
+  /**
+   * Perfil del alumno dentro de la cartera del coach (acepta `usuarioId` o id de perfil). Un
+   * alumno de otro coach, inexistente o archivado responde el mismo 404 (RNF-003 §3.1: no se
+   * revela si el alumno existe en otra cartera). Opciones:
+   * - `bloquear`: la fila queda tomada (`FOR UPDATE`) hasta el fin de la transacción;
+   * - `incluirArchivados`: un alumno archivado SÍ se devuelve (consulta de su historial).
+   *
+   * Es la única búsqueda del perfil para el entrenador en este servicio (suscripción, cobro en
+   * sala e historial).
    */
   private async buscarPerfilDeCartera(
     tx: TenantTransaction,
     entrenadorId: string,
     clienteId: string,
-    opciones: { bloquear?: boolean } = {}
+    opciones: { bloquear?: boolean; incluirArchivados?: boolean } = {}
   ): Promise<PerfilAlumnoFila> {
     const buscar = (columna: typeof perfilesAlumno.usuarioId | typeof perfilesAlumno.id) => {
       const consulta = tx.select().from(perfilesAlumno).where(eq(columna, clienteId));
@@ -1452,7 +1351,11 @@ export class FinanzasService {
       [perfil] = await buscar(perfilesAlumno.id);
     }
 
-    if (!perfil || perfil.entrenadorId !== entrenadorId || perfil.deletedAtUtc) {
+    if (
+      !perfil ||
+      perfil.entrenadorId !== entrenadorId ||
+      (perfil.deletedAtUtc && !opciones.incluirArchivados)
+    ) {
       throw new NotFoundException(MENSAJE_ALUMNO_FUERA_DE_LISTA);
     }
     return perfil;
@@ -1886,7 +1789,7 @@ export class FinanzasService {
           })
           .returning();
       } catch (error) {
-        if (esViolacionIndiceUnico(error, INDICE_REFERENCIA_POR_ENTRENADOR)) {
+        if (esViolacionUnicidad(error, INDICE_REFERENCIA_POR_ENTRENADOR)) {
           throw new ConflictException(MENSAJE_REFERENCIA_DUPLICADA);
         }
         throw error;
@@ -2575,33 +2478,34 @@ export class FinanzasService {
     return this.withTenant(
       this.contextoRlsDeActor(actorUserId, actorRole, entrenadorId),
       async (tx) => {
-        // 1. Validar existencia del alumno y aislamiento de tenant
-        let [perfil] = await tx
-          .select()
-          .from(perfilesAlumno)
-          .where(eq(perfilesAlumno.id, clienteId));
-
-        if (!perfil) {
-          [perfil] = await tx
+        // 1. Alumno y aislamiento. El entrenador usa la búsqueda única de su cartera (404
+        //    uniforme) y SÍ puede consultar los pagos de un alumno archivado.
+        let perfil: PerfilAlumnoFila;
+        if (actorRole === Rol.ENTRENADOR) {
+          perfil = await this.buscarPerfilDeCartera(tx, entrenadorId, clienteId, {
+            incluirArchivados: true,
+          });
+        } else {
+          let [encontrado] = await tx
             .select()
             .from(perfilesAlumno)
-            .where(eq(perfilesAlumno.usuarioId, clienteId));
-        }
+            .where(eq(perfilesAlumno.id, clienteId));
 
-        if (!perfil) {
-          throw new NotFoundException(MENSAJE_ALUMNO_NO_ENCONTRADO);
-        }
+          if (!encontrado) {
+            [encontrado] = await tx
+              .select()
+              .from(perfilesAlumno)
+              .where(eq(perfilesAlumno.usuarioId, clienteId));
+          }
 
-        if (actorRole === Rol.ALUMNO && perfil.usuarioId !== actorUserId) {
-          throw new ForbiddenException('Solo puedes ver tus propios pagos.');
-        }
+          if (!encontrado) {
+            throw new NotFoundException(MENSAJE_ALUMNO_NO_ENCONTRADO);
+          }
 
-        if (
-          actorRole === Rol.ENTRENADOR &&
-          perfil.entrenadorId !== entrenadorId &&
-          perfil.entrenadorId !== actorUserId
-        ) {
-          throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
+          if (encontrado.usuarioId !== actorUserId) {
+            throw new ForbiddenException('Solo puedes ver tus propios pagos.');
+          }
+          perfil = encontrado;
         }
 
         const clienteUsuarioId = perfil.usuarioId;
@@ -2757,39 +2661,12 @@ export class FinanzasService {
     };
     try {
       resolucion = await this.withTenant({ entrenadorId }, async (tx) => {
-        // 1. Validar existencia del alumno y aislamiento de tenant
-        let [perfil] = await tx
-          .select()
-          .from(perfilesAlumno)
-          .where(eq(perfilesAlumno.id, clienteId));
-
-        if (!perfil) {
-          [perfil] = await tx
-            .select()
-            .from(perfilesAlumno)
-            .where(eq(perfilesAlumno.usuarioId, clienteId));
-        }
-
-        if (!perfil) {
-          throw new NotFoundException(MENSAJE_ALUMNO_NO_ENCONTRADO);
-        }
-
-        if (perfil.entrenadorId !== entrenadorId) {
-          throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
-        }
-
-        if (perfil.deletedAtUtc) {
-          throw new NotFoundException(MENSAJE_ALUMNO_FUERA_DE_LISTA);
-        }
-
-        // Bloqueo de la fila del alumno: el barrido diario y una asignación de plan esperan, así
-        // que la cuota abierta y el próximo vencimiento que se leen abajo no cambian bajo nuestros
-        // pies. Se relee tras tomar el bloqueo.
-        [perfil] = await tx
-          .select()
-          .from(perfilesAlumno)
-          .where(eq(perfilesAlumno.id, perfil.id))
-          .for('update');
+        // 1. Alumno de la cartera (otro coach, inexistente o archivado → 404) con la fila
+        //    bloqueada: el barrido diario y una asignación de plan esperan, así que la cuota
+        //    abierta y el próximo vencimiento que se leen abajo no cambian bajo nuestros pies.
+        const perfil = await this.buscarPerfilDeCartera(tx, entrenadorId, clienteId, {
+          bloquear: true,
+        });
 
         const clienteUsuarioId = perfil.usuarioId;
 
@@ -2871,9 +2748,9 @@ export class FinanzasService {
         throw new ConflictException(MENSAJE_CUOTA_EN_PREPARACION);
       });
     } catch (error) {
-      // Defensa ante datos sin bloqueo (p. ej. una emisión manual concurrente): la cuota de ese
-      // periodo ya existe. Un 409 claro en vez de un 500.
-      if (esViolacionIndiceUnico(error, INDICE_CUOTA_POR_PERIODO)) {
+      // Defensa en profundidad: todos los caminos que emiten cuotas bloquean la fila del alumno,
+      // pero si la cuota de ese periodo ya existe por otra vía, un 409 claro en vez de un 500.
+      if (esViolacionUnicidad(error, INDICE_CUOTA_POR_PERIODO)) {
         throw new ConflictException(MENSAJE_CUOTA_EN_PREPARACION);
       }
       throw error;

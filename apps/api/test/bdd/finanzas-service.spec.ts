@@ -18,7 +18,6 @@ import {
   EstadoCuota,
   EstadoConciliacion,
   CrearOverridePlanSchema,
-  EmitirCuotaSchema,
 } from '@guachafit/shared';
 import {
   ConflictException,
@@ -680,36 +679,12 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
   // ===========================================================================
   // E. EMISIÓN DE CUOTAS (RF-008, RNF-002)
   // ===========================================================================
-  describe('5. Emisión de Cuotas Periódicas', () => {
-    it('debe emitir una cuota con saldoPendienteUsd igual a montoTotalUsd y estado EMITIDA', async () => {
-      const cuota = await finanzasService.emitirCuota('coach-uuid-1', {
-        clienteId: 'alumno-uuid-1',
-        planId: 'plan-uuid-1',
-        periodo: '2026-09',
-        montoTotalUsd: '50.00',
-        fechaCorteUtc: '2026-09-30T23:59:59Z',
-      });
-
-      expect(cuota.periodo).toBe('2026-09');
-      expect(cuota.montoTotalUsd).toBe('50.00');
-      expect(cuota.montoAbonadoUsd).toBe('0.00');
-      expect(cuota.saldoPendienteUsd).toBe('50.00');
-      expect(cuota.estado).toBe(EstadoCuota.EMITIDA);
-      expect(cuota.saldoPendienteVes).toBe('3000.00'); // 50 * 60 Bs
-    });
-
-    it('debe rechazar montos totales menores o iguales a cero', async () => {
-      await expect(
-        finanzasService.emitirCuota('coach-uuid-1', {
-          clienteId: 'alumno-uuid-1',
-          planId: 'plan-uuid-1',
-          periodo: '2026-10',
-          montoTotalUsd: '0.00',
-          fechaCorteUtc: '2026-10-31T23:59:59Z',
-        })
-      ).rejects.toThrow(BadRequestException);
-    });
-  });
+  // ===========================================================================
+  // M5 P1 (A4): el describe histórico "5. Emisión de Cuotas Periódicas" se retiró con la
+  // ruta `POST /finanzas/cuotas/emitir` (única forma de emitir: la suscripción, RF-005/RF-008).
+  // La regla "la cuota nace con saldo igual al total y estado EMITIDA" quedó cubierta por la
+  // emisión por suscripción en `rf005-rf008-suscripcion-servicio.spec.ts` (§E1).
+  // ===========================================================================
 
   // ===========================================================================
   // F. REPORTE DE PAGO E IDEMPOTENCIA (RF-007, RNF-002)
@@ -1169,36 +1144,12 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
       servicioConScheduler = new FinanzasService(mockDb, undefined, undefined, mockScheduler);
     });
 
-    it('programa los recordatorios T-5/T-1/T/T+2 al emitir una cuota', async () => {
-      const cuota = await servicioConScheduler.emitirCuota('coach-uuid-1', {
-        clienteId: 'alumno-uuid-1',
-        planId: 'plan-uuid-1',
-        periodo: '2026-09',
-        montoTotalUsd: '50.00',
-        fechaCorteUtc: '2026-09-30T23:59:59Z',
-      });
-
-      expect(mockScheduler.programarRecordatoriosCuota).toHaveBeenCalledWith({
-        id: cuota.id,
-        fechaCorteUtc: expect.any(Date),
-      });
-    });
-
-    it('la emisión NO se cae si Redis falla al agendar los recordatorios', async () => {
-      mockScheduler.programarRecordatoriosCuota.mockRejectedValueOnce(
-        new Error('ECONNREFUSED 127.0.0.1:6379')
-      );
-
-      const cuota = await servicioConScheduler.emitirCuota('coach-uuid-1', {
-        clienteId: 'alumno-uuid-1',
-        planId: 'plan-uuid-1',
-        periodo: '2026-09',
-        montoTotalUsd: '50.00',
-        fechaCorteUtc: '2026-09-30T23:59:59Z',
-      });
-
-      expect(cuota.saldoPendienteUsd).toBe('50.00');
-    });
+    // M5 P1 (A4): los tests "programa los recordatorios ... al emitir una cuota" y
+    // "la emisión NO se cae si Redis falla al agendar" vivían en `emitirCuota` (ruta retirada).
+    // Sus reglas quedan cubiertas por la emisión por suscripción en
+    // `rf005-rf008-suscripcion-servicio.spec.ts`: recordatorios agendados con zona (§E1,
+    // expect de `programarRecordatoriosCuota`) y "un fallo del scheduler no revierte la
+    // asignación ni la emisión" (§E1).
 
     it('cancela los recordatorios al aprobar el pago que deja la cuota en $0.00', async () => {
       mockCuotasMembresia = [
@@ -1447,6 +1398,8 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
     it('historial: mantiene el aislamiento de tenant para entrenador y alumno', async () => {
       mockTransaccionesPago = [];
 
+      // M5 P1 (C4, ajuste autorizado): el coach con un alumno ajeno responde el 404 UNIFICADO
+      // de cartera (antes 403 MENSAJE_SIN_ACCESO_ALUMNO — RNF-003 §3.1).
       await expect(
         finanzasService.obtenerHistorialCliente(
           'coach-ajeno',
@@ -1454,7 +1407,7 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
           'coach-ajeno',
           Rol.ENTRENADOR
         )
-      ).rejects.toThrow(ForbiddenException);
+      ).rejects.toThrow(NotFoundException);
 
       await expect(
         finanzasService.obtenerHistorialCliente(
@@ -1649,19 +1602,10 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
       expect(res.fuenteTasa).toBe('sin_configurar');
     });
 
-    it('emitirCuota sin tasa omite saldoPendienteVes y tasaAplicada (no inventa proyección)', async () => {
-      const cuota = await finanzasService.emitirCuota('coach-uuid-1', {
-        clienteId: 'alumno-uuid-1',
-        planId: 'plan-uuid-1',
-        periodo: '2026-09',
-        montoTotalUsd: '50.00',
-        fechaCorteUtc: '2026-09-30T23:59:59Z',
-      });
-
-      expect(cuota.saldoPendienteUsd).toBe('50.00');
-      expect(cuota.saldoPendienteVes).toBeUndefined();
-      expect(cuota.tasaAplicada).toBeUndefined();
-    });
+    // M5 P1 (A4): "emitirCuota sin tasa omite saldoPendienteVes" se retiró con la ruta.
+    // La regla (no inventar proyección sin tasa) sigue cubierta aquí abajo por los caminos
+    // vivos: reportarPago en VES sin tasa (rechazo) y el cobro en sala; la emisión por
+    // suscripción ya no expone proyección en su DTO.
 
     it('reportarPago en VES sin tasa se rechaza; en USD se registra con tasa 1.0000', async () => {
       crearCuotaAbierta('cuota-sin-tasa');
@@ -1743,95 +1687,18 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
       });
     }
 
-    it('RN-03: el precio acordado del alumno gana sobre el precio base del plan al emitir', async () => {
-      sembrarOverride('35.00');
-
-      const cuota = await finanzasService.emitirCuota('coach-uuid-1', {
-        clienteId: 'alumno-uuid-1',
-        planId: 'plan-uuid-1',
-        periodo: '2026-09',
-        fechaCorteUtc: '2026-09-30T23:59:59Z',
-      });
-
-      expect(cuota.montoTotalUsd).toBe('35.00'); // no el 50.00 del catálogo
-      expect(cuota.saldoPendienteUsd).toBe('35.00');
-      expect(cuota.estado).toBe(EstadoCuota.EMITIDA);
-      expect(cuota.esBecado).toBe(false);
-      expect(cuota.saldoPendienteVes).toBe('2100.00'); // 35.00 * 60.0000
-    });
-
-    it('RN-03: sin override, la cuota toma exactamente el precio base del plan', async () => {
-      const cuota = await finanzasService.emitirCuota('coach-uuid-1', {
-        clienteId: 'alumno-uuid-1',
-        planId: 'plan-uuid-1',
-        periodo: '2026-10',
-        fechaCorteUtc: '2026-10-31T23:59:59Z',
-      });
-
-      expect(cuota.montoTotalUsd).toBe('50.00');
-      expect(cuota.esBecado).toBe(false);
-    });
-
-    it('RN-03: un monto legado en el DTO no puede saltarse la precedencia del override', async () => {
-      sembrarOverride('35.00');
-
-      const cuota = await finanzasService.emitirCuota('coach-uuid-1', {
-        clienteId: 'alumno-uuid-1',
-        planId: 'plan-uuid-1',
-        periodo: '2026-09',
-        montoTotalUsd: '99.00', // contrato legado: se valida pero no decide el monto
-        fechaCorteUtc: '2026-09-30T23:59:59Z',
-      });
-
-      expect(cuota.montoTotalUsd).toBe('35.00');
-    });
-
-    it('RF-005 §6 becado: un override de 0.00 emite una cuota Al Día por 0.00, sin deuda', async () => {
-      sembrarOverride('0.00');
-
-      const cuota = await finanzasService.emitirCuota('coach-uuid-1', {
-        clienteId: 'alumno-uuid-1',
-        planId: 'plan-uuid-1',
-        periodo: '2026-09',
-        fechaCorteUtc: '2026-09-30T23:59:59Z',
-      });
-
-      expect(cuota.montoTotalUsd).toBe('0.00');
-      expect(cuota.montoAbonadoUsd).toBe('0.00');
-      expect(cuota.saldoPendienteUsd).toBe('0.00');
-      expect(cuota.estado).toBe(EstadoCuota.AL_DIA);
-      expect(cuota.esBecado).toBe(true);
-      expect(cuota.saldoPendienteVes).toBe('0.00');
-    });
-
-    it('RF-005 §6: un plan con precio 0 sin override de precio NO emite cuota (no se inventa el monto)', async () => {
-      mockPlanesMembresia[0].precioBaseUsd = '0.00';
-
-      await expect(
-        finanzasService.emitirCuota('coach-uuid-1', {
-          clienteId: 'alumno-uuid-1',
-          planId: 'plan-uuid-1',
-          periodo: '2026-09',
-          fechaCorteUtc: '2026-09-30T23:59:59Z',
-        })
-      ).rejects.toThrow(/no tiene un precio base mayor a 0.00/i);
-    });
-
-    it('RF-005 §6: un override de 0.00 SÍ emite aunque el plan tenga precio 0 (el becado no depende del catálogo)', async () => {
-      mockPlanesMembresia[0].precioBaseUsd = '0.00';
-      sembrarOverride('0.00');
-
-      const cuota = await finanzasService.emitirCuota('coach-uuid-1', {
-        clienteId: 'alumno-uuid-1',
-        planId: 'plan-uuid-1',
-        periodo: '2026-09',
-        fechaCorteUtc: '2026-09-30T23:59:59Z',
-      });
-
-      expect(cuota.montoTotalUsd).toBe('0.00');
-      expect(cuota.estado).toBe(EstadoCuota.AL_DIA);
-      expect(cuota.esBecado).toBe(true);
-    });
+    // ===========================================================================
+    // M5 P1 (A4): los tests de precedencia RN-03 / becado que vivían en `emitirCuota`
+    // (ruta retirada) se migraron a la emisión por SUSCRIPCIÓN, donde viven ya cubiertos en
+    // `rf005-rf008-suscripcion-servicio.spec.ts`:
+    //   · RN-03 (override > catálogo) …………… §E1 RN-03 (override 35.00 → cuota 35.00)
+    //     y §G4 (precio acordado sale del override del plan suscrito).
+    //   · Sin override → precio base del plan … §E1 (cuota con montoTotalUsd del plan base).
+    //   · Becado 0.00 → al_dia, sin recordatorios … §E1 becado.
+    //   · "Plan precio 0 sin override NO emite" y "la cuota nace con saldo igual al total"
+    //     se añadieron como tests nuevos de migración en ese mismo spec (§E1).
+    // El DTO legado con `montoTotalUsd` y el esquema `EmitirCuotaSchema` desaparecen con la ruta.
+    // ===========================================================================
 
     it('listarOverrides hidrata plan y alumno, y filtra por clienteId con 404 si no es de su cartera', async () => {
       sembrarOverride('45.00', '58.0000');
@@ -1955,28 +1822,12 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
       ).toThrow();
     });
 
-    it('EmitirCuotaSchema ya no exige monto (RN-03 lo resuelve) pero rechaza un 0.00 explícito', () => {
-      const sinMonto = EmitirCuotaSchema.parse({
-        clienteId: UUID_ALUMNO,
-        planId: UUID_PLAN,
-        periodo: '2026-09',
-        fechaCorteUtc: '2026-09-30T23:59:59Z',
-      });
-      expect(sinMonto.montoTotalUsd).toBeUndefined();
+    // M5 P1 (A4/A3): `EmitirCuotaSchema` ya no existe en @guachafit/shared (contrato retirado
+    // con la ruta); la validación del contrato de suscripción viva está en
+    // `rf005-rf008-suscripcion-servicio.spec.ts` §C (AsignarSuscripcionSchema).
 
-      expect(() =>
-        EmitirCuotaSchema.parse({
-          clienteId: UUID_ALUMNO,
-          planId: UUID_PLAN,
-          periodo: '2026-09',
-          montoTotalUsd: '0.00',
-          fechaCorteUtc: '2026-09-30T23:59:59Z',
-        })
-      ).toThrow();
-    });
-
-    it('POST /finanzas/cuotas/emitir sin monto usa RN-03 (Zod ya no lo exige) y GET/DELETE validan UUID', async () => {
-      // Fixtures con UUIDs reales para atravesar la validación Zod del controller.
+    it('GET/DELETE de overrides validan UUID y delegan', async () => {
+      // Fixtures con UUIDs reales (migrado del test del POST retirado de cuotas/emitir).
       mockUsuarios.push({ id: UUID_COACH, email: 'coach.uuid@guachafit.com', rol: Rol.ENTRENADOR });
       mockPerfilesAlumno.push({
         id: 'perfil-uuid-alumno',
@@ -2011,14 +1862,6 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
       });
 
       const req = { user: { sub: UUID_COACH, entrenadorId: UUID_COACH, rol: Rol.ENTRENADOR } };
-
-      const cuota = await finanzasController.emitirCuota(req, {
-        clienteId: UUID_ALUMNO,
-        planId: UUID_PLAN,
-        periodo: '2026-11',
-        fechaCorteUtc: '2026-11-30T23:59:59Z',
-      });
-      expect(cuota.montoTotalUsd).toBe('35.00');
 
       await expect(
         finanzasController.listarOverrides(req, 'no-es-uuid')

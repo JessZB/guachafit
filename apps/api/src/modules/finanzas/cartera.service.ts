@@ -321,7 +321,13 @@ export class CarteraService {
           tx
             .select({ total: countDistinct(cuotasMembresia.clienteId) })
             .from(cuotasMembresia)
-            .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId))
+            .innerJoin(
+              perfilesAlumno,
+              and(
+                eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId),
+                eq(perfilesAlumno.entrenadorId, cuotasMembresia.entrenadorId)
+              )
+            )
             .where(whereLista),
           tx
             .select({
@@ -331,11 +337,18 @@ export class CarteraService {
               apellidos: perfilesAlumno.apellidos,
               telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
               tasaOverride: perfilesAlumno.tasaFijadaOverride,
+              proximoCorte: perfilesAlumno.proximoCorte,
               saldoTotalUsd: sql<string>`sum(${cuotasMembresia.saldoPendienteUsd})`,
               corteMasUrgente: min(cuotasMembresia.fechaCorteUtc),
             })
             .from(cuotasMembresia)
-            .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId))
+            .innerJoin(
+              perfilesAlumno,
+              and(
+                eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId),
+                eq(perfilesAlumno.entrenadorId, cuotasMembresia.entrenadorId)
+              )
+            )
             .where(whereLista)
             .groupBy(
               cuotasMembresia.clienteId,
@@ -343,7 +356,8 @@ export class CarteraService {
               perfilesAlumno.nombres,
               perfilesAlumno.apellidos,
               perfilesAlumno.telefonoWhatsapp,
-              perfilesAlumno.tasaFijadaOverride
+              perfilesAlumno.tasaFijadaOverride,
+              perfilesAlumno.proximoCorte
             )
             .orderBy(asc(min(cuotasMembresia.fechaCorteUtc)), asc(cuotasMembresia.clienteId))
             .limit(limit)
@@ -393,6 +407,7 @@ export class CarteraService {
       const base: FilaCarteraDTO = {
         alumnoUsuarioId: fila.clienteId,
         alumnoPerfilId: fila.perfilId ?? null,
+        proximoCorte: fila.proximoCorte ?? null,
         alumnoNombre: `${fila.nombres} ${fila.apellidos}`.trim(),
         telefonoWhatsapp: fila.telefonoWhatsapp ?? null,
         cuotaId: cuota?.id ?? null,
@@ -473,18 +488,31 @@ export class CarteraService {
         tx
           .select({ total: count() })
           .from(transaccionesPago)
-          .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, transaccionesPago.clienteId))
+          .innerJoin(
+            perfilesAlumno,
+            and(
+              eq(perfilesAlumno.usuarioId, transaccionesPago.clienteId),
+              eq(perfilesAlumno.entrenadorId, transaccionesPago.entrenadorId)
+            )
+          )
           .where(whereLista),
         tx
           .select({
             tx: transaccionesPago,
             perfilId: perfilesAlumno.id,
+            proximoCorte: perfilesAlumno.proximoCorte,
             nombres: perfilesAlumno.nombres,
             apellidos: perfilesAlumno.apellidos,
             telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
           })
           .from(transaccionesPago)
-          .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, transaccionesPago.clienteId))
+          .innerJoin(
+            perfilesAlumno,
+            and(
+              eq(perfilesAlumno.usuarioId, transaccionesPago.clienteId),
+              eq(perfilesAlumno.entrenadorId, transaccionesPago.entrenadorId)
+            )
+          )
           .where(whereLista)
           .orderBy(asc(transaccionesPago.fechaReporteUtc), asc(transaccionesPago.id))
           .limit(limit)
@@ -493,13 +521,14 @@ export class CarteraService {
     );
 
     const items = await Promise.all(
-      registros.map(async ({ tx, perfilId, nombres, apellidos, telefonoWhatsapp }) => {
+      registros.map(async ({ tx, perfilId, proximoCorte, nombres, apellidos, telefonoWhatsapp }) => {
         const comprobanteUrl = await this.finanzasService.resolverComprobanteUrl(
           tx.comprobanteStorageKey
         );
         const fila: FilaCarteraDTO = {
           alumnoUsuarioId: tx.clienteId,
           alumnoPerfilId: perfilId ?? null,
+          proximoCorte: proximoCorte ?? null,
           alumnoNombre: `${nombres} ${apellidos}`.trim(),
           telefonoWhatsapp: telefonoWhatsapp ?? null,
           cuotaId: tx.cuotaId,
@@ -578,7 +607,13 @@ export class CarteraService {
         tx
           .select({ total: count() })
           .from(cuotasMembresia)
-          .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId))
+          .innerJoin(
+              perfilesAlumno,
+              and(
+                eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId),
+                eq(perfilesAlumno.entrenadorId, cuotasMembresia.entrenadorId)
+              )
+            )
           .where(whereLista),
         tx
           .select({
@@ -588,6 +623,7 @@ export class CarteraService {
             fechaCorteUtc: cuotasMembresia.fechaCorteUtc,
             estado: cuotasMembresia.estado,
             perfilId: perfilesAlumno.id,
+            proximoCorte: perfilesAlumno.proximoCorte,
             nombres: perfilesAlumno.nombres,
             apellidos: perfilesAlumno.apellidos,
             telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
@@ -595,7 +631,13 @@ export class CarteraService {
             planNombre: planesMembresia.nombre,
           })
           .from(cuotasMembresia)
-          .innerJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId))
+          .innerJoin(
+              perfilesAlumno,
+              and(
+                eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId),
+                eq(perfilesAlumno.entrenadorId, cuotasMembresia.entrenadorId)
+              )
+            )
           .innerJoin(planesMembresia, eq(planesMembresia.id, cuotasMembresia.planId))
           .where(whereLista)
           .orderBy(
@@ -615,6 +657,7 @@ export class CarteraService {
       return {
         alumnoUsuarioId: fila.clienteId,
         alumnoPerfilId: fila.perfilId ?? null,
+        proximoCorte: fila.proximoCorte ?? null,
         alumnoNombre: `${fila.nombres} ${fila.apellidos}`.trim(),
         telefonoWhatsapp: fila.telefonoWhatsapp ?? null,
         cuotaId: fila.cuotaId,

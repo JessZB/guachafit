@@ -110,7 +110,7 @@ vi.mock('../../lib/api-client', async (importOriginal) => {
   };
 });
 
-import { apiClient } from '../../lib/api-client';
+import { apiClient, ApiError } from '../../lib/api-client';
 import { parsearTabFichaAlumno } from '../../lib/alumno-detalle-tab';
 import { AlumnoDetallePage } from './AlumnoDetallePage';
 
@@ -418,5 +418,37 @@ describe('AlumnoDetallePage · contrato E: cobro en sala', () => {
 
     expect(await within(dialogo).findByText(/demo/i)).toBeTruthy();
     expect(llamadasPostCobro()).toHaveLength(0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Correcciones del lote (validación 08): contrato V9 (fiabilidad H4) en la ficha.
+  // ---------------------------------------------------------------------------
+
+  it('V9 · con el 404 de alumno fuera de lista el modal de la ficha muestra el mensaje amigable', async () => {
+    // ApiError real: el traductor (`traducirErrorHttp` + `esMensajeAmigable`) debe dejar pasar el
+    // texto del servidor tal cual (fiabilidad H4), no solo el componente mostrarlo.
+    alHacerPostCobro = () =>
+      Promise.reject(
+        new ApiError(404, {
+          type: 'about:blank',
+          title: 'Not Found',
+          status: 404,
+          detail: '',
+          message: 'Este alumno no está en tu lista.',
+          timestampUtc: '2026-10-09T00:00:00.000Z',
+        })
+      );
+    montarPagina();
+    const dialogo = await abrirCobro();
+    fireEvent.change(controlDeEtiqueta('Monto Recibido', 'input'), {
+      target: { value: '40.00' },
+    });
+
+    const boton = within(dialogo).getByRole('button', {
+      name: /Registrar y Liquidar|Registrar cobro/i,
+    });
+    fireEvent.click(boton);
+
+    expect(await within(dialogo).findByText('Este alumno no está en tu lista.')).toBeTruthy();
   });
 });

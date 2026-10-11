@@ -43,6 +43,7 @@ function filaMora(
 ): FilaCarteraDTO {
   return {
     telefonoWhatsapp: null,
+    proximoCorte: null,
     cuotaId: null,
     estadoCuota: EstadoCuota.VENCIDA,
     fechaCorteUtc: '2026-10-01T23:59:59.000Z',
@@ -111,7 +112,7 @@ vi.mock('../../lib/api-client', async (importOriginal) => {
   };
 });
 
-import { apiClient } from '../../lib/api-client';
+import { apiClient, ApiError } from '../../lib/api-client';
 import { CarteraPage } from './CarteraPage';
 
 type MockFn = ReturnType<typeof vi.fn>;
@@ -327,5 +328,31 @@ describe('CarteraPage · contrato F: cobro en Control de Cobros', () => {
       fechaOperacion: fechaDelModal,
     });
     expect(cuerpo).not.toHaveProperty('referenciaBancaria');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Correcciones del lote (validación 08): contrato V9 (fiabilidad H4).
+  // ---------------------------------------------------------------------------
+
+  it('V9 · con el 404 de alumno fuera de lista el modal muestra el mensaje amigable', async () => {
+    // ApiError real: el traductor (`traducirErrorHttp` + `esMensajeAmigable`) debe dejar pasar el
+    // texto del servidor tal cual (fiabilidad H4), no solo el componente mostrarlo.
+    respuestasPost = [
+      new ApiError(404, {
+        type: 'about:blank',
+        title: 'Not Found',
+        status: 404,
+        detail: '',
+        message: 'Este alumno no está en tu lista.',
+        timestampUtc: '2026-10-09T00:00:00.000Z',
+      }),
+    ];
+    montarPagina();
+    const dialogo = await abrirCobroDe(FILA_A.alumnoNombre);
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Registrar cobro' }));
+
+    expect(await within(dialogo).findByText('Este alumno no está en tu lista.')).toBeTruthy();
+    // El 404 nuevo no se confunde con el 400 de "sin plan asignado".
+    expect(within(dialogo).queryByRole('link', { name: /Asignar plan/i })).toBeNull();
   });
 });

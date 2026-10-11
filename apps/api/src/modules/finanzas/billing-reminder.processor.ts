@@ -10,7 +10,7 @@
  * 2. `barrido-estados` (repeatable diario): primero emite las cuotas de las suscripciones que
  *    entran en su ventana de 5 días (M5-L1, `FinanzasService.emitirCuotasProgramadas`) y luego
  *    aplica la máquina de estados real (`calcularEstadoBarrido`) a TODAS las cuotas de TODOS los
- *    tenants.
+ *    tenants. Al final repone los recordatorios futuros que falten (`reconciliarRecordatorios`).
  *
  * RUTA DE SISTEMA (tenancy): `cuotas_membresia` tiene RLS habilitado (migración 0012, etapa 2).
  * Este worker barre las cuotas de TODOS los tenants, así que corre con el bypass explícito
@@ -30,8 +30,9 @@ import {
   gt,
   notInArray,
   cuotasMembresia,
+  perfilesAlumno,
 } from '@guachafit/database';
-import { EstadoCuota } from '@guachafit/shared';
+import { EstadoAlumno, EstadoCuota } from '@guachafit/shared';
 import { FinanzasService, toCents } from './finanzas.service';
 import {
   COBRANZA_QUEUE,
@@ -51,8 +52,17 @@ export interface ResultadoRecordatorio {
     | 'cuota_no_encontrada'
     | 'cuota_anulada'
     | 'cuota_saldada'
-    | 'pausa_revision';
+    | 'pausa_revision'
+    | 'alumno_inactivo'
+    | 'hito_obsoleto';
 }
+
+/**
+ * Un aviso que llega más de un día tarde (p. ej. un `add` que quedó en la cola de ioredis mientras
+ * Redis estaba caído y se insertó al volver) ya no dice algo cierto ("vence en 5 días"): se
+ * descarta.
+ */
+export const TOLERANCIA_RETRASO_HITO_MS = 24 * 60 * 60 * 1000;
 
 export interface ResultadoBarrido {
   evaluadas: number;
@@ -61,6 +71,11 @@ export interface ResultadoBarrido {
   vencidas: number;
   /** M5-L1: cuotas emitidas automáticamente por las suscripciones antes del barrido de estados. */
   cuotasEmitidas: number;
+  /**
+   * M5-P1: número de CUOTAS abiertas (no de avisos) a las que la reposición diaria agendó al menos
+   * un recordatorio futuro. Si la reposición falla queda en 0 y el log lo dice.
+   */
+  recordatoriosAgendados: number;
 }
 
 interface DatosRecordatorio {
@@ -166,8 +181,21 @@ export class BillingReminderProcessor extends WorkerHost {
    * Verifica el estado real de la cuota antes de enviar: la fuente de verdad es PostgreSQL, no
    * el payload agendado (el saldo pudo cambiar entre la emisión y el hito).
    */
-  async procesarRecordatorio(job: Job<DatosRecordatorio>): Promise<ResultadoRecordatorio> {
-    const { cuotaId, hito } = job.data;
+  async procesarRecordatorio(
+    job: Job<DatosRecordatorio>,
+    ahora: Date = new Date()
+  ): Promise<ResultadoRecordatorio> {
+    const { cuotaId, hito, timestampHitoUtc } = job.data;
+
+    if (
+      timestampHitoUtc &&
+      ahora.getTime() - new Date(timestampHitoUtc).getTime() > TOLERANCIA_RETRASO_HITO_MS
+    ) {
+      this.logger.warn(
+        `Recordatorio ${hito} de la cuota ${cuotaId} llegó con más de un día de retraso; sin envío.`
+      );
+      return { enviado: false, motivo: 'hito_obsoleto' };
+    }
 
     // RUTA DE SISTEMA (RNF-003/ADR-011): bypass explícito de superadmin; la emisión de eventos
     // (Redis) queda fuera de la transacción, después del commit de lectura.
@@ -191,6 +219,21 @@ export class BillingReminderProcessor extends WorkerHost {
     // RF-008 Gherkin 2: los recordatorios de cobro se pausan mientras haya un pago en revisión.
     if (cuota.estado === EstadoCuota.PENDIENTE_REVISION) {
       return { enviado: false, motivo: 'pausa_revision' };
+    }
+
+    // Decisión del dueño (2026-10-10): los alumnos archivados, pausados o suspendidos no reciben
+    // recordatorios automáticos; su deuda sigue visible para el entrenador.
+    const [alumno] = await this.withTenant({ isSuperadmin: true }, async (tx) =>
+      tx
+        .select({
+          deletedAtUtc: perfilesAlumno.deletedAtUtc,
+          estadoActivacion: perfilesAlumno.estadoActivacion,
+        })
+        .from(perfilesAlumno)
+        .where(eq(perfilesAlumno.usuarioId, cuota.clienteId))
+    );
+    if (!alumno || alumno.deletedAtUtc || alumno.estadoActivacion !== EstadoAlumno.ACTIVO) {
+      return { enviado: false, motivo: 'alumno_inactivo' };
     }
 
     // Proyección informativa en Bs solo con tasa real (misma regla que emisión/historial).
@@ -292,6 +335,7 @@ export class BillingReminderProcessor extends WorkerHost {
         porVencer: 0,
         vencidas: 0,
         cuotasEmitidas,
+        recordatoriosAgendados: 0,
       };
 
       for (const fila of filas) {
@@ -320,10 +364,28 @@ export class BillingReminderProcessor extends WorkerHost {
       return resumen;
     });
 
+    // M5-P1 (RF-008): al final, la reposición de recordatorios. Un fallo no invalida lo anterior.
+    let reposicionFallida = false;
+    try {
+      resumen.recordatoriosAgendados = (
+        await this.finanzasService.reconciliarRecordatorios(ahora)
+      ).agendadas;
+    } catch (error) {
+      reposicionFallida = true;
+      this.logger.error(
+        `No se pudieron reponer los recordatorios de cobranza: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+
     this.logger.log(
       `Barrido diario de cuotas: ${resumen.cuotasEmitidas} emitidas, ${resumen.evaluadas} evaluadas, ` +
         `${resumen.actualizadas} actualizadas ` +
-        `(${resumen.porVencer} por vencer, ${resumen.vencidas} vencidas).`
+        `(${resumen.porVencer} por vencer, ${resumen.vencidas} vencidas), ` +
+        (reposicionFallida
+          ? 'la reposición de recordatorios falló (ver el error anterior).'
+          : `${resumen.recordatoriosAgendados} cuotas con recordatorios repuestos.`)
     );
 
     return resumen;

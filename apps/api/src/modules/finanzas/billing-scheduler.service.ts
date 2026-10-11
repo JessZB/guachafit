@@ -46,6 +46,25 @@ export const OPCIONES_JOBS_COBRANZA = {
  */
 export const TIEMPO_MAX_COLA_COBRANZA_MS = 3000;
 
+/**
+ * Tras un tiempo agotado, la cola se da por caída durante este lapso: las llamadas siguientes
+ * vuelven de inmediato sin tocar Redis. Así un barrido con Redis caído espera una sola vez y no
+ * 3 s por alumno; la reposición diaria (`reconciliarRecordatorios`) agenda lo que falte después.
+ *
+ * La pausa es por proceso (cada réplica decide por su cuenta) y puede dar falsos negativos si
+ * Redis solo estaba lento: un hito del mismo día omitido en esa ventana no se repone (límite
+ * aceptado; los hitos futuros los repone el barrido).
+ */
+export const PAUSA_COLA_TRAS_TIEMPO_AGOTADO_MS = 60_000;
+
+export interface OpcionesProgramacion {
+  /**
+   * `true` (por defecto): un hito de HOY (día local) cuya hora ya pasó se envía de inmediato.
+   * `false`: solo se agendan hitos futuros (la reposición diaria no repite un aviso ya enviado).
+   */
+  incluirMismoDia?: boolean;
+}
+
 export interface CuotaParaProgramar {
   id: string;
   fechaCorteUtc: Date;
@@ -56,6 +75,10 @@ export interface CuotaParaProgramar {
 @Injectable()
 export class BillingSchedulerService implements OnModuleInit {
   private readonly logger = new Logger(BillingSchedulerService.name);
+  /** Instante (ms) hasta el que la cola se considera caída tras un tiempo agotado. */
+  private colaEnPausaHasta = 0;
+  /** La pausa se avisa una sola vez por ventana (no una línea por cuota durante un incidente). */
+  private pausaAvisada = false;
 
   constructor(@InjectQueue(COBRANZA_QUEUE) private readonly cobranzaQueue: Queue) {}
 
@@ -111,9 +134,13 @@ export class BillingSchedulerService implements OnModuleInit {
    */
   async programarRecordatoriosCuota(
     cuota: CuotaParaProgramar,
-    ahora: Date = new Date()
+    ahora: Date = new Date(),
+    opciones: OpcionesProgramacion = {}
   ): Promise<HitoCobranza[]> {
     const programados: HitoCobranza[] = [];
+    if (this.colaEnPausa(`agendar los recordatorios de la cuota ${cuota.id}`)) return programados;
+    const incluirMismoDia = opciones.incluirMismoDia ?? true;
+    let falloCola = false;
 
     for (const hito of HITOS_COBRANZA) {
       const timestampHito = calcularTimestampHito(cuota.fechaCorteUtc, hito, cuota.zonaHoraria);
@@ -121,6 +148,7 @@ export class BillingSchedulerService implements OnModuleInit {
 
       if (delay <= 0) {
         const esHoyLocal =
+          incluirMismoDia &&
           cuota.zonaHoraria !== undefined &&
           calcularDiaLocalHito(cuota.fechaCorteUtc, hito, cuota.zonaHoraria) ===
             obtenerFechaLocalYyyyMmDd(ahora, cuota.zonaHoraria);
@@ -146,6 +174,8 @@ export class BillingSchedulerService implements OnModuleInit {
       );
 
       if (!resultado.ok) {
+        falloCola = true;
+        this.abrirPausaSiTiempoAgotado(resultado);
         this.logger.warn(
           `No se pudieron agendar los recordatorios de la cuota ${cuota.id} desde ${hito}: ${describirFallo(
             resultado
@@ -157,11 +187,13 @@ export class BillingSchedulerService implements OnModuleInit {
       programados.push(hito);
     }
 
-    this.logger.log(
-      `Recordatorios programados para cuota ${cuota.id}: ${
-        programados.length > 0 ? programados.join(', ') : 'ninguno (hitos ya vencidos)'
-      }`
-    );
+    if (programados.length > 0) {
+      this.logger.log(`Recordatorios programados para cuota ${cuota.id}: ${programados.join(', ')}`);
+    } else if (!falloCola) {
+      this.logger.log(
+        `Recordatorios programados para cuota ${cuota.id}: ninguno (sus hitos ya pasaron).`
+      );
+    }
 
     return programados;
   }
@@ -176,6 +208,7 @@ export class BillingSchedulerService implements OnModuleInit {
    */
   async cancelarRecordatoriosCuota(cuotaId: string): Promise<number> {
     let eliminados = 0;
+    if (this.colaEnPausa(`cancelar los recordatorios de la cuota ${cuotaId}`)) return eliminados;
 
     for (const hito of HITOS_COBRANZA) {
       const jobId = construirJobIdCobranza(cuotaId, hito);
@@ -187,11 +220,42 @@ export class BillingSchedulerService implements OnModuleInit {
         eliminados += resultado.valor;
         continue;
       }
+      this.abrirPausaSiTiempoAgotado(resultado);
       this.logger.warn(`No se pudo cancelar el job '${jobId}': ${describirFallo(resultado)}`);
       if (resultado.motivo === 'tiempo') break;
     }
 
     return eliminados;
+  }
+
+  /**
+   * Levanta la pausa para sondear Redis de nuevo (la reposición diaria lo hace al empezar). Si
+   * sigue caído, el primer intento vuelve a agotar el tiempo y reabre la pausa.
+   */
+  reanudarCola(): void {
+    this.colaEnPausaHasta = 0;
+  }
+
+  /** `true` si la cola sigue en pausa tras un tiempo agotado reciente (avisa una vez). */
+  private colaEnPausa(accion: string): boolean {
+    if (Date.now() >= this.colaEnPausaHasta) return false;
+    if (!this.pausaAvisada) {
+      this.pausaAvisada = true;
+      this.logger.warn(
+        `Cola de cobranza en pausa tras un tiempo agotado: no se intenta ${accion} ni nada más hasta ${new Date(
+          this.colaEnPausaHasta
+        ).toISOString()}.`
+      );
+    }
+    return true;
+  }
+
+  /** Un tiempo agotado abre la pausa; un rechazo inmediato no (Redis respondió). */
+  private abrirPausaSiTiempoAgotado(resultado: { ok: false; motivo: 'tiempo' | 'error' }): void {
+    if (resultado.motivo === 'tiempo') {
+      this.colaEnPausaHasta = Date.now() + PAUSA_COLA_TRAS_TIEMPO_AGOTADO_MS;
+      this.pausaAvisada = false;
+    }
   }
 }
 

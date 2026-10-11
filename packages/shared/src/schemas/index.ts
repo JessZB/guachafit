@@ -26,7 +26,6 @@ import {
 export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const DECIMAL_STRING_REGEX = /^\d+(\.\d{1,2})?$/;
 export const TASA_STRING_REGEX = /^\d+(\.\d{1,4})?$/;
-export const PERIODO_MES_REGEX = /^\d{4}-\d{2}$/;
 export const FECHA_CALENDARIO_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
@@ -1199,28 +1198,6 @@ export const CrearOverridePlanSchema = z.object({
 export const AsignarSuscripcionSchema = z.object({
   planId: z.string().uuid('Elige un plan de tu catálogo.'),
   fechaInicio: fechaCalendarioRealSchema.optional(),
-});
-
-export const EmitirCuotaSchema = z.object({
-  clienteId: z.string().uuid(),
-  planId: z.string().uuid(),
-  entrenadorId: z.string().uuid().optional(),
-  periodo: z.string().regex(PERIODO_MES_REGEX, 'El periodo no es válido. Usa el formato año-mes (por ejemplo, 2026-01)'),
-  /**
-   * RF-005 RN-03 (Precedencia de Valores): el monto de una cuota NUEVA NO lo dicta el cliente.
-   * El servidor lo resuelve con el override activo del alumno (`precio_acordado_usd`) o, en su
-   * defecto, con el precio base del plan del catálogo. El campo queda como contrato legado
-   * opcional: si se envía, debe ser > 0.00 (nunca una vía para fabricar cuotas de $0 por error;
-   * el becado se expresa con un override de precio 0.00 — RF-005 §6).
-   */
-  montoTotalUsd: z
-    .string()
-    .regex(DECIMAL_STRING_REGEX, 'El monto total debe ser un número con hasta 2 decimales')
-    .refine((val) => Number(val) > 0, 'El monto total debe ser mayor a 0.00')
-    .optional(),
-  fechaCorteUtc: z.string().datetime({ message: 'La fecha de corte no es válida' }),
-  fechaEmisionUtc: z.string().datetime({ message: 'La fecha de emisión no es válida' }).optional(),
-  notas: z.string().max(1000).optional(),
 });
 
 export const ActualizarTasaCambioSchema = z.object({

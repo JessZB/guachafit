@@ -41,6 +41,7 @@ function filaBase(
     Partial<FilaCarteraDTO>
 ): FilaCarteraDTO {
   return {
+    proximoCorte: null,
     telefonoWhatsapp: null,
     cuotaId: null,
     estadoCuota: null,

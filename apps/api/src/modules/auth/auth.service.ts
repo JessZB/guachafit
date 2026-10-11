@@ -52,6 +52,7 @@ import {
 import { obtenerUrlWeb } from '../../common/config/correo';
 import { construirEnlaceConCodigo } from '../notificaciones/correo/plantillas-correo';
 import { enmascararCorreo } from '../../common/enmascarar-correo.util';
+import { esViolacionUnicidad } from '../../common/violacion-unicidad.util';
 import {
   LoginUsuarioDTO,
   EstablecerPasswordConTokenDTO,
@@ -88,18 +89,6 @@ import {
   mensajeCambioCorreoSolicitado,
   mensajeCorreoConfirmado,
 } from '@guachafit/shared';
-
-/** Postgres: violación de unicidad (`usuarios.email` es UNIQUE). */
-const CODIGO_PG_UNICIDAD = '23505';
-
-/** `true` si el error (o su causa) es un 23505 de Postgres. */
-function esViolacionUnicidad(error: unknown): boolean {
-  for (let actual = error, saltos = 0; actual && typeof actual === 'object' && saltos < 3; saltos++) {
-    if ((actual as { code?: unknown }).code === CODIGO_PG_UNICIDAD) return true;
-    actual = (actual as { cause?: unknown }).cause;
-  }
-  return false;
-}
 
 /**
  * Recuperación: intervalo mínimo entre dos enlaces para la misma cuenta. Mientras el enlace

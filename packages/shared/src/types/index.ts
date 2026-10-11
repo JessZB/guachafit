@@ -54,7 +54,6 @@ import {
   CrearPlanMembresiaSchema,
   ActualizarPlanMembresiaSchema,
   CrearOverridePlanSchema,
-  EmitirCuotaSchema,
   ActualizarTasaCambioSchema,
   CalcularConversionSchema,
   ReportarPagoSchema,
@@ -217,7 +216,6 @@ export type ConsultaComparadorFotograficoDTO = z.infer<typeof ConsultaComparador
 export type CrearPlanMembresiaDTO = z.infer<typeof CrearPlanMembresiaSchema>;
 export type ActualizarPlanMembresiaDTO = z.infer<typeof ActualizarPlanMembresiaSchema>;
 export type CrearOverridePlanDTO = z.infer<typeof CrearOverridePlanSchema>;
-export type EmitirCuotaDTO = z.infer<typeof EmitirCuotaSchema>;
 export type ActualizarTasaCambioDTO = z.infer<typeof ActualizarTasaCambioSchema>;
 export type CalcularConversionDTO = z.infer<typeof CalcularConversionSchema>;
 export type ReportarPagoDTO = z.infer<typeof ReportarPagoSchema>;
@@ -710,6 +708,11 @@ export interface FilaCarteraDTO {
   alumnoUsuarioId: string;
   /** `perfiles_alumno.id` para "Ver ficha"; `null` si el perfil no se pudo resolver. */
   alumnoPerfilId: string | null;
+  /**
+   * M5-P1 (ADR-020): vencimiento (`YYYY-MM-DD`, día local del alumno) de la próxima cuota que
+   * emitirá su suscripción; `null` si no tiene plan asignado.
+   */
+  proximoCorte: string | null;
   alumnoNombre: string;
   telefonoWhatsapp: string | null;
   /** Mora / por vencer: cuota más urgente del alumno (vencida más antigua o corte más próximo). */

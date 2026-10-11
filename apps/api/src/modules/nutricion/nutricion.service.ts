@@ -61,6 +61,7 @@ import {
   ToleranciaNutricionalDTO,
 } from '@guachafit/shared';
 import { obtenerFechaLocalYyyyMmDd } from '../../common/adherencia.util';
+import { esViolacionUnicidad } from '../../common/violacion-unicidad.util';
 import {
   evaluarRecepcionCheckinNutricional,
   resolverTimezoneNutricion,
@@ -155,26 +156,10 @@ const INDICE_UNICO_CHECKIN_DIARIO = 'uq_checkin_nutricional_diario';
 
 /**
  * LOTE API-N1: `true` si el error de la base de datos es la violación del índice único del reporte
- * diario (Postgres 23505). `postgres` expone `constraint_name`; `pg`, `constraint`. Se revisa también
- * `cause` por si una capa intermedia envuelve el error original.
+ * diario (Postgres 23505). Delega en el detector común (`common/violacion-unicidad.util.ts`).
  */
 export function esViolacionUnicidadCheckinDiario(error: unknown): boolean {
-  for (let actual = error, saltos = 0; actual && typeof actual === 'object' && saltos < 3; saltos++) {
-    const candidato = actual as {
-      code?: unknown;
-      constraint_name?: unknown;
-      constraint?: unknown;
-      cause?: unknown;
-    };
-    if (
-      candidato.code === '23505' &&
-      (candidato.constraint_name ?? candidato.constraint) === INDICE_UNICO_CHECKIN_DIARIO
-    ) {
-      return true;
-    }
-    actual = candidato.cause;
-  }
-  return false;
+  return esViolacionUnicidad(error, INDICE_UNICO_CHECKIN_DIARIO);
 }
 
 /** 409 del reporte ya registrado: mismo texto y código estable para ambos caminos (LOTE API-N1). */

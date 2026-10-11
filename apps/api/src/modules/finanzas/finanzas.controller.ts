@@ -27,7 +27,6 @@ import {
   CrearPlanMembresiaSchema,
   ActualizarPlanMembresiaSchema,
   CrearOverridePlanSchema,
-  EmitirCuotaSchema,
   ActualizarTasaCambioSchema,
   CalcularConversionSchema,
   ReportarPagoSchema,
@@ -260,20 +259,6 @@ export class FinanzasController {
     }
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.finanzasService.quitarSuscripcion(entrenadorId, clienteId);
-  }
-
-  /**
-   * Emisión de cuota mensual / periódica para un alumno
-   * Rol: Entrenador
-   */
-  @Post('cuotas/emitir')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Rol.ENTRENADOR)
-  @HttpCode(HttpStatus.CREATED)
-  async emitirCuota(@Req() req: any, @Body() body: unknown) {
-    const dto = parsearContrato(EmitirCuotaSchema, body);
-    const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.finanzasService.emitirCuota(entrenadorId, dto);
   }
 
   /**

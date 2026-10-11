@@ -54,6 +54,7 @@ function filaMora(
 ): FilaCarteraDTO {
   return {
     telefonoWhatsapp: null,
+    proximoCorte: null,
     cuotaId: null,
     estadoCuota: EstadoCuota.VENCIDA,
     fechaCorteUtc: '2026-10-01T23:59:59.000Z',

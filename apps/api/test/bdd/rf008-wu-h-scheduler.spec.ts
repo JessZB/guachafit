@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Job } from 'bullmq';
-import { EstadoCuota } from '@guachafit/shared';
+import { EstadoAlumno, EstadoCuota } from '@guachafit/shared';
+import { getTableName } from '@guachafit/database';
 import {
   BillingSchedulerService,
   OPCIONES_JOBS_COBRANZA,
@@ -257,8 +258,14 @@ describe('RF-008 WU-H: BillingReminderProcessor (DB y despachador mock)', () => 
     const updates: Array<{ set: any; id: any }> = [];
     const db: any = {
       select: vi.fn(() => ({
-        from: vi.fn(() => ({
-          where: vi.fn().mockResolvedValue(filas),
+        from: vi.fn((tabla: any) => ({
+          where: vi.fn().mockResolvedValue(
+            // M5-P1 (V3): el despacho revalida al alumno; el mock devuelve un perfil ACTIVO para
+            // que los tests del recordatorio sigan probando lo que probaban (la cuota abierta).
+            tabla && getTableName(tabla) === 'perfiles_alumno'
+              ? [{ usuarioId: clienteId, deletedAtUtc: null, estadoActivacion: EstadoAlumno.ACTIVO }]
+              : filas
+          ),
         })),
       })),
       update: vi.fn(() => ({
@@ -294,6 +301,8 @@ describe('RF-008 WU-H: BillingReminderProcessor (DB y despachador mock)', () => 
       emitirCuotasProgramadas: vi
         .fn()
         .mockResolvedValue({ evaluadas: 0, emitidas: 0, omitidas: 0 }),
+      // M5-P1 (contrato F1): el barrido repone recordatorios al final y reporta `agendadas`.
+      reconciliarRecordatorios: vi.fn().mockResolvedValue({ evaluadas: 0, agendadas: 0 }),
     };
   });
 
@@ -438,6 +447,7 @@ describe('RF-008 WU-H: BillingReminderProcessor (DB y despachador mock)', () => 
         porVencer: 1,
         vencidas: 2,
         cuotasEmitidas: 0,
+        recordatoriosAgendados: 0,
       });
       expect(updates).toHaveLength(2);
       expect(updates[0].set.estado).toBe(EstadoCuota.POR_VENCER);

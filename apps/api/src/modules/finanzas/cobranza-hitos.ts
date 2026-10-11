@@ -11,9 +11,10 @@
  * (`cuota_{id}_T-5`) con separador `_`, que es determinista, seguro y estable.
  *
  * Con la zona del alumno (M5-L1), cada hito sale a las 09:00 locales del día `fecha local del
- * corte + offset`, respetando el horario de verano. Sin zona (ruta heredada) se mantiene el
- * cálculo previo: `fecha_corte_utc + offset` en milisegundos UTC (ADR-002). Ninguno de los dos
- * depende de la zona horaria del proceso.
+ * corte + offset`, respetando el horario de verano. Sin zona (solo llamadas directas; todos los
+ * caminos de producción pasan la zona del alumno o la de por defecto) se usa
+ * `fecha_corte_utc + offset` en milisegundos UTC (ADR-002). Ninguno de los dos depende de la zona
+ * horaria del proceso.
  */
 import {
   instanteUtcDesdeHoraLocal,

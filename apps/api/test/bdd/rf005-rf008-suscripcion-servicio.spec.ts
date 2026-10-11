@@ -898,6 +898,39 @@ describe('M5-L1: suscripción, emisión automática y rutas (RF-005 / RF-008)', 
       expect(mockScheduler.programarRecordatoriosCuota).not.toHaveBeenCalled();
     });
 
+    // M5 P1 (A4 · migración): las reglas del POST retirado `POST /finanzas/cuotas/emitir`
+    // que no tenían cobertura en la emisión por suscripción se recolocan aquí:
+    // 1) la cuota nace con saldo igual al total y sin abonos (invariante al emitir);
+    // 2) un plan con precio 0 sin override de precio NO emite cuota (nunca se inventa un monto).
+    it('§E1: la cuota nace con saldo igual al total y sin abonos', async () => {
+      await finanzasService.asignarSuscripcion(
+        UUID_COACH,
+        'alumno-uuid-1',
+        { planId: UUID_PLAN, fechaInicio: '2026-10-09' },
+        AHORA_CARACAS
+      );
+
+      const cuota = mockCuotasMembresia[0];
+      expect(cuota.montoTotalUsd).toBe('40.00');
+      expect(cuota.montoAbonadoUsd).toBe('0.00');
+      expect(cuota.saldoPendienteUsd).toBe('40.00');
+      expect(cuota.estado).toBe(EstadoCuota.EMITIDA);
+    });
+
+    it('§E1: un plan con precio 0 sin override de precio NO emite cuota (no se inventa el monto)', async () => {
+      mockPlanesMembresia[0].precioBaseUsd = '0.00';
+
+      await expect(
+        finanzasService.asignarSuscripcion(
+          UUID_COACH,
+          'alumno-uuid-1',
+          { planId: UUID_PLAN, fechaInicio: '2026-10-09' },
+          AHORA_CARACAS
+        )
+      ).rejects.toThrow(/no tiene un precio base mayor a 0.00/i);
+      expect(mockCuotasMembresia).toHaveLength(0);
+    });
+
     it('§E1: con suscripción activa no se puede volver a elegir fechaInicio', async () => {
       mockPerfilesAlumno[0].planSuscritoId = UUID_PLAN;
       mockPerfilesAlumno[0].cicloAncla = '2026-08-15';

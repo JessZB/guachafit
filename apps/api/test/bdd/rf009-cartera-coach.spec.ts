@@ -674,4 +674,169 @@ describe('RF-009 WU-I: Tablero de control de cartera del coach', () => {
       expect(mensaje.cuerpo).not.toContain('Bs.');
     });
   });
+
+  // ===========================================================================
+  // M5 · lote P1 (contrato F2): `FilaCarteraDTO` gana `proximoCorte`.
+  // ===========================================================================
+  // `proximoCorte` es igual a `perfiles_alumno.proximo_corte` (`YYYY-MM-DD`) o `null` sin
+  // plan, y debe venir en las 4 pestañas. Con la fila vacía (`undefined` en el mock) la fila
+  // dice `null`, nunca `undefined`. En fase roja FALLA: el servicio no mapea ese campo.
+  describe('M5 P1 · F2: proximoCorte en las cuatro pestañas (RF-009)', () => {
+    it('F2: la pestaña de MORA incluye proximoCorte del plan del alumno (y null sin plan)', async () => {
+      const ahora = Date.now();
+      const { db } = crearMockDb(
+        respuestasResumen({
+          cuotas_membresia_fn: (n: number) => {
+            if (n === 4) return [{ total: 2 }];
+            if (n === 5)
+              return [
+                {
+                  clienteId: 'user-a',
+                  perfilId: 'perfil-a',
+                  nombres: 'Juan',
+                  apellidos: 'Pérez',
+                  telefonoWhatsapp: null,
+                  tasaOverride: null,
+                  saldoTotalUsd: '80.00',
+                  corteMasUrgente: new Date(ahora - 10 * DIA_MS),
+                  proximoCorte: '2026-11-01',
+                },
+                {
+                  clienteId: 'user-b',
+                  perfilId: 'perfil-b',
+                  nombres: 'Ana',
+                  apellidos: 'López',
+                  telefonoWhatsapp: null,
+                  tasaOverride: null,
+                  saldoTotalUsd: '25.00',
+                  corteMasUrgente: new Date(ahora - 2 * DIA_MS),
+                  // SIN proximoCorte: sin plan, la fila expone null
+                },
+              ];
+            return [];
+          },
+          notificaciones_in_app: [],
+        })
+      );
+
+      const { finanzas } = crearFinanzasFake();
+      const servicio = new CarteraService(db, finanzas);
+      const resultado = await servicio.obtenerCartera(COACH_ID, filtro({ pestana: 'mora' }));
+
+      expect(resultado.items[0].proximoCorte).toBe('2026-11-01');
+      expect(resultado.items[1].proximoCorte).toBeNull();
+    });
+
+    it('F2: la pestaña POR VENCER incluye proximoCorte', async () => {
+      const ahora = Date.now();
+      const { db } = crearMockDb(
+        respuestasResumen({
+          cuotas_membresia_fn: (n: number) => {
+            if (n === 4) return [{ total: 1 }];
+            if (n === 5)
+              return [
+                {
+                  clienteId: 'user-a',
+                  perfilId: 'perfil-a',
+                  nombres: 'Juan',
+                  apellidos: 'Pérez',
+                  telefonoWhatsapp: null,
+                  tasaOverride: null,
+                  saldoTotalUsd: '40.00',
+                  corteMasUrgente: new Date(ahora + 2 * DIA_MS),
+                  proximoCorte: '2026-12-05',
+                },
+              ];
+            return [];
+          },
+          notificaciones_in_app: [],
+        })
+      );
+
+      const { finanzas } = crearFinanzasFake({ tasaEfectiva: '65.0000' });
+      const servicio = new CarteraService(db, finanzas);
+      const resultado = await servicio.obtenerCartera(COACH_ID, filtro({ pestana: 'por_vencer' }));
+
+      expect(resultado.items[0].proximoCorte).toBe('2026-12-05');
+    });
+
+    it('F2: la pestaña de REVISIÓN incluye proximoCorte', async () => {
+      const ahora = Date.now();
+      const { db } = crearMockDb({
+        ...respuestasResumen(),
+        transacciones_pago: (n: number) => {
+          if (n === 1) return [{ montoEquivalenteUsd: '35.00' }];
+          if (n === 2) return [{ total: 1 }];
+          if (n === 3) return [{ total: 1 }];
+          if (n === 4)
+            return [
+              {
+                tx: {
+                  id: 'tx-1',
+                  cuotaId: 'cuota-a',
+                  clienteId: 'user-a',
+                  montoOriginal: '1950.00',
+                  monedaOriginal: Moneda.VES,
+                  metodoPago: MetodoPago.PAGO_MOVIL,
+                  referenciaBancaria: '445566',
+                  comprobanteStorageKey: null,
+                  estadoConciliacion: EstadoConciliacion.PENDIENTE,
+                  fechaReporteUtc: new Date(ahora - 2 * DIA_MS),
+                },
+                perfilId: 'perfil-a',
+                nombres: 'Juan',
+                apellidos: 'Pérez',
+                telefonoWhatsapp: null,
+                proximoCorte: '2026-11-20',
+              },
+            ];
+          return [];
+        },
+      });
+
+      const { finanzas } = crearFinanzasFake();
+      const servicio = new CarteraService(db, finanzas);
+      const resultado = await servicio.obtenerCartera(COACH_ID, filtro({ pestana: 'revision' }));
+
+      expect(resultado.items[0].proximoCorte).toBe('2026-11-20');
+    });
+
+    it('F2: la pestaña AL_DÍA incluye proximoCorte', async () => {
+      const ahora = new Date();
+      const periodo = `${ahora.getUTCFullYear()}-${String(ahora.getUTCMonth() + 1).padStart(2, '0')}`;
+      const { db } = crearMockDb({
+        ...respuestasResumen(),
+        cuotas_membresia: (n: number) => {
+          if (n === 1) return [{ total: '0.00', alumnos: 0 }];
+          if (n === 2) return [{ total: '0.00', alumnos: 0 }];
+          if (n === 3) return [{ total: 1 }];
+          if (n === 4) return [{ total: 1 }];
+          if (n === 5)
+            return [
+              {
+                cuotaId: 'cuota-a',
+                clienteId: 'user-a',
+                periodo,
+                fechaCorteUtc: new Date(ahora.getTime() + 20 * DIA_MS),
+                estado: EstadoCuota.AL_DIA,
+                perfilId: 'perfil-a',
+                nombres: 'Juan',
+                apellidos: 'Pérez',
+                telefonoWhatsapp: null,
+                tasaOverride: null,
+                planNombre: 'Presencial Completo',
+                proximoCorte: '2027-01-01',
+              },
+            ];
+          return [];
+        },
+      });
+
+      const { finanzas } = crearFinanzasFake();
+      const servicio = new CarteraService(db, finanzas);
+      const resultado = await servicio.obtenerCartera(COACH_ID, filtro({ pestana: 'al_dia' }));
+
+      expect(resultado.items[0].proximoCorte).toBe('2027-01-01');
+    });
+  });
 });

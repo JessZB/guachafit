@@ -601,6 +601,8 @@ function crearSuperficieFinanciera(
         orderBy: () => q,
         limit: () => q,
         offset: () => q,
+        // M5 P1 (A4): la asignación de suscripción bloquea la fila del alumno (FOR UPDATE).
+        for: () => q,
         then: (resolve: any, reject: any) => Promise.resolve(data).then(resolve, reject),
       };
       return q;
@@ -800,6 +802,10 @@ function crearFinanzasFake() {
     // M5-L1 (H2 de fiabilidad): el barrido diario llama a `emitirCuotasProgramadas` ANTES del
     // barrido de estados; sin este método el TypeError quedaba enmascarado en los logs.
     emitirCuotasProgramadas: vi.fn(async () => ({ evaluadas: 0, emitidas: 0, omitidas: 0 })),
+    // M5-P1 (validación 09, §6.3 del reporte 08): el barrido termina con la reposición; sin este
+    // método la comprobación de deriva C10 no veía `reconciliarRecordatorios` y el fallo quedaba
+    // enmascarado por el try/catch del barrido.
+    reconciliarRecordatorios: vi.fn(async () => ({ evaluadas: 0, agendadas: 0 })),
   } as any;
 }
 
@@ -823,7 +829,12 @@ describe('RNF-003/ADR-011 (etapa 2): tablas financieras siempre dentro de withTe
     expect(superficie.llamadasDb).not.toContain('perfiles_alumno');
   });
 
-  it('crearPlan, listarPlanes y emitirCuota usan { entrenadorId } en UNA transacción cada uno', async () => {
+  it('crearPlan, listarPlanes y asignarSuscripcion usan { entrenadorId } en UNA transacción cada uno', async () => {
+    // M5 P1 (A4): migrado de `emitirCuota` (ruta `POST /finanzas/cuotas/emitir` retirada) a
+    // la única forma de emitir: la SUSCRIPCIÓN. La regla RNF-003 — emisión y suscripción
+    // abren UNA transacción con el GUC `{ entrenadorId }`, `cuotas_membresia` y
+    // `planes_membresia` dentro — queda cubierta en el mismo nivel, con la fecha de inicio
+    // dentro de la ventana de 5 días para que la asignación emita la cuota del ciclo.
     const superficie = crearSuperficieFinanciera({
       ...filasFinanzasBase(),
       cuotas_membresia: [],
@@ -845,12 +856,12 @@ describe('RNF-003/ADR-011 (etapa 2): tablas financieras siempre dentro de withTe
       activo: true,
     } as any);
     await servicio.listarPlanesPorEntrenador(COACH_ID);
-    await servicio.emitirCuota(COACH_ID, {
-      clienteId: ALUMNO_USER_ID,
-      planId: PLAN_FIN_ID,
-      periodo: '2026-10',
-      fechaCorteUtc: '2026-10-31T23:59:59.000Z',
-    } as any);
+    await servicio.asignarSuscripcion(
+      COACH_ID,
+      ALUMNO_USER_ID,
+      { planId: PLAN_FIN_ID, fechaInicio: '2026-10-11' },
+      new Date('2026-10-09T15:00:00.000Z')
+    );
 
     for (const [ctx] of superficie.withTenant.mock.calls) {
       expect(ctx).toEqual({ entrenadorId: COACH_ID });

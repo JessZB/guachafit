@@ -21,6 +21,7 @@ function fila(parcial: Partial<FilaCarteraDTO> = {}): FilaCarteraDTO {
     alumnoUsuarioId: 'u-001',
     alumnoPerfilId: 'al-001',
     alumnoNombre: 'Carlos Mendoza',
+    proximoCorte: null,
     telefonoWhatsapp: '+584121234567',
     cuotaId: 'cuota-1',
     estadoCuota: EstadoCuota.VENCIDA,

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { EstadoCuota, EmitirCuotaSchema } from '@guachafit/shared';
+import { EstadoCuota } from '@guachafit/shared';
 import {
   CuotaState,
   CuotaStateMachine,
@@ -202,23 +202,8 @@ describe('RF-008: Máquina de Estados de la Cuota y Recordatorios Automatizados 
       }).toThrow(/La cuota .* se encuentra anulada/);
     });
 
-    it('debe validar el contrato de emisión de cuota con EmitirCuotaSchema', () => {
-      const payloadValido = {
-        clienteId: '00000000-0000-0000-0000-000000000001',
-        planId: '00000000-0000-0000-0000-000000000002',
-        periodo: '2026-09',
-        montoTotalUsd: '60.00',
-        fechaCorteUtc: '2026-09-15T23:59:59Z',
-      };
-      const resValido = EmitirCuotaSchema.safeParse(payloadValido);
-      expect(resValido.success).toBe(true);
-
-      const payloadInvalido = {
-        ...payloadValido,
-        montoTotalUsd: '0.00', // Monto debe ser > 0
-      };
-      const resInvalido = EmitirCuotaSchema.safeParse(payloadInvalido);
-      expect(resInvalido.success).toBe(false);
-    });
+    // M5 P1 (A4): el test del contrato `EmitirCuotaSchema` se retiró con la ruta
+    // `POST /finanzas/cuotas/emitir`. El contrato VIVO de la emisión (suscripción) está
+    // validado en `rf005-rf008-suscripcion-servicio.spec.ts` §C (AsignarSuscripcionSchema).
   });
 });
