@@ -21,6 +21,11 @@ import { traducirMensajeSuelto } from '../../lib/mensajes-error';
 import { textoConfirmacionReemplazo } from '../../lib/asignacion-masiva';
 import { DialogoConfirmacion } from '../common/DialogoConfirmacion';
 import {
+  filtrarEntradaPeso,
+  filtrarEntradaRepsPrescritas,
+  filtrarEntradaSeries,
+} from '../../lib/entrada-numerica';
+import {
   ETIQUETAS_NIVEL_PLANTILLA,
   aplicarOverridesPreview,
   claveOverrideEjercicio,
@@ -624,7 +629,7 @@ export function SelectorPlantillaAsignacion({
                                   <div className="flex flex-col">
                                     <label
                                       htmlFor={`${idBase}-${bloque.diaId}-${ejIdx}-peso`}
-                                      className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5"
+                                      className="text-xs font-medium text-muted-foreground block mb-0.5"
                                     >
                                       Peso (kg)
                                     </label>
@@ -632,9 +637,12 @@ export function SelectorPlantillaAsignacion({
                                       id={`${idBase}-${bloque.diaId}-${ejIdx}-peso`}
                                       type="text"
                                       value={override?.peso ?? ''}
-                                      onChange={(e) =>
-                                        actualizarOverride(bloque, ej, 'peso', e.target.value)
-                                      }
+                                      inputMode="decimal"
+                                      onChange={(e) => {
+                                        const anterior = override?.peso ?? '';
+                                        const filtrado = filtrarEntradaPeso(e.target.value, anterior, 'kg');
+                                        if (filtrado !== anterior) actualizarOverride(bloque, ej, 'peso', filtrado);
+                                      }}
                                       disabled={asignacionCompletada}
                                       placeholder={
                                         ej.peso && /^\d/.test(ej.peso)
@@ -651,7 +659,7 @@ export function SelectorPlantillaAsignacion({
                                   <div className="flex flex-col">
                                     <label
                                       htmlFor={`${idBase}-${bloque.diaId}-${ejIdx}-series`}
-                                      className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5"
+                                      className="text-xs font-medium text-muted-foreground block mb-0.5"
                                     >
                                       Series
                                     </label>
@@ -660,9 +668,11 @@ export function SelectorPlantillaAsignacion({
                                       type="text"
                                       inputMode="numeric"
                                       value={override?.series ?? ''}
-                                      onChange={(e) =>
-                                        actualizarOverride(bloque, ej, 'series', e.target.value)
-                                      }
+                                      onChange={(e) => {
+                                        const anterior = override?.series ?? '';
+                                        const filtrado = filtrarEntradaSeries(e.target.value, anterior);
+                                        if (filtrado !== anterior) actualizarOverride(bloque, ej, 'series', filtrado);
+                                      }}
                                       disabled={asignacionCompletada}
                                       placeholder={String(ej.series)}
                                       aria-invalid={Boolean(erroresCampo.series)}
@@ -675,7 +685,7 @@ export function SelectorPlantillaAsignacion({
                                   <div className="flex flex-col">
                                     <label
                                       htmlFor={`${idBase}-${bloque.diaId}-${ejIdx}-reps`}
-                                      className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5"
+                                      className="text-xs font-medium text-muted-foreground block mb-0.5"
                                     >
                                       Repeticiones
                                     </label>
@@ -683,9 +693,11 @@ export function SelectorPlantillaAsignacion({
                                       id={`${idBase}-${bloque.diaId}-${ejIdx}-reps`}
                                       type="text"
                                       value={override?.reps ?? ''}
-                                      onChange={(e) =>
-                                        actualizarOverride(bloque, ej, 'reps', e.target.value)
-                                      }
+                                      onChange={(e) => {
+                                        const anterior = override?.reps ?? '';
+                                        const filtrado = filtrarEntradaRepsPrescritas(e.target.value, anterior);
+                                        if (filtrado !== anterior) actualizarOverride(bloque, ej, 'reps', filtrado);
+                                      }}
                                       disabled={asignacionCompletada}
                                       placeholder={ej.reps}
                                       aria-invalid={Boolean(erroresCampo.reps)}

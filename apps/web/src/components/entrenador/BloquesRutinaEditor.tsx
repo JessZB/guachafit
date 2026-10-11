@@ -12,6 +12,7 @@ import {
 import { triggerHaptic } from '../../lib/haptics';
 import { formatearSegundos } from '../../lib/sesion-tiempos';
 import { pluralizar } from '../../lib/pluralizar';
+import { filtrarEntradaRepsPrescritas, filtrarEntradaRpe } from '../../lib/entrada-numerica';
 import { CampoPesoPrescrito } from './CampoPesoPrescrito';
 import { DialogoConfirmacion } from '../common/DialogoConfirmacion';
 import {
@@ -465,7 +466,7 @@ export function BloquesRutinaEditor({
                         <div className="flex flex-col items-center">
                           <span
                             id={`${idBase}-ej-${ejIdx}-series`}
-                            className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5"
+                            className="text-xs font-medium text-muted-foreground block mb-0.5"
                           >
                             Series
                           </span>
@@ -506,17 +507,22 @@ export function BloquesRutinaEditor({
                         <div className="flex flex-col items-center">
                           <label
                             htmlFor={`${idBase}-ej-${ejIdx}-reps`}
-                            className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5"
+                            className="text-xs font-medium text-muted-foreground block mb-0.5"
                           >
                             Repeticiones
                           </label>
                           <input
                             id={`${idBase}-ej-${ejIdx}-reps`}
                             type="text"
+                            inputMode="text"
                             value={ej.reps}
-                            onChange={(e) => actualizarCampoEjercicio(ejIdx, 'reps', e.target.value)}
+                            onChange={(e) => {
+                              const filtrado = filtrarEntradaRepsPrescritas(e.target.value, ej.reps);
+                              if (filtrado !== ej.reps) actualizarCampoEjercicio(ejIdx, 'reps', filtrado);
+                            }}
                             placeholder="8-12"
-                            className="h-8 w-16 sm:w-20 px-2 rounded-lg bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
+                            title="Un número (10), un rango (8-10) o segundos (45 s)"
+                            className="h-11 sm:h-9 w-16 sm:w-20 px-2 rounded-lg bg-background border border-border text-center font-mono font-semibold text-sm text-foreground focus:outline-hidden focus:border-primary transition-colors"
                           />
                         </div>
 
@@ -531,24 +537,29 @@ export function BloquesRutinaEditor({
                           <label
                             htmlFor={`${idBase}-ej-${ejIdx}-rpe`}
                             title="Esfuerzo percibido de 1 a 10"
-                            className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5"
+                            className="text-xs font-medium text-muted-foreground block mb-0.5"
                           >
                             Esfuerzo (1-10)
                           </label>
                           <input
                             id={`${idBase}-ej-${ejIdx}-rpe`}
                             type="text"
+                            inputMode="decimal"
                             value={ej.rpe || ''}
-                            onChange={(e) => actualizarCampoEjercicio(ejIdx, 'rpe', e.target.value)}
+                            onChange={(e) => {
+                              const anterior = ej.rpe || '';
+                              const filtrado = filtrarEntradaRpe(e.target.value, anterior);
+                              if (filtrado !== anterior) actualizarCampoEjercicio(ejIdx, 'rpe', filtrado);
+                            }}
                             placeholder="8"
-                            className="h-8 w-12 sm:w-14 px-1.5 rounded-lg bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
+                            className="h-11 sm:h-9 w-14 sm:w-16 px-1.5 rounded-lg bg-background border border-border text-center font-mono font-semibold text-sm text-foreground focus:outline-hidden focus:border-primary transition-colors"
                           />
                         </div>
 
                         <div className="flex flex-col items-center">
                           <label
                             htmlFor={`${idBase}-ej-${ejIdx}-descanso`}
-                            className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5"
+                            className="text-xs font-medium text-muted-foreground block mb-0.5"
                           >
                             Descanso
                           </label>
@@ -578,7 +589,7 @@ export function BloquesRutinaEditor({
                       <div className="pt-2 border-t border-border/40">
                         <label
                           htmlFor={`${idBase}-ej-${ejIdx}-notas`}
-                          className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-1"
+                          className="text-xs font-medium text-muted-foreground block mb-1"
                         >
                           Notas técnicas para tu alumno (opcional)
                         </label>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { BloqueDiaRutinaDTO } from '@guachafit/shared';
+import { MENSAJE_ESFUERZO_INVALIDO, MENSAJE_PESO_FUERA_DE_RANGO, type BloqueDiaRutinaDTO } from '@guachafit/shared';
+import { MENSAJE_REPS_PRESCRITAS_INVALIDAS } from './entrada-numerica';
 import {
   aplicarOverridesPreview,
   claveOverrideEjercicio,
@@ -81,7 +82,7 @@ describe('construirBloquesParaPlantilla (RF-017 Escenario 1)', () => {
 
     const { errores } = construirBloquesParaPlantilla([vacio, conRpeMalo]);
     expect(errores.some((e) => e.includes('al menos un ejercicio'))).toBe(true);
-    expect(errores.some((e) => e.includes('Esfuerzo no válido'))).toBe(true);
+    expect(errores.some((e) => e.includes(MENSAJE_ESFUERZO_INVALIDO))).toBe(true);
   });
 
   it('bloquea un peso con formato inválido (tres decimales)', () => {
@@ -102,6 +103,11 @@ describe('normalizarAjustePeso (contrato decimal de los ajustes)', () => {
     expect(normalizarAjustePeso('82,25')).toEqual({ valor: '82.25' });
     expect(normalizarAjustePeso('Corporal').error).toBeTruthy();
     expect(normalizarAjustePeso('60.555').error).toBeTruthy();
+  });
+
+  it('C4: rechaza por encima de 999 kg y acepta el tope exacto', () => {
+    expect(normalizarAjustePeso('1000').error).toBe(MENSAJE_PESO_FUERA_DE_RANGO);
+    expect(normalizarAjustePeso('999')).toEqual({ valor: '999' });
   });
 });
 
@@ -150,6 +156,41 @@ describe('validarOverrideEjercicio / construirAjustesPlantilla (Escenario 2)', (
     expect(errores[0].clave).toBe(clave);
     expect(errores[0].mensaje).toContain('Press');
     expect(validarOverrideEjercicio(override({ series: '51' })).series).toBeTruthy();
+  });
+});
+
+describe('reps prescritas con esRepsPrescritasValidas (E3)', () => {
+  it('construirBloquesParaPlantilla rechaza el rango decreciente y el incompleto, nombrando el ejercicio', () => {
+    const bloque = bloqueEdicion();
+    bloque.ejercicios[0].reps = '10-8';
+    bloque.ejercicios[1].reps = '8-';
+
+    const { errores } = construirBloquesParaPlantilla([bloque]);
+
+    expect(
+      errores.some((e) => e.includes(MENSAJE_REPS_PRESCRITAS_INVALIDAS) && e.includes('Press Plano'))
+    ).toBe(true);
+    expect(
+      errores.some(
+        (e) => e.includes(MENSAJE_REPS_PRESCRITAS_INVALIDAS) && e.includes('Remo con Barra')
+      )
+    ).toBe(true);
+  });
+
+  it('construirBloquesParaPlantilla acepta el rango creciente y los segundos', () => {
+    const bloque = bloqueEdicion();
+    bloque.ejercicios[0].reps = '8-10';
+    bloque.ejercicios[1].reps = '45 s';
+
+    const { errores } = construirBloquesParaPlantilla([bloque]);
+    expect(errores).toEqual([]);
+  });
+
+  it('validarOverrideEjercicio marca el rango decreciente y no marca reps vacías', () => {
+    expect(validarOverrideEjercicio(override({ reps: '10-8' })).reps).toBe(
+      MENSAJE_REPS_PRESCRITAS_INVALIDAS
+    );
+    expect(validarOverrideEjercicio(override({ reps: '' })).reps).toBeUndefined();
   });
 });
 

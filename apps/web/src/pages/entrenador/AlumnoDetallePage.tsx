@@ -24,7 +24,13 @@ import {
   type SemaforoPago,
 } from '../../lib/etiquetas-dominio';
 import { etiquetaMetodoPago } from '../../lib/conciliacion-filtros';
-import { normalizarPesoPrescritoTexto } from '../../lib/weight-unit';
+import { normalizarPesoPrescritoTexto, validarRpe } from '../../lib/weight-unit';
+import {
+  MENSAJE_REPS_PRESCRITAS_INVALIDAS,
+  esRepsPrescritasValidas,
+  filtrarEntradaRepsPrescritas,
+  filtrarEntradaRpe,
+} from '../../lib/entrada-numerica';
 import { formatearSegundos } from '../../lib/sesion-tiempos';
 import { pluralizar } from '../../lib/pluralizar';
 import {
@@ -1991,11 +1997,25 @@ export function AlumnoDetallePage() {
             `«${ej.nombre || `Ejercicio ${idx + 1}`}» no está en tu lista de ejercicios. Quítalo y agrégalo de nuevo desde la lista.`
           );
         }
+        const nombreEjercicio = ej.nombre || `Ejercicio ${idx + 1}`;
         const resultadoPeso = normalizarPesoPrescritoTexto(ej.peso);
         if (resultadoPeso.error) {
-          erroresPeso.push(`${ej.nombre || `Ejercicio ${idx + 1}`}: ${resultadoPeso.error}`);
+          erroresPeso.push(`${nombreEjercicio}: ${resultadoPeso.error}`);
         }
-        return { ...ej, peso: resultadoPeso.valor };
+        // Lote E3: mismas reglas que el API, con el ejercicio nombrado en el aviso.
+        if (!esRepsPrescritasValidas(ej.reps || '')) {
+          erroresPeso.push(`${nombreEjercicio}: ${MENSAJE_REPS_PRESCRITAS_INVALIDAS}`);
+        }
+        const resultadoRpe = validarRpe(ej.rpe ?? '');
+        if (!resultadoRpe.ok && resultadoRpe.error) {
+          erroresPeso.push(`${nombreEjercicio}: ${resultadoRpe.error}`);
+        }
+        const { rpe: _rpeOriginal, ...resto } = ej;
+        return {
+          ...resto,
+          peso: resultadoPeso.valor,
+          ...(resultadoRpe.ok && resultadoRpe.rpe ? { rpe: resultadoRpe.rpe } : {}),
+        };
       });
       return {
         diaId: b.diaId || `d${idx + 1}`,
@@ -2014,7 +2034,7 @@ export function AlumnoDetallePage() {
 
     if (erroresPeso.length > 0) {
       triggerHaptic('warning');
-      setRutinaErrorMsg(`Revisa la carga prescrita — ${erroresPeso[0]}`);
+      setRutinaErrorMsg(`Revisa la prescripción — ${erroresPeso[0]}`);
       return;
     }
 
@@ -4404,7 +4424,7 @@ export function AlumnoDetallePage() {
                             <div className="flex items-center gap-2 p-1.5 rounded-xl bg-secondary/30 border border-border/50">
                               {/* Series Stepper */}
                               <div className="flex flex-col items-center">
-                                <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
+                                <label className="text-xs font-medium text-muted-foreground block mb-0.5">
                                   Series
                                 </label>
                                 <div className="flex items-center h-8 rounded-lg bg-background border border-border p-0.5">
@@ -4434,15 +4454,23 @@ export function AlumnoDetallePage() {
 
                               {/* Reps */}
                               <div className="flex flex-col items-center">
-                                <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
-                                  Reps
+                                <label
+                                  htmlFor={`rutina-d${activeDiaIdx}-ej${ejIdx}-reps`}
+                                  className="text-xs font-medium text-muted-foreground block mb-0.5"
+                                >
+                                  Repeticiones
                                 </label>
                                 <input
+                                  id={`rutina-d${activeDiaIdx}-ej${ejIdx}-reps`}
                                   type="text"
                                   value={ej.reps}
-                                  onChange={(e) => actualizarCampoEjercicio(ejIdx, 'reps', e.target.value)}
+                                  onChange={(e) => {
+                                    const filtrado = filtrarEntradaRepsPrescritas(e.target.value, ej.reps ?? '');
+                                    if (filtrado !== ej.reps) actualizarCampoEjercicio(ejIdx, 'reps', filtrado);
+                                  }}
                                   placeholder="8-12"
-                                  className="h-8 w-16 sm:w-20 px-2 rounded-lg bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
+                                  title="Un número (10), un rango (8-10) o segundos (45 s)"
+                                  className="h-11 sm:h-9 w-16 sm:w-20 px-2 rounded-lg bg-background border border-border text-center font-mono font-semibold text-sm text-foreground focus:outline-hidden focus:border-primary transition-colors"
                                 />
                               </div>
 
@@ -4459,21 +4487,30 @@ export function AlumnoDetallePage() {
                             <div className="flex items-center gap-2 p-1.5 rounded-xl bg-secondary/30 border border-border/50">
                               {/* RPE */}
                               <div className="flex flex-col items-center">
-                                <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
-                                  RPE
+                                <label
+                                  htmlFor={`rutina-d${activeDiaIdx}-ej${ejIdx}-rpe`}
+                                  className="text-xs font-medium text-muted-foreground block mb-0.5"
+                                >
+                                  Esfuerzo (1-10)
                                 </label>
                                 <input
+                                  id={`rutina-d${activeDiaIdx}-ej${ejIdx}-rpe`}
                                   type="text"
+                                  inputMode="decimal"
                                   value={ej.rpe || ''}
-                                  onChange={(e) => actualizarCampoEjercicio(ejIdx, 'rpe', e.target.value)}
+                                  onChange={(e) => {
+                                    const anterior = ej.rpe || '';
+                                    const filtrado = filtrarEntradaRpe(e.target.value, anterior);
+                                    if (filtrado !== anterior) actualizarCampoEjercicio(ejIdx, 'rpe', filtrado);
+                                  }}
                                   placeholder="8"
-                                  className="h-8 w-12 sm:w-14 px-1.5 rounded-lg bg-background border border-border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors"
+                                  className="h-11 sm:h-9 w-14 sm:w-16 px-1.5 rounded-lg bg-background border border-border text-center font-mono font-semibold text-sm text-foreground focus:outline-hidden focus:border-primary transition-colors"
                                 />
                               </div>
 
                               {/* Descanso */}
                               <div className="flex flex-col items-center">
-                                <label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block mb-0.5">
+                                <label className="text-xs font-medium text-muted-foreground block mb-0.5">
                                   Descanso
                                 </label>
                                 <select

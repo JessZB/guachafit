@@ -4,7 +4,13 @@
  * conversión, el redondeo y la validación contra el contrato decimal compartido para que
  * ningún valor inválido llegue a la API ni a la cola offline.
  */
-import { DECIMAL_STRING_REGEX } from '@guachafit/shared';
+import {
+  DECIMAL_STRING_REGEX,
+  LIMITES_SERIE,
+  MENSAJE_ESFUERZO_INVALIDO,
+  MENSAJE_PESO_FUERA_DE_RANGO,
+  esRpeValido,
+} from '@guachafit/shared';
 
 export type UnidadPeso = 'kg' | 'lb';
 
@@ -19,9 +25,6 @@ const DECIMALES_DISPLAY = 1;
 
 /** La API acepta hasta 2 decimales en `pesoKg` (DECIMAL_STRING_REGEX). */
 const DECIMALES_KG = 2;
-
-/** Mismo contrato que `RegistrarSerieSchema.rpe` en packages/shared. */
-const RPE_REGEX = /^\d+(\.\d)?$/;
 
 export function esUnidadPeso(valor: unknown): valor is UnidadPeso {
   return valor === 'kg' || valor === 'lb';
@@ -126,8 +129,11 @@ export function convertirEntradaPesoAKg(texto: string, unidad: UnidadPeso): Resu
   if (!Number.isFinite(valor)) {
     return { ok: false, kg: '', error: 'Peso inválido: usa solo números (ej. 28 o 28.5)' };
   }
-  const kg = unidad === 'kg' ? valor : unidadAKg(valor, unidad);
-  return { ok: true, kg: redondearDecimal(kg, DECIMALES_KG).toFixed(DECIMALES_KG) };
+  const kg = redondearDecimal(unidad === 'kg' ? valor : unidadAKg(valor, unidad), DECIMALES_KG);
+  if (kg > LIMITES_SERIE.pesoKgMax) {
+    return { ok: false, kg: '', error: MENSAJE_PESO_FUERA_DE_RANGO };
+  }
+  return { ok: true, kg: kg.toFixed(DECIMALES_KG) };
 }
 
 /**
@@ -170,6 +176,9 @@ export function normalizarPesoPrescritoTexto(texto: string | null | undefined): 
       error: 'Carga inválida: usa números con punto o coma (ej. 60 o 60.5)',
     };
   }
+  if (numeros.some((numero) => Number(numero) > LIMITES_SERIE.pesoKgMax)) {
+    return { valor: conPunto, error: MENSAJE_PESO_FUERA_DE_RANGO };
+  }
   return { valor: conPunto };
 }
 
@@ -177,12 +186,9 @@ export function normalizarPesoPrescritoTexto(texto: string | null | undefined): 
 export function validarRpe(texto: string): { ok: boolean; rpe: string; error?: string } {
   const normalizado = normalizarEntradaDecimal(texto);
   if (normalizado === '') return { ok: true, rpe: '' };
-  if (!RPE_REGEX.test(normalizado)) {
-    return { ok: false, rpe: '', error: 'Esfuerzo no válido: usa un número del 0 al 10 (ej. 8 u 8.5)' };
-  }
-  const valor = Number(normalizado);
-  if (!Number.isFinite(valor) || valor < 0 || valor > 10) {
-    return { ok: false, rpe: '', error: 'Esfuerzo no válido: debe estar entre 0 y 10' };
+  // Mismo contrato que el API (`esRpeValido`): de 1 a 10 en pasos de 0,5.
+  if (!esRpeValido(normalizado)) {
+    return { ok: false, rpe: '', error: MENSAJE_ESFUERZO_INVALIDO };
   }
   return { ok: true, rpe: normalizado };
 }

@@ -46,6 +46,7 @@ import {
   FinalizarSesionResponseDTO,
   SemanaEntrenamientoProgresoDTO,
   CODIGO_SESION_VACIA,
+  LIMITES_SERIE,
 } from '@guachafit/shared';
 import {
   convertirEntradaPesoAKg,
@@ -62,6 +63,7 @@ import {
   validarRpe,
   type UnidadPeso,
 } from '../../lib/weight-unit';
+import { filtrarEntradaPeso, filtrarEntradaReps, filtrarEntradaRpe } from '../../lib/entrada-numerica';
 import {
   Dumbbell,
   Play,
@@ -979,6 +981,13 @@ export function EntrenamientoPage() {
     limpiarBorrador(clave);
   };
 
+  /** Repeticiones: un campo vaciado vuelve a mostrar el último valor guardado al salir. */
+  const handleBlurReps = (serieId: string) => {
+    const clave = `${serieId}:repsLogradas`;
+    if (inputErrors[clave]) return;
+    limpiarBorrador(clave);
+  };
+
   // ===========================================================================
   // WU17: CAPTURA DEL INICIO REAL DE LA SERIE (medición del descanso)
   // ===========================================================================
@@ -1324,6 +1333,9 @@ export function EntrenamientoPage() {
       serie.rpe = resultado.rpe;
     } else {
       const clave = `${serie.id}:repsLogradas`;
+      // Borrador: el campo puede quedar vacío mientras se escribe sin convertirse en 0.
+      setInputDrafts((prev) => ({ ...prev, [clave]: value }));
+      if (value === '') return;
       const numerico = Number(value);
       const errorReps = validarReps(numerico);
       if (errorReps) {
@@ -1372,14 +1384,16 @@ export function EntrenamientoPage() {
         ? Number(normalizarEntradaDecimal(String(serie.pesoKg)))
         : 0;
       const actualKg = Number.isFinite(baseNumerica) ? baseNumerica : 0;
-      const siguienteKg = Math.max(0, actualKg + pasoKg);
+      // Lote E3: el stepper tampoco pasa del tope compartido (999 kg).
+      const siguienteKg = Math.min(LIMITES_SERIE.pesoKgMax, Math.max(0, actualKg + pasoKg));
       serie.pesoKg = siguienteKg > 0 ? redondearDecimal(siguienteKg, 2).toFixed(2) : '';
       limpiarBorrador(clave); // el valor canónico reemplaza cualquier texto en edición
       limpiarErrorInline(clave);
     } else if (field === 'repsLogradas') {
       const current = serie.repsLogradas ?? serie.repsObjetivo ?? 0;
-      const next = Math.max(0, Math.min(200, current + delta));
+      const next = Math.max(0, Math.min(LIMITES_SERIE.repsMax, current + delta));
       serie.repsLogradas = next;
+      limpiarBorrador(`${serie.id}:repsLogradas`);
       limpiarErrorInline(`${serie.id}:repsLogradas`);
     }
     setSesion(updated);
@@ -2391,6 +2405,11 @@ export function EntrenamientoPage() {
                     ? borradorPeso
                     : formatearPesoDesdeKg(serie.pesoKg, unidadPeso) ?? '';
                 const rpeMostrado = borradorRpe !== undefined ? borradorRpe : serie.rpe || '';
+                const borradorReps = inputDrafts[claveReps];
+                const repsMostradas =
+                  borradorReps !== undefined
+                    ? borradorReps
+                    : String(serie.repsLogradas ?? serie.repsObjetivo);
                 const prescritoSerie = pesoPrescritoConCarga(serie);
 
                 return (
@@ -2410,7 +2429,7 @@ export function EntrenamientoPage() {
 
                   {/* Weight Input with Steppers (unidad visible: kg/lb, contrato siempre kg) */}
                   <div className="col-span-2 sm:col-span-4">
-                    <span className="sm:hidden mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <span className="sm:hidden mb-1 block text-xs font-medium text-muted-foreground">
                       Peso ({unidadPeso})
                     </span>
                     <div className="flex items-center rounded-xl bg-background border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 overflow-hidden transition-colors h-12 sm:h-11 shadow-2xs">
@@ -2428,9 +2447,11 @@ export function EntrenamientoPage() {
                         inputMode="decimal"
                         disabled={isReadOnly}
                         value={pesoMostrado}
-                        onChange={(e) =>
-                          handleUpdateSerieValue(ejIdx, sIdx, 'pesoKg', e.target.value)
-                        }
+                        onChange={(e) => {
+                          // Lote E3: lo que no es un peso válido (letras, >999 kg) no llega a escribirse.
+                          const filtrado = filtrarEntradaPeso(e.target.value, pesoMostrado, unidadPeso);
+                          if (filtrado !== pesoMostrado) handleUpdateSerieValue(ejIdx, sIdx, 'pesoKg', filtrado);
+                        }}
                         onBlur={() => handleBlurPeso(serie.id)}
                         placeholder={unidadPeso}
                         aria-label={`Peso real en ${unidadPeso}, serie ${serie.numeroSerie}`}
@@ -2452,7 +2473,7 @@ export function EntrenamientoPage() {
                     {/* Referencia prescrita por serie: permanece visible mientras el alumno edita */}
                     {prescritoSerie && (
                       <span
-                        className="block text-center text-[11px] font-bold text-muted-foreground leading-tight mt-1 sm:mt-0.5 truncate"
+                        className="block text-center text-xs font-medium text-muted-foreground leading-tight mt-1 sm:mt-0.5 truncate"
                         title={`Plan: ${formatearPesoConUnidad(prescritoSerie, unidadPeso)}`}
                       >
                         Plan: {formatearPesoConUnidad(prescritoSerie, unidadPeso)}
@@ -2462,7 +2483,7 @@ export function EntrenamientoPage() {
 
                   {/* Reps Input with Steppers (- / + 1 rep) */}
                   <div className="col-span-2 sm:col-span-3">
-                    <span className="sm:hidden mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <span className="sm:hidden mb-1 block text-xs font-medium text-muted-foreground">
                       Repeticiones
                     </span>
                     <div className="flex items-center rounded-xl bg-background border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 overflow-hidden transition-colors h-12 sm:h-11 shadow-2xs">
@@ -2476,13 +2497,17 @@ export function EntrenamientoPage() {
                         -
                       </button>
                       <input
-                        type="number"
+                        type="text"
                         inputMode="numeric"
                         disabled={isReadOnly}
-                        value={serie.repsLogradas ?? serie.repsObjetivo}
-                        onChange={(e) =>
-                          handleUpdateSerieValue(ejIdx, sIdx, 'repsLogradas', e.target.value)
-                        }
+                        value={repsMostradas}
+                        onChange={(e) => {
+                          // Sin ceros a la izquierda ('05' → '5'); fuera de 0–200 no se escribe.
+                          const nuevo = e.target.value.replace(/^0+(?=\d)/, '');
+                          const filtrado = filtrarEntradaReps(nuevo, repsMostradas);
+                          if (filtrado !== repsMostradas) handleUpdateSerieValue(ejIdx, sIdx, 'repsLogradas', filtrado);
+                        }}
+                        onBlur={() => handleBlurReps(serie.id)}
                         aria-label={`Repeticiones hechas, serie ${serie.numeroSerie}`}
                         aria-invalid={Boolean(errorReps)}
                         className={`w-full min-w-0 text-center py-2 px-1 bg-transparent text-base font-mono font-bold text-foreground focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
@@ -2499,14 +2524,14 @@ export function EntrenamientoPage() {
                         +
                       </button>
                     </div>
-                    <span className="block text-center text-[11px] font-bold text-muted-foreground leading-tight mt-1 sm:mt-0.5">
+                    <span className="block text-center text-xs font-medium text-muted-foreground leading-tight mt-1 sm:mt-0.5">
                       Objetivo: {pluralizar(serie.repsObjetivo, 'repetición', 'repeticiones')}
                     </span>
                   </div>
 
                   {/* RPE Input (0-10 validado contra el contrato) */}
                   <div className="col-span-1 sm:col-span-2">
-                    <span className="sm:hidden mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <span className="sm:hidden mb-1 block text-xs font-medium text-muted-foreground">
                       Esfuerzo (1-10)
                     </span>
                     <input
@@ -2514,9 +2539,10 @@ export function EntrenamientoPage() {
                       inputMode="decimal"
                       disabled={isReadOnly}
                       value={rpeMostrado}
-                      onChange={(e) =>
-                        handleUpdateSerieValue(ejIdx, sIdx, 'rpe', e.target.value)
-                      }
+                      onChange={(e) => {
+                        const filtrado = filtrarEntradaRpe(e.target.value, rpeMostrado);
+                        if (filtrado !== rpeMostrado) handleUpdateSerieValue(ejIdx, sIdx, 'rpe', filtrado);
+                      }}
                       onBlur={() => handleBlurRpe(serie.id)}
                       placeholder="8.5"
                       aria-label={`Esfuerzo de 1 a 10, serie ${serie.numeroSerie}`}

@@ -7,6 +7,8 @@
  */
 import {
   DECIMAL_STRING_REGEX,
+  LIMITES_SERIE,
+  MENSAJE_PESO_FUERA_DE_RANGO,
   UUID_REGEX,
   NivelObjetivoPlantilla,
   type AjusteEjercicioPlantillaDTO,
@@ -14,6 +16,7 @@ import {
 } from '@guachafit/shared';
 import { normalizarEntradaDecimal, normalizarPesoPrescritoTexto, validarRpe } from './weight-unit';
 import { generarTituloBloque, type BloqueEdicion } from './rutina-bloques';
+import { MENSAJE_REPS_PRESCRITAS_INVALIDAS, esRepsPrescritasValidas } from './entrada-numerica';
 
 /** Etiquetas humanas del enum `NivelObjetivoPlantilla` (selects y badges). */
 export const ETIQUETAS_NIVEL_PLANTILLA: Record<NivelObjetivoPlantilla, string> = {
@@ -97,6 +100,10 @@ export function construirBloquesParaPlantilla(bloquesEdit: BloqueEdicion[]): Res
         errores.push(`«${nombre || `Ejercicio ${idx + 1}`}»: ${rpe.error}`);
       }
 
+      if (!esRepsPrescritasValidas(ej.reps || '')) {
+        errores.push(`«${nombre || `Ejercicio ${idx + 1}`}»: ${MENSAJE_REPS_PRESCRITAS_INVALIDAS}`);
+      }
+
       const notas = (ej.notas ?? '').trim();
       return {
         ...(ej.id ? { id: ej.id } : {}),
@@ -172,6 +179,9 @@ export function normalizarAjustePeso(texto: string): { valor?: string; error?: s
   if (!DECIMAL_STRING_REGEX.test(normalizado)) {
     return { error: 'Carga inválida: usa solo números (ej. 60 o 60.5)' };
   }
+  if (Number(normalizado) > LIMITES_SERIE.pesoKgMax) {
+    return { error: MENSAJE_PESO_FUERA_DE_RANGO };
+  }
   return { valor: normalizado };
 }
 
@@ -196,7 +206,9 @@ export function validarOverrideEjercicio(override: OverrideAjusteEjercicio): Err
     }
   }
 
-  if (override.reps.trim().length > 30) {
+  if (override.reps.trim() !== '' && !esRepsPrescritasValidas(override.reps)) {
+    errores.reps = MENSAJE_REPS_PRESCRITAS_INVALIDAS;
+  } else if (override.reps.trim().length > 30) {
     errores.reps = 'Reps: máximo 30 caracteres';
   }
 
