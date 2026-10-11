@@ -13,7 +13,11 @@ import {
   MENSAJE_ALUMNO_NO_ENCONTRADO,
   MENSAJE_SIN_ACCESO_ALUMNO,
 } from '../../common/mensajes-acceso';
-import { CODIGO_SESION_NO_INICIADA, CODIGO_SESION_VACIA } from '@guachafit/shared';
+import {
+  CODIGO_SESION_NO_INICIADA,
+  CODIGO_SESION_VACIA,
+  extraerPesoKgDeTexto,
+} from '@guachafit/shared';
 import { parsearContrato } from '../../common/errores/parsear-contrato';
 import { RegistroIdempotencia } from '../../common/idempotencia/registro-idempotencia';
 import { resolverEjercicioDelCatalogo, validarEjerciciosDeBloques } from './catalogo-ejercicios';
@@ -277,10 +281,13 @@ export function resumirPrescripcionParaAlumno(
   return partes.filter(Boolean).join(' · ');
 }
 
-/** RPE prescrito con un decimal ('8' -> '8.0'); `null` si no hay un número válido. */
+/**
+ * RPE prescrito con un decimal ('8' -> '8.0', '8,5' -> '8.5'); `null` si no hay un número válido.
+ * Acepta la coma decimal igual que `BloqueDiaRutinaSchema.rpe`.
+ */
 function normalizarRpePrescrito(rpe?: string): string | null {
   if (!rpe) return null;
-  const valor = parseFloat(rpe);
+  const valor = parseFloat(rpe.trim().replace(',', '.'));
   return Number.isFinite(valor) ? valor.toFixed(1) : null;
 }
 
@@ -1087,8 +1094,9 @@ export class EntrenamientoService {
       const targetReps = repsMatch ? parseInt(repsMatch[0], 10) : 10;
       // Prescripción cualitativa (ej. "Moderado"): NO materializar 0.00.
       // Se persiste null en peso_prescrito_kg y el texto se conserva en notasCoach.
-      const pesoMatch = (ej.peso || '').match(/\d+(\.\d+)?/);
-      const targetPesoPrescrito = pesoMatch ? parseFloat(pesoMatch[0]).toFixed(2) : null;
+      // Mismo número que valida el contrato (primer número, con coma o punto decimal).
+      const pesoKg = extraerPesoKgDeTexto(ej.peso || '');
+      const targetPesoPrescrito = pesoKg !== null ? pesoKg.toFixed(2) : null;
       const targetRpe = normalizarRpePrescrito(ej.rpe);
 
       for (let s = 1; s <= numSeries; s++) {

@@ -614,15 +614,19 @@ export const BloqueDiaRutinaSchema = z.object({
         /**
          * Carga prescrita como texto libre (ej. '60 kg', '60.5', 'Corporal').
          * Vacío es válido (prescripción cualitativa): la API persiste `peso_prescrito_kg = null`
-         * y conserva el texto en notas, sin materializar '0.00'. Si trae número, respeta el tope.
+         * y conserva el texto en notas, sin materializar '0.00'. Igual que `reps`, ningún número
+         * del texto puede superar el tope ('500-1200 kg' se rechaza aunque se materialice el 500).
          */
         peso: z
           .string()
           .max(30, 'La carga prescrita no puede exceder 30 caracteres')
-          .refine((texto) => {
-            const kg = extraerPesoKgDeTexto(texto);
-            return kg === null || kg <= LIMITES_SERIE.pesoKgMax;
-          }, MENSAJE_PESO_FUERA_DE_RANGO)
+          .refine(
+            (texto) =>
+              (texto.match(/\d+(?:[.,]\d+)?/g) ?? []).every(
+                (n) => Number(n.replace(',', '.')) <= LIMITES_SERIE.pesoKgMax
+              ),
+            MENSAJE_PESO_FUERA_DE_RANGO
+          )
           .optional()
           .default(''),
         /** Esfuerzo como texto ('8', '8.5' o '8,5'); vacío = sin esfuerzo prescrito. */

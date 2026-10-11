@@ -30,6 +30,7 @@ import {
   EstadoAlumno,
   NivelObjetivoPlantilla,
   ModoAsignacionPlantilla,
+  MENSAJE_PESO_FUERA_DE_RANGO,
 } from '@guachafit/shared';
 import * as shared from '@guachafit/shared';
 import { getTableName } from '@guachafit/database';
@@ -38,8 +39,10 @@ import { PlantillasService } from '../../src/modules/entrenamiento/plantillas.se
 // Mismo detector que `api2-errores-claros.spec.ts` (fuente única de `src/common/errores/jerga.ts`).
 import { contieneJerga } from '../../src/common/errores/jerga';
 
-/** Mensajes exactos que el issue de C5 exige para cada límite. */
-const MENSAJE_PESO_FUERA_DE_RANGO = 'El peso no puede superar 999 kg';
+/**
+ * Mensajes exactos que el issue de C5 exige para cada límite. El del peso es el que exporta
+ * `@guachafit/shared` (H5 de la revisión 16): contrato y test no pueden divergir.
+ */
 const MENSAJE_ESFUERZO_INVALIDO =
   'El esfuerzo debe estar entre 1 y 10, en pasos de 0,5 (por ejemplo, 8 o 8.5)';
 const MENSAJE_REPS_FUERA_DE_RANGO = 'Las repeticiones no pueden superar 200';
@@ -184,7 +187,7 @@ describe('LOTE E2 · Límites de las series en el contrato y el API (fase roja)'
         }
       );
 
-      it.each([{ valor: '8.5' }, { valor: '' }, { valor: null }])(
+      it.each([{ valor: '8.5' }, { valor: '10.0' }, { valor: '' }, { valor: null }])(
         '[C5·RegistrarSerie] acepta rpe $valor',
         ({ valor }: { valor: string | null }) => {
           const resultado = RegistrarSerieSchema.safeParse({ ...serieValida, rpe: valor });
@@ -204,7 +207,7 @@ describe('LOTE E2 · Límites de las series en el contrato y el API (fase roja)'
         expect(mensajeDelCampo(resultado, 'pesoKg')).toBe(MENSAJE_PESO_FUERA_DE_RANGO);
       });
 
-      it.each(['8.3', '0', '11'])(
+      it.each(['8.3', '0', '0.5', '11'])(
         "[C5·RegistrarSerie] rechaza rpe '%s' con el mensaje de esfuerzo",
         (rpe: string) => {
           const resultado = RegistrarSerieSchema.safeParse({ ...serieValida, rpe });
@@ -364,7 +367,7 @@ describe('LOTE E2 · Límites de las series en el contrato y el API (fase roja)'
       }
 
       // peso
-      it.each(['Corporal', '', '60 kg', '999', '60,5'])(
+      it.each(['Corporal', '', '60 kg', '999', '60,5', '999.00', '0', ' 72,25 ', '1.000 kg'])(
         '[C5·BloqueDia] acepta peso %j',
         (peso: string) => {
           const resultado = BloqueDiaRutinaSchema.safeParse(bloqueConPeso(peso));
@@ -372,7 +375,7 @@ describe('LOTE E2 · Límites de las series en el contrato y el API (fase roja)'
         }
       );
 
-      it.each(['1000 kg', '1200'])(
+      it.each(['1000 kg', '1200', '500-1200 kg'])(
         "[C5·BloqueDia] rechaza peso '%s' con el mensaje de tope",
         (peso: string) => {
           const resultado = BloqueDiaRutinaSchema.safeParse(bloqueConPeso(peso));
@@ -384,7 +387,7 @@ describe('LOTE E2 · Límites de las series en el contrato y el API (fase roja)'
       );
 
       // rpe
-      it.each([null, '', '8', '8.5', '8,5'] as Array<string | null>)(
+      it.each([null, '', '8', '8.5', '8,5', '10.0'] as Array<string | null>)(
         '[C5·BloqueDia] acepta rpe %j',
         (rpe: string | null) => {
           const resultado = BloqueDiaRutinaSchema.safeParse(bloqueConRpe(rpe));
@@ -392,7 +395,7 @@ describe('LOTE E2 · Límites de las series en el contrato y el API (fase roja)'
         }
       );
 
-      it.each(['8.3', '0', '11', 'alto'])(
+      it.each(['8.3', '0', '0.5', '11', 'alto'])(
         "[C5·BloqueDia] rechaza rpe '%s' con el mensaje de esfuerzo",
         (rpe: string) => {
           const resultado = BloqueDiaRutinaSchema.safeParse(bloqueConRpe(rpe));
@@ -806,11 +809,11 @@ describe('LOTE E2 · Límites de las series en el contrato y el API (fase roja)'
       const sesion = await crearSesionEnProgreso();
       const serieId = sesion.ejercicios[0].series[0].id;
 
-      await expect(
-        entrenamientoService.sincronizarSeries(sesion.id, alumno1, {
-          series: [{ serieId, repsLogradas: 10, pesoKg: '1000', completada: true }],
-        })
-      ).rejects.toThrow(BadRequestException);
+      const rechazo = entrenamientoService.sincronizarSeries(sesion.id, alumno1, {
+        series: [{ serieId, repsLogradas: 10, pesoKg: '1000', completada: true }],
+      });
+      await expect(rechazo).rejects.toThrow(BadRequestException);
+      await expect(rechazo).rejects.toThrow(MENSAJE_PESO_FUERA_DE_RANGO);
 
       const persistida = mockSeriesRegistro.find((s) => s.id === serieId);
       expect(persistida?.pesoKg).toBeNull();
@@ -860,13 +863,13 @@ describe('LOTE E2 · Límites de las series en el contrato y el API (fase roja)'
       };
       mockRutinas.push(previa);
 
-      await expect(
-        entrenamientoService.guardarRutinaSemanal(coach1, alumno1, {
-          alumnoId: alumno1,
-          nombreRutina: 'Semana E2',
-          bloques: [bloqueRutina('1200 kg')],
-        })
-      ).rejects.toThrow(BadRequestException);
+      const rechazo = entrenamientoService.guardarRutinaSemanal(coach1, alumno1, {
+        alumnoId: alumno1,
+        nombreRutina: 'Semana E2',
+        bloques: [bloqueRutina('1200 kg')],
+      });
+      await expect(rechazo).rejects.toThrow(BadRequestException);
+      await expect(rechazo).rejects.toThrow(MENSAJE_PESO_FUERA_DE_RANGO);
 
       expect(previa.activa).toBe(true);
       expect(mockRutinas).toHaveLength(1);
@@ -881,6 +884,59 @@ describe('LOTE E2 · Límites de las series en el contrato y el API (fase roja)'
 
       expect(rutina.bloques[0].ejercicios[0].peso).toBe('999 kg');
       expect(mockRutinas.filter((r) => r.alumnoId === alumno1 && r.activa)).toHaveLength(1);
+    });
+
+    // -------------------------------------------------------------------------
+    // C6.2b · Materialización de la prescripción con coma decimal (H2/H3 de la
+    // revisión 16): lo que el contrato acepta debe llegar igual a las series.
+    // -------------------------------------------------------------------------
+    it("[C6·Materialización] '60,5 kg' y '8,5' llegan a las series como '60.50' y '8.5'", async () => {
+      await entrenamientoService.guardarRutinaSemanal(coach1, alumno1, {
+        alumnoId: alumno1,
+        nombreRutina: 'Semana E2',
+        bloques: [
+          {
+            diaId: 'e2-d1',
+            titulo: 'Día 1: Pierna',
+            ejercicios: [
+              {
+                ejercicioId: ejercicioGlobal,
+                nombre: 'Sentadilla Libre con Barra',
+                series: 3,
+                reps: '10',
+                peso: '60,5 kg',
+                rpe: '8,5',
+              },
+            ],
+          },
+        ],
+      });
+
+      // `entrenarBloqueHoy` es la API pública que termina en `instanciarSesionDesdeBloque`.
+      const sesion = await entrenamientoService.entrenarBloqueHoy(alumno1, 'e2-d1', {
+        timezoneCliente: 'America/Caracas',
+      });
+
+      // H3: el peso materializado es el número que valida el contrato (60.5, no 60.0).
+      expect(mockSeriesRegistro).toHaveLength(3);
+      for (const serie of mockSeriesRegistro) {
+        expect(serie.pesoPrescritoKg).toBe('60.50');
+      }
+
+      // H2: el RPE prescrito conserva la media unidad de '8,5' (antes truncaba a '8.0').
+      expect(mockEjerciciosSesion).toHaveLength(1);
+      expect(mockEjerciciosSesion[0].rpePrescrito).toBe('8.5');
+      for (const serie of mockSeriesRegistro) {
+        expect(serie.rpe).toBe('8.5');
+      }
+
+      // La hidratación que recibe el alumno devuelve lo mismo que quedó materializado.
+      const seriesHidratadas = sesion.ejercicios.flatMap((e) => e.series);
+      expect(seriesHidratadas).toHaveLength(3);
+      for (const serie of seriesHidratadas) {
+        expect(serie.pesoPrescritoKg).toBe('60.50');
+        expect(serie.rpe).toBe('8.5');
+      }
     });
 
     // -------------------------------------------------------------------------
@@ -914,13 +970,13 @@ describe('LOTE E2 · Límites de las series en el contrato y el API (fase roja)'
     it("[C6·Plantilla] rechaza un ajuste con pesoPrescritoKg '1000' y no asigna nada", async () => {
       const plantilla = await crearPlantillaE2();
 
-      await expect(
-        plantillasService.asignarPlantilla(coach1, plantilla.id, {
-          alumnoIds: [alumno1],
-          modo: ModoAsignacionPlantilla.REEMPLAZAR,
-          ajustes: [{ diaId: 'd1', ejercicioId: ejercicioGlobal, pesoPrescritoKg: '1000' }],
-        })
-      ).rejects.toThrow(BadRequestException);
+      const rechazo = plantillasService.asignarPlantilla(coach1, plantilla.id, {
+        alumnoIds: [alumno1],
+        modo: ModoAsignacionPlantilla.REEMPLAZAR,
+        ajustes: [{ diaId: 'd1', ejercicioId: ejercicioGlobal, pesoPrescritoKg: '1000' }],
+      });
+      await expect(rechazo).rejects.toThrow(BadRequestException);
+      await expect(rechazo).rejects.toThrow(MENSAJE_PESO_FUERA_DE_RANGO);
 
       expect(mockRutinas).toHaveLength(0);
       expect(mockRutinas.filter((r) => r.alumnoId === alumno1 && r.activa)).toHaveLength(0);
