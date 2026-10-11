@@ -60,6 +60,7 @@ import {
   CobroDirectoSchema,
   CobroDirectoInteligenteSchema,
   ConciliarTransaccionSchema,
+  RevertirPagoSchema,
   AsignarSuscripcionSchema,
   PreferenciasNotificacionSchema,
   RegistrarDispositivoSchema,
@@ -222,6 +223,7 @@ export type ReportarPagoDTO = z.infer<typeof ReportarPagoSchema>;
 export type CobroDirectoDTO = z.infer<typeof CobroDirectoSchema>;
 export type CobroDirectoInteligenteDTO = z.infer<typeof CobroDirectoInteligenteSchema>;
 export type ConciliarTransaccionDTO = z.infer<typeof ConciliarTransaccionSchema>;
+export type RevertirPagoDTO = z.infer<typeof RevertirPagoSchema>;
 export type AsignarSuscripcionDTO = z.infer<typeof AsignarSuscripcionSchema>;
 /** WU-I (RF-009): filtros server-side del tablero de cartera (`q`, `pestana`, `limit`, `offset`). */
 export type FiltroCarteraDTO = z.infer<typeof FiltroCarteraSchema>;
@@ -661,6 +663,9 @@ export interface TransaccionPagoDetalleDTO {
   comprobanteUrl?: string | null;
   estadoConciliacion: EstadoConciliacion;
   motivoRechazo?: string | null;
+  /** RF-007: motivo y fecha de la reversión de un pago aprobado por error. */
+  motivoReversion?: string | null;
+  fechaReversionUtc?: string | null;
   fechaReporteUtc: string;
   fechaConciliacionUtc?: string | null;
   clienteNombre?: string;

@@ -1405,6 +1405,16 @@ export const ConciliarTransaccionSchema = z
     }
   });
 
+/** RF-007: reversión de un pago aprobado por error (solo el entrenador dueño, con motivo). */
+export const MENSAJE_MOTIVO_REVERSION_OBLIGATORIO = 'Escribe el motivo de la reversión.';
+export const MENSAJE_REVERSION_SOLO_APROBADOS = 'Solo se puede revertir un pago aprobado.';
+export const MENSAJE_REVERSION_SALDO_USADO =
+  'No se puede revertir este pago: el saldo a favor que generó ya se aplicó a otra cuota.';
+
+export const RevertirPagoSchema = z.object({
+  motivo: z.string().trim().min(1, MENSAJE_MOTIVO_REVERSION_OBLIGATORIO).max(500),
+});
+
 // =============================================================================
 // NOTIFICACIONES & PREFERENCIAS SCHEMAS (RF-014, RF-015, RF-016)
 // =============================================================================

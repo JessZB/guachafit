@@ -168,6 +168,8 @@ export enum EstadoConciliacion {
   PENDIENTE = 'pendiente',
   APROBADO = 'aprobado',
   RECHAZADO = 'rechazado',
+  /** RF-007: pago aprobado por error que el entrenador revirtió (queda en el historial). */
+  REVERTIDO = 'revertido',
 }
 
 export enum PlataformaDispositivo {

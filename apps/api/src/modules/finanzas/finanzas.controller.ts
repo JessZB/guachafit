@@ -14,6 +14,7 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { MENSAJE_ALUMNO_NO_ENCONTRADO } from '../../common/mensajes-acceso';
 import { parsearContrato } from '../../common/errores/parsear-contrato';
@@ -33,6 +34,7 @@ import {
   CobroDirectoSchema,
   CobroDirectoInteligenteSchema,
   ConciliarTransaccionSchema,
+  RevertirPagoSchema,
   AsignarSuscripcionSchema,
   LIMITE_BANDEJA_CONCILIACION_POR_DEFECTO,
   LIMITE_BANDEJA_CONCILIACION_MAXIMO,
@@ -359,6 +361,26 @@ export class FinanzasController {
     const dto = parsearContrato(ConciliarTransaccionSchema, body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.finanzasService.conciliarTransaccion(transaccionId, entrenadorId, dto);
+  }
+
+  /**
+   * RF-007: revertir un pago aprobado por error (motivo obligatorio). Rol: Entrenador dueño.
+   */
+  @Post('transacciones/:id/revertir')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR)
+  @HttpCode(HttpStatus.OK)
+  async revertirTransaccion(
+    @Req() req: any,
+    @Param('id') transaccionId: string,
+    @Body() body: unknown
+  ) {
+    if (!UUID_REGEX.test(transaccionId)) {
+      throw new NotFoundException('No encontramos ese pago. Actualiza la pantalla.');
+    }
+    const dto = parsearContrato(RevertirPagoSchema, body);
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    return this.finanzasService.revertirTransaccion(transaccionId, entrenadorId, dto);
   }
 
   /**

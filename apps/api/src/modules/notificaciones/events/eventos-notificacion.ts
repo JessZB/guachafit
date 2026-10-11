@@ -40,6 +40,11 @@ export class PagoRechazadoEvent extends EventoNotificacionDominio {
   static readonly NOMBRE = 'notificacion.pago-rechazado';
 }
 
+/** Finanzas: el coach revirtió un pago aprobado por error (destinatario: alumno). RF-007. */
+export class PagoRevertidoEvent extends EventoNotificacionDominio {
+  static readonly NOMBRE = 'notificacion.pago-revertido';
+}
+
 /** Finanzas: el coach registró un cobro directo en efectivo (destinatario: alumno). */
 export class CobroDirectoRegistradoEvent extends EventoNotificacionDominio {
   static readonly NOMBRE = 'notificacion.cobro-directo-registrado';

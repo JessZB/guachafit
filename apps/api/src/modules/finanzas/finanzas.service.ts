@@ -32,6 +32,7 @@ const MENSAJE_CUOTA_EN_PREPARACION =
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { R2StorageService } from '../antropometria/r2-storage.service';
 import { BillingSchedulerService } from './billing-scheduler.service';
+import { parsearContrato } from '../../common/errores/parsear-contrato';
 import { RegistroIdempotencia } from '../../common/idempotencia/registro-idempotencia';
 import { esViolacionUnicidad } from '../../common/violacion-unicidad.util';
 import { obtenerFechaLocalYyyyMmDd, sumarDiasCalendario } from '../../common/adherencia.util';
@@ -47,6 +48,7 @@ import {
   CobroDirectoRegistradoEvent,
   PagoAprobadoEvent,
   PagoRechazadoEvent,
+  PagoRevertidoEvent,
   PagoReportadoEvent,
 } from '../notificaciones/events/eventos-notificacion';
 import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
@@ -96,6 +98,10 @@ import {
   CobroDirectoDTO,
   CobroDirectoInteligenteDTO,
   ConciliarTransaccionDTO,
+  RevertirPagoDTO,
+  RevertirPagoSchema,
+  MENSAJE_REVERSION_SOLO_APROBADOS,
+  MENSAJE_REVERSION_SALDO_USADO,
   AsignarSuscripcionDTO,
   SuscripcionAlumnoDTO,
   EstadoAlumno,
@@ -270,6 +276,26 @@ export function mensajeCobroConExcedente(
 export function mensajePagoAprobado(base: string, excedenteUsd: string): string {
   if (toCents(excedenteUsd) <= 0) return base;
   return `${base} ${excedenteUsd} USD quedaron como saldo a favor para tu próxima cuota.`;
+}
+
+/**
+ * Estado de una cuota cuando se le retira un abono (rechazo de un pago en revisión o reversión de
+ * uno aprobado, RF-007): otros pagos en revisión mandan; si ya quedó saldada, al día; si conserva
+ * algún abono, parcial; si no, vencida o emitida según el corte.
+ */
+export function estadoCuotaTrasRetirarAbono(cuota: {
+  montoAbonadoUsd: string;
+  saldoPendienteUsd: string;
+  fechaCorteUtc: Date | string;
+  hayOtrasPendientes: boolean;
+  ahora: Date;
+}): EstadoCuota {
+  if (cuota.hayOtrasPendientes) return EstadoCuota.PENDIENTE_REVISION;
+  if (toCents(cuota.saldoPendienteUsd) === 0) return EstadoCuota.AL_DIA;
+  if (toCents(cuota.montoAbonadoUsd) > 0) return EstadoCuota.ABONADA_PARCIAL;
+  return new Date(cuota.fechaCorteUtc).getTime() < cuota.ahora.getTime()
+    ? EstadoCuota.VENCIDA
+    : EstadoCuota.EMITIDA;
 }
 
 /** El efectivo no lleva referencia bancaria: nunca participa en la detección de duplicados. */
@@ -1519,6 +1545,41 @@ export class FinanzasService {
   }
 
   /**
+   * RF-007: resta `excedenteUsd` del saldo a favor del alumno al revertir el pago que lo generó
+   * (simétrica a `acreditarSaldoAFavor`, mismo orden de bloqueos). Si el saldo actual no alcanza,
+   * ese excedente ya se aplicó a otra cuota: 409 y la transacción entera se deshace.
+   */
+  private async retirarSaldoAFavor(
+    tx: TenantTransaction,
+    clienteUsuarioId: string,
+    entrenadorId: string,
+    excedenteUsd: string,
+    ahora: Date
+  ): Promise<void> {
+    if (toCents(excedenteUsd) <= 0) return;
+    const [perfil] = await tx
+      .select({ id: perfilesAlumno.id, saldoAFavorUsd: perfilesAlumno.saldoAFavorUsd })
+      .from(perfilesAlumno)
+      .where(
+        and(
+          eq(perfilesAlumno.usuarioId, clienteUsuarioId),
+          eq(perfilesAlumno.entrenadorId, entrenadorId)
+        )
+      )
+      .for('update');
+    if (!perfil) {
+      throw new NotFoundException(MENSAJE_ALUMNO_NO_ENCONTRADO);
+    }
+    if (toCents(perfil.saldoAFavorUsd) < toCents(excedenteUsd)) {
+      throw new ConflictException(MENSAJE_REVERSION_SALDO_USADO);
+    }
+    await tx
+      .update(perfilesAlumno)
+      .set({ saldoAFavorUsd: subtractDecimals(perfil.saldoAFavorUsd, excedenteUsd), updatedAtUtc: ahora })
+      .where(eq(perfilesAlumno.id, perfil.id));
+  }
+
+  /**
    * Emite la cuota que vence en `corte` (día local) y avanza `proximo_corte` al ciclo siguiente,
    * en la MISMA transacción. Si la cuota de ese periodo ya existe no se duplica, pero el ciclo
    * avanza igual (un barrido repetido es idempotente).
@@ -1878,7 +1939,11 @@ export class FinanzasService {
               eq(transaccionesPago.metodoPago, dto.metodoPago),
               eq(transaccionesPago.referenciaBancaria, dto.referenciaBancaria),
               eq(transaccionesPago.fechaOperacion, dto.fechaOperacion),
-              ne(transaccionesPago.estadoConciliacion, EstadoConciliacion.RECHAZADO)
+              // RF-007: un pago rechazado o revertido no ocupa su referencia.
+              notInArray(transaccionesPago.estadoConciliacion, [
+                EstadoConciliacion.RECHAZADO,
+                EstadoConciliacion.REVERTIDO,
+              ])
             )
           );
 
@@ -2372,19 +2437,14 @@ export class FinanzasService {
             )
           );
 
-        let nuevoEstado: EstadoCuota;
-        if (otrasPendientes.length > 0) {
-          nuevoEstado = EstadoCuota.PENDIENTE_REVISION;
-        } else if (toCents(cuotaLock.saldoPendienteUsd) === 0) {
-          // Otro pago ya la saldó: rechazar este no la vuelve parcial.
-          nuevoEstado = EstadoCuota.AL_DIA;
-        } else if (toCents(cuotaLock.montoAbonadoUsd) > 0) {
-          nuevoEstado = EstadoCuota.ABONADA_PARCIAL;
-        } else if (cuotaLock.fechaCorteUtc.getTime() < nowUtc.getTime()) {
-          nuevoEstado = EstadoCuota.VENCIDA;
-        } else {
-          nuevoEstado = EstadoCuota.EMITIDA;
-        }
+        // Si otro pago ya la saldó, rechazar este no la vuelve parcial.
+        const nuevoEstado = estadoCuotaTrasRetirarAbono({
+          montoAbonadoUsd: cuotaLock.montoAbonadoUsd,
+          saldoPendienteUsd: cuotaLock.saldoPendienteUsd,
+          fechaCorteUtc: cuotaLock.fechaCorteUtc,
+          hayOtrasPendientes: otrasPendientes.length > 0,
+          ahora: nowUtc,
+        });
 
         // Invariante de balance permanece inalterada
         assertBalanceInvariant(
@@ -2469,6 +2529,195 @@ export class FinanzasService {
           )
           .catch(() => {});
       }
+    }
+
+    return resultado;
+  }
+
+  /**
+   * RF-007 (decisión del dueño 2026-10-11): revierte un pago APROBADO por error (de la bandeja o un
+   * cobro en sala). Solo el entrenador dueño, con motivo obligatorio, en cualquier momento.
+   *
+   * Deshace exactamente la aprobación: devuelve a la cuota lo aplicado y quita del saldo a favor el
+   * excedente que generó el pago (RF-006 RN-05). Si ese excedente ya se aplicó a otra cuota (el
+   * saldo a favor actual no alcanza), responde 409 y no cambia nada: nunca queda saldo negativo.
+   * El pago queda `revertido` con su motivo; no se borra.
+   *
+   * Bloqueos en el MISMO orden que la aprobación: transacción → cuota → perfil (ver
+   * `acreditarSaldoAFavor`). Si la cuota vuelve a tener deuda, sus recordatorios se agendan en el
+   * acto (best-effort; BullMQ descarta los repetidos por `jobId`).
+   */
+  async revertirTransaccion(
+    transaccionId: string,
+    entrenadorId: string,
+    dto: RevertirPagoDTO,
+    ahora: Date = new Date()
+  ): Promise<{
+    transaccion: TransaccionPagoDetalleDTO;
+    cuota: CuotaDetalleDTO;
+    mensaje: string;
+  }> {
+    const validado = parsearContrato(RevertirPagoSchema, dto);
+    let zonaAlumno: string | null = null;
+
+    const resultado = await this.db.transaction(async (tx) => {
+      // Contexto RLS del coach (mismo patrón que `conciliarTransaccion`).
+      await tx.execute(
+        sql`SELECT set_config('app.current_entrenador_id', ${entrenadorId}, true)`
+      );
+      await tx.execute(sql`SELECT id FROM transacciones_pago WHERE id = ${transaccionId} FOR UPDATE`);
+
+      const [txRecord] = await tx
+        .select()
+        .from(transaccionesPago)
+        .where(
+          and(
+            eq(transaccionesPago.id, transaccionId),
+            eq(transaccionesPago.entrenadorId, entrenadorId)
+          )
+        );
+      if (!txRecord) {
+        throw new NotFoundException(MENSAJE_PAGO_NO_ENCONTRADO);
+      }
+      if (txRecord.estadoConciliacion !== EstadoConciliacion.APROBADO) {
+        throw new ConflictException(MENSAJE_REVERSION_SOLO_APROBADOS);
+      }
+
+      await tx.execute(sql`SELECT id FROM cuotas_membresia WHERE id = ${txRecord.cuotaId} FOR UPDATE`);
+      const [cuotaLock] = await tx
+        .select()
+        .from(cuotasMembresia)
+        .where(eq(cuotasMembresia.id, txRecord.cuotaId));
+      if (!cuotaLock) {
+        throw new NotFoundException('Cuota asociada a la transacción no encontrada.');
+      }
+      if (cuotaLock.estado === EstadoCuota.ANULADA) {
+        throw new ConflictException('No se puede revertir un pago de una cuota anulada.');
+      }
+
+      const excedente = txRecord.excedenteUsd;
+      const aplicado = subtractDecimals(txRecord.montoEquivalenteUsd, excedente);
+
+      // El excedente que generó este pago sale del saldo a favor; si ya se gastó, no se revierte.
+      await this.retirarSaldoAFavor(
+        tx,
+        cuotaLock.clienteId,
+        cuotaLock.entrenadorId,
+        excedente,
+        ahora
+      );
+
+      // La cuota recupera lo aplicado. El pendiente se recalcula desde el total (también cubre
+      // pagos anteriores a la 0019, cuyo abonado podía superar el total).
+      const nuevoAbonadoCents = Math.max(0, toCents(cuotaLock.montoAbonadoUsd) - toCents(aplicado));
+      const nuevoAbonado = fromCents(nuevoAbonadoCents);
+      const nuevoPendiente = fromCents(
+        Math.max(0, toCents(cuotaLock.montoTotalUsd) - nuevoAbonadoCents)
+      );
+      assertBalanceInvariant(cuotaLock.montoTotalUsd, nuevoAbonado, nuevoPendiente);
+
+      const otrasPendientes = await tx
+        .select({ id: transaccionesPago.id })
+        .from(transaccionesPago)
+        .where(
+          and(
+            eq(transaccionesPago.cuotaId, cuotaLock.id),
+            eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.PENDIENTE)
+          )
+        );
+      const nuevoEstado = estadoCuotaTrasRetirarAbono({
+        montoAbonadoUsd: nuevoAbonado,
+        saldoPendienteUsd: nuevoPendiente,
+        fechaCorteUtc: cuotaLock.fechaCorteUtc,
+        hayOtrasPendientes: otrasPendientes.length > 0,
+        ahora,
+      });
+
+      const [cuotaActualizada] = await tx
+        .update(cuotasMembresia)
+        .set({
+          montoAbonadoUsd: nuevoAbonado,
+          saldoPendienteUsd: nuevoPendiente,
+          estado: nuevoEstado,
+          updatedAtUtc: ahora,
+        })
+        .where(eq(cuotasMembresia.id, cuotaLock.id))
+        .returning();
+
+      const [perfilZona] = await tx
+        .select({ zonaHoraria: perfilesAlumno.zonaHoraria })
+        .from(perfilesAlumno)
+        .where(
+          and(
+            eq(perfilesAlumno.usuarioId, cuotaLock.clienteId),
+            eq(perfilesAlumno.entrenadorId, cuotaLock.entrenadorId)
+          )
+        );
+      zonaAlumno = perfilZona ? zonaDelAlumno(perfilZona) : null;
+
+      const [txRevertida] = await tx
+        .update(transaccionesPago)
+        .set({
+          estadoConciliacion: EstadoConciliacion.REVERTIDO,
+          motivoReversion: validado.motivo,
+          fechaReversionUtc: ahora,
+          updatedAtUtc: ahora,
+        })
+        .where(eq(transaccionesPago.id, transaccionId))
+        .returning();
+
+      return {
+        transaccion: this.mapearTransaccionDTO(txRevertida),
+        cuota: this.mapearCuotaDTO(cuotaActualizada),
+        mensaje:
+          toCents(excedente) > 0
+            ? `Pago revertido. La cuota volvió a su saldo anterior y se descontaron ${excedente} USD del saldo a favor del alumno.`
+            : 'Pago revertido. La cuota volvió a su saldo anterior.',
+      };
+    });
+
+    // La cuota vuelve a tener deuda: se agendan sus recordatorios (incluido el del día si toca).
+    if (toCents(resultado.cuota.saldoPendienteUsd) > 0 && zonaAlumno && this.billingSchedulerService) {
+      try {
+        await this.billingSchedulerService.programarRecordatoriosCuota({
+          id: resultado.cuota.id,
+          fechaCorteUtc: new Date(resultado.cuota.fechaCorteUtc),
+          zonaHoraria: zonaAlumno,
+        });
+      } catch (error) {
+        this.logger.error(
+          `No se pudieron reagendar los recordatorios de la cuota ${resultado.cuota.id}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+
+    if (this.eventEmitter) {
+      // RF-014: aviso fire-and-forget al alumno; un fallo del bus no revierte la reversión.
+      void this.eventEmitter
+        .emitAsync(
+          PagoRevertidoEvent.NOMBRE,
+          new PagoRevertidoEvent({
+            tipoEvento: 'PAGO_REVERTIDO',
+            destinatarioUserId: resultado.transaccion.clienteId,
+            entrenadorId,
+            categoria: 'FINANZAS',
+            titulo: 'Tu entrenador revirtió un pago',
+            cuerpo: `Tu entrenador revirtió tu pago de ${resultado.transaccion.montoOriginal} ${resultado.transaccion.monedaOriginal}. Motivo: ${validado.motivo}. Ese monto vuelve a figurar como pendiente en tu cuota.`,
+            linkAccion: '/app/pagos',
+            datosAdicionales: {
+              transaccionId: resultado.transaccion.id,
+              cuotaId: resultado.cuota.id,
+              motivoReversion: validado.motivo,
+            },
+            esCriticoSeguridad: false,
+            // RNF-004 §3: referencia propia, distinta de la del aviso de aprobación del mismo pago.
+            // Con `_` y nunca `:` (BullMQ 5 rechaza `:` en los jobId; ver notificaciones.config.ts).
+            referenciaId: `${resultado.transaccion.id}_revertido`,
+          })
+        )
+        .catch(() => {});
     }
 
     return resultado;
@@ -2611,6 +2860,8 @@ export class FinanzasService {
       comprobanteStorageKey: t.comprobanteStorageKey,
       estadoConciliacion: t.estadoConciliacion,
       motivoRechazo: t.motivoRechazo,
+      motivoReversion: t.motivoReversion ?? null,
+      fechaReversionUtc: t.fechaReversionUtc ? toIsoSafe(t.fechaReversionUtc) : null,
       fechaReporteUtc: toIsoSafe(t.fechaReporteUtc),
       fechaConciliacionUtc: t.fechaConciliacionUtc ? toIsoSafe(t.fechaConciliacionUtc) : null,
       createdAtUtc: toIsoSafe(t.createdAtUtc),

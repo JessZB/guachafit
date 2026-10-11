@@ -136,6 +136,7 @@ export const estadoConciliacionEnum = pgEnum('enum_estado_conciliacion', [
   EstadoConciliacion.PENDIENTE,
   EstadoConciliacion.APROBADO,
   EstadoConciliacion.RECHAZADO,
+  EstadoConciliacion.REVERTIDO,
 ]);
 /** RF-017 RN-01: nivel objetivo de una plantilla de rutina del banco del coach. */
 export const nivelObjetivoPlantillaEnum = pgEnum('enum_nivel_objetivo_plantilla', [
@@ -748,6 +749,9 @@ export const transaccionesPago = pgTable(
       .default(EstadoConciliacion.PENDIENTE)
       .notNull(),
     motivoRechazo: text('motivo_rechazo'),
+    /** RF-007: reversión de un pago aprobado por error (motivo obligatorio y fecha). */
+    motivoReversion: text('motivo_reversion'),
+    fechaReversionUtc: timestamp('fecha_reversion_utc', { withTimezone: true }),
     fechaReporteUtc: timestamp('fecha_reporte_utc', { withTimezone: true }).defaultNow().notNull(),
     fechaConciliacionUtc: timestamp('fecha_conciliacion_utc', { withTimezone: true }),
     createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
@@ -759,7 +763,11 @@ export const transaccionesPago = pgTable(
     referenciaEntrenadorIndex: uniqueIndex('uq_transaccion_referencia_entrenador')
       .on(table.entrenadorId, table.metodoPago, table.referenciaBancaria, table.fechaOperacion)
       .where(
-        sql`${table.referenciaBancaria} IS NOT NULL AND ${table.metodoPago} NOT IN ('efectivo_usd', 'efectivo_ves') AND ${table.estadoConciliacion} <> 'rechazado'`
+        // RF-007: solo un pago pendiente o aprobado ocupa su referencia; uno rechazado o revertido
+        // la libera (se puede reenviar). Se nombran en positivo valores que ya existían antes de la
+        // 0020: un predicado de índice no admite casts (deben ser IMMUTABLE) y el migrador no deja
+        // usar 'revertido' en la misma transacción que lo crea.
+        sql`${table.referenciaBancaria} IS NOT NULL AND ${table.metodoPago} NOT IN ('efectivo_usd', 'efectivo_ves') AND ${table.estadoConciliacion} IN ('pendiente', 'aprobado')`
       ),
   })
 );
