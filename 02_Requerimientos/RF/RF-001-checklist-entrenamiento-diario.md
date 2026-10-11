@@ -192,7 +192,16 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
 - **Dónde aplica:** pantalla de entrenamiento del alumno (peso, repeticiones —ahora texto con borrador: vaciar el campo ya no lo convierte en 0— y esfuerzo; los botones +/− se detienen en los topes), editor de plantillas, modal de rutina semanal de la ficha (el esfuerzo se valida al guardar; "RPE" pasa a "Esfuerzo (1-10)") y ajustes al asignar una plantilla. Etiquetas de estos campos a 12 px y asociadas a su input.
 - **Evidencia:** web 1356/1356 (lote 141/141), typecheck y build sin errores; revisión de fiabilidad sin bloqueos, sus hallazgos corregidos en `c194caa`.
 
+### 7.13. Vista previa antes de iniciar y series completadas en una línea (2026-10-11, `e440587` y `bb42b55`)
+- **Decisiones del dueño (2026-10-10):** antes de iniciar **no se muestra ningún input** (el alumno podía marcar series de un entrenamiento que no había empezado); una serie completada **no se oculta, se compacta** para liberar pantalla sin perder la sensación de progreso. Criterios de [[00_Reglas_Desarrollo_SDD]] §6 y de la skill ui-ux-pro-max: *progressive-disclosure* y *read-only-distinction*.
+- **Antes de iniciar** (`PLANIFICADA`): "Tu plan de hoy" con el resumen ("5 ejercicios · 18 series") y una lista numerada, sin cards, con una fila por ejercicio (`Sentadilla — 4 × 10 · 60 kg · Esfuerzo 8`) y el botón "Ver técnica" si hay video. El botón **"Iniciar entrenamiento"** queda fijo sobre la barra inferior del móvil (respeta el área segura) y es el único punto de inicio; si el inicio falla, el error aparece **junto al botón**. Componentes `VistaPreviaSesion` y `lib/sesion-vista.ts`.
+- **Serie completada:** una fila de 44 px (`✓ Serie 2 · 60 kg × 10 · Esfuerzo 8`); al tocarla se abre la fila completa para corregir o desmarcar y se compacta al volver a completarla. En una sesión terminada la fila es solo informativa. Componente `FilaSerieCompletada`.
+- **Corrección de un defecto real:** el alumno **no podía marcar una serie sin escribir un peso** (el peso vacío se trataba como inválido, aunque RN-01 lo declara opcional y el API nunca lo prerrellena): ahora se acepta como "sin peso", y un `0.00` guardado se muestra vacío.
+- **Accesibilidad:** el inicio se anuncia ("Entrenamiento en curso") y el cronómetro de una sesión anterior se cierra antes de iniciar para no tapar el botón.
+- **Evidencia:** web 1396/1396 (lote 31/31, incluido el inicio rechazado con 4xx sin modo demo), typecheck y build limpios; revisión de fiabilidad sin bloqueos, sus hallazgos corregidos en `bb42b55`.
+
 ### Pendiente
+- Falta un caso de interacción para una sesión `EN_PROGRESO` cargada desde la caché (cubierto por la lógica existente, sin spec de página).
 - Pegar un texto con unidad (`'60 kg'`) en un campo de peso no escribe nada: solo se aceptan números.
 - El borrador de repeticiones del alumno no tiene spec de interacción; se cubrirá en el lote E5 al extraer la fila de serie a su propio componente.
 - Los pesos corporales de la antropometría (check-in del alumno y medición del entrenador) aún no filtran al teclear (otro dato, de 30 a 300 kg); validan al enviar.
