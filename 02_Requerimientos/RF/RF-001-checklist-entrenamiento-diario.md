@@ -200,8 +200,18 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
 - **Accesibilidad:** el inicio se anuncia ("Entrenamiento en curso") y el cronómetro de una sesión anterior se cierra antes de iniciar para no tapar el botón.
 - **Evidencia:** web 1396/1396 (lote 31/31, incluido el inicio rechazado con 4xx sin modo demo), typecheck y build limpios; revisión de fiabilidad sin bloqueos, sus hallazgos corregidos en `bb42b55`.
 
+### 7.14. Modo foco: una serie a la vez (2026-10-11, `dfc3e51` y `0194fcb`)
+- **Decisión del dueño:** al iniciar no se abruma al alumno con toda la lista; se enfoca la serie actual, con lo que queda del ejercicio y el siguiente ejercicio, y la lista completa queda a un toque. Detalle y alternativas en [[ADR-021-modo-foco-entrenamiento-alumno]].
+- **Mecanismo:** `lib/modo-foco.ts` decide la serie en foco (primera pendiente en orden o, tras **"Hacer ahora"**, la del ejercicio elegido, siguiendo después por los posteriores y en bucle) y los textos ("Ejercicio 2 de 5 · Serie 3 de 4", "Quedan 3 series de este ejercicio", "Siguiente: …"). `ModoFoco` pinta una sola serie con la misma fila que la lista (`renderFilaSerie`): filtros, borradores, envío y cola offline son los mismos. Con todo hecho muestra "Completaste todas las series" y "Finalizar entrenamiento" sigue disponible.
+- **Lista completa:** "Ver entrenamiento completo" muestra las series hechas compactas y las pendientes; "Hacer ahora" por ejercicio y "Volver al enfoque". La cabecera de cada tarjeta se apila en móvil (título sin cortar, badge de descanso de 12 px sin partirse).
+- **Errores y accesibilidad:** un rechazo del servidor sobre una serie que no está en foco se avisa también en el banner superior; el cronómetro solo se cierra si era el de la serie rechazada; el bloque visible del progreso es una región viva que anuncia cada avance.
+- **Evidencia:** web 1448/1452 (los 4 rojos son de la conciliación de RF-006/007, en curso en otra sesión), lote y página 66/66 (incluye rechazo 4xx sin modo demo), typecheck y build limpios; revisión de fiabilidad sin bloqueos, sus hallazgos corregidos en `0194fcb`.
+
 ### Pendiente
 - Falta un caso de interacción para una sesión `EN_PROGRESO` cargada desde la caché (cubierto por la lógica existente, sin spec de página).
+- El ejercicio elegido con "Hacer ahora" se pierde al recargar: el foco vuelve a la primera serie pendiente.
+- `handleToggleSet` copia la sesión de forma superficial y muta la serie del estado anterior (preexistente, sin efecto visible); conviene una copia inmutable.
+- El ajuste del cronómetro de otra serie tras un rechazo (rama "no cerrar") no tiene test propio.
 - Pegar un texto con unidad (`'60 kg'`) en un campo de peso no escribe nada: solo se aceptan números.
 - El borrador de repeticiones del alumno no tiene spec de interacción; se cubrirá en el lote E5 al extraer la fila de serie a su propio componente.
 - Los pesos corporales de la antropometría (check-in del alumno y medición del entrenador) aún no filtran al teclear (otro dato, de 30 a 300 kg); validan al enviar.
