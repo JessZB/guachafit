@@ -2,7 +2,7 @@
 id: HANDOFF-RETOMA
 titulo: "Handoff — Prompt para retomar la validación por módulos"
 fecha: 2026-10-09
-estado: activo
+estado: reemplazado
 tags:
   - handoff
   - retoma
@@ -11,6 +11,8 @@ tags:
 ---
 
 # 🔁 Prompt de retoma (copiar y pegar al inicio de la próxima sesión)
+
+> Reemplazado el 2026-10-10 por [[Handoff_Modulo_Entrenamiento]] (el módulo 5 avanzó: ver ese handoff).
 
 > Uso: abrir una sesión nueva en la bóveda GUACHAFIT y pegar el bloque de abajo tal cual.
 
