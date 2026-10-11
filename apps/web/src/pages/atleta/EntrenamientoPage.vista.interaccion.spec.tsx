@@ -72,6 +72,16 @@ function iniciarEntrenamiento(): void {
   fireEvent.click(iniciar as HTMLElement);
 }
 
+/**
+ * Lote E5: al iniciar, la página enfoca solo la serie actual; la lista completa se abre con
+ * "Ver entrenamiento completo". Los casos que esperan todas las series pulsan antes este botón.
+ */
+function verListaCompleta(): void {
+  const verLista = screen.queryByRole('button', { name: 'Ver entrenamiento completo' });
+  expect(verLista).not.toBeNull();
+  fireEvent.click(verLista as HTMLElement);
+}
+
 afterEach(() => {
   cleanup();
 });
@@ -102,6 +112,7 @@ describe('EntrenamientoPage · vista previa en modo demo (C4)', () => {
   it('al marcar la serie 1 del primer ejercicio aparece la fila compacta y baja en 1 el número de inputs de esa serie', async () => {
     await renderizarDemo();
     iniciarEntrenamiento();
+    verListaCompleta();
 
     const inputsAntes = screen.queryAllByLabelText('Peso real en kg, serie 1');
     expect(inputsAntes.length).toBeGreaterThan(0);
@@ -119,6 +130,7 @@ describe('EntrenamientoPage · vista previa en modo demo (C4)', () => {
   it('al pulsar la fila compacta vuelve la fila completa con su botón "Marcar serie 1 como pendiente"', async () => {
     await renderizarDemo();
     iniciarEntrenamiento();
+    verListaCompleta();
 
     const marcar = screen.queryAllByRole('button', { name: 'Marcar serie 1 como completada' })[0];
     expect(marcar).toBeDefined();
@@ -136,6 +148,7 @@ describe('EntrenamientoPage · vista previa en modo demo (C4)', () => {
   it('marcar la serie 1 sin escribir peso la completa (el peso es opcional) y no aparece ningún "Peso inválido"', async () => {
     await renderizarDemo();
     iniciarEntrenamiento();
+    verListaCompleta();
 
     // No se toca el input de peso: queda vacío (RN-01: el peso es opcional).
     const marcar = screen.queryAllByRole('button', { name: 'Marcar serie 1 como completada' })[0];
@@ -153,6 +166,7 @@ describe('EntrenamientoPage · vista previa en modo demo (C4)', () => {
   it('desmarcar desde la fila abierta la deja pendiente y al volver a marcarla se compacta de nuevo', async () => {
     await renderizarDemo();
     iniciarEntrenamiento();
+    verListaCompleta();
 
     // Completar la serie 1 → fila compacta.
     const marcar = screen.queryAllByRole('button', { name: 'Marcar serie 1 como completada' })[0];

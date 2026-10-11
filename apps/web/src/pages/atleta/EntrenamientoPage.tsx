@@ -66,6 +66,8 @@ import {
 import { filtrarEntradaPeso, filtrarEntradaReps, filtrarEntradaRpe } from '../../lib/entrada-numerica';
 import { VistaPreviaSesion } from '../../components/atleta/VistaPreviaSesion';
 import { FilaSerieCompletada } from '../../components/atleta/FilaSerieCompletada';
+import { ModoFoco } from '../../components/atleta/ModoFoco';
+import { posicionEnFoco } from '../../lib/modo-foco';
 import {
   Dumbbell,
   Play,
@@ -539,6 +541,14 @@ export function EntrenamientoPage() {
   const [isStarting, setIsStarting] = useState(false);
   // Lote E4: series completadas que el alumno abrió para corregir (el resto se ve compacto).
   const [seriesEnCorreccion, setSeriesEnCorreccion] = useState<Set<string>>(() => new Set());
+  // Lote E5: en curso se ve el modo foco; la lista completa se abre a demanda. "Hacer ahora"
+  // fija el ejercicio preferido del foco (la máquina del siguiente puede estar ocupada).
+  const [vistaEnCurso, setVistaEnCurso] = useState<'foco' | 'lista'>('foco');
+  const [ejercicioPreferido, setEjercicioPreferido] = useState<number | null>(null);
+  useEffect(() => {
+    setVistaEnCurso('foco');
+    setEjercicioPreferido(null);
+  }, [sesion?.id]);
   const abrirCorreccionSerie = (serieId: string) =>
     setSeriesEnCorreccion((previas) => new Set(previas).add(serieId));
   // Lote E4 (H3): sin entrenamiento iniciado no hay descanso que medir; el cronómetro abierto
@@ -1703,6 +1713,252 @@ export function EntrenamientoPage() {
     ? formatearRangoHorario(sesion.fechaInicioUtc, sesion.fechaFinUtc)
     : null;
 
+  /** Lote E5: fila de una serie, compartida por el modo foco y la lista completa. */
+  const renderFilaSerie = (ejIdx: number, sIdx: number): React.ReactNode => {
+    if (!sesion) return null;
+    const ejercicioSesion = sesion.ejercicios[ejIdx];
+    const serie = ejercicioSesion.series[sIdx];
+    const descansosReales = descansosRealesEntreSeries(ejercicioSesion.series);
+    const pasoVisible = pasoPesoEnUnidad(unidadPeso);
+                const clavePeso = `${serie.id}:pesoKg`;
+                const claveRpe = `${serie.id}:rpe`;
+                const claveReps = `${serie.id}:repsLogradas`;
+                const borradorPeso = inputDrafts[clavePeso];
+                const borradorRpe = inputDrafts[claveRpe];
+                const errorPeso = inputErrors[clavePeso];
+                const errorRpe = inputErrors[claveRpe];
+                const errorReps = inputErrors[claveReps];
+                // D6: rechazo del servidor al guardar la serie (se muestra junto a ella).
+                const errorEnvio = inputErrors[`${serie.id}:envio`];
+                const errorSerie = errorPeso ?? errorRpe ?? errorReps ?? errorEnvio ?? null;
+                const pesoMostrado =
+                  borradorPeso !== undefined
+                    ? borradorPeso
+                    : Number(serie.pesoKg) > 0
+                    ? formatearPesoDesdeKg(serie.pesoKg, unidadPeso) ?? ''
+                    : '';
+                const rpeMostrado = borradorRpe !== undefined ? borradorRpe : serie.rpe || '';
+                const borradorReps = inputDrafts[claveReps];
+                const repsMostradas =
+                  borradorReps !== undefined
+                    ? borradorReps
+                    : String(serie.repsLogradas ?? serie.repsObjetivo);
+                const prescritoSerie = pesoPrescritoConCarga(serie);
+
+                if (serie.completada && !seriesEnCorreccion.has(serie.id) && !errorSerie) {
+                  return (
+                    <FilaSerieCompletada
+                      key={serie.id}
+                      serie={serie}
+                      unidadPeso={unidadPeso}
+                      onCorregir={isReadOnly ? undefined : () => abrirCorreccionSerie(serie.id)}
+                    />
+                  );
+                }
+
+                return (
+                <div
+                  key={serie.id}
+                  className={`p-2 sm:p-2.5 rounded-2xl border transition-all ${
+                    serie.completada
+                      ? 'bg-success/10 border-success/30'
+                      : 'bg-secondary/30 border-border hover:border-primary/40'
+                  }`}
+                >
+                  {/* Móvil: una columna por campo (input legible + steppers táctiles). Desktop: grid de 12. */}
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-12 sm:gap-2.5 sm:items-start">
+                  <span className="col-span-2 sm:col-span-1 self-center text-left sm:text-center font-mono font-bold text-sm sm:text-base text-foreground">
+                    #{serie.numeroSerie}
+                  </span>
+
+                  {/* Weight Input with Steppers (unidad visible: kg/lb, contrato siempre kg) */}
+                  <div className="col-span-2 sm:col-span-4">
+                    <span className="sm:hidden mb-1 block text-xs font-medium text-muted-foreground">
+                      Peso ({unidadPeso})
+                    </span>
+                    <div className="flex items-center rounded-xl bg-background border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 overflow-hidden transition-colors h-12 sm:h-11 shadow-2xs">
+                      <button
+                        type="button"
+                        disabled={isReadOnly}
+                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'pesoKg', -1)}
+                        aria-label={`Restar ${pasoVisible} ${unidadPeso}`}
+                        className="h-full w-11 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        disabled={isReadOnly}
+                        value={pesoMostrado}
+                        onChange={(e) => {
+                          // Lote E3: lo que no es un peso válido (letras, >999 kg) no llega a escribirse.
+                          const filtrado = filtrarEntradaPeso(e.target.value, pesoMostrado, unidadPeso);
+                          if (filtrado !== pesoMostrado) handleUpdateSerieValue(ejIdx, sIdx, 'pesoKg', filtrado);
+                        }}
+                        onBlur={() => handleBlurPeso(serie.id)}
+                        placeholder={unidadPeso}
+                        aria-label={`Peso real en ${unidadPeso}, serie ${serie.numeroSerie}`}
+                        aria-invalid={Boolean(errorPeso)}
+                        className={`w-full min-w-0 text-center py-2 px-1 bg-transparent text-base font-mono font-bold text-foreground focus:outline-hidden ${
+                          errorPeso ? 'text-destructive' : ''
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        disabled={isReadOnly}
+                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'pesoKg', 1)}
+                        aria-label={`Sumar ${pasoVisible} ${unidadPeso}`}
+                        className="h-full w-11 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
+                      >
+                        +
+                      </button>
+                    </div>
+                    {/* Referencia prescrita por serie: permanece visible mientras el alumno edita */}
+                    {prescritoSerie && (
+                      <span
+                        className="block text-center text-xs font-medium text-muted-foreground leading-tight mt-1 sm:mt-0.5 truncate"
+                        title={`Plan: ${formatearPesoConUnidad(prescritoSerie, unidadPeso)}`}
+                      >
+                        Plan: {formatearPesoConUnidad(prescritoSerie, unidadPeso)}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Reps Input with Steppers (- / + 1 rep) */}
+                  <div className="col-span-2 sm:col-span-3">
+                    <span className="sm:hidden mb-1 block text-xs font-medium text-muted-foreground">
+                      Repeticiones
+                    </span>
+                    <div className="flex items-center rounded-xl bg-background border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 overflow-hidden transition-colors h-12 sm:h-11 shadow-2xs">
+                      <button
+                        type="button"
+                        disabled={isReadOnly}
+                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'repsLogradas', -1)}
+                        aria-label="Restar 1 repetición"
+                        className="h-full w-11 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        disabled={isReadOnly}
+                        value={repsMostradas}
+                        onChange={(e) => {
+                          // Sin ceros a la izquierda ('05' → '5'); fuera de 0–200 no se escribe.
+                          const nuevo = e.target.value.replace(/^0+(?=\d)/, '');
+                          const filtrado = filtrarEntradaReps(nuevo, repsMostradas);
+                          if (filtrado !== repsMostradas) handleUpdateSerieValue(ejIdx, sIdx, 'repsLogradas', filtrado);
+                        }}
+                        onBlur={() => handleBlurReps(serie.id)}
+                        aria-label={`Repeticiones hechas, serie ${serie.numeroSerie}`}
+                        aria-invalid={Boolean(errorReps)}
+                        className={`w-full min-w-0 text-center py-2 px-1 bg-transparent text-base font-mono font-bold text-foreground focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                          errorReps ? 'text-destructive' : ''
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        disabled={isReadOnly}
+                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'repsLogradas', 1)}
+                        aria-label="Sumar 1 repetición"
+                        className="h-full w-11 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
+                      >
+                        +
+                      </button>
+                    </div>
+                    <span className="block text-center text-xs font-medium text-muted-foreground leading-tight mt-1 sm:mt-0.5">
+                      Objetivo: {pluralizar(serie.repsObjetivo, 'repetición', 'repeticiones')}
+                    </span>
+                  </div>
+
+                  {/* RPE Input (0-10 validado contra el contrato) */}
+                  <div className="col-span-1 sm:col-span-2">
+                    <span className="sm:hidden mb-1 block text-xs font-medium text-muted-foreground">
+                      Esfuerzo (1-10)
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      disabled={isReadOnly}
+                      value={rpeMostrado}
+                      onChange={(e) => {
+                        const filtrado = filtrarEntradaRpe(e.target.value, rpeMostrado);
+                        if (filtrado !== rpeMostrado) handleUpdateSerieValue(ejIdx, sIdx, 'rpe', filtrado);
+                      }}
+                      onBlur={() => handleBlurRpe(serie.id)}
+                      placeholder="8.5"
+                      aria-label={`Esfuerzo de 1 a 10, serie ${serie.numeroSerie}`}
+                      aria-invalid={Boolean(errorRpe)}
+                      className={`w-full text-center py-2 px-1 rounded-xl bg-background border text-base sm:text-sm font-mono font-bold text-foreground focus:outline-hidden focus:border-primary focus:ring-2 focus:ring-primary/25 h-12 sm:h-11 shadow-2xs ${
+                        errorRpe ? 'border-destructive text-destructive' : 'border-border'
+                      }`}
+                    />
+                  </div>
+
+                  {/* Complete Checkbox */}
+                  <div className="col-span-1 sm:col-span-2">
+                    <span className="sm:hidden mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Listo
+                    </span>
+                    <div className="flex sm:justify-center">
+                      <button
+                        type="button"
+                        disabled={isReadOnly}
+                        onClick={() => handleToggleSet(ejIdx, sIdx)}
+                        aria-label={`Marcar serie ${serie.numeroSerie} como ${serie.completada ? 'pendiente' : 'completada'}`}
+                        className={`h-12 w-12 sm:h-11 sm:w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary ${
+                          serie.completada
+                            ? 'bg-success-strong text-white shadow-md shadow-success-strong/25 scale-105'
+                            : 'bg-background border-2 border-border text-muted-foreground hover:border-primary'
+                        }`}
+                      >
+                        {serie.completada && <Check className="h-5 w-5 sm:h-6 sm:w-6 stroke-[3.5]" />}
+                      </button>
+                    </div>
+                  </div>
+                  </div>
+
+                  {/* WU17: captura sin fricción del inicio real (mide el descanso de la próxima serie) */}
+                  {!isReadOnly && !serie.completada && !serie.timestampInicioUtc && (
+                    <button
+                      type="button"
+                      onClick={() => handleIniciarSerie(ejIdx, sIdx)}
+                      title="Marca el inicio de esta serie para medir tu descanso real"
+                      className="mt-2 w-full min-h-11 py-2 rounded-xl inline-flex items-center justify-center gap-1.5 text-xs font-bold bg-primary/10 text-primary border border-primary/25 hover:bg-primary/20 transition-colors cursor-pointer active:scale-95"
+                    >
+                      <Play className="h-3 w-3 fill-current" />
+                      <span>Iniciar serie</span>
+                    </button>
+                  )}
+                  {!isReadOnly && !serie.completada && serie.timestampInicioUtc && (
+                    <p className="mt-1.5 px-1 text-[11px] font-mono font-bold text-primary">
+                      Iniciada {formatFechaHoraLocal(serie.timestampInicioUtc) ?? ''}
+                    </p>
+                  )}
+                  {/* WU17: feedback inmediato del descanso real al cerrar la serie */}
+                  {serie.completada && descansosReales[sIdx] !== null && (
+                    <p className="mt-1.5 px-1 text-[11px] font-mono font-bold text-primary flex items-center gap-1">
+                      <Zap className="h-3 w-3 shrink-0" />
+                      <span>Descanso real: {formatearDeltaSegundos(descansosReales[sIdx])}</span>
+                    </p>
+                  )}
+
+                  {/* WU3b: error inline, nunca silencioso */}
+                  {errorSerie && (
+                    <p
+                      role="alert"
+                      className="mt-1.5 px-1 text-xs font-bold text-destructive flex items-center gap-1"
+                    >
+                      <AlertTriangle className="h-3 w-3 shrink-0" />
+                      <span>{errorSerie}</span>
+                    </p>
+                  )}
+                </div>
+                );
+  };
+
   return (
     <div className="space-y-6">
       {/* Lote E4 (H7): anuncia el cambio de estado al iniciar, cuando la vista previa desaparece. */}
@@ -2295,12 +2551,34 @@ export function EntrenamientoPage() {
           error={actionError}
           onVerTecnica={handleAbrirVideo}
         />
+      ) : isInProgress && vistaEnCurso === 'foco' ? (
+        <ModoFoco
+          sesion={sesion}
+          posicion={posicionEnFoco(sesion, ejercicioPreferido)}
+          unidadPeso={unidadPeso}
+          rpeSugeridoPorEjercicio={Object.fromEntries(
+            sesion.ejercicios.map((ej) => [
+              ej.id,
+              resolverRpeSugerido(ej, rpeSugeridoPorEjercicio[ej.id]),
+            ])
+          )}
+          renderSerie={renderFilaSerie}
+          onVerListaCompleta={() => setVistaEnCurso('lista')}
+          onVerTecnica={handleAbrirVideo}
+        />
       ) : (
       <div className="space-y-4">
+        {isInProgress && (
+          <button
+            type="button"
+            onClick={() => setVistaEnCurso('foco')}
+            className="w-full min-h-11 px-4 py-2.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold inline-flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary"
+          >
+            Volver al enfoque
+          </button>
+        )}
         {sesion.ejercicios.map((ejercicioSesion, ejIdx) => {
           const prescripcion = calcularResumenPrescripcion(ejercicioSesion);
-          // WU17: descanso real derivado por serie (inicio N − completada N−1); null sin marcas.
-          const descansosReales = descansosRealesEntreSeries(ejercicioSesion.series);
           // Esfuerzo e indicaciones del entrenador en campos propios (con respaldo
           // para sesiones anteriores: RPE capturado al cargar y la nota de siempre).
           const rpeSugerido = resolverRpeSugerido(
@@ -2318,7 +2596,6 @@ export function EntrenamientoPage() {
                   prescripcion.pesosKg[prescripcion.pesosKg.length - 1],
                   unidadPeso
                 )}`;
-          const pasoVisible = pasoPesoEnUnidad(unidadPeso);
           const nombreEjercicio = ejercicioSesion.ejercicio?.nombre || `Ejercicio #${ejIdx + 1}`;
           const videoUrl = ejercicioSesion.ejercicio?.videoUrl || null;
 
@@ -2328,19 +2605,19 @@ export function EntrenamientoPage() {
             className="p-4 sm:p-5 rounded-3xl bg-card border border-border/80 shadow-xs space-y-3"
           >
             {/* Exercise Header */}
-            <div className="flex items-start justify-between gap-2 border-b border-border/50 pb-3">
-              <div>
-                <span className="text-xs font-bold text-primary uppercase tracking-wider">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 border-b border-border/50 pb-3">
+              <div className="min-w-0 flex-1">
+                <span className="text-xs font-semibold text-primary">
                   Ejercicio {ejIdx + 1}
                 </span>
-                <h3 className="font-bold text-lg sm:text-xl text-foreground tracking-tight mt-0.5">
+                <h3 className="font-bold text-lg sm:text-xl text-foreground tracking-tight mt-0.5 break-words">
                   {nombreEjercicio}
                 </h3>
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   <span className="text-xs sm:text-sm text-muted-foreground font-semibold">
                     {ejercicioSesion.ejercicio?.grupoMuscular}
                   </span>
-                  <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-secondary text-foreground border border-border">
+                  <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-mono font-semibold px-2 py-0.5 rounded-md bg-secondary text-foreground border border-border">
                     <Timer className="h-3 w-3 text-primary" />
                     <span>Descanso: {formatearSegundos(ejercicioSesion.descansoPrescritoSegundos || 90)}</span>
                   </span>
@@ -2358,8 +2635,21 @@ export function EntrenamientoPage() {
                   )}
                 </div>
               </div>
+              {isInProgress && ejercicioSesion.series.some((serie) => !serie.completada) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEjercicioPreferido(ejIdx);
+                    setVistaEnCurso('foco');
+                  }}
+                  aria-label={`Hacer ahora: ${nombreEjercicio}`}
+                  className="min-h-11 shrink-0 self-start px-3 py-1.5 rounded-xl border border-primary/30 bg-primary/10 text-primary text-sm font-semibold cursor-pointer hover:bg-primary/20 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  Hacer ahora
+                </button>
+              )}
               {notaResumen && (
-                <div className="p-2.5 rounded-2xl bg-secondary/60 text-muted-foreground flex items-center gap-2 max-w-xs text-xs">
+                <div className="p-2.5 rounded-2xl bg-secondary/60 text-muted-foreground flex items-center gap-2 sm:max-w-xs text-xs min-w-0">
                   <Info className="h-4 w-4 text-primary shrink-0" />
                   <span className="truncate">{notaResumen}</span>
                 </div>
@@ -2412,245 +2702,7 @@ export function EntrenamientoPage() {
                 <span className="col-span-2 text-center">Listo</span>
               </div>
 
-              {ejercicioSesion.series.map((serie, sIdx) => {
-                const clavePeso = `${serie.id}:pesoKg`;
-                const claveRpe = `${serie.id}:rpe`;
-                const claveReps = `${serie.id}:repsLogradas`;
-                const borradorPeso = inputDrafts[clavePeso];
-                const borradorRpe = inputDrafts[claveRpe];
-                const errorPeso = inputErrors[clavePeso];
-                const errorRpe = inputErrors[claveRpe];
-                const errorReps = inputErrors[claveReps];
-                // D6: rechazo del servidor al guardar la serie (se muestra junto a ella).
-                const errorEnvio = inputErrors[`${serie.id}:envio`];
-                const errorSerie = errorPeso ?? errorRpe ?? errorReps ?? errorEnvio ?? null;
-                const pesoMostrado =
-                  borradorPeso !== undefined
-                    ? borradorPeso
-                    : Number(serie.pesoKg) > 0
-                    ? formatearPesoDesdeKg(serie.pesoKg, unidadPeso) ?? ''
-                    : '';
-                const rpeMostrado = borradorRpe !== undefined ? borradorRpe : serie.rpe || '';
-                const borradorReps = inputDrafts[claveReps];
-                const repsMostradas =
-                  borradorReps !== undefined
-                    ? borradorReps
-                    : String(serie.repsLogradas ?? serie.repsObjetivo);
-                const prescritoSerie = pesoPrescritoConCarga(serie);
-
-                if (serie.completada && !seriesEnCorreccion.has(serie.id) && !errorSerie) {
-                  return (
-                    <FilaSerieCompletada
-                      key={serie.id}
-                      serie={serie}
-                      unidadPeso={unidadPeso}
-                      onCorregir={isReadOnly ? undefined : () => abrirCorreccionSerie(serie.id)}
-                    />
-                  );
-                }
-
-                return (
-                <div
-                  key={serie.id}
-                  className={`p-2 sm:p-2.5 rounded-2xl border transition-all ${
-                    serie.completada
-                      ? 'bg-success/10 border-success/30'
-                      : 'bg-secondary/30 border-border hover:border-primary/40'
-                  }`}
-                >
-                  {/* Móvil: una columna por campo (input legible + steppers táctiles). Desktop: grid de 12. */}
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-12 sm:gap-2.5 sm:items-start">
-                  <span className="col-span-2 sm:col-span-1 self-center text-left sm:text-center font-mono font-bold text-sm sm:text-base text-foreground">
-                    #{serie.numeroSerie}
-                  </span>
-
-                  {/* Weight Input with Steppers (unidad visible: kg/lb, contrato siempre kg) */}
-                  <div className="col-span-2 sm:col-span-4">
-                    <span className="sm:hidden mb-1 block text-xs font-medium text-muted-foreground">
-                      Peso ({unidadPeso})
-                    </span>
-                    <div className="flex items-center rounded-xl bg-background border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 overflow-hidden transition-colors h-12 sm:h-11 shadow-2xs">
-                      <button
-                        type="button"
-                        disabled={isReadOnly}
-                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'pesoKg', -1)}
-                        aria-label={`Restar ${pasoVisible} ${unidadPeso}`}
-                        className="h-full w-11 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
-                      >
-                        -
-                      </button>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        disabled={isReadOnly}
-                        value={pesoMostrado}
-                        onChange={(e) => {
-                          // Lote E3: lo que no es un peso válido (letras, >999 kg) no llega a escribirse.
-                          const filtrado = filtrarEntradaPeso(e.target.value, pesoMostrado, unidadPeso);
-                          if (filtrado !== pesoMostrado) handleUpdateSerieValue(ejIdx, sIdx, 'pesoKg', filtrado);
-                        }}
-                        onBlur={() => handleBlurPeso(serie.id)}
-                        placeholder={unidadPeso}
-                        aria-label={`Peso real en ${unidadPeso}, serie ${serie.numeroSerie}`}
-                        aria-invalid={Boolean(errorPeso)}
-                        className={`w-full min-w-0 text-center py-2 px-1 bg-transparent text-base font-mono font-bold text-foreground focus:outline-hidden ${
-                          errorPeso ? 'text-destructive' : ''
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        disabled={isReadOnly}
-                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'pesoKg', 1)}
-                        aria-label={`Sumar ${pasoVisible} ${unidadPeso}`}
-                        className="h-full w-11 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
-                      >
-                        +
-                      </button>
-                    </div>
-                    {/* Referencia prescrita por serie: permanece visible mientras el alumno edita */}
-                    {prescritoSerie && (
-                      <span
-                        className="block text-center text-xs font-medium text-muted-foreground leading-tight mt-1 sm:mt-0.5 truncate"
-                        title={`Plan: ${formatearPesoConUnidad(prescritoSerie, unidadPeso)}`}
-                      >
-                        Plan: {formatearPesoConUnidad(prescritoSerie, unidadPeso)}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Reps Input with Steppers (- / + 1 rep) */}
-                  <div className="col-span-2 sm:col-span-3">
-                    <span className="sm:hidden mb-1 block text-xs font-medium text-muted-foreground">
-                      Repeticiones
-                    </span>
-                    <div className="flex items-center rounded-xl bg-background border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 overflow-hidden transition-colors h-12 sm:h-11 shadow-2xs">
-                      <button
-                        type="button"
-                        disabled={isReadOnly}
-                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'repsLogradas', -1)}
-                        aria-label="Restar 1 repetición"
-                        className="h-full w-11 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
-                      >
-                        -
-                      </button>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        disabled={isReadOnly}
-                        value={repsMostradas}
-                        onChange={(e) => {
-                          // Sin ceros a la izquierda ('05' → '5'); fuera de 0–200 no se escribe.
-                          const nuevo = e.target.value.replace(/^0+(?=\d)/, '');
-                          const filtrado = filtrarEntradaReps(nuevo, repsMostradas);
-                          if (filtrado !== repsMostradas) handleUpdateSerieValue(ejIdx, sIdx, 'repsLogradas', filtrado);
-                        }}
-                        onBlur={() => handleBlurReps(serie.id)}
-                        aria-label={`Repeticiones hechas, serie ${serie.numeroSerie}`}
-                        aria-invalid={Boolean(errorReps)}
-                        className={`w-full min-w-0 text-center py-2 px-1 bg-transparent text-base font-mono font-bold text-foreground focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                          errorReps ? 'text-destructive' : ''
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        disabled={isReadOnly}
-                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'repsLogradas', 1)}
-                        aria-label="Sumar 1 repetición"
-                        className="h-full w-11 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
-                      >
-                        +
-                      </button>
-                    </div>
-                    <span className="block text-center text-xs font-medium text-muted-foreground leading-tight mt-1 sm:mt-0.5">
-                      Objetivo: {pluralizar(serie.repsObjetivo, 'repetición', 'repeticiones')}
-                    </span>
-                  </div>
-
-                  {/* RPE Input (0-10 validado contra el contrato) */}
-                  <div className="col-span-1 sm:col-span-2">
-                    <span className="sm:hidden mb-1 block text-xs font-medium text-muted-foreground">
-                      Esfuerzo (1-10)
-                    </span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      disabled={isReadOnly}
-                      value={rpeMostrado}
-                      onChange={(e) => {
-                        const filtrado = filtrarEntradaRpe(e.target.value, rpeMostrado);
-                        if (filtrado !== rpeMostrado) handleUpdateSerieValue(ejIdx, sIdx, 'rpe', filtrado);
-                      }}
-                      onBlur={() => handleBlurRpe(serie.id)}
-                      placeholder="8.5"
-                      aria-label={`Esfuerzo de 1 a 10, serie ${serie.numeroSerie}`}
-                      aria-invalid={Boolean(errorRpe)}
-                      className={`w-full text-center py-2 px-1 rounded-xl bg-background border text-base sm:text-sm font-mono font-bold text-foreground focus:outline-hidden focus:border-primary focus:ring-2 focus:ring-primary/25 h-12 sm:h-11 shadow-2xs ${
-                        errorRpe ? 'border-destructive text-destructive' : 'border-border'
-                      }`}
-                    />
-                  </div>
-
-                  {/* Complete Checkbox */}
-                  <div className="col-span-1 sm:col-span-2">
-                    <span className="sm:hidden mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Listo
-                    </span>
-                    <div className="flex sm:justify-center">
-                      <button
-                        type="button"
-                        disabled={isReadOnly}
-                        onClick={() => handleToggleSet(ejIdx, sIdx)}
-                        aria-label={`Marcar serie ${serie.numeroSerie} como ${serie.completada ? 'pendiente' : 'completada'}`}
-                        className={`h-12 w-12 sm:h-11 sm:w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary ${
-                          serie.completada
-                            ? 'bg-success-strong text-white shadow-md shadow-success-strong/25 scale-105'
-                            : 'bg-background border-2 border-border text-muted-foreground hover:border-primary'
-                        }`}
-                      >
-                        {serie.completada && <Check className="h-5 w-5 sm:h-6 sm:w-6 stroke-[3.5]" />}
-                      </button>
-                    </div>
-                  </div>
-                  </div>
-
-                  {/* WU17: captura sin fricción del inicio real (mide el descanso de la próxima serie) */}
-                  {!isReadOnly && !serie.completada && !serie.timestampInicioUtc && (
-                    <button
-                      type="button"
-                      onClick={() => handleIniciarSerie(ejIdx, sIdx)}
-                      title="Marca el inicio de esta serie para medir tu descanso real"
-                      className="mt-2 w-full min-h-11 py-2 rounded-xl inline-flex items-center justify-center gap-1.5 text-xs font-bold bg-primary/10 text-primary border border-primary/25 hover:bg-primary/20 transition-colors cursor-pointer active:scale-95"
-                    >
-                      <Play className="h-3 w-3 fill-current" />
-                      <span>Iniciar serie</span>
-                    </button>
-                  )}
-                  {!isReadOnly && !serie.completada && serie.timestampInicioUtc && (
-                    <p className="mt-1.5 px-1 text-[11px] font-mono font-bold text-primary">
-                      Iniciada {formatFechaHoraLocal(serie.timestampInicioUtc) ?? ''}
-                    </p>
-                  )}
-                  {/* WU17: feedback inmediato del descanso real al cerrar la serie */}
-                  {serie.completada && descansosReales[sIdx] !== null && (
-                    <p className="mt-1.5 px-1 text-[11px] font-mono font-bold text-primary flex items-center gap-1">
-                      <Zap className="h-3 w-3 shrink-0" />
-                      <span>Descanso real: {formatearDeltaSegundos(descansosReales[sIdx])}</span>
-                    </p>
-                  )}
-
-                  {/* WU3b: error inline, nunca silencioso */}
-                  {errorSerie && (
-                    <p
-                      role="alert"
-                      className="mt-1.5 px-1 text-xs font-bold text-destructive flex items-center gap-1"
-                    >
-                      <AlertTriangle className="h-3 w-3 shrink-0" />
-                      <span>{errorSerie}</span>
-                    </p>
-                  )}
-                </div>
-                );
-              })}
+              {ejercicioSesion.series.map((_serie, sIdx) => renderFilaSerie(ejIdx, sIdx))}
             </div>
           </div>
           );
