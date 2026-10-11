@@ -28,6 +28,76 @@ export const DECIMAL_STRING_REGEX = /^\d+(\.\d{1,2})?$/;
 export const TASA_STRING_REGEX = /^\d+(\.\d{1,4})?$/;
 export const FECHA_CALENDARIO_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
+// =============================================================================
+// RF-001 / RF-017: LÍMITES DE UNA SERIE (registro del alumno y prescripción del coach)
+// =============================================================================
+
+/** Rango válido de cada dato de una serie; lo comparten el contrato, el API y los inputs. */
+export const LIMITES_SERIE = {
+  pesoKgMax: 999,
+  repsMax: 200,
+  rpeMin: 1,
+  rpeMax: 10,
+  rpePaso: 0.5,
+} as const;
+
+export const MENSAJE_PESO_FUERA_DE_RANGO = `El peso no puede superar ${LIMITES_SERIE.pesoKgMax} kg`;
+export const MENSAJE_ESFUERZO_INVALIDO =
+  'El esfuerzo debe estar entre 1 y 10, en pasos de 0,5 (por ejemplo, 8 o 8.5)';
+export const MENSAJE_REPS_FUERA_DE_RANGO = `Las repeticiones no pueden superar ${LIMITES_SERIE.repsMax}`;
+
+const RPE_STRING_REGEX = /^\d+(\.\d)?$/;
+
+/** Peso en kg con hasta 2 decimales, entre 0 y el máximo (punto decimal, formato del contrato). */
+export function esPesoKgValido(valor: string): boolean {
+  if (!DECIMAL_STRING_REGEX.test(valor)) return false;
+  const kg = Number(valor);
+  return kg >= 0 && kg <= LIMITES_SERIE.pesoKgMax;
+}
+
+/** Esfuerzo (RPE) entre 1 y 10 en pasos de 0,5, con un decimal como máximo (`8`, `8.5`, `10.0`). */
+export function esRpeValido(valor: string): boolean {
+  if (!RPE_STRING_REGEX.test(valor)) return false;
+  const rpe = Number(valor);
+  return (
+    rpe >= LIMITES_SERIE.rpeMin &&
+    rpe <= LIMITES_SERIE.rpeMax &&
+    Number.isInteger(rpe / LIMITES_SERIE.rpePaso)
+  );
+}
+
+/**
+ * Primer número de un texto libre de carga ('60,5 kg' → 60.5), con coma o punto decimal.
+ * `null` si no hay número ('Corporal', ''). Es el mismo número que el API materializa como
+ * `peso_prescrito_kg`; el rango lo valida el esquema.
+ */
+export function extraerPesoKgDeTexto(texto: string): number | null {
+  const coincidencia = texto.match(/\d+(?:[.,]\d+)?/);
+  return coincidencia ? Number(coincidencia[0].replace(',', '.')) : null;
+}
+
+/** Peso en kg del contrato: formato decimal y tope. `permiteVacio` acepta '' como "sin peso". */
+function campoPesoKg(mensajeFormato: string, opciones: { permiteVacio?: boolean } = {}) {
+  return z.string().superRefine((valor, ctx) => {
+    if (opciones.permiteVacio && valor === '') return;
+    if (!DECIMAL_STRING_REGEX.test(valor)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: mensajeFormato });
+    } else if (!esPesoKgValido(valor)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: MENSAJE_PESO_FUERA_DE_RANGO });
+    }
+  });
+}
+
+/** Esfuerzo del contrato (1–10 en pasos de 0,5). `permiteVacio` acepta '' como "sin esfuerzo". */
+function campoRpe(opciones: { permiteVacio?: boolean } = {}) {
+  return z
+    .string()
+    .refine(
+      (valor) => (opciones.permiteVacio && valor === '') || esRpeValido(valor),
+      MENSAJE_ESFUERZO_INVALIDO
+    );
+}
+
 /**
  * LOTE API-N1: `true` solo si el texto es una fecha AAAA-MM-DD que existe en el calendario
  * (rechaza `2026-02-31`, `2026-13-01` o `abc`). Aritmética UTC: no depende de la zona del equipo.
@@ -499,9 +569,9 @@ export const SeriePrescritaInputSchema = z.object({
    * Peso prescrito por el coach (se persiste en `peso_prescrito_kg`).
    * `pesoSugeridoKg` se mantiene como alias legacy retrocompatible.
    */
-  pesoPrescritoKg: z.string().regex(DECIMAL_STRING_REGEX, 'El peso prescrito debe tener formato decimal (ej. 50.00)').optional(),
-  pesoSugeridoKg: z.string().regex(DECIMAL_STRING_REGEX, 'El peso sugerido debe tener formato decimal (ej. 50.00)').optional(),
-  rpeObjetivo: z.string().regex(/^\d+(\.\d)?$/, 'El RPE objetivo debe tener formato decimal (ej. 8 o 8.5)').optional(),
+  pesoPrescritoKg: campoPesoKg('El peso prescrito debe tener formato decimal (ej. 50.00)').optional(),
+  pesoSugeridoKg: campoPesoKg('El peso sugerido debe tener formato decimal (ej. 50.00)').optional(),
+  rpeObjetivo: campoRpe().optional(),
 });
 
 export const EjercicioPrescritoInputSchema = z.object({
@@ -532,14 +602,38 @@ export const BloqueDiaRutinaSchema = z.object({
         ejercicioId: z.string().uuid().optional(),
         nombre: z.string().min(2, 'El nombre debe tener al menos 2 caracteres').max(120),
         series: z.number().int().min(1).max(50),
-        reps: z.string().min(1).max(30),
+        /** Texto ('10', '8-10', '45s'): ningún número puede superar el máximo de repeticiones. */
+        reps: z
+          .string()
+          .min(1)
+          .max(30)
+          .refine(
+            (texto) => (texto.match(/\d+/g) ?? []).every((n) => Number(n) <= LIMITES_SERIE.repsMax),
+            MENSAJE_REPS_FUERA_DE_RANGO
+          ),
         /**
          * Carga prescrita como texto libre (ej. '60 kg', '60.5', 'Corporal').
          * Vacío es válido (prescripción cualitativa): la API persiste `peso_prescrito_kg = null`
-         * y conserva el texto en notas, sin materializar '0.00'.
+         * y conserva el texto en notas, sin materializar '0.00'. Si trae número, respeta el tope.
          */
-        peso: z.string().max(30, 'La carga prescrita no puede exceder 30 caracteres').optional().default(''),
-        rpe: z.string().max(10).optional(),
+        peso: z
+          .string()
+          .max(30, 'La carga prescrita no puede exceder 30 caracteres')
+          .refine((texto) => {
+            const kg = extraerPesoKgDeTexto(texto);
+            return kg === null || kg <= LIMITES_SERIE.pesoKgMax;
+          }, MENSAJE_PESO_FUERA_DE_RANGO)
+          .optional()
+          .default(''),
+        /** Esfuerzo como texto ('8', '8.5' o '8,5'); vacío = sin esfuerzo prescrito. */
+        rpe: z
+          .string()
+          .max(10)
+          .refine((texto) => {
+            const valor = texto.trim().replace(',', '.');
+            return valor === '' || esRpeValido(valor);
+          }, MENSAJE_ESFUERZO_INVALIDO)
+          .optional(),
         descansoSegundos: z.number().int().min(5).max(1800).optional(),
         /** RF-017 RN-01: notas técnicas del coach para el ejercicio (aditivo, opcional). */
         notas: z.string().max(500, 'Las notas técnicas no pueden exceder 500 caracteres').optional(),
@@ -602,13 +696,10 @@ export const AjusteEjercicioPlantillaSchema = z
     diaId: z.string().min(1, 'El día del ajuste es obligatorio'),
     ejercicioId: z.string().uuid('No encontramos ese ejercicio. Actualiza la pantalla e inténtalo de nuevo.').optional(),
     nombre: z.string().min(2).max(120, 'El nombre del ejercicio no puede exceder 120 caracteres').optional(),
-    pesoPrescritoKg: z
-      .string()
-      .regex(DECIMAL_STRING_REGEX, 'El peso prescrito debe tener formato decimal (ej. 60.00)')
-      .optional(),
+    pesoPrescritoKg: campoPesoKg('El peso prescrito debe tener formato decimal (ej. 60.00)').optional(),
     series: z.number().int().min(1).max(50).optional(),
     reps: z.string().min(1).max(30).optional(),
-    rpe: z.string().regex(/^\d+(\.\d)?$/, 'El RPE debe tener formato decimal (ej. 8 o 8.5)').optional(),
+    rpe: campoRpe().optional(),
   })
   .superRefine((data, ctx) => {
     if (!data.ejercicioId && !data.nombre) {
@@ -659,18 +750,12 @@ export const RegistrarSerieSchema = z
   .object({
     serieId: z.string().uuid('No encontramos esa serie. Actualiza la pantalla e inténtalo de nuevo.'),
     repsLogradas: z.number().int().min(0).max(200),
-    pesoKg: z
-      .string()
-      .regex(DECIMAL_STRING_REGEX, 'El peso en kg debe tener formato decimal con hasta 2 decimales')
+    pesoKg: campoPesoKg('El peso en kg debe tener formato decimal con hasta 2 decimales', {
+      permiteVacio: true,
+    })
       .nullable()
-      .optional()
-      .or(z.literal('')),
-    rpe: z
-      .string()
-      .regex(/^\d+(\.\d)?$/, 'El RPE debe ser un valor decimal (ej. 8 o 8.5)')
-      .nullable()
-      .optional()
-      .or(z.literal('')),
+      .optional(),
+    rpe: campoRpe({ permiteVacio: true }).nullable().optional(),
     descansoSegundos: z.number().int().min(0).max(3600).nullable().optional(),
     completada: z.boolean(),
     /**
