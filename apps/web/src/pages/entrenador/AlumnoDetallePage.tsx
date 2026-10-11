@@ -598,6 +598,7 @@ export function AlumnoDetallePage() {
         alumnoId: id,
         usuarioId: 'user-demo-' + id,
         saldoPendienteTotalUsd: '0.00',
+        saldoAFavorUsd: '0.00',
         totalPagadoHistoricoUsd: '320.00',
         totalPagadoMesActualUsd: '40.00',
         // WU24b: total real de transacciones; en el fixture coincide con las listadas abajo.

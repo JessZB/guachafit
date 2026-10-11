@@ -134,6 +134,13 @@
       "when": 1791567723572,
       "tag": "0018_suscripcion_alumno_referencias",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791688304008,
+      "tag": "0019_saldo_a_favor",
+      "breakpoints": true
     }
   ]
 }

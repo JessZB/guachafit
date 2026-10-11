@@ -338,6 +338,7 @@ export class CarteraService {
               telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
               tasaOverride: perfilesAlumno.tasaFijadaOverride,
               proximoCorte: perfilesAlumno.proximoCorte,
+              saldoAFavorUsd: perfilesAlumno.saldoAFavorUsd,
               saldoTotalUsd: sql<string>`sum(${cuotasMembresia.saldoPendienteUsd})`,
               corteMasUrgente: min(cuotasMembresia.fechaCorteUtc),
             })
@@ -357,7 +358,8 @@ export class CarteraService {
               perfilesAlumno.apellidos,
               perfilesAlumno.telefonoWhatsapp,
               perfilesAlumno.tasaFijadaOverride,
-              perfilesAlumno.proximoCorte
+              perfilesAlumno.proximoCorte,
+              perfilesAlumno.saldoAFavorUsd
             )
             .orderBy(asc(min(cuotasMembresia.fechaCorteUtc)), asc(cuotasMembresia.clienteId))
             .limit(limit)
@@ -408,6 +410,7 @@ export class CarteraService {
         alumnoUsuarioId: fila.clienteId,
         alumnoPerfilId: fila.perfilId ?? null,
         proximoCorte: fila.proximoCorte ?? null,
+        saldoAFavorUsd: fila.saldoAFavorUsd ?? '0.00',
         alumnoNombre: `${fila.nombres} ${fila.apellidos}`.trim(),
         telefonoWhatsapp: fila.telefonoWhatsapp ?? null,
         cuotaId: cuota?.id ?? null,
@@ -501,6 +504,7 @@ export class CarteraService {
             tx: transaccionesPago,
             perfilId: perfilesAlumno.id,
             proximoCorte: perfilesAlumno.proximoCorte,
+            saldoAFavorUsd: perfilesAlumno.saldoAFavorUsd,
             nombres: perfilesAlumno.nombres,
             apellidos: perfilesAlumno.apellidos,
             telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
@@ -521,7 +525,9 @@ export class CarteraService {
     );
 
     const items = await Promise.all(
-      registros.map(async ({ tx, perfilId, proximoCorte, nombres, apellidos, telefonoWhatsapp }) => {
+      registros.map(async (registro) => {
+        const { tx, perfilId, proximoCorte, saldoAFavorUsd, nombres, apellidos, telefonoWhatsapp } =
+          registro;
         const comprobanteUrl = await this.finanzasService.resolverComprobanteUrl(
           tx.comprobanteStorageKey
         );
@@ -529,6 +535,7 @@ export class CarteraService {
           alumnoUsuarioId: tx.clienteId,
           alumnoPerfilId: perfilId ?? null,
           proximoCorte: proximoCorte ?? null,
+          saldoAFavorUsd: saldoAFavorUsd ?? '0.00',
           alumnoNombre: `${nombres} ${apellidos}`.trim(),
           telefonoWhatsapp: telefonoWhatsapp ?? null,
           cuotaId: tx.cuotaId,
@@ -624,6 +631,7 @@ export class CarteraService {
             estado: cuotasMembresia.estado,
             perfilId: perfilesAlumno.id,
             proximoCorte: perfilesAlumno.proximoCorte,
+            saldoAFavorUsd: perfilesAlumno.saldoAFavorUsd,
             nombres: perfilesAlumno.nombres,
             apellidos: perfilesAlumno.apellidos,
             telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
@@ -658,6 +666,7 @@ export class CarteraService {
         alumnoUsuarioId: fila.clienteId,
         alumnoPerfilId: fila.perfilId ?? null,
         proximoCorte: fila.proximoCorte ?? null,
+        saldoAFavorUsd: fila.saldoAFavorUsd ?? '0.00',
         alumnoNombre: `${fila.nombres} ${fila.apellidos}`.trim(),
         telefonoWhatsapp: fila.telefonoWhatsapp ?? null,
         cuotaId: fila.cuotaId,

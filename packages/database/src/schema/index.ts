@@ -254,6 +254,14 @@ export const perfilesAlumno = pgTable(
     }),
     cicloAncla: date('ciclo_ancla'),
     proximoCorte: date('proximo_corte'),
+    /**
+     * RF-006 RN-05: saldo a favor del alumno (USD). Recibe el excedente de un pago aprobado o
+     * cobrado por encima de la deuda y se descuenta solo al emitirse la próxima cuota. La
+     * restricción `ck_perfiles_alumno_saldo_a_favor_no_negativo` (>= 0) está en la migración 0019.
+     */
+    saldoAFavorUsd: numeric('saldo_a_favor_usd', { precision: 14, scale: 2 })
+      .default('0.00')
+      .notNull(),
     deletedAtUtc: timestamp('deleted_at_utc', { withTimezone: true }),
     createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
     updatedAtUtc: timestamp('updated_at_utc', { withTimezone: true }).defaultNow().notNull(),
@@ -687,6 +695,10 @@ export const cuotasMembresia = pgTable(
       .default('0.00')
       .notNull(),
     saldoPendienteUsd: numeric('saldo_pendiente_usd', { precision: 14, scale: 2 }).notNull(),
+    /** RF-006 RN-05: parte de `monto_abonado_usd` que salió del saldo a favor al emitirse. */
+    saldoAFavorAplicadoUsd: numeric('saldo_a_favor_aplicado_usd', { precision: 14, scale: 2 })
+      .default('0.00')
+      .notNull(),
     fechaEmisionUtc: timestamp('fecha_emision_utc', { withTimezone: true }).notNull(),
     fechaCorteUtc: timestamp('fecha_corte_utc', { withTimezone: true }).notNull(),
     estado: estadoCuotaEnum('estado').default(EstadoCuota.EMITIDA).notNull(),
@@ -723,6 +735,11 @@ export const transaccionesPago = pgTable(
     monedaOriginal: monedaEnum('moneda_original').notNull(),
     tasaCambioFijada: numeric('tasa_cambio_fijada', { precision: 12, scale: 4 }).notNull(),
     montoEquivalenteUsd: numeric('monto_equivalente_usd', { precision: 14, scale: 2 }).notNull(),
+    /**
+     * RF-006 RN-05: parte del pago aprobado que excedió el saldo de la cuota y pasó al saldo a
+     * favor del alumno (`monto_equivalente_usd` sigue siendo todo el dinero recibido).
+     */
+    excedenteUsd: numeric('excedente_usd', { precision: 14, scale: 2 }).default('0.00').notNull(),
     metodoPago: metodoPagoEnum('metodo_pago').notNull(),
     referenciaBancaria: varchar('referencia_bancaria', { length: 64 }),
     fechaOperacion: date('fecha_operacion').notNull(),

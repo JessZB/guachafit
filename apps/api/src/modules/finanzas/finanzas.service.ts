@@ -202,6 +202,76 @@ export function assertBalanceInvariant(
   }
 }
 
+/**
+ * RF-006 RN-05: reparte un abono (USD) entre la deuda de la cuota y el saldo a favor. Lo que cubre
+ * el saldo pendiente se aplica a la cuota; el resto es excedente y pasa al saldo a favor.
+ */
+export function repartirAbono(
+  saldoPendienteUsd: string,
+  montoUsd: string
+): { aplicadoUsd: string; excedenteUsd: string } {
+  const pendiente = Math.max(0, toCents(saldoPendienteUsd));
+  const monto = toCents(montoUsd);
+  const aplicado = Math.min(pendiente, monto);
+  return { aplicadoUsd: fromCents(aplicado), excedenteUsd: fromCents(monto - aplicado) };
+}
+
+/**
+ * RF-006 RN-05: estado inicial de una cuota nueva de `montoTotalUsd` cuando el alumno tiene
+ * `saldoAFavorUsd`. El saldo cubre la cuota hasta su total (se reutiliza `repartirAbono` con el
+ * total como "deuda" y el saldo como "abono"); el becado no consume saldo.
+ */
+export function aplicarSaldoAFavorACuota(
+  montoTotalUsd: string,
+  saldoAFavorUsd: string,
+  esBecado: boolean
+): {
+  aplicadoUsd: string;
+  saldoPendienteUsd: string;
+  saldoAFavorRestanteUsd: string;
+  estado: EstadoCuota;
+} {
+  const reparto = esBecado
+    ? { aplicadoUsd: '0.00', excedenteUsd: saldoAFavorUsd }
+    : repartirAbono(montoTotalUsd, saldoAFavorUsd);
+  const saldoPendienteUsd = subtractDecimals(montoTotalUsd, reparto.aplicadoUsd);
+  const estado =
+    esBecado || toCents(saldoPendienteUsd) === 0
+      ? EstadoCuota.AL_DIA
+      : toCents(reparto.aplicadoUsd) > 0
+        ? EstadoCuota.ABONADA_PARCIAL
+        : EstadoCuota.EMITIDA;
+  return {
+    aplicadoUsd: reparto.aplicadoUsd,
+    saldoPendienteUsd,
+    saldoAFavorRestanteUsd: reparto.excedenteUsd,
+    estado,
+  };
+}
+
+/**
+ * RF-006 RN-05: cuerpo del aviso de un cobro en sala. Con excedente dice qué parte se aplicó a la
+ * cuota y qué parte quedó como saldo a favor (nunca afirma que todo se aplicó a la cuota).
+ */
+export function mensajeCobroConExcedente(
+  inicio: string,
+  montoUsd: string,
+  excedenteUsd: string
+): string {
+  if (toCents(excedenteUsd) <= 0) return `${inicio} aplicado a tu cuota.`;
+  const aplicado = subtractDecimals(montoUsd, excedenteUsd);
+  if (toCents(aplicado) <= 0) {
+    return `${inicio}; como tu cuota ya estaba pagada, quedó completo como saldo a favor para tu próxima cuota.`;
+  }
+  return `${inicio}: ${aplicado} USD se aplicaron a tu cuota y ${excedenteUsd} USD quedaron como saldo a favor para tu próxima cuota.`;
+}
+
+/** RF-006 RN-05: cuerpo del aviso de pago aprobado; con excedente menciona el saldo a favor. */
+export function mensajePagoAprobado(base: string, excedenteUsd: string): string {
+  if (toCents(excedenteUsd) <= 0) return base;
+  return `${base} ${excedenteUsd} USD quedaron como saldo a favor para tu próxima cuota.`;
+}
+
 /** El efectivo no lleva referencia bancaria: nunca participa en la detección de duplicados. */
 function esMetodoEfectivo(metodo: MetodoPago): boolean {
   return metodo === MetodoPago.EFECTIVO_USD || metodo === MetodoPago.EFECTIVO_VES;
@@ -1410,6 +1480,45 @@ export class FinanzasService {
   }
 
   /**
+   * RF-006 RN-05: suma `excedenteUsd` al saldo a favor del alumno, con su fila bloqueada para que
+   * una emisión o una aprobación concurrentes no pierdan el incremento. Sin excedente no hace nada.
+   * El perfil se busca en el entrenador DUEÑO de la cuota (supuesto: el perfil del alumno es del
+   * mismo entrenador que sus cuotas).
+   *
+   * ORDEN DE BLOQUEOS (evita deadlocks): aprobar o cobrar bloquea la cuota y DESPUÉS el perfil.
+   * Por eso ninguna ruta que bloquee el perfil del alumno (asignar o quitar el plan, la emisión, el
+   * cobro inteligente) puede bloquear ni actualizar después una cuota EXISTENTE: solo insertar
+   * cuotas nuevas. Si una ruta futura lo necesita, debe bloquear la cuota antes que el perfil.
+   */
+  private async acreditarSaldoAFavor(
+    tx: TenantTransaction,
+    clienteUsuarioId: string,
+    entrenadorId: string,
+    excedenteUsd: string,
+    ahora: Date
+  ): Promise<void> {
+    if (toCents(excedenteUsd) <= 0) return;
+    const [perfil] = await tx
+      .select({ id: perfilesAlumno.id, saldoAFavorUsd: perfilesAlumno.saldoAFavorUsd })
+      .from(perfilesAlumno)
+      .where(
+        and(
+          eq(perfilesAlumno.usuarioId, clienteUsuarioId),
+          eq(perfilesAlumno.entrenadorId, entrenadorId)
+        )
+      )
+      .for('update');
+    if (!perfil) {
+      // Sin perfil no hay dónde acreditar: se revierte la operación entera (nunca se pierde dinero).
+      throw new NotFoundException(MENSAJE_ALUMNO_NO_ENCONTRADO);
+    }
+    await tx
+      .update(perfilesAlumno)
+      .set({ saldoAFavorUsd: addDecimals(perfil.saldoAFavorUsd, excedenteUsd), updatedAtUtc: ahora })
+      .where(eq(perfilesAlumno.id, perfil.id));
+  }
+
+  /**
    * Emite la cuota que vence en `corte` (día local) y avanza `proximo_corte` al ciclo siguiente,
    * en la MISMA transacción. Si la cuota de ese periodo ya existe no se duplica, pero el ciclo
    * avanza igual (un barrido repetido es idempotente).
@@ -1436,10 +1545,29 @@ export class FinanzasService {
     let cuota: CuotaFila | null = null;
     let esBecado = false;
 
+    // RF-006 RN-05: saldo a favor leído con la fila del alumno bloqueada (una aprobación
+    // concurrente que lo incrementa espera a esta transacción, y viceversa).
+    let saldoAFavorRestante: string | null = null;
+
     if (!existente) {
       const monto = await this.resolverMontoCuota(tx, plan, perfil.usuarioId);
       esBecado = monto.esBecado;
-      assertBalanceInvariant(monto.montoTotal, '0.00', monto.montoTotal);
+
+      let saldoAFavor = '0.00';
+      if (!esBecado) {
+        const [filaSaldo] = await tx
+          .select({ saldoAFavorUsd: perfilesAlumno.saldoAFavorUsd })
+          .from(perfilesAlumno)
+          .where(eq(perfilesAlumno.id, perfil.id))
+          .for('update');
+        saldoAFavor = filaSaldo?.saldoAFavorUsd ?? '0.00';
+      }
+      const inicial = aplicarSaldoAFavorACuota(monto.montoTotal, saldoAFavor, esBecado);
+      const aplicado = inicial.aplicadoUsd;
+      const pendiente = inicial.saldoPendienteUsd;
+      const estadoInicial = inicial.estado;
+      if (toCents(aplicado) > 0) saldoAFavorRestante = inicial.saldoAFavorRestanteUsd;
+      assertBalanceInvariant(monto.montoTotal, aplicado, pendiente);
 
       [cuota] = await tx
         .insert(cuotasMembresia)
@@ -1449,12 +1577,14 @@ export class FinanzasService {
           planId: plan.id,
           periodo,
           montoTotalUsd: monto.montoTotal,
-          montoAbonadoUsd: '0.00',
-          saldoPendienteUsd: monto.montoTotal,
+          montoAbonadoUsd: aplicado,
+          saldoPendienteUsd: pendiente,
+          saldoAFavorAplicadoUsd: aplicado,
           fechaEmisionUtc: ahora,
           fechaCorteUtc: instanteCorteUtc(corte, zonaDelAlumno(perfil)),
-          // RF-005 §6: la cuota del becado nace Al Día (no hay deuda que cobrar).
-          estado: esBecado ? EstadoCuota.AL_DIA : EstadoCuota.EMITIDA,
+          // RF-005 §6: la cuota del becado nace Al Día (no hay deuda que cobrar); también la que
+          // el saldo a favor cubre entera.
+          estado: estadoInicial,
           notas: null,
           createdAtUtc: ahora,
           updatedAtUtc: ahora,
@@ -1469,7 +1599,11 @@ export class FinanzasService {
     );
     await tx
       .update(perfilesAlumno)
-      .set({ proximoCorte, updatedAtUtc: ahora })
+      .set({
+        proximoCorte,
+        ...(saldoAFavorRestante !== null ? { saldoAFavorUsd: saldoAFavorRestante } : {}),
+        updatedAtUtc: ahora,
+      })
       .where(eq(perfilesAlumno.id, perfil.id));
 
     return { cuota, esBecado, proximoCorte };
@@ -1480,7 +1614,15 @@ export class FinanzasService {
     emision: EmisionCiclo | null,
     perfil: Pick<PerfilAlumnoFila, 'zonaHoraria'>
   ): Promise<void> {
-    if (!emision?.cuota || emision.esBecado || !this.billingSchedulerService) return;
+    // Una cuota que nace pagada (becado o cubierta por el saldo a favor) no lleva recordatorios.
+    if (
+      !emision?.cuota ||
+      emision.esBecado ||
+      emision.cuota.estado === EstadoCuota.AL_DIA ||
+      !this.billingSchedulerService
+    ) {
+      return;
+    }
     try {
       await this.billingSchedulerService.programarRecordatoriosCuota({
         id: emision.cuota.id,
@@ -1578,6 +1720,7 @@ export class FinanzasService {
           monedaOriginal: t.monedaOriginal,
           tasaCambioFijada: t.tasaCambioFijada,
           montoEquivalenteUsd: t.montoEquivalenteUsd,
+          excedenteUsd: t.excedenteUsd,
           metodoPago: t.metodoPago,
           referenciaBancaria: t.referenciaBancaria,
           fechaOperacion: t.fechaOperacion,
@@ -1608,6 +1751,7 @@ export class FinanzasService {
         montoTotalUsd: cuota.montoTotalUsd,
         montoAbonadoUsd: cuota.montoAbonadoUsd,
         saldoPendienteUsd: cuota.saldoPendienteUsd,
+        saldoAFavorAplicadoUsd: cuota.saldoAFavorAplicadoUsd,
         saldoPendienteVes,
         tasaAplicada: tasa.tasaEfectiva ?? undefined,
         fechaEmisionUtc: toIsoSafe(cuota.fechaEmisionUtc),
@@ -1824,6 +1968,7 @@ export class FinanzasService {
       monedaOriginal: nuevaTx.monedaOriginal,
       tasaCambioFijada: nuevaTx.tasaCambioFijada,
       montoEquivalenteUsd: nuevaTx.montoEquivalenteUsd,
+      excedenteUsd: nuevaTx.excedenteUsd,
       metodoPago: nuevaTx.metodoPago,
       referenciaBancaria: nuevaTx.referenciaBancaria,
       fechaOperacion: nuevaTx.fechaOperacion,
@@ -1940,6 +2085,8 @@ export class FinanzasService {
       }
 
       const nowUtc = new Date();
+      // RF-006 RN-05: lo que excede el saldo de la cuota pasa al saldo a favor del alumno.
+      const reparto = repartirAbono(cuotaLock.saldoPendienteUsd, montoEquivalenteUsd);
 
       // Transacción auto-aprobada
       const [nuevaTx] = await tx
@@ -1953,6 +2100,7 @@ export class FinanzasService {
           monedaOriginal: dto.monedaOriginal,
           tasaCambioFijada,
           montoEquivalenteUsd,
+          excedenteUsd: reparto.excedenteUsd,
           metodoPago: dto.metodoPago,
           // El cobro en sala es siempre en efectivo, que no lleva referencia bancaria (M5-L1):
           // se descarta cualquiera que envíe el cliente y nunca se usa un centinela compartido.
@@ -1966,10 +2114,16 @@ export class FinanzasService {
         })
         .returning();
 
-      // Descuento inmediato y cálculo estricto
-      const nuevoAbonado = addDecimals(cuotaLock.montoAbonadoUsd, montoEquivalenteUsd);
-      const nuevoPendienteRaw = subtractDecimals(cuotaLock.saldoPendienteUsd, montoEquivalenteUsd);
-      const nuevoPendiente = toCents(nuevoPendienteRaw) < 0 ? '0.00' : nuevoPendienteRaw;
+      // Descuento inmediato: la cuota recibe solo lo que debía; el excedente va al saldo a favor.
+      const nuevoAbonado = addDecimals(cuotaLock.montoAbonadoUsd, reparto.aplicadoUsd);
+      const nuevoPendiente = subtractDecimals(cuotaLock.saldoPendienteUsd, reparto.aplicadoUsd);
+      await this.acreditarSaldoAFavor(
+        tx,
+        cuotaLock.clienteId,
+        cuotaLock.entrenadorId,
+        reparto.excedenteUsd,
+        nowUtc
+      );
       const nuevoEstado =
         toCents(nuevoPendiente) === 0 ? EstadoCuota.AL_DIA : EstadoCuota.ABONADA_PARCIAL;
 
@@ -1996,6 +2150,7 @@ export class FinanzasService {
         monedaOriginal: nuevaTx.monedaOriginal,
         tasaCambioFijada: nuevaTx.tasaCambioFijada,
         montoEquivalenteUsd: nuevaTx.montoEquivalenteUsd,
+        excedenteUsd: nuevaTx.excedenteUsd,
         metodoPago: nuevaTx.metodoPago,
         referenciaBancaria: nuevaTx.referenciaBancaria,
         fechaOperacion: nuevaTx.fechaOperacion,
@@ -2024,6 +2179,7 @@ export class FinanzasService {
         montoTotalUsd: cuotaActualizada.montoTotalUsd,
         montoAbonadoUsd: cuotaActualizada.montoAbonadoUsd,
         saldoPendienteUsd: cuotaActualizada.saldoPendienteUsd,
+        saldoAFavorAplicadoUsd: cuotaActualizada.saldoAFavorAplicadoUsd,
         saldoPendienteVes,
         tasaAplicada: tasa.tasaEfectiva ?? undefined,
         fechaEmisionUtc: toIsoSafe(cuotaActualizada.fechaEmisionUtc),
@@ -2061,7 +2217,11 @@ export class FinanzasService {
             entrenadorId,
             categoria: 'FINANZAS',
             titulo: 'Tu entrenador registró un cobro',
-            cuerpo: `Tu entrenador registró un cobro de ${resultado.transaccion.montoEquivalenteUsd} USD aplicado a tu cuota.`,
+            cuerpo: mensajeCobroConExcedente(
+              `Tu entrenador registró un cobro de ${resultado.transaccion.montoEquivalenteUsd} USD`,
+              resultado.transaccion.montoEquivalenteUsd,
+              resultado.transaccion.excedenteUsd
+            ),
             linkAccion: '/app/pagos',
             datosAdicionales: {
               transaccionId: resultado.transaccion.id,
@@ -2069,6 +2229,7 @@ export class FinanzasService {
               montoOriginal: resultado.transaccion.montoOriginal,
               monedaOriginal: resultado.transaccion.monedaOriginal,
               montoEquivalenteUsd: resultado.transaccion.montoEquivalenteUsd,
+              excedenteUsd: resultado.transaccion.excedenteUsd,
             },
             esCriticoSeguridad: false,
             // RNF-004 §3: ref de origen del jobId determinista.
@@ -2142,23 +2303,29 @@ export class FinanzasService {
       const nowUtc = new Date();
 
       if (dto.accion === 'aprobar') {
-        // Aprobación: Liquidar crédito en USD
+        // Aprobación: liquidar crédito en USD. RF-006 RN-05: lo que excede el saldo de la cuota
+        // (p. ej. el mismo pago reportado dos veces) pasa al saldo a favor del alumno.
+        const reparto = repartirAbono(cuotaLock.saldoPendienteUsd, txRecord.montoEquivalenteUsd);
         const [txAprobada] = await tx
           .update(transaccionesPago)
           .set({
             estadoConciliacion: EstadoConciliacion.APROBADO,
+            excedenteUsd: reparto.excedenteUsd,
             fechaConciliacionUtc: nowUtc,
             updatedAtUtc: nowUtc,
           })
           .where(eq(transaccionesPago.id, transaccionId))
           .returning();
 
-        const nuevoAbonado = addDecimals(cuotaLock.montoAbonadoUsd, txRecord.montoEquivalenteUsd);
-        const nuevoPendienteRaw = subtractDecimals(
-          cuotaLock.saldoPendienteUsd,
-          txRecord.montoEquivalenteUsd
+        const nuevoAbonado = addDecimals(cuotaLock.montoAbonadoUsd, reparto.aplicadoUsd);
+        const nuevoPendiente = subtractDecimals(cuotaLock.saldoPendienteUsd, reparto.aplicadoUsd);
+        await this.acreditarSaldoAFavor(
+          tx,
+          cuotaLock.clienteId,
+          cuotaLock.entrenadorId,
+          reparto.excedenteUsd,
+          nowUtc
         );
-        const nuevoPendiente = toCents(nuevoPendienteRaw) < 0 ? '0.00' : nuevoPendienteRaw;
         const nuevoEstado =
           toCents(nuevoPendiente) === 0 ? EstadoCuota.AL_DIA : EstadoCuota.ABONADA_PARCIAL;
 
@@ -2208,6 +2375,9 @@ export class FinanzasService {
         let nuevoEstado: EstadoCuota;
         if (otrasPendientes.length > 0) {
           nuevoEstado = EstadoCuota.PENDIENTE_REVISION;
+        } else if (toCents(cuotaLock.saldoPendienteUsd) === 0) {
+          // Otro pago ya la saldó: rechazar este no la vuelve parcial.
+          nuevoEstado = EstadoCuota.AL_DIA;
         } else if (toCents(cuotaLock.montoAbonadoUsd) > 0) {
           nuevoEstado = EstadoCuota.ABONADA_PARCIAL;
         } else if (cuotaLock.fechaCorteUtc.getTime() < nowUtc.getTime()) {
@@ -2258,12 +2428,16 @@ export class FinanzasService {
               entrenadorId,
               categoria: 'FINANZAS',
               titulo: '¡Pago verificado y aprobado!',
-              cuerpo: `Tu pago de ${resultado.transaccion.montoOriginal} ${resultado.transaccion.monedaOriginal} fue aprobado con éxito.`,
+              cuerpo: mensajePagoAprobado(
+                `Tu pago de ${resultado.transaccion.montoOriginal} ${resultado.transaccion.monedaOriginal} fue aprobado con éxito.`,
+                resultado.transaccion.excedenteUsd
+              ),
               linkAccion: '/finanzas',
               datosAdicionales: {
                 transaccionId: resultado.transaccion.id,
                 cuotaId: resultado.cuota.id,
                 montoEquivalenteUsd: resultado.transaccion.montoEquivalenteUsd,
+                excedenteUsd: resultado.transaccion.excedenteUsd,
               },
               esCriticoSeguridad: true, // Recibo financiero / comprobante crítico garantizado por Email (RF-015 RN-03)
               // RNF-004 §3: ref de origen del jobId determinista.
@@ -2332,9 +2506,11 @@ export class FinanzasService {
         .select({
           tx: transaccionesPago,
           alumno: perfilesAlumno,
+          cuota: cuotasMembresia,
         })
         .from(transaccionesPago)
         .leftJoin(perfilesAlumno, eq(perfilesAlumno.usuarioId, transaccionesPago.clienteId))
+        .leftJoin(cuotasMembresia, eq(cuotasMembresia.id, transaccionesPago.cuotaId))
         .where(whereBandeja)
         // FIFO por fecha de reporte; desempate estable para paginar sin repetidos.
         .orderBy(asc(transaccionesPago.fechaReporteUtc), asc(transaccionesPago.id))
@@ -2345,7 +2521,7 @@ export class FinanzasService {
     });
 
     const items = await Promise.all(
-      records.map(async ({ tx, alumno }) => ({
+      records.map(async ({ tx, alumno, cuota }) => ({
         id: tx.id,
         cuotaId: tx.cuotaId,
         clienteId: tx.clienteId,
@@ -2355,6 +2531,10 @@ export class FinanzasService {
         monedaOriginal: tx.monedaOriginal,
         tasaCambioFijada: tx.tasaCambioFijada,
         montoEquivalenteUsd: tx.montoEquivalenteUsd,
+        excedenteUsd: tx.excedenteUsd,
+        // Saldo actual de la cuota, para que la web pueda avisar antes de aprobar si el pago la
+        // excede (el excedente quedará como saldo a favor).
+        saldoPendienteCuotaUsd: cuota?.saldoPendienteUsd ?? undefined,
         metodoPago: tx.metodoPago,
         referenciaBancaria: tx.referenciaBancaria,
         fechaOperacion: tx.fechaOperacion,
@@ -2424,6 +2604,7 @@ export class FinanzasService {
       monedaOriginal: t.monedaOriginal,
       tasaCambioFijada: t.tasaCambioFijada,
       montoEquivalenteUsd: t.montoEquivalenteUsd,
+      excedenteUsd: t.excedenteUsd,
       metodoPago: t.metodoPago,
       referenciaBancaria: t.referenciaBancaria,
       fechaOperacion: t.fechaOperacion,
@@ -2447,6 +2628,7 @@ export class FinanzasService {
       montoTotalUsd: c.montoTotalUsd,
       montoAbonadoUsd: c.montoAbonadoUsd,
       saldoPendienteUsd: c.saldoPendienteUsd,
+      saldoAFavorAplicadoUsd: c.saldoAFavorAplicadoUsd,
       fechaEmisionUtc: toIsoSafe(c.fechaEmisionUtc),
       fechaCorteUtc: toIsoSafe(c.fechaCorteUtc),
       estado: c.estado,
@@ -2588,6 +2770,7 @@ export class FinanzasService {
           alumnoId: perfil.id,
           usuarioId: clienteUsuarioId,
           saldoPendienteTotalUsd: fromCents(saldoTotalCents),
+          saldoAFavorUsd: perfil.saldoAFavorUsd ?? '0.00',
           totalPagadoHistoricoUsd: fromCents(totalPagadoHistCents),
           totalPagadoMesActualUsd: fromCents(totalPagadoMesCents),
           cuotaMesActual: cuotaMes

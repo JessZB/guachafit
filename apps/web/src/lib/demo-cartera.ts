@@ -42,6 +42,7 @@ function filaBase(
 ): FilaCarteraDTO {
   return {
     proximoCorte: null,
+    saldoAFavorUsd: '0.00',
     telefonoWhatsapp: null,
     cuotaId: null,
     estadoCuota: null,

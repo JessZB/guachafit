@@ -46,11 +46,11 @@ describe('Arranque · comparación de la última migración (función pura)', ()
     expect(ultimaMigracionDelJournal({ entries: [] })).toBeNull();
   });
 
-  // M5-L1: la 0018 (suscripción del alumno y referencias por entrenador) es la última: el arranque debe exigirla.
-  it('el journal real del repositorio termina en la migración 0018', () => {
+  // RF-006 RN-05: la 0019 (saldo a favor del alumno) es ahora la última: el arranque debe exigirla.
+  it('el journal real del repositorio termina en la migración 0019', () => {
     const ruta = path.resolve(__dirname, '../../../../packages/database/drizzle/meta/_journal.json');
     const journal = JSON.parse(fs.readFileSync(ruta, 'utf8'));
-    expect(ultimaMigracionDelJournal(journal)?.tag).toMatch(/^0018_/);
+    expect(ultimaMigracionDelJournal(journal)?.tag).toMatch(/^0019_/);
   });
 
   it('faltan migraciones si no hay ninguna aplicada o la última aplicada es anterior', () => {

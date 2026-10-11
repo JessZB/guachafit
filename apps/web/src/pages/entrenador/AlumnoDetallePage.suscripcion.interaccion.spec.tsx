@@ -88,6 +88,7 @@ const RESUMEN_FINANCIERO: ResumenFinancieroAlumnoDTO = {
   alumnoId: CLIENTE_ID,
   usuarioId: ALUMNO_USUARIO_ID,
   saldoPendienteTotalUsd: '0.00',
+  saldoAFavorUsd: '0.00',
   totalPagadoHistoricoUsd: '0.00',
   totalPagadoMesActualUsd: '0.00',
   cuotaMesActual: null,

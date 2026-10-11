@@ -21,6 +21,7 @@ function tx(parcial: {
     monedaOriginal: Moneda.VES,
     tasaCambioFijada: '65.0000',
     montoEquivalenteUsd: '20.00',
+    excedenteUsd: '0.00',
     metodoPago: MetodoPago.PAGO_MOVIL,
     referenciaBancaria: '987654',
     fechaOperacion: '2026-09-02',

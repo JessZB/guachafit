@@ -43,6 +43,7 @@ function fila(parcial: Partial<FilaCarteraDTO> = {}): FilaCarteraDTO {
     fechaReporteUtc: null,
     diasEspera: null,
     ...parcial,
+    saldoAFavorUsd: parcial.saldoAFavorUsd ?? '0.00',
   };
 }
 

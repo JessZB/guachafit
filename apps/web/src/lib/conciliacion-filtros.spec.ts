@@ -23,6 +23,7 @@ function tx(parcial: {
     monedaOriginal: Moneda.USD,
     tasaCambioFijada: '65.0000',
     montoEquivalenteUsd: '100.00',
+    excedenteUsd: '0.00',
     metodoPago: parcial.metodoPago,
     referenciaBancaria: parcial.referenciaBancaria ?? null,
     fechaOperacion: '2026-09-10',

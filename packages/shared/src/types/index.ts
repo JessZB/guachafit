@@ -491,6 +491,8 @@ export interface ResumenFinancieroAlumnoDTO {
   alumnoId: string;
   usuarioId: string;
   saldoPendienteTotalUsd: string;
+  /** RF-006 RN-05: saldo a favor del alumno (USD); se aplica solo a la próxima cuota. */
+  saldoAFavorUsd: string;
   totalPagadoHistoricoUsd: string;
   totalPagadoMesActualUsd: string;
   cuotaMesActual?: {
@@ -643,6 +645,13 @@ export interface TransaccionPagoDetalleDTO {
   monedaOriginal: Moneda;
   tasaCambioFijada: string;
   montoEquivalenteUsd: string;
+  /** RF-006 RN-05: parte del pago aprobado que pasó al saldo a favor del alumno. */
+  excedenteUsd: string;
+  /**
+   * Solo en la bandeja de conciliación: saldo actual de la cuota del pago, para avisar antes de
+   * aprobar si el pago la excede (el excedente quedará como saldo a favor).
+   */
+  saldoPendienteCuotaUsd?: string;
   metodoPago: MetodoPago;
   referenciaBancaria?: string | null;
   fechaOperacion: string; // Formato YYYY-MM-DD
@@ -713,6 +722,8 @@ export interface FilaCarteraDTO {
    * emitirá su suscripción; `null` si no tiene plan asignado.
    */
   proximoCorte: string | null;
+  /** RF-006 RN-05: saldo a favor del alumno (USD), `'0.00'` si no tiene. */
+  saldoAFavorUsd: string;
   alumnoNombre: string;
   telefonoWhatsapp: string | null;
   /** Mora / por vencer: cuota más urgente del alumno (vencida más antigua o corte más próximo). */
@@ -776,6 +787,8 @@ export interface CuotaDetalleDTO {
   montoTotalUsd: string;
   montoAbonadoUsd: string;
   saldoPendienteUsd: string;
+  /** RF-006 RN-05: parte de `montoAbonadoUsd` que salió del saldo a favor al emitirse. */
+  saldoAFavorAplicadoUsd: string;
   saldoPendienteVes?: string;
   tasaAplicada?: string;
   fechaEmisionUtc: string;
