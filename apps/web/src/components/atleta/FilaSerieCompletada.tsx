@@ -6,7 +6,8 @@ import type { UnidadPeso } from '../../lib/weight-unit';
 
 /**
  * Serie completada en una línea (RF-001, lote E4): libera espacio en pantalla sin ocultar el
- * progreso. Tocarla abre la fila completa para corregir los datos o desmarcarla.
+ * progreso. Con `onCorregir` es un botón que abre la fila completa para corregir o desmarcar;
+ * sin él (sesión terminada, solo lectura) es una fila informativa que no promete edición.
  */
 export function FilaSerieCompletada({
   serie,
@@ -15,17 +16,11 @@ export function FilaSerieCompletada({
 }: {
   serie: SerieRegistroDetalleDTO;
   unidadPeso: UnidadPeso;
-  onCorregir: () => void;
+  onCorregir?: () => void;
 }) {
   const texto = textoSerieCompletada(serie, unidadPeso);
-
-  return (
-    <button
-      type="button"
-      onClick={onCorregir}
-      aria-label={`${texto}. Completada, toca para corregir`}
-      className="w-full min-h-11 px-3 py-2 rounded-2xl border border-success/30 bg-success/10 flex items-center gap-2.5 text-left text-sm text-foreground hover:border-success/60 transition-colors cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
-    >
+  const contenido = (
+    <>
       <span
         aria-hidden="true"
         className="h-6 w-6 shrink-0 rounded-full bg-success-strong text-white flex items-center justify-center"
@@ -33,6 +28,27 @@ export function FilaSerieCompletada({
         <Check className="h-4 w-4 stroke-[3]" />
       </span>
       <span className="min-w-0 flex-1 truncate font-medium">{texto}</span>
+    </>
+  );
+  const clases =
+    'w-full min-h-11 px-3 py-2 rounded-2xl border border-success/30 bg-success/10 flex items-center gap-2.5 text-left text-sm text-foreground';
+
+  if (!onCorregir) {
+    return (
+      <div className={clases} aria-label={`${texto}. Completada`} role="group">
+        {contenido}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onCorregir}
+      aria-label={`${texto}. Completada, toca para corregir`}
+      className={`${clases} hover:border-success/60 transition-colors cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary`}
+    >
+      {contenido}
       <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
     </button>
   );

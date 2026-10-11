@@ -84,6 +84,21 @@ const SESION: SesionEntrenamientoDetalleDTO = {
   updatedAtUtc: '2026-10-01T00:00:00.000Z',
 };
 
+/** Igual que SESION, pero el primer ejercicio tiene video de técnica en el catálogo. */
+const SESION_CON_VIDEO: SesionEntrenamientoDetalleDTO = {
+  ...SESION,
+  ejercicios: [
+    {
+      ...SESION.ejercicios[0],
+      ejercicio: {
+        ...SESION.ejercicios[0].ejercicio!,
+        videoUrl: 'https://videos.example.com/press-de-banca.mp4',
+      },
+    },
+    SESION.ejercicios[1],
+  ],
+};
+
 afterEach(() => {
   cleanup();
 });
@@ -152,5 +167,44 @@ describe('VistaPreviaSesion · vista previa de solo lectura (C2)', () => {
       expect(clase).not.toContain('text-[11px]');
       expect(clase).not.toContain('text-[10px]');
     }
+  });
+
+  it('con error="No se pudo iniciar" hay un role="alert" con ese texto', () => {
+    render(
+      <VistaPreviaSesion
+        sesion={SESION}
+        unidadPeso="kg"
+        onIniciar={vi.fn()}
+        error="No se pudo iniciar"
+      />
+    );
+
+    const alerta = screen.getByRole('alert');
+    expect(alerta.textContent).toContain('No se pudo iniciar');
+  });
+
+  it('con onVerTecnica y videoUrl, "Ver técnica de {nombre}" llama a onVerTecnica con ese ejercicio', () => {
+    const onVerTecnica = vi.fn();
+    render(
+      <VistaPreviaSesion
+        sesion={SESION_CON_VIDEO}
+        unidadPeso="kg"
+        onIniciar={vi.fn()}
+        onVerTecnica={onVerTecnica}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ver técnica de Press de banca' }));
+
+    expect(onVerTecnica).toHaveBeenCalledTimes(1);
+    expect(onVerTecnica).toHaveBeenCalledWith(SESION_CON_VIDEO.ejercicios[0]);
+  });
+
+  it('sin videoUrl no aparece el botón "Ver técnica"', () => {
+    render(
+      <VistaPreviaSesion sesion={SESION} unidadPeso="kg" onIniciar={vi.fn()} onVerTecnica={vi.fn()} />
+    );
+
+    expect(screen.queryByRole('button', { name: /^Ver técnica/ })).toBeNull();
   });
 });

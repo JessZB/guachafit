@@ -64,4 +64,18 @@ describe('FilaSerieCompletada · fila compacta (C3)', () => {
     expect(boton.className).not.toContain('text-[11px]');
     expect(boton.className).not.toContain('text-[10px]');
   });
+
+  it('sin onCorregir es informativa: sin botón, con el texto de la serie y sin "corregir"', () => {
+    const { container } = render(<FilaSerieCompletada serie={SERIE} unidadPeso="kg" />);
+
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    expect(screen.getByText(TEXTO_SERIE)).toBeTruthy();
+    expect(container.textContent ?? '').not.toMatch(/corregir/i);
+    const etiquetas = Array.from(container.querySelectorAll('[aria-label]')).map(
+      (elemento) => elemento.getAttribute('aria-label') ?? ''
+    );
+    for (const etiqueta of etiquetas) {
+      expect(etiqueta).not.toMatch(/corregir/i);
+    }
+  });
 });

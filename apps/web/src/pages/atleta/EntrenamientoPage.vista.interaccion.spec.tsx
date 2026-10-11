@@ -149,4 +149,30 @@ describe('EntrenamientoPage · vista previa en modo demo (C4)', () => {
       .filter((alerta) => /peso inválido/i.test(alerta.textContent ?? ''));
     expect(alertasDePeso).toHaveLength(0);
   });
+
+  it('desmarcar desde la fila abierta la deja pendiente y al volver a marcarla se compacta de nuevo', async () => {
+    await renderizarDemo();
+    iniciarEntrenamiento();
+
+    // Completar la serie 1 → fila compacta.
+    const marcar = screen.queryAllByRole('button', { name: 'Marcar serie 1 como completada' })[0];
+    expect(marcar).toBeDefined();
+    fireEvent.click(marcar as HTMLElement);
+    expect(filaCompactaSerie1()).not.toBeNull();
+
+    // Abrirla y pulsar "Marcar serie 1 como pendiente".
+    fireEvent.click(filaCompactaSerie1() as HTMLElement);
+    const pendiente = screen.queryAllByRole('button', { name: 'Marcar serie 1 como pendiente' })[0];
+    expect(pendiente).toBeDefined();
+    fireEvent.click(pendiente as HTMLElement);
+
+    // Queda pendiente: vuelve el botón de completar en esa fila y no hay fila compacta.
+    expect(filaCompactaSerie1()).toBeNull();
+    const recompletar = screen.queryAllByRole('button', { name: 'Marcar serie 1 como completada' })[0];
+    expect(recompletar).toBeDefined();
+
+    // Al volver a marcarla, se compacta de nuevo.
+    fireEvent.click(recompletar as HTMLElement);
+    expect(filaCompactaSerie1()).not.toBeNull();
+  });
 });

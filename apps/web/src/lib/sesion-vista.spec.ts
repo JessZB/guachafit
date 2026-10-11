@@ -150,6 +150,12 @@ describe('sesion-vista · textoSerieCompletada', () => {
     expect(textoSerieCompletada(unaRepeticion, 'kg')).toBe('Serie 1 · 1 repetición');
   });
 
+  it("con pesoKg '0.00' (lo que persiste la API tras un completado sin peso) y 10 reps → \"Serie 1 · 10 repeticiones\"", () => {
+    const persistida = serie({ numeroSerie: 1, pesoKg: '0.00', repsLogradas: 10 });
+
+    expect(textoSerieCompletada(persistida, 'kg')).toBe('Serie 1 · 10 repeticiones');
+  });
+
   it('con repsLogradas null usa repsObjetivo (8)', () => {
     const sinReps = serie({ numeroSerie: 1, pesoKg: null, repsLogradas: null, repsObjetivo: 8 });
 

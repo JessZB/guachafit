@@ -541,6 +541,11 @@ export function EntrenamientoPage() {
   const [seriesEnCorreccion, setSeriesEnCorreccion] = useState<Set<string>>(() => new Set());
   const abrirCorreccionSerie = (serieId: string) =>
     setSeriesEnCorreccion((previas) => new Set(previas).add(serieId));
+  // Lote E4 (H3): sin entrenamiento iniciado no hay descanso que medir; el cronómetro abierto
+  // de otra sesión no debe tapar el botón "Iniciar entrenamiento".
+  useEffect(() => {
+    if (sesion?.estado === EstadoSesion.PLANIFICADA) setIsRestTimerOpen(false);
+  }, [sesion?.id, sesion?.estado]);
   const cerrarCorreccionSerie = (serieId: string) =>
     setSeriesEnCorreccion((previas) => {
       if (!previas.has(serieId)) return previas;
@@ -1700,8 +1705,13 @@ export function EntrenamientoPage() {
 
   return (
     <div className="space-y-6">
-      {/* Errores de acciones explícitas (conflictos, red): visibles y accionables */}
-      {actionError && (
+      {/* Lote E4 (H7): anuncia el cambio de estado al iniciar, cuando la vista previa desaparece. */}
+      <p className="sr-only" role="status" aria-live="polite">
+        {sesion && isInProgress ? 'Entrenamiento en curso' : ''}
+      </p>
+      {/* Errores de acciones explícitas (conflictos, red): visibles y accionables. Antes de
+          iniciar, el error del inicio se muestra junto al botón de la vista previa (lote E4). */}
+      {actionError && !(sesion && isPlanned) && (
         <div
           role="alert"
           className="p-3.5 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-semibold flex items-center gap-2"
@@ -2173,7 +2183,7 @@ export function EntrenamientoPage() {
           </div>
         </div>
 
-        {/* Action Button: Start or Finish */}
+        {/* Finalizar: el inicio vive en la vista previa (VistaPreviaSesion). */}
         {isInProgress && (
           <div className="flex flex-col gap-3 pt-1">
             <div className="text-xs text-muted-foreground flex items-center gap-2">
@@ -2282,6 +2292,8 @@ export function EntrenamientoPage() {
           )}
           onIniciar={handleStartSession}
           iniciando={isStarting}
+          error={actionError}
+          onVerTecnica={handleAbrirVideo}
         />
       ) : (
       <div className="space-y-4">
@@ -2415,7 +2427,9 @@ export function EntrenamientoPage() {
                 const pesoMostrado =
                   borradorPeso !== undefined
                     ? borradorPeso
-                    : formatearPesoDesdeKg(serie.pesoKg, unidadPeso) ?? '';
+                    : Number(serie.pesoKg) > 0
+                    ? formatearPesoDesdeKg(serie.pesoKg, unidadPeso) ?? ''
+                    : '';
                 const rpeMostrado = borradorRpe !== undefined ? borradorRpe : serie.rpe || '';
                 const borradorReps = inputDrafts[claveReps];
                 const repsMostradas =
@@ -2430,7 +2444,7 @@ export function EntrenamientoPage() {
                       key={serie.id}
                       serie={serie}
                       unidadPeso={unidadPeso}
-                      onCorregir={() => abrirCorreccionSerie(serie.id)}
+                      onCorregir={isReadOnly ? undefined : () => abrirCorreccionSerie(serie.id)}
                     />
                   );
                 }
