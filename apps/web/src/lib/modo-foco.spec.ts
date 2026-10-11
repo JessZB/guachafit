@@ -117,6 +117,21 @@ describe('modo-foco · posicionEnFoco (C1)', () => {
 
     expect(posicionEnFoco(s, null)).toBeNull();
   });
+
+  // Lote E5 · validación (H5): un preferido fuera de rango no debe romper el foco.
+  it('con ejercicioPreferido=-1 fuera de rango se comporta como null: primer pendiente', () => {
+    const s = sesion([ejercicio(0, 2, 2), ejercicio(1, 2), ejercicio(2, 2)]);
+
+    expect(posicionEnFoco(s, -1)).toEqual(posicionEnFoco(s, null));
+    expect(posicionEnFoco(s, -1)).toEqual({ ejercicioIndex: 1, serieIndex: 0 });
+  });
+
+  it('con ejercicioPreferido=99 fuera de rango se comporta como null: primer pendiente', () => {
+    const s = sesion([ejercicio(0, 2, 2), ejercicio(1, 2), ejercicio(2, 2)]);
+
+    expect(posicionEnFoco(s, 99)).toEqual(posicionEnFoco(s, null));
+    expect(posicionEnFoco(s, 99)).toEqual({ ejercicioIndex: 1, serieIndex: 0 });
+  });
 });
 
 describe('modo-foco · progresoFoco y textos (C1)', () => {

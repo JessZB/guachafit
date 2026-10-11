@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '../../context/auth-context';
 import { apiClient, ApiError, generateIdempotencyKey } from '../../lib/api-client';
 import { resolverBloqueoAlumno, type BloqueoAlumno } from '../../lib/acceso-alumno';
@@ -67,7 +67,7 @@ import { filtrarEntradaPeso, filtrarEntradaReps, filtrarEntradaRpe } from '../..
 import { VistaPreviaSesion } from '../../components/atleta/VistaPreviaSesion';
 import { FilaSerieCompletada } from '../../components/atleta/FilaSerieCompletada';
 import { ModoFoco } from '../../components/atleta/ModoFoco';
-import { posicionEnFoco } from '../../lib/modo-foco';
+import { posicionEnFoco, type PosicionFoco } from '../../lib/modo-foco';
 import {
   Dumbbell,
   Play,
@@ -545,6 +545,12 @@ export function EntrenamientoPage() {
   // fija el ejercicio preferido del foco (la máquina del siguiente puede estar ocupada).
   const [vistaEnCurso, setVistaEnCurso] = useState<'foco' | 'lista'>('foco');
   const [ejercicioPreferido, setEjercicioPreferido] = useState<number | null>(null);
+  // Respuestas asíncronas (rechazo de una serie): leen el foco y el cronómetro vigentes, no
+  // los capturados al marcar.
+  const posicionFocoVigente = useRef<PosicionFoco | null>(null);
+  const serieDelCronometroVigente = useRef<{ ejercicioIndex: number; serieIndex: number } | null>(
+    null
+  );
   useEffect(() => {
     setVistaEnCurso('foco');
     setEjercicioPreferido(null);
@@ -1313,17 +1319,27 @@ export function EntrenamientoPage() {
       void cacheSesion(revertida);
       return revertida;
     });
-    if (willBeCompleted) {
+    const cronometro = serieDelCronometroVigente.current;
+    if (
+      willBeCompleted &&
+      cronometro?.ejercicioIndex === ejercicioIndex &&
+      cronometro?.serieIndex === serieIndex
+    ) {
       setIsRestTimerOpen(false);
       setActiveSerieKey(null);
     }
     triggerHaptic('warning');
-    marcarErrorInline(
-      `${serie.id}:envio`,
+    const mensajeRechazo =
       resultado.error instanceof Error && resultado.error.message
         ? resultado.error.message
-        : 'No pudimos guardar esta serie. Inténtalo de nuevo.'
-    );
+        : 'No pudimos guardar esta serie. Inténtalo de nuevo.';
+    marcarErrorInline(`${serie.id}:envio`, mensajeRechazo);
+    // Lote E5: en modo foco solo se ve una serie; si la rechazada es otra, el aviso sube al
+    // banner para que no quede sin superficie (el error inline sigue en su fila).
+    const foco = posicionFocoVigente.current;
+    if (foco && (foco.ejercicioIndex !== ejercicioIndex || foco.serieIndex !== serieIndex)) {
+      setActionError(`${nombreEjercicio}, serie ${serie.numeroSerie}: ${mensajeRechazo}`);
+    }
   };
 
   // Update set values (weight, reps, rpe)
@@ -1712,6 +1728,10 @@ export function EntrenamientoPage() {
   const rangoHorarioSesion = sesion
     ? formatearRangoHorario(sesion.fechaInicioUtc, sesion.fechaFinUtc)
     : null;
+
+  posicionFocoVigente.current =
+    sesion && isInProgress && vistaEnCurso === 'foco' ? posicionEnFoco(sesion, ejercicioPreferido) : null;
+  serieDelCronometroVigente.current = isRestTimerOpen ? activeSerieKey : null;
 
   /** Lote E5: fila de una serie, compartida por el modo foco y la lista completa. */
   const renderFilaSerie = (ejIdx: number, sIdx: number): React.ReactNode => {
@@ -2554,7 +2574,7 @@ export function EntrenamientoPage() {
       ) : isInProgress && vistaEnCurso === 'foco' ? (
         <ModoFoco
           sesion={sesion}
-          posicion={posicionEnFoco(sesion, ejercicioPreferido)}
+          posicion={posicionFocoVigente.current}
           unidadPeso={unidadPeso}
           rpeSugeridoPorEjercicio={Object.fromEntries(
             sesion.ejercicios.map((ej) => [

@@ -129,6 +129,43 @@ describe('ModoFoco · foco de la serie actual (C2)', () => {
     expect(screen.getByText('Quedan 3 series de este ejercicio')).toBeTruthy();
   });
 
+  // Lote E5 · validación (H3): el avance del foco se anuncia en una región viva.
+  it('anuncia el avance en una región aria-live="polite" con progreso y nombre; al cambiar de posición, su texto cambia', () => {
+    const { container, rerender } = render(
+      <ModoFoco
+        sesion={SESION}
+        posicion={{ ejercicioIndex: 0, serieIndex: 0 }}
+        unidadPeso="kg"
+        rpeSugeridoPorEjercicio={RPE_SUGERIDO}
+        renderSerie={() => null}
+        onVerListaCompleta={vi.fn()}
+      />
+    );
+
+    const region = container.querySelector('[aria-live="polite"]');
+    expect(region).not.toBeNull();
+    const textoAntes = region?.textContent ?? '';
+    expect(textoAntes).toContain('Ejercicio 1 de 2 · Serie 1 de 3');
+    expect(textoAntes).toContain('Press de banca');
+
+    rerender(
+      <ModoFoco
+        sesion={SESION}
+        posicion={{ ejercicioIndex: 1, serieIndex: 0 }}
+        unidadPeso="kg"
+        renderSerie={() => null}
+        onVerListaCompleta={vi.fn()}
+      />
+    );
+
+    const regionTras = container.querySelector('[aria-live="polite"]');
+    expect(regionTras).not.toBeNull();
+    const textoDespues = regionTras?.textContent ?? '';
+    expect(textoDespues).not.toBe(textoAntes);
+    expect(textoDespues).toContain('Ejercicio 2 de 2 · Serie 1 de 1');
+    expect(textoDespues).toContain('Remo con barra');
+  });
+
   it('llama a renderSerie una sola vez con la posición actual y pinta lo que devuelve', () => {
     const renderSerie = vi.fn(() => <div data-testid="serie-actual" />);
     render(

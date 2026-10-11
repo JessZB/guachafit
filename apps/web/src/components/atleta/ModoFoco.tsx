@@ -69,12 +69,16 @@ export function ModoFoco({
   const rpeDe = (id: string) => rpeSugeridoPorEjercicio?.[id] ?? null;
 
   return (
-    <section aria-label="Entrenamiento en foco" className="space-y-4">
+    <section aria-label="Entrenamiento en foco" className="space-y-4 pb-16 sm:pb-0">
       <div className="p-4 sm:p-5 rounded-3xl bg-card border border-border/80 space-y-3">
         <div className="space-y-1">
-          <p className="text-sm font-semibold text-primary">{textoProgresoFoco(progreso)}</p>
           <div className="flex items-start justify-between gap-2">
-            <h2 className="min-w-0 text-xl font-bold text-foreground break-words">{nombre}</h2>
+            {/* Región viva visible: anuncia cada avance del foco (la fila anterior se desmonta y el
+                lector no lo notaría) sin repetir el texto en un nodo oculto. */}
+            <div className="min-w-0" aria-live="polite" aria-atomic="true">
+              <p className="text-sm font-semibold text-primary">{textoProgresoFoco(progreso)}</p>
+              <h2 className="text-xl font-bold text-foreground break-words">{nombre}</h2>
+            </div>
             {onVerTecnica && ejercicio?.ejercicio?.videoUrl && (
               <button
                 type="button"

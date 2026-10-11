@@ -15,7 +15,7 @@
  */
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 const sesionMock = vi.hoisted(() => ({
   usuario: {
@@ -166,5 +166,55 @@ describe('EntrenamientoPage · modo foco en modo demo (C3)', () => {
 
     expect(screen.queryByText('Completaste todas las series')).not.toBeNull();
     expect(screen.queryByRole('button', { name: 'Finalizar entrenamiento' })).not.toBeNull();
+  });
+
+  // Lote E5 · validación: el "Siguiente:" anunciado coincide con el foco tras terminar el
+  // ejercicio preferido (H5, caso que la revisión 29 solo cubría con su sonda externa).
+  it('"Siguiente:" tras "Hacer ahora": al completar el ejercicio 3 el foco pasa al ejercicio 4 anunciado', async () => {
+    await renderizarDemoEIniciar();
+
+    pulsarBoton('Ver entrenamiento completo');
+    const botonesHacerAhora = screen.queryAllByRole('button', { name: /Hacer ahora/ });
+    expect(botonesHacerAhora.length).toBeGreaterThanOrEqual(3);
+    fireEvent.click(botonesHacerAhora[2]);
+    expect(screen.queryAllByText(/Ejercicio 3 de \d+ · Serie 1 de \d+/).length).toBeGreaterThan(0);
+
+    // El aviso "Siguiente:" previo nombra el ejercicio al que debe saltar el foco.
+    const aviso = screen.getByText((contenido) => contenido.startsWith('Siguiente:'));
+    const bloqueAviso = aviso.closest('p') ?? aviso;
+    const nombreSiguiente = bloqueAviso.querySelectorAll('span')[1]?.textContent ?? '';
+    expect(nombreSiguiente).toBe('Curl con Barra Z de Pie');
+
+    for (let numeroSerie = 1; numeroSerie <= SERIES_POR_EJERCICIO[2]; numeroSerie++) {
+      marcarPrimeraSeriePendiente(numeroSerie);
+    }
+
+    expect(screen.queryAllByText(/Ejercicio 4 de \d+/).length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { name: nombreSiguiente })).toBeTruthy();
+  });
+
+  // Lote E5 · validación: desmarcar desde la lista devuelve el foco a la serie pendiente (H5).
+  it('desmarcar la serie 1 desde la lista devuelve el foco a "Ejercicio 1 · Serie 1"', async () => {
+    await renderizarDemoEIniciar();
+    marcarPrimeraSeriePendiente(1);
+
+    pulsarBoton('Ver entrenamiento completo');
+    const fila = filaCompactaSerie1();
+    expect(fila).not.toBeNull();
+    fireEvent.click(fila as HTMLElement);
+
+    const desmarcar = screen.queryByRole('button', { name: 'Marcar serie 1 como pendiente' });
+    expect(desmarcar).not.toBeNull();
+    fireEvent.click(desmarcar as HTMLElement);
+
+    pulsarBoton('Volver al enfoque');
+
+    const seccion = screen.getByRole('region', { name: 'Entrenamiento en foco' });
+    expect(within(seccion).queryAllByText(/Ejercicio 1 de \d+ · Serie 1 de \d+/).length).toBeGreaterThan(
+      0
+    );
+    const inputs = screen.queryAllByLabelText(/Peso real en kg/);
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0].getAttribute('aria-label')).toBe('Peso real en kg, serie 1');
   });
 });
