@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { avisoExcedenteAprobacion, mensajeConExcedente } from '../../lib/saldo-a-favor';
 import { apiClient } from '../../lib/api-client';
 import { useAuth } from '../../context/auth-context';
 import { pluralizar } from '../../lib/pluralizar';
@@ -213,11 +214,16 @@ export function ConciliacionPage() {
 
   const handleAprobar = async (txId: string) => {
     setActionError(null);
+    let excedenteUsd: string | undefined;
     try {
-      await apiClient(`/finanzas/transacciones/${txId}/conciliar`, {
-        method: 'PATCH',
-        body: JSON.stringify({ accion: 'aprobar' }),
-      });
+      const respuesta = await apiClient<{ transaccion?: { excedenteUsd?: string } } | null>(
+        `/finanzas/transacciones/${txId}/conciliar`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ accion: 'aprobar' }),
+        }
+      );
+      excedenteUsd = respuesta?.transaccion?.excedenteUsd;
     } catch (err: any) {
       // D5: sin éxito falso ni desaparición optimista; la transacción sigue en la bandeja.
       setActionError(
@@ -230,7 +236,8 @@ export function ConciliacionPage() {
     // En demo se registra el id resuelto y el slice local se recalcula.
     if (isDemoMode) setIdsResueltosDemo((prev) => [...prev, txId]);
     else recargar();
-    setActionSuccess('Transacción aprobada. Saldo deducido de la deuda maestra.');
+    // RF-006 RN-05: el excedente (dato del API) queda como saldo a favor del alumno.
+    setActionSuccess(mensajeConExcedente('Pago aprobado y descontado de la cuota.', excedenteUsd));
     setTimeout(() => setActionSuccess(null), 3000);
   };
 
@@ -472,6 +479,16 @@ export function ConciliacionPage() {
                   </span>
                 </div>
               </div>
+
+              {/* RF-006 RN-05: aviso previo si el pago excede lo que debe la cuota. */}
+              {avisoExcedenteAprobacion(tx.montoEquivalenteUsd, tx.saldoPendienteCuotaUsd) && (
+                <p
+                  role="note"
+                  className="p-3 rounded-2xl bg-warning/10 border border-warning/30 text-xs font-semibold text-foreground"
+                >
+                  {avisoExcedenteAprobacion(tx.montoEquivalenteUsd, tx.saldoPendienteCuotaUsd)}
+                </p>
+              )}
 
               {/* Actions Grid */}
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">

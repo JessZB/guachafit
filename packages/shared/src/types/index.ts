@@ -501,6 +501,8 @@ export interface ResumenFinancieroAlumnoDTO {
     montoTotalUsd: string;
     montoPagadoUsd: string;
     saldoPendienteUsd: string;
+    /** RF-006 RN-05: parte de la cuota cubierta con el saldo a favor al emitirse. */
+    saldoAFavorAplicadoUsd?: string;
     estado: string;
     fechaVencimiento: string;
   } | null;

@@ -2780,6 +2780,7 @@ export class FinanzasService {
                 montoTotalUsd: cuotaMes.montoTotalUsd,
                 montoPagadoUsd: cuotaMes.montoAbonadoUsd,
                 saldoPendienteUsd: cuotaMes.saldoPendienteUsd,
+                saldoAFavorAplicadoUsd: cuotaMes.saldoAFavorAplicadoUsd,
                 estado: cuotaMes.estado,
                 fechaVencimiento: toIsoSafe(cuotaMes.fechaCorteUtc),
               }

@@ -160,4 +160,34 @@ describe('TablaCartera (WU-I)', () => {
     expect(html).not.toContain('Registrar cobro');
     expect(html).not.toContain('Recordatorio');
   });
+
+  // ---------------------------------------------------------------------------
+  // RF-006 RN-05 (lote web, prompt 01): saldo a favor en la celda del alumno.
+  // ---------------------------------------------------------------------------
+
+  it('fila con saldo a favor: muestra "A favor: 10.00 USD" en la celda del alumno en cualquier pestaña', () => {
+    expect(renderizar([fila({ saldoAFavorUsd: '10.00' })], 'mora')).toContain(
+      'A favor: 10.00 USD'
+    );
+    expect(
+      renderizar(
+        [
+          fila({
+            saldoAFavorUsd: '10.00',
+            estadoCuota: EstadoCuota.AL_DIA,
+            saldoPendienteUsd: '0.00',
+            saldoPendienteBs: '0.00',
+            planNombre: 'Presencial Completo',
+            periodo: '2026-09',
+            diasAtraso: null,
+          }),
+        ],
+        'al_dia'
+      )
+    ).toContain('A favor: 10.00 USD');
+  });
+
+  it('fila sin saldo a favor: no muestra el texto "A favor"', () => {
+    expect(renderizar([fila({ saldoAFavorUsd: '0.00' })], 'mora')).not.toContain('A favor:');
+  });
 });

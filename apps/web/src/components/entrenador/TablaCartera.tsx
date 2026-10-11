@@ -10,6 +10,7 @@ import type { FilaCarteraDTO, PestanaCarteraDTO } from '@guachafit/shared';
 import { etiquetaEstadoCuota } from '../../lib/etiquetas-dominio';
 import { etiquetaMetodoPago } from '../../lib/conciliacion-filtros';
 import { formatFechaHoraLocal } from '../../lib/date-format';
+import { tieneSaldoAFavor } from '../../lib/saldo-a-favor';
 import {
   etiquetaDiasAtraso,
   etiquetaDiasEspera,
@@ -301,6 +302,11 @@ export function TablaCartera({
               >
                 <td className="px-4 py-3 align-top">
                   <div className="font-bold text-foreground">{fila.alumnoNombre}</div>
+                  {tieneSaldoAFavor(fila.saldoAFavorUsd) && (
+                    <div className="text-[11px] font-semibold text-success">
+                      {`A favor: ${fila.saldoAFavorUsd} USD`}
+                    </div>
+                  )}
                   {fila.telefonoWhatsapp && (
                     <div className="text-[11px] text-muted-foreground font-mono">
                       {fila.telefonoWhatsapp}
@@ -390,6 +396,11 @@ export function TablaCartera({
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="font-bold text-sm text-foreground truncate">{fila.alumnoNombre}</p>
+                {tieneSaldoAFavor(fila.saldoAFavorUsd) && (
+                  <p className="text-[11px] font-semibold text-success">
+                    {`A favor: ${fila.saldoAFavorUsd} USD`}
+                  </p>
+                )}
                 {fila.telefonoWhatsapp && (
                   <p className="text-[11px] text-muted-foreground font-mono">
                     {fila.telefonoWhatsapp}

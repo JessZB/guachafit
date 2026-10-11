@@ -111,6 +111,7 @@ import {
   textoProximaCuota,
 } from '../../lib/suscripcion-alumno';
 import { construirPayloadCobroSala } from '../../lib/cobro-sala';
+import { mensajeConExcedente, textoSaldoAFavor, tieneSaldoAFavor } from '../../lib/saldo-a-favor';
 import { partesEnZona } from '../../lib/zona-horaria';
 import {
   ArrowLeft,
@@ -1729,10 +1730,18 @@ export function AlumnoDetallePage() {
     }
 
     try {
-      await apiClient.post(`/finanzas/clientes/${id}/cobro-directo-inteligente`, payload, {
-        idempotencyKey: claveCobro,
-      });
-      setCobroSuccessMsg('Cobro directo registrado y liquidado con éxito.');
+      const respuesta = await apiClient.post<{ transaccion?: { excedenteUsd?: string } } | null>(
+        `/finanzas/clientes/${id}/cobro-directo-inteligente`,
+        payload,
+        { idempotencyKey: claveCobro }
+      );
+      // RF-006 RN-05: si el cobro excedió la deuda, el API dice cuánto quedó a favor.
+      setCobroSuccessMsg(
+        mensajeConExcedente(
+          'Cobro directo registrado y liquidado con éxito.',
+          respuesta?.transaccion?.excedenteUsd
+        )
+      );
       // Cobro confirmado: el siguiente cobro de este alumno usará una clave nueva.
       setClaveCobro(generateIdempotencyKey());
       temporizadorCobroRef.current = setTimeout(() => {
@@ -2921,6 +2930,11 @@ export function AlumnoDetallePage() {
                   ? 'Cuota pendiente de liquidar'
                   : 'Sin deudas activas'}
               </span>
+              {finanzas && tieneSaldoAFavor(finanzas.saldoAFavorUsd) && (
+                <span className="text-xs font-semibold text-success block">
+                  {textoSaldoAFavor(finanzas.saldoAFavorUsd)}
+                </span>
+              )}
             </div>
 
             <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1.5">

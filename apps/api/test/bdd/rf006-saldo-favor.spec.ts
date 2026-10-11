@@ -1349,6 +1349,21 @@ describe('RF-006 · saldo a favor (contratos A–E del prompt 01)', () => {
 
       expect(resumen.saldoAFavorUsd).toBe('10.00');
     });
+
+    it('[E19] ResumenFinancieroAlumnoDTO.cuotaMesActual expone saldoAFavorAplicadoUsd (contrato 10)', async () => {
+      // Fase roja: `obtenerHistorialCliente` todavía no mapea la columna de la cuota al DTO.
+      sembrarCuota({ id: 'cuota-e19', saldoAFavorAplicadoUsd: '10.00' });
+
+      const resumen = await finanzasService.obtenerHistorialCliente(
+        UUID_COACH,
+        ALUMNO_USER,
+        UUID_COACH,
+        Rol.ENTRENADOR
+      );
+
+      const cuota = resumen.cuotaMesActual as { saldoAFavorAplicadoUsd?: string } | null;
+      expect(cuota?.saldoAFavorAplicadoUsd).toBe('10.00');
+    });
   });
 
   // ===========================================================================

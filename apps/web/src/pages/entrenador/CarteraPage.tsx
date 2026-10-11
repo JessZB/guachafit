@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient, generateIdempotencyKey } from '../../lib/api-client';
 import { construirPayloadCobroSala } from '../../lib/cobro-sala';
+import { mensajeConExcedente } from '../../lib/saldo-a-favor';
 import { esErrorSinPlanAsignado } from '../../lib/suscripcion-alumno';
 import { useAuth } from '../../context/auth-context';
 import { useValorDebounced } from '../../lib/use-valor-debounced';
@@ -298,7 +299,7 @@ export function CarteraPage() {
     }
 
     try {
-      await apiClient(
+      const respuesta = await apiClient<{ transaccion?: { excedenteUsd?: string } } | null>(
         `/finanzas/clientes/${cobro.fila.alumnoUsuarioId}/cobro-directo-inteligente`,
         {
           method: 'POST',
@@ -315,8 +316,12 @@ export function CarteraPage() {
       // Cobro confirmado: el próximo cobro de este alumno usará una clave nueva. El mensaje no
       // repite el monto del formulario: un reintento idempotente devuelve el cobro original.
       clavesCobroPendientesRef.current.delete(cobro.fila.alumnoUsuarioId);
+      // RF-006 RN-05: si el cobro excedió la deuda, el API dice cuánto quedó a favor.
       setExitoCobro(
-        `Cobro registrado y auto-aprobado para ${cobro.fila.alumnoNombre}. El saldo del alumno quedó actualizado.`
+        mensajeConExcedente(
+          `Cobro registrado y auto-aprobado para ${cobro.fila.alumnoNombre}. El saldo del alumno quedó actualizado.`,
+          respuesta?.transaccion?.excedenteUsd
+        )
       );
       recargar();
     } catch (err: any) {

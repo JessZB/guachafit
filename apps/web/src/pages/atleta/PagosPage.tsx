@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { tieneSaldoAFavor, textoSaldoAFavor } from '../../lib/saldo-a-favor';
 import { useAuth } from '../../context/auth-context';
 import { apiClient, resolverUrlApi } from '../../lib/api-client';
 import { pluralizar } from '../../lib/pluralizar';
@@ -156,7 +157,7 @@ function adaptarCuotaDesdeResumen(
     montoTotalUsd: c.montoTotalUsd,
     montoAbonadoUsd: c.montoPagadoUsd,
     saldoPendienteUsd: c.saldoPendienteUsd,
-    saldoAFavorAplicadoUsd: '0.00',
+    saldoAFavorAplicadoUsd: c.saldoAFavorAplicadoUsd ?? '0.00',
     fechaEmisionUtc: c.fechaVencimiento,
     fechaCorteUtc: c.fechaVencimiento,
     estado: c.estado as EstadoCuota,
@@ -173,6 +174,8 @@ export function PagosPage() {
   const { user, isDemoMode } = useAuth();
   const [cuota, setCuota] = useState<CuotaDetalleDTO | null>(null);
   const [tasa, setTasa] = useState<TasaCambioVigenteDTO | null>(null);
+  // RF-006 RN-05: saldo a favor del alumno (se aplica solo a la próxima cuota).
+  const [saldoAFavorUsd, setSaldoAFavorUsd] = useState('0.00');
   // D6: distingue "sin tasa configurada" (dato real de la API) de "no se pudo consultar".
   const [tasaError, setTasaError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -327,6 +330,7 @@ export function PagosPage() {
         `/finanzas/clientes/${user.id}/historial?txLimit=${tamanoSolicitado}&txOffset=${offset}`
       );
       setCuota(adaptarCuotaDesdeResumen(resumen, user.entrenadorId || user.id));
+      setSaldoAFavorUsd(resumen.saldoAFavorUsd ?? '0.00');
       setTransaccionesHistorial(
         adaptarTransaccionesHistorial(resumen.transacciones, {
           clienteId: resumen.usuarioId,
@@ -544,6 +548,18 @@ export function PagosPage() {
         </div>
       </div>
 
+      {/* RF-006 RN-05: saldo a favor del alumno */}
+      {tieneSaldoAFavor(saldoAFavorUsd) && (
+        <div role="status" className="p-4 rounded-3xl bg-success/10 border border-success/30 space-y-0.5">
+          <p className="text-sm font-bold text-foreground">
+            {textoSaldoAFavor(saldoAFavorUsd, tasa?.tasaEfectiva)}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Se aplicará automáticamente a tu próxima cuota.
+          </p>
+        </div>
+      )}
+
       {/* D2: error de carga honesto con reintento (sin cuota demo fuera del modo demo) */}
       {error && (
         <div className="p-5 rounded-3xl bg-card border border-destructive/30 text-center space-y-3">
@@ -637,6 +653,11 @@ export function PagosPage() {
                   </span>
                 </div>
               </div>
+              {tieneSaldoAFavor(cuota.saldoAFavorAplicadoUsd) && (
+                <p className="text-xs font-semibold text-success">
+                  {`De esta cuota, ${cuota.saldoAFavorAplicadoUsd} USD se cubrieron con tu saldo a favor.`}
+                </p>
+              )}
             </div>
           )}
 
