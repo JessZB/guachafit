@@ -111,6 +111,7 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 - [ ] **Cambio atascado:** si un cambio falla 8 veces por error del servidor pasa a "rechazado" y deja de frenar a los demás; desde el panel puedes **Descartarlo**. Los cortes de red no cuentan como fallo.
 - [ ] **Indicaciones del coach:** si el coach puso notas técnicas o esfuerzo sugerido en la rutina/plantilla, el alumno ve **"Indicaciones de tu entrenador: …"** y el esfuerzo sugerido en el ejercicio (requiere la migración `0014`).
 - [ ] **Lenguaje claro:** en la pantalla del alumno no aparecen "RPE", "RIR" ni siglas: dice **esfuerzo**, **repeticiones**, **semana**. Los botones del cronómetro y de las series se tocan con comodidad (44px).
+- [ ] **Solo datos válidos (desde 2026-10-11):** en una serie intenta escribir letras, `1000` kg (o `2203` lb), `201` repeticiones o un esfuerzo de `0`, `11` u `8.3` → **no se escriben**. `8,5` de esfuerzo y `60,5` kg sí. Vacía las repeticiones y sal del campo → vuelve el último valor (no aparece 0). Los botones +/− no pasan de 999 kg ni de 200 repeticiones.
 
 ## 2. Seguimiento de Alumnos (entrenador)
 
@@ -162,6 +163,7 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 - [ ] **Reintento en modo Añadir:** corta la red justo al asignar en modo **Añadir** (DevTools → Network → Offline) → aparece un aviso de que **no se sabe si se completó** y, al reintentar, pide confirmar antes (para no duplicar días).
 - [ ] **Tope de 7 días:** asigna en modo **Añadir** una plantilla a un alumno cuya rutina ya suma 7 días (o que los superaría) → se rechaza con *"La rutina de este alumno quedaría con más de 7 días. Usa «Reemplazar» o quita días antes de añadir."* y la rutina del alumno no cambia.
 - [ ] **Ejercicio desactivado nombrado:** crea una plantilla con un ejercicio propio, desactiva ese ejercicio del catálogo e intenta guardar o asignar la plantilla → el error **nombra el ejercicio** (*"Press X ya no está en tu lista de ejercicios. Quítalo o cámbialo por otro y vuelve a guardar."*).
+- [ ] **Campos del entrenador (desde 2026-10-11):** en el editor de plantillas, en la rutina semanal de la ficha y en los ajustes al asignar, el peso solo admite números hasta 999 o el interruptor **"Peso corporal"** (al desactivarlo vuelve el número anterior); las repeticiones admiten `10`, `8-10`, `8 - 10` o `45 s`, y el esfuerzo de 1 a 10 en pasos de 0,5. Una plantilla antigua con `'10-12 reps'` se puede borrar y corregir; si guardas con un dato inválido, el aviso **nombra el ejercicio**.
 - [ ] **Editor seguro:** borrar un día o un ejercicio pide confirmación; cerrar la plantilla con cambios sin guardar avisa; sin conexión, "Guardar" queda deshabilitado con **"Necesitas internet para guardar"**; el lápiz de edición se ve siempre.
 
 ## 7. Altas, enlaces y accesos
