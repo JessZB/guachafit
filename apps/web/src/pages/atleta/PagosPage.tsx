@@ -612,7 +612,7 @@ export function PagosPage() {
                   <span className="text-xs font-semibold text-muted-foreground block">
                     Saldo Pendiente
                   </span>
-                  <div className="text-3xl sm:text-4xl font-black font-mono text-foreground mt-0.5">
+                  <div className="text-3xl sm:text-4xl font-bold font-mono text-foreground mt-0.5">
                     ${cuota.saldoPendienteUsd}{' '}
                     <span className="text-sm font-semibold text-primary">USD</span>
                   </div>
@@ -802,7 +802,7 @@ export function PagosPage() {
                       : 'Contravalor acreditado a tu cuota:'}
                   </span>
                   {!pagoVesSinTasa && (
-                    <span className="font-mono font-black text-sm text-primary">
+                    <span className="font-mono font-bold text-sm text-primary">
                       ${contravalorUsd} USD
                     </span>
                   )}
@@ -979,7 +979,7 @@ export function PagosPage() {
             ) : transaccionesFiltradas.length === 0 ? (
               <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
                 <SearchX className="h-9 w-9 text-muted-foreground mx-auto opacity-50" />
-                <h3 className="text-sm font-black text-foreground">Sin resultados</h3>
+                <h3 className="text-sm font-bold text-foreground">Sin resultados</h3>
                 <p className="text-xs text-muted-foreground max-w-md mx-auto">
                   Ningún pago del historial coincide con el estado seleccionado.
                 </p>
@@ -1026,7 +1026,7 @@ export function PagosPage() {
                       </div>
 
                       <div className="text-left sm:text-right">
-                        <p className="font-mono font-black text-base text-foreground">
+                        <p className="font-mono font-bold text-base text-foreground">
                           +${tx.montoEquivalenteUsd} USD
                         </p>
                         <p className="text-[11px] font-mono text-muted-foreground">

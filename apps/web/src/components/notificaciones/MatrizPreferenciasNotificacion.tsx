@@ -426,7 +426,7 @@ export function MatrizPreferenciasNotificacion({
               <div className="min-w-0">
                 <h3
                   id="rn02-finanzas-titulo"
-                  className="font-extrabold text-base text-foreground leading-tight"
+                  className="font-bold text-base text-foreground leading-tight"
                 >
                   ¿Desactivar todos los avisos de pagos?
                 </h3>

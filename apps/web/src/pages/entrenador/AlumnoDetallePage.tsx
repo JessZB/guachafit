@@ -312,7 +312,7 @@ function FeedbackAlumno({ notas }: { notas?: string | null }) {
                 {etiqueta.titulo}
               </span>
               {etiqueta.valor && (
-                <span className="font-mono font-black text-foreground">{etiqueta.valor}</span>
+                <span className="font-mono font-bold text-foreground">{etiqueta.valor}</span>
               )}
             </span>
           ))}
@@ -2164,18 +2164,18 @@ export function AlumnoDetallePage() {
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
           {/* Avatar e Identidad */}
           <div className="flex items-center gap-4">
-            <div className="h-16 w-16 rounded-2xl bg-secondary/80 border-2 border-primary/30 flex items-center justify-center text-primary font-black text-xl shadow-xs shrink-0">
+            <div className="h-16 w-16 rounded-2xl bg-secondary/80 border-2 border-primary/30 flex items-center justify-center text-primary font-bold text-xl shadow-xs shrink-0">
               {alumno.nombres[0]}
               {alumno.apellidos[0]}
             </div>
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
                   {alumno.nombres} {alumno.apellidos}
                 </h1>
                 {/* Semáforo de Pago */}
                 <span
-                  className={`px-3 py-1 rounded-full text-[11px] font-extrabold tracking-wide uppercase border flex items-center gap-1.5 shadow-2xs ${
+                  className={`px-3 py-1 rounded-full text-[11px] font-bold tracking-wide uppercase border flex items-center gap-1.5 shadow-2xs ${
                     semaforo === 'al_dia'
                       ? 'bg-success/15 text-success border-success/30'
                       : semaforo === 'por_vencer'
@@ -2201,7 +2201,7 @@ export function AlumnoDetallePage() {
 
                 {/* Badge Estado de Activación */}
                 <span
-                  className={`px-3 py-1 rounded-full text-[11px] font-extrabold tracking-wide uppercase border flex items-center gap-1.5 shadow-2xs ${
+                  className={`px-3 py-1 rounded-full text-[11px] font-bold tracking-wide uppercase border flex items-center gap-1.5 shadow-2xs ${
                     isArchived
                       ? 'bg-secondary text-muted-foreground border-border/80'
                       : alumno.estadoActivacion === EstadoAlumno.ACTIVO
@@ -2222,7 +2222,7 @@ export function AlumnoDetallePage() {
                 </span>
 
                 {/* Badge Modalidad */}
-                <span className="px-3 py-1 rounded-full text-[11px] font-extrabold tracking-wide uppercase bg-secondary/80 text-foreground border border-border/70 flex items-center gap-1.5 shadow-2xs">
+                <span className="px-3 py-1 rounded-full text-[11px] font-bold tracking-wide uppercase bg-secondary/80 text-foreground border border-border/70 flex items-center gap-1.5 shadow-2xs">
                   <span className="h-1.5 w-1.5 rounded-full bg-foreground/50" />
                   {alumno.modalidad}
                 </span>
@@ -2404,7 +2404,7 @@ export function AlumnoDetallePage() {
           <DollarSign className="h-4 w-4" />
           <span>Finanzas & Pagos</span>
           {finanzas && Number(finanzas.saldoPendienteTotalUsd) > 0 && (
-            <span className="px-1.5 py-0.5 rounded-full text-[11px] bg-danger-strong text-white font-black font-mono">
+            <span className="px-1.5 py-0.5 rounded-full text-[11px] bg-danger-strong text-white font-bold font-mono">
               ${finanzas.saldoPendienteTotalUsd}
             </span>
           )}
@@ -2464,7 +2464,7 @@ export function AlumnoDetallePage() {
             <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4">
               <div className="flex items-center gap-2 border-b border-border/80 pb-3">
                 <User className="h-4 w-4 text-primary" />
-                <h3 className="font-extrabold text-sm text-foreground">Ficha Deportiva & Personal</h3>
+                <h3 className="font-bold text-sm text-foreground">Ficha Deportiva & Personal</h3>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -2565,7 +2565,7 @@ export function AlumnoDetallePage() {
                 <div className="flex items-center justify-between border-b border-border/80 pb-3">
                   <div className="flex items-center gap-2">
                     <CreditCard className="h-4 w-4 text-primary" />
-                    <h3 className="font-extrabold text-sm text-foreground">Plan Comercial & Tarifa (RF-005)</h3>
+                    <h3 className="font-bold text-sm text-foreground">Plan Comercial & Tarifa (RF-005)</h3>
                   </div>
                   {/* M5-L1B: el badge dice la verdad sobre el plan (suscripción) o que no hay dato. */}
                   {suscripcionError ? (
@@ -2785,7 +2785,7 @@ export function AlumnoDetallePage() {
                 <div className="flex items-center justify-between border-b border-border/80 pb-3">
                   <div className="flex items-center gap-2 text-primary">
                     <Lock className="h-4 w-4" />
-                    <h3 className="font-extrabold text-sm text-foreground">Ficha Médica Confidencial</h3>
+                    <h3 className="font-bold text-sm text-foreground">Ficha Médica Confidencial</h3>
                   </div>
                   <span className="text-xs text-muted-foreground">Se guarda cifrada</span>
                 </div>
@@ -2826,7 +2826,7 @@ export function AlumnoDetallePage() {
             <button
               type="submit"
               disabled={isSavingPerfil}
-              className="py-3 px-6 rounded-2xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all disabled:opacity-50 cursor-pointer"
+              className="py-3 px-6 rounded-2xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all disabled:opacity-50 cursor-pointer"
             >
               {isSavingPerfil ? 'Guardando expediente...' : 'Guardar Cambios de Ficha & Plan'}
             </button>
@@ -2882,7 +2882,7 @@ export function AlumnoDetallePage() {
                 />
               </div>
               <p
-                className={`text-2xl font-black font-mono tracking-tight ${
+                className={`text-2xl font-bold font-mono tracking-tight ${
                   !finanzas
                     ? 'text-muted-foreground'
                     : Number(finanzas.saldoPendienteTotalUsd || 0) > 0
@@ -2906,7 +2906,7 @@ export function AlumnoDetallePage() {
               <span className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block">
                 Pagado en Mes en Curso
               </span>
-              <p className="text-2xl font-black font-mono tracking-tight text-foreground">
+              <p className="text-2xl font-bold font-mono tracking-tight text-foreground">
                 ${finanzas ? finanzas.totalPagadoMesActualUsd || '0.00' : '—'}{' '}
                 <span className="text-xs font-bold text-muted-foreground">USD</span>
               </p>
@@ -2917,7 +2917,7 @@ export function AlumnoDetallePage() {
               <span className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider block">
                 Histórico Total Acumulado
               </span>
-              <p className="text-2xl font-black font-mono tracking-tight text-primary">
+              <p className="text-2xl font-bold font-mono tracking-tight text-primary">
                 ${finanzas ? finanzas.totalPagadoHistoricoUsd || '0.00' : '—'}{' '}
                 <span className="text-xs font-bold text-muted-foreground">USD</span>
               </p>
@@ -2934,13 +2934,13 @@ export function AlumnoDetallePage() {
                   <span>Estado de la Cuota Mensual</span>
                 </div>
                 <div className="flex items-center gap-2.5 mt-0.5">
-                  <h3 className="text-lg font-black text-foreground">
+                  <h3 className="text-lg font-bold text-foreground">
                     Periodo:{' '}
                     {finanzas?.cuotaMesActual?.periodo || (finanzas ? 'Sin cuota emitida' : '—')}
                   </h3>
                   {finanzas?.cuotaMesActual && (
                     <span
-                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold tracking-wide uppercase border flex items-center gap-1.5 shadow-2xs ${
+                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide uppercase border flex items-center gap-1.5 shadow-2xs ${
                         Number(finanzas.cuotaMesActual.saldoPendienteUsd) <= 0
                           ? 'bg-success/15 text-success border-success/30'
                           : 'bg-danger/15 text-danger border-danger/30'
@@ -2976,7 +2976,7 @@ export function AlumnoDetallePage() {
                   setCobroSinPlan(false);
                   setIsCobroModalOpen(true);
                 }}
-                className="py-2.5 px-4 rounded-xl bg-success-strong hover:bg-success-strong/90 text-white font-black text-xs shadow-md shadow-success-strong/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-success"
+                className="py-2.5 px-4 rounded-xl bg-success-strong hover:bg-success-strong/90 text-white font-bold text-xs shadow-md shadow-success-strong/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-success"
               >
                 <DollarSign className="h-4 w-4" />
                 <span>Registrar Cobro Directo en Sala</span>
@@ -2987,19 +2987,19 @@ export function AlumnoDetallePage() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                 <div className="p-3 rounded-2xl bg-secondary/30 border border-border/50">
                   <span className="text-[11px] text-muted-foreground uppercase font-semibold">Total Cuota</span>
-                  <p className="font-mono font-black text-sm text-foreground mt-0.5">
+                  <p className="font-mono font-bold text-sm text-foreground mt-0.5">
                     ${finanzas.cuotaMesActual.montoTotalUsd} USD
                   </p>
                 </div>
                 <div className="p-3 rounded-2xl bg-secondary/30 border border-border/50">
                   <span className="text-[11px] text-muted-foreground uppercase font-semibold">Monto Abonado</span>
-                  <p className="font-mono font-black text-sm text-success mt-0.5">
+                  <p className="font-mono font-bold text-sm text-success mt-0.5">
                     ${finanzas.cuotaMesActual.montoPagadoUsd} USD
                   </p>
                 </div>
                 <div className="p-3 rounded-2xl bg-secondary/30 border border-border/50">
                   <span className="text-[11px] text-muted-foreground uppercase font-semibold">Saldo Restante</span>
-                  <p className="font-mono font-black text-sm text-danger mt-0.5">
+                  <p className="font-mono font-bold text-sm text-danger mt-0.5">
                     ${finanzas.cuotaMesActual.saldoPendienteUsd} USD
                   </p>
                 </div>
@@ -3067,7 +3067,7 @@ export function AlumnoDetallePage() {
                     </div>
 
                     <div className="text-right">
-                      <p className="font-mono font-black text-sm text-success">
+                      <p className="font-mono font-bold text-sm text-success">
                         +${tx.montoUsd} USD
                       </p>
                       {tx.montoBs && (
@@ -3113,7 +3113,7 @@ export function AlumnoDetallePage() {
           {/* Header con botón de nuevo control */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-6 rounded-3xl bg-card border border-border shadow-xs">
             <div>
-              <h3 className="text-lg font-black text-foreground">Evolución Corporal & Medidas</h3>
+              <h3 className="text-lg font-bold text-foreground">Evolución Corporal & Medidas</h3>
               <p className="text-xs text-muted-foreground">
                 Control antropométrico multieje, porcentaje graso y registros de pesaje.
               </p>
@@ -3143,7 +3143,7 @@ export function AlumnoDetallePage() {
               <div className="flex items-center gap-2">
                 <CalendarClock className="h-4 w-4 text-primary" />
                 <div>
-                  <h3 className="font-extrabold text-sm text-foreground">
+                  <h3 className="font-bold text-sm text-foreground">
                     Calendario de Check-in Antropométrico
                   </h3>
                   <p className="text-xs text-muted-foreground">
@@ -3321,7 +3321,7 @@ export function AlumnoDetallePage() {
                 <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1">
                   <span className="text-[11px] uppercase font-bold text-muted-foreground block">Peso Actual</span>
                   <div className="flex items-baseline gap-2">
-                    <p className="text-2xl font-black font-mono text-foreground">{actual.pesoKg} kg</p>
+                    <p className="text-2xl font-bold font-mono text-foreground">{actual.pesoKg} kg</p>
                     {deltaPeso && (
                       <span
                         className={`text-[11px] font-bold font-mono px-2 py-0.5 rounded-full border ${
@@ -3339,7 +3339,7 @@ export function AlumnoDetallePage() {
                 <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1">
                   <span className="text-[11px] uppercase font-bold text-muted-foreground block">% Grasa Estimada</span>
                   <div className="flex items-baseline gap-2">
-                    <p className="text-2xl font-black font-mono text-foreground">
+                    <p className="text-2xl font-bold font-mono text-foreground">
                       {actual.grasaPorcentaje ? `${actual.grasaPorcentaje}%` : '—'}
                     </p>
                     {deltaGrasa && (
@@ -3359,7 +3359,7 @@ export function AlumnoDetallePage() {
                 <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1">
                   <span className="text-[11px] uppercase font-bold text-muted-foreground block">Cintura</span>
                   <div className="flex items-baseline gap-2">
-                    <p className="text-2xl font-black font-mono text-foreground">
+                    <p className="text-2xl font-bold font-mono text-foreground">
                       {actual.cinturaCm ? `${actual.cinturaCm} cm` : '—'}
                     </p>
                     {deltaCintura && (
@@ -3378,7 +3378,7 @@ export function AlumnoDetallePage() {
 
                 <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1">
                   <span className="text-[11px] uppercase font-bold text-muted-foreground block">Brazo / Pecho</span>
-                  <p className="text-2xl font-black font-mono text-primary">
+                  <p className="text-2xl font-bold font-mono text-primary">
                     {actual.brazoCm ?? '—'} / {actual.pechoCm ?? '—'} cm
                   </p>
                 </div>
@@ -3472,7 +3472,7 @@ export function AlumnoDetallePage() {
                     <span className="text-sm font-bold text-foreground">
                       {formatFechaCalendario(c.fecha) ?? c.fecha}
                     </span>
-                    <span className="font-mono text-sm font-black text-foreground">
+                    <span className="font-mono text-sm font-bold text-foreground">
                       {c.pesoKg} kg
                     </span>
                   </div>
@@ -3560,7 +3560,7 @@ export function AlumnoDetallePage() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/80 pb-3">
                 <div className="flex items-center gap-2">
                   <Dumbbell className="h-4 w-4 text-primary" />
-                  <h3 className="font-extrabold text-sm text-foreground">
+                  <h3 className="font-bold text-sm text-foreground">
                     {ultimoEntrenamiento.estado === EstadoSesion.EN_PROGRESO
                       ? 'Entrenamiento en Progreso'
                       : 'Último Entrenamiento Realizado'}{' '}
@@ -3636,7 +3636,7 @@ export function AlumnoDetallePage() {
               <div className="flex items-center gap-2">
                 <History className="h-5 w-5 text-primary" />
                 <div>
-                  <h3 className="text-base font-black text-foreground">
+                  <h3 className="text-base font-bold text-foreground">
                     Historial de Sesiones ({historialTotal})
                   </h3>
                   <p className="text-xs text-muted-foreground">
@@ -3747,7 +3747,7 @@ export function AlumnoDetallePage() {
           >
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-black text-foreground">Rutina Semanal Asignada</h3>
+                <h3 className="text-base font-bold text-foreground">Rutina Semanal Asignada</h3>
                 <p className="text-xs text-muted-foreground">
                   Estructura de días, ejercicios, series, repeticiones y cargas asignadas al alumno.
                 </p>
@@ -3800,7 +3800,7 @@ export function AlumnoDetallePage() {
                 >
                   <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
                     <div>
-                      <h4 className="font-extrabold text-sm text-foreground">{bloque.titulo}</h4>
+                      <h4 className="font-bold text-sm text-foreground">{bloque.titulo}</h4>
                       <p className="text-[11px] text-muted-foreground">{bloque.enfoque}</p>
                     </div>
                     <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-secondary text-foreground border border-border">
@@ -3953,7 +3953,7 @@ export function AlumnoDetallePage() {
                 <button
                   type="submit"
                   disabled={isSubmittingCobro}
-                  className="w-full py-3 px-4 rounded-xl bg-success-strong hover:bg-success-strong/90 text-white font-black text-sm tracking-wide shadow-md shadow-success-strong/20 active:scale-98 transition-all disabled:opacity-50 mt-2 cursor-pointer"
+                  className="w-full py-3 px-4 rounded-xl bg-success-strong hover:bg-success-strong/90 text-white font-bold text-sm tracking-wide shadow-md shadow-success-strong/20 active:scale-98 transition-all disabled:opacity-50 mt-2 cursor-pointer"
                 >
                   {isSubmittingCobro ? 'Procesando cobro en BD...' : 'Registrar y Liquidar Cobro'}
                 </button>
@@ -4092,7 +4092,7 @@ export function AlumnoDetallePage() {
               <button
                 type="submit"
                 disabled={isSavingAntro || fotosAntro.subiendo}
-                className="w-full py-3 px-4 rounded-xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-md shadow-primary/20 active:scale-98 transition-all disabled:opacity-50 mt-2 cursor-pointer"
+                className="w-full py-3 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-md shadow-primary/20 active:scale-98 transition-all disabled:opacity-50 mt-2 cursor-pointer"
               >
                 {isSavingAntro ? 'Guardando medidas...' : 'Guardar Control Antropométrico'}
               </button>
@@ -4124,7 +4124,7 @@ export function AlumnoDetallePage() {
               <div className="flex items-center gap-2">
                 <Dumbbell className="h-5 w-5 text-primary" />
                 <div>
-                  <h3 id="modal-rutina-title" className="font-black text-base text-foreground">
+                  <h3 id="modal-rutina-title" className="font-bold text-base text-foreground">
                     Asignar & Editar Rutina Semanal
                   </h3>
                   <p className="text-xs text-muted-foreground">
@@ -4312,7 +4312,7 @@ export function AlumnoDetallePage() {
                     <span className="text-[11px] font-bold text-primary uppercase tracking-wider shrink-0">
                       🏷️ Título generado:
                     </span>
-                    <span className="font-extrabold text-foreground truncate">
+                    <span className="font-bold text-foreground truncate">
                       {bloquesRutinaEdit[activeDiaIdx].titulo}
                     </span>
                   </div>
@@ -4338,7 +4338,7 @@ export function AlumnoDetallePage() {
                           {/* Fila Superior: Número de orden, Nombre completo (sin truncar), Edición inline y Eliminar */}
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex items-start gap-2.5 flex-1 min-w-0">
-                              <span className="h-6 w-6 rounded-lg bg-primary/10 text-primary font-mono font-black flex items-center justify-center text-[11px] shrink-0 mt-0.5">
+                              <span className="h-6 w-6 rounded-lg bg-primary/10 text-primary font-mono font-bold flex items-center justify-center text-[11px] shrink-0 mt-0.5">
                                 {ejIdx + 1}
                               </span>
                               <div className="flex-1 min-w-0">
@@ -4416,7 +4416,7 @@ export function AlumnoDetallePage() {
                                   >
                                     <Minus className="h-3 w-3" />
                                   </button>
-                                  <span className="w-6 text-center font-mono font-black text-xs text-foreground select-none">
+                                  <span className="w-6 text-center font-mono font-bold text-xs text-foreground select-none">
                                     {ej.series || 1}
                                   </span>
                                   <button

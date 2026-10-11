@@ -161,7 +161,7 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
               >
                 {isFinished ? '¡Listo!' : 'Descanso'}
               </span>
-              <span className="text-base sm:text-lg font-black font-mono tracking-tight leading-tight">
+              <span className="text-base sm:text-lg font-bold font-mono tracking-tight leading-tight">
                 {formatTime(secondsLeft)}
               </span>
             </div>
@@ -239,7 +239,7 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
             <div className="flex items-center gap-2">
               <Timer className={`h-4 w-4 ${isFinished ? 'text-destructive' : 'text-primary'}`} />
               <span
-                className={`text-xs font-black uppercase tracking-wider ${
+                className={`text-xs font-bold uppercase tracking-wider ${
                   isFinished ? 'text-destructive' : ''
                 }`}
               >
@@ -275,7 +275,7 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
 
           {/* Display & Barra de Progreso */}
           <div className="my-4 flex flex-col items-center">
-            <div className={`text-5xl font-black tracking-tight font-mono ${isFinished ? 'text-destructive' : ''}`}>
+            <div className={`text-5xl font-bold tracking-tight font-mono ${isFinished ? 'text-destructive' : ''}`}>
               {formatTime(secondsLeft)}
             </div>
             <div className="w-full bg-secondary/80 h-2 rounded-full overflow-hidden mt-3.5">
@@ -295,7 +295,7 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
                 onClick={() => setPreset(sec)}
                 aria-pressed={totalSeconds === sec}
                 aria-label={`Descanso de ${formatearSegundos(sec)}`}
-                className={`min-h-11 min-w-11 py-2 text-xs font-extrabold rounded-xl border transition-all cursor-pointer ${
+                className={`min-h-11 min-w-11 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
                   totalSeconds === sec
                     ? 'bg-primary text-primary-foreground border-primary shadow-sm scale-102'
                     : 'bg-secondary/60 hover:bg-secondary border-border text-foreground'
@@ -312,7 +312,7 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
               <button
                 type="button"
                 onClick={() => adjustSeconds(-15)}
-                className="min-h-11 min-w-11 px-2.5 py-1.5 rounded-xl bg-secondary/80 hover:bg-secondary text-xs font-black text-foreground cursor-pointer"
+                className="min-h-11 min-w-11 px-2.5 py-1.5 rounded-xl bg-secondary/80 hover:bg-secondary text-xs font-bold text-foreground cursor-pointer"
                 title="Quitar 15 segundos"
                 aria-label="Quitar 15 segundos"
               >
@@ -321,7 +321,7 @@ export function RestTimer({ initialSeconds = 90, onClose, isOpen, onDurationChan
               <button
                 type="button"
                 onClick={() => adjustSeconds(30)}
-                className="min-h-11 min-w-11 px-2.5 py-1.5 rounded-xl bg-secondary/80 hover:bg-secondary text-xs font-black text-foreground cursor-pointer"
+                className="min-h-11 min-w-11 px-2.5 py-1.5 rounded-xl bg-secondary/80 hover:bg-secondary text-xs font-bold text-foreground cursor-pointer"
                 title="Agregar 30 segundos"
                 aria-label="Agregar 30 segundos"
               >

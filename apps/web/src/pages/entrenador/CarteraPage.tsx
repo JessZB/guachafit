@@ -342,7 +342,7 @@ export function CarteraPage() {
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
               Control de Cobros
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -444,7 +444,7 @@ export function CarteraPage() {
                   >
                     <span>{pestanaItem.etiqueta}</span>
                     <span
-                      className={`min-w-[1.5rem] text-center px-1.5 py-0.5 rounded-full text-[11px] font-black ${
+                      className={`min-w-[1.5rem] text-center px-1.5 py-0.5 rounded-full text-[11px] font-bold ${
                         activa
                           ? 'bg-primary-foreground/20 text-primary-foreground'
                           : 'bg-background/60 text-foreground border border-border/60'

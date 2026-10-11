@@ -208,7 +208,7 @@ export function AntropometriaPage() {
               <Camera className="h-4 w-4" />
               <span>Medidas y Fotos</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground mt-1">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground mt-1">
               Evaluaciones Físicas
             </h1>
             <p className="text-xs text-muted-foreground">
@@ -318,7 +318,7 @@ export function AntropometriaPage() {
           ) : visibles.length === 0 ? (
             <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
               <SearchX className="h-9 w-9 text-muted-foreground mx-auto opacity-50" />
-              <h3 className="text-sm font-black text-foreground">Sin resultados</h3>
+              <h3 className="text-sm font-bold text-foreground">Sin resultados</h3>
               <p className="text-xs text-muted-foreground max-w-md mx-auto">
                 Ninguna evaluación pendiente coincide con la búsqueda.
               </p>

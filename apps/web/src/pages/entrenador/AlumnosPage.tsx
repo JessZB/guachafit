@@ -399,7 +399,7 @@ export function AlumnosPage() {
               <Users className="h-4 w-4" />
               <span>Alumnos</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground mt-1">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground mt-1">
               Gestión de Alumnos
             </h1>
             <p className="text-xs text-muted-foreground">
@@ -469,7 +469,7 @@ export function AlumnosPage() {
             <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider block">
               Total Cartera
             </span>
-            <p className="font-mono font-black text-xl sm:text-2xl text-foreground tracking-tight">
+            <p className="font-mono font-bold text-xl sm:text-2xl text-foreground tracking-tight">
               {kpis.total}
             </p>
           </button>
@@ -489,7 +489,7 @@ export function AlumnosPage() {
             <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider block">
               Activos
             </span>
-            <p className="font-mono font-black text-xl sm:text-2xl text-success tracking-tight">
+            <p className="font-mono font-bold text-xl sm:text-2xl text-success tracking-tight">
               {kpis.activos}
             </p>
           </button>
@@ -509,7 +509,7 @@ export function AlumnosPage() {
             <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider block">
               Pausados
             </span>
-            <p className="font-mono font-black text-xl sm:text-2xl text-warning tracking-tight">
+            <p className="font-mono font-bold text-xl sm:text-2xl text-warning tracking-tight">
               {kpis.pausados}
             </p>
           </button>
@@ -534,7 +534,7 @@ export function AlumnosPage() {
                 <span className="h-2 w-2 rounded-full bg-danger animate-pulse" />
               )}
             </div>
-            <p className="font-mono font-black text-xl sm:text-2xl text-danger tracking-tight">
+            <p className="font-mono font-bold text-xl sm:text-2xl text-danger tracking-tight">
               {kpis.morosos}
             </p>
           </button>
@@ -554,7 +554,7 @@ export function AlumnosPage() {
             <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider block">
               Presenciales
             </span>
-            <p className="font-mono font-black text-xl sm:text-2xl text-primary tracking-tight">
+            <p className="font-mono font-bold text-xl sm:text-2xl text-primary tracking-tight">
               {kpis.presenciales}
             </p>
           </button>
@@ -574,7 +574,7 @@ export function AlumnosPage() {
             <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider block">
               Archivados
             </span>
-            <p className="font-mono font-black text-xl sm:text-2xl text-muted-foreground tracking-tight">
+            <p className="font-mono font-bold text-xl sm:text-2xl text-muted-foreground tracking-tight">
               {kpis.archivados}
             </p>
           </button>
@@ -852,7 +852,7 @@ export function AlumnosPage() {
                 <div className="flex items-start justify-between gap-2.5">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="relative">
-                      <div className="h-10 w-10 rounded-xl bg-secondary/80 border border-border/70 flex items-center justify-center text-primary font-black text-sm shrink-0 group-hover:border-primary/40 group-hover:bg-primary/10 transition-colors">
+                      <div className="h-10 w-10 rounded-xl bg-secondary/80 border border-border/70 flex items-center justify-center text-primary font-bold text-sm shrink-0 group-hover:border-primary/40 group-hover:bg-primary/10 transition-colors">
                         {a.nombres[0]}
                         {a.apellidos[0]}
                       </div>
@@ -864,7 +864,7 @@ export function AlumnosPage() {
                     </div>
 
                     <div className="min-w-0">
-                      <h3 className="font-black text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                      <h3 className="font-bold text-sm text-foreground truncate group-hover:text-primary transition-colors">
                         {a.nombres} {a.apellidos}
                       </h3>
                       <p className="text-xs text-muted-foreground font-mono truncate">
@@ -974,7 +974,7 @@ export function AlumnosPage() {
                           {a.apellidos[0]}
                         </div>
                         <div>
-                          <p className="font-extrabold text-foreground group-hover:text-primary transition-colors">
+                          <p className="font-bold text-foreground group-hover:text-primary transition-colors">
                             {a.nombres} {a.apellidos}
                           </p>
                           <span className="text-xs text-muted-foreground">{a.email}</span>
@@ -1292,7 +1292,7 @@ export function AlumnosPage() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full min-h-11 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-md hover:brightness-110 active:scale-98 transition-all disabled:opacity-50 mt-2 cursor-pointer"
+                  className="w-full min-h-11 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-md hover:brightness-110 active:scale-98 transition-all disabled:opacity-50 mt-2 cursor-pointer"
                 >
                   {isSubmitting ? 'Inscribiendo alumno...' : 'Inscribir Alumno'}
                 </button>

@@ -44,7 +44,7 @@ export function MetricCard({
       </div>
 
       <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1 min-w-0">
-        <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground font-mono break-words">
+        <span className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground font-mono break-words">
           {value}
         </span>
         {badge && (

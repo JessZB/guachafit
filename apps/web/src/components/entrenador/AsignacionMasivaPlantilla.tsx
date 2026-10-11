@@ -265,7 +265,7 @@ export function AsignacionMasivaPlantilla({ plantilla, onCerrar }: AsignacionMas
           <div className="flex items-center gap-2 min-w-0">
             <Users className="h-5 w-5 text-primary shrink-0" aria-hidden="true" />
             <div className="min-w-0">
-              <h3 id="asignacion-masiva-titulo" className="font-black text-base text-foreground">
+              <h3 id="asignacion-masiva-titulo" className="font-bold text-base text-foreground">
                 Asignar a alumnos
               </h3>
               <p className="text-xs text-muted-foreground break-words">

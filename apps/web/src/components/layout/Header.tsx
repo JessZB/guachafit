@@ -86,7 +86,7 @@ export function Header() {
             <Dumbbell className="h-5 w-5" />
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="font-black text-lg tracking-tight text-foreground leading-none truncate">
+            <span className="font-bold text-lg tracking-tight text-foreground leading-none truncate">
               GUACHAFIT
             </span>
             <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider mt-0.5 truncate">

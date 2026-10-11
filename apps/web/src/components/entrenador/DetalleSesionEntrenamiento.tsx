@@ -122,11 +122,11 @@ export function DetalleSesionEntrenamiento({
             </span>
             <div className="min-w-0">
               {titulo && (
-                <p className="text-[11px] font-black uppercase tracking-wider text-primary truncate">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-primary truncate">
                   {titulo}
                 </p>
               )}
-              <h4 className="font-extrabold text-sm text-foreground">
+              <h4 className="font-bold text-sm text-foreground">
                 {fecha}
                 {rangoHoras ? ` · ${rangoHoras}` : ''}
               </h4>
@@ -148,7 +148,7 @@ export function DetalleSesionEntrenamiento({
               </span>
             )}
             <span
-              className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full border ${CLASES_TONO_SESION[etiquetaEstado.tono]}`}
+              className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${CLASES_TONO_SESION[etiquetaEstado.tono]}`}
             >
               {etiquetaEstado.texto}
             </span>
@@ -329,7 +329,7 @@ export function DetalleSesionEntrenamiento({
                               <span className="text-muted-foreground font-normal"> / objetivo: {serie.repsObjetivo}</span>
                             </span>
                             <span
-                              className={pesoReal ? 'text-primary font-black' : 'text-muted-foreground italic'}
+                              className={pesoReal ? 'text-primary font-bold' : 'text-muted-foreground italic'}
                               title={pesoReal ? 'Peso real levantado' : 'Sin peso real registrado'}
                             >
                               {pesoReal ?? 'Sin peso'}

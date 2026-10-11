@@ -127,7 +127,7 @@ export function DashboardPage() {
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
               Resumen del Negocio
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -313,7 +313,7 @@ export function DashboardPage() {
                   </p>
                 </div>
                 <div className="text-right shrink-0">
-                  <span className="font-mono font-black text-sm text-foreground">
+                  <span className="font-mono font-bold text-sm text-foreground">
                     ${mora.saldoPendienteUsd} USD
                   </span>
                 </div>

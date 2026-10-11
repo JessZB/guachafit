@@ -225,7 +225,7 @@ function ModalActividadAlumno({
               <History className="h-4 w-4" />
             </span>
             <div className="min-w-0">
-              <h2 id="modal-actividad-titulo" className="font-black text-base text-foreground truncate">
+              <h2 id="modal-actividad-titulo" className="font-bold text-base text-foreground truncate">
                 Actividad de {alumno.nombreCompleto}
               </h2>
               <p className="text-[11px] text-muted-foreground">
@@ -249,7 +249,7 @@ function ModalActividadAlumno({
           <div className="p-3.5 rounded-2xl bg-secondary/30 border border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2 flex-wrap">
               <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide border ${tonoAlumno.chip}`}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide border ${tonoAlumno.chip}`}
               >
                 <span className={`h-1.5 w-1.5 rounded-full ${tonoAlumno.punto}`} />
                 {etiquetaAlumno.texto}
@@ -366,7 +366,7 @@ function ModalActividadAlumno({
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span
-                          className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full border ${CLASES_TONO[etiquetaSesion.tono].chip}`}
+                          className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${CLASES_TONO[etiquetaSesion.tono].chip}`}
                         >
                           {etiquetaSesion.texto}
                         </span>
@@ -521,7 +521,7 @@ export function MonitorAdherenciaPage() {
               <Activity className="h-4 w-4" />
               <span>Cumplimiento semanal</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground mt-1">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground mt-1">
               Seguimiento de Alumnos
             </h1>
             <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
@@ -565,7 +565,7 @@ export function MonitorAdherenciaPage() {
                 <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                   Todos
                 </span>
-                <span className="text-2xl font-black font-mono text-foreground">
+                <span className="text-2xl font-bold font-mono text-foreground">
                   {resumen?.total ?? 0}
                 </span>
               </button>
@@ -619,7 +619,7 @@ export function MonitorAdherenciaPage() {
                   <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                     {etiqueta}
                   </span>
-                  <span className={`text-2xl font-black font-mono ${clase}`}>{valor}</span>
+                  <span className={`text-2xl font-bold font-mono ${clase}`}>{valor}</span>
                 </button>
               ))}
             </div>
@@ -759,16 +759,16 @@ export function MonitorAdherenciaPage() {
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-11 w-11 rounded-2xl bg-secondary/80 border border-border/70 flex items-center justify-center text-primary font-black text-sm shrink-0">
+                      <div className="h-11 w-11 rounded-2xl bg-secondary/80 border border-border/70 flex items-center justify-center text-primary font-bold text-sm shrink-0">
                         {iniciales(alumno.nombreCompleto)}
                       </div>
                       <div className="min-w-0">
-                        <h3 className="font-black text-sm text-foreground truncate">
+                        <h3 className="font-bold text-sm text-foreground truncate">
                           {alumno.nombreCompleto}
                         </h3>
                         <div className="flex items-center gap-2 flex-wrap mt-1">
                           <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide border ${tono.chip}`}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide border ${tono.chip}`}
                           >
                             <span
                               className={`h-1.5 w-1.5 rounded-full ${tono.punto} ${
@@ -826,7 +826,7 @@ export function MonitorAdherenciaPage() {
                             {alumno.sesionesCompletadas}/
                             {pluralizar(alumno.sesionesPrescritas, 'sesión completada', 'sesiones completadas')}
                           </span>
-                          <span className={`font-mono font-black ${tono.texto}`}>
+                          <span className={`font-mono font-bold ${tono.texto}`}>
                             {alumno.porcentajeCumplimientoSemanal}%
                           </span>
                         </div>

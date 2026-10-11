@@ -85,7 +85,7 @@ export function ConfirmarCorreoPage() {
           <span className="p-2.5 rounded-2xl bg-primary/15 text-primary shrink-0">
             <MailCheck className="h-5 w-5" />
           </span>
-          <h1 className="text-xl font-black tracking-tight text-foreground">Confirmar tu correo</h1>
+          <h1 className="text-xl font-bold tracking-tight text-foreground">Confirmar tu correo</h1>
         </div>
         <EstadoConfirmacionCorreo
           estado={resultado.estado}

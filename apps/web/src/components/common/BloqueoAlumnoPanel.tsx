@@ -83,7 +83,7 @@ export function BloqueoAlumnoPanel({
         </div>
 
         <div className="space-y-2">
-          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
             {bloqueo.titulo}
           </h1>
           <p className="text-sm text-muted-foreground leading-relaxed">{bloqueo.mensaje}</p>

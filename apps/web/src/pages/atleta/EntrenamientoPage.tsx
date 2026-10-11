@@ -1728,7 +1728,7 @@ export function EntrenamientoPage() {
 
             <div className="flex items-center gap-2.5 self-end sm:self-center">
               <div className="text-right">
-                <span className="text-xs font-black text-foreground">
+                <span className="text-xs font-bold text-foreground">
                   {formatearProgresoDias(
                     semanaProgreso.bloquesCompletados,
                     semanaProgreso.totalBloques
@@ -1778,17 +1778,17 @@ export function EntrenamientoPage() {
                 'bg-secondary/60 text-muted-foreground border-border hover:bg-secondary hover:text-foreground';
               if (esCompletado) {
                 badgeStyle = esActivo
-                  ? 'bg-success/20 text-success border-success/40 ring-2 ring-success/30 font-extrabold'
+                  ? 'bg-success/20 text-success border-success/40 ring-2 ring-success/30 font-bold'
                   : 'bg-success/10 text-success border-success/30 hover:bg-success/20 font-bold';
               } else if (esOmitido) {
                 badgeStyle =
                   'bg-warning/10 text-warning border-warning/30 hover:bg-warning/20 font-bold';
               } else if (esActivo) {
                 badgeStyle =
-                  'bg-primary text-primary-foreground border-primary font-black shadow-md shadow-primary/25 ring-2 ring-primary/30';
+                  'bg-primary text-primary-foreground border-primary font-bold shadow-md shadow-primary/25 ring-2 ring-primary/30';
               } else if (esSugerido) {
                 badgeStyle =
-                  'bg-primary/15 text-primary border-primary/40 hover:bg-primary/25 font-extrabold';
+                  'bg-primary/15 text-primary border-primary/40 hover:bg-primary/25 font-bold';
               }
 
               return (
@@ -1852,7 +1852,7 @@ export function EntrenamientoPage() {
             <AlertTriangle className="h-8 w-8" />
           </div>
           <div className="max-w-md mx-auto space-y-1.5">
-            <h3 className="text-xl font-black text-foreground">No pudimos cargar tu entrenamiento</h3>
+            <h3 className="text-xl font-bold text-foreground">No pudimos cargar tu entrenamiento</h3>
             <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
               Revisa tu conexión e inténtalo de nuevo. Tu historial no se ha perdido.
             </p>
@@ -1875,7 +1875,7 @@ export function EntrenamientoPage() {
             <WifiOff className="h-8 w-8" />
           </div>
           <div className="max-w-md mx-auto space-y-1.5">
-            <h3 className="text-xl font-black text-foreground">Sin conexión</h3>
+            <h3 className="text-xl font-bold text-foreground">Sin conexión</h3>
             <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
               {/* D3: lo guardado de otro día se informa, nunca se presenta como el de hoy */}
               {ultimoGuardadoOtroDia
@@ -1908,7 +1908,7 @@ export function EntrenamientoPage() {
           </div>
 
           <div className="max-w-md mx-auto space-y-1.5">
-            <h3 className="text-xl font-black text-foreground">
+            <h3 className="text-xl font-bold text-foreground">
               {!semanaProgreso || semanaProgreso.totalBloques === 0
                 ? 'Aún no tienes rutina asignada para hoy'
                 : semanaProgreso.bloquesCompletados === semanaProgreso.totalBloques
@@ -1947,7 +1947,7 @@ export function EntrenamientoPage() {
                 disabled={isSwitchingBloque}
                 aria-busy={isSwitchingBloque}
                 onClick={() => handleEntrenarBloqueHoy(selectedBloque.bloqueId, true)}
-                className="w-full min-h-11 py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-lg shadow-primary/25 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="w-full min-h-11 py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-lg shadow-primary/25 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {isSwitchingBloque ? (
                   <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
@@ -1981,7 +1981,7 @@ export function EntrenamientoPage() {
                       className="p-3.5 rounded-2xl bg-secondary/50 hover:bg-secondary border border-border hover:border-primary/50 text-left transition-all duration-200 active:scale-98 cursor-pointer flex flex-col justify-between group disabled:opacity-50"
                     >
                       <div className="flex items-center justify-between gap-1 mb-1">
-                        <span className="text-xs font-black text-foreground group-hover:text-primary transition-colors">
+                        <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
                           {b.titulo}
                         </span>
                         {b.esSugeridoHoy && (
@@ -2053,7 +2053,7 @@ export function EntrenamientoPage() {
                     </span>
                   )}
                 </div>
-                <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground mt-1">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground mt-1">
                   Tu entrenamiento de hoy
                 </h1>
               </div>
@@ -2070,7 +2070,7 @@ export function EntrenamientoPage() {
                 <span className="text-xs text-muted-foreground font-bold uppercase tracking-wider">
                   Progreso
                 </span>
-                <span className="text-base sm:text-lg font-black font-mono">
+                <span className="text-base sm:text-lg font-bold font-mono">
                   {isOmitted ? '—' : `${sesion.porcentajeCumplimiento}%`}
                 </span>
               </div>
@@ -2083,7 +2083,7 @@ export function EntrenamientoPage() {
                   <span className="text-xs text-muted-foreground font-bold uppercase tracking-wider">
                     Volumen
                   </span>
-                  <span className="text-base sm:text-lg font-black font-mono text-foreground">
+                  <span className="text-base sm:text-lg font-bold font-mono text-foreground">
                     {formatearPesoConUnidad(sesion.volumenTotalKg, unidadPeso) ??
                       `${sesion.volumenTotalKg} ${unidadPeso}`}
                   </span>
@@ -2099,7 +2099,7 @@ export function EntrenamientoPage() {
                   <span className="text-xs text-muted-foreground font-bold uppercase tracking-wider">
                     Duración
                   </span>
-                  <span className="text-base sm:text-lg font-black font-mono text-foreground">
+                  <span className="text-base sm:text-lg font-bold font-mono text-foreground">
                     {formatDuracionMinutos(sesion.duracionMinutos)}
                   </span>
                 </div>
@@ -2131,7 +2131,7 @@ export function EntrenamientoPage() {
                   aria-pressed={unidadPeso === u}
                   onClick={() => handleCambiarUnidad(u)}
                   title={`Mostrar y registrar pesos en ${u === 'kg' ? 'kilogramos' : 'libras'}`}
-                  className={`min-h-11 px-3.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer active:scale-95 ${
+                  className={`min-h-11 px-3.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer active:scale-95 ${
                     unidadPeso === u
                       ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/25'
                       : 'text-muted-foreground hover:text-foreground'
@@ -2151,7 +2151,7 @@ export function EntrenamientoPage() {
             onClick={handleStartSession}
             disabled={isStarting}
             aria-busy={isStarting}
-            className="w-full min-h-11 py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-lg shadow-primary/25 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+            className="w-full min-h-11 py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-lg shadow-primary/25 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
           >
             {isStarting ? (
               <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
@@ -2292,10 +2292,10 @@ export function EntrenamientoPage() {
             {/* Exercise Header */}
             <div className="flex items-start justify-between gap-2 border-b border-border/50 pb-3">
               <div>
-                <span className="text-xs font-black text-primary uppercase tracking-wider">
+                <span className="text-xs font-bold text-primary uppercase tracking-wider">
                   Ejercicio {ejIdx + 1}
                 </span>
-                <h3 className="font-black text-lg sm:text-xl text-foreground tracking-tight mt-0.5">
+                <h3 className="font-bold text-lg sm:text-xl text-foreground tracking-tight mt-0.5">
                   {nombreEjercicio}
                 </h3>
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -2332,7 +2332,7 @@ export function EntrenamientoPage() {
             <div className="flex items-start gap-2 p-2.5 rounded-2xl bg-primary/5 border border-primary/15">
               <ClipboardList className="h-4 w-4 text-primary shrink-0 mt-0.5" />
               <div className="min-w-0 flex-1">
-                <span className="text-[11px] font-black uppercase tracking-wider text-primary block leading-none mb-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-primary block leading-none mb-1">
                   Lo que te indicó tu entrenador
                 </span>
                 <p className="text-[11px] sm:text-xs font-bold text-foreground leading-snug">
@@ -2350,7 +2350,7 @@ export function EntrenamientoPage() {
                 </p>
                 {indicaciones && (
                   <p className="mt-1.5 text-[11px] sm:text-xs text-foreground leading-snug">
-                    <span className="font-black">Indicaciones de tu entrenador: </span>
+                    <span className="font-bold">Indicaciones de tu entrenador: </span>
                     <span className="font-semibold">{indicaciones}</span>
                   </p>
                 )}
@@ -2360,13 +2360,13 @@ export function EntrenamientoPage() {
             {/* Sets Grid */}
             <div className="space-y-2.5">
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-black uppercase tracking-wider text-muted-foreground">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                   Lo que hiciste
                 </span>
                 <span className="h-px flex-1 bg-border/60" aria-hidden="true" />
               </div>
               {/* Cabecera de columnas: solo desde sm; en móvil cada campo lleva su propio label */}
-              <div className="hidden sm:grid grid-cols-12 gap-1.5 sm:gap-2.5 text-xs font-black text-muted-foreground uppercase tracking-wider px-2">
+              <div className="hidden sm:grid grid-cols-12 gap-1.5 sm:gap-2.5 text-xs font-bold text-muted-foreground uppercase tracking-wider px-2">
                 <span className="col-span-1 text-center">#</span>
                 <span className="col-span-4 text-center">Peso ({unidadPeso})</span>
                 <span className="col-span-3 text-center">Repeticiones</span>
@@ -2404,13 +2404,13 @@ export function EntrenamientoPage() {
                 >
                   {/* Móvil: una columna por campo (input legible + steppers táctiles). Desktop: grid de 12. */}
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-12 sm:gap-2.5 sm:items-start">
-                  <span className="col-span-2 sm:col-span-1 self-center text-left sm:text-center font-mono font-black text-sm sm:text-base text-foreground">
+                  <span className="col-span-2 sm:col-span-1 self-center text-left sm:text-center font-mono font-bold text-sm sm:text-base text-foreground">
                     #{serie.numeroSerie}
                   </span>
 
                   {/* Weight Input with Steppers (unidad visible: kg/lb, contrato siempre kg) */}
                   <div className="col-span-2 sm:col-span-4">
-                    <span className="sm:hidden mb-1 block text-[11px] font-black uppercase tracking-wider text-muted-foreground">
+                    <span className="sm:hidden mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                       Peso ({unidadPeso})
                     </span>
                     <div className="flex items-center rounded-xl bg-background border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 overflow-hidden transition-colors h-12 sm:h-11 shadow-2xs">
@@ -2419,7 +2419,7 @@ export function EntrenamientoPage() {
                         disabled={isReadOnly}
                         onClick={() => handleStepSerieValue(ejIdx, sIdx, 'pesoKg', -1)}
                         aria-label={`Restar ${pasoVisible} ${unidadPeso}`}
-                        className="h-full w-11 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-black shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
+                        className="h-full w-11 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
                       >
                         -
                       </button>
@@ -2435,7 +2435,7 @@ export function EntrenamientoPage() {
                         placeholder={unidadPeso}
                         aria-label={`Peso real en ${unidadPeso}, serie ${serie.numeroSerie}`}
                         aria-invalid={Boolean(errorPeso)}
-                        className={`w-full min-w-0 text-center py-2 px-1 bg-transparent text-base font-mono font-black text-foreground focus:outline-hidden ${
+                        className={`w-full min-w-0 text-center py-2 px-1 bg-transparent text-base font-mono font-bold text-foreground focus:outline-hidden ${
                           errorPeso ? 'text-destructive' : ''
                         }`}
                       />
@@ -2444,7 +2444,7 @@ export function EntrenamientoPage() {
                         disabled={isReadOnly}
                         onClick={() => handleStepSerieValue(ejIdx, sIdx, 'pesoKg', 1)}
                         aria-label={`Sumar ${pasoVisible} ${unidadPeso}`}
-                        className="h-full w-11 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-black shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
+                        className="h-full w-11 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
                       >
                         +
                       </button>
@@ -2462,7 +2462,7 @@ export function EntrenamientoPage() {
 
                   {/* Reps Input with Steppers (- / + 1 rep) */}
                   <div className="col-span-2 sm:col-span-3">
-                    <span className="sm:hidden mb-1 block text-[11px] font-black uppercase tracking-wider text-muted-foreground">
+                    <span className="sm:hidden mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                       Repeticiones
                     </span>
                     <div className="flex items-center rounded-xl bg-background border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 overflow-hidden transition-colors h-12 sm:h-11 shadow-2xs">
@@ -2471,7 +2471,7 @@ export function EntrenamientoPage() {
                         disabled={isReadOnly}
                         onClick={() => handleStepSerieValue(ejIdx, sIdx, 'repsLogradas', -1)}
                         aria-label="Restar 1 repetición"
-                        className="h-full w-11 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-black shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
+                        className="h-full w-11 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
                       >
                         -
                       </button>
@@ -2485,7 +2485,7 @@ export function EntrenamientoPage() {
                         }
                         aria-label={`Repeticiones hechas, serie ${serie.numeroSerie}`}
                         aria-invalid={Boolean(errorReps)}
-                        className={`w-full min-w-0 text-center py-2 px-1 bg-transparent text-base font-mono font-black text-foreground focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                        className={`w-full min-w-0 text-center py-2 px-1 bg-transparent text-base font-mono font-bold text-foreground focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
                           errorReps ? 'text-destructive' : ''
                         }`}
                       />
@@ -2494,7 +2494,7 @@ export function EntrenamientoPage() {
                         disabled={isReadOnly}
                         onClick={() => handleStepSerieValue(ejIdx, sIdx, 'repsLogradas', 1)}
                         aria-label="Sumar 1 repetición"
-                        className="h-full w-11 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-black shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
+                        className="h-full w-11 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
                       >
                         +
                       </button>
@@ -2506,7 +2506,7 @@ export function EntrenamientoPage() {
 
                   {/* RPE Input (0-10 validado contra el contrato) */}
                   <div className="col-span-1 sm:col-span-2">
-                    <span className="sm:hidden mb-1 block text-[11px] font-black uppercase tracking-wider text-muted-foreground">
+                    <span className="sm:hidden mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                       Esfuerzo (1-10)
                     </span>
                     <input
@@ -2529,7 +2529,7 @@ export function EntrenamientoPage() {
 
                   {/* Complete Checkbox */}
                   <div className="col-span-1 sm:col-span-2">
-                    <span className="sm:hidden mb-1 block text-[11px] font-black uppercase tracking-wider text-muted-foreground">
+                    <span className="sm:hidden mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                       Listo
                     </span>
                     <div className="flex sm:justify-center">
@@ -2639,7 +2639,7 @@ export function EntrenamientoPage() {
                 <span id="finalizar-esfuerzo-titulo" className="text-xs font-bold text-foreground">
                   ¿Qué tan duro fue? (1 a 10)
                 </span>
-                <span className="text-primary font-mono font-black text-sm text-right">
+                <span className="text-primary font-mono font-bold text-sm text-right">
                   {rpeSesion} / 10 · <span className="text-xs font-semibold text-muted-foreground">{describirEsfuerzo(rpeSesion)}</span>
                 </span>
               </div>
@@ -2756,7 +2756,7 @@ export function EntrenamientoPage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="font-mono font-black text-sm text-foreground">{formatearSegundos(avgReal)}</span>
+                    <span className="font-mono font-bold text-sm text-foreground">{formatearSegundos(avgReal)}</span>
                     <span
                       className={`text-[11px] font-bold block ${
                         diff > 15

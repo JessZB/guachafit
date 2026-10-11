@@ -649,7 +649,7 @@ export function NutricionPage() {
           <Utensils className="h-4 w-4" />
           <span>Reporte de hoy</span>
         </div>
-        <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
           Mi Comida de Hoy
         </h1>
         <p className="text-xs text-muted-foreground">
@@ -733,7 +733,7 @@ export function NutricionPage() {
                 <span className="block text-xs font-semibold uppercase text-muted-foreground">
                   {objetivo.etiqueta}
                 </span>
-                <p className="text-base font-black font-mono text-foreground mt-0.5">
+                <p className="text-base font-bold font-mono text-foreground mt-0.5">
                   {objetivo.valor}
                 </p>
               </div>
@@ -1037,7 +1037,7 @@ export function NutricionPage() {
           type="button"
           onClick={handleSaveCheckin}
           disabled={isLoading || formularioDeshabilitado}
-          className="w-full min-h-11 py-3 px-4 rounded-xl bg-primary text-primary-foreground font-black text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full min-h-11 py-3 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isLoading ? (
             <Loader2 className="h-4 w-4 animate-spin" />

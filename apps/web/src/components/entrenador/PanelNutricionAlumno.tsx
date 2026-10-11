@@ -554,7 +554,7 @@ export function PanelNutricionAlumno({
                 <span className="block text-xs font-semibold uppercase text-muted-foreground">
                   {objetivo.etiqueta}
                 </span>
-                <p className="text-base font-black font-mono text-foreground mt-0.5">{objetivo.valor}</p>
+                <p className="text-base font-bold font-mono text-foreground mt-0.5">{objetivo.valor}</p>
               </div>
             ))}
           </div>
@@ -794,7 +794,7 @@ export function PanelNutricionAlumno({
                 <button
                   type="submit"
                   disabled={isGuardandoMetas}
-                  className="min-h-11 px-4 rounded-xl bg-primary text-primary-foreground text-xs font-black shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                  className="min-h-11 px-4 rounded-xl bg-primary text-primary-foreground text-xs font-bold shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
                 >
                   {isGuardandoMetas && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   <span>{isGuardandoMetas ? 'Guardando…' : 'Guardar metas'}</span>

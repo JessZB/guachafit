@@ -300,7 +300,7 @@ export function SelectorPlantillaAsignacion({
           <div className="flex items-center gap-2">
             <ClipboardList className="h-5 w-5 text-primary" />
             <div>
-              <h3 id="modal-plantilla-asignar-title" className="font-black text-base text-foreground">
+              <h3 id="modal-plantilla-asignar-title" className="font-bold text-base text-foreground">
                 Cargar desde plantilla
               </h3>
               <p className="text-xs text-muted-foreground">
@@ -456,8 +456,8 @@ export function SelectorPlantillaAsignacion({
                 {/* Cabecera de la plantilla seleccionada */}
                 <div className="p-4 rounded-2xl bg-secondary/25 border border-border/60 space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
-                    <h4 className="text-sm font-black text-foreground break-words">{detalle.nombre}</h4>
-                    <span className="shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide border bg-secondary text-foreground border-border">
+                    <h4 className="text-sm font-bold text-foreground break-words">{detalle.nombre}</h4>
+                    <span className="shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide border bg-secondary text-foreground border-border">
                       {ETIQUETAS_NIVEL_PLANTILLA[detalle.nivelObjetivo]}
                     </span>
                   </div>
@@ -550,7 +550,7 @@ export function SelectorPlantillaAsignacion({
                         className="p-3.5 rounded-2xl bg-secondary/20 border border-border/60 space-y-2.5"
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-extrabold text-foreground">
+                          <span className="text-xs font-bold text-foreground">
                             {bloque.titulo}
                           </span>
                           <span className="text-[11px] font-mono text-muted-foreground">
@@ -583,14 +583,14 @@ export function SelectorPlantillaAsignacion({
                               >
                                 <div className="flex items-center justify-between gap-2">
                                   <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span className="h-4.5 w-4.5 rounded-md bg-primary/10 text-primary font-mono font-black flex items-center justify-center text-[11px] shrink-0">
+                                    <span className="h-4.5 w-4.5 rounded-md bg-primary/10 text-primary font-mono font-bold flex items-center justify-center text-[11px] shrink-0">
                                       {ejIdx + 1}
                                     </span>
                                     <span className="font-bold text-foreground break-words">
                                       {ej.nombre}
                                     </span>
                                     {ajustado && (
-                                      <span className="shrink-0 px-1.5 py-0.5 rounded-md bg-primary/15 text-primary text-[11px] font-extrabold uppercase">
+                                      <span className="shrink-0 px-1.5 py-0.5 rounded-md bg-primary/15 text-primary text-[11px] font-bold uppercase">
                                         ajustado
                                       </span>
                                     )}

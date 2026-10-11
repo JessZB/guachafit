@@ -61,7 +61,7 @@ export function VisorFoto({ foto, fecha, onCerrar, etiqueta }: VisorFotoProps) {
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="font-black text-base text-foreground">
+            <h3 className="font-bold text-base text-foreground">
               {corporal ? `Perspectiva ${tituloToma}` : tituloToma}
             </h3>
             <p className="text-xs text-muted-foreground">{fechaLarga}</p>

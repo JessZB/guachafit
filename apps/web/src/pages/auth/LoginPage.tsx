@@ -67,7 +67,7 @@ export function LoginPage() {
           <div className="h-14 w-14 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground shadow-xl shadow-primary/25 mb-1">
             <Dumbbell className="h-8 w-8" />
           </div>
-          <h1 className="font-black text-3xl tracking-tight">GUACHAFIT</h1>
+          <h1 className="font-bold text-3xl tracking-tight">GUACHAFIT</h1>
           <p className="text-sm text-muted-foreground max-w-xs">
             Entrena, sigue a tus alumnos y controla tus cobros en un solo lugar.
           </p>

@@ -258,7 +258,7 @@ export function TablaCartera({
             buscando ? 'text-muted-foreground opacity-50' : 'text-success'
           }`}
         />
-        <h3 className="text-sm font-black text-foreground">{vacio.titulo}</h3>
+        <h3 className="text-sm font-bold text-foreground">{vacio.titulo}</h3>
         <p className="text-xs text-muted-foreground max-w-md mx-auto">{vacio.detalle}</p>
       </div>
     );
@@ -349,7 +349,7 @@ export function TablaCartera({
                 ) : (
                   <>
                     <td className="px-4 py-3 align-top">
-                      <span className="font-mono font-black text-foreground">
+                      <span className="font-mono font-bold text-foreground">
                         ${fila.saldoPendienteUsd} USD
                       </span>
                     </td>
@@ -417,7 +417,7 @@ export function TablaCartera({
               </div>
             ) : (
               <div className="flex items-center justify-between gap-3">
-                <span className="font-mono font-black text-foreground">
+                <span className="font-mono font-bold text-foreground">
                   ${fila.saldoPendienteUsd} USD
                 </span>
                 <span className="text-xs">

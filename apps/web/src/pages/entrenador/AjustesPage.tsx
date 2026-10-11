@@ -388,7 +388,7 @@ export function AjustesPage() {
       {/* Encabezado */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-black tracking-tight text-foreground">
+          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground">
             Ajustes
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
@@ -547,9 +547,9 @@ export function AjustesPage() {
                     </span>
                   </div>
 
-                  <h3 className="text-lg font-black text-foreground">{plan.nombre}</h3>
+                  <h3 className="text-lg font-bold text-foreground">{plan.nombre}</h3>
                   <div className="flex items-baseline gap-1 mt-1 mb-2">
-                    <span className="text-2xl font-black font-mono text-primary">
+                    <span className="text-2xl font-bold font-mono text-primary">
                       ${plan.precioBaseUsd}
                     </span>
                     <span className="text-xs text-muted-foreground">USD / mes</span>
@@ -654,7 +654,7 @@ export function AjustesPage() {
               <div className="flex items-center justify-between border-b border-border/80 pb-3">
                 <div className="flex items-center gap-2">
                   <DollarSign className="h-5 w-5 text-primary" />
-                  <h3 className="font-extrabold text-base text-foreground">
+                  <h3 className="font-bold text-base text-foreground">
                     Motor de Tasa Activa (Bs/USD)
                   </h3>
                 </div>
@@ -834,7 +834,7 @@ export function AjustesPage() {
             <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4">
               <div className="flex items-center gap-2 border-b border-border/80 pb-3">
                 <Calculator className="h-4 w-4 text-primary" />
-                <h3 className="font-extrabold text-sm text-foreground">
+                <h3 className="font-bold text-sm text-foreground">
                   Conversor Inmediato USD ↔ VES
                 </h3>
               </div>
@@ -912,7 +912,7 @@ export function AjustesPage() {
           className="space-y-4 animate-in fade-in-50 duration-200"
         >
           <div className="p-5 rounded-3xl bg-card border border-border/80 space-y-1">
-            <h2 className="font-extrabold text-base text-foreground">
+            <h2 className="font-bold text-base text-foreground">
               Avisos que recibes como entrenador
             </h2>
             <p className="text-xs text-muted-foreground">
@@ -948,7 +948,7 @@ export function AjustesPage() {
                 <CreditCard className="h-5 w-5 text-primary" />
                 <h3
                   id="ajustes-plan-titulo"
-                  className="font-extrabold text-base text-foreground"
+                  className="font-bold text-base text-foreground"
                 >
                   {editingPlanId ? 'Editar Plan Comercial' : 'Nuevo Plan Comercial'}
                 </h3>

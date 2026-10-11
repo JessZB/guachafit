@@ -270,7 +270,7 @@ export function ConciliacionPage() {
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
               Bandeja de Pagos por Validar
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -402,7 +402,7 @@ export function ConciliacionPage() {
           {visibles.length === 0 ? (
             <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
               <SearchX className="h-9 w-9 text-muted-foreground mx-auto opacity-50" />
-              <h3 className="text-sm font-black text-foreground">Sin resultados</h3>
+              <h3 className="text-sm font-bold text-foreground">Sin resultados</h3>
               <p className="text-xs text-muted-foreground max-w-md mx-auto">
                 Ningún pago en cola coincide con la búsqueda o el método seleccionado.
               </p>
@@ -424,7 +424,7 @@ export function ConciliacionPage() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/50 pb-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="font-black text-lg text-foreground">
+                    <h2 className="font-bold text-lg text-foreground">
                       {tx.clienteNombre || 'Alumno'}
                     </h2>
                     <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border uppercase">
@@ -462,7 +462,7 @@ export function ConciliacionPage() {
                   <span className="text-xs text-muted-foreground font-medium block">
                     Abono en Dólares
                   </span>
-                  <span className="text-2xl font-black font-mono text-primary">
+                  <span className="text-2xl font-bold font-mono text-primary">
                     +${tx.montoEquivalenteUsd} USD
                   </span>
                   <span className="text-[11px] font-mono text-muted-foreground block mt-0.5">
@@ -606,13 +606,13 @@ export function ConciliacionPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl bg-secondary/30 border border-border text-xs">
               <div>
                 <span className="text-[11px] text-muted-foreground uppercase font-bold">Monto Declarado</span>
-                <p className="font-mono font-black text-foreground mt-0.5">
+                <p className="font-mono font-bold text-foreground mt-0.5">
                   {viewingComprobanteTx.montoOriginal} {viewingComprobanteTx.monedaOriginal}
                 </p>
               </div>
               <div>
                 <span className="text-[11px] text-muted-foreground uppercase font-bold">Equivalente USD</span>
-                <p className="font-mono font-black text-primary mt-0.5">
+                <p className="font-mono font-bold text-primary mt-0.5">
                   +${viewingComprobanteTx.montoEquivalenteUsd}
                 </p>
               </div>

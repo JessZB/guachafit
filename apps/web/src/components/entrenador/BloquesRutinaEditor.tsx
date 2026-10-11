@@ -375,7 +375,7 @@ export function BloquesRutinaEditor({
               <span className="text-[11px] font-bold text-primary uppercase tracking-wider shrink-0">
                 Así lo verá tu alumno:
               </span>
-              <span className="font-extrabold text-foreground truncate">{diaActivo.titulo}</span>
+              <span className="font-bold text-foreground truncate">{diaActivo.titulo}</span>
             </div>
           </div>
 
@@ -398,7 +398,7 @@ export function BloquesRutinaEditor({
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-2.5 flex-1 min-w-0">
-                        <span className="h-6 w-6 rounded-lg bg-primary/10 text-primary font-mono font-black flex items-center justify-center text-[11px] shrink-0 mt-0.5">
+                        <span className="h-6 w-6 rounded-lg bg-primary/10 text-primary font-mono font-bold flex items-center justify-center text-[11px] shrink-0 mt-0.5">
                           {ejIdx + 1}
                         </span>
                         <div className="flex-1 min-w-0">
@@ -486,7 +486,7 @@ export function BloquesRutinaEditor({
                             </button>
                             <span
                               aria-live="polite"
-                              className="w-6 text-center font-mono font-black text-xs text-foreground select-none"
+                              className="w-6 text-center font-mono font-bold text-xs text-foreground select-none"
                             >
                               {ej.series || 1}
                             </span>

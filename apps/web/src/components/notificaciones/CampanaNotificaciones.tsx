@@ -57,7 +57,7 @@ export function CampanaNotificaciones() {
         {insignia && (
           <span
             aria-hidden="true"
-            className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-primary text-primary-foreground text-[11px] font-black leading-5 text-center"
+            className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-primary text-primary-foreground text-[11px] font-bold leading-5 text-center"
           >
             {insignia}
           </span>

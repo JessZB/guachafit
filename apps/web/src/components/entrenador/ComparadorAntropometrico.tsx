@@ -198,7 +198,7 @@ export function ComparadorAntropometrico() {
     <div className="p-5 sm:p-6 rounded-3xl bg-card border border-border shadow-md space-y-5">
       <div className="flex items-center gap-2">
         <Users className="h-4 w-4 text-primary" />
-        <h2 className="font-black text-lg text-foreground">Comparador Antes / Después</h2>
+        <h2 className="font-bold text-lg text-foreground">Comparador Antes / Después</h2>
       </div>
 
       {errorAlumnos && (

@@ -491,7 +491,7 @@ export function PlantillasPage() {
         <div>
           <div className="flex items-center gap-2">
             <ClipboardList className="h-5 w-5 text-primary" />
-            <h1 className="text-2xl font-black tracking-tight text-foreground">Plantillas de ejercicios</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Plantillas de ejercicios</h1>
           </div>
           <p className="text-xs text-muted-foreground mt-1">
             Diseña rutinas reutilizables y asígnalas a tus alumnos en segundos. Cada asignación es una
@@ -620,7 +620,7 @@ export function PlantillasPage() {
       ) : error ? (
         <div className="p-8 rounded-3xl bg-card border border-border text-center space-y-3 max-w-lg mx-auto">
           <AlertCircle className="h-9 w-9 text-destructive mx-auto" />
-          <h3 className="text-sm font-black text-foreground">No se pudieron cargar las plantillas</h3>
+          <h3 className="text-sm font-bold text-foreground">No se pudieron cargar las plantillas</h3>
           <p className="text-xs text-muted-foreground">{error}</p>
           <button
             type="button"
@@ -635,7 +635,7 @@ export function PlantillasPage() {
         hayFiltroActivo ? (
           <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
             <SearchX className="h-9 w-9 text-muted-foreground mx-auto opacity-50" />
-            <h3 className="text-sm font-black text-foreground">Sin resultados</h3>
+            <h3 className="text-sm font-bold text-foreground">Sin resultados</h3>
             <p className="text-xs text-muted-foreground max-w-md mx-auto">
               Ninguna plantilla coincide con la búsqueda o el nivel seleccionado.
             </p>
@@ -651,7 +651,7 @@ export function PlantillasPage() {
         ) : (
           <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
             <Dumbbell className="h-9 w-9 text-muted-foreground mx-auto opacity-50" />
-            <h3 className="text-sm font-black text-foreground">
+            <h3 className="text-sm font-bold text-foreground">
               {filtro === 'activas'
                 ? 'No tienes plantillas activas'
                 : filtro === 'desactivadas'
@@ -684,11 +684,11 @@ export function PlantillasPage() {
             >
               <div className="space-y-2.5">
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-extrabold text-sm text-foreground leading-snug break-words">
+                  <h3 className="font-bold text-sm text-foreground leading-snug break-words">
                     {plantilla.nombre}
                   </h3>
                   <span
-                    className={`shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide border ${
+                    className={`shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide border ${
                       plantilla.activa
                         ? 'bg-success/15 text-success border-success/30'
                         : 'bg-secondary text-muted-foreground border-border'
@@ -699,7 +699,7 @@ export function PlantillasPage() {
                 </div>
 
                 <span
-                  className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide border ${
+                  className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide border ${
                     CLASES_NIVEL[plantilla.nivelObjetivo]
                   }`}
                 >
@@ -837,7 +837,7 @@ export function PlantillasPage() {
               <div className="flex items-center gap-2">
                 <ClipboardList className="h-5 w-5 text-primary" />
                 <div>
-                  <h3 id="modal-plantilla-title" className="font-black text-base text-foreground">
+                  <h3 id="modal-plantilla-title" className="font-bold text-base text-foreground">
                     {editando ? 'Editar plantilla' : 'Nueva plantilla de rutina'}
                   </h3>
                   <p className="text-xs text-muted-foreground">

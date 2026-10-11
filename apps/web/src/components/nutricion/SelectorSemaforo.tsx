@@ -88,7 +88,7 @@ export function SelectorSemaforo({
               }`}
             >
               <Icono className={`h-8 w-8 mb-1 ${claseIcono}`} aria-hidden="true" />
-              <span className="font-extrabold text-sm text-foreground">{titulo}</span>
+              <span className="font-bold text-sm text-foreground">{titulo}</span>
               <span className="text-xs text-muted-foreground mt-0.5 text-center">{detalle}</span>
             </button>
           )

@@ -90,7 +90,7 @@ export function PantallaAjustes({
           <Settings className="h-5 w-5" />
         </span>
         <div>
-          <h1 className="text-2xl lg:text-3xl font-black tracking-tight text-foreground">Ajustes</h1>
+          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground">Ajustes</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{descripcion}</p>
         </div>
       </div>

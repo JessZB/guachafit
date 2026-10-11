@@ -551,7 +551,7 @@ export function ProgresoPage() {
                   <span className="text-[11px] font-semibold uppercase text-muted-foreground">
                     Cambio de Peso
                   </span>
-                  <p className="text-xl font-black font-mono text-success mt-0.5">
+                  <p className="text-xl font-bold font-mono text-success mt-0.5">
                     {evolucion.cambioNetoPesoKg} kg
                   </p>
                 </div>
@@ -559,7 +559,7 @@ export function ProgresoPage() {
                   <span className="text-[11px] font-semibold uppercase text-muted-foreground">
                     Grasa Corporal
                   </span>
-                  <p className="text-xl font-black font-mono text-success mt-0.5">
+                  <p className="text-xl font-bold font-mono text-success mt-0.5">
                     {evolucion.cambioNetoGrasaPorcentaje}%
                   </p>
                 </div>
@@ -567,7 +567,7 @@ export function ProgresoPage() {
                   <span className="text-[11px] font-semibold uppercase text-muted-foreground">
                     Evaluaciones
                   </span>
-                  <p className="text-xl font-black font-mono text-foreground mt-0.5">
+                  <p className="text-xl font-bold font-mono text-foreground mt-0.5">
                     {evolucion.totalEvaluaciones} aprobadas
                   </p>
                 </div>

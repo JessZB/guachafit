@@ -28,7 +28,7 @@ export function App() {
             <Dumbbell className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="font-black text-xl tracking-tight text-foreground">
+            <h1 className="font-bold text-xl tracking-tight text-foreground">
               GUACHAFIT
             </h1>
             <p className="text-xs text-muted-foreground font-medium">High-Performance Training & Ops</p>
@@ -87,7 +87,7 @@ export function App() {
           <span>Spec-Driven Development Monorepo Inicializado</span>
         </div>
 
-        <h2 className="text-4xl sm:text-6xl font-extrabold tracking-tight max-w-3xl">
+        <h2 className="text-4xl sm:text-6xl font-bold tracking-tight max-w-3xl">
           Entrenamiento, nutrición y gestión de alumnos sin fricción.
         </h2>
 
