@@ -1,9 +1,8 @@
 /**
- * Lote E6 · C1 (fase roja): textos puros de la asignación de plantilla en 3 pasos.
+ * Lote E6 · C1: textos puros de la asignación de plantilla en 3 pasos.
  *
- * `apps/web/src/lib/asignacion-pasos.ts` todavía no existe: este spec debe fallar al resolver
- * el import. Cuando exista, cada caso fija el contrato del prompt 32 (pasos, texto de ejercicio
- * y resumen de asignación).
+ * Contrato vigente del prompt 32: `apps/web/src/lib/asignacion-pasos.ts` existe y cada caso
+ * fija sus salidas (títulos de paso, texto de ejercicio y resumen de asignación).
  */
 import { describe, expect, it } from 'vitest';
 import { ModoAsignacionPlantilla, type BloqueDiaRutinaDTO } from '@guachafit/shared';

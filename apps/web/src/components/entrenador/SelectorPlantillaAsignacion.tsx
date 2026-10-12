@@ -100,6 +100,9 @@ export function SelectorPlantillaAsignacion({
   const [diaAbierto, setDiaAbierto] = useState<string | null>(null);
   const [ajustando, setAjustando] = useState<Set<string>>(() => new Set());
   const refResumenErrores = useRef<HTMLDivElement>(null);
+  const refTituloPaso = useRef<HTMLParagraphElement>(null);
+  const refBotonCerrar = useRef<HTMLButtonElement>(null);
+  const esPrimerPaso = useRef(true);
   const idBase = useId();
 
   // U3b: Escape, trampa de Tab y restore del foco; el foco inicial sigue en el buscador
@@ -235,10 +238,43 @@ export function SelectorPlantillaAsignacion({
     setPaso('revisar');
   };
 
+  // Al cambiar de paso, el foco va a su título (que además se anuncia): el botón pulsado se
+  // desmonta y el foco no debe perderse. El paso inicial conserva el foco del buscador.
+  useEffect(() => {
+    if (esPrimerPaso.current) {
+      esPrimerPaso.current = false;
+      return;
+    }
+    refTituloPaso.current?.focus();
+  }, [paso]);
+
+  /** Del resumen de errores al primer campo inválido de ese ejercicio (abre su día). */
+  const irAlCampoConError = (clave: string) => {
+    if (!detalle) return;
+    for (const bloque of detalle.bloques) {
+      const ejIdx = bloque.ejercicios.findIndex(
+        (ej) => claveOverrideEjercicio(bloque.diaId, ej.ejercicioId, ej.nombre) === clave
+      );
+      if (ejIdx < 0) continue;
+      const override = overrides[clave];
+      const errores = override ? validarOverrideEjercicio(override) : {};
+      const campo = errores.peso ? 'peso' : errores.series ? 'series' : 'reps';
+      setDiaAbierto(bloque.diaId);
+      setAjustando((previos) => new Set(previos).add(clave));
+      window.setTimeout(() => document.getElementById(`${idBase}-${bloque.diaId}-${ejIdx}-${campo}`)?.focus(), 0);
+      return;
+    }
+  };
+
   // Resumen de errores enfocable: al aparecer recibe el foco para que se lea primero.
   useEffect(() => {
     if (paso === 'revisar' && erroresAjustes.length > 0) refResumenErrores.current?.focus();
   }, [paso, erroresAjustes]);
+
+  const asignacionHecha = Boolean(resultado && resultado.exitosos > 0);
+  useEffect(() => {
+    if (asignacionHecha) refBotonCerrar.current?.focus();
+  }, [asignacionHecha]);
 
   const ajustesPendientes = useMemo(
     () => Object.values(overrides).filter(overrideTieneCambios).length,
@@ -351,7 +387,7 @@ export function SelectorPlantillaAsignacion({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 id="modal-plantilla-asignar-title" className="text-lg font-bold text-foreground">
-                Asignar rutina
+                Cargar desde plantilla
               </h2>
               <p className="text-sm text-muted-foreground break-words">Para {alumnoNombre}</p>
             </div>
@@ -365,7 +401,15 @@ export function SelectorPlantillaAsignacion({
             </button>
           </div>
           <div className="space-y-1.5">
-            <p className="text-sm font-semibold text-foreground">{textoPaso(paso)}</p>
+            <p
+              ref={refTituloPaso}
+              tabIndex={-1}
+              aria-live="polite"
+              aria-atomic="true"
+              className="text-sm font-semibold text-foreground focus:outline-hidden"
+            >
+              {textoPaso(paso)}
+            </p>
             <div className="grid grid-cols-3 gap-1.5" aria-hidden="true">
               {PASOS_ASIGNACION.map((p, i) => (
                 <span
@@ -487,6 +531,11 @@ export function SelectorPlantillaAsignacion({
                   {errorDetalle}
                 </p>
               )}
+              {!detalle && !isLoading && plantillasFiltradas.length > 0 && (
+                <p id={`${idBase}-pista-siguiente`} className="text-sm text-muted-foreground">
+                  Elige una plantilla para continuar.
+                </p>
+              )}
             </>
           )}
 
@@ -517,7 +566,15 @@ export function SelectorPlantillaAsignacion({
                   </p>
                   <ul className="list-disc pl-6 space-y-0.5">
                     {erroresAjustes.map((error) => (
-                      <li key={error.clave}>{error.mensaje}</li>
+                      <li key={error.clave}>
+                        <button
+                          type="button"
+                          onClick={() => irAlCampoConError(error.clave)}
+                          className="text-left underline underline-offset-2 hover:text-primary cursor-pointer"
+                        >
+                          {error.mensaje}
+                        </button>
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -565,6 +622,7 @@ export function SelectorPlantillaAsignacion({
                             const editando = ajustando.has(clave);
                             const errorVisible =
                               erroresCampo.peso || erroresCampo.series || erroresCampo.reps || errorAjuste?.mensaje;
+                            const idErrorFila = `${idBase}-${bloque.diaId}-${ejIdx}-error`;
                             return (
                               <li key={ej.id || clave || ejIdx} className="py-2.5 space-y-2">
                                 <div className="flex items-start justify-between gap-3">
@@ -579,7 +637,7 @@ export function SelectorPlantillaAsignacion({
                                     </p>
                                     <p className="text-sm text-muted-foreground">{textoEjercicioPlantilla(ej)}</p>
                                     {ej.notas && (
-                                      <p className="text-xs text-muted-foreground">Nota técnica: {ej.notas}</p>
+                                      <p className="text-xs text-muted-foreground break-words">Nota técnica: {ej.notas}</p>
                                     )}
                                   </div>
                                   <button
@@ -597,80 +655,24 @@ export function SelectorPlantillaAsignacion({
 
                                 {editando && (
                                   <div className="flex items-end gap-3 flex-wrap pl-0.5">
-                                    <div className="flex flex-col gap-1">
-                                      <label
-                                        htmlFor={`${idBase}-${bloque.diaId}-${ejIdx}-peso`}
-                                        className="text-xs font-medium text-muted-foreground"
-                                      >
-                                        Peso (kg)
-                                      </label>
-                                      <input
-                                        id={`${idBase}-${bloque.diaId}-${ejIdx}-peso`}
-                                        type="text"
-                                        inputMode="decimal"
-                                        value={override?.peso ?? ''}
-                                        onChange={(e) => {
-                                          const anterior = override?.peso ?? '';
-                                          const filtrado = filtrarEntradaPeso(e.target.value, anterior, 'kg');
-                                          if (filtrado !== anterior) actualizarOverride(bloque, ej, 'peso', filtrado);
+                                    {CAMPOS_AJUSTE.map((campo) => (
+                                      <CampoAjuste
+                                        key={campo.campo}
+                                        id={`${idBase}-${bloque.diaId}-${ejIdx}-${campo.campo}`}
+                                        etiqueta={campo.etiqueta}
+                                        inputMode={campo.inputMode}
+                                        anchoClase={campo.anchoClase}
+                                        valor={override?.[campo.campo] ?? ''}
+                                        invalido={Boolean(erroresCampo[campo.campo])}
+                                        idError={errorVisible ? idErrorFila : undefined}
+                                        deshabilitado={asignacionCompletada}
+                                        onCambio={(texto) => {
+                                          const anterior = override?.[campo.campo] ?? '';
+                                          const filtrado = campo.filtrar(texto, anterior);
+                                          if (filtrado !== anterior) actualizarOverride(bloque, ej, campo.campo, filtrado);
                                         }}
-                                        disabled={asignacionCompletada}
-                                        placeholder="sin cambio"
-                                        aria-invalid={Boolean(erroresCampo.peso)}
-                                        className={`h-11 w-24 px-2 rounded-lg bg-background border text-center font-mono text-sm text-foreground focus:outline-hidden focus:border-primary ${
-                                          erroresCampo.peso ? 'border-destructive/70' : 'border-border'
-                                        }`}
                                       />
-                                    </div>
-                                    <div className="flex flex-col gap-1">
-                                      <label
-                                        htmlFor={`${idBase}-${bloque.diaId}-${ejIdx}-series`}
-                                        className="text-xs font-medium text-muted-foreground"
-                                      >
-                                        Series
-                                      </label>
-                                      <input
-                                        id={`${idBase}-${bloque.diaId}-${ejIdx}-series`}
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={override?.series ?? ''}
-                                        onChange={(e) => {
-                                          const anterior = override?.series ?? '';
-                                          const filtrado = filtrarEntradaSeries(e.target.value, anterior);
-                                          if (filtrado !== anterior) actualizarOverride(bloque, ej, 'series', filtrado);
-                                        }}
-                                        disabled={asignacionCompletada}
-                                        placeholder={String(ej.series)}
-                                        aria-invalid={Boolean(erroresCampo.series)}
-                                        className={`h-11 w-16 px-2 rounded-lg bg-background border text-center font-mono text-sm text-foreground focus:outline-hidden focus:border-primary ${
-                                          erroresCampo.series ? 'border-destructive/70' : 'border-border'
-                                        }`}
-                                      />
-                                    </div>
-                                    <div className="flex flex-col gap-1">
-                                      <label
-                                        htmlFor={`${idBase}-${bloque.diaId}-${ejIdx}-reps`}
-                                        className="text-xs font-medium text-muted-foreground"
-                                      >
-                                        Repeticiones
-                                      </label>
-                                      <input
-                                        id={`${idBase}-${bloque.diaId}-${ejIdx}-reps`}
-                                        type="text"
-                                        value={override?.reps ?? ''}
-                                        onChange={(e) => {
-                                          const anterior = override?.reps ?? '';
-                                          const filtrado = filtrarEntradaRepsPrescritas(e.target.value, anterior);
-                                          if (filtrado !== anterior) actualizarOverride(bloque, ej, 'reps', filtrado);
-                                        }}
-                                        disabled={asignacionCompletada}
-                                        placeholder={ej.reps}
-                                        aria-invalid={Boolean(erroresCampo.reps)}
-                                        className={`h-11 w-20 px-2 rounded-lg bg-background border text-center font-mono text-sm text-foreground focus:outline-hidden focus:border-primary ${
-                                          erroresCampo.reps ? 'border-destructive/70' : 'border-border'
-                                        }`}
-                                      />
-                                    </div>
+                                    ))}
                                     {ajustado && (
                                       <button
                                         type="button"
@@ -685,7 +687,9 @@ export function SelectorPlantillaAsignacion({
                                 )}
 
                                 {errorVisible && (
-                                  <p className="text-sm font-medium text-destructive">{errorVisible}</p>
+                                  <p id={idErrorFila} className="text-sm font-medium text-destructive">
+                                    {errorVisible}
+                                  </p>
                                 )}
                               </li>
                             );
@@ -720,10 +724,11 @@ export function SelectorPlantillaAsignacion({
                   const idOpcion = `${idBase}-modo-${opcion.valor}`;
                   const marcado = modo === opcion.valor;
                   return (
-                    <div
+                    <label
                       key={opcion.valor}
-                      className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${
-                        marcado ? 'border-primary/60 bg-primary/5' : 'border-border'
+                      htmlFor={idOpcion}
+                      className={`flex items-start gap-3 min-h-11 p-3 rounded-xl border transition-colors cursor-pointer ${
+                        marcado ? 'border-primary/60 bg-primary/5' : 'border-border hover:border-primary/40'
                       }`}
                     >
                       <input
@@ -733,23 +738,24 @@ export function SelectorPlantillaAsignacion({
                         value={opcion.valor}
                         checked={marcado}
                         onChange={() => setModo(opcion.valor)}
+                        aria-labelledby={`${idOpcion}-titulo`}
                         aria-describedby={`${idOpcion}-detalle`}
                         className="mt-0.5 h-5 w-5 accent-primary cursor-pointer"
                       />
-                      <div className="min-w-0">
-                        <label htmlFor={idOpcion} className="block text-sm font-semibold text-foreground cursor-pointer">
+                      <span className="min-w-0">
+                        <span id={`${idOpcion}-titulo`} className="block text-sm font-semibold text-foreground">
                           {opcion.titulo}
-                        </label>
-                        <p id={`${idOpcion}-detalle`} className="text-sm text-muted-foreground">
+                        </span>
+                        <span id={`${idOpcion}-detalle`} className="block text-sm text-muted-foreground">
                           {opcion.detalle}
-                        </p>
-                      </div>
-                    </div>
+                        </span>
+                      </span>
+                    </label>
                   );
                 })}
               </fieldset>
 
-              <p className="text-base text-foreground">
+              <p className="text-base text-foreground break-words">
                 {resumenAsignacion({
                   plantillaNombre: detalle.nombre,
                   alumnoNombre,
@@ -765,7 +771,7 @@ export function SelectorPlantillaAsignacion({
                   className="p-3 rounded-xl bg-success/10 border border-success/30 text-sm text-foreground flex items-start gap-2"
                 >
                   <CheckCircle2 className="h-5 w-5 shrink-0 text-success-strong" aria-hidden="true" />
-                  <span>
+                  <span className="min-w-0 break-words">
                     <span className="font-semibold">Rutina asignada a {alumnoNombre}.</span>{' '}
                     {resultado.modo === ModoAsignacionPlantilla.REEMPLAZAR
                       ? 'Reemplazó su rutina activa.'
@@ -791,6 +797,7 @@ export function SelectorPlantillaAsignacion({
         <div className="px-4 sm:px-6 py-3 border-t border-border/80 flex items-center justify-between gap-3 safe-area-pb">
           {paso === 'elegir' || asignacionCompletada ? (
             <button
+              ref={refBotonCerrar}
               type="button"
               onClick={onCerrar}
               disabled={isAsignando}
@@ -832,7 +839,8 @@ export function SelectorPlantillaAsignacion({
               type="button"
               disabled={!puedeAvanzar}
               onClick={() => (paso === 'elegir' ? irARevisar() : setPaso('confirmar'))}
-              className="min-h-11 px-5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              aria-describedby={!puedeAvanzar && paso === 'elegir' ? `${idBase}-pista-siguiente` : undefined}
+              className="min-h-11 px-5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Siguiente
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -852,6 +860,76 @@ export function SelectorPlantillaAsignacion({
         procesando={isAsignando}
         onCancelar={() => setConfirmandoReemplazo(false)}
         onConfirmar={() => void confirmarAsignacion(true)}
+      />
+    </div>
+  );
+}
+
+/** Campos de un ajuste: misma estructura, distinto filtro y teclado. */
+const CAMPOS_AJUSTE: Array<{
+  campo: 'peso' | 'series' | 'reps';
+  etiqueta: string;
+  inputMode: 'decimal' | 'numeric' | 'text';
+  anchoClase: string;
+  filtrar: (nuevo: string, anterior: string) => string;
+}> = [
+  {
+    campo: 'peso',
+    etiqueta: 'Peso (kg)',
+    inputMode: 'decimal',
+    anchoClase: 'w-24',
+    filtrar: (nuevo, anterior) => filtrarEntradaPeso(nuevo, anterior, 'kg'),
+  },
+  { campo: 'series', etiqueta: 'Series', inputMode: 'numeric', anchoClase: 'w-16', filtrar: filtrarEntradaSeries },
+  {
+    campo: 'reps',
+    etiqueta: 'Repeticiones',
+    inputMode: 'text',
+    anchoClase: 'w-20',
+    filtrar: filtrarEntradaRepsPrescritas,
+  },
+];
+
+/** Un campo de ajuste con su etiqueta, filtro al teclear y error enlazado (`aria-describedby`). */
+function CampoAjuste({
+  id,
+  etiqueta,
+  inputMode,
+  anchoClase,
+  valor,
+  invalido,
+  idError,
+  deshabilitado,
+  onCambio,
+}: {
+  id: string;
+  etiqueta: string;
+  inputMode: 'decimal' | 'numeric' | 'text';
+  anchoClase: string;
+  valor: string;
+  invalido: boolean;
+  idError?: string;
+  deshabilitado: boolean;
+  onCambio: (texto: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label htmlFor={id} className="text-xs font-medium text-muted-foreground">
+        {etiqueta}
+      </label>
+      <input
+        id={id}
+        type="text"
+        inputMode={inputMode}
+        value={valor}
+        onChange={(e) => onCambio(e.target.value)}
+        disabled={deshabilitado}
+        placeholder="sin cambio"
+        aria-invalid={invalido}
+        aria-describedby={idError}
+        className={`h-11 ${anchoClase} px-2 rounded-lg bg-background border text-center font-mono text-sm text-foreground focus:outline-hidden focus:border-primary ${
+          invalido ? 'border-destructive/70' : 'border-border'
+        }`}
       />
     </div>
   );
