@@ -1303,7 +1303,9 @@ describe('Hardening QA: Alumnos, Expediente 360° y Cobro Directo Inteligente (E
         });
         expect(parsed.montoOriginal).toBe('50.00');
         expect(parsed.metodoPago).toBe(MetodoPago.EFECTIVO_USD);
-        expect(parsed.fechaOperacion).toBeDefined();
+        // Sin fecha, el schema la deja opcional y sin valor por defecto:
+        // la API usa el día local del alumno.
+        expect(parsed.fechaOperacion).toBeUndefined();
       });
     });
 

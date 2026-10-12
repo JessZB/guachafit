@@ -1384,8 +1384,8 @@ export const CobroDirectoInteligenteSchema = z.object({
   fechaOperacion: z
     .string()
     .regex(FECHA_CALENDARIO_REGEX, 'La fecha del pago no es válida. Usa el formato año-mes-día (por ejemplo, 2026-01-31)')
-    .optional()
-    .default(() => new Date().toISOString().split('T')[0]),
+    // Sin fecha, la API usa el día LOCAL del alumno (el día UTC desplazaría la tarde al día siguiente).
+    .optional(),
   referenciaBancaria: z.string().max(64, 'La referencia bancaria no puede exceder 64 caracteres').optional(),
   notas: z.string().max(500, 'Las notas no pueden exceder 500 caracteres').optional(),
 });
@@ -1404,6 +1404,9 @@ export const ConciliarTransaccionSchema = z
       });
     }
   });
+
+/** RF-007/RF-009: un pago (cobro en sala o reporte del alumno) no puede tener fecha futura. */
+export const MENSAJE_FECHA_PAGO_FUTURA = 'La fecha del pago no puede ser posterior a hoy.';
 
 /** RF-007: reversión de un pago aprobado por error (solo el entrenador dueño, con motivo). */
 export const MENSAJE_MOTIVO_REVERSION_OBLIGATORIO = 'Escribe el motivo de la reversión.';

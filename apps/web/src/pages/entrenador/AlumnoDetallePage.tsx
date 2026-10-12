@@ -83,6 +83,7 @@ import {
   EstadoAlumno,
   EstadoSesion,
   Moneda,
+  type TasaCambioVigenteDTO,
   PlanMembresiaDetalleDTO,
   OverridePlanDetalleDTO,
   type SuscripcionAlumnoDTO,
@@ -97,6 +98,7 @@ import {
   PeriodicidadAntropometria,
   type FotoAntropometriaInputDTO,
   EstadoConciliacion,
+  MENSAJE_FECHA_PAGO_FUTURA,
 } from '@guachafit/shared';
 import { SelectorFotosCheckin } from '../../components/antropometria/SelectorFotosCheckin';
 import {
@@ -112,7 +114,12 @@ import {
   suscripcionDemoAlumno,
   textoProximaCuota,
 } from '../../lib/suscripcion-alumno';
-import { construirPayloadCobroSala } from '../../lib/cobro-sala';
+import {
+  construirPayloadCobroSala,
+  errorTrasCambiarFecha,
+  textoTasaCobro,
+  validarFechaCobro,
+} from '../../lib/cobro-sala';
 import { mensajeConExcedente, textoSaldoAFavor, tieneSaldoAFavor } from '../../lib/saldo-a-favor';
 import { partesEnZona } from '../../lib/zona-horaria';
 import {
@@ -411,6 +418,10 @@ export function AlumnoDetallePage() {
   const [isCobroModalOpen, setIsCobroModalOpen] = useState(false);
   const [cobroMonto, setCobroMonto] = useState('40.00');
   const [cobroMoneda, setCobroMoneda] = useState<Moneda>(Moneda.USD);
+  // RF-007/RF-009: el cobro admite fechas anteriores (hoy por defecto y como máximo).
+  const [cobroFecha, setCobroFecha] = useState(() => fechaCalendarioLocal());
+  // Tasa con la que se convertirá un cobro en bolívares (la vigente del alumno al registrar).
+  const [tasaCobro, setTasaCobro] = useState<string | null>(null);
   const [cobroNotas, setCobroNotas] = useState('');
   // M5-L1B (RNF-002): clave de idempotencia del cobro en sala de este alumno.
   // La clave se renueva SOLO tras un cobro confirmado: si la respuesta se perdió, cerrar y
@@ -1712,21 +1723,47 @@ export function AlumnoDetallePage() {
     }
   };
 
+  // Al abrir el cobro en sala: hoy como fecha por defecto y la tasa vigente del alumno (sin demo).
+  useEffect(() => {
+    if (!isCobroModalOpen) return;
+    setCobroFecha(fechaCalendarioLocal());
+    if (isDemoMode || !alumno?.usuarioId) {
+      setTasaCobro(null);
+      return;
+    }
+    let vigente = true;
+    apiClient<TasaCambioVigenteDTO>(`/finanzas/tasas/vigente?clienteId=${alumno.usuarioId}`)
+      .then((tasa) => {
+        if (vigente) setTasaCobro(tasa?.tasaEfectiva ?? null);
+      })
+      .catch(() => {
+        if (vigente) setTasaCobro(null);
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [isCobroModalOpen, isDemoMode, alumno?.usuarioId]);
+
   // Enviar Cobro Directo Inteligente en Sala
   const handleRegistrarCobro = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!id) return;
+    const errorFecha = validarFechaCobro(cobroFecha, fechaCalendarioLocal());
+    if (errorFecha) {
+      setCobroErrorMsg(errorFecha);
+      return;
+    }
     setIsSubmittingCobro(true);
     setCobroSuccessMsg(null);
     setCobroErrorMsg(null);
     setCobroSinPlan(false);
 
-    // M5-L1B: solo efectivo (método según la moneda) y fecha del día LOCAL.
+    // M5-L1B: solo efectivo (método según la moneda) y la fecha elegida (día LOCAL, hoy o anterior).
     const payload = construirPayloadCobroSala({
       monto: cobroMonto,
       moneda: cobroMoneda,
       notas: cobroNotas,
-      hoyLocal: fechaCalendarioLocal(),
+      hoyLocal: cobroFecha,
     });
 
     // MODO DEMO EXPLÍCITO: sin llamadas reales; el éxito dice que es una demostración.
@@ -4086,6 +4123,34 @@ export function AlumnoDetallePage() {
                 </div>
 
                 <div className="space-y-1">
+                  <label htmlFor="ficha-cobro-fecha" className="text-xs font-semibold text-muted-foreground">
+                    Fecha de la operación
+                  </label>
+                  <input
+                    id="ficha-cobro-fecha"
+                    type="date"
+                    max={fechaCalendarioLocal()}
+                    value={cobroFecha}
+                    onChange={(e) => {
+                      setCobroFecha(e.target.value);
+                      setCobroErrorMsg(errorTrasCambiarFecha);
+                    }}
+                    // El navegador bloquea la fecha futura por `max`: se muestra nuestro mensaje
+                    // en lugar de su burbuja (los demás campos conservan la validación nativa).
+                    onInvalid={(e) => {
+                      if (!e.currentTarget.validity.rangeOverflow) return;
+                      e.preventDefault();
+                      setCobroErrorMsg(MENSAJE_FECHA_PAGO_FUTURA);
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                  />
+                </div>
+
+                {cobroMoneda === Moneda.VES && textoTasaCobro(tasaCobro) && (
+                  <p className="text-[11px] font-semibold text-foreground">{textoTasaCobro(tasaCobro)}</p>
+                )}
+
+                <div className="space-y-1">
                   <label className="text-xs font-semibold text-muted-foreground">Notas Internas</label>
                   <input
                     type="text"
@@ -4101,7 +4166,7 @@ export function AlumnoDetallePage() {
                   disabled={isSubmittingCobro}
                   className="w-full py-3 px-4 rounded-xl bg-success-strong hover:bg-success-strong/90 text-white font-bold text-sm tracking-wide shadow-md shadow-success-strong/20 active:scale-98 transition-all disabled:opacity-50 mt-2 cursor-pointer"
                 >
-                  {isSubmittingCobro ? 'Procesando cobro en BD...' : 'Registrar y Liquidar Cobro'}
+                  {isSubmittingCobro ? 'Registrando cobro…' : 'Registrar y Liquidar Cobro'}
                 </button>
               </form>
               </>

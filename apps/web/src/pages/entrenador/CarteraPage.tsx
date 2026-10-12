@@ -1,7 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient, generateIdempotencyKey } from '../../lib/api-client';
-import { construirPayloadCobroSala } from '../../lib/cobro-sala';
+import {
+  construirPayloadCobroSala,
+  errorTrasCambiarFecha,
+  textoTasaCobro,
+  validarFechaCobro,
+} from '../../lib/cobro-sala';
 import { mensajeConExcedente } from '../../lib/saldo-a-favor';
 import { esErrorSinPlanAsignado } from '../../lib/suscripcion-alumno';
 import { useAuth } from '../../context/auth-context';
@@ -279,6 +284,11 @@ export function CarteraPage() {
     const monto = Number(cobro.monto);
     if (!Number.isFinite(monto) || monto <= 0) {
       setErrorCobro('El monto debe ser mayor a 0.00.');
+      return;
+    }
+    const errorFecha = validarFechaCobro(cobro.fechaOperacion, fechaCalendarioLocal());
+    if (errorFecha) {
+      setErrorCobro(errorFecha);
       return;
     }
     setEnviandoCobro(true);
@@ -802,22 +812,27 @@ export function CarteraPage() {
                   <input
                     id="cobro-fecha"
                     type="date"
+                    max={fechaCalendarioLocal()}
                     value={cobro.fechaOperacion}
-                    onChange={(evento) =>
+                    onChange={(evento) => {
                       setCobro((actual) =>
                         actual ? { ...actual, fechaOperacion: evento.target.value } : actual
-                      )
-                    }
+                      );
+                      setErrorCobro(errorTrasCambiarFecha);
+                    }}
                     className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
                   />
                 </div>
 
+                {cobro.moneda === Moneda.VES &&
+                  textoTasaCobro(cobro.fila.tasaAplicada ?? resumen?.tasaVigente) && (
+                    <p className="text-[11px] font-semibold text-foreground">
+                      {textoTasaCobro(cobro.fila.tasaAplicada ?? resumen?.tasaVigente)}
+                    </p>
+                  )}
+
                 <p className="text-[11px] text-muted-foreground">
-                  El cobro se registra y auto-aprueba con{' '}
-                  <span className="font-bold text-foreground">
-                    registrado_por: tu usuario de coach
-                  </span>
-                  . El saldo del alumno se descuenta de inmediato.
+                  El cobro queda aprobado al instante y se descuenta del saldo del alumno.
                 </p>
               </div>
             )}

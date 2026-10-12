@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { errorTrasCambiarFecha, validarFechaCobro } from '../../lib/cobro-sala';
 import { tieneSaldoAFavor, textoSaldoAFavor } from '../../lib/saldo-a-favor';
 import { useAuth } from '../../context/auth-context';
 import { apiClient, resolverUrlApi } from '../../lib/api-client';
@@ -17,6 +18,7 @@ import {
   ResumenFinancieroAlumnoDTO,
   TransaccionPagoDetalleDTO,
   AuthUserDTO,
+  MENSAJE_FECHA_PAGO_FUTURA,
 } from '@guachafit/shared';
 import {
   etiquetaEstadoTransaccion,
@@ -26,7 +28,7 @@ import {
 } from '../../lib/pagos-historial-filtros';
 import { etiquetaEstadoCuota } from '../../lib/etiquetas-dominio';
 import { etiquetaMetodoPago } from '../../lib/conciliacion-filtros';
-import { formatFechaCalendario } from '../../lib/date-format';
+import { fechaCalendarioLocal, formatFechaCalendario } from '../../lib/date-format';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import {
   CreditCard,
@@ -204,7 +206,7 @@ export function PagosPage() {
   const [moneda, setMoneda] = useState<Moneda>(Moneda.VES);
   const [montoOriginal, setMontoOriginal] = useState('1300.00');
   const [referenciaBancaria, setReferenciaBancaria] = useState('');
-  const [fechaOperacion, setFechaOperacion] = useState(new Date().toISOString().split('T')[0]);
+  const [fechaOperacion, setFechaOperacion] = useState(fechaCalendarioLocal);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -447,6 +449,12 @@ export function PagosPage() {
 
   const handleReportarPago = async (e: React.FormEvent) => {
     e.preventDefault();
+    // RF-007: un pago de días anteriores se puede reportar; uno con fecha futura no.
+    const errorFecha = validarFechaCobro(fechaOperacion, fechaCalendarioLocal());
+    if (errorFecha) {
+      setFormError(errorFecha);
+      return;
+    }
     setIsSubmitting(true);
     setFormError(null);
 
@@ -854,8 +862,19 @@ export function PagosPage() {
                   <input
                     type="date"
                     required
+                    max={fechaCalendarioLocal()}
                     value={fechaOperacion}
-                    onChange={(e) => setFechaOperacion(e.target.value)}
+                    onChange={(e) => {
+                      setFechaOperacion(e.target.value);
+                      setFormError(errorTrasCambiarFecha);
+                    }}
+                    // El navegador bloquea la fecha futura por `max`: se muestra nuestro mensaje
+                    // en lugar de su burbuja (los demás campos conservan la validación nativa).
+                    onInvalid={(e) => {
+                      if (!e.currentTarget.validity.rangeOverflow) return;
+                      e.preventDefault();
+                      setFormError(MENSAJE_FECHA_PAGO_FUTURA);
+                    }}
                     className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
                   />
                 </div>

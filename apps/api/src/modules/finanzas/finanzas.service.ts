@@ -102,6 +102,7 @@ import {
   RevertirPagoSchema,
   MENSAJE_REVERSION_SOLO_APROBADOS,
   MENSAJE_REVERSION_SALDO_USADO,
+  MENSAJE_FECHA_PAGO_FUTURA,
   AsignarSuscripcionDTO,
   SuscripcionAlumnoDTO,
   EstadoAlumno,
@@ -296,6 +297,15 @@ export function estadoCuotaTrasRetirarAbono(cuota: {
   return new Date(cuota.fechaCorteUtc).getTime() < cuota.ahora.getTime()
     ? EstadoCuota.VENCIDA
     : EstadoCuota.EMITIDA;
+}
+
+/**
+ * RF-007/RF-009: ¿la fecha de un pago (YYYY-MM-DD) es futura? Se compara con "hoy" en la zona más
+ * adelantada del mundo (UTC+14): así una diferencia de zona entre entrenador y alumno nunca rechaza
+ * un pago de hoy. La web limita además el campo a hoy en el dispositivo.
+ */
+export function esFechaPagoFutura(fechaOperacion: string, ahora: Date): boolean {
+  return fechaOperacion > obtenerFechaLocalYyyyMmDd(ahora, 'Pacific/Kiritimati');
 }
 
 /** El efectivo no lleva referencia bancaria: nunca participa en la detección de duplicados. */
@@ -1870,8 +1880,13 @@ export class FinanzasService {
     // 1. Idempotencia en memoria (lag de red / reintento exacto): una respuesta guardada o una
     //    ejecución en curso con la misma clave se reutiliza en vez de registrar otro pago.
     let ejecutadoAhora = false;
-    const { transaccion, cuota } = await this.idempotencia.ejecutar(cacheKey, () => {
+    // La guarda de fecha futura va dentro de la ejecución: un reintento con la misma clave pasada
+    // la medianoche devuelve el pago ya registrado en vez de rechazarlo (los fallos no se guardan).
+    const { transaccion, cuota } = await this.idempotencia.ejecutar(cacheKey, async () => {
       ejecutadoAhora = true;
+      if (esFechaPagoFutura(dto.fechaOperacion, new Date())) {
+        throw new BadRequestException(MENSAJE_FECHA_PAGO_FUTURA);
+      }
       return this.registrarReportePago(cuotaId, alumnoUserId, dto);
     });
 
@@ -2100,6 +2115,9 @@ export class FinanzasService {
       throw new BadRequestException(
         'El cobro en sala solo acepta efectivo (dólares o bolívares).'
       );
+    }
+    if (esFechaPagoFutura(dto.fechaOperacion, new Date())) {
+      throw new BadRequestException(MENSAJE_FECHA_PAGO_FUTURA);
     }
 
     const resultado = await this.db.transaction(async (tx) => {
@@ -3087,6 +3105,11 @@ export class FinanzasService {
     if (!esMetodoEfectivo(dto.metodoPago)) {
       throw new BadRequestException('El cobro en sala solo acepta efectivo (dólares o bolívares).');
     }
+    // La fecha futura se rechaza ANTES de emitir nada (no deja una cuota adelantada huérfana).
+    if (dto.fechaOperacion && esFechaPagoFutura(dto.fechaOperacion, ahora)) {
+      throw new BadRequestException(MENSAJE_FECHA_PAGO_FUTURA);
+    }
+    let zonaAlumno: string = ZONA_HORARIA_ALUMNO_POR_DEFECTO;
 
     // RNF-003/ADR-011 (etapa 2): la resolución (alumno + cuota abierta o adelantada) lee y escribe
     // tablas con RLS en UNA transacción con el GUC del coach; `cobroDirecto` abre después su
@@ -3103,6 +3126,7 @@ export class FinanzasService {
         const perfil = await this.buscarPerfilDeCartera(tx, entrenadorId, clienteId, {
           bloquear: true,
         });
+        zonaAlumno = zonaDelAlumno(perfil);
 
         const clienteUsuarioId = perfil.usuarioId;
 
@@ -3199,6 +3223,8 @@ export class FinanzasService {
       await this.programarRecordatoriosDeEmision(emision.emision, emision.perfil);
     }
 
-    return this.cobroDirecto(targetCuotaId, entrenadorId, dto);
+    // Sin fecha, el día LOCAL del alumno (no el día UTC).
+    const fechaOperacion = dto.fechaOperacion ?? obtenerFechaLocalYyyyMmDd(ahora, zonaAlumno);
+    return this.cobroDirecto(targetCuotaId, entrenadorId, { ...dto, fechaOperacion } as CobroDirectoDTO);
   }
 }
