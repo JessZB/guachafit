@@ -32,6 +32,9 @@ function filtrar(nuevo: string, anterior: string, esValido: (texto: string) => b
   return anterior;
 }
 
+/** Tope del peso corporal (`CheckinAntropometricoSchema`: de 30 a 300 kg). */
+const PESO_CORPORAL_MAX_KG = 300;
+
 /** Tope del peso en la unidad visible: 999 kg o su equivalente en lb (2202.42). */
 export function pesoMaximoEnUnidad(unidad: UnidadPeso): number {
   return redondearDecimal(kgAUnidad(LIMITES_SERIE.pesoKgMax, unidad), 2);
@@ -45,6 +48,24 @@ export function filtrarEntradaPeso(nuevo: string, anterior: string, unidad: Unid
     anterior,
     (texto) => PESO_PARCIAL.test(texto) && Number(texto.replace(',', '.')) <= maximo
   );
+}
+
+/** Peso corporal de antropometría: hasta 300 kg al escribir (el mínimo de 30 se valida al enviar). */
+export function filtrarEntradaPesoCorporal(nuevo: string, anterior: string): string {
+  return filtrar(
+    nuevo,
+    anterior,
+    (texto) => PESO_PARCIAL.test(texto) && Number(texto.replace(',', '.')) <= PESO_CORPORAL_MAX_KG
+  );
+}
+
+/**
+ * Número de un texto pegado que sea solo un número con unidad opcional ('60 kg', ' 60,5 kg ',
+ * '135 lb'); conserva su separador. `null` si trae cualquier otra cosa ('2x20 kg', 'Corporal').
+ */
+export function extraerNumeroPegado(texto: string): string | null {
+  const coincidencia = texto.trim().match(/^(\d+(?:[.,]\d+)?)\s*(?:kgs?|lb)?$/i);
+  return coincidencia ? coincidencia[1] : null;
 }
 
 /** Repeticiones hechas por el alumno (0–200). */

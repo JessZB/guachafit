@@ -3,7 +3,7 @@
  *
  * Única fuente de verdad de los datos de ejemplo compartidos por:
  * - `PlantillasPage` (listado y operaciones locales de crear/editar/desactivar/reactivar),
- * - `SelectorPlantillaAsignacion` (picker "Cargar desde Plantilla" del Expediente 360°).
+ * - `SelectorPlantillaAsignacion` (picker "Cargar desde plantilla" del Expediente 360°).
  *
  * SOLO se consumen con la bandera `isDemoMode` activa. Los nombres de los ejercicios y sus
  * ids son los mismos del catálogo demo del expediente (`AlumnoDetallePage`) y de los bloques

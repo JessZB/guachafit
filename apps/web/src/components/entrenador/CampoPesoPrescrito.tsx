@@ -1,6 +1,7 @@
 import React, { useId, useRef, useState } from 'react';
 import {
   componerPesoPrescrito,
+  extraerNumeroPegado,
   filtrarEntradaPeso,
   interpretarPesoPrescrito,
 } from '../../lib/entrada-numerica';
@@ -75,6 +76,13 @@ export function CampoPesoPrescrito({
         value={esCorporal ? '' : borrador}
         disabled={esCorporal}
         onChange={(e) => cambiarNumero(e.target.value)}
+        onPaste={(e) => {
+          // Lote E7: '60 kg' pegado escribe 60; cualquier otro texto lo rechaza el filtro.
+          const numero = extraerNumeroPegado(e.clipboardData.getData('text'));
+          if (numero === null) return;
+          e.preventDefault();
+          cambiarNumero(numero);
+        }}
         placeholder={esCorporal ? '—' : '60'}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? idError : undefined}

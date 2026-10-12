@@ -91,6 +91,7 @@ function filaCompactaSerie1(): HTMLElement | null {
 
 afterEach(() => {
   cleanup();
+  sessionStorage.clear();
 });
 
 describe('EntrenamientoPage · modo foco en modo demo (C3)', () => {

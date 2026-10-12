@@ -157,3 +157,30 @@ describe('CampoPesoPrescrito · S3/S6: número recuperado y resincronización de
     expect(estaActivado(interruptorCorporal())).toBe(true);
   });
 });
+
+/**
+ * Lote E7 · C3.1 (fase roja): pegar un peso con unidad en el campo del coach.
+ * Pegar '60 kg' debe terminar en `onChange('60')` (se extrae el número del portapapeles);
+ * pegar texto sin número ('abc') no debe emitir nada ni alterar lo que había.
+ * El componente actual no escucha `onPaste`, así que el primer caso falla por aserción.
+ */
+describe('CampoPesoPrescrito · C3.1 (lote E7): pegado de un peso con unidad', () => {
+  it('pegar "60 kg" termina en onChange("60")', () => {
+    const { onChange } = renderizarCampo('');
+    const input = inputNumerico();
+
+    fireEvent.paste(input, { clipboardData: { getData: () => '60 kg' } });
+
+    expect(onChange).toHaveBeenLastCalledWith('60');
+  });
+
+  it('pegar "abc" no llama a onChange y el input sigue igual', () => {
+    const { onChange } = renderizarCampo('60');
+    const input = inputNumerico();
+
+    fireEvent.paste(input, { clipboardData: { getData: () => 'abc' } });
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input.value).toBe('60');
+  });
+});

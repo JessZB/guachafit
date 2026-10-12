@@ -20,6 +20,7 @@ import { traducirMensajeSuelto } from '../../lib/mensajes-error';
 import { textoConfirmacionReemplazo } from '../../lib/asignacion-masiva';
 import { DialogoConfirmacion } from '../common/DialogoConfirmacion';
 import {
+  extraerNumeroPegado,
   filtrarEntradaPeso,
   filtrarEntradaRepsPrescritas,
   filtrarEntradaSeries,
@@ -65,7 +66,7 @@ interface SelectorPlantillaAsignacionProps {
 }
 
 /**
- * RF-017 Escenario 2 + RN-03: "Cargar desde Plantilla" en el Expediente 360°.
+ * RF-017 Escenario 2 + RN-03: "Cargar desde plantilla" en el Expediente 360°.
  * Selecciona una plantilla activa del banco, previsualiza días/ejercicios/series,
  * permite ajustar cargas particulares antes de confirmar y exige elegir explícitamente
  * entre Reemplazar y Fusionar la rutina del alumno.
@@ -923,6 +924,12 @@ function CampoAjuste({
         inputMode={inputMode}
         value={valor}
         onChange={(e) => onCambio(e.target.value)}
+        onPaste={(e) => {
+          const numero = extraerNumeroPegado(e.clipboardData.getData('text'));
+          if (numero === null) return;
+          e.preventDefault();
+          onCambio(numero);
+        }}
         disabled={deshabilitado}
         placeholder="sin cambio"
         aria-invalid={invalido}

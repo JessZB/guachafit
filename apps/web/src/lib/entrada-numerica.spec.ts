@@ -1,18 +1,22 @@
 /**
  * Lote E3 · contratos C1–C3 (fase roja): filtros de entrada numérica de la web.
  *
- * El módulo `./entrada-numerica` todavía no existe: el archivo debe fallar al resolver
- * el import. Cuando exista, cada caso de esta tabla describe el contrato exacto.
- *
  * C1: los filtros reciben (nuevo, anterior) y devuelven el texto que debe quedar: el nuevo
  * si es un estado válido mientras se escribe, o el anterior si no lo es. Nunca transforman
  * el texto (no cambian la coma por punto).
+ *
+ * Lote E7 (pendiente del módulo de entrenamiento): este archivo se amplía con C1 de E7 —
+ * `extraerNumeroPegado` (pegar '60 kg' / '135 lb' en un campo numérico) y
+ * `filtrarEntradaPesoCorporal` (peso del check-in con tope 300) —, exportaciones que hoy NO
+ * existen: la carga del archivo falla al resolver el import, que es el rojo esperado.
  */
 import { describe, expect, it } from 'vitest';
 import {
   componerPesoPrescrito,
   esRepsPrescritasValidas,
+  extraerNumeroPegado,
   filtrarEntradaPeso,
+  filtrarEntradaPesoCorporal,
   filtrarEntradaReps,
   filtrarEntradaRepsPrescritas,
   filtrarEntradaRpe,
@@ -102,6 +106,44 @@ describe('C1 · filtrarEntradaSeries: series de un ajuste (1–50, fuera del con
 
   it.each(['0', '51', '05', '1a', '100'])('rechaza "%s" y devuelve el anterior', (nuevo) => {
     expect(filtrarEntradaSeries(nuevo, '5')).toBe('5');
+  });
+});
+
+/**
+ * Lote E7 · C1: pegar un peso con unidad ('60 kg', '135 lb') en un campo numérico.
+ * `extraerNumeroPegado` devuelve el número SOLO si el texto es un número con una unidad
+ * opcional (kg/kgs/lb, sin distinguir mayúsculas) y espacios alrededor; conserva el separador
+ * que traía. Cualquier otro caso (mezclas, texto, vacío) devuelve `null`.
+ */
+describe('C1 · extraerNumeroPegado: número pegado con unidad opcional (kg/kgs/lb)', () => {
+  it.each([
+    ['60 kg', '60'],
+    [' 60,5 kg ', '60,5'],
+    ['135 lb', '135'],
+    ['60', '60'],
+    ['72.25KG', '72.25'],
+    ['60 kgs', '60'],
+  ])('extrae de "%s" el número "%s"', (texto, esperado) => {
+    expect(extraerNumeroPegado(texto)).toBe(esperado);
+  });
+
+  it.each(['2x20 kg', 'Corporal', '', '60 kg 70'])('rechaza "%s" con null', (texto) => {
+    expect(extraerNumeroPegado(texto)).toBeNull();
+  });
+});
+
+/**
+ * Lote E7 · C1: peso corporal (check-in de antropometría) con el mismo filtro de kg pero tope
+ * 300. El mínimo de 30 se valida al enviar, no mientras se escribe: hay que poder teclear '3'
+ * camino de '35'.
+ */
+describe('C1 · filtrarEntradaPesoCorporal: peso corporal (tope 300, mínimo al enviar)', () => {
+  it.each(['', '3', '72', '72,5', '72.25', '300'])('acepta "%s"', (nuevo) => {
+    expect(filtrarEntradaPesoCorporal(nuevo, '72')).toBe(nuevo);
+  });
+
+  it.each(['301', '7a', '72.255'])('rechaza "%s" y devuelve el anterior', (nuevo) => {
+    expect(filtrarEntradaPesoCorporal(nuevo, '72')).toBe('72');
   });
 });
 

@@ -37,6 +37,7 @@ import {
   Modalidad,
 } from '@guachafit/shared';
 import { SelectorFotosCheckin } from '../../components/antropometria/SelectorFotosCheckin';
+import { filtrarEntradaPesoCorporal } from '../../lib/entrada-numerica';
 import {
   TrendingUp,
   Camera,
@@ -733,7 +734,10 @@ export function ProgresoPage() {
                         inputMode="decimal"
                         autoComplete="off"
                         value={pesoKg}
-                        onChange={(e) => setPesoKg(e.target.value)}
+                        onChange={(e) => {
+                          const filtrado = filtrarEntradaPesoCorporal(e.target.value, pesoKg);
+                          if (filtrado !== pesoKg) setPesoKg(filtrado);
+                        }}
                         aria-invalid={Boolean(erroresMedidas.pesoKg)}
                         className={`${CLASES_INPUT_MEDIDA} ${
                           erroresMedidas.pesoKg ? 'border-destructive' : 'border-border'

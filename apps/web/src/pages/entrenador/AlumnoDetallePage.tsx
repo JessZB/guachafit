@@ -29,6 +29,7 @@ import { normalizarPesoPrescritoTexto, validarRpe } from '../../lib/weight-unit'
 import {
   MENSAJE_REPS_PRESCRITAS_INVALIDAS,
   esRepsPrescritasValidas,
+  filtrarEntradaPesoCorporal,
   filtrarEntradaRepsPrescritas,
   filtrarEntradaRpe,
 } from '../../lib/entrada-numerica';
@@ -524,7 +525,7 @@ export function AlumnoDetallePage() {
   const [isSavingRutina, setIsSavingRutina] = useState(false);
   const [rutinaErrorMsg, setRutinaErrorMsg] = useState<string | null>(null);
 
-  // WU6b (RF-017): modal "Cargar desde Plantilla" del banco del coach
+  // WU6b (RF-017): modal "Cargar desde plantilla" del banco del coach
   const [isPlantillaModalOpen, setIsPlantillaModalOpen] = useState(false);
 
   // U3b: los tres modales propios + el selector de plantilla comparten el contrato de diálogo
@@ -3952,7 +3953,7 @@ export function AlumnoDetallePage() {
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground font-bold text-xs border border-border transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ClipboardList className="h-3.5 w-3.5 text-primary" />
-                  <span>Cargar desde Plantilla</span>
+                  <span>Cargar desde plantilla</span>
                 </button>
 
                 <button
@@ -3961,7 +3962,7 @@ export function AlumnoDetallePage() {
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer"
                 >
                   <Pencil className="h-3.5 w-3.5" />
-                  <span>Editar / Asignar Rutina</span>
+                  <span>Editar rutina semanal</span>
                 </button>
               </div>
             </div>
@@ -4228,7 +4229,11 @@ export function AlumnoDetallePage() {
                     type="text"
                     required
                     value={antroPeso}
-                    onChange={(e) => setAntroPeso(e.target.value)}
+                    onChange={(e) => {
+                      // Lote E7: peso corporal filtrado al teclear (máx. 300 kg; el mínimo se valida al enviar).
+                      const filtrado = filtrarEntradaPesoCorporal(e.target.value, antroPeso);
+                      if (filtrado !== antroPeso) setAntroPeso(filtrado);
+                    }}
                     className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm font-mono font-bold text-foreground focus:outline-hidden focus:border-primary"
                   />
                 </div>

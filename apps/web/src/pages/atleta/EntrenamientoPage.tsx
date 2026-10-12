@@ -63,7 +63,18 @@ import {
   validarRpe,
   type UnidadPeso,
 } from '../../lib/weight-unit';
-import { filtrarEntradaPeso, filtrarEntradaReps, filtrarEntradaRpe } from '../../lib/entrada-numerica';
+import {
+  extraerNumeroPegado,
+  filtrarEntradaPeso,
+  filtrarEntradaReps,
+  filtrarEntradaRpe,
+} from '../../lib/entrada-numerica';
+import {
+  almacenDeSesion,
+  clonarSesionParaEdicion,
+  guardarEjercicioPreferido,
+  leerEjercicioPreferido,
+} from '../../lib/sesion-estado';
 import { VistaPreviaSesion } from '../../components/atleta/VistaPreviaSesion';
 import { FilaSerieCompletada } from '../../components/atleta/FilaSerieCompletada';
 import { ModoFoco } from '../../components/atleta/ModoFoco';
@@ -544,7 +555,18 @@ export function EntrenamientoPage() {
   // Lote E5: en curso se ve el modo foco; la lista completa se abre a demanda. "Hacer ahora"
   // fija el ejercicio preferido del foco (la máquina del siguiente puede estar ocupada).
   const [vistaEnCurso, setVistaEnCurso] = useState<'foco' | 'lista'>('foco');
-  const [ejercicioPreferido, setEjercicioPreferido] = useState<number | null>(null);
+  // Lote E7: el ejercicio de "Hacer ahora" sobrevive a una recarga de la misma sesión. Se deriva
+  // en el render (estado en memoria de esta sesión o, si no, `sessionStorage`) para que el
+  // primer render con la sesión cargada ya enfoque el ejercicio correcto, sin parpadeo.
+  const [preferidoElegido, setPreferidoElegido] = useState<{
+    sesionId: string;
+    indice: number | null;
+  } | null>(null);
+  const ejercicioPreferido = !sesion
+    ? null
+    : preferidoElegido?.sesionId === sesion.id
+    ? preferidoElegido.indice
+    : leerEjercicioPreferido(almacenDeSesion(), sesion.id);
   // Respuestas asíncronas (rechazo de una serie): leen el foco y el cronómetro vigentes, no
   // los capturados al marcar.
   const posicionFocoVigente = useRef<PosicionFoco | null>(null);
@@ -553,7 +575,6 @@ export function EntrenamientoPage() {
   );
   useEffect(() => {
     setVistaEnCurso('foco');
-    setEjercicioPreferido(null);
   }, [sesion?.id]);
   const abrirCorreccionSerie = (serieId: string) =>
     setSeriesEnCorreccion((previas) => new Set(previas).add(serieId));
@@ -1105,7 +1126,7 @@ export function EntrenamientoPage() {
 
       if (serie.descansoSegundos === newSeconds) return;
 
-      const updated = { ...sesion };
+      const updated = clonarSesionParaEdicion(sesion);
       updated.ejercicios[ejercicioIndex].series[serieIndex].descansoSegundos = newSeconds;
       setSesion(updated);
 
@@ -1172,7 +1193,7 @@ export function EntrenamientoPage() {
   // Toggle set completion and trigger rest timer
   const handleToggleSet = async (ejercicioIndex: number, serieIndex: number) => {
     if (!sesion) return;
-    const updated = { ...sesion };
+    const updated = clonarSesionParaEdicion(sesion);
     const serie = updated.ejercicios[ejercicioIndex].series[serieIndex];
     const willBeCompleted = !serie.completada;
     // D6: copia previa para revertir si el servidor rechaza la serie (4xx con conexión).
@@ -1350,7 +1371,7 @@ export function EntrenamientoPage() {
     value: string
   ) => {
     if (!sesion) return;
-    const updated = { ...sesion };
+    const updated = clonarSesionParaEdicion(sesion);
     const serie = updated.ejercicios[ejercicioIndex].series[serieIndex];
 
     // WU17: editar pesos/reps/RPE es interacción real => marca el inicio si aún no existe.
@@ -1416,7 +1437,7 @@ export function EntrenamientoPage() {
   ) => {
     if (!sesion) return;
     triggerHaptic('light');
-    const updated = { ...sesion };
+    const updated = clonarSesionParaEdicion(sesion);
     const serie = updated.ejercicios[ejercicioIndex].series[serieIndex];
 
     // WU17: tocar los steppers de peso/reps es interacción real => marca el inicio si falta.
@@ -1814,6 +1835,14 @@ export function EntrenamientoPage() {
                         onChange={(e) => {
                           // Lote E3: lo que no es un peso válido (letras, >999 kg) no llega a escribirse.
                           const filtrado = filtrarEntradaPeso(e.target.value, pesoMostrado, unidadPeso);
+                          if (filtrado !== pesoMostrado) handleUpdateSerieValue(ejIdx, sIdx, 'pesoKg', filtrado);
+                        }}
+                        onPaste={(e) => {
+                          // Lote E7: '60 kg' pegado (p. ej. desde el plan) escribe 60.
+                          const numero = extraerNumeroPegado(e.clipboardData.getData('text'));
+                          if (numero === null) return;
+                          e.preventDefault();
+                          const filtrado = filtrarEntradaPeso(numero, pesoMostrado, unidadPeso);
                           if (filtrado !== pesoMostrado) handleUpdateSerieValue(ejIdx, sIdx, 'pesoKg', filtrado);
                         }}
                         onBlur={() => handleBlurPeso(serie.id)}
@@ -2659,7 +2688,8 @@ export function EntrenamientoPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setEjercicioPreferido(ejIdx);
+                    setPreferidoElegido({ sesionId: sesion.id, indice: ejIdx });
+                    guardarEjercicioPreferido(almacenDeSesion(), sesion.id, ejIdx);
                     setVistaEnCurso('foco');
                   }}
                   aria-label={`Hacer ahora: ${nombreEjercicio}`}
