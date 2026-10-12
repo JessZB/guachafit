@@ -132,6 +132,13 @@ describe('C1 · extraerNumeroPegado: número pegado con unidad opcional (kg/kgs/
   });
 });
 
+describe('S4 · extraerNumeroPegado: formatos sin número válido', () => {
+  // El vacío ('') ya lo cubre la tabla C1 anterior; aquí los casos con dígitos mal formados.
+  it.each(['.5', '60.', '1e3'])('rechaza "%s" con null', (texto) => {
+    expect(extraerNumeroPegado(texto)).toBeNull();
+  });
+});
+
 /**
  * Lote E7 · C1: peso corporal (check-in de antropometría) con el mismo filtro de kg pero tope
  * 300. El mínimo de 30 se valida al enviar, no mientras se escribe: hay que poder teclear '3'
@@ -144,6 +151,16 @@ describe('C1 · filtrarEntradaPesoCorporal: peso corporal (tope 300, mínimo al 
 
   it.each(['301', '7a', '72.255'])('rechaza "%s" y devuelve el anterior', (nuevo) => {
     expect(filtrarEntradaPesoCorporal(nuevo, '72')).toBe('72');
+  });
+});
+
+describe('S4 · filtrarEntradaPesoCorporal: bordes del tope 300', () => {
+  it.each(['300,1', '300.1'])('rechaza "%s" y devuelve el anterior', (nuevo) => {
+    expect(filtrarEntradaPesoCorporal(nuevo, '72')).toBe('72');
+  });
+
+  it('acepta "300.00"', () => {
+    expect(filtrarEntradaPesoCorporal('300.00', '72')).toBe('300.00');
   });
 });
 

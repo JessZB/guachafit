@@ -667,6 +667,7 @@ export function SelectorPlantillaAsignacion({
                                         invalido={Boolean(erroresCampo[campo.campo])}
                                         idError={errorVisible ? idErrorFila : undefined}
                                         deshabilitado={asignacionCompletada}
+                                        pegarConUnidad={campo.campo === 'peso'}
                                         onCambio={(texto) => {
                                           const anterior = override?.[campo.campo] ?? '';
                                           const filtrado = campo.filtrar(texto, anterior);
@@ -901,6 +902,7 @@ function CampoAjuste({
   invalido,
   idError,
   deshabilitado,
+  pegarConUnidad,
   onCambio,
 }: {
   id: string;
@@ -911,6 +913,8 @@ function CampoAjuste({
   invalido: boolean;
   idError?: string;
   deshabilitado: boolean;
+  /** Solo el peso: pegar '60 kg' escribe 60. En series y reps el pegado sigue el filtro nativo. */
+  pegarConUnidad: boolean;
   onCambio: (texto: string) => void;
 }) {
   return (
@@ -925,6 +929,7 @@ function CampoAjuste({
         value={valor}
         onChange={(e) => onCambio(e.target.value)}
         onPaste={(e) => {
+          if (!pegarConUnidad) return;
           const numero = extraerNumeroPegado(e.clipboardData.getData('text'));
           if (numero === null) return;
           e.preventDefault();

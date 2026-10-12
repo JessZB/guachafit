@@ -132,6 +132,14 @@ describe('modo-foco · posicionEnFoco (C1)', () => {
     expect(posicionEnFoco(s, 99)).toEqual(posicionEnFoco(s, null));
     expect(posicionEnFoco(s, 99)).toEqual({ ejercicioIndex: 1, serieIndex: 0 });
   });
+
+  it('S4: con ejercicioPreferido=99 fuera de rango en sesión de 2 ejercicios empieza en el primer pendiente', () => {
+    const s = sesion([ejercicio(0, 2), ejercicio(1, 2)]);
+    expect(posicionEnFoco(s, 99)).toEqual({ ejercicioIndex: 0, serieIndex: 0 });
+
+    const parcial = sesion([ejercicio(0, 2, 2), ejercicio(1, 2)]);
+    expect(posicionEnFoco(parcial, 99)).toEqual({ ejercicioIndex: 1, serieIndex: 0 });
+  });
 });
 
 describe('modo-foco · progresoFoco y textos (C1)', () => {

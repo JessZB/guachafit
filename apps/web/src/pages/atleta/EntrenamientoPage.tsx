@@ -1320,6 +1320,8 @@ export function EntrenamientoPage() {
     }
 
     // D6: rechazo de datos con conexión → la serie vuelve a como estaba y el error se ve junto a ella.
+    // Solo se revierte lo que tocó el marcado: el peso, las reps o el RPE editados mientras el
+    // envío estaba en vuelo se conservan (revisión E7, W1).
     setSesion((actual) => {
       if (!actual || actual.id !== updated.id) return actual;
       const revertida: SesionEntrenamientoDetalleDTO = {
@@ -1331,7 +1333,14 @@ export function EntrenamientoPage() {
             ? {
                 ...ejercicio,
                 series: ejercicio.series.map((s, indiceSerie) =>
-                  indiceSerie === serieIndex ? { ...serieAntes } : s
+                  indiceSerie === serieIndex
+                    ? {
+                        ...s,
+                        completada: serieAntes.completada,
+                        timestampCompletadaUtc: serieAntes.timestampCompletadaUtc,
+                        descansoSegundos: serieAntes.descansoSegundos,
+                      }
+                    : s
                 ),
               }
             : ejercicio

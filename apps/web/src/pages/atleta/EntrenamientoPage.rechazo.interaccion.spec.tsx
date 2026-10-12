@@ -19,7 +19,7 @@
  */
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import {
   EstadoSesion,
   type ProblemDetails,
@@ -300,5 +300,168 @@ describe('EntrenamientoPage · rechazo 4xx de una serie sin modo demo (H1/H2)', 
     // El aviso vive en el banner, no en el foco: la fila rechazada no está renderizada ahí.
     const seccionTrasRechazo = screen.getByRole('region', { name: 'Entrenamiento en foco' });
     expect(within(seccionTrasRechazo).queryByText(MENSAJE_RECHAZO)).toBeNull();
+  });
+});
+
+/** Tarjeta de un ejercicio en la lista completa (nodo fresco por llamada: el render cambia). */
+function tarjetaDe(nombreEjercicio: string): HTMLElement {
+  const encabezado = screen.getByRole('heading', { name: nombreEjercicio });
+  const tarjeta = encabezado.closest('div[class*="rounded-3xl"]');
+  expect(tarjeta).not.toBeNull();
+  return tarjeta as HTMLElement;
+}
+
+type ResolutorPut = {
+  resolver: (valor: unknown) => void;
+  rechazar: (motivo: unknown) => void;
+};
+
+/** PUT de series con promesa controlada por serie (el cuerpo trae `series[0].serieId`). */
+function mockPutsControlados(pendientes: Map<string, ResolutorPut>): void {
+  mockApi.mockImplementation((endpoint: string, opciones?: { method?: string; body?: string }) => {
+    const metodo = opciones?.method ?? 'GET';
+    if (metodo === 'GET' && endpoint.startsWith('/alumnos/me/rutina/semana-actual')) {
+      return Promise.resolve(clonar(SEMANA));
+    }
+    if (metodo === 'GET' && endpoint.startsWith('/alumnos/me/sesiones/hoy')) {
+      return Promise.resolve(clonar(SESION_HOY));
+    }
+    if (metodo === 'PUT' && endpoint === `/sesiones/${SESION_ID}/series`) {
+      const cuerpo = JSON.parse(opciones?.body ?? '{}') as {
+        series?: Array<{ serieId?: string }>;
+      };
+      const serieId = cuerpo.series?.[0]?.serieId ?? 'desconocida';
+      return new Promise((resolver, rechazar) => {
+        pendientes.set(serieId, { resolver, rechazar });
+      });
+    }
+    return Promise.reject(new Error(`Llamada inesperada en este spec: ${metodo} ${endpoint}`));
+  });
+}
+
+describe('EntrenamientoPage · W1: edición en vuelo durante un rechazo 4xx (contrato 1)', () => {
+  it('un peso editado a "62,5" mientras el PUT está en vuelo se conserva tras el rechazo', async () => {
+    const pendientes = new Map<string, ResolutorPut>();
+    mockPutsControlados(pendientes);
+    render(<EntrenamientoPage />);
+
+    const seccion = await screen.findByRole(
+      'region',
+      { name: 'Entrenamiento en foco' },
+      { timeout: 5000 }
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // La edición en vuelo se hace en la lista: el foco solo pinta la serie vigente.
+    fireEvent.click(within(seccion).getByRole('button', { name: 'Ver entrenamiento completo' }));
+    await screen.findByRole('button', { name: 'Volver al enfoque' }, { timeout: 5000 });
+
+    const peso = within(tarjetaDe('Sentadilla')).getByLabelText(
+      'Peso real en kg, serie 1'
+    ) as HTMLInputElement;
+    fireEvent.change(peso, { target: { value: '60' } });
+    expect(peso.value).toBe('60');
+
+    // Marca con el PUT pendiente (promesa controlada): la fila queda completada y compacta.
+    marcarSerieEnEjercicio('Sentadilla', 1);
+    const corregir = await within(tarjetaDe('Sentadilla')).findByRole(
+      'button',
+      { name: /Completada, toca para corregir/ },
+      { timeout: 5000 }
+    );
+    fireEvent.click(corregir);
+
+    // Edición en vuelo: antes de la respuesta el peso pasa a 62,5.
+    const pesoEnVuelo = within(tarjetaDe('Sentadilla')).getByLabelText(
+      'Peso real en kg, serie 1'
+    ) as HTMLInputElement;
+    expect(pesoEnVuelo.value).toBe('60');
+    fireEvent.change(pesoEnVuelo, { target: { value: '62,5' } });
+    expect(pesoEnVuelo.value).toBe('62,5');
+
+    // El PUT de s-1 sigue sin responder.
+    await waitFor(() => expect(pendientes.has('s-1')).toBe(true), { timeout: 5000 });
+
+    await act(async () => {
+      pendientes.get('s-1')?.rechazar(new ApiError(409, PROBLEMA_409, MENSAJE_RECHAZO));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // La serie vuelve a pendiente, el peso en vuelo se conserva y el error queda inline.
+    const tarjeta = tarjetaDe('Sentadilla');
+    expect(
+      within(tarjeta).getByRole('button', { name: 'Marcar serie 1 como completada' })
+    ).toBeTruthy();
+    const pesoTrasRechazo = within(tarjeta).getByLabelText(
+      'Peso real en kg, serie 1'
+    ) as HTMLInputElement;
+    expect(pesoTrasRechazo.value).toBe('62,5');
+    const alerta = await within(tarjeta).findByRole('alert', undefined, { timeout: 5000 });
+    expect(alerta.textContent).toContain(MENSAJE_RECHAZO);
+
+    // Al salir del campo el borrador se descarta y se ve el valor canónico persistido
+    // ('62.50' → '62.5'): con la reversión anterior (`{ ...serieAntes }`) aquí se vería '60'.
+    fireEvent.blur(pesoTrasRechazo);
+    expect(
+      (within(tarjetaDe('Sentadilla')).getByLabelText(
+        'Peso real en kg, serie 1'
+      ) as HTMLInputElement).value
+    ).toBe('62.5');
+  });
+});
+
+describe('EntrenamientoPage · rama "no cerrar" del cronómetro (contrato 4)', () => {
+  it('si se rechaza otra serie distinta de la vigente, el cronómetro sigue abierto', async () => {
+    const pendientes = new Map<string, ResolutorPut>();
+    mockPutsControlados(pendientes);
+    render(<EntrenamientoPage />);
+
+    const seccion = await screen.findByRole(
+      'region',
+      { name: 'Entrenamiento en foco' },
+      { timeout: 5000 }
+    );
+
+    // Serie A (Sentadilla 1): el PUT queda en vuelo y el foco avanza a la serie 2.
+    fireEvent.click(
+      within(seccion).getByRole('button', { name: 'Marcar serie 1 como completada' })
+    );
+    await screen.findByText(/Ejercicio 1 de 2 · Serie 2 de 2/, undefined, { timeout: 5000 });
+
+    // Serie B (Sentadilla 2): el cronómetro vigente pasa a ser el suyo.
+    const seccionB = screen.getByRole('region', { name: 'Entrenamiento en foco' });
+    fireEvent.click(
+      within(seccionB).getByRole('button', { name: 'Marcar serie 2 como completada' })
+    );
+    await screen.findByText(/Ejercicio 2 de 2 · Serie 1 de 1/, undefined, { timeout: 5000 });
+    expect(
+      screen.getByRole('button', { name: 'Cerrar cronómetro de descanso' })
+    ).toBeTruthy();
+
+    await waitFor(() => expect(pendientes.has('s-1')).toBe(true), { timeout: 5000 });
+    await waitFor(() => expect(pendientes.has('s-2')).toBe(true), { timeout: 5000 });
+
+    // Se rechaza A, no la vigente B: el cronómetro de B sigue abierto y el aviso sube al
+    // banner (el foco vigente ya está en otro ejercicio).
+    await act(async () => {
+      pendientes.get('s-1')?.rechazar(new ApiError(409, PROBLEMA_409, MENSAJE_RECHAZO));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(
+      screen.getByRole('button', { name: 'Cerrar cronómetro de descanso' })
+    ).toBeTruthy();
+    const banner = await screen.findByText(`Sentadilla, serie 1: ${MENSAJE_RECHAZO}`, undefined, {
+      timeout: 5000,
+    });
+    expect(banner.closest('[role="alert"]')).not.toBeNull();
+
+    // Limpieza: el PUT de B termina con éxito para no dejar promesas en vuelo.
+    await act(async () => {
+      pendientes.get('s-2')?.resolver({});
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
   });
 });

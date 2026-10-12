@@ -392,3 +392,33 @@ describe('SelectorPlantillaAsignacion · W1–W3 y S1–S4 (correcciones de la r
     expect(within(dialogo).getByRole('heading', { name: 'Cargar desde plantilla' })).toBeTruthy();
   });
 });
+
+describe('SelectorPlantillaAsignacion · S2 Pegar con unidad solo en Peso (contrato 3)', () => {
+  it('pegar "60 kg" en Peso escribe 60; en Repeticiones no escribe ni lo intercepta; "4" en Series entra por el camino nativo', async () => {
+    await irAlPaso2();
+
+    fireEvent.click(screen.getByRole('button', { name: `Ajustar ${EJERCICIO_AJUSTADO}` }));
+    const peso = screen.getByLabelText('Peso (kg)') as HTMLInputElement;
+    const series = screen.getByLabelText('Series') as HTMLInputElement;
+    const reps = screen.getByLabelText('Repeticiones') as HTMLInputElement;
+
+    // Peso sí intercepta el pegado (`pegarConUnidad`): preventDefault + escribe el número.
+    const pesoCancelado = !fireEvent.paste(peso, { clipboardData: { getData: () => '60 kg' } });
+    expect(pesoCancelado).toBe(true);
+    expect(peso.value).toBe('60');
+
+    // Repeticiones no intercepta: el pegado nativo pasa por `campo.filtrar` y el filtro de
+    // reps rechaza '60 kg', así que el valor sigue igual. (jsdom no inserta el texto del
+    // portapapeles: la no-intercepción se prueba con que el evento no se cancela.)
+    const repsCancelado = !fireEvent.paste(reps, { clipboardData: { getData: () => '60 kg' } });
+    expect(repsCancelado).toBe(false);
+    expect(reps.value).toBe('');
+
+    // Series tampoco intercepta; el 4 entra por el camino nativo (el change reproduce lo que
+    // el navegador escribe tras el pegado no interceptado, filtrado por `campo.filtrar`).
+    const seriesCancelado = !fireEvent.paste(series, { clipboardData: { getData: () => '4' } });
+    expect(seriesCancelado).toBe(false);
+    fireEvent.change(series, { target: { value: '4' } });
+    expect(series.value).toBe('4');
+  });
+});
