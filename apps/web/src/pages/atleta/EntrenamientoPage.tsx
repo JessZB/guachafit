@@ -57,18 +57,11 @@ import {
   normalizarEntradaDecimal,
   normalizarKgParaContrato,
   pasoPesoEnKg,
-  pasoPesoEnUnidad,
   redondearDecimal,
   validarReps,
   validarRpe,
   type UnidadPeso,
 } from '../../lib/weight-unit';
-import {
-  extraerNumeroPegado,
-  filtrarEntradaPeso,
-  filtrarEntradaReps,
-  filtrarEntradaRpe,
-} from '../../lib/entrada-numerica';
 import {
   almacenDeSesion,
   clonarSesionParaEdicion,
@@ -77,6 +70,7 @@ import {
 } from '../../lib/sesion-estado';
 import { VistaPreviaSesion } from '../../components/atleta/VistaPreviaSesion';
 import { FilaSerieCompletada } from '../../components/atleta/FilaSerieCompletada';
+import { FilaSerieEdicion } from '../../components/atleta/FilaSerieEdicion';
 import { ModoFoco } from '../../components/atleta/ModoFoco';
 import { posicionEnFoco, type PosicionFoco } from '../../lib/modo-foco';
 import {
@@ -87,7 +81,6 @@ import {
   Clock,
   Timer,
   Info,
-  Check,
   Award,
   X,
   MessageSquare,
@@ -115,7 +108,6 @@ import {
 import { estimarCumpleRachaPorVolumen } from '../../lib/racha';
 import {
   descansosRealesEntreSeries,
-  formatearDeltaSegundos,
   formatearSegundos,
   marcarInicioSerieReal,
 } from '../../lib/sesion-tiempos';
@@ -1268,6 +1260,7 @@ export function EntrenamientoPage() {
     // WU3b: al marcar la serie, el texto en edición se reemplaza por el valor canónico persistido.
     limpiarBorrador(`${serie.id}:pesoKg`);
     limpiarBorrador(`${serie.id}:rpe`);
+    limpiarBorrador(`${serie.id}:repsLogradas`);
 
     // Modo demo: interacción local sin cache ni mutaciones reales.
     if (isDemoMode) return;
@@ -1769,252 +1762,66 @@ export function EntrenamientoPage() {
     const ejercicioSesion = sesion.ejercicios[ejIdx];
     const serie = ejercicioSesion.series[sIdx];
     const descansosReales = descansosRealesEntreSeries(ejercicioSesion.series);
-    const pasoVisible = pasoPesoEnUnidad(unidadPeso);
-                const clavePeso = `${serie.id}:pesoKg`;
-                const claveRpe = `${serie.id}:rpe`;
-                const claveReps = `${serie.id}:repsLogradas`;
-                const borradorPeso = inputDrafts[clavePeso];
-                const borradorRpe = inputDrafts[claveRpe];
-                const errorPeso = inputErrors[clavePeso];
-                const errorRpe = inputErrors[claveRpe];
-                const errorReps = inputErrors[claveReps];
-                // D6: rechazo del servidor al guardar la serie (se muestra junto a ella).
-                const errorEnvio = inputErrors[`${serie.id}:envio`];
-                const errorSerie = errorPeso ?? errorRpe ?? errorReps ?? errorEnvio ?? null;
-                const pesoMostrado =
-                  borradorPeso !== undefined
-                    ? borradorPeso
-                    : Number(serie.pesoKg) > 0
-                    ? formatearPesoDesdeKg(serie.pesoKg, unidadPeso) ?? ''
-                    : '';
-                const rpeMostrado = borradorRpe !== undefined ? borradorRpe : serie.rpe || '';
-                const borradorReps = inputDrafts[claveReps];
-                const repsMostradas =
-                  borradorReps !== undefined
-                    ? borradorReps
-                    : String(serie.repsLogradas ?? serie.repsObjetivo);
-                const prescritoSerie = pesoPrescritoConCarga(serie);
+    const clavePeso = `${serie.id}:pesoKg`;
+    const claveRpe = `${serie.id}:rpe`;
+    const claveReps = `${serie.id}:repsLogradas`;
+    const borradorPeso = inputDrafts[clavePeso];
+    const borradorRpe = inputDrafts[claveRpe];
+    const errorPeso = inputErrors[clavePeso];
+    const errorRpe = inputErrors[claveRpe];
+    const errorReps = inputErrors[claveReps];
+    // D6: rechazo del servidor al guardar la serie (se muestra junto a ella).
+    const errorEnvio = inputErrors[`${serie.id}:envio`];
+    const errorSerie = errorPeso ?? errorRpe ?? errorReps ?? errorEnvio ?? null;
+    const pesoMostrado =
+      borradorPeso !== undefined
+        ? borradorPeso
+        : Number(serie.pesoKg) > 0
+        ? formatearPesoDesdeKg(serie.pesoKg, unidadPeso) ?? ''
+        : '';
+    const rpeMostrado = borradorRpe !== undefined ? borradorRpe : serie.rpe || '';
+    const borradorReps = inputDrafts[claveReps];
+    const repsMostradas =
+      borradorReps !== undefined
+        ? borradorReps
+        : String(serie.repsLogradas ?? serie.repsObjetivo);
+    const prescritoSerie = pesoPrescritoConCarga(serie);
 
-                if (serie.completada && !seriesEnCorreccion.has(serie.id) && !errorSerie) {
-                  return (
-                    <FilaSerieCompletada
-                      key={serie.id}
-                      serie={serie}
-                      unidadPeso={unidadPeso}
-                      onCorregir={isReadOnly ? undefined : () => abrirCorreccionSerie(serie.id)}
-                    />
-                  );
-                }
+    if (serie.completada && !seriesEnCorreccion.has(serie.id) && !errorSerie) {
+      return (
+        <FilaSerieCompletada
+          key={serie.id}
+          serie={serie}
+          unidadPeso={unidadPeso}
+          onCorregir={isReadOnly ? undefined : () => abrirCorreccionSerie(serie.id)}
+        />
+      );
+    }
 
-                return (
-                <div
-                  key={serie.id}
-                  className={`p-2 sm:p-2.5 rounded-2xl border transition-all ${
-                    serie.completada
-                      ? 'bg-success/10 border-success/30'
-                      : 'bg-secondary/30 border-border hover:border-primary/40'
-                  }`}
-                >
-                  {/* Móvil: una columna por campo (input legible + steppers táctiles). Desktop: grid de 12. */}
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-12 sm:gap-2.5 sm:items-start">
-                  <span className="col-span-2 sm:col-span-1 self-center text-left sm:text-center font-mono font-bold text-sm sm:text-base text-foreground">
-                    #{serie.numeroSerie}
-                  </span>
-
-                  {/* Weight Input with Steppers (unidad visible: kg/lb, contrato siempre kg) */}
-                  <div className="col-span-2 sm:col-span-4">
-                    <span className="sm:hidden mb-1 block text-xs font-medium text-muted-foreground">
-                      Peso ({unidadPeso})
-                    </span>
-                    <div className="flex items-center rounded-xl bg-background border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 overflow-hidden transition-colors h-12 sm:h-11 shadow-2xs">
-                      <button
-                        type="button"
-                        disabled={isReadOnly}
-                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'pesoKg', -1)}
-                        aria-label={`Restar ${pasoVisible} ${unidadPeso}`}
-                        className="h-full w-11 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
-                      >
-                        -
-                      </button>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        disabled={isReadOnly}
-                        value={pesoMostrado}
-                        onChange={(e) => {
-                          // Lote E3: lo que no es un peso válido (letras, >999 kg) no llega a escribirse.
-                          const filtrado = filtrarEntradaPeso(e.target.value, pesoMostrado, unidadPeso);
-                          if (filtrado !== pesoMostrado) handleUpdateSerieValue(ejIdx, sIdx, 'pesoKg', filtrado);
-                        }}
-                        onPaste={(e) => {
-                          // Lote E7: '60 kg' pegado (p. ej. desde el plan) escribe 60.
-                          const numero = extraerNumeroPegado(e.clipboardData.getData('text'));
-                          if (numero === null) return;
-                          e.preventDefault();
-                          const filtrado = filtrarEntradaPeso(numero, pesoMostrado, unidadPeso);
-                          if (filtrado !== pesoMostrado) handleUpdateSerieValue(ejIdx, sIdx, 'pesoKg', filtrado);
-                        }}
-                        onBlur={() => handleBlurPeso(serie.id)}
-                        placeholder={unidadPeso}
-                        aria-label={`Peso real en ${unidadPeso}, serie ${serie.numeroSerie}`}
-                        aria-invalid={Boolean(errorPeso)}
-                        className={`w-full min-w-0 text-center py-2 px-1 bg-transparent text-base font-mono font-bold text-foreground focus:outline-hidden ${
-                          errorPeso ? 'text-destructive' : ''
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        disabled={isReadOnly}
-                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'pesoKg', 1)}
-                        aria-label={`Sumar ${pasoVisible} ${unidadPeso}`}
-                        className="h-full w-11 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
-                      >
-                        +
-                      </button>
-                    </div>
-                    {/* Referencia prescrita por serie: permanece visible mientras el alumno edita */}
-                    {prescritoSerie && (
-                      <span
-                        className="block text-center text-xs font-medium text-muted-foreground leading-tight mt-1 sm:mt-0.5 truncate"
-                        title={`Plan: ${formatearPesoConUnidad(prescritoSerie, unidadPeso)}`}
-                      >
-                        Plan: {formatearPesoConUnidad(prescritoSerie, unidadPeso)}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Reps Input with Steppers (- / + 1 rep) */}
-                  <div className="col-span-2 sm:col-span-3">
-                    <span className="sm:hidden mb-1 block text-xs font-medium text-muted-foreground">
-                      Repeticiones
-                    </span>
-                    <div className="flex items-center rounded-xl bg-background border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 overflow-hidden transition-colors h-12 sm:h-11 shadow-2xs">
-                      <button
-                        type="button"
-                        disabled={isReadOnly}
-                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'repsLogradas', -1)}
-                        aria-label="Restar 1 repetición"
-                        className="h-full w-11 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
-                      >
-                        -
-                      </button>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        disabled={isReadOnly}
-                        value={repsMostradas}
-                        onChange={(e) => {
-                          // Sin ceros a la izquierda ('05' → '5'); fuera de 0–200 no se escribe.
-                          const nuevo = e.target.value.replace(/^0+(?=\d)/, '');
-                          const filtrado = filtrarEntradaReps(nuevo, repsMostradas);
-                          if (filtrado !== repsMostradas) handleUpdateSerieValue(ejIdx, sIdx, 'repsLogradas', filtrado);
-                        }}
-                        onBlur={() => handleBlurReps(serie.id)}
-                        aria-label={`Repeticiones hechas, serie ${serie.numeroSerie}`}
-                        aria-invalid={Boolean(errorReps)}
-                        className={`w-full min-w-0 text-center py-2 px-1 bg-transparent text-base font-mono font-bold text-foreground focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                          errorReps ? 'text-destructive' : ''
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        disabled={isReadOnly}
-                        onClick={() => handleStepSerieValue(ejIdx, sIdx, 'repsLogradas', 1)}
-                        aria-label="Sumar 1 repetición"
-                        className="h-full w-11 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
-                      >
-                        +
-                      </button>
-                    </div>
-                    <span className="block text-center text-xs font-medium text-muted-foreground leading-tight mt-1 sm:mt-0.5">
-                      Objetivo: {pluralizar(serie.repsObjetivo, 'repetición', 'repeticiones')}
-                    </span>
-                  </div>
-
-                  {/* RPE Input (0-10 validado contra el contrato) */}
-                  <div className="col-span-1 sm:col-span-2">
-                    <span className="sm:hidden mb-1 block text-xs font-medium text-muted-foreground">
-                      Esfuerzo (1-10)
-                    </span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      disabled={isReadOnly}
-                      value={rpeMostrado}
-                      onChange={(e) => {
-                        const filtrado = filtrarEntradaRpe(e.target.value, rpeMostrado);
-                        if (filtrado !== rpeMostrado) handleUpdateSerieValue(ejIdx, sIdx, 'rpe', filtrado);
-                      }}
-                      onBlur={() => handleBlurRpe(serie.id)}
-                      placeholder="8.5"
-                      aria-label={`Esfuerzo de 1 a 10, serie ${serie.numeroSerie}`}
-                      aria-invalid={Boolean(errorRpe)}
-                      className={`w-full text-center py-2 px-1 rounded-xl bg-background border text-base sm:text-sm font-mono font-bold text-foreground focus:outline-hidden focus:border-primary focus:ring-2 focus:ring-primary/25 h-12 sm:h-11 shadow-2xs ${
-                        errorRpe ? 'border-destructive text-destructive' : 'border-border'
-                      }`}
-                    />
-                  </div>
-
-                  {/* Complete Checkbox */}
-                  <div className="col-span-1 sm:col-span-2">
-                    <span className="sm:hidden mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Listo
-                    </span>
-                    <div className="flex sm:justify-center">
-                      <button
-                        type="button"
-                        disabled={isReadOnly}
-                        onClick={() => handleToggleSet(ejIdx, sIdx)}
-                        aria-label={`Marcar serie ${serie.numeroSerie} como ${serie.completada ? 'pendiente' : 'completada'}`}
-                        className={`h-12 w-12 sm:h-11 sm:w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary ${
-                          serie.completada
-                            ? 'bg-success-strong text-white shadow-md shadow-success-strong/25 scale-105'
-                            : 'bg-background border-2 border-border text-muted-foreground hover:border-primary'
-                        }`}
-                      >
-                        {serie.completada && <Check className="h-5 w-5 sm:h-6 sm:w-6 stroke-[3.5]" />}
-                      </button>
-                    </div>
-                  </div>
-                  </div>
-
-                  {/* WU17: captura sin fricción del inicio real (mide el descanso de la próxima serie) */}
-                  {!isReadOnly && !serie.completada && !serie.timestampInicioUtc && (
-                    <button
-                      type="button"
-                      onClick={() => handleIniciarSerie(ejIdx, sIdx)}
-                      title="Marca el inicio de esta serie para medir tu descanso real"
-                      className="mt-2 w-full min-h-11 py-2 rounded-xl inline-flex items-center justify-center gap-1.5 text-xs font-bold bg-primary/10 text-primary border border-primary/25 hover:bg-primary/20 transition-colors cursor-pointer active:scale-95"
-                    >
-                      <Play className="h-3 w-3 fill-current" />
-                      <span>Iniciar serie</span>
-                    </button>
-                  )}
-                  {!isReadOnly && !serie.completada && serie.timestampInicioUtc && (
-                    <p className="mt-1.5 px-1 text-[11px] font-mono font-bold text-primary">
-                      Iniciada {formatFechaHoraLocal(serie.timestampInicioUtc) ?? ''}
-                    </p>
-                  )}
-                  {/* WU17: feedback inmediato del descanso real al cerrar la serie */}
-                  {serie.completada && descansosReales[sIdx] !== null && (
-                    <p className="mt-1.5 px-1 text-[11px] font-mono font-bold text-primary flex items-center gap-1">
-                      <Zap className="h-3 w-3 shrink-0" />
-                      <span>Descanso real: {formatearDeltaSegundos(descansosReales[sIdx])}</span>
-                    </p>
-                  )}
-
-                  {/* WU3b: error inline, nunca silencioso */}
-                  {errorSerie && (
-                    <p
-                      role="alert"
-                      className="mt-1.5 px-1 text-xs font-bold text-destructive flex items-center gap-1"
-                    >
-                      <AlertTriangle className="h-3 w-3 shrink-0" />
-                      <span>{errorSerie}</span>
-                    </p>
-                  )}
-                </div>
-                );
+    return (
+      <FilaSerieEdicion
+        key={serie.id}
+        serie={serie}
+        unidadPeso={unidadPeso}
+        soloLectura={isReadOnly}
+        pesoMostrado={pesoMostrado}
+        repsMostradas={repsMostradas}
+        rpeMostrado={rpeMostrado}
+        pesoPrescritoKg={prescritoSerie}
+        descansoRealSegundos={descansosReales[sIdx]}
+        errorPeso={errorPeso}
+        errorReps={errorReps}
+        errorRpe={errorRpe}
+        errorSerie={errorSerie}
+        onCambiar={(campo, texto) => handleUpdateSerieValue(ejIdx, sIdx, campo, texto)}
+        onPaso={(campo, delta) => handleStepSerieValue(ejIdx, sIdx, campo, delta)}
+        onSalirPeso={() => handleBlurPeso(serie.id)}
+        onSalirReps={() => handleBlurReps(serie.id)}
+        onSalirRpe={() => handleBlurRpe(serie.id)}
+        onMarcar={() => handleToggleSet(ejIdx, sIdx)}
+        onIniciar={() => handleIniciarSerie(ejIdx, sIdx)}
+      />
+    );
   };
 
   return (

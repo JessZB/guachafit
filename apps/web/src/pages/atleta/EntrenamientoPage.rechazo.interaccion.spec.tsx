@@ -58,6 +58,7 @@ vi.mock('../../lib/api-client', async (importOriginal) => {
 
 import { ApiError, apiClient } from '../../lib/api-client';
 import { EntrenamientoPage } from './EntrenamientoPage';
+import { clonar, tarjetaDe } from './entrenamiento.spec-helper';
 
 type MockFn = ReturnType<typeof vi.fn>;
 const mockApi = apiClient as unknown as MockFn & {
@@ -212,11 +213,6 @@ beforeEach(() => {
   });
 });
 
-/** Copia profunda de un fixture JSON plano (evita compartir referencias entre tests). */
-function clonar<T>(valor: T): T {
-  return JSON.parse(JSON.stringify(valor)) as T;
-}
-
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -224,10 +220,9 @@ afterEach(() => {
 
 /** Marca una serie dentro de la tarjeta del ejercicio nombrado (vista de lista completa). */
 function marcarSerieEnEjercicio(nombreEjercicio: string, numeroSerie: number): void {
-  const encabezado = screen.getByRole('heading', { name: nombreEjercicio });
-  const tarjeta = encabezado.closest('div[class*="rounded-3xl"]');
-  expect(tarjeta).not.toBeNull();
-  const boton = within(tarjeta as HTMLElement).getByRole('button', {
+  // H-05: reutiliza el `tarjetaDe` compartido; solo el clic queda local.
+  const tarjeta = tarjetaDe(nombreEjercicio);
+  const boton = within(tarjeta).getByRole('button', {
     name: `Marcar serie ${numeroSerie} como completada`,
   });
   fireEvent.click(boton);
@@ -303,14 +298,7 @@ describe('EntrenamientoPage · rechazo 4xx de una serie sin modo demo (H1/H2)', 
   });
 });
 
-/** Tarjeta de un ejercicio en la lista completa (nodo fresco por llamada: el render cambia). */
-function tarjetaDe(nombreEjercicio: string): HTMLElement {
-  const encabezado = screen.getByRole('heading', { name: nombreEjercicio });
-  const tarjeta = encabezado.closest('div[class*="rounded-3xl"]');
-  expect(tarjeta).not.toBeNull();
-  return tarjeta as HTMLElement;
-}
-
+/** PUT de series con promesa controlada por serie (el cuerpo trae `series[0].serieId`). */
 type ResolutorPut = {
   resolver: (valor: unknown) => void;
   rechazar: (motivo: unknown) => void;
