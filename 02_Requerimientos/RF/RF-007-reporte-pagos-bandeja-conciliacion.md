@@ -135,7 +135,17 @@ Then la transacción debe transicionar a estado "Rechazado"
 - En bolívares se usa la tasa vigente al registrar (no hay histórico de tasas por día) y el modal la muestra para que el entrenador la confirme.
 - El recaudado del mes (KPI-01) sigue contando por fecha de registro, no de pago.
 
+### Confirmación y reversión en la web (2026-10-11, `e16039d`)
+- **Conciliación:** "Aprobar y Descontar Saldo" ya no aprueba en el acto: abre "¿Aprobar el pago de {alumno}?" con "Se descontarán X USD de su cuota." y, si lo hay, el aviso del excedente. "Aprobar pago" confirma; el botón queda bloqueado mientras se aprueba (sin doble envío). El rechazo ya tenía su propio diálogo con motivo obligatorio.
+- **Ficha del alumno:**
+  - cada pago del historial muestra su estado (Verificado, Rechazado, En Revisión o Revertido);
+  - los aprobados tienen **"Revertir pago"** (no en demo), con un diálogo que identifica el pago (monto, método y referencia), explica la consecuencia y exige "Motivo de la reversión";
+  - al revertir se ve el mensaje del API y se recarga el historial;
+  - si falla (p. ej. "…el saldo a favor que generó ya se aplicó a otra cuota."), el error se ve dentro del diálogo, que sigue abierto.
+- **Alumno (Pagos):** estado "Revertido" (antes salía "En Revisión") con chip neutro y su filtro, y "Motivo: …" o "Tu entrenador revirtió este pago.".
+- Evidencia: specs `*.reversion*` de Conciliación, la ficha, Pagos y `pagos-historial-filtros`. Web **1489** aprobados y API **1675** (17 omitidos); typecheck y build en verde. Revisado (fiabilidad) y validado.
+
 ### Pendiente
-- Web de la reversión: confirmación al aprobar o rechazar en Conciliación y botón "Revertir pago" con motivo.
+- El mensaje de éxito de la reversión no se borra solo; las mutaciones de Conciliación y de la reversión no tienen tiempo límite; la demo de Conciliación llama al API.
 - El comprobante sigue siendo opcional.
 - Implementar los pagos con fecha anterior (ver arriba).
