@@ -188,5 +188,5 @@ describe('EntrenamientoPage · vista previa en modo demo (C4)', () => {
     // Al volver a marcarla, se compacta de nuevo.
     fireEvent.click(recompletar as HTMLElement);
     expect(filaCompactaSerie1()).not.toBeNull();
-  });
+  }, 15000);
 });

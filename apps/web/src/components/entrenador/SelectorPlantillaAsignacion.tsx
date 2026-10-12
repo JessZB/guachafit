@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ModoAsignacionPlantilla,
@@ -14,7 +14,6 @@ import {
   detallePlantillaDemo,
   plantillasDemoActivas,
 } from '../../lib/demo-plantillas';
-import { formatearSegundos } from '../../lib/sesion-tiempos';
 import { pluralizar } from '../../lib/pluralizar';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import { traducirMensajeSuelto } from '../../lib/mensajes-error';
@@ -37,15 +36,20 @@ import {
   type OverrideAjusteEjercicio,
 } from '../../lib/plantillas-rutina';
 import {
+  PASOS_ASIGNACION,
+  resumenAsignacion,
+  textoEjercicioPlantilla,
+  textoPaso,
+  type PasoAsignacion,
+} from '../../lib/asignacion-pasos';
+import {
   AlertCircle,
   ArrowLeft,
+  ArrowRight,
   CheckCircle2,
-  ClipboardList,
-  Dumbbell,
-  Layers,
+  ChevronDown,
   Loader2,
   RefreshCw,
-  Repeat2,
   Search,
   SlidersHorizontal,
   X,
@@ -90,6 +94,12 @@ export function SelectorPlantillaAsignacion({
   const [erroresAjustes, setErroresAjustes] = useState<ErrorAjuste[]>([]);
   // C4: reemplazar la rutina actual del alumno pide confirmación explícita.
   const [confirmandoReemplazo, setConfirmandoReemplazo] = useState(false);
+  // Lote E6: el formulario avanza en 3 pasos; en el 2 solo hay un día abierto y los campos
+  // de ajuste aparecen al pulsar "Ajustar" en cada ejercicio.
+  const [paso, setPaso] = useState<PasoAsignacion>('elegir');
+  const [diaAbierto, setDiaAbierto] = useState<string | null>(null);
+  const [ajustando, setAjustando] = useState<Set<string>>(() => new Set());
+  const refResumenErrores = useRef<HTMLDivElement>(null);
   const idBase = useId();
 
   // U3b: Escape, trampa de Tab y restore del foco; el foco inicial sigue en el buscador
@@ -135,6 +145,8 @@ export function SelectorPlantillaAsignacion({
     setErrorDetalle(null);
     setOverrides({});
     setErroresAjustes([]);
+    setAjustando(new Set());
+    setDiaAbierto(null);
     setResultado(null);
     setErrorAsignacion(null);
 
@@ -206,6 +218,28 @@ export function SelectorPlantillaAsignacion({
     [detalle, overrides]
   );
 
+  const alternarAjuste = (clave: string) =>
+    setAjustando((previos) => {
+      const siguientes = new Set(previos);
+      if (siguientes.has(clave)) siguientes.delete(clave);
+      else siguientes.add(clave);
+      return siguientes;
+    });
+
+  /** Paso 2: al entrar se abre el primer día (o se conserva el que ya estaba abierto). */
+  const irARevisar = () => {
+    if (!detalle) return;
+    setDiaAbierto((actual) =>
+      actual && detalle.bloques.some((b) => b.diaId === actual) ? actual : detalle.bloques[0]?.diaId ?? null
+    );
+    setPaso('revisar');
+  };
+
+  // Resumen de errores enfocable: al aparecer recibe el foco para que se lea primero.
+  useEffect(() => {
+    if (paso === 'revisar' && erroresAjustes.length > 0) refResumenErrores.current?.focus();
+  }, [paso, erroresAjustes]);
+
   const ajustesPendientes = useMemo(
     () => Object.values(overrides).filter(overrideTieneCambios).length,
     [overrides]
@@ -218,7 +252,15 @@ export function SelectorPlantillaAsignacion({
     if (!detalle || asignacionCompletada) return;
     const { ajustes, errores } = construirAjustesPlantilla(overrides);
     if (errores.length > 0) {
+      // Vuelve al paso 2 con el día y los campos del primer ajuste inválido a la vista.
       setErroresAjustes(errores);
+      const primera = errores[0].clave;
+      const bloque = detalle.bloques.find((b) =>
+        b.ejercicios.some((ej) => claveOverrideEjercicio(b.diaId, ej.ejercicioId, ej.nombre) === primera)
+      );
+      if (bloque) setDiaAbierto(bloque.diaId);
+      setAjustando((previos) => new Set(previos).add(primera));
+      setPaso('revisar');
       triggerHaptic('warning');
       return;
     }
@@ -285,12 +327,16 @@ export function SelectorPlantillaAsignacion({
     }
   };
 
+  const totalEjercicios = detalle ? detalle.bloques.reduce((t, b) => t + b.ejercicios.length, 0) : 0;
+  const puedeAvanzar = Boolean(detalle && !errorDetalle && !cargandoDetalleId);
+  const indicePaso = PASOS_ASIGNACION.indexOf(paso);
+
   return (
     <div
       onClick={(e) => {
         if (e.target === e.currentTarget) onCerrar();
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
     >
       <div
         ref={refDialogo}
@@ -298,545 +344,500 @@ export function SelectorPlantillaAsignacion({
         aria-modal="true"
         aria-labelledby="modal-plantilla-asignar-title"
         tabIndex={-1}
-        className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-5xl space-y-5 max-h-[90vh] overflow-y-auto"
+        className="w-full sm:max-w-2xl h-[100dvh] sm:h-auto sm:max-h-[90vh] bg-card sm:rounded-3xl sm:border border-border shadow-2xl flex flex-col"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border/80 pb-3">
-          <div className="flex items-center gap-2">
-            <ClipboardList className="h-5 w-5 text-primary" />
-            <div>
-              <h3 id="modal-plantilla-asignar-title" className="font-bold text-base text-foreground">
-                Cargar desde plantilla
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                Expediente de <span className="font-semibold text-foreground">{alumnoNombre}</span> ·
-                elige una plantilla, ajusta cargas y confirma la asignación.
-              </p>
+        {/* Cabecera: título, alumno y paso actual con su barra de progreso */}
+        <div className="px-4 sm:px-6 pt-4 pb-3 border-b border-border/80 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 id="modal-plantilla-asignar-title" className="text-lg font-bold text-foreground">
+                Asignar rutina
+              </h2>
+              <p className="text-sm text-muted-foreground break-words">Para {alumnoNombre}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onCerrar}
+              className="min-h-11 min-w-11 shrink-0 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer"
+              aria-label="Cerrar selector de plantilla"
+            >
+              <X className="h-5 w-5" aria-hidden="true" />
+            </button>
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-sm font-semibold text-foreground">{textoPaso(paso)}</p>
+            <div className="grid grid-cols-3 gap-1.5" aria-hidden="true">
+              {PASOS_ASIGNACION.map((p, i) => (
+                <span
+                  key={p}
+                  className={`h-1.5 rounded-full ${i <= indicePaso ? 'bg-primary' : 'bg-secondary'}`}
+                />
+              ))}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onCerrar}
-            className="min-h-11 min-w-11 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer"
-            title="Cerrar"
-            aria-label="Cerrar selector de plantilla"
-          >
-            <X className="h-5 w-5" aria-hidden="true" />
-          </button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr),minmax(0,3fr)] gap-5">
-          {/* Columna izquierda: banco de plantillas */}
-          <div className="space-y-3 lg:border-r lg:border-border/60 lg:pr-5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                <Layers className="h-3.5 w-3.5 text-primary" />
-                Plantillas activas
-              </span>
-              <span className="text-[11px] font-mono text-muted-foreground">
-                {plantillas.length} disponibles
-              </span>
-            </div>
-
-            <div className="relative">
-              <Search className="h-3.5 w-3.5 absolute left-3 top-2.5 text-muted-foreground" />
-              <input
-                type="text"
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                autoFocus
-                placeholder="Buscar plantilla..."
-                className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-hidden focus:border-primary"
-              />
-            </div>
-
-            {isLoading ? (
-              <div className="space-y-2">
-                {[0, 1, 2].map((i) => (
-                  <div
-                    key={i}
-                    className="h-16 rounded-2xl bg-secondary/30 border border-border/60 animate-pulse"
+        {/* Contenido del paso */}
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4">
+          {paso === 'elegir' && (
+            <>
+              <div className="space-y-1.5">
+                <label htmlFor={`${idBase}-busqueda`} className="text-sm font-medium text-foreground">
+                  Buscar plantilla
+                </label>
+                <div className="relative">
+                  <Search
+                    className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+                    aria-hidden="true"
                   />
-                ))}
+                  <input
+                    id={`${idBase}-busqueda`}
+                    type="search"
+                    value={busqueda}
+                    onChange={(e) => setBusqueda(e.target.value)}
+                    autoFocus
+                    placeholder="Nombre de la plantilla"
+                    className="w-full min-h-11 pl-9 pr-3 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                  />
+                </div>
               </div>
-            ) : errorCarga ? (
-              <div className="p-4 rounded-2xl bg-card border border-border text-center space-y-2">
-                <AlertCircle className="h-5 w-5 text-destructive mx-auto" />
-                <p className="text-[11px] text-muted-foreground">{errorCarga}</p>
-                <button
-                  type="button"
-                  onClick={cargarPlantillas}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-bold text-[11px] cursor-pointer"
-                >
-                  <RefreshCw className="h-3 w-3" />
-                  Reintentar
-                </button>
-              </div>
-            ) : plantillasFiltradas.length === 0 ? (
-              <div className="p-4 rounded-2xl bg-card border border-dashed border-border text-center space-y-1.5">
-                <Dumbbell className="h-5 w-5 text-muted-foreground mx-auto opacity-50" />
-                <p className="text-[11px] font-bold text-foreground">
-                  {plantillas.length === 0
-                    ? 'No tienes plantillas activas'
-                    : 'Sin coincidencias'}
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  {plantillas.length === 0 ? (
-                    <>
-                      Crea una en el{' '}
-                      <Link
-                        to="/coach/plantillas"
-                        className="text-primary font-bold hover:underline"
-                        onClick={onCerrar}
-                      >
-                        Plantillas de ejercicios
-                      </Link>{' '}
-                      y vuelve a intentarlo.
-                    </>
-                  ) : (
-                    'Ajusta el término de búsqueda.'
-                  )}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-                {plantillasFiltradas.map((plantilla) => {
-                  const seleccionada = detalle?.id === plantilla.id;
-                  return (
-                    <button
-                      key={plantilla.id}
-                      type="button"
-                      onClick={() => seleccionarPlantilla(plantilla)}
-                      disabled={Boolean(cargandoDetalleId)}
-                      className={`w-full text-left p-3 rounded-2xl border transition-all cursor-pointer disabled:opacity-60 ${
-                        seleccionada
-                          ? 'bg-primary/10 border-primary/50'
-                          : 'bg-card border-border/70 hover:border-primary/40'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-xs font-bold text-foreground leading-snug break-words">
-                          {plantilla.nombre}
-                        </span>
-                        {cargandoDetalleId === plantilla.id ? (
-                          <Loader2 className="h-3.5 w-3.5 text-primary animate-spin shrink-0" />
-                        ) : (
-                          seleccionada && <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                        <span className="px-2 py-0.5 rounded-md bg-secondary border border-border/60 text-[11px] font-bold text-muted-foreground uppercase tracking-wide">
-                          {ETIQUETAS_NIVEL_PLANTILLA[plantilla.nivelObjetivo]}
-                        </span>
-                        <span className="text-[11px] font-mono text-muted-foreground">
-                          {pluralizar(plantilla.totalDias, 'día', 'días')} ·{' '}
-                          {pluralizar(plantilla.totalEjercicios, 'ejercicio', 'ejercicios')}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
 
-          {/* Columna derecha: preview + ajustes + confirmación */}
-          <div className="space-y-4">
-            {!detalle ? (
-              <div className="p-8 rounded-2xl bg-secondary/15 border border-dashed border-border text-center space-y-2 h-full flex flex-col items-center justify-center">
-                <ArrowLeft className="h-6 w-6 text-muted-foreground opacity-60" />
-                <p className="text-xs font-bold text-foreground">Selecciona una plantilla</p>
-                <p className="text-[11px] text-muted-foreground max-w-xs">
-                  Verás los días, ejercicios, series y cargas prescritas antes de confirmar la
-                  asignación.
-                </p>
-              </div>
-            ) : errorDetalle ? (
-              <div className="p-6 rounded-2xl bg-card border border-border text-center space-y-2">
-                <AlertCircle className="h-6 w-6 text-destructive mx-auto" />
-                <p className="text-[11px] text-muted-foreground">{errorDetalle}</p>
-              </div>
-            ) : (
-              <>
-                {/* Cabecera de la plantilla seleccionada */}
-                <div className="p-4 rounded-2xl bg-secondary/25 border border-border/60 space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <h4 className="text-sm font-bold text-foreground break-words">{detalle.nombre}</h4>
-                    <span className="shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide border bg-secondary text-foreground border-border">
-                      {ETIQUETAS_NIVEL_PLANTILLA[detalle.nivelObjetivo]}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground font-mono">
-                    {pluralizar(detalle.bloques.length, 'día', 'días')} ·{' '}
-                    {pluralizar(
-                      detalle.bloques.reduce((t, b) => t + b.ejercicios.length, 0),
-                      'ejercicio',
-                      'ejercicios'
-                    )}
-                    {ajustesPendientes > 0 && (
-                      <span className="text-primary font-bold">
-                        {' '}
-                        · {ajustesPendientes} ajuste{ajustesPendientes === 1 ? '' : 's'} de carga
-                      </span>
+              {isLoading ? (
+                <div className="space-y-2" aria-label="Cargando plantillas">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="h-14 rounded-xl bg-secondary/40 animate-pulse" />
+                  ))}
+                </div>
+              ) : errorCarga ? (
+                <div role="alert" className="py-6 text-center space-y-3">
+                  <p className="text-sm text-muted-foreground">{errorCarga}</p>
+                  <button
+                    type="button"
+                    onClick={cargarPlantillas}
+                    className="min-h-11 inline-flex items-center gap-1.5 px-4 rounded-xl bg-primary text-primary-foreground font-semibold text-sm cursor-pointer"
+                  >
+                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                    Reintentar
+                  </button>
+                </div>
+              ) : plantillasFiltradas.length === 0 ? (
+                <div className="py-6 text-center space-y-1">
+                  <p className="text-sm font-semibold text-foreground">
+                    {plantillas.length === 0 ? 'No tienes plantillas activas' : 'Sin coincidencias'}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {plantillas.length === 0 ? (
+                      <>
+                        Crea una en{' '}
+                        <Link
+                          to="/coach/plantillas"
+                          className="text-primary font-semibold hover:underline"
+                          onClick={onCerrar}
+                        >
+                          Plantillas de ejercicios
+                        </Link>{' '}
+                        y vuelve a intentarlo.
+                      </>
+                    ) : (
+                      'Prueba con otro nombre.'
                     )}
                   </p>
                 </div>
+              ) : (
+                <ul role="list" className="divide-y divide-border/70 border-y border-border/70">
+                  {plantillasFiltradas.map((plantilla) => {
+                    const seleccionada = detalle?.id === plantilla.id;
+                    return (
+                      <li key={plantilla.id}>
+                        <button
+                          type="button"
+                          onClick={() => seleccionarPlantilla(plantilla)}
+                          disabled={Boolean(cargandoDetalleId)}
+                          aria-pressed={seleccionada}
+                          className={`w-full min-h-14 px-3 py-3 flex items-center gap-3 text-left cursor-pointer transition-colors disabled:opacity-60 ${
+                            seleccionada ? 'bg-primary/10' : 'hover:bg-secondary/50'
+                          }`}
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-semibold text-foreground break-words">
+                              {plantilla.nombre}
+                            </span>
+                            <span className="block text-xs text-muted-foreground">
+                              {ETIQUETAS_NIVEL_PLANTILLA[plantilla.nivelObjetivo]} ·{' '}
+                              {pluralizar(plantilla.totalDias, 'día', 'días')} ·{' '}
+                              {pluralizar(plantilla.totalEjercicios, 'ejercicio', 'ejercicios')}
+                            </span>
+                          </span>
+                          {cargandoDetalleId === plantilla.id ? (
+                            <Loader2 className="h-5 w-5 text-primary animate-spin shrink-0" aria-hidden="true" />
+                          ) : (
+                            seleccionada && (
+                              <CheckCircle2 className="h-5 w-5 text-primary shrink-0" aria-hidden="true" />
+                            )
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
 
-                {/* Modo de asignación (RN-03) */}
-                <div className="space-y-2">
-                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                    <Repeat2 className="h-3.5 w-3.5 text-primary" />
-                    ¿Qué hacemos con la rutina actual?
+              {errorDetalle && (
+                <p role="alert" className="text-sm text-destructive">
+                  {errorDetalle}
+                </p>
+              )}
+            </>
+          )}
+
+          {paso === 'revisar' && detalle && (
+            <>
+              <p className="text-sm text-muted-foreground">
+                <span className="font-semibold text-foreground">{detalle.nombre}</span> ·{' '}
+                {pluralizar(detalle.bloques.length, 'día', 'días')} ·{' '}
+                {pluralizar(totalEjercicios, 'ejercicio', 'ejercicios')}
+                {ajustesPendientes > 0 && (
+                  <span className="text-primary font-semibold">
+                    {' '}
+                    · {pluralizar(ajustesPendientes, 'ajuste', 'ajustes')}
                   </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <label
-                      className={`p-3 rounded-2xl border cursor-pointer transition-all ${
-                        modo === ModoAsignacionPlantilla.REEMPLAZAR
-                          ? 'bg-primary/10 border-primary/50'
-                          : 'bg-card border-border/70 hover:border-primary/30'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="modo-asignacion-plantilla"
-                        value={ModoAsignacionPlantilla.REEMPLAZAR}
-                        checked={modo === ModoAsignacionPlantilla.REEMPLAZAR}
-                        onChange={() => setModo(ModoAsignacionPlantilla.REEMPLAZAR)}
-                        disabled={asignacionCompletada}
-                        className="sr-only"
-                      />
-                      <span className="text-xs font-bold text-foreground block">
-                        Reemplazar la rutina actual
-                      </span>
-                      <span className="text-[11px] text-muted-foreground block mt-1 leading-snug">
-                        Sustituye la rutina vigente de {alumnoNombre} por esta plantilla. La rutina
-                        anterior deja de estar activa; su historial no se borra.
-                      </span>
-                    </label>
+                )}
+              </p>
 
-                    <label
-                      className={`p-3 rounded-2xl border cursor-pointer transition-all ${
-                        modo === ModoAsignacionPlantilla.FUSIONAR
-                          ? 'bg-primary/10 border-primary/50'
-                          : 'bg-card border-border/70 hover:border-primary/30'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="modo-asignacion-plantilla"
-                        value={ModoAsignacionPlantilla.FUSIONAR}
-                        checked={modo === ModoAsignacionPlantilla.FUSIONAR}
-                        onChange={() => setModo(ModoAsignacionPlantilla.FUSIONAR)}
-                        disabled={asignacionCompletada}
-                        className="sr-only"
-                      />
-                      <span className="text-xs font-bold text-foreground block">
-                        Añadir a la rutina actual
-                      </span>
-                      <span className="text-[11px] text-muted-foreground block mt-1 leading-snug">
-                        Agrega los días de la plantilla a los que ya tiene, sin borrar ninguno. Si no
-                        tiene rutina, se crea una nueva.
-                      </span>
-                    </label>
-                  </div>
+              {erroresAjustes.length > 0 && (
+                <div
+                  ref={refResumenErrores}
+                  role="alert"
+                  tabIndex={-1}
+                  className="p-3 rounded-xl bg-warning/10 border border-warning/30 text-sm text-foreground space-y-1 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-warning"
+                >
+                  <p className="font-semibold flex items-center gap-1.5">
+                    <AlertCircle className="h-4 w-4 text-warning shrink-0" aria-hidden="true" />
+                    Revisa estos ajustes antes de asignar:
+                  </p>
+                  <ul className="list-disc pl-6 space-y-0.5">
+                    {erroresAjustes.map((error) => (
+                      <li key={error.clave}>{error.mensaje}</li>
+                    ))}
+                  </ul>
                 </div>
+              )}
 
-                {/* Preview con ajustes */}
-                <div className="space-y-2">
-                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                    <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
-                    Vista previa y ajustes de carga
-                  </span>
-
-                  <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
-                    {bloquesPreview.map((bloque) => (
-                      <div
-                        key={bloque.diaId}
-                        className="p-3.5 rounded-2xl bg-secondary/20 border border-border/60 space-y-2.5"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-bold text-foreground">
-                            {bloque.titulo}
+              <div className="divide-y divide-border/70 border-y border-border/70">
+                {bloquesPreview.map((bloque) => {
+                  const abierto = diaAbierto === bloque.diaId;
+                  const idPanel = `${idBase}-dia-${bloque.diaId}`;
+                  return (
+                    <section key={bloque.diaId}>
+                      <h3>
+                        <button
+                          type="button"
+                          aria-expanded={abierto}
+                          aria-controls={idPanel}
+                          onClick={() => setDiaAbierto(abierto ? null : bloque.diaId)}
+                          className="w-full min-h-12 py-3 flex items-center justify-between gap-3 text-left cursor-pointer"
+                        >
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold text-foreground break-words">
+                              {bloque.titulo}
+                            </span>
+                            <span className="block text-xs text-muted-foreground">
+                              {pluralizar(bloque.ejercicios.length, 'ejercicio', 'ejercicios')}
+                            </span>
                           </span>
-                          <span className="text-[11px] font-mono text-muted-foreground">
-                            {pluralizar(bloque.ejercicios.length, 'ejercicio', 'ejercicios')}
-                          </span>
-                        </div>
+                          <ChevronDown
+                            className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
+                              abierto ? 'rotate-180' : ''
+                            }`}
+                            aria-hidden="true"
+                          />
+                        </button>
+                      </h3>
 
-                        <div className="space-y-2">
+                      {abierto && (
+                        <ul id={idPanel} className="pb-3 space-y-1">
                           {bloque.ejercicios.map((ej, ejIdx) => {
-                            const clave = claveOverrideEjercicio(
-                              bloque.diaId,
-                              ej.ejercicioId,
-                              ej.nombre
-                            );
-                            const override = obtenerOverrideDeEjercicio(
-                              overrides,
-                              bloque.diaId,
-                              ej
-                            );
+                            const clave = claveOverrideEjercicio(bloque.diaId, ej.ejercicioId, ej.nombre);
+                            const override = obtenerOverrideDeEjercicio(overrides, bloque.diaId, ej);
                             const erroresCampo = override ? validarOverrideEjercicio(override) : {};
                             const ajustado = Boolean(override && overrideTieneCambios(override));
                             const errorAjuste = erroresAjustes.find((e) => e.clave === clave);
-
+                            const editando = ajustando.has(clave);
+                            const errorVisible =
+                              erroresCampo.peso || erroresCampo.series || erroresCampo.reps || errorAjuste?.mensaje;
                             return (
-                              <div
-                                key={ej.id || clave || ejIdx}
-                                className={`p-2.5 rounded-xl bg-card border text-xs space-y-2 ${
-                                  ajustado ? 'border-primary/50' : 'border-border/60'
-                                }`}
-                              >
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span className="h-4.5 w-4.5 rounded-md bg-primary/10 text-primary font-mono font-bold flex items-center justify-center text-[11px] shrink-0">
-                                      {ejIdx + 1}
-                                    </span>
-                                    <span className="font-bold text-foreground break-words">
+                              <li key={ej.id || clave || ejIdx} className="py-2.5 space-y-2">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-foreground break-words">
                                       {ej.nombre}
-                                    </span>
-                                    {ajustado && (
-                                      <span className="shrink-0 px-1.5 py-0.5 rounded-md bg-primary/15 text-primary text-[11px] font-bold uppercase">
-                                        ajustado
-                                      </span>
+                                      {ajustado && (
+                                        <span className="ml-2 inline-block px-1.5 py-0.5 rounded-md bg-primary/15 text-primary text-xs font-semibold align-middle">
+                                          Ajustado
+                                        </span>
+                                      )}
+                                    </p>
+                                    <p className="text-sm text-muted-foreground">{textoEjercicioPlantilla(ej)}</p>
+                                    {ej.notas && (
+                                      <p className="text-xs text-muted-foreground">Nota técnica: {ej.notas}</p>
                                     )}
                                   </div>
-                                  {ajustado && (
-                                    <button
-                                      type="button"
-                                      onClick={() => limpiarOverride(clave)}
-                                      disabled={asignacionCompletada}
-                                      className="min-h-11 px-2 text-xs font-bold text-muted-foreground hover:text-foreground underline cursor-pointer shrink-0 disabled:opacity-50"
-                                      title="Descartar los ajustes de este ejercicio"
-                                    >
-                                      Restablecer
-                                    </button>
-                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => alternarAjuste(clave)}
+                                    disabled={asignacionCompletada}
+                                    aria-expanded={editando}
+                                    aria-label={`Ajustar ${ej.nombre}`}
+                                    className="min-h-11 shrink-0 px-3 rounded-xl border border-border text-sm font-medium text-foreground hover:border-primary/40 inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                                  >
+                                    <SlidersHorizontal className="h-4 w-4 text-primary" aria-hidden="true" />
+                                    Ajustar
+                                  </button>
                                 </div>
 
-                                <div className="flex items-center gap-x-3 gap-y-1 flex-wrap font-mono text-[11px] text-muted-foreground">
-                                  <span className="px-1.5 py-0.5 rounded-md bg-secondary border border-border/60 font-bold text-foreground">
-                                    {pluralizar(ej.series, 'serie', 'series')} × {ej.reps}
-                                  </span>
-                                  <span className="px-1.5 py-0.5 rounded-md bg-primary/10 border border-primary/20 font-bold text-primary">
-                                    {ej.peso || 'sin carga'}
-                                  </span>
-                                  {ej.rpe && <span title="Esfuerzo percibido">Esfuerzo {ej.rpe}/10</span>}
-                                  <span>Descanso: {formatearSegundos(ej.descansoSegundos || 90)}</span>
-                                </div>
-
-                                {/* Overrides de peso / series / reps */}
-                                <div className="flex items-end gap-2 flex-wrap pt-1.5 border-t border-border/40">
-                                  <div className="flex flex-col">
-                                    <label
-                                      htmlFor={`${idBase}-${bloque.diaId}-${ejIdx}-peso`}
-                                      className="text-xs font-medium text-muted-foreground block mb-0.5"
-                                    >
-                                      Peso (kg)
-                                    </label>
-                                    <input
-                                      id={`${idBase}-${bloque.diaId}-${ejIdx}-peso`}
-                                      type="text"
-                                      value={override?.peso ?? ''}
-                                      inputMode="decimal"
-                                      onChange={(e) => {
-                                        const anterior = override?.peso ?? '';
-                                        const filtrado = filtrarEntradaPeso(e.target.value, anterior, 'kg');
-                                        if (filtrado !== anterior) actualizarOverride(bloque, ej, 'peso', filtrado);
-                                      }}
-                                      disabled={asignacionCompletada}
-                                      placeholder={
-                                        ej.peso && /^\d/.test(ej.peso)
-                                          ? ej.peso.replace(/[^\d.]/g, '')
-                                          : 'sin cambio'
-                                      }
-                                      aria-invalid={Boolean(erroresCampo.peso)}
-                                      className={`h-11 w-20 px-2 rounded-lg bg-background border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors ${
-                                        erroresCampo.peso ? 'border-destructive/70' : 'border-border'
-                                      }`}
-                                    />
+                                {editando && (
+                                  <div className="flex items-end gap-3 flex-wrap pl-0.5">
+                                    <div className="flex flex-col gap-1">
+                                      <label
+                                        htmlFor={`${idBase}-${bloque.diaId}-${ejIdx}-peso`}
+                                        className="text-xs font-medium text-muted-foreground"
+                                      >
+                                        Peso (kg)
+                                      </label>
+                                      <input
+                                        id={`${idBase}-${bloque.diaId}-${ejIdx}-peso`}
+                                        type="text"
+                                        inputMode="decimal"
+                                        value={override?.peso ?? ''}
+                                        onChange={(e) => {
+                                          const anterior = override?.peso ?? '';
+                                          const filtrado = filtrarEntradaPeso(e.target.value, anterior, 'kg');
+                                          if (filtrado !== anterior) actualizarOverride(bloque, ej, 'peso', filtrado);
+                                        }}
+                                        disabled={asignacionCompletada}
+                                        placeholder="sin cambio"
+                                        aria-invalid={Boolean(erroresCampo.peso)}
+                                        className={`h-11 w-24 px-2 rounded-lg bg-background border text-center font-mono text-sm text-foreground focus:outline-hidden focus:border-primary ${
+                                          erroresCampo.peso ? 'border-destructive/70' : 'border-border'
+                                        }`}
+                                      />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                      <label
+                                        htmlFor={`${idBase}-${bloque.diaId}-${ejIdx}-series`}
+                                        className="text-xs font-medium text-muted-foreground"
+                                      >
+                                        Series
+                                      </label>
+                                      <input
+                                        id={`${idBase}-${bloque.diaId}-${ejIdx}-series`}
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={override?.series ?? ''}
+                                        onChange={(e) => {
+                                          const anterior = override?.series ?? '';
+                                          const filtrado = filtrarEntradaSeries(e.target.value, anterior);
+                                          if (filtrado !== anterior) actualizarOverride(bloque, ej, 'series', filtrado);
+                                        }}
+                                        disabled={asignacionCompletada}
+                                        placeholder={String(ej.series)}
+                                        aria-invalid={Boolean(erroresCampo.series)}
+                                        className={`h-11 w-16 px-2 rounded-lg bg-background border text-center font-mono text-sm text-foreground focus:outline-hidden focus:border-primary ${
+                                          erroresCampo.series ? 'border-destructive/70' : 'border-border'
+                                        }`}
+                                      />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                      <label
+                                        htmlFor={`${idBase}-${bloque.diaId}-${ejIdx}-reps`}
+                                        className="text-xs font-medium text-muted-foreground"
+                                      >
+                                        Repeticiones
+                                      </label>
+                                      <input
+                                        id={`${idBase}-${bloque.diaId}-${ejIdx}-reps`}
+                                        type="text"
+                                        value={override?.reps ?? ''}
+                                        onChange={(e) => {
+                                          const anterior = override?.reps ?? '';
+                                          const filtrado = filtrarEntradaRepsPrescritas(e.target.value, anterior);
+                                          if (filtrado !== anterior) actualizarOverride(bloque, ej, 'reps', filtrado);
+                                        }}
+                                        disabled={asignacionCompletada}
+                                        placeholder={ej.reps}
+                                        aria-invalid={Boolean(erroresCampo.reps)}
+                                        className={`h-11 w-20 px-2 rounded-lg bg-background border text-center font-mono text-sm text-foreground focus:outline-hidden focus:border-primary ${
+                                          erroresCampo.reps ? 'border-destructive/70' : 'border-border'
+                                        }`}
+                                      />
+                                    </div>
+                                    {ajustado && (
+                                      <button
+                                        type="button"
+                                        onClick={() => limpiarOverride(clave)}
+                                        disabled={asignacionCompletada}
+                                        className="min-h-11 px-2 text-sm font-medium text-muted-foreground hover:text-foreground underline cursor-pointer disabled:opacity-50"
+                                      >
+                                        Restablecer
+                                      </button>
+                                    )}
                                   </div>
-
-                                  <div className="flex flex-col">
-                                    <label
-                                      htmlFor={`${idBase}-${bloque.diaId}-${ejIdx}-series`}
-                                      className="text-xs font-medium text-muted-foreground block mb-0.5"
-                                    >
-                                      Series
-                                    </label>
-                                    <input
-                                      id={`${idBase}-${bloque.diaId}-${ejIdx}-series`}
-                                      type="text"
-                                      inputMode="numeric"
-                                      value={override?.series ?? ''}
-                                      onChange={(e) => {
-                                        const anterior = override?.series ?? '';
-                                        const filtrado = filtrarEntradaSeries(e.target.value, anterior);
-                                        if (filtrado !== anterior) actualizarOverride(bloque, ej, 'series', filtrado);
-                                      }}
-                                      disabled={asignacionCompletada}
-                                      placeholder={String(ej.series)}
-                                      aria-invalid={Boolean(erroresCampo.series)}
-                                      className={`h-11 w-14 px-1.5 rounded-lg bg-background border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors ${
-                                        erroresCampo.series ? 'border-destructive/70' : 'border-border'
-                                      }`}
-                                    />
-                                  </div>
-
-                                  <div className="flex flex-col">
-                                    <label
-                                      htmlFor={`${idBase}-${bloque.diaId}-${ejIdx}-reps`}
-                                      className="text-xs font-medium text-muted-foreground block mb-0.5"
-                                    >
-                                      Repeticiones
-                                    </label>
-                                    <input
-                                      id={`${idBase}-${bloque.diaId}-${ejIdx}-reps`}
-                                      type="text"
-                                      value={override?.reps ?? ''}
-                                      onChange={(e) => {
-                                        const anterior = override?.reps ?? '';
-                                        const filtrado = filtrarEntradaRepsPrescritas(e.target.value, anterior);
-                                        if (filtrado !== anterior) actualizarOverride(bloque, ej, 'reps', filtrado);
-                                      }}
-                                      disabled={asignacionCompletada}
-                                      placeholder={ej.reps}
-                                      aria-invalid={Boolean(erroresCampo.reps)}
-                                      className={`h-11 w-16 px-1.5 rounded-lg bg-background border text-center font-mono font-bold text-xs text-foreground focus:outline-hidden focus:border-primary transition-colors ${
-                                        erroresCampo.reps ? 'border-destructive/70' : 'border-border'
-                                      }`}
-                                    />
-                                  </div>
-                                </div>
-
-                                {(erroresCampo.peso || erroresCampo.series || erroresCampo.reps) && (
-                                  <p role="alert" className="text-xs font-bold text-destructive">
-                                    {erroresCampo.peso || erroresCampo.series || erroresCampo.reps}
-                                  </p>
-                                )}
-                                {errorAjuste && !erroresCampo.peso && !erroresCampo.series && !erroresCampo.reps && (
-                                  <p className="text-[11px] font-bold text-destructive">
-                                    {errorAjuste.mensaje}
-                                  </p>
                                 )}
 
-                                {ej.notas && (
-                                  <p className="text-[11px] text-muted-foreground leading-snug">
-                                    <span className="font-bold text-foreground">Nota técnica:</span>{' '}
-                                    {ej.notas}
-                                  </p>
+                                {errorVisible && (
+                                  <p className="text-sm font-medium text-destructive">{errorVisible}</p>
                                 )}
-                              </div>
+                              </li>
                             );
                           })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Resultado de la asignación */}
-                {resultado && resultado.exitosos > 0 && (
-                  <div
-                    role="status"
-                    aria-live="polite"
-                    className="p-3 rounded-2xl bg-success/10 border border-success/30 text-success text-xs flex items-start gap-2"
-                  >
-                    <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
-                    <div className="space-y-0.5">
-                      <span className="block font-bold">
-                        Planificación asignada a {alumnoNombre}.
-                      </span>
-                      <span className="block text-[11px] text-success/80">
-                        {resultado.modo === ModoAsignacionPlantilla.REEMPLAZAR
-                          ? 'Rutina activa reemplazada'
-                          : 'Días añadidos a la rutina actual'}
-                        {resultado.resultados[0]?.rutinaNombre
-                          ? ` · «${resultado.resultados[0].rutinaNombre}»`
-                          : ''}
-                        {resultado.resultados[0]?.bloquesTotal
-                          ? ` · ${pluralizar(resultado.resultados[0].bloquesTotal, 'día', 'días')}`
-                          : ''}
-                        . El expediente ya refleja la rutina vigente.
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {errorAsignacion && (
-                  <div
-                    role="alert"
-                    className="p-3 rounded-2xl bg-destructive/15 border border-destructive/30 text-destructive text-xs flex items-center gap-2"
-                  >
-                    <AlertCircle className="h-4 w-4 shrink-0" />
-                    <span>{errorAsignacion}</span>
-                  </div>
-                )}
-
-                {erroresAjustes.length > 0 && (
-                  <div
-                    role="alert"
-                    className="p-3 rounded-2xl bg-warning/10 border border-warning/30 text-warning text-xs flex items-start gap-2"
-                  >
-                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                    <div className="space-y-0.5">
-                      <span className="block font-bold">
-                        Revisa los ajustes marcados antes de confirmar.
-                      </span>
-                      <span className="block text-[11px] text-warning/80">
-                        {erroresAjustes[0].mensaje}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Footer del modal */}
-                <div className="pt-3 border-t border-border/80 flex items-center justify-between gap-3">
-                  <span className="text-[11px] text-muted-foreground font-mono">
-                    {ajustesPendientes} ajuste{ajustesPendientes === 1 ? '' : 's'} por confirmar
-                  </span>
-
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={isAsignando}
-                      onClick={onCerrar}
-                      className="min-h-11 px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs cursor-pointer disabled:opacity-50"
-                    >
-                      Cerrar
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isAsignando || asignacionCompletada}
-                      onClick={() => void confirmarAsignacion()}
-                      title={
-                        asignacionCompletada
-                          ? 'La asignación ya se completó. Cierra el panel para asignar otra plantilla o modo.'
-                          : undefined
-                      }
-                      className="min-h-11 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                    >
-                      {isAsignando ? (
-                        <>
-                          <div className="h-3 w-3 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin" />
-                          <span>Asignando...</span>
-                        </>
-                      ) : asignacionCompletada ? (
-                        <>
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          <span>Asignación completada</span>
-                        </>
-                      ) : (
-                        <>
-                          <Dumbbell className="h-3.5 w-3.5" />
-                          <span>Confirmar asignación</span>
-                        </>
+                        </ul>
                       )}
-                    </button>
-                  </div>
+                    </section>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {paso === 'confirmar' && detalle && (
+            <>
+              <fieldset className="space-y-2" disabled={asignacionCompletada}>
+                <legend className="text-sm font-semibold text-foreground mb-2">
+                  ¿Qué hacemos con la rutina actual?
+                </legend>
+                {[
+                  {
+                    valor: ModoAsignacionPlantilla.REEMPLAZAR,
+                    titulo: 'Reemplazar la rutina actual',
+                    detalle: `La rutina vigente de ${alumnoNombre} deja de estar activa; su historial no se borra.`,
+                  },
+                  {
+                    valor: ModoAsignacionPlantilla.FUSIONAR,
+                    titulo: 'Añadir a la rutina actual',
+                    detalle: 'Agrega los días de la plantilla a los que ya tiene, sin borrar ninguno.',
+                  },
+                ].map((opcion) => {
+                  const idOpcion = `${idBase}-modo-${opcion.valor}`;
+                  const marcado = modo === opcion.valor;
+                  return (
+                    <div
+                      key={opcion.valor}
+                      className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${
+                        marcado ? 'border-primary/60 bg-primary/5' : 'border-border'
+                      }`}
+                    >
+                      <input
+                        id={idOpcion}
+                        type="radio"
+                        name={`${idBase}-modo`}
+                        value={opcion.valor}
+                        checked={marcado}
+                        onChange={() => setModo(opcion.valor)}
+                        aria-describedby={`${idOpcion}-detalle`}
+                        className="mt-0.5 h-5 w-5 accent-primary cursor-pointer"
+                      />
+                      <div className="min-w-0">
+                        <label htmlFor={idOpcion} className="block text-sm font-semibold text-foreground cursor-pointer">
+                          {opcion.titulo}
+                        </label>
+                        <p id={`${idOpcion}-detalle`} className="text-sm text-muted-foreground">
+                          {opcion.detalle}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </fieldset>
+
+              <p className="text-base text-foreground">
+                {resumenAsignacion({
+                  plantillaNombre: detalle.nombre,
+                  alumnoNombre,
+                  numeroAjustes: ajustesPendientes,
+                  modo,
+                })}
+              </p>
+
+              {resultado && resultado.exitosos > 0 && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="p-3 rounded-xl bg-success/10 border border-success/30 text-sm text-foreground flex items-start gap-2"
+                >
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-success-strong" aria-hidden="true" />
+                  <span>
+                    <span className="font-semibold">Rutina asignada a {alumnoNombre}.</span>{' '}
+                    {resultado.modo === ModoAsignacionPlantilla.REEMPLAZAR
+                      ? 'Reemplazó su rutina activa.'
+                      : 'Los días se añadieron a su rutina actual.'}
+                  </span>
                 </div>
-              </>
-            )}
-          </div>
+              )}
+
+              {errorAsignacion && (
+                <div
+                  role="alert"
+                  className="p-3 rounded-xl bg-destructive/10 border border-destructive/30 text-sm text-destructive flex items-start gap-2"
+                >
+                  <AlertCircle className="h-5 w-5 shrink-0" aria-hidden="true" />
+                  <span>{errorAsignacion}</span>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Navegación fija abajo */}
+        <div className="px-4 sm:px-6 py-3 border-t border-border/80 flex items-center justify-between gap-3 safe-area-pb">
+          {paso === 'elegir' || asignacionCompletada ? (
+            <button
+              type="button"
+              onClick={onCerrar}
+              disabled={isAsignando}
+              className="min-h-11 px-4 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-sm cursor-pointer disabled:opacity-50"
+            >
+              Cerrar
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setPaso(paso === 'confirmar' ? 'revisar' : 'elegir')}
+              disabled={isAsignando}
+              className="min-h-11 px-4 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-sm inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              Atrás
+            </button>
+          )}
+
+          {paso === 'confirmar' ? (
+            <button
+              type="button"
+              disabled={isAsignando || asignacionCompletada}
+              onClick={() => void confirmarAsignacion()}
+              aria-busy={isAsignando}
+              className="min-h-11 px-5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-md shadow-primary/20 hover:brightness-110 cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+            >
+              {isAsignando ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+              )}
+              <span>
+                {isAsignando ? 'Asignando…' : asignacionCompletada ? 'Asignación completada' : 'Asignar rutina'}
+              </span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={!puedeAvanzar}
+              onClick={() => (paso === 'elegir' ? irARevisar() : setPaso('confirmar'))}
+              className="min-h-11 px-5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              Siguiente
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
         </div>
       </div>
 
