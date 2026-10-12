@@ -45,6 +45,11 @@ export class PagoRevertidoEvent extends EventoNotificacionDominio {
   static readonly NOMBRE = 'notificacion.pago-revertido';
 }
 
+/** Finanzas (RF-008): el coach anuló una cuota sin pagos (destinatario: alumno). */
+export class CuotaAnuladaEvent extends EventoNotificacionDominio {
+  static readonly NOMBRE = 'notificacion.cuota-anulada';
+}
+
 /** Finanzas: el coach registró un cobro directo en efectivo (destinatario: alumno). */
 export class CobroDirectoRegistradoEvent extends EventoNotificacionDominio {
   static readonly NOMBRE = 'notificacion.cobro-directo-registrado';

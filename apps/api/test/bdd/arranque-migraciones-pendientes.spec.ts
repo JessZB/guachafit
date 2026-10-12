@@ -46,12 +46,12 @@ describe('Arranque · comparación de la última migración (función pura)', ()
     expect(ultimaMigracionDelJournal({ entries: [] })).toBeNull();
   });
 
-  // RF-007: la 0021 (referencia liberada de un pago revertido) es ahora la última: el arranque
+  // RF-008: la 0022 (columnas de anulación de cuota) es ahora la última: el arranque
   // debe exigirla.
-  it('el journal real del repositorio termina en la migración 0021', () => {
+  it('el journal real del repositorio termina en la migración 0022', () => {
     const ruta = path.resolve(__dirname, '../../../../packages/database/drizzle/meta/_journal.json');
     const journal = JSON.parse(fs.readFileSync(ruta, 'utf8'));
-    expect(ultimaMigracionDelJournal(journal)?.tag).toMatch(/^0021_/);
+    expect(ultimaMigracionDelJournal(journal)?.tag).toMatch(/^0022_/);
   });
 
   it('faltan migraciones si no hay ninguna aplicada o la última aplicada es anterior', () => {

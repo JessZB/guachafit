@@ -1418,6 +1418,27 @@ export const RevertirPagoSchema = z.object({
   motivo: z.string().trim().min(1, MENSAJE_MOTIVO_REVERSION_OBLIGATORIO).max(500),
 });
 
+/** RF-008: anulación de una cuota sin pagos (solo el entrenador dueño, con motivo). */
+export const MENSAJE_MOTIVO_ANULACION_OBLIGATORIO = 'Escribe el motivo de la anulación.';
+export const MENSAJE_ANULACION_PAGO_EN_REVISION =
+  'Primero aprueba o rechaza el pago en revisión de esta cuota.';
+export const MENSAJE_ANULACION_CON_PAGOS_APROBADOS =
+  'No se puede anular una cuota con pagos aprobados.';
+export const MENSAJE_CUOTA_YA_ANULADA = 'Esta cuota ya está anulada.';
+export const MENSAJE_CONCILIACION_CUOTA_ANULADA =
+  'No se puede conciliar un pago de una cuota anulada.';
+export const MENSAJE_REPORTE_CUOTA_ANULADA = 'No se pueden reportar pagos sobre una cuota anulada.';
+export const MENSAJE_COBRO_CUOTA_ANULADA = 'La cuota se encuentra anulada.';
+export const MENSAJE_REVERSION_CUOTA_ANULADA = 'No se puede revertir un pago de una cuota anulada.';
+
+export const AnularCuotaSchema = z.object({
+  motivo: z
+    .string({ required_error: MENSAJE_MOTIVO_ANULACION_OBLIGATORIO })
+    .trim()
+    .min(1, MENSAJE_MOTIVO_ANULACION_OBLIGATORIO)
+    .max(500),
+});
+
 // =============================================================================
 // NOTIFICACIONES & PREFERENCIAS SCHEMAS (RF-014, RF-015, RF-016)
 // =============================================================================

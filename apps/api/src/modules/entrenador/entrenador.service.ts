@@ -10,6 +10,7 @@ import {
   inArray,
   desc,
   gte,
+  ne,
   perfilesEntrenador,
   perfilesAlumno,
   transaccionesPago,
@@ -23,6 +24,7 @@ import {
   DashboardComandoDTO,
   EstadoAlumno,
   EstadoConciliacion,
+  EstadoCuota,
   EstadoMedicion,
   EstadoSesion,
   PerfilEntrenadorDTO,
@@ -155,7 +157,9 @@ export class EntrenadorService {
             .where(
               and(
                 eq(cuotasMembresia.entrenadorId, coachId),
-                eq(cuotasMembresia.periodo, periodoActual)
+                eq(cuotasMembresia.periodo, periodoActual),
+                // RF-008: una cuota anulada no se cobra, no suma a la meta del mes.
+                ne(cuotasMembresia.estado, EstadoCuota.ANULADA)
               )
             ),
           tx

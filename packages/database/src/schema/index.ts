@@ -704,15 +704,19 @@ export const cuotasMembresia = pgTable(
     fechaCorteUtc: timestamp('fecha_corte_utc', { withTimezone: true }).notNull(),
     estado: estadoCuotaEnum('estado').default(EstadoCuota.EMITIDA).notNull(),
     notas: text('notas'),
+    /** RF-008: anulación (terminal) por el entrenador dueño, con motivo obligatorio. */
+    motivoAnulacion: text('motivo_anulacion'),
+    fechaAnulacionUtc: timestamp('fecha_anulacion_utc', { withTimezone: true }),
+    anuladaPor: uuid('anulada_por').references(() => usuarios.id, { onDelete: 'restrict' }),
     createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
     updatedAtUtc: timestamp('updated_at_utc', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
-    uniqueCuota: uniqueIndex('uq_cuota_cliente_plan_periodo').on(
-      table.clienteId,
-      table.planId,
-      table.periodo
-    ),
+    // RF-008: una sola cuota VIGENTE por alumno, plan y periodo. Las anuladas no ocupan el periodo:
+    // anular, quitar el plan y reasignarlo con el mismo plan debe poder emitir la cuota corregida.
+    uniqueCuota: uniqueIndex('uq_cuota_cliente_plan_periodo')
+      .on(table.clienteId, table.planId, table.periodo)
+      .where(sql`${table.estado} <> 'anulada'`),
   })
 );
 

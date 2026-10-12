@@ -61,6 +61,7 @@ import {
   CobroDirectoInteligenteSchema,
   ConciliarTransaccionSchema,
   RevertirPagoSchema,
+  AnularCuotaSchema,
   AsignarSuscripcionSchema,
   PreferenciasNotificacionSchema,
   RegistrarDispositivoSchema,
@@ -224,6 +225,7 @@ export type CobroDirectoDTO = z.infer<typeof CobroDirectoSchema>;
 export type CobroDirectoInteligenteDTO = z.infer<typeof CobroDirectoInteligenteSchema>;
 export type ConciliarTransaccionDTO = z.infer<typeof ConciliarTransaccionSchema>;
 export type RevertirPagoDTO = z.infer<typeof RevertirPagoSchema>;
+export type AnularCuotaDTO = z.infer<typeof AnularCuotaSchema>;
 export type AsignarSuscripcionDTO = z.infer<typeof AsignarSuscripcionSchema>;
 /** WU-I (RF-009): filtros server-side del tablero de cartera (`q`, `pestana`, `limit`, `offset`). */
 export type FiltroCarteraDTO = z.infer<typeof FiltroCarteraSchema>;
@@ -507,6 +509,9 @@ export interface ResumenFinancieroAlumnoDTO {
     saldoAFavorAplicadoUsd?: string;
     estado: string;
     fechaVencimiento: string;
+    /** RF-008: solo en cuotas anuladas (aquí siempre `null`: la cuota del mes nunca es anulada). */
+    motivoAnulacion?: string | null;
+    fechaAnulacionUtc?: string | null;
   } | null;
   /**
    * WU24b: COUNT real de transacciones del alumno (independiente del slice paginado).
@@ -810,6 +815,10 @@ export interface CuotaDetalleDTO {
    * (`estado = al_dia`), sin recordatorios de cobro.
    */
   esBecado?: boolean;
+  /** RF-008: motivo, fecha (ISO) y autor de la anulación; `null` si la cuota no está anulada. */
+  motivoAnulacion?: string | null;
+  fechaAnulacionUtc?: string | null;
+  anuladaPor?: string | null;
   planNombre?: string;
   clienteNombre?: string;
   transacciones?: TransaccionPagoDetalleDTO[];

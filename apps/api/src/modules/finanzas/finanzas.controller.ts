@@ -35,6 +35,7 @@ import {
   CobroDirectoInteligenteSchema,
   ConciliarTransaccionSchema,
   RevertirPagoSchema,
+  AnularCuotaSchema,
   AsignarSuscripcionSchema,
   LIMITE_BANDEJA_CONCILIACION_POR_DEFECTO,
   LIMITE_BANDEJA_CONCILIACION_MAXIMO,
@@ -319,6 +320,22 @@ export class FinanzasController {
     const dto = parsearContrato(CobroDirectoSchema, body);
     const entrenadorId = req.user.entrenadorId || req.user.sub;
     return this.finanzasService.cobroDirecto(cuotaId, entrenadorId, dto);
+  }
+
+  /**
+   * RF-008: anular una cuota sin pagos (motivo obligatorio). Rol: Entrenador dueño.
+   */
+  @Post('cuotas/:id/anular')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ENTRENADOR)
+  @HttpCode(HttpStatus.OK)
+  async anularCuota(@Req() req: any, @Param('id') cuotaId: string, @Body() body: unknown) {
+    if (!UUID_REGEX.test(cuotaId)) {
+      throw new NotFoundException('No encontramos esa cuota. Actualiza la pantalla.');
+    }
+    const dto = parsearContrato(AnularCuotaSchema, body);
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    return this.finanzasService.anularCuota(cuotaId, entrenadorId, dto);
   }
 
   /**

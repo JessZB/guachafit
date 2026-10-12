@@ -155,6 +155,13 @@
       "when": 1791755731734,
       "tag": "0021_referencia_revertido_libre",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791826770636,
+      "tag": "0022_anulacion_cuotas",
+      "breakpoints": true
     }
   ]
 }

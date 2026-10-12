@@ -50,6 +50,7 @@ import {
   PagoRechazadoEvent,
   PagoRevertidoEvent,
   PagoReportadoEvent,
+  CuotaAnuladaEvent,
 } from '../notificaciones/events/eventos-notificacion';
 import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
 import {
@@ -103,6 +104,15 @@ import {
   MENSAJE_REVERSION_SOLO_APROBADOS,
   MENSAJE_REVERSION_SALDO_USADO,
   MENSAJE_FECHA_PAGO_FUTURA,
+  AnularCuotaDTO,
+  AnularCuotaSchema,
+  MENSAJE_ANULACION_PAGO_EN_REVISION,
+  MENSAJE_ANULACION_CON_PAGOS_APROBADOS,
+  MENSAJE_CUOTA_YA_ANULADA,
+  MENSAJE_CONCILIACION_CUOTA_ANULADA,
+  MENSAJE_REPORTE_CUOTA_ANULADA,
+  MENSAJE_COBRO_CUOTA_ANULADA,
+  MENSAJE_REVERSION_CUOTA_ANULADA,
   AsignarSuscripcionDTO,
   SuscripcionAlumnoDTO,
   EstadoAlumno,
@@ -365,10 +375,11 @@ export class FinanzasService {
   private readonly logger = new Logger(FinanzasService.name);
 
   /**
-   * WU-H (RF-008 / ADR-008 §3.2): al liquidarse una cuota (saldo $0.00) se cancelan los
-   * recordatorios futuros. Se ejecuta DESPUÉS del commit: un fallo de Redis no revierte el pago.
+   * WU-H (RF-008 / ADR-008 §3.2): cancela los recordatorios futuros de una cuota que ya no tiene
+   * deuda (liquidada o anulada). Cancela sin comprobar el estado: decide quien la llama. Se ejecuta
+   * DESPUÉS del commit: un fallo de Redis no revierte la operación.
    */
-  private async cancelarRecordatoriosSiLiquidada(cuotaId: string): Promise<void> {
+  private async cancelarRecordatoriosDeCuota(cuotaId: string): Promise<void> {
     if (!this.billingSchedulerService) return;
     try {
       await this.billingSchedulerService.cancelarRecordatoriosCuota(cuotaId);
@@ -1470,6 +1481,9 @@ export class FinanzasService {
   /**
    * Día local hasta el que el alumno ya está cubierto: fin del periodo de su cuota no anulada más
    * reciente (vencimiento + duración de su plan, en meses de calendario). `null` sin cuotas.
+   *
+   * RF-008 (decisión del dueño 2026-10-12): las ANULADAS no cuentan, para que el entrenador pueda
+   * corregir una cuota mal emitida (anular, quitar el plan y reasignarlo con la fecha correcta).
    */
   private async calcularCoberturaVigente(
     tx: TenantTransaction,
@@ -1609,7 +1623,9 @@ export class FinanzasService {
         and(
           eq(cuotasMembresia.clienteId, perfil.usuarioId),
           eq(cuotasMembresia.planId, plan.id),
-          eq(cuotasMembresia.periodo, periodo)
+          eq(cuotasMembresia.periodo, periodo),
+          // RF-008: una cuota anulada no ocupa su periodo (mismo predicado que el índice único).
+          ne(cuotasMembresia.estado, EstadoCuota.ANULADA)
         )
       );
 
@@ -1917,11 +1933,14 @@ export class FinanzasService {
     // Validación de titularidad, transacción y transición de la cuota en UNA transacción; las
     // políticas `self_select`/`self_insert`/`self_update` de 0012 cubren exactamente este flujo.
     const nuevaTx = await this.withTenant({ usuarioId: alumnoUserId }, async (tx) => {
-      // 2. Validar cuota y permisos del alumno titular
+      // 2. Validar cuota y permisos del alumno titular. RF-008: la cuota se bloquea para que una
+      //    anulación en paralelo no deje un pago en revisión sobre una cuota anulada (la anulación
+      //    también la bloquea antes de revisar sus pagos).
       const [cuota] = await tx
         .select()
         .from(cuotasMembresia)
-        .where(eq(cuotasMembresia.id, cuotaId));
+        .where(eq(cuotasMembresia.id, cuotaId))
+        .for('update');
 
       if (!cuota) {
         throw new NotFoundException(MENSAJE_CUOTA_NO_ENCONTRADA);
@@ -1932,7 +1951,7 @@ export class FinanzasService {
       }
 
       if (cuota.estado === EstadoCuota.ANULADA) {
-        throw new BadRequestException('No se pueden reportar pagos sobre una cuota anulada.');
+        throw new BadRequestException(MENSAJE_REPORTE_CUOTA_ANULADA);
       }
 
       if (cuota.estado === EstadoCuota.AL_DIA && toCents(cuota.saldoPendienteUsd) === 0) {
@@ -2146,7 +2165,7 @@ export class FinanzasService {
       }
 
       if (cuotaLock.estado === EstadoCuota.ANULADA) {
-        throw new BadRequestException('La cuota se encuentra anulada.');
+        throw new BadRequestException(MENSAJE_COBRO_CUOTA_ANULADA);
       }
 
       // Calcular contravalor USD. Un cobro en VES exige tasa real: sin ella se aborta la
@@ -2285,7 +2304,7 @@ export class FinanzasService {
     // WU-H (RF-008 / ADR-008 §3.2): un cobro directo que liquida la cuota cancela los
     // recordatorios futuros pendientes.
     if (toCents(resultado.cuota.saldoPendienteUsd) === 0) {
-      await this.cancelarRecordatoriosSiLiquidada(resultado.cuota.id);
+      await this.cancelarRecordatoriosDeCuota(resultado.cuota.id);
     }
 
     if (this.eventEmitter) {
@@ -2381,6 +2400,10 @@ export class FinanzasService {
 
       if (!cuotaLock) {
         throw new NotFoundException('Cuota asociada a la transacción no encontrada.');
+      }
+      // RF-008: una cuota anulada es terminal; ningún pago se aprueba ni se rechaza sobre ella.
+      if (cuotaLock.estado === EstadoCuota.ANULADA) {
+        throw new ConflictException(MENSAJE_CONCILIACION_CUOTA_ANULADA);
       }
 
       const nowUtc = new Date();
@@ -2491,7 +2514,7 @@ export class FinanzasService {
     // WU-H (RF-008 / ADR-008 §3.2): aprobar el pago que deja la cuota en $0.00 cancela los
     // recordatorios futuros (T-1/T/T+2) para no cobrarle a un cliente que ya está al día.
     if (dto.accion === 'aprobar' && toCents(resultado.cuota.saldoPendienteUsd) === 0) {
-      await this.cancelarRecordatoriosSiLiquidada(resultado.cuota.id);
+      await this.cancelarRecordatoriosDeCuota(resultado.cuota.id);
     }
 
     if (this.eventEmitter) {
@@ -2610,7 +2633,7 @@ export class FinanzasService {
         throw new NotFoundException('Cuota asociada a la transacción no encontrada.');
       }
       if (cuotaLock.estado === EstadoCuota.ANULADA) {
-        throw new ConflictException('No se puede revertir un pago de una cuota anulada.');
+        throw new ConflictException(MENSAJE_REVERSION_CUOTA_ANULADA);
       }
 
       const excedente = txRecord.excedenteUsd;
@@ -2733,6 +2756,127 @@ export class FinanzasService {
             // RNF-004 §3: referencia propia, distinta de la del aviso de aprobación del mismo pago.
             // Con `_` y nunca `:` (BullMQ 5 rechaza `:` en los jobId; ver notificaciones.config.ts).
             referenciaId: `${resultado.transaccion.id}_revertido`,
+          })
+        )
+        .catch(() => {});
+    }
+
+    return resultado;
+  }
+
+  /**
+   * RF-008: anula una cuota sin pagos (estado terminal). Solo el entrenador dueño, con motivo.
+   *
+   * - La cuota se bloquea ANTES de revisar sus pagos: un reporte o una conciliación en paralelo
+   *   esperan y después ven la cuota anulada, o la anulación ve su pago y responde 409.
+   * - Lo que la cuota tomó del saldo a favor al emitirse vuelve al perfil del alumno (cuota →
+   *   perfil, el orden de bloqueos de `acreditarSaldoAFavor`).
+   * - La cuota anulada queda sin deuda (abonado y pendiente en 0) y conserva su total para el
+   *   historial: como estado terminal, queda fuera de la invariante total = abonado + pendiente.
+   * - Se puede anular la cuota de un alumno archivado (la búsqueda es por cuota y entrenador).
+   */
+  async anularCuota(
+    cuotaId: string,
+    entrenadorId: string,
+    dto: AnularCuotaDTO,
+    ahora: Date = new Date()
+  ): Promise<{ cuota: CuotaDetalleDTO; saldoAFavorDevueltoUsd: string; mensaje: string }> {
+    const validado = parsearContrato(AnularCuotaSchema, dto);
+
+    const resultado = await this.db.transaction(async (tx) => {
+      // Contexto RLS del coach (mismo patrón que `revertirTransaccion`).
+      await tx.execute(
+        sql`SELECT set_config('app.current_entrenador_id', ${entrenadorId}, true)`
+      );
+      const [cuota] = await tx
+        .select()
+        .from(cuotasMembresia)
+        .where(and(eq(cuotasMembresia.id, cuotaId), eq(cuotasMembresia.entrenadorId, entrenadorId)))
+        .for('update');
+      if (!cuota) {
+        throw new NotFoundException(MENSAJE_CUOTA_NO_ENCONTRADA);
+      }
+      if (cuota.estado === EstadoCuota.ANULADA) {
+        throw new ConflictException(MENSAJE_CUOTA_YA_ANULADA);
+      }
+
+      // Los pagos rechazados o revertidos no bloquean: quedan en el historial.
+      const pagosVigentes = await tx
+        .select({ estadoConciliacion: transaccionesPago.estadoConciliacion })
+        .from(transaccionesPago)
+        .where(
+          and(
+            eq(transaccionesPago.cuotaId, cuota.id),
+            inArray(transaccionesPago.estadoConciliacion, [
+              EstadoConciliacion.PENDIENTE,
+              EstadoConciliacion.APROBADO,
+            ])
+          )
+        );
+      if (pagosVigentes.some((p) => p.estadoConciliacion === EstadoConciliacion.PENDIENTE)) {
+        throw new ConflictException(MENSAJE_ANULACION_PAGO_EN_REVISION);
+      }
+      // Defensa: un abono que no salió del saldo a favor viene de un pago (dato anterior a la 0019).
+      if (
+        pagosVigentes.length > 0 ||
+        toCents(cuota.montoAbonadoUsd) > toCents(cuota.saldoAFavorAplicadoUsd)
+      ) {
+        throw new ConflictException(MENSAJE_ANULACION_CON_PAGOS_APROBADOS);
+      }
+
+      const devuelto = fromCents(toCents(cuota.saldoAFavorAplicadoUsd));
+      await this.acreditarSaldoAFavor(tx, cuota.clienteId, cuota.entrenadorId, devuelto, ahora);
+
+      const [cuotaAnulada] = await tx
+        .update(cuotasMembresia)
+        .set({
+          estado: EstadoCuota.ANULADA,
+          montoAbonadoUsd: '0.00',
+          saldoPendienteUsd: '0.00',
+          saldoAFavorAplicadoUsd: '0.00',
+          motivoAnulacion: validado.motivo,
+          fechaAnulacionUtc: ahora,
+          anuladaPor: entrenadorId,
+          updatedAtUtc: ahora,
+        })
+        .where(eq(cuotasMembresia.id, cuota.id))
+        .returning();
+
+      return {
+        cuota: this.mapearCuotaDTO(cuotaAnulada),
+        saldoAFavorDevueltoUsd: devuelto,
+        mensaje:
+          toCents(devuelto) > 0
+            ? `Cuota anulada. ${devuelto} USD volvieron al saldo a favor del alumno.`
+            : 'Cuota anulada.',
+      };
+    });
+
+    // Una cuota anulada no tiene deuda: sus recordatorios sobran (el procesador ya los descarta).
+    await this.cancelarRecordatoriosDeCuota(resultado.cuota.id);
+
+    if (this.eventEmitter) {
+      const [anio, mes] = resultado.cuota.periodo.split('-');
+      const devolucion =
+        toCents(resultado.saldoAFavorDevueltoUsd) > 0
+          ? ` ${resultado.saldoAFavorDevueltoUsd} USD volvieron a tu saldo a favor.`
+          : '';
+      // RF-014: aviso fire-and-forget al alumno; un fallo del bus no revierte la anulación.
+      void this.eventEmitter
+        .emitAsync(
+          CuotaAnuladaEvent.NOMBRE,
+          new CuotaAnuladaEvent({
+            tipoEvento: 'CUOTA_ANULADA',
+            destinatarioUserId: resultado.cuota.clienteId,
+            entrenadorId,
+            categoria: 'FINANZAS',
+            titulo: 'Tu entrenador anuló una cuota',
+            cuerpo: `Tu entrenador anuló tu cuota de ${mes}/${anio}. Motivo: ${validado.motivo}.${devolucion}`,
+            linkAccion: '/app/pagos',
+            datosAdicionales: { cuotaId: resultado.cuota.id, motivoAnulacion: validado.motivo },
+            esCriticoSeguridad: false,
+            // Una sola anulación por cuota (terminal): la referencia no se repite. Sin `:` (BullMQ).
+            referenciaId: `${resultado.cuota.id}_anulada`,
           })
         )
         .catch(() => {});
@@ -2902,6 +3046,9 @@ export class FinanzasService {
       fechaCorteUtc: toIsoSafe(c.fechaCorteUtc),
       estado: c.estado,
       notas: c.notas,
+      motivoAnulacion: c.motivoAnulacion ?? null,
+      fechaAnulacionUtc: c.fechaAnulacionUtc ? toIsoSafe(c.fechaAnulacionUtc) : null,
+      anuladaPor: c.anuladaPor ?? null,
       createdAtUtc: toIsoSafe(c.createdAtUtc),
       updatedAtUtc: toIsoSafe(c.updatedAtUtc),
     };
@@ -2995,8 +3142,12 @@ export class FinanzasService {
           ? txQuery.limit(txLimit).offset(txOffset)
           : txQuery);
 
+        // RF-008: una cuota anulada no es deuda ni "cuota del mes", aunque un dato antiguo
+        // conserve saldo pendiente.
+        const cuotasVigentes = cuotas.filter((c) => c.estado !== EstadoCuota.ANULADA);
+
         let saldoTotalCents = 0;
-        for (const c of cuotas) {
+        for (const c of cuotasVigentes) {
           if (c.estado !== EstadoCuota.AL_DIA) {
             saldoTotalCents += toCents(c.saldoPendienteUsd);
           }
@@ -3033,7 +3184,8 @@ export class FinanzasService {
         const totalPagadoMesCents = toCents(filaTotalesMes?.totalUsd ?? '0');
 
         const currentPeriod = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
-        const cuotaMes = cuotas.find((c) => c.periodo === currentPeriod) || cuotas[0] || null;
+        const cuotaMes =
+          cuotasVigentes.find((c) => c.periodo === currentPeriod) || cuotasVigentes[0] || null;
 
         return {
           alumnoId: perfil.id,
@@ -3052,6 +3204,10 @@ export class FinanzasService {
                 saldoAFavorAplicadoUsd: cuotaMes.saldoAFavorAplicadoUsd,
                 estado: cuotaMes.estado,
                 fechaVencimiento: toIsoSafe(cuotaMes.fechaCorteUtc),
+                motivoAnulacion: cuotaMes.motivoAnulacion ?? null,
+                fechaAnulacionUtc: cuotaMes.fechaAnulacionUtc
+                  ? toIsoSafe(cuotaMes.fechaAnulacionUtc)
+                  : null,
               }
             : null,
           transaccionesTotal: Number(filaTotalTx?.total ?? 0),
