@@ -220,6 +220,17 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
   - **Tests nuevos:** rama "no cerrar" del cronómetro (un rechazo de otra serie no cierra el vigente), bordes del peso corporal (`'300,1'`), formatos de pegado no válidos y preferido fuera de rango.
   - **Evidencia:** web 1585/1585, typecheck y build limpios.
 
+### 7.16. Fila editable de la serie como componente (2026-10-12, `f4bcda1`)
+- **`FilaSerieEdicion`** (`components/atleta`) es la fila editable que comparten el modo foco y la lista completa.
+  - **Componente:** es presentacional. Lleva los filtros de entrada, los steppers, el marcado, "Iniciar serie", el descanso real y el error inline.
+  - **`renderFilaSerie`:** sigue calculando los borradores, los errores y los valores mostrados, y decide si la serie se ve compacta (`FilaSerieCompletada`).
+  - **Sin cambio de comportamiento:** lo verificó una comparación mecánica del JSX y del preámbulo contra el código anterior.
+- **Borrador de repeticiones:** al marcar una serie se descarta también el borrador de reps, como ya pasaba con el de peso y el de esfuerzo. Si el alumno vació el campo y marcó sin salir de él, al reabrir la corrección ve el valor enviado y no el campo vacío.
+- **Textos:** la fila deja de usar 11 px ("Listo", "Iniciada …" y "Descanso real" pasan a 12 px), como el resto de `components/atleta`.
+- **Evidencia:**
+  - specs del componente y del borrador de reps (vaciar y salir, stepper con el campo vacío, completar con y sin salir del campo);
+  - web 1624/1624, typecheck y build limpios;
+  - revisión de legibilidad aprobada con observaciones, sus hallazgos corregidos en el mismo commit.
+
 ### Pendiente
-- El borrador de repeticiones del alumno no tiene spec de interacción propio: la fila de serie es la función `renderFilaSerie` (lote E5), no un componente aislado.
 - Carrera de orden preexistente en `EntrenamientoPage` (§7.10): un envío directo en vuelo puede llegar después de un cambio encolado posterior de la misma sesión.

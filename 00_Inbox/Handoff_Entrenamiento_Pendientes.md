@@ -34,12 +34,12 @@ Repo/vault: C:\Users\jesus\OneDrive\Documentos\Obsidian Vault\Trabajo\GUACHAFIT 
 ## Antes de empezar
 1. Engram: si hay otra sesión abierta en este repo, registra un id propio con `mem_session_start` y pásalo como `session_id` en cada escritura. Si no, las escrituras fallan con "multiple active runtime sessions".
 2. Busca en memoria: `mem_search "guachafit entrenamiento E7 pendientes"`. Resumen de la sesión anterior: observación #4882.
-3. Lee RF-001 §7.10–§7.15 y su "### Pendiente", y la "Pendiente" de RF-017 §6.
+3. Lee RF-001 §7.10–§7.16 y su "### Pendiente", y la "Pendiente" de RF-017 §6.
 4. Escritura segura: valida antes de abrir un archivo para escribir, usa un temporal + `os.replace` y respeta CRLF. Nunca hagas `checkout`/`restore` de archivos completos: puede haber otra sesión en `main`. Commitea solo tus rutas y revisa `git diff --cached`.
 
 ## Pendientes, en este orden
 1. ✅ **Revisión de fiabilidad del lote E7** y ✅ **test de la rama "no cerrar" del cronómetro**: hechos en `7ca9fcf`, con dos hallazgos corregidos (ver RF-001 §7.15). Siguiente: el punto 3.
-3. **Extraer la fila de serie** (`renderFilaSerie` en `EntrenamientoPage.tsx`) a un componente `FilaSerieEdicion`, con props explícitas (valores mostrados, errores y handlers). Requisitos:
+3. ✅ Hecho en `f4bcda1` (RF-001 §7.16). Siguiente: el punto 4. **Extraer la fila de serie** (`renderFilaSerie` en `EntrenamientoPage.tsx`) a un componente `FilaSerieEdicion`, con props explícitas (valores mostrados, errores y handlers). Requisitos:
    - sin cambio de comportamiento: verificar con la comparación mecánica que se usó en E5/E6;
    - después, un spec de interacción del borrador de repeticiones (vaciar y salir, stepper, completar).
 4. **Carrera de orden de los envíos** (RF-001 §7.10): un envío directo en vuelo puede llegar después de un cambio encolado posterior de la misma sesión.
