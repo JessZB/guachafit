@@ -143,6 +143,9 @@ Then el sistema debe crear una transacción con estado "Aprobado"
 - La API de cartera envía `proximoCorte` (próximo vencimiento de la suscripción, o `null` sin plan) en las 4 pestañas. Las uniones con el perfil exigen además el mismo entrenador (defensa en profundidad, RNF-003).
 - El cobro en sala y el historial usan la búsqueda única del alumno: otro coach o un alumno inexistente → 404 "Este alumno no está en tu lista." (antes 403). El coach sí ve el historial de un alumno archivado.
 
+### Cobro en sala con fecha anterior (2026-10-12, `cea825b`)
+- El modal de cobro de Control de Cobros y de la ficha pide "Fecha de la operación" (hoy por defecto y como máximo) y, en bolívares, muestra la tasa con la que se convertirá. La API rechaza fechas futuras. Reglas completas en [[RF-007-reporte-pagos-bandeja-conciliacion]] ("Pagos con fecha anterior").
+
 ### Pendiente
 - **Próximo vencimiento en Control de Cobros:** la API ya lo envía; falta mostrarlo en la tabla (lote web P2).
 - PagosPage del alumno, conciliación (confirmación y reversión) y anulación de cuotas siguen pendientes del módulo 5. Saldo a favor: resuelto el 2026-10-11 en la API (`afd3f7c`) y en la web (`b975905`: "A favor: X USD" en la tabla y la ficha; aviso del excedente al aprobar y tras cobrar en sala), ver [[RF-006-motor-bimonetario-liquidacion-abonos]].

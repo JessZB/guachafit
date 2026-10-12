@@ -4,7 +4,7 @@ modulo: Finanzas
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-10-11
+fecha_verificacion: 2026-10-12
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -130,10 +130,14 @@ Then la transacción debe transicionar a estado "Rechazado"
   - El alumno recibe "Tu entrenador revirtió un pago" con el monto, el motivo y que el monto vuelve a figurar como pendiente. Si la cuota vuelve a tener deuda, sus recordatorios se agendan en el acto.
 - Evidencia: `apps/api/test/bdd/rf007-reversion-pago-aprobado.spec.ts` (44 casos) y `rf007-reversion-concurrencia.e2e.spec.ts` (Postgres real: reversión frente a emisión sin saldo negativo ni `40P01`, y referencia liberada y reaprobada). La `0020` y la `0021` se aplicaron en un mismo run sobre una BD vacía. API **1674** aprobados (17 omitidos). Revisado con los 4 enfoques y validado; el BLOCKER del `jobId` del aviso y el de la `0021` (cast no inmutable) quedaron corregidos.
 
-### Pagos con fecha anterior: reglas aprobadas (2026-10-11, pendiente de implementar)
-- El cobro en sala tendrá un campo de fecha (hoy por defecto y como máximo). La API rechazará fechas futuras en el cobro en sala y en el reporte del alumno (hoy acepta cualquier fecha).
-- En bolívares se usa la tasa vigente al registrar (no hay histórico de tasas por día) y el modal la muestra para que el entrenador la confirme.
-- El recaudado del mes (KPI-01) sigue contando por fecha de registro, no de pago.
+### Pagos con fecha anterior (reglas del 2026-10-11, implementado el 2026-10-12, `cea825b`)
+- **Cobro en sala (ficha y Control de Cobros):** campo "Fecha de la operación" con hoy por defecto y como máximo; se puede registrar un pago de días anteriores. El reporte del alumno (Pagos) también limita la fecha a hoy y arranca con el día local (antes, el día UTC: de noche en Caracas salía mañana y se bloqueaba).
+- **API:** rechaza con 400 "La fecha del pago no puede ser posterior a hoy." en el reporte del alumno, el cobro directo y el cobro inteligente (antes de emitir ninguna cuota). En el reporte, la comprobación corre dentro de la ejecución idempotente: un reintento con la misma clave devuelve el pago ya registrado. Sin fecha, el cobro inteligente usa el día local del alumno.
+- **Bolívares:** se usa la tasa vigente al registrar (no hay histórico por día) y el modal la muestra ("Se convertirá con la tasa vigente al registrar: 1 USD = X Bs."), con la tasa propia del alumno si la tiene.
+- **Recaudado del mes (KPI-01):** cuenta por fecha de registro, no por la fecha del pago.
+- **Mensajes:** un error de fecha se borra al cambiar la fecha; en la ficha y en Pagos, el mensaje propio sustituye la burbuja del navegador para la fecha futura (la fecha vacía en Pagos conserva la burbuja nativa).
+- **Regla provisional de "hoy" (aprobada el 2026-10-12):** la API compara con el día de `Pacific/Kiritimati` (UTC+14), así que nunca rechaza un "hoy" de ninguna zona, a costa de aceptar "mañana" durante algunas horas; la web usa el día del dispositivo que registra. Se sustituirá por la validación con la zona del alumno (ver Pendiente).
+- Evidencia: `rf009-es-fecha-pago-futura`, `rf009-mensaje-fecha-pago-futura`, `rf009-rf007-fecha-anterior` (API) y `cobro-sala.fecha-anterior` + `*.fecha-anterior.interaccion` de Pagos, la ficha y Cartera (web). API **1692** aprobados (17 omitidos); typecheck y build en verde. Revisado (fiabilidad) y validado.
 
 ### Confirmación y reversión en la web (2026-10-11, `e16039d`)
 - **Conciliación:** "Aprobar y Descontar Saldo" ya no aprueba en el acto: abre "¿Aprobar el pago de {alumno}?" con "Se descontarán X USD de su cuota." y, si lo hay, el aviso del excedente. "Aprobar pago" confirma; el botón queda bloqueado mientras se aprueba (sin doble envío). El rechazo ya tenía su propio diálogo con motivo obligatorio.
@@ -148,4 +152,6 @@ Then la transacción debe transicionar a estado "Rechazado"
 ### Pendiente
 - El mensaje de éxito de la reversión no se borra solo; las mutaciones de Conciliación y de la reversión no tienen tiempo límite; la demo de Conciliación llama al API.
 - El comprobante sigue siendo opcional.
-- Implementar los pagos con fecha anterior (ver arriba).
+- **Zona horaria del alumno (lote propio):** guardar la zona del dispositivo al activar la cuenta (hoy todos quedan en `America/Caracas` y solo se cambia a mano en Ajustes), avisar cuando la zona del dispositivo difiera de la configurada ("tu dispositivo va X h por delante/detrás") y, con eso, validar la fecha del pago con la zona del alumno en la API y en la web, en lugar de la regla provisional.
+- `fechaOperacion` solo valida el formato: una llamada directa con `2026-02-30` se acepta.
+- Dos ventanas de "recaudado del mes": KPI-01 usa el mes UTC y `totalPagadoMesActualUsd` el mes en la hora local del servidor (solo discrepan si el servidor no corre en UTC).
