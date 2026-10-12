@@ -35,29 +35,28 @@ Repo/vault: C:\Users\jesus\OneDrive\Documentos\Obsidian Vault\Trabajo\GUACHAFIT 
 - En los prompts para OpenCode di qué archivos son ajenos y pide demostrar en aislamiento cualquier fallo ajeno. Los timeouts de 5 s en specs HTTP del API son por carga: se re-ejecutan en aislamiento.
 - Engram puede fallar con "multiple active runtime sessions": avisa y sigue.
 
-## Estado del módulo 5 (lo hecho en esta tanda)
-- Saldo a favor (RF-006 RN-05): API `afd3f7c`/`cefec40`, web `b975905`/`1492ef3`. Migración 0019. Regla de bloqueos documentada en `acreditarSaldoAFavor` (aprobar/cobrar: cuota → perfil; ninguna ruta que bloquee el perfil toca después una cuota existente).
-- Reversión de pagos aprobados (RF-007): API `4878d7e`/`613737b` (migraciones 0020 estado `revertido` y 0021 índice de referencias con `IN ('pendiente','aprobado')`; un pago revertido libera su referencia), web `e16039d`/`e7191ae` (confirmación al aprobar en Conciliación, "Revertir pago" en la ficha, estado "Revertido" en los historiales).
+## Estado del módulo 5 (PAUSADO por decisión del dueño el 2026-10-12; no hay lote en curso)
+- Saldo a favor (RF-006 RN-05): API `afd3f7c`/`cefec40`, web `b975905`/`1492ef3`. Migración 0019.
+- Reversión de pagos aprobados (RF-007): API `4878d7e`/`613737b` (migraciones 0020 y 0021), web `e16039d`/`e7191ae`.
+- Pagos con fecha anterior (RF-007/RF-009): `cea825b` + doc-sync `376bbdb`. Regla provisional de "hoy": la API compara con el día de `Pacific/Kiritimati` y la web usa el día del dispositivo.
+- Anulación de cuotas (RF-008), **solo API**: `7f46acc` + doc-sync `ac976a5`. `POST /finanzas/cuotas/:id/anular` (motivo obligatorio; 409 con pagos en revisión o aprobados; devuelve el saldo a favor aplicado; aviso `CUOTA_ANULADA`). Migración 0022: motivo/fecha/autor e índice único parcial (`estado <> 'anulada'`). Una cuota anulada no ocupa su periodo: se corrige una cuota mal emitida anulando, quitando el plan y reasignándolo. Reglas completas en RF-008 §7.
 
-## EN CURSO: lote "pagos con fecha anterior" (RF-007/RF-009), SIN COMMIT
-- Reglas del dueño (RF-007 "### Pagos con fecha anterior: reglas aprobadas"): cobro en sala con fecha (hoy por defecto y máximo); la API rechaza fechas futuras (cobro en sala y reporte del alumno); en Bs. la tasa vigente al registrar se muestra en el modal; el recaudado del mes cuenta por fecha de registro.
-- Implementado y validado (prompt 03 en verde: web 1516, API 1690 +17 omitidas):
-  - shared: `MENSAJE_FECHA_PAGO_FUTURA`; `CobroDirectoInteligenteSchema.fechaOperacion` opcional sin default UTC.
-  - API (`finanzas.service.ts`): `esFechaPagoFutura` (compara con el día de `Pacific/Kiritimati`, UTC+14), 400 en `reportarPago`, `cobroDirecto` y cobro inteligente (antes de emitir); sin fecha, el cobro inteligente usa el día local del alumno.
-  - web: `lib/cobro-sala.ts` (`validarFechaCobro`, `textoTasaCobro`); CarteraPage (max, validación, tasa, texto sin jerga); ficha (campo fecha, tasa con `/finanzas/tasas/vigente?clienteId=`, "Registrando cobro…"); PagosPage (max y validación). En ficha y PagosPage, `onInvalid` sustituye la burbuja nativa por nuestro mensaje (sin `noValidate`, para conservar la validación nativa del resto).
-- **Siguiente paso:** el usuario va a ejecutar (o ya ejecutó) `.opencode-prompts/04-rf009-fecha-anterior-review-reliability.md`. Lee su reporte en `.opencode-prompts/reportes/04-rf009-fecha-anterior-review-reliability.reporte.md`, aplica correcciones si hace falta (+ validación), y cierra: commit de código nombrando estos archivos — `apps/api/src/modules/finanzas/finanzas.service.ts`, `apps/api/test/bdd/rf011-rf012-alumnos-edge-cases.spec.ts`, `apps/api/test/bdd/rf009-*.spec.ts` (3), `apps/web/src/lib/cobro-sala.ts`, `apps/web/src/lib/cobro-sala.fecha-anterior.spec.ts`, `apps/web/src/pages/atleta/PagosPage.tsx` + `PagosPage.fecha-anterior.interaccion.spec.tsx`, `apps/web/src/pages/entrenador/AlumnoDetallePage.tsx` + `AlumnoDetallePage.fecha-anterior.interaccion.spec.tsx`, `apps/web/src/pages/entrenador/CarteraPage.tsx` + `CarteraPage.fecha-anterior.interaccion.spec.tsx`, `packages/shared/src/schemas/index.ts` — y doc-sync (RF-007: pasar la sección de reglas a "implementado (fecha, sha)"; RF-009 si aplica; 06_Guia_Pruebas_Manuales.md). Luego borra los prompts/reportes `0[1-4]-rf009-fecha-anterior-*`.
-
-## Pendiente del módulo 5 (orden propuesto)
-1. Anulación de cuotas (necesita decisión de producto: quién, cuándo, qué pasa con pagos y saldo a favor).
-2. PagosPage del alumno: idempotencia del reporte, recarga, modo demo (Pagos y Conciliación llaman al API en demo), comprobantes sin EXIF (como las fotos de antropometría), accesibilidad.
-3. Lote web P2 de Control de Cobros: mostrar `proximoCorte`, precio residual tras reconciliar, éxito en modo demo, jerga, `htmlFor`, precarga de becados.
-4. Seguimientos documentados: reconciliador de la invariante de saldo (RNF-002), `ReportarPagoSchema` sin tope de monto, mensajes de éxito que no se borran solos, mutaciones sin `tiempoLimiteMs`, e2e de RF-006 que usa el barrido global de emisión.
+## Pendientes del módulo 5 (orden propuesto)
+1. **Web de la anulación de cuotas:** botón "Anular cuota" en la ficha (historial de cuotas) con diálogo de motivo obligatorio y los avisos aprobados ("este periodo no se cobrará aunque el alumno siga entrenando"; si tiene plan, "quítalo si dejó el gimnasio"); estado "Anulada" con el motivo en Pagos del alumno (hoy `lib/estado-cuota.ts` muestra "Sin cuota vigente"). No en demo.
+2. **Congelar la membresía (lesión o viaje)** con la cuota ya pagada: correr el próximo vencimiento N días. Antes decidir con el dueño: máximo de días, si detiene recordatorios y cómo convive con la pausa de alumno existente.
+3. **Condonar el resto de una cuota con abono** (cerrarla con lo abonado). Decisión de producto pendiente.
+4. **Zona horaria del alumno:** guardar la zona del dispositivo al activar la cuenta, avisar si la del dispositivo difiere de la configurada y validar la fecha de pago con la zona del alumno (sustituye la regla provisional de Kiritimati).
+5. **PagosPage del alumno:** idempotencia del reporte, recarga, modo demo (Pagos y Conciliación llaman al API en demo), comprobantes sin EXIF, accesibilidad.
+6. **Lote web P2 de Control de Cobros:** mostrar `proximoCorte`, precio residual tras reconciliar, éxito en modo demo, jerga, `htmlFor`, precarga de becados.
+7. **Seguimientos:** reconciliador de la invariante de saldo (RNF-002; las cuotas anuladas quedan fuera de la invariante), `ReportarPagoSchema` sin tope de monto, `fechaOperacion` solo valida formato (`2026-02-30` pasa), dos ventanas de "recaudado del mes" (UTC frente a hora del servidor), mensajes de éxito que no se borran solos, mutaciones sin `tiempoLimiteMs`, e2e de RF-006 que usa el barrido global de emisión, `obtenerCuotaPorId` no expone el motivo de anulación.
 Después: módulo 6 (Dashboard del entrenador, RF-013), 7 (Notificaciones, RF-014..016, RNF-004), 8 (PWA offline transversal).
 
 ## Referencias
-- Tests base (al 2026-10-12): web ~1516, API ~1690 (+17 omitidas). Docker: `guachafit-postgres` (migraciones con `pnpm db:migrate`; e2e con `E2E_DATABASE_URL`).
-- Decisiones: ADR-020 (suscripción y emisión automática), ADR-015 (borrado best-effort en la bóveda), ADR-017/018 (hosting, correo).
-- Piezas a reutilizar: `lib/saldo-a-favor.ts`, `lib/pagos-historial-filtros.ts`, `DialogoConfirmacion` (con `confirmarDeshabilitado`), `estadoCuotaTrasRetirarAbono`, `repartirAbono`, `api-client` (`tiempoLimiteMs`), `lib/imagen-comprimida.ts`.
+- Tests base (al 2026-10-12): web ~1622, API ~1735 (+29 omitidas). Docker: `guachafit-postgres` (migraciones con `pnpm db:migrate`; la base local ya está en la 0022).
+- **e2e:** vitest del API no carga `.env`. Definir en la terminal de OpenCode `$env:E2E_DATABASE_URL='postgres://postgres:postgres@localhost:5432/guachafit'` (credenciales dev del compose) y aplicar antes las migraciones pendientes.
+- Decisiones: ADR-020 (suscripción y emisión automática, índice parcial desde la 0022), ADR-015 (borrado best-effort en la bóveda), ADR-017/018 (hosting, correo).
+- Piezas a reutilizar: `lib/saldo-a-favor.ts`, `lib/pagos-historial-filtros.ts`, `lib/cobro-sala.ts`, `DialogoConfirmacion` (con `confirmarDeshabilitado`), `estadoCuotaTrasRetirarAbono`, `repartirAbono`, `api-client` (`tiempoLimiteMs`), `lib/imagen-comprimida.ts`.
+- Para cambiar contratos ya revisados, validar primero el paquete de reglas con un Día del Juicio (así se encontraron los críticos de la anulación).
 
-Empieza revisando memoria (mem_search "guachafit módulo 5 fecha anterior") y el reporte 04 de la revisión de fiabilidad; si aún no existe, pídeme que ejecute ese prompt.
+Empieza revisando memoria (mem_search "guachafit módulo 5") y pregúntame qué pendiente retomar.
 ```
