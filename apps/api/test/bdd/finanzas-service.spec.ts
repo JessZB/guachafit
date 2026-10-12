@@ -18,6 +18,7 @@ import {
   EstadoCuota,
   EstadoConciliacion,
   CrearOverridePlanSchema,
+  type ResumenFinancieroAlumnoDTO,
 } from '@guachafit/shared';
 import {
   ConflictException,
@@ -1461,6 +1462,63 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
       );
       expect(noNumerico.transaccionesTotal).toBe(2);
       expect(noNumerico.transacciones).toHaveLength(2);
+    });
+  });
+
+  // ===========================================================================
+  // 9c. RF-007: motivo de la reversión en el historial financiero del alumno
+  // ===========================================================================
+  describe('9c. RF-007: `motivoReversion` en las transacciones del historial', () => {
+    /** Fila de `transacciones_pago` con la columna `motivoReversion` (migración 0020). */
+    function crearTxHistorial(
+      id: string,
+      estado: EstadoConciliacion,
+      motivoReversion: string | null
+    ) {
+      return {
+        id,
+        cuotaId: 'cuota-historial-1',
+        clienteId: 'alumno-uuid-1',
+        entrenadorId: 'coach-uuid-1',
+        registradoPor: 'alumno-uuid-1',
+        montoOriginal: '20.00',
+        monedaOriginal: Moneda.USD,
+        tasaCambioFijada: '1.0000',
+        montoEquivalenteUsd: '20.00',
+        metodoPago: MetodoPago.EFECTIVO_USD,
+        referenciaBancaria: `ref-${id}`,
+        fechaOperacion: '2026-10-01',
+        estadoConciliacion: estado,
+        motivoReversion,
+        fechaReporteUtc: new Date('2026-10-01T10:00:00Z'),
+        createdAtUtc: new Date('2026-10-01T10:00:00Z'),
+        updatedAtUtc: new Date('2026-10-01T10:00:00Z'),
+      };
+    }
+
+    it('los items del historial llevan motivoReversion con el valor de la columna (y null si no fue revertido)', async () => {
+      mockTransaccionesPago = [
+        crearTxHistorial('tx-revertida', EstadoConciliacion.REVERTIDO, 'Cobro duplicado'),
+        crearTxHistorial('tx-aprobada', EstadoConciliacion.APROBADO, null),
+      ];
+
+      const resumen = await finanzasService.obtenerHistorialCliente(
+        'coach-uuid-1',
+        'perfil-alumno-1',
+        'coach-uuid-1',
+        Rol.ENTRENADOR
+      );
+
+      const items = resumen.transacciones as Array<
+        ResumenFinancieroAlumnoDTO['transacciones'][number] & {
+          motivoReversion?: string | null;
+        }
+      >;
+      const revertida = items.find((t) => t.id === 'tx-revertida');
+      const aprobada = items.find((t) => t.id === 'tx-aprobada');
+
+      expect(revertida?.motivoReversion).toBe('Cobro duplicado');
+      expect(aprobada?.motivoReversion).toBeNull();
     });
   });
 

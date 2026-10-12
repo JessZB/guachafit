@@ -13,7 +13,7 @@
  * el PATCH de conciliación una respuesta configurable (el excedente que traerá el API).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -214,6 +214,9 @@ describe('ConciliacionPage · contrato 6: excedente antes de aprobar y en el éx
     await esperarTarjeta();
 
     fireEvent.click(screen.getByRole('button', { name: 'Aprobar y Descontar Saldo' }));
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Aprobar pago' })
+    );
 
     expect(
       await screen.findByText(
@@ -230,6 +233,9 @@ describe('ConciliacionPage · contrato 6: excedente antes de aprobar y en el éx
     await esperarTarjeta();
 
     fireEvent.click(screen.getByRole('button', { name: 'Aprobar y Descontar Saldo' }));
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Aprobar pago' })
+    );
 
     expect(await screen.findByText('Pago aprobado y descontado de la cuota.')).toBeTruthy();
     expect(screen.queryByText(/quedaron como saldo a favor/)).toBeNull();
@@ -252,6 +258,9 @@ describe('ConciliacionPage · contrato 6: excedente antes de aprobar y en el éx
     await esperarTarjeta();
 
     fireEvent.click(screen.getByRole('button', { name: 'Aprobar y Descontar Saldo' }));
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Aprobar pago' })
+    );
 
     expect(await screen.findByText('Pago aprobado y descontado de la cuota.')).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull();
@@ -264,6 +273,9 @@ describe('ConciliacionPage · contrato 6: excedente antes de aprobar y en el éx
     await esperarTarjeta();
 
     fireEvent.click(screen.getByRole('button', { name: 'Aprobar y Descontar Saldo' }));
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Aprobar pago' })
+    );
 
     expect(await screen.findByText('Pago aprobado y descontado de la cuota.')).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull();

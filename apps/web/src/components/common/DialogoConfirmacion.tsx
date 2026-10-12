@@ -19,6 +19,8 @@ export interface DialogoConfirmacionProps {
   textoConfirmar: string;
   textoCancelar?: string;
   procesando?: boolean;
+  /** Deshabilita solo el botón de confirmar (p. ej. mientras falta un dato obligatorio). */
+  confirmarDeshabilitado?: boolean;
   /** `peligro` pinta el botón de confirmar en rojo (acciones destructivas como archivar). */
   variante?: 'primaria' | 'peligro';
   onCancelar: () => void;
@@ -33,6 +35,7 @@ export function DialogoConfirmacion({
   textoConfirmar,
   textoCancelar = 'Cancelar',
   procesando = false,
+  confirmarDeshabilitado = false,
   variante = 'primaria',
   onCancelar,
   onConfirmar,
@@ -84,7 +87,7 @@ export function DialogoConfirmacion({
           <button
             type="button"
             onClick={onConfirmar}
-            disabled={procesando}
+            disabled={procesando || confirmarDeshabilitado}
             className={`min-h-11 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold hover:brightness-110 active:scale-95 transition-all cursor-pointer disabled:opacity-50 ${claseConfirmar}`}
           >
             {procesando && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

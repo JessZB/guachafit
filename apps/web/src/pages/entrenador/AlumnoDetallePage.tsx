@@ -24,6 +24,7 @@ import {
   type SemaforoPago,
 } from '../../lib/etiquetas-dominio';
 import { etiquetaMetodoPago } from '../../lib/conciliacion-filtros';
+import { etiquetaEstadoTransaccion, normalizarEstadoTransaccion } from '../../lib/pagos-historial-filtros';
 import { normalizarPesoPrescritoTexto, validarRpe } from '../../lib/weight-unit';
 import {
   MENSAJE_REPS_PRESCRITAS_INVALIDAS,
@@ -95,6 +96,7 @@ import {
   UUID_REGEX,
   PeriodicidadAntropometria,
   type FotoAntropometriaInputDTO,
+  EstadoConciliacion,
 } from '@guachafit/shared';
 import { SelectorFotosCheckin } from '../../components/antropometria/SelectorFotosCheckin';
 import {
@@ -361,6 +363,17 @@ export function AlumnoDetallePage() {
   const [tamanoTx, setTamanoTx] = useState(TAMANO_PAGINA_FICHA);
   const [isCargandoTx, setIsCargandoTx] = useState(false);
   const [transaccionesError, setTransaccionesError] = useState<string | null>(null);
+  // RF-007: reversión de un pago aprobado por error (motivo obligatorio).
+  const [pagoPorRevertir, setPagoPorRevertir] = useState<{
+    id: string;
+    montoUsd: string;
+    metodoPago: string;
+    referencia?: string;
+  } | null>(null);
+  const [motivoReversion, setMotivoReversion] = useState('');
+  const [revirtiendo, setRevirtiendo] = useState(false);
+  const [errorReversion, setErrorReversion] = useState<string | null>(null);
+  const [reversionExitoMsg, setReversionExitoMsg] = useState<string | null>(null);
   const [planesCatalogo, setPlanesCatalogo] = useState<PlanMembresiaDetalleDTO[]>([]);
   // WU-J (RF-005): override vigente del alumno (precio/tasa pactados) y su error de carga.
   const [overridesAlumno, setOverridesAlumno] = useState<OverridePlanDetalleDTO[]>([]);
@@ -3057,6 +3070,75 @@ export function AlumnoDetallePage() {
             )}
           </div>
 
+          {/* RF-007: confirmación de la reversión de un pago aprobado */}
+          <DialogoConfirmacion
+            abierto={pagoPorRevertir !== null}
+            idTitulo="ficha-confirmar-reversion"
+            titulo="¿Revertir este pago?"
+            detalle={
+              <div className="space-y-2">
+                {pagoPorRevertir && (
+                  <p className="font-semibold text-foreground">
+                    {`Pago de ${pagoPorRevertir.montoUsd} USD · ${etiquetaMetodoPago(
+                      pagoPorRevertir.metodoPago
+                    )}${pagoPorRevertir.referencia ? ` · Ref: ${pagoPorRevertir.referencia}` : ''}`}
+                  </p>
+                )}
+                <p>
+                  La cuota volverá a mostrar ese monto como pendiente y el alumno recibirá un aviso
+                  con el motivo.
+                </p>
+                <label htmlFor="ficha-motivo-reversion" className="block font-semibold text-foreground">
+                  Motivo de la reversión
+                </label>
+                <textarea
+                  id="ficha-motivo-reversion"
+                  value={motivoReversion}
+                  onChange={(e) => setMotivoReversion(e.target.value)}
+                  maxLength={500}
+                  rows={3}
+                  className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-hidden focus:border-primary"
+                />
+                {errorReversion && (
+                  <p role="alert" className="text-destructive font-semibold">
+                    {errorReversion}
+                  </p>
+                )}
+              </div>
+            }
+            textoConfirmar="Revertir pago"
+            variante="peligro"
+            procesando={revirtiendo}
+            confirmarDeshabilitado={!motivoReversion.trim()}
+            onCancelar={() => {
+              setPagoPorRevertir(null);
+              setMotivoReversion('');
+              setErrorReversion(null);
+            }}
+            onConfirmar={async () => {
+              if (!pagoPorRevertir || !motivoReversion.trim() || revirtiendo) return;
+              setRevirtiendo(true);
+              setErrorReversion(null);
+              try {
+                const respuesta = await apiClient.post<{ mensaje?: string } | null>(
+                  `/finanzas/transacciones/${pagoPorRevertir.id}/revertir`,
+                  { motivo: motivoReversion.trim() }
+                );
+                setReversionExitoMsg(respuesta?.mensaje ?? 'Pago revertido.');
+                setPagoPorRevertir(null);
+                setMotivoReversion('');
+                await cargarTransacciones(paginaTx, tamanoTx);
+              } catch (err: any) {
+                // El diálogo sigue abierto: p. ej. el saldo a favor que generó ya se gastó (409).
+                setErrorReversion(
+                  err?.message || 'No se pudo revertir el pago. Inténtalo de nuevo en unos minutos.'
+                );
+              } finally {
+                setRevirtiendo(false);
+              }
+            }}
+          />
+
           {/* Historial de Transacciones y Comprobantes */}
           <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
@@ -3078,6 +3160,11 @@ export function AlumnoDetallePage() {
               </div>
             )}
 
+            {reversionExitoMsg && (
+              <p role="status" className="text-xs font-semibold text-success">
+                {reversionExitoMsg}
+              </p>
+            )}
             {finanzas && finanzas.transacciones.length > 0 ? (
               <div className="space-y-2.5">
                 {finanzas.transacciones.map((tx) => (
@@ -3095,10 +3182,34 @@ export function AlumnoDetallePage() {
                             • Ref: {tx.referencia}
                           </span>
                         )}
+                        <span className="text-[11px] font-semibold text-muted-foreground">
+                          {etiquetaEstadoTransaccion(tx.estado)}
+                        </span>
                       </div>
                       <span className="text-[11px] text-muted-foreground font-mono">
                         {formatFechaHoraLocal(tx.createdAtUtc) ?? '—'}
                       </span>
+                      {!isDemoMode &&
+                        normalizarEstadoTransaccion(tx.estado) === EstadoConciliacion.APROBADO && (
+                          <button
+                            type="button"
+                            aria-label={`Revertir pago de ${tx.montoUsd} USD`}
+                            onClick={() => {
+                              setPagoPorRevertir({
+                                id: tx.id,
+                                montoUsd: tx.montoUsd,
+                                metodoPago: tx.metodoPago,
+                                referencia: tx.referencia,
+                              });
+                              setMotivoReversion('');
+                              setErrorReversion(null);
+                              setReversionExitoMsg(null);
+                            }}
+                            className="mt-1 min-h-11 px-3 rounded-xl border border-destructive/40 text-destructive text-[11px] font-bold hover:bg-destructive/10 cursor-pointer"
+                          >
+                            Revertir pago
+                          </button>
+                        )}
                     </div>
 
                     <div className="text-right">

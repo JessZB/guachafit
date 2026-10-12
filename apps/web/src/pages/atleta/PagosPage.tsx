@@ -93,6 +93,7 @@ const OPCIONES_ESTADO_HISTORIAL: Array<{
   { valor: EstadoConciliacion.PENDIENTE, label: etiquetaEstadoTransaccion(EstadoConciliacion.PENDIENTE) },
   { valor: EstadoConciliacion.APROBADO, label: etiquetaEstadoTransaccion(EstadoConciliacion.APROBADO) },
   { valor: EstadoConciliacion.RECHAZADO, label: etiquetaEstadoTransaccion(EstadoConciliacion.RECHAZADO) },
+  { valor: EstadoConciliacion.REVERTIDO, label: etiquetaEstadoTransaccion(EstadoConciliacion.REVERTIDO) },
 ];
 
 /**
@@ -129,6 +130,7 @@ function adaptarTransaccionesHistorial(
       referenciaBancaria: tx.referencia ?? null,
       fechaOperacion: tx.createdAtUtc ? tx.createdAtUtc.slice(0, 10) : '',
       estadoConciliacion: (tx.estado as EstadoConciliacion) ?? EstadoConciliacion.PENDIENTE,
+      motivoReversion: tx.motivoReversion ?? null,
       fechaReporteUtc: tx.createdAtUtc,
       createdAtUtc: tx.createdAtUtc,
       updatedAtUtc: tx.createdAtUtc,
@@ -1039,6 +1041,9 @@ export function PagosPage() {
                                 : normalizarEstadoTransaccion(tx.estadoConciliacion) ===
                                   EstadoConciliacion.RECHAZADO
                                 ? 'bg-destructive/15 text-destructive border border-destructive/20'
+                                : normalizarEstadoTransaccion(tx.estadoConciliacion) ===
+                                  EstadoConciliacion.REVERTIDO
+                                ? 'bg-secondary text-muted-foreground border border-border'
                                 : 'bg-warning/15 text-warning border border-warning/20'
                             }`}
                           >
@@ -1060,6 +1065,16 @@ export function PagosPage() {
                         </p>
                       </div>
                     </div>
+
+                    {/* RF-007: pago revertido por el entrenador, con su motivo */}
+                    {normalizarEstadoTransaccion(tx.estadoConciliacion) ===
+                      EstadoConciliacion.REVERTIDO && (
+                      <p className="p-3 rounded-xl bg-secondary/40 border border-border text-xs text-foreground mt-1">
+                        {tx.motivoReversion
+                          ? `Motivo: ${tx.motivoReversion}`
+                          : 'Tu entrenador revirtió este pago.'}
+                      </p>
+                    )}
 
                     {/* UX CRÍTICA: VISIBILIDAD DEL MOTIVO DE RECHAZO */}
                     {normalizarEstadoTransaccion(tx.estadoConciliacion) ===

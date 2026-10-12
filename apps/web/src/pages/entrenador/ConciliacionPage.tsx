@@ -8,6 +8,7 @@ import { rebanarPagina } from '../../lib/paginacion';
 import { usePaginacionServidor } from '../../lib/use-paginacion-servidor';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import { Paginacion } from '../../components/common/Paginacion';
+import { DialogoConfirmacion } from '../../components/common/DialogoConfirmacion';
 import {
   TransaccionPagoDetalleDTO,
   BandejaConciliacionDTO,
@@ -116,6 +117,9 @@ export function ConciliacionPage() {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   // D5: fallo de conciliación visible; la transacción no desaparece si el server no confirmó.
   const [actionError, setActionError] = useState<string | null>(null);
+  // RF-007: el pago se aprueba solo tras confirmarlo; `aprobando` evita el doble envío.
+  const [pagoPorAprobar, setPagoPorAprobar] = useState<TransaccionPagoDetalleDTO | null>(null);
+  const [aprobando, setAprobando] = useState(false);
   // WU20: filtros client-side de la bandeja (búsqueda por alumno/referencia + método de pago).
   // WU25b: con paginación server-side se aplican sobre la PÁGINA cargada (el endpoint no acepta
   // filtros); la UI muestra el conteo "en esta página" para no confundir con el total en cola.
@@ -505,7 +509,7 @@ export function ConciliacionPage() {
                     Rechazar con Motivo
                   </button>
                   <button
-                    onClick={() => handleAprobar(tx.id)}
+                    onClick={() => setPagoPorAprobar(tx)}
                     className="flex-1 sm:flex-initial py-2 px-5 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
                   >
                     Aprobar y Descontar Saldo
@@ -519,6 +523,42 @@ export function ConciliacionPage() {
       )}
 
       {/* Reject Modal */}
+      <DialogoConfirmacion
+        abierto={pagoPorAprobar !== null}
+        idTitulo="conciliacion-confirmar-aprobacion"
+        titulo={`¿Aprobar el pago de ${pagoPorAprobar?.clienteNombre ?? 'este alumno'}?`}
+        detalle={
+          <>
+            <p>{`Se descontarán ${pagoPorAprobar?.montoEquivalenteUsd ?? ''} USD de su cuota.`}</p>
+            {pagoPorAprobar &&
+              avisoExcedenteAprobacion(
+                pagoPorAprobar.montoEquivalenteUsd,
+                pagoPorAprobar.saldoPendienteCuotaUsd
+              ) && (
+                <p className="mt-1 font-semibold text-foreground">
+                  {avisoExcedenteAprobacion(
+                    pagoPorAprobar.montoEquivalenteUsd,
+                    pagoPorAprobar.saldoPendienteCuotaUsd
+                  )}
+                </p>
+              )}
+          </>
+        }
+        textoConfirmar="Aprobar pago"
+        procesando={aprobando}
+        onCancelar={() => setPagoPorAprobar(null)}
+        onConfirmar={async () => {
+          if (!pagoPorAprobar || aprobando) return;
+          setAprobando(true);
+          try {
+            await handleAprobar(pagoPorAprobar.id);
+          } finally {
+            setAprobando(false);
+            setPagoPorAprobar(null);
+          }
+        }}
+      />
+
       {rejectingTx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
           <div
@@ -715,7 +755,7 @@ export function ConciliacionPage() {
                 </button>
                 <button
                   onClick={() => {
-                    handleAprobar(viewingComprobanteTx.id);
+                    setPagoPorAprobar(viewingComprobanteTx);
                     setViewingComprobanteTx(null);
                   }}
                   className="flex-1 sm:flex-initial py-2 px-5 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"

@@ -2,7 +2,8 @@
  * WU20: filtros del historial de pagos del alumno (chips por estado de conciliación).
  *
  * Espeja EXACTAMENTE lo que cada fila ya renderiza: aprobado → "Verificado",
- * rechazado → "Rechazado" y cualquier otro valor → "En Revisión" (pendiente).
+ * rechazado → "Rechazado", revertido → "Revertido" (RF-007) y cualquier otro valor → "En Revisión"
+ * (pendiente).
  */
 import { EstadoConciliacion, type TransaccionPagoDetalleDTO } from '@guachafit/shared';
 
@@ -16,6 +17,7 @@ export function normalizarEstadoTransaccion(
 ): EstadoConciliacion {
   if (estado === EstadoConciliacion.APROBADO) return EstadoConciliacion.APROBADO;
   if (estado === EstadoConciliacion.RECHAZADO) return EstadoConciliacion.RECHAZADO;
+  if (estado === EstadoConciliacion.REVERTIDO) return EstadoConciliacion.REVERTIDO;
   return EstadoConciliacion.PENDIENTE;
 }
 
@@ -26,6 +28,8 @@ export function etiquetaEstadoTransaccion(estado: string | null | undefined): st
       return 'Verificado';
     case EstadoConciliacion.RECHAZADO:
       return 'Rechazado';
+    case EstadoConciliacion.REVERTIDO:
+      return 'Revertido';
     default:
       return 'En Revisión';
   }

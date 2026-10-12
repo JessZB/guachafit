@@ -3045,6 +3045,7 @@ export class FinanzasService {
             metodoPago: t.metodoPago,
             referencia: t.referenciaBancaria || undefined,
             estado: t.estadoConciliacion,
+            motivoReversion: t.motivoReversion ?? null,
             createdAtUtc: toIsoSafe(t.createdAtUtc),
           })),
         };

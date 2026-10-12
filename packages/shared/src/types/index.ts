@@ -525,6 +525,8 @@ export interface ResumenFinancieroAlumnoDTO {
     metodoPago: string;
     referencia?: string;
     estado: string;
+    /** RF-007: motivo de la reversión; `null` si el pago no fue revertido. */
+    motivoReversion?: string | null;
     createdAtUtc: string;
   }>;
 }
