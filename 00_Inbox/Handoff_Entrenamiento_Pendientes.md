@@ -38,12 +38,7 @@ Repo/vault: C:\Users\jesus\OneDrive\Documentos\Obsidian Vault\Trabajo\GUACHAFIT 
 4. Escritura segura: valida antes de abrir un archivo para escribir, usa un temporal + `os.replace` y respeta CRLF. Nunca hagas `checkout`/`restore` de archivos completos: puede haber otra sesión en `main`. Commitea solo tus rutas y revisa `git diff --cached`.
 
 ## Pendientes, en este orden
-1. **Revisión de un enfoque (fiabilidad) del lote E7**, commit `63369d7`:
-   - pegar con unidad;
-   - preferido en `sessionStorage` derivado en el render;
-   - `clonarSesionParaEdicion` en los handlers;
-   - peso corporal filtrado.
-2. **Test de la rama "no cerrar" del cronómetro:** un rechazo de una serie que no es la del cronómetro no lo cierra. Está en `handleToggleSet` de `EntrenamientoPage.tsx`, con la ref `serieDelCronometroVigente`.
+1. ✅ **Revisión de fiabilidad del lote E7** y ✅ **test de la rama "no cerrar" del cronómetro**: hechos en `7ca9fcf`, con dos hallazgos corregidos (ver RF-001 §7.15). Siguiente: el punto 3.
 3. **Extraer la fila de serie** (`renderFilaSerie` en `EntrenamientoPage.tsx`) a un componente `FilaSerieEdicion`, con props explícitas (valores mostrados, errores y handlers). Requisitos:
    - sin cambio de comportamiento: verificar con la comparación mecánica que se usó en E5/E6;
    - después, un spec de interacción del borrador de repeticiones (vaciar y salir, stepper, completar).

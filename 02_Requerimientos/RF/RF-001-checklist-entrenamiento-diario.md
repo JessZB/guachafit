@@ -213,8 +213,13 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
 - **Copia inmutable:** los handlers de series (`handleToggleSet`, `handleUpdateSerieValue`, `handleStepSerieValue`) trabajan sobre `clonarSesionParaEdicion` y ya no mutan el estado anterior.
 - **Sesión en curso desde la caché:** cubierta con un spec sin conexión (Dexie): muestra el modo foco y no llama al API.
 - **Evidencia:** web 1575/1575 (lote 265/265), typecheck y build limpios.
+- **Límite aceptado del pegado:** se escribe el número en la unidad visible, sin convertir. `'135 lb'` pegado con la unidad en kg escribe 135 kg (decisión del dueño, 2026-10-12).
+- **Revisión de fiabilidad (2026-10-12, `7ca9fcf`):** aprobada con observaciones; se corrigieron dos.
+  - **Rechazo con edición en vuelo:** si el servidor rechaza una serie, solo se revierten `completada`, `timestampCompletadaUtc` y `descansoSegundos`. El peso, las reps y el RPE que el alumno editó mientras el envío estaba en vuelo se conservan.
+  - **Pegado en los ajustes de asignación:** `'60 kg'` solo se interpreta en Peso (ver RF-017 §6).
+  - **Tests nuevos:** rama "no cerrar" del cronómetro (un rechazo de otra serie no cierra el vigente), bordes del peso corporal (`'300,1'`), formatos de pegado no válidos y preferido fuera de rango.
+  - **Evidencia:** web 1585/1585, typecheck y build limpios.
 
 ### Pendiente
-- El ajuste del cronómetro de otra serie tras un rechazo (rama "no cerrar") no tiene test propio.
 - El borrador de repeticiones del alumno no tiene spec de interacción propio: la fila de serie es la función `renderFilaSerie` (lote E5), no un componente aislado.
 - Carrera de orden preexistente en `EntrenamientoPage` (§7.10): un envío directo en vuelo puede llegar después de un cambio encolado posterior de la misma sesión.
