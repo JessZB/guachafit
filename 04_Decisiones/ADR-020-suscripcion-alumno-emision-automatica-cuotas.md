@@ -53,7 +53,7 @@ El plan asignado vive en el **perfil del alumno** como una suscripción, y las c
 4. **Emisión:** el barrido diario de cobranza llama primero a `emitirCuotasProgramadas` y después evalúa los estados.
    - Recorre los alumnos activos con plan.
    - Por alumno abre una transacción con el contexto RLS del coach, bloquea la fila (`FOR UPDATE`), revalida estado y archivado, emite la cuota y avanza `proximo_corte`.
-   - El índice `uq_cuota_cliente_plan_periodo` impide duplicados.
+   - El índice `uq_cuota_cliente_plan_periodo` impide duplicados. Desde la 0022 (RF-008, 2026-10-12) es parcial (`WHERE estado <> 'anulada'`): una cuota anulada no ocupa su periodo, así que anular, quitar el plan y reasignarlo emite la cuota corregida; nunca hay dos vigentes del mismo periodo.
    - Un becado (override de $0.00) recibe su cuota en `al_dia`.
 5. **Recordatorios:** a las 09:00 locales del alumno, también en días de cambio de horario. Si la cuota se emite el mismo día local de un hito ya pasado, ese hito sale de inmediato. Las llamadas a Redis esperan como máximo 3 s.
 6. **Cobro en sala:**

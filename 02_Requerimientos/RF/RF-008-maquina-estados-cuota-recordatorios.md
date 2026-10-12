@@ -4,7 +4,7 @@ modulo: Finanzas
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-10-10
+fecha_verificacion: 2026-10-12
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -125,6 +125,21 @@ Then el estado de la cuota debe transicionar a "Vencida / En Mora"
 - **Aviso tardío:** si un aviso llega con más de 24 h de retraso respecto a su hora (un `add` que quedó encolado mientras Redis estaba caído), se descarta (`hito_obsoleto`).
 - **Emisión manual retirada:** ya no existe la ruta que agendaba los hitos sin zona.
 - Evidencia: `m5p1-reconciliar-recordatorios.spec.ts`, `m5p1-procesador-recordatorios.spec.ts`, `m5p1-scheduler-pausa-hitos.spec.ts`, `m5p1-barrido-recordatorios.spec.ts`; API **1491** aprobados (6 omitidos). Revisado con los 4 enfoques y validado.
+
+### Anulación de cuotas (reglas del 2026-10-12, API implementada el 2026-10-12, `7f46acc`)
+Reglas validadas con un Día del Juicio (dos jueces) sobre el código real. Ruta `POST /finanzas/cuotas/:id/anular` con `{ "motivo": "…" }`; migración `0022` (motivo, fecha y autor; índice único parcial).
+- **Quién y dónde:** solo el entrenador dueño, desde la ficha del alumno (también de alumnos archivados). No en demo. Una cuota de otro entrenador o inexistente responde el mismo 404.
+- **Qué cuotas:** sin pagos aprobados y sin pagos en revisión ("Primero aprueba o rechaza el pago en revisión de esta cuota."). Los pagos rechazados o revertidos no bloquean y quedan en el historial. Es terminal: una cuota anulada no se reactiva y anularla otra vez responde 409 sin repetir el aviso.
+- **Motivo obligatorio:** se guardan motivo, fecha y quién anuló.
+- **Dinero:** si la cuota nació con saldo a favor aplicado, ese monto vuelve al saldo a favor del alumno (se bloquea la cuota y después el perfil). La cuota anulada queda sin deuda (abonado y pendiente en 0; el total se conserva para el historial).
+- **Efectos:** sale de mora, "por vencer", saldo pendiente del historial, cuota del mes del alumno y meta de cobranza del dashboard. Sus recordatorios se cancelan (best-effort) y el procesador ya los descarta. Mientras la suscripción siga, el periodo no se vuelve a emitir.
+- **Corregir una cuota mal emitida (decisión del 2026-10-12):** la cobertura de la suscripción ignora las cuotas anuladas (como ya decía ADR-020), así que el entrenador puede anular, quitar el plan y reasignarlo con la fecha correcta. Si al reasignar elige una fecha dentro del periodo anulado, ese periodo se vuelve a cobrar: es la corrección buscada. Para que funcione también con el mismo plan y el mismo mes, una cuota anulada no ocupa su periodo: la emisión la ignora y el índice único de cuotas por alumno, plan y periodo solo cuenta las no anuladas (migración 0022).
+- **Concurrencia:** la anulación, el reporte del alumno y la conciliación bloquean la cuota; ninguna puede dejar una cuota anulada con un pago en revisión o aprobado.
+- **Aviso al alumno:** "Tu entrenador anuló una cuota" con el motivo; en Pagos la cuota se ve "Anulada".
+- **Diálogo:** avisa que ese periodo no se cobrará aunque el alumno siga entrenando y, si tiene plan, que lo quite si dejó el gimnasio.
+- **Fuera de alcance (lotes futuros):** congelar la membresía (lesión o viaje) con la cuota pagada; condonar el resto de una cuota con abono.
+- **Pendiente:** la web (botón "Anular cuota" con su diálogo en la ficha y el estado "Anulada" con el motivo en Pagos del alumno); hoy solo existe la API.
+- Evidencia: `rf008-anulacion-cuota.spec.ts` (30), `rf008-anulacion-cuota-efectos.spec.ts` (13) y `rf008-anulacion-cuota-concurrencia.e2e.spec.ts` (12 contra PostgreSQL: anular contra reportar ×10, doble anulación e índice parcial). API **1735** aprobados (29 omitidos); e2e de finanzas en verde. Revisado con los 4 enfoques y validado.
 
 **Límites aceptados:**
 
