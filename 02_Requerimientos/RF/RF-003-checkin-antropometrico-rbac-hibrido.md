@@ -136,6 +136,9 @@ Con los tres criterios pendientes cerrados (Escenario 2, §6 y Escenario 3), el 
 - **Seguridad (RNF-001):** el API rechaza con 400 (`MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA`) toda foto cuya clave no sea `antropometria/{alumnoId}/…` con la estructura del presign, antes de guardar nada. Antes se aceptaba cualquier texto, lo que permitía registrar la clave de una foto ajena y leerla con la URL firmada. Además, el detalle, la evolución y el comparador ya no firman fotos con clave ajena (defensa ante filas antiguas).
 - Evidencia: `apps/web/src/lib/antropometria-fotos.spec.ts`, `components/antropometria/SelectorFotosCheckin.spec.tsx`, `pages/atleta/ProgresoPage.fotos.interaccion.spec.tsx`, `pages/entrenador/AlumnoDetallePage.control-sala.interaccion.spec.tsx`, `apps/api/test/bdd/antropometria-service.spec.ts`; web **1115** aprobados, API **1334** (1 omitida); typecheck y build en verde. Revisado con los 4 enfoques y validado tras las correcciones (19 resueltos, 7 en seguimiento).
 
+### Peso corporal filtrado al teclear (2026-10-12, `63369d7`)
+- El peso del check-in del alumno y el de la medición del entrenador solo dejan escribir números de hasta 300 kg con 2 decimales (`filtrarEntradaPesoCorporal`); el mínimo de 30 kg sigue validándose al enviar, como exige `CheckinAntropometricoSchema`. Evidencia: spec `ProgresoPage.peso.interaccion.spec.tsx`; web 1575/1575.
+
 ### Pendiente
 - **Fotos huérfanas:** una foto subida y luego quitada, o un check-in que no se llega a enviar, deja el objeto en la bóveda (no hay borrado ni barrido). Ver [[RNF-001-almacenamiento-seguridad-fotos-progreso]].
 - **Modo demo:** resuelto el 2026-10-09 (`84643ef`) para el check-in, que ahora se simula en local y lo dice; en la demostración, el título "¡Mediciones Guardadas!" convive con el aviso "En la demostración no se envía nada a tu entrenador." (podría ser más claro). Las pantallas de Nutrición y Pagos del alumno en demo siguen llamando al API.

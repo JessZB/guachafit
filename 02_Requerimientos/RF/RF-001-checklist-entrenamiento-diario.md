@@ -4,7 +4,7 @@ modulo: Entrenamiento
 prioridad: alta
 estado: implementado
 version_implementada: v1.3.0
-fecha_verificacion: 2026-10-11
+fecha_verificacion: 2026-10-12
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0
@@ -207,11 +207,14 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
 - **Errores y accesibilidad:** un rechazo del servidor sobre una serie que no está en foco se avisa también en el banner superior; el cronómetro solo se cierra si era el de la serie rechazada; el bloque visible del progreso es una región viva que anuncia cada avance.
 - **Evidencia:** web 1448/1452 (los 4 rojos son de la conciliación de RF-006/007, en curso en otra sesión), lote y página 66/66 (incluye rechazo 4xx sin modo demo), typecheck y build limpios; revisión de fiabilidad sin bloqueos, sus hallazgos corregidos en `0194fcb`.
 
+### 7.15. Cierre de pendientes del módulo (2026-10-12, `63369d7`)
+- **Pegar con unidad:** pegar `'60 kg'`, `'60,5 kg'` o `'135 lb'` en un campo de peso (alumno, entrenador y ajustes de asignación) escribe el número (`extraerNumeroPegado`); un texto con otra cosa (`'2x20 kg'`) sigue sin escribirse.
+- **"Hacer ahora" persistente:** el ejercicio elegido se guarda en `sessionStorage` por sesión y se aplica **desde el primer render** al recargar (se deriva en el render, sin parpadeo del ejercicio 1); si el navegador bloquea el almacenamiento, vive solo en memoria (`lib/sesion-estado.ts`).
+- **Copia inmutable:** los handlers de series (`handleToggleSet`, `handleUpdateSerieValue`, `handleStepSerieValue`) trabajan sobre `clonarSesionParaEdicion` y ya no mutan el estado anterior.
+- **Sesión en curso desde la caché:** cubierta con un spec sin conexión (Dexie): muestra el modo foco y no llama al API.
+- **Evidencia:** web 1575/1575 (lote 265/265), typecheck y build limpios.
+
 ### Pendiente
-- Falta un caso de interacción para una sesión `EN_PROGRESO` cargada desde la caché (cubierto por la lógica existente, sin spec de página).
-- El ejercicio elegido con "Hacer ahora" se pierde al recargar: el foco vuelve a la primera serie pendiente.
-- `handleToggleSet` copia la sesión de forma superficial y muta la serie del estado anterior (preexistente, sin efecto visible); conviene una copia inmutable.
 - El ajuste del cronómetro de otra serie tras un rechazo (rama "no cerrar") no tiene test propio.
-- Pegar un texto con unidad (`'60 kg'`) en un campo de peso no escribe nada: solo se aceptan números.
-- El borrador de repeticiones del alumno no tiene spec de interacción; se cubrirá en el lote E5 al extraer la fila de serie a su propio componente.
-- Los pesos corporales de la antropometría (check-in del alumno y medición del entrenador) aún no filtran al teclear (otro dato, de 30 a 300 kg); validan al enviar.
+- El borrador de repeticiones del alumno no tiene spec de interacción propio: la fila de serie es la función `renderFilaSerie` (lote E5), no un componente aislado.
+- Carrera de orden preexistente en `EntrenamientoPage` (§7.10): un envío directo en vuelo puede llegar después de un cambio encolado posterior de la misma sesión.
