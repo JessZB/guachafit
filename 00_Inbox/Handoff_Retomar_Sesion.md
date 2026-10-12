@@ -1,8 +1,8 @@
 ---
 id: HANDOFF-RETOMA
-titulo: "Handoff — Prompt para retomar la validación por módulos"
-fecha: 2026-10-09
-estado: reemplazado
+titulo: "Handoff — Prompt para retomar el módulo 5 (Pagos y cartera)"
+fecha: 2026-10-12
+estado: activo
 tags:
   - handoff
   - retoma
@@ -12,62 +12,52 @@ tags:
 
 # 🔁 Prompt de retoma (copiar y pegar al inicio de la próxima sesión)
 
-> Reemplazado el 2026-10-10 por [[Handoff_Modulo_Entrenamiento]] (el módulo 5 avanzó: ver ese handoff).
-
-> Uso: abrir una sesión nueva en la bóveda GUACHAFIT y pegar el bloque de abajo tal cual.
+> Uso: abrir una sesión nueva en la bóveda GUACHAFIT y pegar el bloque de abajo tal cual. El módulo de Entrenamiento lo trabaja OTRA sesión en paralelo: ver [[Handoff_Modulo_Entrenamiento]].
 
 ```markdown
-# Retomar: validación por módulos de GUACHAFIT (sesión nueva)
+# Retomar: módulo 5 (Pagos y cartera) de GUACHAFIT, sesión nueva
 
-Repo/vault: C:\Users\jesus\OneDrive\Documentos\Obsidian Vault\Trabajo\GUACHAFIT (rama main, sin push; último commit 7686bb3).
+Repo/vault: C:\Users\jesus\OneDrive\Documentos\Obsidian Vault\Trabajo\GUACHAFIT (rama main, sin push).
 
 ## Flujo de trabajo (Claude + OpenCode; reglas en 00_Reglas_Desarrollo_SDD.md §7 y ~/.claude/rules/opencode-director.md)
 - Tú (Claude) diriges, escribes el código de producción y el doc-sync. NO escribes ni ejecutas tests y NO lanzas sub-agentes de revisión.
-- Todo lo de pruebas y revisión va como prompt para OpenCode en `.opencode-prompts/<NN>-<lote>-<tipo>.md` (tipos: tests, verificacion, review-risk, review-resilience, review-readability, review-reliability, validacion). Reportes en `.opencode-prompts/reportes/<mismo nombre>.reporte.md`.
-- Yo ejecuto cada prompt en la TUI de OpenCode pegando: `Lee y ejecuta exactamente el prompt .opencode-prompts/<archivo>.md y deja el reporte en la ruta que indica.` NUNCA ejecutes opencode tú ni me des comandos `opencode run`.
-- Ciclo por lote: tests (fase roja, con contratos exactos) → implementas → verificación → revisión (1 enfoque si el riesgo es medio; los 4 si toca auth/seguridad/permisos/datos/migraciones o pasa de 400 líneas; son de solo lectura y pueden correr en paralelo) → corrección → validación → commit de código + commit `docs(vault): ...` → borrar los prompts y reportes del lote.
-- Verifica cada reporte contra `git status`/`git diff` antes de aceptarlo (que OpenCode no haya tocado producción) y revisa tú mismo lo crítico (p. ej. el `dist/sw.js`).
-- Doc-sync por commit: RF/RNF con `fecha_verificacion` y bloque "### <tema> (fecha, `sha`)" con mecanismo, límites y evidencia (números de suites); sección "### Pendiente" actualizada; ADR si hay decisión; `06_Guia_Pruebas_Manuales.md`. Ejemplos recientes: affec1f/da1c0a7, 84643ef/7686bb3.
-- Commits convencionales en español, SIN Co-Authored-By. No hacer push.
-- Puedes editar `.env.example`; NUNCA leas ni edites `.env`.
-- Una pregunta a la vez; ante decisiones de producto, pregúntame (con tu recomendación y su porqué).
-- Para editar archivos con muchas comillas/backticks, escribe un script Python en el scratchpad y ejecútalo (los heredocs de Bash fallan con ese contenido).
+- Pruebas y revisiones van como prompts para OpenCode en `.opencode-prompts/<NN>-<lote>-<tipo>.md`; reportes en `.opencode-prompts/reportes/<mismo>.reporte.md`. Yo los ejecuto en la TUI de OpenCode pegando: `Lee y ejecuta exactamente el prompt .opencode-prompts/<archivo>.md y deja el reporte en la ruta que indica.` NUNCA ejecutes opencode ni des comandos `opencode run`.
+- Ciclo por lote: tests (fase roja con contratos exactos) → implementas → verificación → revisión (1 enfoque si riesgo medio; 4 si dinero/datos/seguridad/migraciones o >400 líneas) → corrección → validación → commit de código + commit `docs(vault): ...` → borrar los prompts y reportes del lote.
+- Verifica cada reporte contra `git status`/`git diff` (que OpenCode no haya tocado producción) antes de aceptarlo.
+- Commits convencionales en español, SIN Co-Authored-By. No hacer push. Puedes editar `.env.example`; NUNCA leas ni edites `.env`. `.claude/settings.json` y `Notas del 09-10-2026.md` sin seguimiento no son parte del trabajo.
+- Una pregunta a la vez; ante decisiones de producto, pregúntame con tu recomendación y su porqué.
+- Para editar con comillas/backticks usa un script Python escrito con Write (los heredocs de Bash fallan) y ancla los patrones al salto de línea previo (un patrón con N espacios coincide dentro de una línea con más espacios).
 
-## Objetivo
-Validar, módulo por módulo, que se cumplan los RF/RNF de `02_Requerimientos/` desde los tres roles (administrador, entrenador, alumno), y corregir lo que falte. Por módulo:
-1. Auditoría de solo lectura (tú, con CodeGraph primero): cumplimiento por criterio y por rol con archivo:línea y tests; textos con jerga o poco claros (actual → propuesto, español claro con tuteo); UX (carga/vacío/error, accesibilidad, 44px, confirmaciones); PWA offline. Ojo: un RF marcado "implementado" puede no serlo (en el módulo 4 la subida de fotos no existía en la web).
-2. Informe corto y priorizado, separando front y API, y las decisiones de producto que necesites (una a la vez).
-3. Correcciones por lotes con el ciclo de arriba.
+## CONVIVENCIA CON LA OTRA SESIÓN (importante)
+- Otra sesión trabaja en Entrenamiento en la MISMA rama y el MISMO árbol (EntrenamientoPage, components/atleta, modo-foco, SelectorPlantillaAsignacion, asignacion-pasos…, prompts `.opencode-prompts/1x-3x-e*`).
+- Haz commit SIEMPRE nombrando tus archivos (`git add <lista>`), nunca `git add -A`. Antes de commitear revisa `git status` y que los archivos compartidos (p. ej. `packages/shared/src/*`) solo lleven tus cambios.
+- Si necesitas editar un archivo que la otra sesión tiene modificado sin commit, espera a que lo commitee.
+- En los prompts para OpenCode di qué archivos son ajenos y pide demostrar en aislamiento cualquier fallo ajeno. Los timeouts de 5 s en specs HTTP del API son por carga: se re-ejecutan en aislamiento.
+- Engram puede fallar con "multiple active runtime sessions": avisa y sigue.
 
-## Módulos
-- ✅ 1 Acceso y roles (RF-010, RF-011, RF-012, RNF-003)
-- ✅ 2 Entrenamiento (RF-001, RF-017)
-- ✅ Pendientes de API de los módulos 1-2 y lote de despliegue
-- ✅ 3 Nutrición (RF-002): zona horaria del perfil, reportes tardíos, copia de metas
-- ✅ Ajustes por rol (RF-018): perfil, correo con confirmación, contraseña; tiempo límite de guardados; pruebas de interacción con jsdom
-- ✅ 4 Evolución corporal y fotos (RF-003, RF-004, RNF-001): fotos opcionales del check-in (decisión del dueño), claves de la bóveda validadas por alumno, privacidad (sin EXIF, caché sin enlaces firmados, Safari/iPhone)
-- ⏳ 5 Pagos y cartera (RF-005, RF-006, RF-007, RF-008, RF-009, RNF-002) ← EMPEZAR AQUÍ (RF-005..008 y RNF-002 constan como parcial; RF-009 como implementado: verifícalo)
-- ⏳ 6 Dashboard del entrenador (RF-013)
-- ⏳ 7 Notificaciones y preferencias (RF-014, RF-015, RF-016, RNF-004)
-- ⏳ 8 PWA offline (transversal: al cierre de todos los módulos)
+## Estado del módulo 5 (lo hecho en esta tanda)
+- Saldo a favor (RF-006 RN-05): API `afd3f7c`/`cefec40`, web `b975905`/`1492ef3`. Migración 0019. Regla de bloqueos documentada en `acreditarSaldoAFavor` (aprobar/cobrar: cuota → perfil; ninguna ruta que bloquee el perfil toca después una cuota existente).
+- Reversión de pagos aprobados (RF-007): API `4878d7e`/`613737b` (migraciones 0020 estado `revertido` y 0021 índice de referencias con `IN ('pendiente','aprobado')`; un pago revertido libera su referencia), web `e16039d`/`e7191ae` (confirmación al aprobar en Conciliación, "Revertir pago" en la ficha, estado "Revertido" en los historiales).
 
-## Estado y referencias
-- Tests: API 1334 passed / 1 skipped; web 1134 (94 archivos). Algunos tests HTTP del API fallan de forma intermitente por timeout bajo carga: re-ejecutar antes de concluir.
-- Web: vitest con entorno `node` por defecto; los specs de interacción `*.spec.tsx` declaran `// @vitest-environment jsdom` (jsdom + @testing-library/react como devDependencies).
-- Docker local: Postgres `guachafit-postgres`, Redis y MinIO (`docker compose up -d`); migraciones con `pnpm db:migrate`.
-- Decisiones: hosting VPS + Coolify (ADR-017), correo Brevo (ADR-018), borrado best-effort en la bóveda (ADR-015), guía de despliegue en 05_Arquitectura/04_Guia_Despliegue_VPS_Coolify.md.
-- Convenciones para reutilizar: errores en apps/web/src/lib/mensajes-error.ts y apps/api/src/common/errores/ (parsearContrato, jerga.ts); mensajes de acceso en apps/api/src/common/mensajes-acceso.ts; códigos de error en packages/shared/src/codigos-error.ts; api-client con `tiempoLimiteMs`, `ErrorDeConexion`, `ErrorTiempoAgotado`; compresión `lib/imagen-comprimida.ts`; subida con reintentos `lib/antropometria-fotos.ts`; patrón de comprobantes `lib/comprobante-pago.ts`; DialogoConfirmacion, AvisoDatosOffline, useTabsAccesibles y la cola offline por sesión en apps/web.
-- Trucos de entorno: en Git Bash, `docker run ... /app/...` necesita MSYS_NO_PATHCONV=1; `docker --env-file` no quita comillas de .env.example. Engram puede fallar con "multiple active runtime sessions": si pasa, avisa y sigue.
-- `.claude/settings.json` sin seguimiento no es parte del trabajo: no lo commitees.
+## EN CURSO: lote "pagos con fecha anterior" (RF-007/RF-009), SIN COMMIT
+- Reglas del dueño (RF-007 "### Pagos con fecha anterior: reglas aprobadas"): cobro en sala con fecha (hoy por defecto y máximo); la API rechaza fechas futuras (cobro en sala y reporte del alumno); en Bs. la tasa vigente al registrar se muestra en el modal; el recaudado del mes cuenta por fecha de registro.
+- Implementado y validado (prompt 03 en verde: web 1516, API 1690 +17 omitidas):
+  - shared: `MENSAJE_FECHA_PAGO_FUTURA`; `CobroDirectoInteligenteSchema.fechaOperacion` opcional sin default UTC.
+  - API (`finanzas.service.ts`): `esFechaPagoFutura` (compara con el día de `Pacific/Kiritimati`, UTC+14), 400 en `reportarPago`, `cobroDirecto` y cobro inteligente (antes de emitir); sin fecha, el cobro inteligente usa el día local del alumno.
+  - web: `lib/cobro-sala.ts` (`validarFechaCobro`, `textoTasaCobro`); CarteraPage (max, validación, tasa, texto sin jerga); ficha (campo fecha, tasa con `/finanzas/tasas/vigente?clienteId=`, "Registrando cobro…"); PagosPage (max y validación). En ficha y PagosPage, `onInvalid` sustituye la burbuja nativa por nuestro mensaje (sin `noValidate`, para conservar la validación nativa del resto).
+- **Siguiente paso:** el usuario va a ejecutar (o ya ejecutó) `.opencode-prompts/04-rf009-fecha-anterior-review-reliability.md`. Lee su reporte en `.opencode-prompts/reportes/04-rf009-fecha-anterior-review-reliability.reporte.md`, aplica correcciones si hace falta (+ validación), y cierra: commit de código nombrando estos archivos — `apps/api/src/modules/finanzas/finanzas.service.ts`, `apps/api/test/bdd/rf011-rf012-alumnos-edge-cases.spec.ts`, `apps/api/test/bdd/rf009-*.spec.ts` (3), `apps/web/src/lib/cobro-sala.ts`, `apps/web/src/lib/cobro-sala.fecha-anterior.spec.ts`, `apps/web/src/pages/atleta/PagosPage.tsx` + `PagosPage.fecha-anterior.interaccion.spec.tsx`, `apps/web/src/pages/entrenador/AlumnoDetallePage.tsx` + `AlumnoDetallePage.fecha-anterior.interaccion.spec.tsx`, `apps/web/src/pages/entrenador/CarteraPage.tsx` + `CarteraPage.fecha-anterior.interaccion.spec.tsx`, `packages/shared/src/schemas/index.ts` — y doc-sync (RF-007: pasar la sección de reglas a "implementado (fecha, sha)"; RF-009 si aplica; 06_Guia_Pruebas_Manuales.md). Luego borra los prompts/reportes `0[1-4]-rf009-fecha-anterior-*`.
 
-## Pendientes conocidos (documentados en el vault)
-- Módulo 5, ya detectados en el módulo 4: los comprobantes de pago no rechazan el original sin recodificar (EXIF); en modo demo, Pagos y Nutrición del alumno llaman al API; `comprobante-pago.ts` duplica la mecánica presign + PUT sin reintentos ni plazo.
-- RNF-001: fotos huérfanas en la bóveda (falta barrido, patrón ADR-015); pruebas de carga k6; menores (Reintentar inútil tras "no pudo preparar la foto", clave `__proto__`, bordes del plugin de caché).
-- RF-018: en Notificaciones/Zona horaria/Planes/Tasas se pierde el resultado al cambiar de pestaña con un guardado en vuelo; el GET del perfil sin tiempo límite; `aria-controls` colgante en pestañas del entrenador; jsdom 30 pide Node ≥ 22.22.2 sin piso declarado.
-- D2: apuntar el DATABASE_URL de desarrollo a `guachafit_app` (decisión mía).
-- Configuración real en Coolify sin verificar (no hay servidor aún).
-- Carrera de orden con envíos en vuelo en EntrenamientoPage; auditoría de accesos entre coaches solo en alumnos.service; el cliente de BD se crea al importar; throttler e idempotencia en memoria (con réplicas → Redis).
-- Duplicaciones: diálogo de borrar día/ejercicio, SelectorPlantillaAsignacion/AsignacionMasivaPlantilla, paneles Perfil/Seguridad entre PantallaAjustes y AjustesPage del entrenador; AlumnoDetallePage (4000+ líneas) con etiquetas sin `htmlFor` y textos de 11px.
+## Pendiente del módulo 5 (orden propuesto)
+1. Anulación de cuotas (necesita decisión de producto: quién, cuándo, qué pasa con pagos y saldo a favor).
+2. PagosPage del alumno: idempotencia del reporte, recarga, modo demo (Pagos y Conciliación llaman al API en demo), comprobantes sin EXIF (como las fotos de antropometría), accesibilidad.
+3. Lote web P2 de Control de Cobros: mostrar `proximoCorte`, precio residual tras reconciliar, éxito en modo demo, jerga, `htmlFor`, precarga de becados.
+4. Seguimientos documentados: reconciliador de la invariante de saldo (RNF-002), `ReportarPagoSchema` sin tope de monto, mensajes de éxito que no se borran solos, mutaciones sin `tiempoLimiteMs`, e2e de RF-006 que usa el barrido global de emisión.
+Después: módulo 6 (Dashboard del entrenador, RF-013), 7 (Notificaciones, RF-014..016, RNF-004), 8 (PWA offline transversal).
 
-Empieza revisando memoria (mem_search "guachafit módulo 5 pagos cartera") y luego haz la auditoría de solo lectura del módulo 5 (RF-005..RF-009, RNF-002) con CodeGraph, y dame el informe priorizado.
+## Referencias
+- Tests base (al 2026-10-12): web ~1516, API ~1690 (+17 omitidas). Docker: `guachafit-postgres` (migraciones con `pnpm db:migrate`; e2e con `E2E_DATABASE_URL`).
+- Decisiones: ADR-020 (suscripción y emisión automática), ADR-015 (borrado best-effort en la bóveda), ADR-017/018 (hosting, correo).
+- Piezas a reutilizar: `lib/saldo-a-favor.ts`, `lib/pagos-historial-filtros.ts`, `DialogoConfirmacion` (con `confirmarDeshabilitado`), `estadoCuotaTrasRetirarAbono`, `repartirAbono`, `api-client` (`tiempoLimiteMs`), `lib/imagen-comprimida.ts`.
+
+Empieza revisando memoria (mem_search "guachafit módulo 5 fecha anterior") y el reporte 04 de la revisión de fiabilidad; si aún no existe, pídeme que ejecute ese prompt.
 ```
