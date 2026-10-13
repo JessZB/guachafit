@@ -76,7 +76,7 @@ Orden: (M ∥ F) → S → D → R. Si R encuentra BLOCKERs, Claude redacta un p
 - [x] M: `100`–`106`.
 - [x] F: `107`.
 - [x] S: `108`, `109` (+ corrección `115`).
-- [ ] D: `110`.
+- [x] D: `110`.
 - [ ] R: `111`–`114`.
 - [ ] Claude: verificación contra el diff, un commit por módulo, ADR-023, `docs(vault)` y limpieza.
 
@@ -107,5 +107,11 @@ Orden: (M ∥ F) → S → D → R. Si R encuentra BLOCKERs, Claude redacta un p
   - Commits `3f3b445` y `091a0f5`.
   - **Lección:** un prompt que mueve código debe ejecutar la suite completa de los paquetes que lo consumen, no solo el typecheck. Hay specs que leen el código fuente por ruta.
 
+- 2026-10-13 (Claude): `110` verificado.
+  - Guardián `apps/api/src/tamano-archivos.spec.ts` en verde (4/4), con exactamente 8 excepciones: los archivos de la Ola 2 del API.
+  - API: 1805 tests, typecheck 0 y build en verde. Web: 2105 tests, typecheck 0 y build en verde. Shared: typecheck 0.
+  - Borrador `04_Decisiones/ADR-023-casos-de-uso-servicios-api.md` (propuesto).
+  - Pendiente menor: los comentarios del guardián están en inglés, mientras que el de la web está en español.
+
 ## Siguiente paso
-- El dueño lanza `110`.
+- El dueño lanza `111`–`114` en paralelo (solo lectura).
