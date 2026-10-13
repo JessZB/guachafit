@@ -75,7 +75,7 @@ Orden: (M ∥ F) → S → D → R. Si R encuentra BLOCKERs, Claude redacta un p
 ## Checklist
 - [x] M: `100`–`106`.
 - [x] F: `107`.
-- [ ] S: `108`, `109`.
+- [x] S: `108`, `109` (+ corrección `115`).
 - [ ] D: `110`.
 - [ ] R: `111`–`114`.
 - [ ] Claude: verificación contra el diff, un commit por módulo, ADR-023, `docs(vault)` y limpieza.
@@ -99,5 +99,13 @@ Orden: (M ∥ F) → S → D → R. Si R encuentra BLOCKERs, Claude redacta un p
   - E2E omitidos (no hay `E2E_DATABASE_URL`).
   - Commits `5033c85`..`7ce6c9e`.
 
+- 2026-10-13 (Claude): fase S verificada contra el diff, con la corrección `115`.
+  - `schemas/index.ts` (1779) y `types/index.ts` (1435) quedan como barriles de 11 líneas, con 11 archivos de dominio cada uno; el más grande tiene 341 líneas (`schemas/notificaciones.ts`). Exports idénticos: 169 y 142.
+  - El `108` había duplicado 3 auxiliares no exportados (`campoPesoKg`, `campoRpe` y `fechaCalendarioRealSchema`). Ahora viven una sola vez en `schemas/campos-internos.ts`, fuera del barril.
+  - **Excepción a P6 autorizada por Claude:** dos specs leían el código fuente por la ruta de `index.ts`. `api2-errores-claros` tenía un test en rojo y otro que pasaba en vacío; `rf005-rf008` tenía uno en rojo que el `109` no detectó porque solo ejecutó typechecks. Ahora leen la carpeta completa, con los mismos tests y aserciones; el test de jerga sigue analizando 224 literales, igual que en HEAD.
+  - Resultados: API 1801 tests en verde x3 (29 omitidos, e2e), web 2105/2105, typechecks 0 y build en verde.
+  - Commits `3f3b445` y `091a0f5`.
+  - **Lección:** un prompt que mueve código debe ejecutar la suite completa de los paquetes que lo consumen, no solo el typecheck. Hay specs que leen el código fuente por ruta.
+
 ## Siguiente paso
-- El dueño lanza `108` y `109` en paralelo.
+- El dueño lanza `110`.
