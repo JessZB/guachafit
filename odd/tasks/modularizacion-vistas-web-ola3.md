@@ -39,7 +39,7 @@ Objetivo de tamaño: contenedor ≤ 300 y piezas ≤ 250. En los archivos más p
 | **D. Cierre** | `88` | No | `EXCEPCIONES_OLA3_NO_TRABAJADA` vacía, candidatos, verificación global → `reportes/cierre-ola3/` |
 
 ## Checklist
-- [ ] M: prompts `80`–`87`.
+- [x] M: prompts `80`–`87` (un commit por módulo).
 - [ ] D: prompt `88`.
 - [ ] Claude: verificación contra el diff, un commit por módulo, `docs(vault)` y limpieza.
 
@@ -51,6 +51,7 @@ Objetivo de tamaño: contenedor ≤ 300 y piezas ≤ 250. En los archivos más p
 
 ## Progreso
 - 2026-10-13: ODD creado, archivos medidos y prompts `80`–`88` redactados.
+- 2026-10-13 (Claude): fase M verificada contra el diff. Archivos: 638 → 223, 585 → 152, 559 → 244, 543 → 133, 466 → 113, 459 → 65, 432 → 275 y 412 → 95. Solo se tocó la superficie propia, sin editar specs existentes, y ninguna pieza nueva pasa de 250 líneas. Commits `9008807`..`43d146b`. Quedan 7 CANDIDATOS para el `88`. El guardián queda en rojo esperado (R15).
 
 ## Siguiente paso
-- El dueño lanza en paralelo los prompts `80`–`87`.
+- Prompt `88` (cierre), solo.
