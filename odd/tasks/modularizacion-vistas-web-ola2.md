@@ -44,7 +44,7 @@ Ajustes aprendidos en la Ola 1:
 
 ## Checklist
 - [x] M: prompts `70`–`75`. Commits `428ac00`..`17f8cbc`.
-- [ ] E: prompt `76` (convergencia del editor o decisión documentada de mantener la duplicación).
+- [x] E: prompt `76` (convergencia del editor o decisión documentada de mantener la duplicación).
 - [ ] D: prompt `77`.
 - [ ] Claude: verificación contra el diff, un commit por módulo, `docs(vault)` y limpieza.
 
@@ -58,6 +58,7 @@ Ajustes aprendidos en la Ola 1:
 ## Progreso
 - 2026-10-13: ODD creado, archivos medidos y prompts `70`–`77` redactados.
 - 2026-10-13 (Claude): fase M verificada contra el diff. Archivos: 977 → 246, 948 → 177, 888 → 122, 864 → 195, 830 → 174 y 772 → 112. Ninguna pieza nueva pasa de 289 líneas. Solo se tocó la superficie propia, sin editar specs existentes. Se crearon 9 specs de caracterización y 7 de lógica pura. Commit por módulo. El guardián queda en rojo esperado (R15) hasta el `77`.
+- 2026-10-13 (Claude): `76` verificado y commiteado en `9fe41c1`. Convergencia total con 16 props opcionales: se elimina `CatalogoEjerciciosRutina` y `ContenidoRutinaSemanal` pasa de 397 a 164 líneas. Los 164 tests de las 4 vistas afectadas mantienen el mismo conteo y typecheck da 0 errores. **BLOCKER-51-1 RESUELTO.**
 
 ## Siguiente paso
-- Prompt `76` (convergencia del editor), solo.
+- Prompt `77` (cierre), solo.
