@@ -73,8 +73,8 @@ Esos métodos pasan a delegar. Los specs hacen `new Servicio(db, …)` y `create
 Orden: (M ∥ F) → S → D → R. Si R encuentra BLOCKERs, Claude redacta un prompt `validacion` de corrección.
 
 ## Checklist
-- [ ] M: `100`–`106`.
-- [ ] F: `107`.
+- [x] M: `100`–`106`.
+- [x] F: `107`.
 - [ ] S: `108`, `109`.
 - [ ] D: `110`.
 - [ ] R: `111`–`114`.
@@ -90,6 +90,14 @@ Orden: (M ∥ F) → S → D → R. Si R encuentra BLOCKERs, Claude redacta un p
 
 ## Progreso
 - 2026-10-13: ODD creado y prompts `100`–`114` redactados.
+- 2026-10-13 (Claude): fases M y F verificadas contra el diff.
+  - Fachadas: finanzas 3386 → 282, entrenamiento 2221 → 334, alumnos 1431 → 240, auth 1279 → 194, antropometría 975 → 171, cartera 939 → 251 y nutrición 911 → 182. El caso de uso más grande tiene 289 líneas (`emision-programada.caso.ts`).
+  - Constructores, decoradores, métodos públicos, exports de módulo y privados usados con `as any` intactos.
+  - Sin cambios en ningún `*.module.ts` ni en ningún spec existente.
+  - Conteos de llamadas idénticos entre el servicio original y la fachada con sus casos: `withTenant(`, `FOR UPDATE`, transacciones, eventos y colas, `throw new`, `insert`/`update`/`delete`, `Math.round`/`toFixed` y códigos de error.
+  - W-52-2: presupuesto de 20 s y reintento acotado del clic; los 6 `expect` intactos.
+  - E2E omitidos (no hay `E2E_DATABASE_URL`).
+  - Commits `5033c85`..`7ce6c9e`.
 
 ## Siguiente paso
-- El dueño lanza `100`–`107` en paralelo.
+- El dueño lanza `108` y `109` en paralelo.
