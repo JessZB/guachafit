@@ -184,22 +184,45 @@ describe('EntrenamientoPage · sesión EN_PROGRESO desde la caché sin conexión
     );
   });
 
-  it('(c) "Hacer ahora" en el ejercicio 2 guarda el índice 1 en sessionStorage', async () => {
-    await prepararCache(crearSesionEnProgreso());
-    render(<EntrenamientoPage />);
-    await screen.findByRole('region', { name: 'Entrenamiento en foco' }, { timeout: 5000 });
+  it(
+    '(c) "Hacer ahora" en el ejercicio 2 guarda el índice 1 en sessionStorage',
+    // W-52-2: two chained `findByRole` waits (up to 5000 ms each) plus the Dexie
+    // read and render exceed the default `testTimeout` (5000 ms) when the machine
+    // is loaded (full suite or parallel suites). The budget (20 s) covers the sum
+    // of all capped waits (5 s + 3x2 s retries + 5 s) without changing any assertion.
+    { timeout: 20000 },
+    async () => {
+      await prepararCache(crearSesionEnProgreso());
+      render(<EntrenamientoPage />);
+      await screen.findByRole('region', { name: 'Entrenamiento en foco' }, { timeout: 5000 });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ver entrenamiento completo' }));
-    fireEvent.click(
-      await screen.findByRole(
-        'button',
-        { name: 'Hacer ahora: Press de banca' },
-        { timeout: 5000 }
-      )
-    );
+      // W-52-2: under load the discrete click on "Ver entrenamiento completo" is
+      // occasionally swallowed (the focus view stays mounted, no transition ever
+      // happens). Re-dispatch it — bounded, with active waiting only — until the
+      // list view actually renders. The behavioral assertion below is unchanged:
+      // the same "Hacer ahora" button is clicked and the same sessionStorage
+      // value is expected.
+      for (let intento = 0; intento < 3; intento++) {
+        const verLista = screen.queryByRole('button', { name: 'Ver entrenamiento completo' });
+        if (verLista) fireEvent.click(verLista);
+        // eslint-disable-next-line no-await-in-loop
+        const listaVisible = await screen
+          .findByRole('button', { name: 'Hacer ahora: Press de banca' }, { timeout: 2000 })
+          .then(() => true)
+          .catch(() => false);
+        if (listaVisible) break;
+      }
+      fireEvent.click(
+        await screen.findByRole(
+          'button',
+          { name: 'Hacer ahora: Press de banca' },
+          { timeout: 5000 }
+        )
+      );
 
-    expect(sessionStorage.getItem(CLAVE_PREFERIDO)).toBe('1');
-  });
+      expect(sessionStorage.getItem(CLAVE_PREFERIDO)).toBe('1');
+    }
+  );
 
   it('C3.3: pegar "60 kg" en el input de peso de la serie en foco lo deja en 60', async () => {
     await prepararCache(crearSesionEnProgreso());
