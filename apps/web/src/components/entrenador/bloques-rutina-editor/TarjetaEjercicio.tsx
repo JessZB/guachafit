@@ -8,7 +8,9 @@
  * es mecánica). Solo props y callbacks (R1): sin `useQuery` ni `api-client` (R9).
  * Conserva roles, labels, títulos y textos que usan los specs (R5). El estado de
  * renombre inline vive aquí: al cambiar de día las filas se desmontan (claves por
- * `ej.id`), así que no hace falta el reset que hacía el contenedor.
+ * `ej.id`), así que no hace falta el reset que hacía el contenedor. Convergence
+ * (76): reused by the alumno routine body with `mostrarNotas={false}` and the
+ * `editNameTitle` copy variant (Plantillas copy stays the default).
  *
  * §6: español claro, `filtrarEntradaRepsPrescritas`/`filtrarEntradaRpe` + `inputMode`
  * en numéricos, `formatearSegundos` en descansos, controles 44px (`min-h-11`/`h-11`),
@@ -30,6 +32,8 @@ interface TarjetaEjercicioProps {
   onActualizarCampo: (campo: string, valor: unknown) => void;
   onCambiarSeries: (delta: number) => void;
   onPedirBorrar: () => void;
+  /** Copy variant for the rename-pencil tooltip (default: Plantillas copy). */
+  editNameTitle?: string;
 }
 
 export function TarjetaEjercicio({
@@ -40,6 +44,7 @@ export function TarjetaEjercicio({
   onActualizarCampo,
   onCambiarSeries,
   onPedirBorrar,
+  editNameTitle = 'Editar el nombre del ejercicio',
 }: TarjetaEjercicioProps) {
   const [editandoNombre, setEditandoNombre] = useState(false);
 
@@ -84,7 +89,7 @@ export function TarjetaEjercicio({
                 <button
                   type="button"
                   onClick={() => setEditandoNombre(true)}
-                  title="Editar el nombre del ejercicio"
+                  title={editNameTitle}
                   aria-label={`Editar el nombre de ${ej.nombre}`}
                   className="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer shrink-0"
                 >

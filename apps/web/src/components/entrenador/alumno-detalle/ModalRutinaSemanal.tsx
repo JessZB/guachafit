@@ -2,10 +2,9 @@
  * Modal de prescripción / edición de la rutina semanal del alumno (contenedor de modal ÚNICO).
  *
  * Shell: overlay, header, aviso de éxito, cuerpo del editor, error, footer de acciones y
- * confirmación de borrado (C4). El cuerpo vive en `ContenidoRutinaSemanal` y el catálogo en
- * `CatalogoEjerciciosRutina`: recortes verbatim del modal original (626 líneas) para el tope
- * R2 de 400 líneas por archivo. La convergencia con `BloquesRutinaEditor` (matriz 48 fila 10)
- * está BLOQUEADA por R5 (BLOCKER-51-1 en el reporte 51). La fase D unifica el copy y converge.
+ * confirmación de borrado (C4). El cuerpo vive en `ContenidoRutinaSemanal` (adaptador
+ * sobre las piezas compartidas de `bloques-rutina-editor/`, convergencia 76,
+ * BLOCKER-51-1 RESUELTO): sin copias locales de editor ni de catálogo.
  *
  * Conserva idénticos `Asignar & Editar Rutina Semanal` (`role="dialog"` + `aria-modal`),
  * `Cerrar`, `Guardar planificación activa`, `N días configurados` y los diálogos
@@ -18,7 +17,6 @@ import { AlertCircle, CheckCircle2, Dumbbell, X } from 'lucide-react';
 import { pluralizar } from '../../../lib/pluralizar';
 import { DialogoConfirmacion } from '../../common/DialogoConfirmacion';
 import { ContenidoRutinaSemanal } from './ContenidoRutinaSemanal';
-import { CatalogoEjerciciosRutina } from './CatalogoEjerciciosRutina';
 import type { RetornoRutinaAlumno } from './use-rutina-alumno';
 
 export interface ModalRutinaSemanalProps {
@@ -109,11 +107,8 @@ export function ModalRutinaSemanal({
             </div>
           )}
 
-          {/* Pestañas de Días + Configuración + Ejercicios */}
+          {/* Pestañas de Días + Configuración + Ejercicios + Catálogo */}
           <ContenidoRutinaSemanal rutina={rutina} />
-
-          {/* Sección: Añadir Ejercicio desde Catálogo con Filtro & Creación Rápida */}
-          <CatalogoEjerciciosRutina rutina={rutina} />
 
           {rutinaErrorMsg && (
             <div className="p-3 rounded-xl bg-destructive/15 border border-destructive/30 text-destructive text-xs flex items-center gap-2">

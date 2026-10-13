@@ -7,6 +7,10 @@
  * mecánica). Solo props y callbacks (R1): sin `useQuery` ni `api-client` (R9).
  * Conserva `aria-pressed`, textos y clases que usan los specs (R5).
  *
+ * Convergence (76): reused by the alumno routine body via the optional
+ * `addDayLabel` variant (Plantillas copy stays the default). Extra `aria-pressed`
+ * and 44px targets do not alter any spec-queried name.
+ *
  * §6: español claro, controles 44px (`min-h-11`), piso 11px, tokens con variante
  * claro/oscuro, pesos ≤ 700.
  */
@@ -19,9 +23,11 @@ interface PestanasDiasProps {
   indiceActivo: number;
   onElegirDia: (indice: number) => void;
   onAgregarDia: () => void;
+  /** Copy variant for the add-day button (default: Plantillas copy). */
+  addDayLabel?: string;
 }
 
-export function PestanasDias({ bloques, indiceActivo, onElegirDia, onAgregarDia }: PestanasDiasProps) {
+export function PestanasDias({ bloques, indiceActivo, onElegirDia, onAgregarDia, addDayLabel = 'Añadir día' }: PestanasDiasProps) {
   return (
     <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-border/60">
       {bloques.map((bloque, idx) => {
@@ -54,7 +60,7 @@ export function PestanasDias({ bloques, indiceActivo, onElegirDia, onAgregarDia 
           className="min-h-11 py-1.5 px-3 rounded-xl bg-secondary/80 hover:bg-secondary text-primary font-bold text-xs flex items-center gap-1 cursor-pointer whitespace-nowrap"
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-          <span>Añadir día</span>
+          <span>{addDayLabel}</span>
         </button>
       )}
     </div>

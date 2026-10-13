@@ -6,7 +6,9 @@
  * (R3: los labels —`Número de día` frente a `Número de Bloque / Día` en
  * `ContenidoRutinaSemanal.tsx:85-103`— difieren, así que la sustitución no es
  * mecánica). Solo props y callbacks (R1): sin `useQuery` ni `api-client` (R9).
- * Conserva `id`, labels y textos que usan los specs (R5).
+ * Conserva `id`, labels y textos que usan los specs (R5). Convergence (76):
+ * reused by the alumno routine body via optional copy-variant props (Plantillas
+ * copy stays the default); same model, same lib, same delete semantics.
  *
  * §6: español claro, `pluralizar` en el mínimo, controles 44px (`min-h-11`),
  * piso 11px, tokens con variante claro/oscuro, pesos ≤ 700.
@@ -27,6 +29,13 @@ interface ConfiguracionDiaProps {
   minBloques: number;
   onCambiar: (bloques: BloqueEdicion[]) => void;
   onPedirBorrarDia: () => void;
+  /** Copy variants (defaults: Plantillas copy). */
+  dayNumberLabel?: string;
+  suggestedDayLabel?: string;
+  annotationLabel?: string;
+  annotationHint?: string;
+  focusLabel?: string;
+  previewLabel?: string;
 }
 
 export function ConfiguracionDia({
@@ -36,6 +45,12 @@ export function ConfiguracionDia({
   minBloques,
   onCambiar,
   onPedirBorrarDia,
+  dayNumberLabel = 'Número de día',
+  suggestedDayLabel = 'Día de la semana sugerido',
+  annotationLabel = 'Nombre corto del día (opcional)',
+  annotationHint = 'Se añade después del día elegido, por ejemplo «Día 1 (Lunes): Empuje».',
+  focusLabel = 'Enfoque o indicaciones (opcional)',
+  previewLabel = 'Así lo verá tu alumno:',
 }: ConfiguracionDiaProps) {
   const diaActivo = bloques[indiceActivo];
   if (!diaActivo) return null;
@@ -48,7 +63,7 @@ export function ConfiguracionDia({
             htmlFor={`${idBase}-dia-numero`}
             className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block"
           >
-            Número de día
+            {dayNumberLabel}
           </label>
           <select
             id={`${idBase}-dia-numero`}
@@ -76,7 +91,7 @@ export function ConfiguracionDia({
             htmlFor={`${idBase}-dia-sugerido`}
             className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block"
           >
-            Día de la semana sugerido
+            {suggestedDayLabel}
           </label>
           <select
             id={`${idBase}-dia-sugerido`}
@@ -126,7 +141,7 @@ export function ConfiguracionDia({
             htmlFor={`${idBase}-anotacion`}
             className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block"
           >
-            Nombre corto del día (opcional)
+            {annotationLabel}
           </label>
           <input
             id={`${idBase}-anotacion`}
@@ -143,7 +158,7 @@ export function ConfiguracionDia({
             className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs font-semibold text-foreground focus:outline-hidden focus:border-primary transition-colors"
           />
           <span className="text-[11px] text-muted-foreground block">
-            Se añade después del día elegido, por ejemplo «Día 1 (Lunes): Empuje».
+            {annotationHint}
           </span>
         </div>
 
@@ -152,7 +167,7 @@ export function ConfiguracionDia({
             htmlFor={`${idBase}-enfoque`}
             className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block"
           >
-            Enfoque o indicaciones (opcional)
+            {focusLabel}
           </label>
           <input
             id={`${idBase}-enfoque`}
@@ -176,7 +191,7 @@ export function ConfiguracionDia({
 
       <div className="px-3 py-2 rounded-xl bg-background/80 border border-border/70 flex items-center gap-2 text-xs">
         <span className="text-[11px] font-bold text-primary uppercase tracking-wider shrink-0">
-          Así lo verá tu alumno:
+          {previewLabel}
         </span>
         <span className="font-bold text-foreground truncate">{diaActivo.titulo}</span>
       </div>

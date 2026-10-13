@@ -331,6 +331,8 @@ export function useRutinaAlumno({ hayConexion }: ParametrosRutinaAlumno) {
     isRutinaModalOpen,
     setIsRutinaModalOpen,
     bloquesRutinaEdit,
+    // Convergence (76): direct setter for the shared ConfiguracionDia onCambiar.
+    setBloquesRutinaEdit,
     activeDiaIdx,
     setActiveDiaIdx,
     selectedGrupoMuscular,

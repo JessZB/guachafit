@@ -8,7 +8,10 @@
  * buscador y sin reintento de error, así que la sustitución no es mecánica). Solo
  * props y callbacks (R1): sin `useQuery` ni `api-client` (R9). Conserva roles,
  * labels, `aria-pressed`/`aria-expanded` y textos que usan los specs (R5). Estados
- * honestos §6.6: el error del catálogo trae su causa y el reintento.
+ * honestos §6.6: el error del catálogo trae su causa y el reintento. Convergence
+ * (76): reused by the alumno routine body via optional copy-variant props
+ * (Plantillas copy stays the default) plus `addButtonAccessibleName` for the
+ * spec-pinned `Añadir` row-button name.
  *
  * §6: español claro, controles 44px (`min-h-11`), piso 11px, tokens con variante
  * claro/oscuro, pesos ≤ 700.
@@ -44,6 +47,19 @@ interface PanelCatalogoProps {
   onCambiarCreacion: (cambios: Partial<EstadoCreacionEjercicio>) => void;
   onCrear: (e: React.FormEvent) => void;
   onAgregarEjercicio: (nombre: string, ejercicioId?: string) => void;
+  /** Copy variants (defaults: Plantillas copy). */
+  sectionTitle?: string;
+  createToggleLabel?: string;
+  hideCreatorLabel?: string;
+  createFormTitle?: string;
+  submitButtonLabel?: string;
+  searchPlaceholder?: string;
+  emptyCreateLabel?: string;
+  /**
+   * Accessible name override for the per-row add button. When omitted the
+   * button reads `Añadir <nombre>`; the alumno view pins plain `Añadir`.
+   */
+  addButtonAccessibleName?: string;
 }
 
 export function PanelCatalogo({
@@ -61,13 +77,21 @@ export function PanelCatalogo({
   onCambiarCreacion,
   onCrear,
   onAgregarEjercicio,
+  sectionTitle = 'Añadir ejercicio desde tu lista',
+  createToggleLabel = 'Crear ejercicio nuevo',
+  hideCreatorLabel = 'Ocultar',
+  createFormTitle = 'Nuevo ejercicio en tu lista',
+  submitButtonLabel = 'Crear y agregar a este día',
+  searchPlaceholder = 'Buscar en tu lista de ejercicios...',
+  emptyCreateLabel = 'Crear ejercicio nuevo',
+  addButtonAccessibleName,
 }: PanelCatalogoProps) {
   return (
     <div className="p-4 rounded-2xl bg-secondary/30 border border-border/80 space-y-3">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <FolderPlus className="h-4 w-4 text-primary" />
-          <span className="text-xs font-bold text-foreground">Añadir ejercicio desde tu lista</span>
+          <span className="text-xs font-bold text-foreground">{sectionTitle}</span>
         </div>
 
         {puedeCrear && (
@@ -78,7 +102,7 @@ export function PanelCatalogo({
             className="min-h-11 text-xs font-bold text-primary hover:underline cursor-pointer flex items-center gap-1 self-start sm:self-auto"
           >
             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>{creacion.abierto ? 'Ocultar' : 'Crear ejercicio nuevo'}</span>
+            <span>{creacion.abierto ? hideCreatorLabel : createToggleLabel}</span>
           </button>
         )}
       </div>
@@ -89,7 +113,7 @@ export function PanelCatalogo({
           className="p-3 rounded-xl bg-card border border-primary/30 space-y-3 animate-in zoom-in-95 duration-150"
         >
           <span className="text-[11px] font-bold text-primary uppercase tracking-wide block">
-            Nuevo ejercicio en tu lista
+            {createFormTitle}
           </span>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <input
@@ -145,7 +169,7 @@ export function PanelCatalogo({
               disabled={creacion.enCurso}
               className="min-h-11 px-3 py-1 rounded-lg bg-primary text-primary-foreground font-bold text-xs cursor-pointer disabled:opacity-50"
             >
-              {creacion.enCurso ? 'Guardando...' : 'Crear y agregar a este día'}
+              {creacion.enCurso ? 'Guardando...' : submitButtonLabel}
             </button>
           </div>
         </form>
@@ -177,7 +201,7 @@ export function PanelCatalogo({
           <Search className="h-3.5 w-3.5 absolute left-3 top-2.5 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Buscar en tu lista de ejercicios..."
+            placeholder={searchPlaceholder}
             aria-label="Buscar ejercicio"
             value={filtroTexto}
             onChange={(e) => onCambiarFiltro(e.target.value)}
@@ -216,7 +240,7 @@ export function PanelCatalogo({
               >
                 <Plus className="h-3 w-3" />
                 <span>
-                  {filtroTexto.trim() ? `Crear «${filtroTexto.trim()}»` : 'Crear ejercicio nuevo'}
+                  {filtroTexto.trim() ? `Crear «${filtroTexto.trim()}»` : emptyCreateLabel}
                 </span>
               </button>
             ) : null}
@@ -234,7 +258,7 @@ export function PanelCatalogo({
               <button
                 type="button"
                 onClick={() => onAgregarEjercicio(ej.nombre, ej.id)}
-                aria-label={`Añadir ${ej.nombre}`}
+                aria-label={addButtonAccessibleName ?? `Añadir ${ej.nombre}`}
                 className="min-h-11 px-3 py-1 rounded-lg bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-bold text-xs flex items-center gap-1 transition-all cursor-pointer shrink-0"
               >
                 <Plus className="h-3 w-3" />
