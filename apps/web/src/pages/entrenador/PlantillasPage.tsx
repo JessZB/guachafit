@@ -1,64 +1,28 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-  NivelObjetivoPlantilla,
-  type EjercicioCatalogoDetalleDTO,
-  type PlantillaRutinaDTO,
-  type PlantillaRutinaResumenDTO,
-} from '@guachafit/shared';
-import { apiClient, resolverUrlApi } from '../../lib/api-client';
+/**
+ * RF-017 Escenario 1: banco de plantillas de rutina del coach.
+ * Listado con estados explícitos (loading/vacío/error+retry) + creación/edición con los
+ * selectores estructurados y el picker de catálogo del modal de prescripción (WU5).
+ *
+ * Contenedor orquestador (fase B, prompt 58): lee la bandera demo, compone filtros,
+ * estados, tarjetas y modal, y conecta los hooks. Sin JSX de detalle (R1).
+ * Usa los átomos de la consolidación 48 (`ui/EstadoCarga`, `ui/EstadoError`,
+ * `ui/EstadoVacio`) en lugar de las copias locales.
+ *
+ * §6: estados honestos (carga/vacío/error+reintento), español claro, 44px,
+ * 11px mínimo, tokens con variante claro/oscuro, peso ≤ 700.
+ */
+import { useMemo, useState } from 'react';
+import type { PlantillaRutinaResumenDTO } from '@guachafit/shared';
+import { resolverUrlApi } from '../../lib/api-client';
 import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
-import { formatFechaLocal } from '../../lib/date-format';
-import { pluralizar } from '../../lib/pluralizar';
-import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import { useFrescuraOffline } from '../../lib/use-frescura-offline';
 import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
-import { DialogoConfirmacion } from '../../components/common/DialogoConfirmacion';
 import { AsignacionMasivaPlantilla } from '../../components/entrenador/AsignacionMasivaPlantilla';
-import {
-  CATALOGO_DEMO,
-  PLANTILLAS_DEMO,
-  crearPlantillaDemo,
-  generarIdDemo,
-  plantillasDemoResumen,
-  resumirPlantillaDemo,
-} from '../../lib/demo-plantillas';
-import {
-  ETIQUETAS_NIVEL_PLANTILLA,
-  NIVELES_PLANTILLA_ORDEN,
-  construirBloquesParaPlantilla,
-  firmaFormularioPlantilla,
-  resumirBloques,
-  validarNombrePlantilla,
-} from '../../lib/plantillas-rutina';
-import {
-  crearBloqueEdicion,
-  parsearBloqueParaEdicion,
-  type BloqueEdicion,
-} from '../../lib/rutina-bloques';
-import {
-  BloquesRutinaEditor,
-  type DatosEjercicioNuevo,
-} from '../../components/entrenador/BloquesRutinaEditor';
-import {
-  AlertCircle,
-  CheckCircle2,
-  ClipboardList,
-  Dumbbell,
-  Loader2,
-  Pencil,
-  Plus,
-  RefreshCw,
-  RotateCcw,
-  Search,
-  SearchX,
-  Sparkles,
-  Trash2,
-  Users,
-  WifiOff,
-  X,
-} from 'lucide-react';
-
+import { EstadoCarga } from '../../components/ui/EstadoCarga';
+import { EstadoError } from '../../components/ui/EstadoError';
+import { EstadoVacio } from '../../components/ui/EstadoVacio';
+import { Dumbbell, SearchX } from 'lucide-react';
 import {
   contarPlantillasPorEstado,
   filtrarPlantillas,
@@ -66,127 +30,42 @@ import {
   type FiltroEstadoPlantilla,
   type FiltroNivelPlantilla,
 } from '../../lib/plantillas-filtros';
+import { usePlantillasBanco } from '../../components/entrenador/plantillas/use-plantillas-banco';
+import { useFormularioPlantilla } from '../../components/entrenador/plantillas/use-formulario-plantilla';
+import { CabeceraPlantillas } from '../../components/entrenador/plantillas/CabeceraPlantillas';
+import { AvisoAccionPlantillas } from '../../components/entrenador/plantillas/AvisoAccionPlantillas';
+import { FiltrosPlantillas } from '../../components/entrenador/plantillas/FiltrosPlantillas';
+import { TarjetaPlantilla } from '../../components/entrenador/plantillas/TarjetaPlantilla';
+import { ModalPlantilla } from '../../components/entrenador/plantillas/ModalPlantilla';
 
-const OPCIONES_FILTRO: Array<{ valor: FiltroEstadoPlantilla; label: string }> = [
-  { valor: 'activas', label: 'Activas' },
-  { valor: 'desactivadas', label: 'Desactivadas' },
-  { valor: 'todas', label: 'Todas' },
-];
-
-/** Clases de badge por nivel objetivo (paleta Athletic Slate compartida). */
-const CLASES_NIVEL: Record<NivelObjetivoPlantilla, string> = {
-  [NivelObjetivoPlantilla.PRINCIPIANTE]:
-    'bg-info/15 text-info border-info/30',
-  [NivelObjetivoPlantilla.INTERMEDIO]:
-    'bg-warning/15 text-warning border-warning/30',
-  [NivelObjetivoPlantilla.AVANZADO]:
-    'bg-danger/15 text-danger border-danger/30',
-};
-
-/**
- * RF-017 Escenario 1: banco de plantillas de rutina del coach.
- * Listado con estados explícitos (loading/vacío/error+retry) + creación/edición con los
- * selectores estructurados y el picker de catálogo del modal de prescripción (WU5).
- */
 export function PlantillasPage() {
   const { isDemoMode } = useAuth();
-  const [plantillas, setPlantillas] = useState<PlantillaRutinaResumenDTO[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // D7: sin conexión no se puede guardar (la lista puede venir de la copia guardada).
+  const { isOnline } = useFrescuraOffline(null);
+
+  const banco = usePlantillasBanco(isDemoMode);
+  const formulario = useFormularioPlantilla({
+    isDemoMode,
+    obtenerDetalle: banco.obtenerDetalle,
+    reponerResumen: banco.reponerResumen,
+    reponerDetalleDemo: banco.reponerDetalleDemo,
+    informarErrorAccion: banco.setAccionError,
+  });
+
   const [filtro, setFiltro] = useState<FiltroEstadoPlantilla>('activas');
   const [busqueda, setBusqueda] = useState('');
   const [filtroNivel, setFiltroNivel] = useState<FiltroNivelPlantilla>('todos');
-  const [accionError, setAccionError] = useState<string | null>(null);
 
-  const [catalogo, setCatalogo] = useState<EjercicioCatalogoDetalleDTO[]>([]);
-  const [catalogoError, setCatalogoError] = useState<string | null>(null);
-
-  // MODO DEMO: detalles locales (fixture + altas/ediciones de la sesión) para editar sin API.
-  const [detallesDemo, setDetallesDemo] = useState<Record<string, PlantillaRutinaDTO>>(() =>
-    Object.fromEntries(PLANTILLAS_DEMO.map((plantilla) => [plantilla.id, plantilla]))
-  );
-
-  // Modal de creación/edición
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editando, setEditando] = useState<PlantillaRutinaDTO | null>(null);
-  const [cargandoDetalleId, setCargandoDetalleId] = useState<string | null>(null);
-  const [formNombre, setFormNombre] = useState('');
-  const [formNivel, setFormNivel] = useState<NivelObjetivoPlantilla>(
-    NivelObjetivoPlantilla.PRINCIPIANTE
-  );
-  const [bloquesEdit, setBloquesEdit] = useState<BloqueEdicion[]>([]);
-  // Remonta el editor al abrir el modal (día activo/búsqueda frescos) sin resetearlo al guardar.
-  const [editorKey, setEditorKey] = useState(0);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [intentoGuardar, setIntentoGuardar] = useState(false);
-
-  // Confirmación inline de desactivación + acción en curso
-  const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
-  const [ocupadaId, setOcupadaId] = useState<string | null>(null);
-
-  // C4: firma del formulario al abrir/guardar para avisar de cambios sin guardar al cerrar.
-  const [firmaGuardada, setFirmaGuardada] = useState('');
-  const [confirmandoCierre, setConfirmandoCierre] = useState(false);
   // A6: plantilla elegida para asignarla a varios alumnos.
   const [asignandoPlantilla, setAsignandoPlantilla] = useState<PlantillaRutinaResumenDTO | null>(
     null
   );
-  // D7: sin conexión no se puede guardar (la lista puede venir de la copia guardada).
-  const { isOnline } = useFrescuraOffline(null);
 
-  const cargarPlantillas = async () => {
-    setIsLoading(true);
-    setError(null);
-
-    // MODO DEMO EXPLÍCITO (isDemoMode): banco de ejemplo solo con la bandera activa.
-    if (isDemoMode) {
-      setDetallesDemo(Object.fromEntries(PLANTILLAS_DEMO.map((plantilla) => [plantilla.id, plantilla])));
-      setPlantillas(plantillasDemoResumen());
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const res = await apiClient<PlantillaRutinaResumenDTO[]>('/plantillas');
-      setPlantillas(Array.isArray(res) ? res : []);
-    } catch (err: any) {
-      setError(err?.message || 'No se pudieron cargar tus plantillas de ejercicios.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const cargarCatalogo = async () => {
-    setCatalogoError(null);
-
-    // MODO DEMO EXPLÍCITO (isDemoMode): catálogo de ejemplo sin llamada API.
-    if (isDemoMode) {
-      setCatalogo(CATALOGO_DEMO);
-      return;
-    }
-
-    try {
-      const res = await apiClient<EjercicioCatalogoDetalleDTO[]>('/ejercicios/catalogo');
-      setCatalogo(Array.isArray(res) ? res : []);
-    } catch {
-      setCatalogoError('No se pudo cargar el catálogo de ejercicios. Revisa la conexión.');
-    }
-  };
-
-  useEffect(() => {
-    cargarPlantillas();
-    cargarCatalogo();
-  }, [isDemoMode]);
-
-  // Accesibilidad (U3b): Escape, trampa de foco y restore viven en `useDialogoAccesible`.
-
-  const conteos = useMemo(() => contarPlantillasPorEstado(plantillas), [plantillas]);
+  const conteos = useMemo(() => contarPlantillasPorEstado(banco.plantillas), [banco.plantillas]);
 
   const visibles = useMemo(
-    () => filtrarPlantillas(plantillas, { estado: filtro, busqueda, nivel: filtroNivel }),
-    [plantillas, filtro, busqueda, filtroNivel]
+    () => filtrarPlantillas(banco.plantillas, { estado: filtro, busqueda, nivel: filtroNivel }),
+    [banco.plantillas, filtro, busqueda, filtroNivel]
   );
 
   const hayFiltroActivo = hayFiltroPlantillasActivo({ busqueda, nivel: filtroNivel });
@@ -197,620 +76,105 @@ export function PlantillasPage() {
     setFiltroNivel('todos');
   };
 
-  const nombreError = validarNombrePlantilla(formNombre);
-  const mostrarNombreError = Boolean(nombreError) && (intentoGuardar || formNombre.trim() !== '');
+  const cambiarFiltro = (nuevo: FiltroEstadoPlantilla) => {
+    triggerHaptic('selection');
+    setFiltro(nuevo);
+  };
 
-  const abrirCrear = () => {
+  const asignarPlantilla = (plantilla: PlantillaRutinaResumenDTO) => {
     triggerHaptic('light');
-    setEditando(null);
-    setFormNombre('');
-    setFormNivel(NivelObjetivoPlantilla.PRINCIPIANTE);
-    const bloquesIniciales = [crearBloqueEdicion(1)];
-    setBloquesEdit(bloquesIniciales);
-    setFirmaGuardada(
-      firmaFormularioPlantilla('', NivelObjetivoPlantilla.PRINCIPIANTE, bloquesIniciales)
-    );
-    setEditorKey((k) => k + 1);
-    setSaveSuccess(null);
-    setSaveError(null);
-    setIntentoGuardar(false);
-    setIsModalOpen(true);
+    setAsignandoPlantilla(plantilla);
   };
 
-  /** Carga un detalle en el formulario del modal (mismo estado en demo y en sesión real). */
-  const cargarDetalleEnFormulario = (detalle: PlantillaRutinaDTO) => {
-    setEditando(detalle);
-    setFormNombre(detalle.nombre);
-    setFormNivel(detalle.nivelObjetivo);
-    const bloquesDetalle = (detalle.bloques ?? []).map((bloque, idx) =>
-      parsearBloqueParaEdicion(bloque, idx)
-    );
-    setBloquesEdit(bloquesDetalle);
-    setFirmaGuardada(
-      firmaFormularioPlantilla(detalle.nombre, detalle.nivelObjetivo, bloquesDetalle)
-    );
-    setEditorKey((k) => k + 1);
-    setSaveSuccess(null);
-    setSaveError(null);
-    setIntentoGuardar(false);
-    setIsModalOpen(true);
-  };
-
-  const abrirEditar = async (resumen: PlantillaRutinaResumenDTO) => {
+  const pedirDesactivar = (id: string) => {
     triggerHaptic('light');
-    setAccionError(null);
-
-    // MODO DEMO EXPLÍCITO (isDemoMode): el detalle sale del estado local, sin llamada API.
-    if (isDemoMode) {
-      const detalle = detallesDemo[resumen.id];
-      if (!detalle) {
-        setAccionError('No se pudo abrir la plantilla para edición.');
-        triggerHaptic('warning');
-        return;
-      }
-      cargarDetalleEnFormulario(detalle);
-      return;
-    }
-
-    setCargandoDetalleId(resumen.id);
-    try {
-      const detalle = await apiClient<PlantillaRutinaDTO>(`/plantillas/${resumen.id}`);
-      cargarDetalleEnFormulario(detalle);
-    } catch (err: any) {
-      setAccionError(err?.message || 'No se pudo abrir la plantilla para edición.');
-      triggerHaptic('warning');
-    } finally {
-      setCargandoDetalleId(null);
-    }
+    banco.setConfirmandoId(id);
   };
 
-  const guardarPlantilla = async () => {
-    setIntentoGuardar(true);
-    setSaveSuccess(null);
-
-    const errorNombre = validarNombrePlantilla(formNombre);
-    if (errorNombre) {
-      setSaveError(errorNombre);
-      triggerHaptic('warning');
-      return;
-    }
-
-    const { bloques, errores } = construirBloquesParaPlantilla(bloquesEdit);
-    if (errores.length > 0) {
-      setSaveError(`Revisa los días y ejercicios: ${errores[0]}`);
-      triggerHaptic('warning');
-      return;
-    }
-
-    const payload = {
-      nombre: formNombre.trim(),
-      nivelObjetivo: formNivel,
-      bloques,
-    };
-    // Firma de lo que realmente se envía, calculada al INICIAR el guardado.
-    const firmaEnviada = firmaFormularioPlantilla(formNombre, formNivel, bloquesEdit);
-
-    // MODO DEMO EXPLÍCITO (isDemoMode): crear/editar en estado LOCAL, sin llamada API,
-    // con los mismos mensajes de éxito y la misma actualización del listado.
-    if (isDemoMode) {
-      const detalle = crearPlantillaDemo({
-        id: editando?.id,
-        nombre: payload.nombre,
-        nivelObjetivo: payload.nivelObjetivo,
-        bloques: payload.bloques,
-        activa: editando?.activa ?? true,
-        createdAtUtc: editando?.createdAtUtc,
-      });
-      setDetallesDemo((prev) => ({ ...prev, [detalle.id]: detalle }));
-      setPlantillas((prev) => [
-        resumirPlantillaDemo(detalle),
-        ...prev.filter((p) => p.id !== detalle.id),
-      ]);
-      setEditando(detalle);
-      setFirmaGuardada(firmaEnviada);
-      triggerHaptic('success');
-      setSaveError(null);
-      // WU5: el mensaje persiste inline hasta que el coach cierre el panel.
-      setSaveSuccess(
-        editando
-          ? 'Plantilla actualizada. Las rutinas ya asignadas a alumnos no se modifican.'
-          : 'Plantilla creada y activa. Puedes seguir ajustándola o cerrar este panel.'
-      );
-      return;
-    }
-
-    setIsSaving(true);
-    setSaveError(null);
-    try {
-      const res = editando
-        ? await apiClient<PlantillaRutinaDTO>(`/plantillas/${editando.id}`, {
-            method: 'PATCH',
-            body: JSON.stringify(payload),
-          })
-        : await apiClient<PlantillaRutinaDTO>('/plantillas', {
-            method: 'POST',
-            body: JSON.stringify(payload),
-          });
-
-      const resumen: PlantillaRutinaResumenDTO = {
-        id: res.id,
-        entrenadorId: res.entrenadorId,
-        nombre: res.nombre,
-        nivelObjetivo: res.nivelObjetivo,
-        totalDias: res.bloques.length,
-        totalEjercicios: res.bloques.reduce(
-          (total, bloque) => total + (bloque.ejercicios?.length ?? 0),
-          0
-        ),
-        activa: res.activa,
-        createdAtUtc: res.createdAtUtc,
-        updatedAtUtc: res.updatedAtUtc,
-      };
-      setPlantillas((prev) => [resumen, ...prev.filter((p) => p.id !== res.id)]);
-      setEditando(res);
-      setFirmaGuardada(firmaEnviada);
-      triggerHaptic('success');
-      // WU5: el mensaje persiste inline hasta que el coach cierre el panel.
-      setSaveSuccess(
-        editando
-          ? 'Plantilla actualizada. Las rutinas ya asignadas a alumnos no se modifican.'
-          : 'Plantilla creada y activa. Puedes seguir ajustándola o cerrar este panel.'
-      );
-    } catch (err: any) {
-      setSaveError(err?.message || 'No se pudo guardar la plantilla en el servidor.');
-      triggerHaptic('warning');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  /** Cambia activa/inactiva en el banco local del modo demo (listado + detalle). */
-  const actualizarActivaLocal = (id: string, activa: boolean) => {
-    setPlantillas((prev) => prev.map((p) => (p.id === id ? { ...p, activa } : p)));
-    setDetallesDemo((prev) => (prev[id] ? { ...prev, [id]: { ...prev[id], activa } } : prev));
-  };
-
-  const desactivarPlantilla = async (id: string) => {
-    setOcupadaId(id);
-    setAccionError(null);
-
-    // MODO DEMO EXPLÍCITO (isDemoMode): desactivación local, sin llamada API.
-    if (isDemoMode) {
-      actualizarActivaLocal(id, false);
-      triggerHaptic('success');
-      setOcupadaId(null);
-      setConfirmandoId(null);
-      return;
-    }
-
-    try {
-      await apiClient<PlantillaRutinaResumenDTO>(`/plantillas/${id}`, { method: 'DELETE' });
-      setPlantillas((prev) => prev.map((p) => (p.id === id ? { ...p, activa: false } : p)));
-      triggerHaptic('success');
-    } catch (err: any) {
-      setAccionError(err?.message || 'No se pudo desactivar la plantilla.');
-      triggerHaptic('warning');
-    } finally {
-      setOcupadaId(null);
-      setConfirmandoId(null);
-    }
-  };
-
-  const reactivarPlantilla = async (id: string) => {
-    setOcupadaId(id);
-    setAccionError(null);
-
-    // MODO DEMO EXPLÍCITO (isDemoMode): reactivación local, sin llamada API.
-    if (isDemoMode) {
-      actualizarActivaLocal(id, true);
-      triggerHaptic('success');
-      setOcupadaId(null);
-      return;
-    }
-
-    try {
-      const res = await apiClient<PlantillaRutinaDTO>(`/plantillas/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ activa: true }),
-      });
-      setPlantillas((prev) => prev.map((p) => (p.id === id ? { ...p, activa: res.activa } : p)));
-      triggerHaptic('success');
-    } catch (err: any) {
-      setAccionError(err?.message || 'No se pudo reactivar la plantilla.');
-      triggerHaptic('warning');
-    } finally {
-      setOcupadaId(null);
-    }
-  };
-
-  const crearEjercicioEnCatalogo = async (
-    datos: DatosEjercicioNuevo
-  ): Promise<EjercicioCatalogoDetalleDTO | null> => {
-    // MODO DEMO EXPLÍCITO (isDemoMode): alta local en el catálogo de ejemplo, sin API.
-    if (isDemoMode) {
-      const nuevo: EjercicioCatalogoDetalleDTO = {
-        id: generarIdDemo(),
-        entrenadorId: null,
-        nombre: datos.nombre,
-        grupoMuscular: datos.grupoMuscular,
-        patronMovimiento: datos.patronMovimiento || null,
-        activo: true,
-        createdAtUtc: new Date().toISOString(),
-      };
-      setCatalogo((prev) => [nuevo, ...prev]);
-      return nuevo;
-    }
-
-    try {
-      const res = await apiClient<EjercicioCatalogoDetalleDTO>('/ejercicios/catalogo', {
-        method: 'POST',
-        body: JSON.stringify(datos),
-      });
-      setCatalogo((prev) => [res, ...prev]);
-      return res;
-    } catch {
-      return null;
-    }
-  };
-
-  const cerrarModalSinPreguntar = () => {
-    setConfirmandoCierre(false);
-    setIsModalOpen(false);
-    setSaveSuccess(null);
-    setSaveError(null);
-    setIntentoGuardar(false);
-  };
-
-  const hayCambiosSinGuardar =
-    isModalOpen && firmaFormularioPlantilla(formNombre, formNivel, bloquesEdit) !== firmaGuardada;
-
-  /** C4: con cambios sin guardar, cerrar pide confirmación (X, Escape, fondo o "Cerrar"). */
-  const cerrarModal = () => {
-    if (isSaving) return;
-    if (hayCambiosSinGuardar) {
-      setConfirmandoCierre(true);
-      return;
-    }
-    cerrarModalSinPreguntar();
-  };
-
-  // U3b: Escape, trampa de Tab y restore del foco; el foco inicial sigue en el nombre
-  // (`autoFocus` del formulario), por eso el hook no lo reasigna.
-  const refModalPlantilla = useDialogoAccesible({
-    abierto: isModalOpen,
-    onCerrar: cerrarModal,
-    enfocarAlAbrir: false,
-  });
-
-  const resumenEditor = useMemo(() => resumirBloques(bloquesEdit), [bloquesEdit]);
+  const tituloVacioPorEstado =
+    filtro === 'activas'
+      ? 'No tienes plantillas activas'
+      : filtro === 'desactivadas'
+        ? 'No tienes plantillas desactivadas'
+        : 'Todavía no tienes plantillas de ejercicios';
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-12">
-      {/* Cabecera */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <ClipboardList className="h-5 w-5 text-primary" />
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">Plantillas de ejercicios</h1>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Diseña rutinas reutilizables y asígnalas a tus alumnos en segundos. Cada asignación es una
-            copia independiente: editar la plantilla no altera lo ya prescrito.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={abrirCrear}
-          className="min-h-11 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer self-start sm:self-auto"
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          <span>Nueva plantilla</span>
-        </button>
-      </div>
+      <CabeceraPlantillas onNueva={formulario.abrirCrear} />
 
       {/* D7: la lista puede venir de la copia guardada cuando no hay conexión */}
-      {!isDemoMode && plantillas.length > 0 && (
+      {!isDemoMode && banco.plantillas.length > 0 && (
         <AvisoDatosOffline url={resolverUrlApi('/plantillas')} />
       )}
 
-      {accionError && (
-        <div
-          role="alert"
-          className="p-3 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-center justify-between gap-3"
-        >
-          <span className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            {accionError}
-          </span>
-          <button
-            type="button"
-            onClick={() => setAccionError(null)}
-            className="min-h-11 min-w-11 flex items-center justify-center rounded-lg hover:bg-destructive/10 cursor-pointer shrink-0"
-            title="Descartar aviso"
-            aria-label="Descartar aviso"
-          >
-            <X className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-        </div>
+      {banco.accionError && (
+        <AvisoAccionPlantillas
+          mensaje={banco.accionError}
+          onDescartar={() => banco.setAccionError(null)}
+        />
       )}
 
-      {/* Filtros: estado + búsqueda por nombre + nivel objetivo */}
-      <div className="p-4 rounded-3xl bg-card border border-border/80 space-y-3">
-        <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            {OPCIONES_FILTRO.map((opcion) => {
-              const activo = filtro === opcion.valor;
-              const conteo = conteos[opcion.valor];
-              return (
-                <button
-                  key={opcion.valor}
-                  type="button"
-                  onClick={() => {
-                    triggerHaptic('selection');
-                    setFiltro(opcion.valor);
-                  }}
-                  aria-pressed={activo}
-                  className={`min-h-11 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                    activo
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <span>{opcion.label}</span>
-                  <span className={`font-mono text-xs ${activo ? 'opacity-80' : 'opacity-60'}`}>
-                    {conteo}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex flex-1 flex-col sm:flex-row gap-2 lg:justify-end">
-            <div className="relative flex-1 sm:max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-              <input
-                type="search"
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar por nombre..."
-                aria-label="Buscar plantilla por nombre"
-                className="w-full pl-9 pr-3 py-2 rounded-xl bg-background border border-border text-xs font-semibold text-foreground focus:outline-hidden focus:border-primary transition-colors"
-              />
-            </div>
-
-            <select
-              value={filtroNivel}
-              onChange={(e) => setFiltroNivel(e.target.value as FiltroNivelPlantilla)}
-              aria-label="Filtrar plantillas por nivel objetivo"
-              className="px-3 py-2 rounded-xl bg-background border border-border text-xs font-bold text-foreground focus:outline-hidden focus:border-primary transition-colors cursor-pointer"
-            >
-              <option value="todos">Todos los niveles</option>
-              {NIVELES_PLANTILLA_ORDEN.map((nivel) => (
-                <option key={nivel} value={nivel}>
-                  {ETIQUETAS_NIVEL_PLANTILLA[nivel]}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {!isLoading && !error && (
-          <p className="text-[11px] text-muted-foreground font-mono">
-            Mostrando {visibles.length} de {conteos[filtro]}{' '}
-            {filtro === 'todas' ? 'plantillas' : filtro}
-          </p>
-        )}
-      </div>
+      <FiltrosPlantillas
+        filtro={filtro}
+        conteos={conteos}
+        onCambiarFiltro={cambiarFiltro}
+        busqueda={busqueda}
+        onCambiarBusqueda={setBusqueda}
+        filtroNivel={filtroNivel}
+        onCambiarNivel={setFiltroNivel}
+        visiblesCount={visibles.length}
+        mostrarContador={!banco.isLoading && !banco.error}
+      />
 
       {/* Estados de la lista */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {[0, 1, 2].map((i) => (
-            <div
-              key={i}
-              className="p-5 rounded-3xl bg-card border border-border/80 space-y-3 animate-pulse"
-            >
-              <div className="h-4 w-2/3 rounded-lg bg-secondary/60" />
-              <div className="h-3 w-1/3 rounded-lg bg-secondary/40" />
-              <div className="h-8 w-full rounded-lg bg-secondary/30" />
-            </div>
-          ))}
-        </div>
-      ) : error ? (
-        <div className="p-8 rounded-3xl bg-card border border-border text-center space-y-3 max-w-lg mx-auto">
-          <AlertCircle className="h-9 w-9 text-destructive mx-auto" />
-          <h3 className="text-sm font-bold text-foreground">No se pudieron cargar las plantillas</h3>
-          <p className="text-xs text-muted-foreground">{error}</p>
-          <button
-            type="button"
-            onClick={cargarPlantillas}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs cursor-pointer"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            <span>Reintentar</span>
-          </button>
-        </div>
+      {banco.isLoading ? (
+        <EstadoCarga texto="Cargando plantillas…" />
+      ) : banco.error ? (
+        <EstadoError
+          titulo="No se pudieron cargar las plantillas"
+          mensaje={banco.error}
+          onReintentar={banco.cargarPlantillas}
+        />
       ) : visibles.length === 0 ? (
         hayFiltroActivo ? (
-          <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
-            <SearchX className="h-9 w-9 text-muted-foreground mx-auto opacity-50" />
-            <h3 className="text-sm font-bold text-foreground">Sin resultados</h3>
-            <p className="text-xs text-muted-foreground max-w-md mx-auto">
-              Ninguna plantilla coincide con la búsqueda o el nivel seleccionado.
-            </p>
-            <button
-              type="button"
-              onClick={limpiarFiltros}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs cursor-pointer"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              <span>Limpiar filtros</span>
-            </button>
-          </div>
+          <EstadoVacio
+            titulo="Sin resultados"
+            detalle="Ninguna plantilla coincide con la búsqueda o el nivel seleccionado."
+            icono={SearchX}
+            accion={{ texto: 'Limpiar filtros', onAccion: limpiarFiltros }}
+          />
         ) : (
-          <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
-            <Dumbbell className="h-9 w-9 text-muted-foreground mx-auto opacity-50" />
-            <h3 className="text-sm font-bold text-foreground">
-              {filtro === 'activas'
-                ? 'No tienes plantillas activas'
-                : filtro === 'desactivadas'
-                ? 'No tienes plantillas desactivadas'
-                : 'Todavía no tienes plantillas de ejercicios'}
-            </h3>
-            <p className="text-xs text-muted-foreground max-w-md mx-auto">
-              {filtro === 'activas'
+          <EstadoVacio
+            titulo={tituloVacioPorEstado}
+            detalle={
+              filtro === 'activas'
                 ? 'Crea tu primera plantilla para prescribir una semana completa con un clic a cualquier alumno.'
-                : 'Las plantillas desactivadas se conservan y pueden reactivarse cuando quieras.'}
-            </p>
-            <button
-              type="button"
-              onClick={abrirCrear}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs cursor-pointer"
-            >
-              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>Crear plantilla</span>
-            </button>
-          </div>
+                : 'Las plantillas desactivadas se conservan y pueden reactivarse cuando quieras.'
+            }
+            icono={Dumbbell}
+            accion={{ texto: 'Crear plantilla', onAccion: formulario.abrirCrear, variante: 'primaria' }}
+          />
         )
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {visibles.map((plantilla) => (
-            <div
+            <TarjetaPlantilla
               key={plantilla.id}
-              className={`p-5 rounded-3xl bg-card border border-border/80 shadow-xs space-y-3.5 flex flex-col justify-between transition-all hover:border-primary/40 ${
-                plantilla.activa ? '' : 'opacity-75'
-              }`}
-            >
-              <div className="space-y-2.5">
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-bold text-sm text-foreground leading-snug break-words">
-                    {plantilla.nombre}
-                  </h3>
-                  <span
-                    className={`shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide border ${
-                      plantilla.activa
-                        ? 'bg-success/15 text-success border-success/30'
-                        : 'bg-secondary text-muted-foreground border-border'
-                    }`}
-                  >
-                    {plantilla.activa ? 'Activa' : 'Desactivada'}
-                  </span>
-                </div>
-
-                <span
-                  className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide border ${
-                    CLASES_NIVEL[plantilla.nivelObjetivo]
-                  }`}
-                >
-                  {ETIQUETAS_NIVEL_PLANTILLA[plantilla.nivelObjetivo]}
-                </span>
-
-                <div className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
-                  <span className="px-2 py-0.5 rounded-md bg-secondary border border-border/60 font-bold text-foreground">
-                    {plantilla.totalDias} {plantilla.totalDias === 1 ? 'día' : 'días'}
-                  </span>
-                  <span className="px-2 py-0.5 rounded-md bg-secondary border border-border/60 font-bold text-foreground">
-                    {pluralizar(plantilla.totalEjercicios, 'ejercicio', 'ejercicios')}
-                  </span>
-                </div>
-
-                <p className="text-[11px] text-muted-foreground">
-                  Actualizada el {formatFechaLocal(plantilla.updatedAtUtc) || '—'}
-                </p>
-              </div>
-
-              {confirmandoId === plantilla.id ? (
-                <div className="p-3 rounded-2xl bg-destructive/10 border border-destructive/30 space-y-2">
-                  <p className="text-xs text-foreground leading-snug">
-                    ¿Desactivar <span className="font-bold">{plantilla.nombre}</span>? No se borra: podrás
-                    reactivarla. Las rutinas ya asignadas no cambian.
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={ocupadaId === plantilla.id}
-                      onClick={() => desactivarPlantilla(plantilla.id)}
-                      className="min-h-11 px-3 py-1.5 rounded-lg bg-destructive text-destructive-foreground font-bold text-xs disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
-                    >
-                      {ocupadaId === plantilla.id ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-3 w-3" />
-                      )}
-                      <span>Sí, desactivar</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmandoId(null)}
-                      className="min-h-11 px-3 py-1.5 rounded-lg bg-secondary text-foreground font-bold text-xs cursor-pointer"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border/60">
-                  {/* A6: asignación masiva desde la tarjeta (solo plantillas activas) */}
-                  {plantilla.activa && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        triggerHaptic('light');
-                        setAsignandoPlantilla(plantilla);
-                      }}
-                      disabled={!isOnline && !isDemoMode}
-                      title={!isOnline && !isDemoMode ? 'Necesitas internet para asignar' : undefined}
-                      className="w-full min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
-                    >
-                      <Users className="h-3.5 w-3.5" aria-hidden="true" />
-                      <span>Asignar a alumnos</span>
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => abrirEditar(plantilla)}
-                    disabled={cargandoDetalleId === plantilla.id}
-                    className="flex-1 min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    {cargandoDetalleId === plantilla.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Pencil className="h-3.5 w-3.5" />
-                    )}
-                    <span>Editar</span>
-                  </button>
-
-                  {plantilla.activa ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        triggerHaptic('light');
-                        setConfirmandoId(plantilla.id);
-                      }}
-                      className="flex-1 min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-destructive/10 hover:bg-destructive/20 text-destructive font-bold text-xs transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      <span>Desactivar</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={ocupadaId === plantilla.id}
-                      onClick={() => reactivarPlantilla(plantilla.id)}
-                      className="flex-1 min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
-                    >
-                      {ocupadaId === plantilla.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <RotateCcw className="h-3.5 w-3.5" />
-                      )}
-                      <span>Reactivar</span>
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+              plantilla={plantilla}
+              confirmandoDesactivar={banco.confirmandoId === plantilla.id}
+              accionEnCurso={banco.ocupadaId === plantilla.id}
+              cargandoDetalle={banco.cargandoDetalleId === plantilla.id}
+              puedeAsignar={isOnline || isDemoMode}
+              tituloAsignarBloqueado={
+                !isOnline && !isDemoMode ? 'Necesitas internet para asignar' : undefined
+              }
+              onAsignar={() => asignarPlantilla(plantilla)}
+              onEditar={() => formulario.abrirEditar(plantilla)}
+              onPedirDesactivar={() => pedirDesactivar(plantilla.id)}
+              onConfirmarDesactivar={() => banco.desactivarPlantilla(plantilla.id)}
+              onCancelarDesactivar={() => banco.setConfirmandoId(null)}
+              onReactivar={() => banco.reactivarPlantilla(plantilla.id)}
+            />
           ))}
         </div>
       )}
@@ -818,198 +182,35 @@ export function PlantillasPage() {
       {/* ===================================================================== */}
       {/* MODAL: CREAR / EDITAR PLANTILLA                                       */}
       {/* ===================================================================== */}
-      {isModalOpen && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) cerrarModal();
-          }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
-        >
-          <div
-            ref={refModalPlantilla}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="modal-plantilla-title"
-            tabIndex={-1}
-            className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-4xl space-y-5 max-h-[90vh] overflow-y-auto"
-          >
-            <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <div className="flex items-center gap-2">
-                <ClipboardList className="h-5 w-5 text-primary" />
-                <div>
-                  <h3 id="modal-plantilla-title" className="font-bold text-base text-foreground">
-                    {editando ? 'Editar plantilla' : 'Nueva plantilla de rutina'}
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Estructura los días, los ejercicios y sus cargas. Podrás reutilizarla con cualquier
-                    alumno.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={cerrarModal}
-                className="min-h-11 min-w-11 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer"
-                title="Cerrar"
-                aria-label="Cerrar"
-              >
-                <X className="h-5 w-5" aria-hidden="true" />
-              </button>
-            </div>
-
-            {saveSuccess && (
-              <div
-                role="status"
-                aria-live="polite"
-                className="p-3 rounded-2xl bg-success/10 border border-success/30 text-success text-xs flex items-start gap-2"
-              >
-                <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
-                <div className="space-y-0.5">
-                  <span className="block font-bold">{saveSuccess}</span>
-                  <span className="block text-[11px] text-success/80">
-                    Puedes seguir ajustando la plantilla o cerrar este panel cuando quieras.
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Mientras se guarda, el formulario queda bloqueado: lo que ves es lo que se envía. */}
-            <fieldset
-              disabled={isSaving}
-              aria-busy={isSaving}
-              className="min-w-0 m-0 p-0 border-0 space-y-5 disabled:opacity-70"
-            >
-            <legend className="sr-only">Datos de la plantilla</legend>
-            {/* Identidad de la plantilla */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="sm:col-span-2 space-y-1">
-                <label
-                  htmlFor="plantilla-nombre"
-                  className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block"
-                >
-                  Nombre de la plantilla
-                </label>
-                <input
-                  id="plantilla-nombre"
-                  type="text"
-                  value={formNombre}
-                  onChange={(e) => setFormNombre(e.target.value)}
-                  placeholder="ej. Pierna Énfasis Isquios - Fase 1"
-                  maxLength={120}
-                  autoFocus
-                  aria-invalid={mostrarNombreError}
-                  className={`w-full px-3 py-2 rounded-xl bg-background border text-xs font-semibold text-foreground focus:outline-hidden focus:border-primary transition-colors ${
-                    mostrarNombreError ? 'border-destructive/70' : 'border-border'
-                  }`}
-                />
-                {mostrarNombreError && (
-                  <span role="alert" className="text-xs font-bold text-destructive block">
-                    {nombreError}
-                  </span>
-                )}
-              </div>
-
-              <div className="space-y-1">
-                <label
-                  htmlFor="plantilla-nivel"
-                  className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block"
-                >
-                  Nivel objetivo
-                </label>
-                <select
-                  id="plantilla-nivel"
-                  value={formNivel}
-                  onChange={(e) => setFormNivel(e.target.value as NivelObjetivoPlantilla)}
-                  className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs font-bold text-foreground focus:outline-hidden focus:border-primary transition-colors cursor-pointer"
-                >
-                  {NIVELES_PLANTILLA_ORDEN.map((nivel) => (
-                    <option key={nivel} value={nivel}>
-                      {ETIQUETAS_NIVEL_PLANTILLA[nivel]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <BloquesRutinaEditor
-              key={editorKey}
-              bloques={bloquesEdit}
-              onCambiar={setBloquesEdit}
-              catalogo={catalogo}
-              catalogoError={catalogoError}
-              onReintentarCatalogo={cargarCatalogo}
-              onCrearEjercicio={crearEjercicioEnCatalogo}
-              mostrarNotas
-              minBloques={1}
-            />
-            </fieldset>
-
-            {saveError && (
-              <div
-                role="alert"
-                className="p-3 rounded-xl bg-destructive/15 border border-destructive/30 text-destructive text-xs flex items-center gap-2"
-              >
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>{saveError}</span>
-              </div>
-            )}
-
-            <div className="pt-3 border-t border-border/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <span className="text-[11px] text-muted-foreground font-mono flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-primary" />
-                {resumenEditor.totalDias} día{resumenEditor.totalDias === 1 ? '' : 's'} ·{' '}
-                {resumenEditor.totalEjercicios} ejercicio
-                {resumenEditor.totalEjercicios === 1 ? '' : 's'} ·{' '}
-                {pluralizar(resumenEditor.totalSeries, 'serie', 'series')}
-              </span>
-
-              <div className="flex gap-2 self-end sm:self-auto">
-                <button
-                  type="button"
-                  disabled={isSaving}
-                  onClick={cerrarModal}
-                  className="min-h-11 px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs cursor-pointer disabled:opacity-50"
-                >
-                  Cerrar
-                </button>
-                <button
-                  type="button"
-                  disabled={isSaving || (!isOnline && !isDemoMode)}
-                  onClick={guardarPlantilla}
-                  className="min-h-11 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  {isSaving ? (
-                    <>
-                      <div className="h-3 w-3 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin" />
-                      <span>Guardando...</span>
-                    </>
-                  ) : !isOnline && !isDemoMode ? (
-                    <>
-                      <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />
-                      <span>Necesitas internet para guardar</span>
-                    </>
-                  ) : (
-                    <span>{editando ? 'Guardar cambios' : 'Crear plantilla'}</span>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {formulario.isModalOpen && (
+        <ModalPlantilla
+          editando={formulario.editando}
+          formNombre={formulario.formNombre}
+          onCambiarNombre={formulario.setFormNombre}
+          formNivel={formulario.formNivel}
+          onCambiarNivel={formulario.setFormNivel}
+          bloquesEdit={formulario.bloquesEdit}
+          onCambiarBloques={formulario.setBloquesEdit}
+          editorKey={formulario.editorKey}
+          catalogo={banco.catalogo}
+          catalogoError={banco.catalogoError}
+          onReintentarCatalogo={banco.cargarCatalogo}
+          onCrearEjercicio={banco.crearEjercicioEnCatalogo}
+          nombreError={formulario.nombreError}
+          mostrarNombreError={formulario.mostrarNombreError}
+          saveSuccess={formulario.saveSuccess}
+          saveError={formulario.saveError}
+          isSaving={formulario.isSaving}
+          isOnline={isOnline}
+          isDemoMode={isDemoMode}
+          resumenEditor={formulario.resumenEditor}
+          confirmandoCierre={formulario.confirmandoCierre}
+          onGuardar={formulario.guardarPlantilla}
+          onCerrar={formulario.cerrarModal}
+          onSeguirEditando={() => formulario.setConfirmandoCierre(false)}
+          onSalirSinGuardar={formulario.cerrarModalSinPreguntar}
+        />
       )}
-
-      {/* C4: aviso de cambios sin guardar al cerrar el panel de la plantilla */}
-      <DialogoConfirmacion
-        abierto={confirmandoCierre}
-        idTitulo="plantilla-confirmar-cierre"
-        titulo="¿Salir sin guardar?"
-        detalle="Tienes cambios sin guardar en esta plantilla. Si sales ahora, se perderán."
-        textoConfirmar="Salir sin guardar"
-        textoCancelar="Seguir editando"
-        variante="peligro"
-        onCancelar={() => setConfirmandoCierre(false)}
-        onConfirmar={cerrarModalSinPreguntar}
-      />
 
       {/* A6: asignar la plantilla a varios alumnos */}
       {asignandoPlantilla && (
