@@ -234,3 +234,10 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
 
 ### Pendiente
 - Carrera de orden preexistente en `EntrenamientoPage` (§7.10): un envío directo en vuelo puede llegar después de un cambio encolado posterior de la misma sesión.
+  - **Diagnóstico (Judgment Day de diseño, 2026-10-12):**
+    - la carrera es real;
+    - un directo que falla se re-encola detrás de lo posterior, con la hora del fallo;
+    - finalizar puede adelantarse a series en vuelo;
+    - un rechazo tardío deshace un toque posterior.
+  - **Decisión del dueño:** el orden se garantiza dentro del dispositivo. Con red lenta, el segundo cambio puede verse unos segundos como "por enviar". El uso desde varias pestañas o dispositivos queda como límite.
+  - **Estado:** tests en rojo escritos (lote E9); falta la implementación. Ver [[Handoff_Entrenamiento_Pendientes]].
