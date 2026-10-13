@@ -45,8 +45,8 @@ Ajustes aprendidos en la Ola 1:
 ## Checklist
 - [x] M: prompts `70`–`75`. Commits `428ac00`..`17f8cbc`.
 - [x] E: prompt `76` (convergencia del editor o decisión documentada de mantener la duplicación).
-- [ ] D: prompt `77`.
-- [ ] Claude: verificación contra el diff, un commit por módulo, `docs(vault)` y limpieza.
+- [x] D: prompt `77`.
+- [x] Claude: verificación contra el diff, un commit por módulo, `docs(vault)` y limpieza.
 
 ## Criterios de aceptación
 - Los 6 archivos quedan ≤ 300 líneas como contenedores, y ninguna pieza nueva pasa de 400.
@@ -60,5 +60,7 @@ Ajustes aprendidos en la Ola 1:
 - 2026-10-13 (Claude): fase M verificada contra el diff. Archivos: 977 → 246, 948 → 177, 888 → 122, 864 → 195, 830 → 174 y 772 → 112. Ninguna pieza nueva pasa de 289 líneas. Solo se tocó la superficie propia, sin editar specs existentes. Se crearon 9 specs de caracterización y 7 de lógica pura. Commit por módulo. El guardián queda en rojo esperado (R15) hasta el `77`.
 - 2026-10-13 (Claude): `76` verificado y commiteado en `9fe41c1`. Convergencia total con 16 props opcionales: se elimina `CatalogoEjerciciosRutina` y `ContenidoRutinaSemanal` pasa de 397 a 164 líneas. Los 164 tests de las 4 vistas afectadas mantienen el mismo conteo y typecheck da 0 errores. **BLOCKER-51-1 RESUELTO.**
 
+- 2026-10-13 (Claude): `77` verificado. `EXCEPCIONES_OLA2_NO_TRABAJADA` vacía y guardián 4/4. Suite 1947/1947 en verde (175 archivos), typecheck 0 y build en verde (2124 módulos). Se promovieron 0 candidatos (todos ÚNICOS, con su razón) y se corrigió 1 comentario obsoleto. Commit `3242bb0`. Los prompts y reportes 70–77 se borran. **ODD cerrado (Ola 2).**
+
 ## Siguiente paso
-- Prompt `77` (cierre), solo.
+- ODD de la Ola 3 (401–699 líneas; 8 archivos exceptuados en `EXCEPCIONES_OLA3_NO_TRABAJADA`).

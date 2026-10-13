@@ -159,7 +159,7 @@ Orden: A → (C ∥ B0) → B → D. La fase C va antes que B para que las vista
 - 2026-10-13 (Claude): el `62` resolvió BLOCKER-59-1. Guardián 4/4 ×3, typecheck 0 y suite 1817/1818; el único fallo es el flake W-52-2, que pasa 3/3 ejecutado solo. Commit `f5a0bd7`. ADR-022 pasa a `aceptado`, se añade la regla 14 en la §6 de `00_Reglas_Desarrollo_SDD.md` y se borran los prompts y reportes 40–62. **ODD cerrado (Ola 1).**
 
 ## Siguiente paso
-- ODD de la Ola 2 (700–999 líneas), que incluye la convergencia del editor de rutina de M1 con `BloquesRutinaEditor` (BLOCKER-51-1).
+- ~~ODD de la Ola 2~~: cerrado el 2026-10-13 en `odd/tasks/modularizacion-vistas-web-ola2.md` (incluye la resolución de BLOCKER-51-1).
 - ODD de la Ola 3 (401–699 líneas).
 - Opcional: estabilizar el caso (c) de `EntrenamientoPage.cache.interaccion.spec.tsx` (W-52-2) dándole un `timeout` propio a `findByRole`.
 - ODD aparte para los servicios del API de más de 1000 líneas.
