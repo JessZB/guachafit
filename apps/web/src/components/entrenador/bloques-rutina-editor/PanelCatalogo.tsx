@@ -3,7 +3,7 @@
  *
  * Origen: `BloquesRutinaEditor.tsx:613-795` (chips de grupo, buscador, lista para
  * añadir, vacío con atajos y formulario de creación rápida). Componente único de la
- * vista (R3: `CatalogoEjerciciosRutina.tsx:45-...` usa otro copy —`Añadir Ejercicio
+ * vista (R3 histórico, convergencia 76: `CatalogoEjerciciosRutina.tsx` eliminado; usaba otro copy —`Añadir Ejercicio
  * desde Catálogo` frente a `Añadir ejercicio desde tu lista`—, otro placeholder de
  * buscador y sin reintento de error, así que la sustitución no es mecánica). Solo
  * props y callbacks (R1): sin `useQuery` ni `api-client` (R9). Conserva roles,

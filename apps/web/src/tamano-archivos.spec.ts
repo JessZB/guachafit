@@ -29,14 +29,7 @@ const FUENTES_PAGINAS_COMPONENTES = import.meta.glob<string>(
  * que aún no se trabajaron. Tienen su propio ODD posterior con las mismas reglas.
  * Ningún archivo de M1–M8 puede estar en esta lista (lo verifica el segundo test).
  */
-export const EXCEPCIONES_OLA2_NO_TRABAJADA: string[] = [
-  'src/components/entrenador/PanelNutricionAlumno.tsx', // Ola 2 ODD: 977 líneas
-  'src/components/entrenador/SelectorPlantillaAsignacion.tsx', // Ola 2 ODD: 948 líneas
-  'src/pages/entrenador/MonitorAdherenciaPage.tsx', // Ola 2 ODD: 888 líneas
-  'src/pages/entrenador/CarteraPage.tsx', // Ola 2 ODD: 864 líneas
-  'src/components/entrenador/BloquesRutinaEditor.tsx', // Ola 2 ODD: 830 líneas
-  'src/pages/entrenador/ConciliacionPage.tsx', // Ola 2 ODD: 772 líneas
-];
+export const EXCEPCIONES_OLA2_NO_TRABAJADA: string[] = [];
 
 /**
  * Excepciones explícitas: SOLO archivos de la Ola 3 del ODD
