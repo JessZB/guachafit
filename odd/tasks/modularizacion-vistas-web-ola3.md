@@ -40,8 +40,8 @@ Objetivo de tamaño: contenedor ≤ 300 y piezas ≤ 250. En los archivos más p
 
 ## Checklist
 - [x] M: prompts `80`–`87` (un commit por módulo).
-- [ ] D: prompt `88`.
-- [ ] Claude: verificación contra el diff, un commit por módulo, `docs(vault)` y limpieza.
+- [x] D: prompt `88`.
+- [x] Claude: verificación contra el diff, un commit por módulo, `docs(vault)` y limpieza.
 
 ## Criterios de aceptación
 - Los 8 archivos quedan en ≤ 300 líneas, y ninguna pieza nueva pasa de 400.
@@ -52,6 +52,7 @@ Objetivo de tamaño: contenedor ≤ 300 y piezas ≤ 250. En los archivos más p
 ## Progreso
 - 2026-10-13: ODD creado, archivos medidos y prompts `80`–`88` redactados.
 - 2026-10-13 (Claude): fase M verificada contra el diff. Archivos: 638 → 223, 585 → 152, 559 → 244, 543 → 133, 466 → 113, 459 → 65, 432 → 275 y 412 → 95. Solo se tocó la superficie propia, sin editar specs existentes, y ninguna pieza nueva pasa de 250 líneas. Commits `9008807`..`43d146b`. Quedan 7 CANDIDATOS para el `88`. El guardián queda en rojo esperado (R15).
+- 2026-10-13 (Claude): `88` verificado. Las dos listas de excepciones quedan vacías y el guardián da 4/4. Suite 2104/2105: el único fallo es el flake W-52-2, que pasa 3/3 ejecutado solo. Typecheck 0 y build en verde (2189 módulos). Se promovieron 0 candidatos (divergencias reales) y se corrigieron 3 comentarios de `ui/`. El archivo más grande de `pages/` y `components/` es `DashboardPage` (385). Commit `9caa325`. Los prompts y reportes 80–88 se borran. **ODD cerrado (Ola 3).**
 
 ## Siguiente paso
-- Prompt `88` (cierre), solo.
+- Modularización web terminada. Pendiente aparte: el ODD de los servicios del API de más de 1000 líneas. Opcional: estabilizar el caso (c) de `EntrenamientoPage.cache` (W-52-2).

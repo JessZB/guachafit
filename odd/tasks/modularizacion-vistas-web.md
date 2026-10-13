@@ -160,6 +160,6 @@ Orden: A → (C ∥ B0) → B → D. La fase C va antes que B para que las vista
 
 ## Siguiente paso
 - ~~ODD de la Ola 2~~: cerrado el 2026-10-13 en `odd/tasks/modularizacion-vistas-web-ola2.md` (incluye la resolución de BLOCKER-51-1).
-- ODD de la Ola 3 (401–699 líneas).
+- ~~ODD de la Ola 3~~: cerrado el 2026-10-13 en `odd/tasks/modularizacion-vistas-web-ola3.md`; el guardián queda sin excepciones.
 - Opcional: estabilizar el caso (c) de `EntrenamientoPage.cache.interaccion.spec.tsx` (W-52-2) dándole un `timeout` propio a `findByRole`.
 - ODD aparte para los servicios del API de más de 1000 líneas.

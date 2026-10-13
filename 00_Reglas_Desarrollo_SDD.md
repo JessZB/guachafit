@@ -175,7 +175,7 @@ Reglas transversales del frontend, vinculantes para toda vista nueva (se revisan
      - lo único de la vista va en `components/<rol>/<modulo>/`, con sus hooks `use-*.ts`;
      - la lógica pura va en `lib/<modulo>-*.ts`.
    - Los componentes presentacionales no piden datos: reciben props y callbacks.
-   - Ningún `.ts`/`.tsx` de `pages/` o `components/` pasa de 400 líneas. Lo vigila el test guardián `apps/web/src/tamano-archivos.spec.ts`, que solo admite las excepciones explícitas de las olas pendientes del ODD `odd/tasks/modularizacion-vistas-web.md` y falla cuando una excepción sobra.
+   - Ningún `.ts`/`.tsx` de `pages/` o `components/` pasa de 400 líneas. Lo vigila el test guardián `apps/web/src/tamano-archivos.spec.ts`, que desde el 2026-10-13 (cierre de la Ola 3) no admite excepciones. Cualquier excepción nueva exige añadirla de forma explícita al guardián con una referencia a su ODD, y el guardián falla en cuanto sobra.
    - Un refactor de estructura no edita specs existentes ni cambia el mecanismo de datos de la vista.
 
 ---

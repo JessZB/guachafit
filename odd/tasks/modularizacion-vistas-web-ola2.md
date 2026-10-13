@@ -63,4 +63,4 @@ Ajustes aprendidos en la Ola 1:
 - 2026-10-13 (Claude): `77` verificado. `EXCEPCIONES_OLA2_NO_TRABAJADA` vacía y guardián 4/4. Suite 1947/1947 en verde (175 archivos), typecheck 0 y build en verde (2124 módulos). Se promovieron 0 candidatos (todos ÚNICOS, con su razón) y se corrigió 1 comentario obsoleto. Commit `3242bb0`. Los prompts y reportes 70–77 se borran. **ODD cerrado (Ola 2).**
 
 ## Siguiente paso
-- ODD de la Ola 3 (401–699 líneas; 8 archivos exceptuados en `EXCEPCIONES_OLA3_NO_TRABAJADA`).
+- ~~ODD de la Ola 3~~: cerrado el 2026-10-13 en `odd/tasks/modularizacion-vistas-web-ola3.md`.
