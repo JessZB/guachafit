@@ -1,98 +1,45 @@
-import {
-  Injectable,
-  Inject,
-  Logger,
-  Optional,
-  NotFoundException,
-  ForbiddenException,
-  BadRequestException,
-} from '@nestjs/common';
-import { parsearContrato } from '../../common/errores/parsear-contrato';
-import { MENSAJE_ALUMNO_NO_ENCONTRADO, MENSAJE_SIN_ACCESO_ALUMNO } from '../../common/mensajes-acceso';
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
 import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
-import {
-  Database,
-  TenantRlsContext,
-  WithTenantFn,
-  withTenant as withTenantBase,
-  eq,
-  and,
-  desc,
-  asc,
-  inArray,
-  gte,
-  lte,
-  count,
-  controlesAntropometricos,
-  fotosAntropometria,
-  perfilesAlumno,
-  usuarios,
-} from '@guachafit/database';
-import {
-  Rol,
-  Modalidad,
-  OrigenAntropometria,
-  EstadoMedicion,
+import { withTenant as withTenantBase } from '@guachafit/database';
+import type { Database, WithTenantFn } from '@guachafit/database';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
+import type { Rol } from '@guachafit/shared';
+import { LIMITE_COLA_ANTROPOMETRIA_POR_DEFECTO } from '@guachafit/shared';
+import type {
   CheckinAntropometricoDTO,
-  CheckinAntropometricoSchema,
-  MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA,
-  ConciliarAntropometriaDTO,
-  ConciliarAntropometriaSchema,
-  PresignedUploadUrlDTO,
-  PresignedUploadUrlSchema,
-  PresignedUploadUrlResponseDTO,
-  FiltroEvolucionAntropometricaDTO,
-  FiltroEvolucionAntropometricaSchema,
-  ConsultaComparadorFotograficoDTO,
-  ConsultaComparadorFotograficoSchema,
-  ControlAntropometricoDetalleDTO,
   ColaPendientesAntropometricosDTO,
+  ConciliarAntropometriaDTO,
+  ConsultaComparadorFotograficoDTO,
+  ControlAntropometricoDetalleDTO,
   EvolucionCorporalDTO,
-  ComparativaAngularDTO,
-  FotoAntropometriaDetalleDTO,
-  PerimetrosCorporalesDTO,
-  PlieguesCutaneosDTO,
-  LIMITE_COLA_ANTROPOMETRIA_POR_DEFECTO,
-  LIMITE_CONTROLES_EVOLUCION_POR_DEFECTO,
+  FiltroEvolucionAntropometricaDTO,
+  PresignedUploadUrlDTO,
+  PresignedUploadUrlResponseDTO,
 } from '@guachafit/shared';
-import { R2StorageService } from './r2-storage.service';
+import type { R2StorageService } from './r2-storage.service';
+import type { ContextoAntropometria } from './casos-antropometria/contexto-antropometria';
 import {
-  construirMensajeFueraDeVentana,
-  evaluarVentanaCheckinAntropometrico,
-} from './antropometria-periodicidad.util';
-import { CheckinAntropometricoRecibidoEvent } from '../notificaciones/events/eventos-notificacion';
+  TIPO_EVENTO_CHECKIN_RECIBIDO,
+  LINK_COLA_ANTROPOMETRIA_COACH,
+} from './casos-antropometria/antropometria-constantes';
+import type { ComparativaAngularResultadoDTO } from './casos-antropometria/obtener-comparativa';
+import { solicitarPresignedUploadUrl as solicitarPresignedUploadUrlCaso } from './casos-antropometria/solicitar-presigned';
+import { registrarCheckin as registrarCheckinCaso } from './casos-antropometria/registrar-checkin';
+import { conciliarControl as conciliarControlCaso } from './casos-antropometria/conciliar-control';
+import { obtenerEvolucion as obtenerEvolucionCaso } from './casos-antropometria/obtener-evolucion';
+import { obtenerComparativaFotografica as obtenerComparativaFotograficaCaso } from './casos-antropometria/obtener-comparativa';
+import { listarPendientes as listarPendientesCaso } from './casos-antropometria/listar-pendientes';
+import { obtenerControlPorId as obtenerControlPorIdCaso } from './casos-antropometria/obtener-control';
 
-export interface ComparativaAngularResultadoDTO extends ComparativaAngularDTO {
-  fotoDisponible: boolean;
-}
-
-/** RF-003 Escenario 2 (cierre): aviso al coach del check-in remoto pendiente de validación. */
-export const TIPO_EVENTO_CHECKIN_RECIBIDO = 'CHECKIN_ANTROPOMETRICO_RECIBIDO' as const;
-
-/** Ruta real de la cola de revisión antropométrica del coach (router web). */
-export const LINK_COLA_ANTROPOMETRIA_COACH = '/coach/antropometria';
-
-function toIsoUtcString(date: Date | string | null | undefined): string | null {
-  if (!date) return null;
-  const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toISOString();
-}
-
-/** LOTE API-2: control antropométrico inexistente o de otro alumno (sin mostrar identificadores). */
-const MENSAJE_CONTROL_NO_ENCONTRADO = 'No encontramos esa medición. Actualiza la pantalla.';
+export { TIPO_EVENTO_CHECKIN_RECIBIDO, LINK_COLA_ANTROPOMETRIA_COACH };
+export type { ComparativaAngularResultadoDTO };
 
 /**
- * RNF-001: la clave es un objeto de la bóveda de antropometría de ESE alumno, con la estructura que
- * emite el presign. Sin distinguir mayúsculas: el contrato acepta UUID en cualquier caja.
+ * Antropometria facade (P1/P2): keeps the file, the class name, the decorators,
+ * the identical constructor and every public method. Each method now delegates
+ * to a use case in `casos-antropometria/` with the dependency context built
+ * once in the constructor. No behavior change (P3).
  */
-function esClaveFotoDelAlumno(storageKey: string, alumnoId: string): boolean {
-  return (
-    storageKey.toLowerCase().startsWith(`antropometria/${alumnoId.toLowerCase()}/`) &&
-    R2StorageService.validarStorageKeyEstructura(storageKey)
-  );
-}
-
 @Injectable()
 export class AntropometriaService {
   private readonly logger = new Logger(AntropometriaService.name);
@@ -103,6 +50,9 @@ export class AntropometriaService {
    */
   private readonly withTenant: WithTenantFn;
 
+  /** Explicit dependency context shared by all use cases (P2, no new providers). */
+  private readonly ctx: ContextoAntropometria;
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
     public readonly r2StorageService: R2StorageService,
@@ -110,22 +60,13 @@ export class AntropometriaService {
     @Optional() @Inject(WITH_TENANT) withTenant?: WithTenantFn
   ) {
     this.withTenant = withTenant ?? ((context, fn) => withTenantBase(context, fn, this.db));
-  }
-
-  /**
-   * RNF-003/ADR-011 (etapa 3): contexto RLS del perfil según el actor de la petición.
-   * - ALUMNO -> self-select (`current_usuario_id`).
-   * - ENTRENADOR -> tenant del coach.
-   * - SUPERADMIN -> bypass explícito.
-   */
-  private contextoRlsDeCaller(caller: {
-    id: string;
-    rol: Rol;
-    entrenadorId?: string;
-  }): TenantRlsContext {
-    if (caller.rol === Rol.ALUMNO) return { usuarioId: caller.id };
-    if (caller.rol === Rol.SUPERADMIN) return { isSuperadmin: true };
-    return { entrenadorId: caller.entrenadorId ?? caller.id };
+    this.ctx = {
+      db: this.db,
+      withTenant: this.withTenant,
+      r2StorageService: this.r2StorageService,
+      eventEmitter: this.eventEmitter,
+      logger: this.logger,
+    };
   }
 
   /**
@@ -137,40 +78,7 @@ export class AntropometriaService {
     dto: PresignedUploadUrlDTO,
     customUuid?: string
   ): Promise<PresignedUploadUrlResponseDTO> {
-    const validado = parsearContrato(PresignedUploadUrlSchema, dto);
-
-    // RBAC primero: un alumno solo opera sobre su propio perfil (y su contexto RLS es self).
-    if (caller.rol === Rol.ALUMNO && caller.id !== validado.alumnoId) {
-      throw new ForbiddenException('No puedes subir archivos para otro alumno.');
-    }
-
-    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura con el contexto del actor.
-    const [alumno] = await this.withTenant(this.contextoRlsDeCaller(caller), (tx) =>
-      tx
-        .select()
-        .from(perfilesAlumno)
-        .where(eq(perfilesAlumno.usuarioId, validado.alumnoId))
-        .limit(1)
-    );
-
-    if (!alumno) {
-      throw new NotFoundException(MENSAJE_ALUMNO_NO_ENCONTRADO);
-    }
-
-    if (caller.rol === Rol.ALUMNO) {
-      if (validado.modulo === 'antropometria' && alumno.modalidad === Modalidad.PRESENCIAL) {
-        throw new ForbiddenException(
-          'Los alumnos en modalidad presencial no registran sus propias medidas: las toma tu entrenador y quedan verificadas.'
-        );
-      }
-    } else if (caller.rol === Rol.ENTRENADOR) {
-      const coachId = caller.entrenadorId || caller.id;
-      if (alumno.entrenadorId !== coachId) {
-        throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
-      }
-    }
-
-    return this.r2StorageService.generarPresignedUploadUrl(validado, customUuid);
+    return solicitarPresignedUploadUrlCaso(this.ctx, caller, dto, customUuid);
   }
 
   /**
@@ -189,184 +97,7 @@ export class AntropometriaService {
     dto: CheckinAntropometricoDTO,
     customId?: string
   ): Promise<ControlAntropometricoDetalleDTO> {
-    const validado = parsearContrato(CheckinAntropometricoSchema, dto);
-
-    // RBAC primero: un alumno solo registra sus propias métricas (y su contexto RLS es self).
-    if (caller.rol === Rol.ALUMNO && caller.id !== validado.alumnoId) {
-      throw new ForbiddenException('No puedes registrar medidas para otro alumno.');
-    }
-
-    // RNF-001: cada foto debe ser un objeto de la bóveda de antropometría de ESTE alumno, con la
-    // estructura que emite el presign. Sin esto, una clave ajena guardada en el control permitiría
-    // leer la foto de otro alumno con la URL firmada de lectura.
-    const fotoInvalida = (validado.fotos ?? []).some(
-      (foto) => !esClaveFotoDelAlumno(foto.storageKey, validado.alumnoId)
-    );
-    if (fotoInvalida) {
-      throw new BadRequestException(MENSAJE_FOTO_ANTROPOMETRIA_INVALIDA);
-    }
-
-    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura con el contexto del actor.
-    const [alumno] = await this.withTenant(this.contextoRlsDeCaller(caller), (tx) =>
-      tx
-        .select()
-        .from(perfilesAlumno)
-        .where(eq(perfilesAlumno.usuarioId, validado.alumnoId))
-        .limit(1)
-    );
-
-    if (!alumno) {
-      throw new NotFoundException(MENSAJE_ALUMNO_NO_ENCONTRADO);
-    }
-
-    // Zona IANA del alumno para el día local del calendario (RN-01/RN-04). Es una consulta
-    // independiente del perfil para no acoplar la hidratación al join.
-    const [usuarioAlumno] = await this.db
-      .select()
-      .from(usuarios)
-      .where(eq(usuarios.id, validado.alumnoId))
-      .limit(1);
-
-    let origen: OrigenAntropometria;
-    let estado: EstadoMedicion;
-    let registradoPor: string;
-    let fechaAprobacionUtc: Date | null = null;
-    const now = new Date();
-
-    if (caller.rol === Rol.ALUMNO) {
-      if (alumno.modalidad === Modalidad.PRESENCIAL) {
-        throw new ForbiddenException(
-          'Los alumnos en modalidad presencial no registran sus propias medidas: las toma tu entrenador y quedan verificadas.'
-        );
-      }
-
-      // RN-04/§6: escritura remota habilitada SOLO dentro de la ventana activa del calendario.
-      const ventana = evaluarVentanaCheckinAntropometrico({
-        periodicidad: alumno.periodicidadAntropometria,
-        antropometriaInicio: alumno.antropometriaInicio,
-        timezone: usuarioAlumno?.timezone,
-        ahora: now,
-      });
-      if (!ventana.permitido) {
-        throw new BadRequestException(construirMensajeFueraDeVentana(ventana));
-      }
-
-      origen = OrigenAntropometria.REMOTO_AUTOREPORTE;
-      estado = EstadoMedicion.PENDIENTE_APROBACION;
-      registradoPor = caller.id;
-      fechaAprobacionUtc = null;
-    } else if (caller.rol === Rol.ENTRENADOR) {
-      const coachId = caller.entrenadorId || caller.id;
-      if (alumno.entrenadorId !== coachId) {
-        throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
-      }
-      origen = OrigenAntropometria.PRESENCIAL_VERIFICADO;
-      estado = EstadoMedicion.APROBADO;
-      registradoPor = caller.id;
-      fechaAprobacionUtc = now;
-    } else {
-      throw new ForbiddenException('Rol no autorizado para registrar evaluaciones antropométricas.');
-    }
-
-    // RF-003 RN-02 (WU RF-003a): alias legados. `brazoCm` = brazo RELAJADO y `musloCm` = muslo
-    // MEDIO; el payload nuevo tiene precedencia y el legado sigue funcionando (nunca ambos vacíos).
-    const perimetro = validado.perimetros;
-    const brazoRelajadoCm = perimetro?.brazoRelajadoCm ?? perimetro?.brazoCm ?? null;
-    const musloMedioCm = perimetro?.musloMedioCm ?? perimetro?.musloCm ?? null;
-
-    const controlId = await this.db.transaction(async (tx) => {
-      const valuesToInsert: any = {
-        alumnoId: validado.alumnoId,
-        fechaEvaluacion: validado.fechaEvaluacion,
-        pesoKg: validado.pesoKg,
-        alturaCm: validado.alturaCm ?? null,
-        porcentajeGrasa: validado.porcentajeGrasa ?? null,
-        cuelloCm: perimetro?.cuelloCm ?? null,
-        pechoCm: perimetro?.pechoCm ?? null,
-        cinturaCm: perimetro?.cinturaCm ?? null,
-        caderaCm: perimetro?.caderaCm ?? null,
-        // Alias legados (compatibilidad de datos previos al RF-003a).
-        brazoCm: brazoRelajadoCm,
-        musloCm: musloMedioCm,
-        // Modelo completo del RN-02.
-        brazoRelajadoCm,
-        brazoContraidoCm: perimetro?.brazoContraidoCm ?? null,
-        musloMedioCm,
-        pliegueTricepsMm: validado.pliegues?.tricepsMm ?? null,
-        pliegueSubescapularMm: validado.pliegues?.subescapularMm ?? null,
-        pliegueSuprailiacoMm: validado.pliegues?.suprailiacoMm ?? null,
-        pliegueAbdominalMm: validado.pliegues?.abdominalMm ?? null,
-        modalidad: alumno.modalidad,
-        origen,
-        registradoPor,
-        estado,
-        observacionesCoach: validado.observacionesCoach ?? null,
-        motivoRechazo: null,
-        fechaAprobacionUtc,
-        createdAtUtc: now,
-        updatedAtUtc: now,
-      };
-
-      if (customId) {
-        valuesToInsert.id = customId;
-      }
-
-      const [inserted] = await tx
-        .insert(controlesAntropometricos)
-        .values(valuesToInsert)
-        .returning();
-
-      if (validado.fotos && validado.fotos.length > 0) {
-        for (const f of validado.fotos) {
-          await tx.insert(fotosAntropometria).values({
-            controlId: inserted.id,
-            angulo: f.angulo,
-            storageKey: f.storageKey,
-            createdAtUtc: now,
-          });
-        }
-      }
-
-      return inserted.id;
-    });
-
-    // RF-003 Escenario 2 (WU "RF-003 · cierre"): el autoreporte remoto queda `pendiente_aprobacion`
-    // y el coach debe enterarse para revisarlo. Fire-and-forget (patrón de los emisores existentes:
-    // `void emitAsync(...).catch(...)`): un fallo del bus no revierte un check-in ya persistido.
-    // El registro presencial del coach NO emite: no hay nada que aprobar.
-    if (origen === OrigenAntropometria.REMOTO_AUTOREPORTE) {
-      const nombreAlumno = `${alumno.nombres} ${alumno.apellidos}`.trim();
-      void this.eventEmitter
-        .emitAsync(
-          CheckinAntropometricoRecibidoEvent.NOMBRE,
-          new CheckinAntropometricoRecibidoEvent({
-            tipoEvento: TIPO_EVENTO_CHECKIN_RECIBIDO,
-            destinatarioUserId: alumno.entrenadorId,
-            entrenadorId: alumno.entrenadorId,
-            categoria: 'ANTROPOMETRIA',
-            titulo: 'Nuevo check-in pendiente de validación',
-            cuerpo: `${nombreAlumno} envió su check-in antropométrico; revísalo.`,
-            linkAccion: LINK_COLA_ANTROPOMETRIA_COACH,
-            // RNF-004 §3: referencia determinista del control (jobId de push/email sin duplicados).
-            referenciaId: `checkin_antropometrico_${controlId}`,
-            datosAdicionales: {
-              controlId,
-              alumnoId: alumno.usuarioId,
-              fechaEvaluacion: validado.fechaEvaluacion,
-            },
-            esCriticoSeguridad: false,
-          })
-        )
-        .catch((error) =>
-          this.logger.warn(
-            `No se pudo avisar al coach del check-in remoto ${controlId}: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          )
-        );
-    }
-
-    return this.obtenerControlPorIdInterno(controlId);
+    return registrarCheckinCaso(this.ctx, caller, dto, customId);
   }
 
   /**
@@ -377,64 +108,7 @@ export class AntropometriaService {
     controlId: string,
     dto: ConciliarAntropometriaDTO
   ): Promise<ControlAntropometricoDetalleDTO> {
-    const validado = parsearContrato(ConciliarAntropometriaSchema, dto);
-
-    const [control] = await this.db
-      .select()
-      .from(controlesAntropometricos)
-      .where(eq(controlesAntropometricos.id, controlId))
-      .limit(1);
-
-    if (!control) {
-      throw new NotFoundException(MENSAJE_CONTROL_NO_ENCONTRADO);
-    }
-
-    // RNF-003/ADR-011 (etapa 3): lectura del perfil con el GUC del coach (RLS).
-    const [alumno] = await this.withTenant({ entrenadorId: coachId }, (tx) =>
-      tx
-        .select()
-        .from(perfilesAlumno)
-        .where(eq(perfilesAlumno.usuarioId, control.alumnoId))
-        .limit(1)
-    );
-
-    if (!alumno || alumno.entrenadorId !== coachId) {
-      throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
-    }
-
-    const now = new Date();
-    let nuevoEstado: EstadoMedicion;
-    let fechaAprobacionUtc: Date | null = null;
-    let motivoRechazo: string | null = null;
-
-    if (validado.accion === 'aprobar') {
-      nuevoEstado = EstadoMedicion.APROBADO;
-      fechaAprobacionUtc = now;
-      motivoRechazo = null;
-    } else if (validado.accion === 'rechazar') {
-      if (!validado.motivoRechazo || validado.motivoRechazo.trim().length === 0) {
-        throw new BadRequestException('El motivo de rechazo es obligatorio al rechazar una evaluación antropométrica.');
-      }
-      nuevoEstado = EstadoMedicion.RECHAZADO;
-      fechaAprobacionUtc = null;
-      motivoRechazo = validado.motivoRechazo;
-    } else {
-      throw new BadRequestException('Acción no reconocida.');
-    }
-
-    await this.db
-      .update(controlesAntropometricos)
-      .set({
-        estado: nuevoEstado,
-        fechaAprobacionUtc,
-        motivoRechazo,
-        observacionesCoach:
-          validado.observacionesCoach !== undefined ? validado.observacionesCoach : control.observacionesCoach,
-        updatedAtUtc: now,
-      })
-      .where(eq(controlesAntropometricos.id, controlId));
-
-    return this.obtenerControlPorIdInterno(controlId);
+    return conciliarControlCaso(this.ctx, coachId, controlId, dto);
   }
 
   /**
@@ -454,153 +128,7 @@ export class AntropometriaService {
     filtro?: FiltroEvolucionAntropometricaDTO,
     caller?: { id: string; rol: Rol; entrenadorId?: string }
   ): Promise<EvolucionCorporalDTO> {
-    if (filtro) {
-      parsearContrato(FiltroEvolucionAntropometricaSchema, filtro);
-    }
-
-    if (caller) {
-      if (caller.rol === Rol.ALUMNO && caller.id !== alumnoId) {
-        throw new ForbiddenException('Solo puedes ver tu propia evolución.');
-      }
-      if (caller.rol === Rol.ENTRENADOR) {
-        const coachId = caller.entrenadorId || caller.id;
-        // RNF-003/ADR-011 (etapa 3): lectura del perfil con el GUC del coach (RLS).
-        const [perfil] = await this.withTenant({ entrenadorId: coachId }, (tx) =>
-          tx
-            .select()
-            .from(perfilesAlumno)
-            .where(eq(perfilesAlumno.usuarioId, alumnoId))
-            .limit(1)
-        );
-
-        if (!perfil || perfil.entrenadorId !== coachId) {
-          throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
-        }
-      }
-    }
-
-    const conditions = [
-      eq(controlesAntropometricos.alumnoId, alumnoId),
-      eq(controlesAntropometricos.estado, EstadoMedicion.APROBADO),
-    ];
-
-    if (filtro?.desde) {
-      conditions.push(gte(controlesAntropometricos.fechaEvaluacion, filtro.desde));
-    }
-    if (filtro?.hasta) {
-      conditions.push(lte(controlesAntropometricos.fechaEvaluacion, filtro.hasta));
-    }
-    if (filtro?.periodo && filtro.periodo !== 'todo' && !filtro.desde) {
-      const now = new Date();
-      let meses = 1;
-      if (filtro.periodo === '3M') meses = 3;
-      else if (filtro.periodo === '6M') meses = 6;
-      else if (filtro.periodo === '1A') meses = 12;
-      const fechaDesde = new Date(now.setMonth(now.getMonth() - meses)).toISOString().split('T')[0];
-      conditions.push(gte(controlesAntropometricos.fechaEvaluacion, fechaDesde));
-    }
-
-    const whereEvolucion = and(...conditions);
-
-    // WU24b: COUNT real en SQL para el total del envelope (independiente del slice).
-    const [filaTotal] = await this.db
-      .select({ total: count() })
-      .from(controlesAntropometricos)
-      .where(whereEvolucion);
-    const totalControles = Number(filaTotal?.total ?? 0);
-
-    // WU24b: paginación OPT-IN; sin parámetros la serie completa sigue siendo el default.
-    const paginando = filtro?.controlesLimit !== undefined || filtro?.controlesOffset !== undefined;
-    const controlesLimit = paginando
-      ? filtro?.controlesLimit ?? LIMITE_CONTROLES_EVOLUCION_POR_DEFECTO
-      : undefined;
-    const controlesOffset = paginando ? filtro?.controlesOffset ?? 0 : 0;
-
-    const queryEvolucion = this.db
-      .select()
-      .from(controlesAntropometricos)
-      .where(whereEvolucion)
-      .orderBy(
-        asc(controlesAntropometricos.fechaEvaluacion),
-        // WU24b: desempate estable para que `controlesOffset` no repita ni salte filas.
-        asc(controlesAntropometricos.createdAtUtc),
-        asc(controlesAntropometricos.id)
-      );
-
-    const rows = await (controlesLimit !== undefined
-      ? queryEvolucion.limit(controlesLimit).offset(controlesOffset)
-      : queryEvolucion);
-
-    const evaluaciones: ControlAntropometricoDetalleDTO[] = await Promise.all(
-      rows.map((row) => this.hidratarControl(row))
-    );
-
-    let cambioNetoPesoKg: string | null = null;
-    let cambioNetoGrasaPorcentaje: string | null = null;
-
-    // WU24b: los cambios netos se calculan sobre la SERIE COMPLETA (no la página) con dos
-    // consultas ligeras de primera/última evaluación; así el valor no depende del slice.
-    if (totalControles >= 1) {
-      const [primera] = await this.db
-        .select({
-          pesoKg: controlesAntropometricos.pesoKg,
-          porcentajeGrasa: controlesAntropometricos.porcentajeGrasa,
-        })
-        .from(controlesAntropometricos)
-        .where(whereEvolucion)
-        .orderBy(
-          asc(controlesAntropometricos.fechaEvaluacion),
-          asc(controlesAntropometricos.createdAtUtc),
-          asc(controlesAntropometricos.id)
-        )
-        .limit(1);
-
-      if (totalControles === 1) {
-        cambioNetoPesoKg = '0.00';
-        if (primera && primera.porcentajeGrasa !== null && primera.porcentajeGrasa !== undefined) {
-          cambioNetoGrasaPorcentaje = '0.00';
-        }
-      } else {
-        const [ultima] = await this.db
-          .select({
-            pesoKg: controlesAntropometricos.pesoKg,
-            porcentajeGrasa: controlesAntropometricos.porcentajeGrasa,
-          })
-          .from(controlesAntropometricos)
-          .where(whereEvolucion)
-          .orderBy(
-            desc(controlesAntropometricos.fechaEvaluacion),
-            desc(controlesAntropometricos.createdAtUtc),
-            desc(controlesAntropometricos.id)
-          )
-          .limit(1);
-
-        if (primera && ultima) {
-          cambioNetoPesoKg = (Number(ultima.pesoKg) - Number(primera.pesoKg)).toFixed(2);
-
-          if (
-            primera.porcentajeGrasa !== null &&
-            primera.porcentajeGrasa !== undefined &&
-            ultima.porcentajeGrasa !== null &&
-            ultima.porcentajeGrasa !== undefined
-          ) {
-            cambioNetoGrasaPorcentaje = (
-              Number(ultima.porcentajeGrasa) - Number(primera.porcentajeGrasa)
-            ).toFixed(2);
-          }
-        }
-      }
-    }
-
-    return {
-      alumnoId,
-      totalEvaluaciones: totalControles,
-      controlesTotal: totalControles,
-      evaluaciones,
-      cambioNetoPesoKg,
-      cambioNetoGrasaPorcentaje,
-      rangoSeleccionado: filtro?.periodo ?? 'todo',
-    };
+    return obtenerEvolucionCaso(this.ctx, alumnoId, filtro, caller);
   }
 
   /**
@@ -613,130 +141,7 @@ export class AntropometriaService {
     dto: ConsultaComparadorFotograficoDTO,
     caller?: { id: string; rol: Rol; entrenadorId?: string }
   ): Promise<ComparativaAngularResultadoDTO> {
-    parsearContrato(ConsultaComparadorFotograficoSchema, dto);
-
-    if (caller) {
-      if (caller.rol === Rol.ALUMNO && caller.id !== alumnoId) {
-        throw new ForbiddenException('Solo puedes ver tu propia comparación de fotos.');
-      }
-      if (caller.rol === Rol.ENTRENADOR) {
-        const coachId = caller.entrenadorId || caller.id;
-        // RNF-003/ADR-011 (etapa 3): lectura del perfil con el GUC del coach (RLS).
-        const [perfil] = await this.withTenant({ entrenadorId: coachId }, (tx) =>
-          tx
-            .select()
-            .from(perfilesAlumno)
-            .where(eq(perfilesAlumno.usuarioId, alumnoId))
-            .limit(1)
-        );
-
-        if (!perfil || perfil.entrenadorId !== coachId) {
-          throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
-        }
-      }
-    }
-
-    const [controlA] = await this.db
-      .select()
-      .from(controlesAntropometricos)
-      .where(eq(controlesAntropometricos.id, dto.controlIdA))
-      .limit(1);
-
-    const [controlB] = await this.db
-      .select()
-      .from(controlesAntropometricos)
-      .where(eq(controlesAntropometricos.id, dto.controlIdB))
-      .limit(1);
-
-    if (!controlA || controlA.alumnoId !== alumnoId) {
-      throw new NotFoundException(MENSAJE_CONTROL_NO_ENCONTRADO);
-    }
-    if (!controlB || controlB.alumnoId !== alumnoId) {
-      throw new NotFoundException(MENSAJE_CONTROL_NO_ENCONTRADO);
-    }
-
-    if (controlA.estado !== EstadoMedicion.APROBADO || controlB.estado !== EstadoMedicion.APROBADO) {
-      throw new BadRequestException('Solo es posible comparar fotográficamente evaluaciones en estado Aprobado.');
-    }
-
-    const [fotoAGuardada] = await this.db
-      .select()
-      .from(fotosAntropometria)
-      .where(
-        and(
-          eq(fotosAntropometria.controlId, dto.controlIdA),
-          eq(fotosAntropometria.angulo, dto.angulo)
-        )
-      )
-      .limit(1);
-
-    const [fotoBGuardada] = await this.db
-      .select()
-      .from(fotosAntropometria)
-      .where(
-        and(
-          eq(fotosAntropometria.controlId, dto.controlIdB),
-          eq(fotosAntropometria.angulo, dto.angulo)
-        )
-      )
-      .limit(1);
-
-    // Defensa en profundidad (RNF-001): una clave guardada antes de validar la escritura que no
-    // pertenezca al alumno no se firma; esa perspectiva queda como "foto no disponible".
-    const fotoARaw = this.fotoFirmable(fotoAGuardada, alumnoId);
-    const fotoBRaw = this.fotoFirmable(fotoBGuardada, alumnoId);
-
-    let fotoA: FotoAntropometriaDetalleDTO | null = null;
-    let fotoB: FotoAntropometriaDetalleDTO | null = null;
-
-    if (fotoARaw) {
-      fotoA = {
-        id: fotoARaw.id,
-        controlId: fotoARaw.controlId,
-        angulo: fotoARaw.angulo,
-        storageKey: fotoARaw.storageKey,
-        presignedGetUrl: await this.r2StorageService.generarPresignedGetUrl(fotoARaw.storageKey, 900),
-        createdAtUtc: toIsoUtcString(fotoARaw.createdAtUtc)!,
-      };
-    }
-
-    if (fotoBRaw) {
-      fotoB = {
-        id: fotoBRaw.id,
-        controlId: fotoBRaw.controlId,
-        angulo: fotoBRaw.angulo,
-        storageKey: fotoBRaw.storageKey,
-        presignedGetUrl: await this.r2StorageService.generarPresignedGetUrl(fotoBRaw.storageKey, 900),
-        createdAtUtc: toIsoUtcString(fotoBRaw.createdAtUtc)!,
-      };
-    }
-
-    const fotoDisponible = Boolean(fotoA && fotoB);
-
-    const pesoA = Number(controlA.pesoKg);
-    const pesoB = Number(controlB.pesoKg);
-    const diferenciaPesoKg = (pesoB - pesoA).toFixed(2);
-
-    let diferenciaGrasaPorcentaje: string | null = null;
-    if (controlA.porcentajeGrasa !== null && controlB.porcentajeGrasa !== null) {
-      const grasaA = Number(controlA.porcentajeGrasa);
-      const grasaB = Number(controlB.porcentajeGrasa);
-      diferenciaGrasaPorcentaje = (grasaB - grasaA).toFixed(2);
-    }
-
-    const controlADetalle = await this.hidratarControl(controlA, false);
-    const controlBDetalle = await this.hidratarControl(controlB, false);
-
-    return {
-      angulo: dto.angulo,
-      controlA: controlADetalle,
-      controlB: controlBDetalle,
-      fotoA,
-      fotoB,
-      fotoDisponible,
-      diferenciaPesoKg,
-      diferenciaGrasaPorcentaje,
-    };
+    return obtenerComparativaFotograficaCaso(this.ctx, alumnoId, dto, caller);
   }
 
   /**
@@ -751,62 +156,7 @@ export class AntropometriaService {
     limit = LIMITE_COLA_ANTROPOMETRIA_POR_DEFECTO,
     offset = 0
   ): Promise<ColaPendientesAntropometricosDTO> {
-    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; lectura de la cartera con el GUC
-    // del coach.
-    const alumnosCoach = await this.withTenant({ entrenadorId: coachId }, (tx) =>
-      tx
-        .select({
-          usuarioId: perfilesAlumno.usuarioId,
-          nombres: perfilesAlumno.nombres,
-          apellidos: perfilesAlumno.apellidos,
-        })
-        .from(perfilesAlumno)
-        .where(eq(perfilesAlumno.entrenadorId, coachId))
-    );
-
-    const alumnoIds = alumnosCoach.map((a) => a.usuarioId);
-    if (alumnoIds.length === 0) {
-      return { items: [], total: 0, limit, offset };
-    }
-
-    // WU20: nombre visible del alumno para la cola del coach (aditivo; el cliente tiene fallback).
-    const nombrePorAlumno = new Map(
-      alumnosCoach.map((a) => [a.usuarioId, `${a.nombres} ${a.apellidos}`])
-    );
-
-    const wherePendientes = and(
-      inArray(controlesAntropometricos.alumnoId, alumnoIds),
-      eq(controlesAntropometricos.estado, EstadoMedicion.PENDIENTE_APROBACION)
-    );
-
-    // WU24b: COUNT real en SQL para el `total` del envelope.
-    const [filaTotal] = await this.db
-      .select({ total: count() })
-      .from(controlesAntropometricos)
-      .where(wherePendientes);
-
-    const rows = await this.db
-      .select()
-      .from(controlesAntropometricos)
-      .where(wherePendientes)
-      .orderBy(
-        desc(controlesAntropometricos.fechaEvaluacion),
-        desc(controlesAntropometricos.createdAtUtc),
-        desc(controlesAntropometricos.id)
-      )
-      .limit(limit)
-      .offset(offset);
-
-    const items = await Promise.all(
-      rows.map((row) => this.hidratarControl(row, true, nombrePorAlumno.get(row.alumnoId) ?? null))
-    );
-
-    return {
-      items,
-      total: Number(filaTotal?.total ?? 0),
-      limit,
-      offset,
-    };
+    return listarPendientesCaso(this.ctx, coachId, limit, offset);
   }
 
   /**
@@ -816,160 +166,6 @@ export class AntropometriaService {
     controlId: string,
     caller?: { id: string; rol: Rol; entrenadorId?: string }
   ): Promise<ControlAntropometricoDetalleDTO> {
-    const [control] = await this.db
-      .select()
-      .from(controlesAntropometricos)
-      .where(eq(controlesAntropometricos.id, controlId))
-      .limit(1);
-
-    if (!control) {
-      throw new NotFoundException(MENSAJE_CONTROL_NO_ENCONTRADO);
-    }
-
-    if (caller) {
-      if (caller.rol === Rol.ALUMNO && caller.id !== control.alumnoId) {
-        throw new ForbiddenException('No tienes acceso a esta medición.');
-      }
-      if (caller.rol === Rol.ENTRENADOR) {
-        const coachId = caller.entrenadorId || caller.id;
-        // RNF-003/ADR-011 (etapa 3): lectura del perfil con el GUC del coach (RLS).
-        const [alumno] = await this.withTenant({ entrenadorId: coachId }, (tx) =>
-          tx
-            .select()
-            .from(perfilesAlumno)
-            .where(eq(perfilesAlumno.usuarioId, control.alumnoId))
-            .limit(1)
-        );
-
-        if (!alumno || alumno.entrenadorId !== coachId) {
-          throw new ForbiddenException(MENSAJE_SIN_ACCESO_ALUMNO);
-        }
-      }
-    }
-
-    return this.hidratarControl(control);
-  }
-
-  // ---------------------------------------------------------------------------
-  // HELPERS PRIVADOS DE HIDRATACIÓN
-  // ---------------------------------------------------------------------------
-
-  /**
-   * RNF-001: devuelve la foto solo si su clave pertenece a la bóveda de antropometría del alumno.
-   * Una fila con clave ajena (aceptada antes de validar la escritura) no se firma y se registra
-   * sin datos del alumno ni la clave, para poder sanearla.
-   */
-  private fotoFirmable<T extends { id: string; storageKey: string }>(
-    foto: T | undefined,
-    alumnoId: string
-  ): T | undefined {
-    if (!foto) return undefined;
-    if (esClaveFotoDelAlumno(foto.storageKey, alumnoId)) return foto;
-    this.logger.warn(`Foto antropométrica ${foto.id} con clave fuera de la bóveda de su alumno: no se firma.`);
-    return undefined;
-  }
-
-  private async hidratarControl(
-    control: any,
-    cargarFotos = true,
-    alumnoNombre: string | null = null
-  ): Promise<ControlAntropometricoDetalleDTO> {
-    let fotos: FotoAntropometriaDetalleDTO[] = [];
-    if (cargarFotos) {
-      const fotosRows = await this.db
-        .select()
-        .from(fotosAntropometria)
-        .where(eq(fotosAntropometria.controlId, control.id))
-        .orderBy(asc(fotosAntropometria.createdAtUtc));
-
-      // Defensa en profundidad (RNF-001): solo se firman claves de la bóveda de este alumno.
-      const firmables = fotosRows.filter((f) => this.fotoFirmable(f, control.alumnoId));
-      fotos = await Promise.all(
-        firmables.map(async (f) => ({
-          id: f.id,
-          controlId: f.controlId,
-          angulo: f.angulo,
-          storageKey: f.storageKey,
-          presignedGetUrl: await this.r2StorageService.generarPresignedGetUrl(f.storageKey, 900),
-          createdAtUtc: toIsoUtcString(f.createdAtUtc)!,
-        }))
-      );
-    }
-
-    // RF-003 RN-02 (WU RF-003a): alias legados resueltos en lectura. `brazoCm`/`musloCm` conservan
-    // los datos históricos (controles previos a las columnas nuevas) y el modelo nuevo los expone
-    // también como `brazoRelajadoCm`/`musloMedioCm`; las columnas nuevas tienen precedencia.
-    const brazoRelajadoCm = control.brazoRelajadoCm ?? control.brazoCm ?? null;
-    const musloMedioCm = control.musloMedioCm ?? control.musloCm ?? null;
-
-    const perimetros: PerimetrosCorporalesDTO | null =
-      control.cuelloCm ||
-      control.pechoCm ||
-      control.cinturaCm ||
-      control.caderaCm ||
-      brazoRelajadoCm ||
-      control.brazoContraidoCm ||
-      musloMedioCm
-        ? {
-            cuelloCm: control.cuelloCm ?? undefined,
-            pechoCm: control.pechoCm ?? undefined,
-            cinturaCm: control.cinturaCm ?? undefined,
-            caderaCm: control.caderaCm ?? undefined,
-            brazoRelajadoCm: brazoRelajadoCm ?? undefined,
-            brazoContraidoCm: control.brazoContraidoCm ?? undefined,
-            musloMedioCm: musloMedioCm ?? undefined,
-            brazoCm: brazoRelajadoCm ?? undefined,
-            musloCm: musloMedioCm ?? undefined,
-          }
-        : null;
-
-    const pliegues: PlieguesCutaneosDTO | null =
-      control.pliegueTricepsMm ||
-      control.pliegueSubescapularMm ||
-      control.pliegueSuprailiacoMm ||
-      control.pliegueAbdominalMm
-        ? {
-            tricepsMm: control.pliegueTricepsMm ?? undefined,
-            subescapularMm: control.pliegueSubescapularMm ?? undefined,
-            suprailiacoMm: control.pliegueSuprailiacoMm ?? undefined,
-            abdominalMm: control.pliegueAbdominalMm ?? undefined,
-          }
-        : null;
-
-    return {
-      id: control.id,
-      alumnoId: control.alumnoId,
-      alumnoNombre,
-      fechaEvaluacion: control.fechaEvaluacion,
-      pesoKg: control.pesoKg,
-      alturaCm: control.alturaCm ?? null,
-      porcentajeGrasa: control.porcentajeGrasa ?? null,
-      perimetros,
-      pliegues,
-      modalidad: control.modalidad,
-      origen: control.origen,
-      registradoPor: control.registradoPor,
-      estado: control.estado,
-      observacionesCoach: control.observacionesCoach ?? null,
-      motivoRechazo: control.motivoRechazo ?? null,
-      fechaAprobacionUtc: toIsoUtcString(control.fechaAprobacionUtc),
-      fotos,
-      createdAtUtc: toIsoUtcString(control.createdAtUtc)!,
-      updatedAtUtc: toIsoUtcString(control.updatedAtUtc)!,
-    };
-  }
-
-  private async obtenerControlPorIdInterno(controlId: string): Promise<ControlAntropometricoDetalleDTO> {
-    const [control] = await this.db
-      .select()
-      .from(controlesAntropometricos)
-      .where(eq(controlesAntropometricos.id, controlId))
-      .limit(1);
-
-    if (!control) {
-      throw new NotFoundException(MENSAJE_CONTROL_NO_ENCONTRADO);
-    }
-
-    return this.hidratarControl(control);
+    return obtenerControlPorIdCaso(this.ctx, controlId, caller);
   }
 }
