@@ -486,7 +486,17 @@ const path = require('node:path') as typeof import('node:path');
 
 const RAIZ_API = path.resolve(__dirname, '../../src');
 const RAIZ_WEB = path.resolve(__dirname, '../../../web/src');
-const SCHEMAS_SHARED = path.resolve(__dirname, '../../../../packages/shared/src/schemas/index.ts');
+const DIR_SCHEMAS_SHARED = path.resolve(__dirname, '../../../../packages/shared/src/schemas');
+
+/** Concatena todos los `.ts` del dominio de schemas, ordenados por nombre. */
+function fuenteSchemasShared(): string {
+  return fs
+    .readdirSync(DIR_SCHEMAS_SHARED)
+    .filter((nombre) => nombre.endsWith('.ts'))
+    .sort()
+    .map((nombre) => fs.readFileSync(path.join(DIR_SCHEMAS_SHARED, nombre), 'utf8'))
+    .join('\n');
+}
 
 function archivosFuente(dir: string): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entrada) => {
@@ -686,7 +696,7 @@ describe('API-2 · mensajes del contrato compartido (packages/shared) sin jerga'
   const EXCEPCIONES = [/^Confirma con `confirmarSinCanalesFinanzas: true`/];
 
   it('ningún mensaje de los schemas compartidos contiene jerga técnica', () => {
-    const fuente = sinComentarios(fs.readFileSync(SCHEMAS_SHARED, 'utf8'));
+    const fuente = sinComentarios(fuenteSchemasShared());
     const hallazgos: string[] = [];
     for (const c of fuente.matchAll(/(['"`])([A-ZÁÉÍÓÚÑ¿¡$](?:(?!\1)[^\n])*?)\1/g)) {
       const texto = textoVisible(c[2]);
@@ -697,7 +707,7 @@ describe('API-2 · mensajes del contrato compartido (packages/shared) sin jerga'
   });
 
   it('la tasa del precio especial se explica sin "override"', () => {
-    const fuente = fs.readFileSync(SCHEMAS_SHARED, 'utf8');
+    const fuente = fuenteSchemasShared();
     expect(fuente).toContain('La tasa del precio especial debe tener hasta 4 decimales');
     expect(fuente).toContain('La tasa del precio especial debe ser mayor a 0');
   });
