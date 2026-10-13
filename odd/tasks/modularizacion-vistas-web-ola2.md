@@ -43,7 +43,7 @@ Ajustes aprendidos en la Ola 1:
 - **Siempre prohibido:** editar specs existentes, `.env`, commit, push, dependencias nuevas, `apps/api`, `packages/*` y `router.tsx`.
 
 ## Checklist
-- [ ] M: prompts `70`–`75`.
+- [x] M: prompts `70`–`75`. Commits `428ac00`..`17f8cbc`.
 - [ ] E: prompt `76` (convergencia del editor o decisión documentada de mantener la duplicación).
 - [ ] D: prompt `77`.
 - [ ] Claude: verificación contra el diff, un commit por módulo, `docs(vault)` y limpieza.
@@ -57,6 +57,7 @@ Ajustes aprendidos en la Ola 1:
 
 ## Progreso
 - 2026-10-13: ODD creado, archivos medidos y prompts `70`–`77` redactados.
+- 2026-10-13 (Claude): fase M verificada contra el diff. Archivos: 977 → 246, 948 → 177, 888 → 122, 864 → 195, 830 → 174 y 772 → 112. Ninguna pieza nueva pasa de 289 líneas. Solo se tocó la superficie propia, sin editar specs existentes. Se crearon 9 specs de caracterización y 7 de lógica pura. Commit por módulo. El guardián queda en rojo esperado (R15) hasta el `77`.
 
 ## Siguiente paso
-- El dueño lanza en paralelo los prompts `70`–`75`.
+- Prompt `76` (convergencia del editor), solo.
