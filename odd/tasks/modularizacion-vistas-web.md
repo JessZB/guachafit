@@ -32,6 +32,9 @@ Ocho vistas pasan de 1000 líneas y siguen creciendo (`AlumnoDetallePage` tiene 
 ### Ola 2: de 700 a 999 líneas (ODD posterior, con las mismas reglas)
 `PanelNutricionAlumno.tsx` (977), `SelectorPlantillaAsignacion.tsx` (948), `MonitorAdherenciaPage.tsx` (888), `CarteraPage.tsx` (864), `BloquesRutinaEditor.tsx` (830), `ConciliacionPage.tsx` (772).
 
+### Ola 3: de 401 a 699 líneas (añadida el 2026-10-13, detectada por el guardián en la fase D)
+`AntropometriaPage.tsx` (639), `AdminPage.tsx` (586), `GraficoEvolucion.tsx` (560), `AsignacionMasivaPlantilla.tsx` (544), `MatrizPreferenciasNotificacion.tsx` (467), `TablaCartera.tsx` (460), `OnboardingPage.tsx` (433), `DetalleSesionEntrenamiento.tsx` (413). Ninguno se tocó en este ODD. Quedan exceptuados en el guardián hasta su ODD.
+
 ### Fuera de alcance (registrado para no ocultarlo)
 Servicios del API de más de 1000 líneas: `finanzas.service.ts` (3386), `entrenamiento.service.ts` (2221), `alumnos.service.ts` (1431) y `auth.service.ts` (1279). También los contratos `packages/shared/src/schemas/index.ts` (1779) y `types/index.ts` (1435). Necesitan su propio ODD de modularización por casos de uso; no son vistas.
 
@@ -128,11 +131,11 @@ Orden: A → (C ∥ B0) → B → D. La fase C va antes que B para que las vista
 
 ## Checklist
 - [x] A: prompts `40`–`47` (inventario de M1–M8, en paralelo). Verificado 2026-10-12: 8/8 reportes escritos.
-- [ ] C: prompt `48` (consolidación de reutilizables + borrador de ADR-022).
-- [ ] B0: prompts `49`, `50` y `60` (caracterización de M3, M8 y la parte sin cubrir de M1).
-- [ ] B: prompts `51`–`58` (extracción por vista con subagentes; M1 y M2 en sub-lotes según su inventario).
-- [ ] D: prompt `59` (guardián de tamaño + verificación global + promoción de candidatos).
-- [ ] Claude: verificación de cada reporte contra el diff, commits por módulo y `docs(vault)` (§6 regla 14, ADR-022 aceptado, guía).
+- [x] C: prompt `48` (consolidación de reutilizables + borrador de ADR-022).
+- [x] B0: prompts `49`, `50` y `60` (caracterización de M3, M8 y la parte sin cubrir de M1).
+- [x] B: prompts `51`–`58` (extracción por vista con subagentes; M1 y M2 en sub-lotes según su inventario).
+- [x] D: prompt `59` (guardián de tamaño + verificación global + promoción de candidatos).
+- [x] Claude: verificación de cada reporte contra el diff, commits por módulo y `docs(vault)` (§6 regla 14, ADR-022 aceptado, guía).
 
 ## Criterios de aceptación
 - Ningún archivo de `pages/` o `components/` de los módulos M1–M8 pasa de 400 líneas, y cada contenedor de página tiene ≤ 300.
@@ -151,6 +154,12 @@ Orden: A → (C ∥ B0) → B → D. La fase C va antes que B para que las vista
 - 2026-10-13 (Claude): fase B verificada contra el diff para M1, M3, M4, M6, M7 y M8. Contenedores: 300, 225, 205, 298, 258 y 224. Ningún archivo nuevo pasa de 400 líneas. Solo se modificaron las 6 páginas: ningún spec existente del lote, ni `common/`, ni `lib/` existente, ni `router.tsx`. Los `lib/` nuevos llevan el prefijo de su módulo y R9 se respetó. Excepciones R2 justificadas en el reporte 51: 4 hooks de M1 entre 260 y 374 líneas y `ContenidoRutinaSemanal` con 397. BLOCKER-51-1: el editor no converge con `BloquesRutinaEditor` sin romper R5; queda como recorte verbatim pendiente para D o para un ODD posterior.
 - 2026-10-13 (Claude): commits `3b71c5b`..`f75fb48` (ui + 6 módulos) y `1b06b91` (docs). M5 `progreso` verificado (contenedor 1188 → 245, 9/9 tests sin editar, solo su superficie) y commiteado en `837fa70`. M2 `entrenamiento`: el `52` se detuvo en la tarea 0, sin cambios (BLOCKER-52-1), porque `EntrenamientoPage.orden.interaccion.spec.tsx`, de la sesión E9, está en rojo 2/6.
 - 2026-10-13 (Claude): M2 `entrenamiento` verificado (2950 → 285, 30/30 con `--testTimeout=20000`, typecheck limpio, solo su superficie) y commiteado en `e0be785`. Fase B cerrada 8/8. Observaciones: el caso (c) del spec `cache` es sensible a la carga (W-52-2); el `52` no tuvo subagentes (W-52-1); se añadió `min-h-11` en 2 controles (§6.8).
+- 2026-10-13 (Claude): fase D (`59`) verificada. Typecheck 0 errores, build en verde, suite 1816/1817. El único rojo es el guardián nuevo (BLOCKER-59-1): 8 archivos de 401–699 líneas que este ODD no clasificaba, un hueco del diseño de las olas. Se añade la Ola 3 y el prompt `62` para exceptuarlos. Se promovieron 0 candidatos (pares no mecánicos). BLOCKER-51-1, el editor de rutina duplicado con `BloquesRutinaEditor`, pasa al ODD de la Ola 2, que incluye ese editor.
+
+- 2026-10-13 (Claude): el `62` resolvió BLOCKER-59-1. Guardián 4/4 ×3, typecheck 0 y suite 1817/1818; el único fallo es el flake W-52-2, que pasa 3/3 ejecutado solo. Commit `f5a0bd7`. ADR-022 pasa a `aceptado`, se añade la regla 14 en la §6 de `00_Reglas_Desarrollo_SDD.md` y se borran los prompts y reportes 40–62. **ODD cerrado (Ola 1).**
 
 ## Siguiente paso
-- Fase D: prompt `59` (con las notas W-52-1/W-52-2 añadidas).
+- ODD de la Ola 2 (700–999 líneas), que incluye la convergencia del editor de rutina de M1 con `BloquesRutinaEditor` (BLOCKER-51-1).
+- ODD de la Ola 3 (401–699 líneas).
+- Opcional: estabilizar el caso (c) de `EntrenamientoPage.cache.interaccion.spec.tsx` (W-52-2) dándole un `timeout` propio a `findByRole`.
+- ODD aparte para los servicios del API de más de 1000 líneas.

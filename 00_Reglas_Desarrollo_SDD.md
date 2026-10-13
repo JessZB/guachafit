@@ -126,7 +126,7 @@ GUACHAFIT/
 │   ├── RF/                       # RF-001 al RF-018 (Gherkin)
 │   └── RNF/                      # RNF-001 al RNF-004 (Métricas y SLOs)
 ├── 03_Dominio/                   # Entidades y Agregados DDD
-├── 04_Decisiones/                # ADR-001 al ADR-021
+├── 04_Decisiones/                # ADR-001 al ADR-022
 ├── 05_Arquitectura/              # Especificación técnica, DDL y contratos API
 ├── apps/                         # Aplicaciones ejecutables
 │   ├── api/                      # Backend NestJS + Drizzle + BullMQ
@@ -146,7 +146,7 @@ GUACHAFIT/
 ## 🔗 5. Trazabilidad
 - Ecosistema de Requerimientos: [[RF-001-checklist-entrenamiento-diario]] al [[RF-018-mi-perfil-autogestion-cuenta]].
 - Atributos de Calidad: [[RNF-001-almacenamiento-seguridad-fotos-progreso]] al [[RNF-004-resiliencia-notificaciones-idempotencia-fallbacks]].
-- Decisiones Arquitecturales: [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-021-modo-foco-entrenamiento-alumno]] (incluye [[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]], [[ADR-020-suscripcion-alumno-emision-automatica-cuotas]], [[ADR-018-proveedor-correo-transaccional-brevo]], [[ADR-017-despliegue-vps-coolify]], [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]], [[ADR-012-modo-demo-explicito-datos-sinteticos]] y [[ADR-013-paginacion-server-side-stack-listas]]).
+- Decisiones Arquitecturales: [[ADR-001-modelo-hibrido-auditoria-antropometrica]] al [[ADR-022-estructura-componentes-atomicos-web]] (incluye [[ADR-021-modo-foco-entrenamiento-alumno]], [[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]], [[ADR-020-suscripcion-alumno-emision-automatica-cuotas]], [[ADR-018-proveedor-correo-transaccional-brevo]], [[ADR-017-despliegue-vps-coolify]], [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]], [[ADR-012-modo-demo-explicito-datos-sinteticos]] y [[ADR-013-paginacion-server-side-stack-listas]]).
 
 ---
 
@@ -167,6 +167,16 @@ Reglas transversales del frontend, vinculantes para toda vista nueva (se revisan
 11. **Actualizaciones y datos offline con control del usuario:** la app nunca aplica una actualización del Service Worker ni recarga sin acción explícita del usuario; los datos servidos desde caché se señalan como offline con su antigüedad ("hace X"). Decisión en [[ADR-014-actualizaciones-guiadas-sw-frescura-offline]].
 12. **Peso tipográfico máximo 700 (desde 2026-10-10):** ningún texto usa pesos 800 ni 900 (`font-black`, `font-extrabold`, `font-[800\|900]`, `font-weight: 800/900`). La jerarquía se construye con 700 (`font-bold`, títulos y cifras clave), 600 (`font-semibold`), 500 (`font-medium`, etiquetas) y 400 (cuerpo). Lo vigila el test guardián `apps/web/src/estilo-tipografia.spec.ts`, que falla y lista cada archivo y línea si aparece un peso prohibido.
 13. **Entrada numérica filtrada (desde 2026-10-11):** todo input de un dato numérico de series (peso, repeticiones, esfuerzo, series) filtra al teclear con `apps/web/src/lib/entrada-numerica.ts` y los topes compartidos `LIMITES_SERIE` de `@guachafit/shared`: lo inválido no llega a escribirse y la validación al guardar repite la regla del API. Usa `inputMode` acorde (`decimal` o `numeric`) y nunca `type="number"` para estos datos.
+14. **Componentes atómicos y tope de tamaño (desde 2026-10-13):**
+   - Toda vista nueva o trabajada sigue [[ADR-022-estructura-componentes-atomicos-web]]:
+     - la página es un contenedor orquestador de ≤ 300 líneas;
+     - los átomos sin dominio van en `components/ui/` (estados de carga, vacío y error, `BotonTactil`, `BadgeEstado`, `ChipFiltro`);
+     - lo compartido va en `components/common/` o `components/<dominio>/`;
+     - lo único de la vista va en `components/<rol>/<modulo>/`, con sus hooks `use-*.ts`;
+     - la lógica pura va en `lib/<modulo>-*.ts`.
+   - Los componentes presentacionales no piden datos: reciben props y callbacks.
+   - Ningún `.ts`/`.tsx` de `pages/` o `components/` pasa de 400 líneas. Lo vigila el test guardián `apps/web/src/tamano-archivos.spec.ts`, que solo admite las excepciones explícitas de las olas pendientes del ODD `odd/tasks/modularizacion-vistas-web.md` y falla cuando una excepción sobra.
+   - Un refactor de estructura no edita specs existentes ni cambia el mecanismo de datos de la vista.
 
 ---
 

@@ -2,7 +2,8 @@
 id: ADR-022
 titulo: "ADR-022: Estructura de componentes atómicos web (ui/ + common/ + vista)"
 fecha: 2026-10-12
-estado: propuesto
+estado: aceptado
+fecha_verificacion: 2026-10-13
 decisores:
   - "Dueño del producto"
   - "Tech Lead"
@@ -17,7 +18,7 @@ tags:
 # ADR-022: Estructura de componentes atómicos web (ui/ + common/ + vista)
 
 ## 1. Estado
-`propuesto` (borrador de la fase C del ODD `odd/tasks/modularizacion-vistas-web.md`, prompt 48).
+`aceptado` (2026-10-13). Fue un borrador de la fase C del ODD `odd/tasks/modularizacion-vistas-web.md` (prompt 48) y se aceptó al cerrar el ODD. Lo aplican las 8 vistas de la Ola 1 y lo vigila `apps/web/src/tamano-archivos.spec.ts`.
 
 ---
 
@@ -103,3 +104,38 @@ Se adopta la estructura de capas R1–R8 del ODD como convención permanente del
   Queda para un ODD posterior con specs nuevos.
 - **No crear `ui/` y dejar cada copia en su vista:** descartada porque perpetúa las
   20+ copias del vacío y los incumplimientos táctiles ya medidos.
+
+---
+
+## 6. Lo aprendido en las fases B (cierre 59, sin cambiar el estado)
+
+La fase B partió las 8 vistas con los mismos conteos de tests antes y después
+(M1 99, M2 30, M3 34, M4 19, M5 9, M6 6 SSR + 9 caracterización, M7 1, M8 18)
+y dejó los 8 contenedores en ≤ 300 líneas (300, 285, 225, 205, 245, 298,
+258, 224). Ningún archivo nuevo pasa de 400; las desviaciones R2 quedan
+justificadas por escrito en el reporte 51 (4 hooks de M1 entre 260 y 374
+líneas y `ContenidoRutinaSemanal` con 397: recortes verbatim de secuencias
+atómicas que partir más fragmentaría).
+
+- **R3 confirmado en la práctica:** ante la duda, único. La mayoría de los
+  CANDIDATOS de dos módulos resultaron no sustituibles de forma mecánica
+  (markup, colores o contratos de props distintos por rol: semáforo/badge
+  M1↔M3, fila de transacción M1↔M4, subida de comprobante M4↔M6, tarjeta-acción
+  del hub M4↔M5) y quedaron ÚNICOS con su razón en el reporte de cierre. Las
+  filas 16 y 25 de la matriz ya lo preveían. Solo se promueve con sustitución
+  mecánica y specs verdes antes y después.
+- **R9 obligatorio:** cada hook extraído encapsula el mecanismo vigente
+  (`apiClient` + `useState` + paginación manual); introducir TanStack Query
+  rompe los specs que montan sin `QueryClientProvider` (BLOCKER B-2).
+- **B0 previo para vistas sin specs:** M3 y M8 no se refactorizaron hasta tener
+  caracterización en verde (34 y 18 tests); M1 necesitó el 60 (27 tests) para
+  la pestaña entrenamiento y el modal de rutina.
+- **BLOCKER-51-1 sigue abierto:** converger el editor de rutina de M1 sobre
+  `BloquesRutinaEditor` rompería ~10 tests de caracterización (copys fijados
+  por igualdad exacta); queda como recorte verbatim para la fase D (unificar
+  copy) o un ODD posterior.
+- **Deuda fuera del ODD:** el guardián `tamano-archivos.spec.ts` señala 8
+  archivos preexistentes de más de 400 líneas que no son M1–M8 ni Ola 2
+  (`AntropometriaPage`, `AdminPage`, `GraficoEvolucion`, `AsignacionMasivaPlantilla`,
+  `MatrizPreferenciasNotificacion`, `TablaCartera`, `OnboardingPage`,
+  `DetalleSesionEntrenamiento`); ver BLOCKER-59-1 en el reporte de cierre.
