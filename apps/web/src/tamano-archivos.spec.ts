@@ -1,7 +1,9 @@
 /**
  * Guardián del tope duro R2 (ODD `odd/tasks/modularizacion-vistas-web.md`):
  * ningún `.ts`/`.tsx` de `src/pages` o `src/components` (excluyendo specs)
- * pasa de 400 líneas. (El tope ≤ 300 de los contenedores M1–M8 lo impone el
+ * pasa de 400 líneas. Tras el cierre de la Ola 3 (prompt 88) el tope rige ya
+ * para TODO `pages/` y `components/`: ambas listas de excepciones quedan
+ * vacías. (Los topes ≤ 300 de los contenedores M1–M8 y T1–T8 los imponen los
  * ODD, no este spec.)
  *
  * La recolección de archivos usa `import.meta.glob` de Vite (`?raw`), sin APIs
@@ -32,22 +34,13 @@ const FUENTES_PAGINAS_COMPONENTES = import.meta.glob<string>(
 export const EXCEPCIONES_OLA2_NO_TRABAJADA: string[] = [];
 
 /**
- * Excepciones explícitas: SOLO archivos de la Ola 3 del ODD
- * (`odd/tasks/modularizacion-vistas-web.md`, sección "Ola 3: de 401 a 699 líneas",
- * añadida el 2026-10-13 tras el BLOCKER-59-1) que aún no se trabajaron. Mismo
- * formato de rutas que la lista de la Ola 2. Ningún archivo de M1–M8 puede estar
- * en esta lista (lo verifica el segundo test).
+ * Excepciones explícitas de la Ola 3
+ * (`odd/tasks/modularizacion-vistas-web-ola3.md`): VACÍA tras el cierre
+ * (prompt 88). Los 8 archivos ya bajaron de 400 líneas y el tope rige para
+ * TODO `pages/` y `components/`. Se conserva la constante vacía para que el
+ * test "toda excepción sigue haciendo falta" la cubra.
  */
-export const EXCEPCIONES_OLA3_NO_TRABAJADA: string[] = [
-  'src/pages/entrenador/AntropometriaPage.tsx', // Ola 3 ODD: 639 líneas
-  'src/pages/admin/AdminPage.tsx', // Ola 3 ODD: 586 líneas
-  'src/components/common/GraficoEvolucion.tsx', // Ola 3 ODD: 560 líneas
-  'src/components/entrenador/AsignacionMasivaPlantilla.tsx', // Ola 3 ODD: 544 líneas
-  'src/components/notificaciones/MatrizPreferenciasNotificacion.tsx', // Ola 3 ODD: 467 líneas
-  'src/components/entrenador/TablaCartera.tsx', // Ola 3 ODD: 460 líneas
-  'src/pages/auth/OnboardingPage.tsx', // Ola 3 ODD: 433 líneas
-  'src/components/entrenador/DetalleSesionEntrenamiento.tsx', // Ola 3 ODD: 413 líneas
-];
+export const EXCEPCIONES_OLA3_NO_TRABAJADA: string[] = [];
 
 /**
  * Contenedores de página de los módulos M1–M8 del ODD (Ola 1). Ninguno puede

@@ -2,9 +2,13 @@
  * Átomo de badge de estado por tono semántico (fase C, prompt 48).
  *
  * Consolida los 5 mapas tono→clases duplicados en la web
- * (`TablaCartera.tsx:64-70`, `DetalleSesionEntrenamiento.tsx:55-61`,
- * `ProgresoPage.tsx:62-69`, `AlumnoDetallePage.tsx:173-179`,
- * `TablaEntrenadoresAdmin.tsx:46-47`, `PlantillasPage.tsx:76-84` para nivel).
+ * (orígenes pre-Olas 1–3: `TablaCartera.tsx`, `DetalleSesionEntrenamiento.tsx`,
+ * `ProgresoPage.tsx`, `AlumnoDetallePage.tsx`,
+ * `TablaEntrenadoresAdmin.tsx` y `PlantillasPage.tsx` para nivel; las líneas
+ * citadas en la versión anterior ya no corresponden porque las Olas 1–3
+ * extrajeron esos mapas a piezas propias —p. ej.
+ * `tabla-cartera/BadgeCartera.tsx`, que usa `destructive` en vez de `danger`
+ * y por eso sigue ÚNICA—).
  *
  * Decisiones de consolidación (ver reporte 48 §2):
  * - Ternario único `bg-{t}/15 text-{t} border-{t}/25` por tono.

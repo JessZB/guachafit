@@ -2,10 +2,14 @@
  * Átomo de estado vacío (fase C, prompt 48).
  *
  * Consolida la tarjeta `border-dashed` duplicada en 20+ sitios
- * (`PlantillasPage.tsx:636-650` y `:652-674`, `AlumnosPage.tsx:791-823`,
- * `PagosPage.tsx:589-598` y `:1020-1041`, `ProgresoPage.tsx:1036-1048`,
- * `AntropometriaPage.tsx:319`, `ConciliacionPage.tsx:416`,
- * `TablaCartera.tsx:256-265`, `MonitorAdherenciaPage.tsx:688-725`).
+ * (orígenes pre-Olas 1–3: `PlantillasPage.tsx`, `AlumnosPage.tsx`,
+ * `PagosPage.tsx`, `ProgresoPage.tsx`, `AntropometriaPage.tsx`,
+ * `ConciliacionPage.tsx`, `TablaCartera.tsx` y `MonitorAdherenciaPage.tsx`;
+ * las líneas citadas en la versión anterior ya no corresponden porque las
+ * Olas 1–3 extrajeron esos vacíos a piezas propias —p. ej.
+ * `tabla-cartera/EstadoVacioCartera.tsx`, con icono y color propios según
+ * pestaña, y `grafico-evolucion/EstadosGraficoEvolucion.tsx`, con copys
+ * propios por rama—).
  *
  * - La acción opcional se renderiza con `BotonTactil` (44px, §6.8).
  * - §6.6: vacío explícito con título y detalle honesto; sin dominio ni datos (R9).

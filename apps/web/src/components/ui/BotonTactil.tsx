@@ -2,9 +2,13 @@
  * Átomo de botón táctil (fase C, prompt 48).
  *
  * Consolida el botón primario de 44px duplicado en al menos 4 superficies
- * (`PlantillasPage.tsx:502-509`, `AlumnosPage.tsx:444-450`,
- * `AsignacionMasivaPlantilla.tsx:506`, `AjustesPage.tsx:824`) y la variante
- * secundaria de `PlantillasPage.tsx:642-649`.
+ * (orígenes pre-Olas 1–3: `PlantillasPage.tsx`, `AlumnosPage.tsx`,
+ * `AsignacionMasivaPlantilla.tsx`, `AjustesPage.tsx` y la variante
+ * secundaria de `PlantillasPage.tsx`; las líneas citadas en la versión
+ * anterior ya no corresponden porque las Olas 1–3 extrajeron esos botones
+ * a piezas propias —p. ej. `tabla-cartera/BotonAccionCartera.tsx`, con área
+ * táctil `py-1.5` en vez de `min-h-11`, y `grafico-evolucion/BotonRango.tsx`,
+ * con `aria-pressed` y estilos propios de activo—).
  *
  * - §6.8: `min-h-11` siempre (las copias de "Reintentar"/"Limpiar filtros" con
  *   `py-2` quedaban en ~32-40px; ver WARNINGs de los inventarios 43/44/47).
