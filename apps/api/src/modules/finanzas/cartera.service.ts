@@ -20,107 +20,50 @@ import {
   Injectable,
   Inject,
   Logger,
-  NotFoundException,
   Optional,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
 import {
   Database,
   WithTenantFn,
   withTenant as withTenantBase,
-  and,
-  asc,
-  count,
-  countDistinct,
-  desc,
-  eq,
-  gt,
-  ilike,
-  inArray,
-  lte,
-  max,
-  min,
-  ne,
-  or,
-  sql,
-  cuotasMembresia,
-  notificacionesInApp,
-  perfilesAlumno,
-  planesMembresia,
-  transaccionesPago,
 } from '@guachafit/database';
 import {
   CarteraDTO,
-  EstadoConciliacion,
-  EstadoCuota,
-  FilaCarteraDTO,
   FiltroCarteraDTO,
   LIMITE_CARTERA_POR_DEFECTO,
   RecordatorioManualResultadoDTO,
   ResumenCarteraDTO,
 } from '@guachafit/shared';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { RecordatorioManualCobroEvent } from '../notificaciones/events/eventos-notificacion';
-import { FinanzasService, toIsoSafe } from './finanzas.service';
+import { FinanzasService } from './finanzas.service';
 import {
-  MS_POR_DIA,
-  calcularDiasAtraso,
-  calcularRecaudadoMesUsd,
-  calcularVentanaMesUtc,
   condicionCuotaEnMora,
   condicionCuotaPorVencer,
   escaparPatronLike,
 } from '../../common/cartera.util';
 
-/**
- * Tipo de evento del recordatorio MANUAL (RF-009 RN-02). Distinto de los hitos automáticos de
- * WU-H (`CUOTA_VENCIDA`, `CUOTA_POR_VENCER`, ...) para no confundir una gestión del coach con un
- * recordatorio programado — y para poder medir el cooldown anti-spam.
- */
-export const TIPO_EVENTO_RECORDATORIO_MANUAL = 'RECORDATORIO_MANUAL_COBRO';
+import {
+  type DatosMensajeRecordatorioManual,
+  construirMensajeRecordatorioManual,
+  TIPO_EVENTO_RECORDATORIO_MANUAL,
+  HORAS_COOLDOWN_RECORDATORIO_MANUAL,
+} from './casos-cartera/mensaje-recordatorio-reglas';
+import { proyectarSaldoCon } from './casos-cartera/proyectar-saldo-reglas';
+import type { ContextoCartera, ContextoTasa } from './casos-cartera/contexto-cartera';
+import { calcularResumenCartera } from './casos-cartera/calcular-resumen-cartera';
+import { listarCuotasPorUrgencia as listarCuotasPorUrgenciaCaso } from './casos-cartera/listar-cuotas-urgencia';
+import { listarRevisionCartera } from './casos-cartera/listar-revision-cartera';
+import { listarAlDiaCartera } from './casos-cartera/listar-al-dia-cartera';
+import { obtenerUltimasGestiones as obtenerUltimasGestionesCaso } from './casos-cartera/obtener-ultimas-gestiones';
+import { enviarRecordatorioManual as enviarRecordatorioManualCaso } from './casos-cartera/enviar-recordatorio-manual';
 
-/**
- * Horas mínimas entre dos recordatorios manuales al mismo alumno.
- *
- * El RF-009 no fija un límite; este cooldown evita el spam por doble clic o recordatorios
- * repetidos en la misma jornada sin bloquear una gestión legítima del día siguiente.
- */
-export const HORAS_COOLDOWN_RECORDATORIO_MANUAL = 6;
-
-/** Titular mínimo que necesita el compositor del mensaje manual (RN-02). */
-export interface DatosMensajeRecordatorioManual {
-  nombre: string;
-  saldoPendienteUsd: string;
-  saldoPendienteBs: string | null;
-  periodo: string | null;
-}
-
-/**
- * Compositor PURO del mensaje manual (RN-02): incluye el saldo exacto en USD y, si existe tasa
- * vigente, su equivalente en Bs. Los datos bancarios del coach aún no se persisten en el modelo,
- * por lo que el mensaje no los inventa.
- */
-export function construirMensajeRecordatorioManual(
-  datos: DatosMensajeRecordatorioManual
-): { titulo: string; cuerpo: string } {
-  const saldoDual = datos.saldoPendienteBs
-    ? `$${datos.saldoPendienteUsd} USD (o Bs. ${datos.saldoPendienteBs})`
-    : `$${datos.saldoPendienteUsd} USD`;
-  const ciclo = datos.periodo ? ` de ${datos.periodo}` : '';
-
-  return {
-    titulo: 'Recordatorio de pago',
-    cuerpo:
-      `Hola ${datos.nombre}, tu mensualidad${ciclo} tiene un saldo pendiente de ${saldoDual}. ` +
-      'Puedes reportar tu pago desde la app para mantener tu plan al día.',
-  };
-}
-
-/** Contexto de tasa por fila: override del alumno > tasa activa del coach. */
-interface ContextoTasa {
-  tasaBase: string | null;
-}
+export type { DatosMensajeRecordatorioManual };
+export {
+  construirMensajeRecordatorioManual,
+  TIPO_EVENTO_RECORDATORIO_MANUAL,
+  HORAS_COOLDOWN_RECORDATORIO_MANUAL,
+};
 
 @Injectable()
 export class CarteraService {
@@ -133,6 +76,9 @@ export class CarteraService {
    */
   private readonly withTenant: WithTenantFn;
 
+  /** Contexto de dependencias explícito de los casos de uso (P2). */
+  private readonly ctx: ContextoCartera;
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
     private readonly finanzasService: FinanzasService,
@@ -141,6 +87,13 @@ export class CarteraService {
     @Optional() @Inject(WITH_TENANT) withTenant?: WithTenantFn
   ) {
     this.withTenant = withTenant ?? ((context, fn) => withTenantBase(context, fn, this.db));
+    this.ctx = {
+      db: this.db,
+      withTenant: this.withTenant,
+      finanzasService: this.finanzasService,
+      eventEmitter: this.eventEmitter,
+      logger: this.logger,
+    };
   }
 
   /**
@@ -199,83 +152,7 @@ export class CarteraService {
    * en paralelo; ninguno de estos números se deriva de datos demo o heurísticas.
    */
   private async calcularResumen(entrenadorId: string, ahora: Date): Promise<ResumenCarteraDTO> {
-    const { periodoActual, inicioMesUtc, inicioMesSiguienteUtc } = calcularVentanaMesUtc(ahora);
-
-    // RNF-003/ADR-011 (etapa 2): las 5 lecturas sobre tablas financieras con RLS corren en UNA
-    // transacción con el GUC del coach (la tasa vigente vive en tablas sin RLS: fuera del bloque).
-    const [recaudadoMesUsd, [filaMora], [filaPorVencer], [filaRevision], [filaAlDia]] =
-      await this.withTenant({ entrenadorId }, async (tx) =>
-        Promise.all([
-          calcularRecaudadoMesUsd(tx, entrenadorId, { inicioMesUtc, inicioMesSiguienteUtc }),
-          tx
-            .select({
-              total: sql<string>`coalesce(sum(${cuotasMembresia.saldoPendienteUsd}), 0)`,
-              alumnos: countDistinct(cuotasMembresia.clienteId),
-            })
-            .from(cuotasMembresia)
-            .where(
-              and(
-                eq(cuotasMembresia.entrenadorId, entrenadorId),
-                condicionCuotaEnMora(ahora)
-              )
-            ),
-          tx
-            .select({
-              total: sql<string>`coalesce(sum(${cuotasMembresia.saldoPendienteUsd}), 0)`,
-              alumnos: countDistinct(cuotasMembresia.clienteId),
-            })
-            .from(cuotasMembresia)
-            .where(
-              and(
-                eq(cuotasMembresia.entrenadorId, entrenadorId),
-                condicionCuotaPorVencer(ahora)
-              )
-            ),
-          tx
-            .select({ total: count() })
-            .from(transaccionesPago)
-            .where(
-              and(
-                eq(transaccionesPago.entrenadorId, entrenadorId),
-                eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.PENDIENTE)
-              )
-            ),
-          tx
-            .select({ total: count() })
-            .from(cuotasMembresia)
-            .where(
-              and(
-                eq(cuotasMembresia.entrenadorId, entrenadorId),
-                eq(cuotasMembresia.periodo, periodoActual),
-                lte(cuotasMembresia.saldoPendienteUsd, '0'),
-                ne(cuotasMembresia.estado, EstadoCuota.ANULADA)
-              )
-            ),
-        ])
-      );
-
-    const tasa = await this.finanzasService.obtenerTasaVigente(entrenadorId);
-
-    const alumnosEnMora = Number(filaMora?.alumnos ?? 0);
-    const proximosAVencer = Number(filaPorVencer?.alumnos ?? 0);
-    const pagosPorValidar = Number(filaRevision?.total ?? 0);
-    const contadorAlDia = Number(filaAlDia?.total ?? 0);
-
-    return {
-      recaudadoMesUsd,
-      totalEnMoraUsd: Number(filaMora?.total ?? 0).toFixed(2),
-      alumnosEnMora,
-      totalPorVencerUsd: Number(filaPorVencer?.total ?? 0).toFixed(2),
-      proximosAVencer,
-      pagosPorValidar,
-      contadores: {
-        enMora: alumnosEnMora,
-        porVencer: proximosAVencer,
-        revision: pagosPorValidar,
-        alDia: contadorAlDia,
-      },
-      tasaVigente: tasa.tasaEfectiva,
-    };
+    return calcularResumenCartera(this.ctx, entrenadorId, ahora);
   }
 
   /**
@@ -296,166 +173,7 @@ export class CarteraService {
     tipo: 'mora' | 'por_vencer';
     resumen: ResumenCarteraDTO;
   }): Promise<CarteraDTO> {
-    const { entrenadorId, ahora, limit, offset, patron, contexto, condicion, tipo, resumen } =
-      opciones;
-
-    const filtroNombre = patron
-      ? or(
-          ilike(perfilesAlumno.nombres, patron),
-          ilike(perfilesAlumno.apellidos, patron)
-        )!
-      : undefined;
-    const whereLista = and(
-      eq(cuotasMembresia.entrenadorId, entrenadorId),
-      condicion,
-      filtroNombre
-    );
-
-    // RNF-003/ADR-011 (etapa 2): todas las lecturas de `cuotas_membresia` (+ join a perfiles)
-    // de esta pestaña corren en UNA transacción con el GUC del coach. Las gestiones manuales
-    // (`notificaciones_in_app`, sin RLS) quedan fuera.
-    const { filaTotal, filas, cuotasPagina } = await this.withTenant(
-      { entrenadorId },
-      async (tx) => {
-        const [filaTotal, filas] = await Promise.all([
-          tx
-            .select({ total: countDistinct(cuotasMembresia.clienteId) })
-            .from(cuotasMembresia)
-            .innerJoin(
-              perfilesAlumno,
-              and(
-                eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId),
-                eq(perfilesAlumno.entrenadorId, cuotasMembresia.entrenadorId)
-              )
-            )
-            .where(whereLista),
-          tx
-            .select({
-              clienteId: cuotasMembresia.clienteId,
-              perfilId: perfilesAlumno.id,
-              nombres: perfilesAlumno.nombres,
-              apellidos: perfilesAlumno.apellidos,
-              telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
-              tasaOverride: perfilesAlumno.tasaFijadaOverride,
-              proximoCorte: perfilesAlumno.proximoCorte,
-              saldoAFavorUsd: perfilesAlumno.saldoAFavorUsd,
-              saldoTotalUsd: sql<string>`sum(${cuotasMembresia.saldoPendienteUsd})`,
-              corteMasUrgente: min(cuotasMembresia.fechaCorteUtc),
-            })
-            .from(cuotasMembresia)
-            .innerJoin(
-              perfilesAlumno,
-              and(
-                eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId),
-                eq(perfilesAlumno.entrenadorId, cuotasMembresia.entrenadorId)
-              )
-            )
-            .where(whereLista)
-            .groupBy(
-              cuotasMembresia.clienteId,
-              perfilesAlumno.id,
-              perfilesAlumno.nombres,
-              perfilesAlumno.apellidos,
-              perfilesAlumno.telefonoWhatsapp,
-              perfilesAlumno.tasaFijadaOverride,
-              perfilesAlumno.proximoCorte,
-              perfilesAlumno.saldoAFavorUsd
-            )
-            .orderBy(asc(min(cuotasMembresia.fechaCorteUtc)), asc(cuotasMembresia.clienteId))
-            .limit(limit)
-            .offset(offset),
-        ]);
-
-        // Detalle de la cuota más urgente de cada alumno de la página (una sola consulta en lote).
-        const idsPagina = filas.map((fila) => fila.clienteId);
-        const cuotasPagina =
-          idsPagina.length > 0
-            ? await tx
-                .select({
-                  id: cuotasMembresia.id,
-                  clienteId: cuotasMembresia.clienteId,
-                  estado: cuotasMembresia.estado,
-                  fechaCorteUtc: cuotasMembresia.fechaCorteUtc,
-                  saldoPendienteUsd: cuotasMembresia.saldoPendienteUsd,
-                })
-                .from(cuotasMembresia)
-                .where(
-                  and(
-                    eq(cuotasMembresia.entrenadorId, entrenadorId),
-                    condicion,
-                    inArray(cuotasMembresia.clienteId, idsPagina)
-                  )
-                )
-                .orderBy(asc(cuotasMembresia.fechaCorteUtc))
-            : [];
-
-        return { filaTotal, filas, cuotasPagina };
-      }
-    );
-
-    const idsPagina = filas.map((fila) => fila.clienteId);
-    const gestiones = await this.obtenerUltimasGestiones(idsPagina);
-
-    const cuotaPorAlumno = new Map<string, (typeof cuotasPagina)[number]>();
-    for (const cuota of cuotasPagina) {
-      if (!cuotaPorAlumno.has(cuota.clienteId)) cuotaPorAlumno.set(cuota.clienteId, cuota);
-    }
-
-    const items = filas.map((fila) => {
-      const cuota = cuotaPorAlumno.get(fila.clienteId);
-      const fechaCorte = cuota?.fechaCorteUtc ?? fila.corteMasUrgente;
-      const saldoUsd = Number(fila.saldoTotalUsd ?? 0).toFixed(2);
-      const proyeccion = this.proyectarSaldo(saldoUsd, fila.tasaOverride, contexto.tasaBase);
-      const base: FilaCarteraDTO = {
-        alumnoUsuarioId: fila.clienteId,
-        alumnoPerfilId: fila.perfilId ?? null,
-        proximoCorte: fila.proximoCorte ?? null,
-        saldoAFavorUsd: fila.saldoAFavorUsd ?? '0.00',
-        alumnoNombre: `${fila.nombres} ${fila.apellidos}`.trim(),
-        telefonoWhatsapp: fila.telefonoWhatsapp ?? null,
-        cuotaId: cuota?.id ?? null,
-        estadoCuota: cuota?.estado ?? null,
-        fechaCorteUtc: fechaCorte ? toIsoSafe(fechaCorte) : null,
-        saldoPendienteUsd: saldoUsd,
-        saldoPendienteBs: proyeccion.saldoPendienteBs,
-        tasaAplicada: proyeccion.tasaAplicada,
-        diasAtraso: null,
-        diasRestantes: null,
-        ultimaGestionUtc: gestiones.get(fila.clienteId) ?? null,
-        planNombre: null,
-        periodo: null,
-        pagoId: null,
-        montoReportado: null,
-        monedaOriginal: null,
-        metodoPago: null,
-        referenciaBancaria: null,
-        comprobanteUrl: null,
-        fechaReporteUtc: null,
-        diasEspera: null,
-      };
-
-      if (tipo === 'mora') {
-        return {
-          ...base,
-          diasAtraso: fechaCorte ? calcularDiasAtraso(new Date(fechaCorte), ahora) : null,
-        };
-      }
-
-      return {
-        ...base,
-        diasRestantes: fechaCorte
-          ? Math.max(0, Math.round((new Date(fechaCorte).getTime() - ahora.getTime()) / MS_POR_DIA))
-          : null,
-      };
-    });
-
-    return {
-      items,
-      total: Number(filaTotal[0]?.total ?? 0),
-      limit,
-      offset,
-      resumen,
-    };
+    return listarCuotasPorUrgenciaCaso(this.ctx, opciones);
   }
 
   /**
@@ -471,107 +189,7 @@ export class CarteraService {
     patron: string | null;
     resumen: ResumenCarteraDTO;
   }): Promise<CarteraDTO> {
-    const { entrenadorId, ahora, limit, offset, patron, resumen } = opciones;
-
-    const filtroNombre = patron
-      ? or(
-          ilike(perfilesAlumno.nombres, patron),
-          ilike(perfilesAlumno.apellidos, patron)
-        )!
-      : undefined;
-    const whereLista = and(
-      eq(transaccionesPago.entrenadorId, entrenadorId),
-      eq(transaccionesPago.estadoConciliacion, EstadoConciliacion.PENDIENTE),
-      filtroNombre
-    );
-
-    // RNF-003/ADR-011 (etapa 2): `transacciones_pago` (+ join a perfiles) con el GUC del coach.
-    const [filaTotal, registros] = await this.withTenant({ entrenadorId }, async (tx) =>
-      Promise.all([
-        tx
-          .select({ total: count() })
-          .from(transaccionesPago)
-          .innerJoin(
-            perfilesAlumno,
-            and(
-              eq(perfilesAlumno.usuarioId, transaccionesPago.clienteId),
-              eq(perfilesAlumno.entrenadorId, transaccionesPago.entrenadorId)
-            )
-          )
-          .where(whereLista),
-        tx
-          .select({
-            tx: transaccionesPago,
-            perfilId: perfilesAlumno.id,
-            proximoCorte: perfilesAlumno.proximoCorte,
-            saldoAFavorUsd: perfilesAlumno.saldoAFavorUsd,
-            nombres: perfilesAlumno.nombres,
-            apellidos: perfilesAlumno.apellidos,
-            telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
-          })
-          .from(transaccionesPago)
-          .innerJoin(
-            perfilesAlumno,
-            and(
-              eq(perfilesAlumno.usuarioId, transaccionesPago.clienteId),
-              eq(perfilesAlumno.entrenadorId, transaccionesPago.entrenadorId)
-            )
-          )
-          .where(whereLista)
-          .orderBy(asc(transaccionesPago.fechaReporteUtc), asc(transaccionesPago.id))
-          .limit(limit)
-          .offset(offset),
-      ])
-    );
-
-    const items = await Promise.all(
-      registros.map(async (registro) => {
-        const { tx, perfilId, proximoCorte, saldoAFavorUsd, nombres, apellidos, telefonoWhatsapp } =
-          registro;
-        const comprobanteUrl = await this.finanzasService.resolverComprobanteUrl(
-          tx.comprobanteStorageKey
-        );
-        const fila: FilaCarteraDTO = {
-          alumnoUsuarioId: tx.clienteId,
-          alumnoPerfilId: perfilId ?? null,
-          proximoCorte: proximoCorte ?? null,
-          saldoAFavorUsd: saldoAFavorUsd ?? '0.00',
-          alumnoNombre: `${nombres} ${apellidos}`.trim(),
-          telefonoWhatsapp: telefonoWhatsapp ?? null,
-          cuotaId: tx.cuotaId,
-          estadoCuota: null,
-          fechaCorteUtc: null,
-          saldoPendienteUsd: null,
-          saldoPendienteBs: null,
-          tasaAplicada: null,
-          diasAtraso: null,
-          diasRestantes: null,
-          ultimaGestionUtc: null,
-          planNombre: null,
-          periodo: null,
-          pagoId: tx.id,
-          montoReportado: tx.montoOriginal,
-          monedaOriginal: tx.monedaOriginal,
-          metodoPago: tx.metodoPago,
-          referenciaBancaria: tx.referenciaBancaria,
-          comprobanteUrl,
-          fechaReporteUtc: toIsoSafe(tx.fechaReporteUtc),
-          diasEspera: Math.max(
-            0,
-            Math.floor((ahora.getTime() - new Date(tx.fechaReporteUtc).getTime()) / MS_POR_DIA)
-          ),
-        };
-        return fila;
-      })
-    );
-
-    return {
-      items,
-      total: Number(filaTotal[0]?.total ?? 0),
-      limit,
-      offset,
-      resumen,
-    };
+    return listarRevisionCartera(this.ctx, opciones);
   }
 
   /**
@@ -591,113 +209,7 @@ export class CarteraService {
     contexto: ContextoTasa;
     resumen: ResumenCarteraDTO;
   }): Promise<CarteraDTO> {
-    const { entrenadorId, ahora, limit, offset, patron, contexto, resumen } = opciones;
-    const { periodoActual } = calcularVentanaMesUtc(ahora);
-
-    const filtroNombre = patron
-      ? or(
-          ilike(perfilesAlumno.nombres, patron),
-          ilike(perfilesAlumno.apellidos, patron)
-        )!
-      : undefined;
-    const whereLista = and(
-      eq(cuotasMembresia.entrenadorId, entrenadorId),
-      eq(cuotasMembresia.periodo, periodoActual),
-      lte(cuotasMembresia.saldoPendienteUsd, '0'),
-      ne(cuotasMembresia.estado, EstadoCuota.ANULADA),
-      filtroNombre
-    );
-
-    // RNF-003/ADR-011 (etapa 2): `cuotas_membresia` + join a `planes_membresia` con el GUC del coach.
-    const [filaTotal, filas] = await this.withTenant({ entrenadorId }, async (tx) =>
-      Promise.all([
-        tx
-          .select({ total: count() })
-          .from(cuotasMembresia)
-          .innerJoin(
-              perfilesAlumno,
-              and(
-                eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId),
-                eq(perfilesAlumno.entrenadorId, cuotasMembresia.entrenadorId)
-              )
-            )
-          .where(whereLista),
-        tx
-          .select({
-            cuotaId: cuotasMembresia.id,
-            clienteId: cuotasMembresia.clienteId,
-            periodo: cuotasMembresia.periodo,
-            fechaCorteUtc: cuotasMembresia.fechaCorteUtc,
-            estado: cuotasMembresia.estado,
-            perfilId: perfilesAlumno.id,
-            proximoCorte: perfilesAlumno.proximoCorte,
-            saldoAFavorUsd: perfilesAlumno.saldoAFavorUsd,
-            nombres: perfilesAlumno.nombres,
-            apellidos: perfilesAlumno.apellidos,
-            telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
-            tasaOverride: perfilesAlumno.tasaFijadaOverride,
-            planNombre: planesMembresia.nombre,
-          })
-          .from(cuotasMembresia)
-          .innerJoin(
-              perfilesAlumno,
-              and(
-                eq(perfilesAlumno.usuarioId, cuotasMembresia.clienteId),
-                eq(perfilesAlumno.entrenadorId, cuotasMembresia.entrenadorId)
-              )
-            )
-          .innerJoin(planesMembresia, eq(planesMembresia.id, cuotasMembresia.planId))
-          .where(whereLista)
-          .orderBy(
-            asc(perfilesAlumno.apellidos),
-            asc(perfilesAlumno.nombres),
-            asc(cuotasMembresia.id)
-          )
-          .limit(limit)
-          .offset(offset),
-      ])
-    );
-
-    const items = filas.map((fila) => {
-      // La cuota está cubierta: su proyección en Bs es 0 solo si existe tasa real; sin tasa el
-      // dato se omite (misma honestidad que las demás pestañas).
-      const proyeccionCero = this.proyectarSaldo('0.00', fila.tasaOverride, contexto.tasaBase);
-      return {
-        alumnoUsuarioId: fila.clienteId,
-        alumnoPerfilId: fila.perfilId ?? null,
-        proximoCorte: fila.proximoCorte ?? null,
-        saldoAFavorUsd: fila.saldoAFavorUsd ?? '0.00',
-        alumnoNombre: `${fila.nombres} ${fila.apellidos}`.trim(),
-        telefonoWhatsapp: fila.telefonoWhatsapp ?? null,
-        cuotaId: fila.cuotaId,
-        estadoCuota: fila.estado,
-        fechaCorteUtc: toIsoSafe(fila.fechaCorteUtc),
-        saldoPendienteUsd: '0.00',
-        saldoPendienteBs: proyeccionCero.saldoPendienteBs,
-        tasaAplicada: proyeccionCero.tasaAplicada,
-        diasAtraso: null,
-        diasRestantes: null,
-        ultimaGestionUtc: null,
-        planNombre: fila.planNombre,
-        periodo: fila.periodo,
-        pagoId: null,
-        montoReportado: null,
-        monedaOriginal: null,
-        metodoPago: null,
-        referenciaBancaria: null,
-        comprobanteUrl: null,
-        fechaReporteUtc: null,
-        diasEspera: null,
-      };
-    });
-
-    return {
-      items,
-      total: Number(filaTotal[0]?.total ?? 0),
-      limit,
-      offset,
-      resumen,
-    };
+    return listarAlDiaCartera(this.ctx, opciones);
   }
 
   /**
@@ -712,209 +224,12 @@ export class CarteraService {
     entrenadorId: string,
     clienteId: string
   ): Promise<RecordatorioManualResultadoDTO> {
-    // RNF-003/ADR-011 (etapa 2): perfil + cuota abierta del alumno en UNA transacción con el
-    // GUC del coach (`cuotas_membresia` tiene RLS; el join implícito por tenancy es explícito).
-    const { perfil, cuotaAbierta } = await this.withTenant({ entrenadorId }, async (tx) => {
-      const [perfil] = await tx
-        .select({
-          id: perfilesAlumno.id,
-          nombres: perfilesAlumno.nombres,
-          apellidos: perfilesAlumno.apellidos,
-        })
-        .from(perfilesAlumno)
-        .where(
-          and(
-            eq(perfilesAlumno.usuarioId, clienteId),
-            eq(perfilesAlumno.entrenadorId, entrenadorId)
-          )
-        );
-
-      if (!perfil) {
-        return { perfil: undefined, cuotaAbierta: undefined };
-      }
-
-      // Cuota abierta más urgente: la que primero debería pagarse.
-      const [cuotaAbierta] = await tx
-        .select({
-          id: cuotasMembresia.id,
-          periodo: cuotasMembresia.periodo,
-          estado: cuotasMembresia.estado,
-          saldoPendienteUsd: cuotasMembresia.saldoPendienteUsd,
-        })
-        .from(cuotasMembresia)
-        .where(
-          and(
-            eq(cuotasMembresia.clienteId, clienteId),
-            eq(cuotasMembresia.entrenadorId, entrenadorId),
-            ne(cuotasMembresia.estado, EstadoCuota.ANULADA),
-            gt(cuotasMembresia.saldoPendienteUsd, '0')
-          )
-        )
-        .orderBy(asc(cuotasMembresia.fechaCorteUtc))
-        .limit(1);
-
-      return { perfil, cuotaAbierta };
-    });
-
-    if (!perfil) {
-      throw new NotFoundException('El alumno no existe o no pertenece a tu cartera.');
-    }
-
-    const nombreCompleto = `${perfil.nombres} ${perfil.apellidos}`.trim();
-    const ahora = new Date();
-
-    if (!cuotaAbierta) {
-      return {
-        enviado: false,
-        motivo: 'sin_saldo_pendiente',
-        mensaje: `${nombreCompleto} no tiene saldo pendiente: no hay nada que recordar.`,
-        mensajeSugerido: null,
-        saldoPendienteUsd: null,
-        saldoPendienteBs: null,
-        ultimaGestionUtc: null,
-        proximoPermitidoUtc: null,
-      };
-    }
-
-    if (cuotaAbierta.estado === EstadoCuota.PENDIENTE_REVISION) {
-      return {
-        enviado: false,
-        motivo: 'pausa_revision',
-        mensaje:
-          `${nombreCompleto} tiene un pago en verificación: los recordatorios se pausan mientras ` +
-          'se revisa el comprobante.',
-        mensajeSugerido: null,
-        saldoPendienteUsd: cuotaAbierta.saldoPendienteUsd,
-        saldoPendienteBs: null,
-        ultimaGestionUtc: null,
-        proximoPermitidoUtc: null,
-      };
-    }
-
-    // Cooldown anti-spam: se mide solo contra recordatorios MANUALES (los automáticos de WU-H
-    // son otra cosa y no cuentan como gestión del coach).
-    const [ultimaGestion] = await this.db
-      .select({ createdAtUtc: notificacionesInApp.createdAtUtc })
-      .from(notificacionesInApp)
-      .where(
-        and(
-          eq(notificacionesInApp.usuarioId, clienteId),
-          eq(notificacionesInApp.tipoEvento, TIPO_EVENTO_RECORDATORIO_MANUAL)
-        )
-      )
-      .orderBy(desc(notificacionesInApp.createdAtUtc))
-      .limit(1);
-
-    const ultimaGestionUtc = ultimaGestion ? toIsoSafe(ultimaGestion.createdAtUtc) : null;
-    const cooldownMs = HORAS_COOLDOWN_RECORDATORIO_MANUAL * 60 * 60 * 1000;
-
-    if (ultimaGestion && ahora.getTime() - new Date(ultimaGestion.createdAtUtc).getTime() < cooldownMs) {
-      const proximoPermitido = new Date(new Date(ultimaGestion.createdAtUtc).getTime() + cooldownMs);
-      return {
-        enviado: false,
-        motivo: 'cooldown_activo',
-        mensaje:
-          `Ya enviaste un recordatorio manual a ${nombreCompleto} hace menos de ` +
-          `${HORAS_COOLDOWN_RECORDATORIO_MANUAL} horas. Espera para no saturar al alumno.`,
-        mensajeSugerido: null,
-        saldoPendienteUsd: cuotaAbierta.saldoPendienteUsd,
-        saldoPendienteBs: null,
-        ultimaGestionUtc,
-        proximoPermitidoUtc: proximoPermitido.toISOString(),
-      };
-    }
-
-    // RNF-003/ADR-011 (etapa 3): la tasa override lee `perfiles_alumno` (RLS); transacción con
-    // el GUC del coach.
-    const tasa = await this.withTenant({ entrenadorId }, (tx) =>
-      this.finanzasService.obtenerTasaVigente(entrenadorId, clienteId, tx)
-    );
-    const saldoPendienteBs = tasa.tasaEfectiva
-      ? this.finanzasService.proyectarVES(cuotaAbierta.saldoPendienteUsd, tasa.tasaEfectiva)
-      : null;
-
-    const mensaje = construirMensajeRecordatorioManual({
-      nombre: perfil.nombres,
-      saldoPendienteUsd: cuotaAbierta.saldoPendienteUsd,
-      saldoPendienteBs,
-      periodo: cuotaAbierta.periodo,
-    });
-
-    if (!this.eventEmitter) {
-      throw new ServiceUnavailableException(
-        'El servicio de notificaciones no está disponible en este momento.'
-      );
-    }
-
-    // RF-014 RN-01: se emite el evento y se ESPERA su resultado (emitAsync) porque la respuesta
-    // del endpoint describe si hubo push; el despachador sigue siendo el único que encola.
-    const resultados = await this.eventEmitter.emitAsync(
-      RecordatorioManualCobroEvent.NOMBRE,
-      new RecordatorioManualCobroEvent({
-        tipoEvento: TIPO_EVENTO_RECORDATORIO_MANUAL,
-        destinatarioUserId: clienteId,
-        entrenadorId,
-        categoria: 'FINANZAS',
-        titulo: mensaje.titulo,
-        cuerpo: mensaje.cuerpo,
-        linkAccion: '/app/pagos',
-        datosAdicionales: {
-          cuotaId: cuotaAbierta.id,
-          saldoPendienteUsd: cuotaAbierta.saldoPendienteUsd,
-          saldoPendienteBs,
-          origen: 'recordatorio_manual',
-        },
-        esCriticoSeguridad: false,
-        // RNF-004 §3: ref de origen del jobId determinista.
-        referenciaId: cuotaAbierta.id,
-      })
-    );
-
-    const despacho = (resultados?.[0] ?? null) as { pushEnqueued?: boolean } | null;
-
-    this.logger.log(
-      `Recordatorio manual despachado a ${clienteId} (cuota ${cuotaAbierta.id}) por coach ${entrenadorId}.`
-    );
-
-    return {
-      enviado: true,
-      motivo: 'despachado',
-      mensaje: despacho?.pushEnqueued
-        ? `Recordatorio enviado a ${nombreCompleto} (notificación in-app + push).`
-        : `Recordatorio enviado a ${nombreCompleto} (notificación in-app).`,
-      mensajeSugerido: mensaje.cuerpo,
-      saldoPendienteUsd: cuotaAbierta.saldoPendienteUsd,
-      saldoPendienteBs,
-      ultimaGestionUtc: ahora.toISOString(),
-      proximoPermitidoUtc: new Date(ahora.getTime() + cooldownMs).toISOString(),
-    };
+    return enviarRecordatorioManualCaso(this.ctx, entrenadorId, clienteId);
   }
 
   /** Último recordatorio manual por alumno (para la columna "última gestión" de la lista). */
   private async obtenerUltimasGestiones(ids: string[]): Promise<Map<string, string>> {
-    if (ids.length === 0) return new Map();
-
-    const filas = await this.db
-      .select({
-        usuarioId: notificacionesInApp.usuarioId,
-        ultimaGestionUtc: max(notificacionesInApp.createdAtUtc),
-      })
-      .from(notificacionesInApp)
-      .where(
-        and(
-          inArray(notificacionesInApp.usuarioId, ids),
-          eq(notificacionesInApp.tipoEvento, TIPO_EVENTO_RECORDATORIO_MANUAL)
-        )
-      )
-      .groupBy(notificacionesInApp.usuarioId);
-
-    const gestiones = new Map<string, string>();
-    for (const fila of filas) {
-      if (fila.ultimaGestionUtc) {
-        gestiones.set(fila.usuarioId, toIsoSafe(fila.ultimaGestionUtc));
-      }
-    }
-    return gestiones;
+    return obtenerUltimasGestionesCaso(this.ctx, ids);
   }
 
   /**
@@ -926,14 +241,11 @@ export class CarteraService {
     tasaOverride: string | null,
     tasaBase: string | null
   ): { tasaAplicada: string | null; saldoPendienteBs: string | null } {
-    const tasa =
-      tasaOverride && parseFloat(tasaOverride) > 0 ? tasaOverride : tasaBase;
-    if (!tasa || parseFloat(tasa) <= 0) {
-      return { tasaAplicada: null, saldoPendienteBs: null };
-    }
-    return {
-      tasaAplicada: tasa,
-      saldoPendienteBs: this.finanzasService.proyectarVES(saldoUsd, tasa),
-    };
+    return proyectarSaldoCon(
+      (saldo, tasa) => this.finanzasService.proyectarVES(saldo, tasa),
+      saldoUsd,
+      tasaOverride,
+      tasaBase
+    );
   }
 }
