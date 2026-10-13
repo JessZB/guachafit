@@ -662,11 +662,16 @@ describe('M5-L1: suscripción, emisión automática y rutas (RF-005 / RF-008)', 
     });
 
     it('SuscripcionAlumnoDTO declara los 7 campos del contrato en shared/src/types/index.ts', () => {
-      const rutaTipos = path.resolve(
+      const dirTipos = path.resolve(
         path.dirname(fileURLToPath(import.meta.url)),
-        '../../../../packages/shared/src/types/index.ts'
+        '../../../../packages/shared/src/types'
       );
-      const fuente = fs.readFileSync(rutaTipos, 'utf8');
+      const fuente = fs
+        .readdirSync(dirTipos)
+        .filter((nombre) => nombre.endsWith('.ts'))
+        .sort()
+        .map((nombre) => fs.readFileSync(path.join(dirTipos, nombre), 'utf8'))
+        .join('\n');
       const bloque =
         fuente.match(/export interface SuscripcionAlumnoDTO\s*\{([\s\S]*?)\}/)?.[1] ?? '';
 
