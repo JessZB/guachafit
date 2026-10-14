@@ -13,277 +13,148 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-  BadRequestException,
-  NotFoundException,
 } from '@nestjs/common';
-import { MENSAJE_ALUMNO_NO_ENCONTRADO } from '../../common/mensajes-acceso';
-import { parsearContrato } from '../../common/errores/parsear-contrato';
 import { FinanzasService } from './finanzas.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Rol } from '@guachafit/shared';
 import {
-  Rol,
-  UUID_REGEX,
-  CrearPlanMembresiaSchema,
-  ActualizarPlanMembresiaSchema,
-  CrearOverridePlanSchema,
-  ActualizarTasaCambioSchema,
-  CalcularConversionSchema,
-  ReportarPagoSchema,
-  CobroDirectoSchema,
-  CobroDirectoInteligenteSchema,
-  ConciliarTransaccionSchema,
-  RevertirPagoSchema,
-  AnularCuotaSchema,
-  AsignarSuscripcionSchema,
-  LIMITE_BANDEJA_CONCILIACION_POR_DEFECTO,
-  LIMITE_BANDEJA_CONCILIACION_MAXIMO,
-  LIMITE_TRANSACCIONES_HISTORIAL_MAXIMO,
-} from '@guachafit/shared';
+  actualizarPlanControlador,
+  actualizarTasaControlador,
+  anularCuotaControlador,
+  asignarSuscripcionControlador,
+  calcularConversionControlador,
+  cobroDirectoControlador,
+  cobroDirectoInteligenteControlador,
+  conciliarTransaccionControlador,
+  crearOverrideControlador,
+  crearPlanControlador,
+  eliminarOverrideControlador,
+  listarBandejaConciliacionControlador,
+  listarOverridesControlador,
+  listarPlanesControlador,
+  obtenerCuotaControlador,
+  obtenerHistorialClienteControlador,
+  obtenerSuscripcionControlador,
+  obtenerTasaVigenteControlador,
+  quitarSuscripcionControlador,
+  reportarPagoControlador,
+  revertirTransaccionControlador,
+} from './controlador-finanzas';
 
 @Controller('finanzas')
 export class FinanzasController {
   constructor(private readonly finanzasService: FinanzasService) {}
 
-  /**
-   * Consulta de tasas de cambio vigentes (BCV, Paralelo, Coach, Override cliente)
-   * Autenticado (Entrenador, Alumno)
-   */
+  /** Consulta de tasas vigentes (BCV, Paralelo, Coach, Override del cliente). Entrenador y Alumno. */
   @Get('tasas/vigente')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR, Rol.ALUMNO)
   async obtenerTasaVigente(@Req() req: any, @Query('clienteId') clienteId?: string) {
-    let entrenadorId = req.user.entrenadorId;
-    let targetClienteId = clienteId;
-
-    if (req.user.rol === Rol.ALUMNO) {
-      targetClienteId = req.user.sub;
-      if (!entrenadorId) {
-        // En caso de que no venga en el token, FinanzasService lo busca
-        entrenadorId = req.user.entrenadorId;
-      }
-    } else {
-      entrenadorId = req.user.entrenadorId || req.user.sub;
-    }
-
-    if (!entrenadorId) {
-      throw new BadRequestException('No se pudo determinar el contexto del entrenador para la tasa.');
-    }
-
-    // RNF-003/ADR-011 (etapa 3): la tasa override lee `perfiles_alumno` (RLS); el contexto RLS
-    // es el del actor (self del alumno, tenant del coach).
-    return this.finanzasService.obtenerTasaVigente(
-      entrenadorId,
-      targetClienteId,
-      undefined,
-      req.user.rol === Rol.ALUMNO ? { usuarioId: req.user.sub } : { entrenadorId }
-    );
+    return obtenerTasaVigenteControlador(this.finanzasService, req.user, clienteId);
   }
 
-  /**
-   * Actualizar tasas de cambio de referencia del entrenador
-   * Rol: Entrenador
-   */
+  /** Actualiza las tasas de referencia del entrenador. Entrenador. */
   @Put('tasas')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
   async actualizarTasa(@Req() req: any, @Body() body: unknown) {
-    const dto = parsearContrato(ActualizarTasaCambioSchema, body);
-    const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.finanzasService.actualizarTasa(entrenadorId, dto);
+    return actualizarTasaControlador(this.finanzasService, req.user, body);
   }
 
-  /**
-   * Calcular conversión bimonetaria precisa entre USD y VES
-   * Autenticado (Entrenador, Alumno)
-   */
+  /** Conversión bimonetaria precisa entre USD y VES. Entrenador y Alumno. */
   @Post('tasas/calcular')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR, Rol.ALUMNO)
   @HttpCode(HttpStatus.OK)
   async calcularConversion(@Req() req: any, @Body() body: unknown) {
-    const dto = parsearContrato(CalcularConversionSchema, body);
-    const entrenadorId =
-      req.user.rol === Rol.ALUMNO
-        ? req.user.entrenadorId
-        : req.user.entrenadorId || req.user.sub;
-
-    if (!entrenadorId) {
-      throw new BadRequestException('No se pudo determinar el contexto del entrenador para el cálculo.');
-    }
-
-    return this.finanzasService.calcularConversion(
-      dto,
-      entrenadorId,
-      req.user.sub,
-      req.user.rol
-    );
+    return calcularConversionControlador(this.finanzasService, req.user, body);
   }
 
-  /**
-   * Crear plan estándar en el catálogo comercial
-   * Rol: Entrenador
-   */
+  /** Crea un plan estándar del catálogo comercial. Entrenador. */
   @Post('planes')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
   @HttpCode(HttpStatus.CREATED)
   async crearPlan(@Req() req: any, @Body() body: unknown) {
-    const dto = parsearContrato(CrearPlanMembresiaSchema, body);
-    const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.finanzasService.crearPlan(entrenadorId, dto);
+    return crearPlanControlador(this.finanzasService, req.user, body);
   }
 
-  /**
-   * Listar planes del catálogo del entrenador
-   * Rol: Entrenador
-   */
+  /** Lista los planes del catálogo del entrenador. Entrenador. */
   @Get('planes')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
   async listarPlanes(@Req() req: any) {
-    const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.finanzasService.listarPlanesPorEntrenador(entrenadorId);
+    return listarPlanesControlador(this.finanzasService, req.user);
   }
 
-  /**
-   * Actualizar un plan comercial del catálogo
-   * Rol: Entrenador
-   */
+  /** Actualiza un plan comercial del catálogo. Entrenador. */
   @Patch('planes/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
-  async actualizarPlan(
-    @Req() req: any,
-    @Param('id') planId: string,
-    @Body() body: unknown
-  ) {
-    if (!UUID_REGEX.test(planId)) {
-      throw new BadRequestException('No encontramos ese plan. Puede que se haya eliminado.');
-    }
-    const dto = parsearContrato(ActualizarPlanMembresiaSchema, body);
-    const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.finanzasService.actualizarPlan(entrenadorId, planId, dto);
+  async actualizarPlan(@Req() req: any, @Param('id') planId: string, @Body() body: unknown) {
+    return actualizarPlanControlador(this.finanzasService, req.user, planId, body);
   }
 
-  /**
-   * Crear o actualizar override de precio/tasa para un cliente específico
-   * Rol: Entrenador
-   */
+  /** Crea o actualiza el override de precio/tasa de un cliente. Entrenador. */
   @Post('planes/override')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
   @HttpCode(HttpStatus.CREATED)
   async crearOverride(@Req() req: any, @Body() body: unknown) {
-    const dto = parsearContrato(CrearOverridePlanSchema, body);
-    const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.finanzasService.crearOverride(entrenadorId, dto);
+    return crearOverrideControlador(this.finanzasService, req.user, body);
   }
 
-  /**
-   * Listar overrides del catálogo comercial (RF-005 RN-02)
-   * - Sin `clienteId`: todos los overrides de la cartera del entrenador.
-   * - Con `clienteId` (usuarioId o perfilId): solo los del alumno, con aislamiento de tenant.
-   * Rol: Entrenador
-   */
+  /** Lista overrides (RF-005 RN-02): sin clienteId, toda la cartera; con clienteId, solo el alumno. Entrenador. */
   @Get('planes/override')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
   async listarOverrides(@Req() req: any, @Query('clienteId') clienteId?: string) {
-    if (clienteId !== undefined && !UUID_REGEX.test(clienteId)) {
-      throw new BadRequestException(MENSAJE_ALUMNO_NO_ENCONTRADO);
-    }
-    const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.finanzasService.listarOverrides(entrenadorId, clienteId || undefined);
+    return listarOverridesControlador(this.finanzasService, req.user, clienteId);
   }
 
-  /**
-   * Eliminar el override de un alumno (RF-005 RN-02): vuelve a heredar los valores del plan.
-   * Rol: Entrenador
-   */
+  /** Elimina el override de un alumno (RF-005 RN-02): hereda de nuevo el plan. Entrenador. */
   @Delete('planes/override/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
   async eliminarOverride(@Req() req: any, @Param('id') overrideId: string) {
-    if (!UUID_REGEX.test(overrideId)) {
-      throw new BadRequestException('No encontramos ese precio especial. Puede que se haya eliminado.');
-    }
-    const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.finanzasService.eliminarOverride(entrenadorId, overrideId);
+    return eliminarOverrideControlador(this.finanzasService, req.user, overrideId);
   }
 
-  /**
-   * Plan asignado al alumno y su ciclo de cobro (M5-L1, RF-005 / RF-008); `null` si no tiene.
-   * Rol: Entrenador
-   */
+  /** Plan y ciclo de cobro del alumno (M5-L1, RF-005/RF-008); null si no tiene. Entrenador. */
   @Get('suscripciones/:clienteId')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
   async obtenerSuscripcion(@Req() req: any, @Param('clienteId') clienteId: string) {
-    if (!UUID_REGEX.test(clienteId)) {
-      throw new BadRequestException(MENSAJE_ALUMNO_NO_ENCONTRADO);
-    }
-    const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.finanzasService.obtenerSuscripcion(entrenadorId, clienteId);
+    return obtenerSuscripcionControlador(this.finanzasService, req.user, clienteId);
   }
 
-  /**
-   * Asigna o cambia el plan del alumno; sus cuotas se emiten solas desde entonces (M5-L1).
-   * `fechaInicio` solo se envía con el primer plan.
-   * Rol: Entrenador
-   */
+  /** Asigna o cambia el plan del alumno (M5-L1); fechaInicio solo con el primer plan. Entrenador. */
   @Put('suscripciones/:clienteId')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
-  async asignarSuscripcion(
-    @Req() req: any,
-    @Param('clienteId') clienteId: string,
-    @Body() body: unknown
-  ) {
-    if (!UUID_REGEX.test(clienteId)) {
-      throw new BadRequestException(MENSAJE_ALUMNO_NO_ENCONTRADO);
-    }
-    const dto = parsearContrato(AsignarSuscripcionSchema, body);
-    const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.finanzasService.asignarSuscripcion(entrenadorId, clienteId, dto);
+  async asignarSuscripcion(@Req() req: any, @Param('clienteId') clienteId: string, @Body() body: unknown) {
+    return asignarSuscripcionControlador(this.finanzasService, req.user, clienteId, body);
   }
 
-  /**
-   * Quita el plan del alumno: deja de renovarse; las cuotas emitidas no cambian (M5-L1).
-   * Rol: Entrenador
-   */
+  /** Quita el plan del alumno (M5-L1): no renueva; cuotas emitidas intactas. Entrenador. */
   @Delete('suscripciones/:clienteId')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
   async quitarSuscripcion(@Req() req: any, @Param('clienteId') clienteId: string) {
-    if (!UUID_REGEX.test(clienteId)) {
-      throw new BadRequestException(MENSAJE_ALUMNO_NO_ENCONTRADO);
-    }
-    const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.finanzasService.quitarSuscripcion(entrenadorId, clienteId);
+    return quitarSuscripcionControlador(this.finanzasService, req.user, clienteId);
   }
 
-  /**
-   * Consultar detalle de una cuota por ID
-   * Roles: Entrenador, Alumno titular
-   */
+  /** Detalle de una cuota por ID. Entrenador y Alumno titular. */
   @Get('cuotas/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR, Rol.ALUMNO)
   async obtenerCuota(@Req() req: any, @Param('id') cuotaId: string) {
-    return this.finanzasService.obtenerCuotaPorId(
-      cuotaId,
-      req.user.sub,
-      req.user.rol,
-      req.user.entrenadorId
-    );
+    return obtenerCuotaControlador(this.finanzasService, req.user, cuotaId);
   }
 
-  /**
-   * Reporte de abono o liquidación por el alumno titular con X-Idempotency-Key
-   * Rol: Alumno
-   */
+  /** Reporte de abono del alumno titular con X-Idempotency-Key. Alumno. */
   @Post('cuotas/:id/reportar-pago')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ALUMNO)
@@ -294,118 +165,53 @@ export class FinanzasController {
     @Headers('x-idempotency-key') idempotencyHeader: string | undefined,
     @Body() body: unknown
   ) {
-    const dto = parsearContrato(ReportarPagoSchema, body);
-    const alumnoUserId = req.user.sub;
-    return this.finanzasService.reportarPago(
-      cuotaId,
-      alumnoUserId,
-      dto,
-      idempotencyHeader
-    );
+    return reportarPagoControlador(this.finanzasService, req.user, cuotaId, idempotencyHeader, body);
   }
 
-  /**
-   * Registro de cobro directo en efectivo en sala por el entrenador (auto-aprobado)
-   * Rol: Entrenador
-   */
+  /** Cobro directo en efectivo en sala (auto-aprobado). Entrenador. */
   @Post('cuotas/:id/cobro-directo')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
   @HttpCode(HttpStatus.CREATED)
-  async cobroDirecto(
-    @Req() req: any,
-    @Param('id') cuotaId: string,
-    @Body() body: unknown
-  ) {
-    const dto = parsearContrato(CobroDirectoSchema, body);
-    const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.finanzasService.cobroDirecto(cuotaId, entrenadorId, dto);
+  async cobroDirecto(@Req() req: any, @Param('id') cuotaId: string, @Body() body: unknown) {
+    return cobroDirectoControlador(this.finanzasService, req.user, cuotaId, body);
   }
 
-  /**
-   * RF-008: anular una cuota sin pagos (motivo obligatorio). Rol: Entrenador dueño.
-   */
+  /** RF-008: anula una cuota sin pagos (motivo obligatorio). Entrenador dueño. */
   @Post('cuotas/:id/anular')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
   @HttpCode(HttpStatus.OK)
   async anularCuota(@Req() req: any, @Param('id') cuotaId: string, @Body() body: unknown) {
-    if (!UUID_REGEX.test(cuotaId)) {
-      throw new NotFoundException('No encontramos esa cuota. Actualiza la pantalla.');
-    }
-    const dto = parsearContrato(AnularCuotaSchema, body);
-    const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.finanzasService.anularCuota(cuotaId, entrenadorId, dto);
+    return anularCuotaControlador(this.finanzasService, req.user, cuotaId, body);
   }
 
-  /**
-   * Bandeja de conciliación bancaria del entrenador (FIFO, transacciones pendientes)
-   * WU24b: envelope `{ items, total, limit, offset }`; `limit` default 25 (techo 100) y
-   * `offset` default 0. El orden FIFO por fecha de reporte se mantiene.
-   * Rol: Entrenador
-   */
+  /** Bandeja de conciliación FIFO (WU24b: envelope items/total/limit/offset; limit 25, techo 100; offset 0). Entrenador. */
   @Get('conciliacion/bandeja')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
-  async listarBandejaConciliacion(
-    @Req() req: any,
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string
-  ) {
-    const entrenadorId = req.user.entrenadorId || req.user.sub;
-    const limitNum = limit
-      ? Math.min(
-          Math.max(parseInt(limit, 10) || LIMITE_BANDEJA_CONCILIACION_POR_DEFECTO, 1),
-          LIMITE_BANDEJA_CONCILIACION_MAXIMO
-        )
-      : LIMITE_BANDEJA_CONCILIACION_POR_DEFECTO;
-    const offsetNum = offset ? Math.max(parseInt(offset, 10) || 0, 0) : 0;
-    return this.finanzasService.listarBandejaConciliacion(entrenadorId, limitNum, offsetNum);
+  async listarBandejaConciliacion(@Req() req: any, @Query('limit') limit?: string, @Query('offset') offset?: string) {
+    return listarBandejaConciliacionControlador(this.finanzasService, req.user, limit, offset);
   }
 
-  /**
-   * Conciliar transacción (aprobar o rechazar) bajo transacción ACID y bloqueo pesimista
-   * Rol: Entrenador
-   */
+  /** Concilia una transacción (aprobar o rechazar) con ACID y bloqueo pesimista. Entrenador. */
   @Patch('transacciones/:id/conciliar')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
-  async conciliarTransaccion(
-    @Req() req: any,
-    @Param('id') transaccionId: string,
-    @Body() body: unknown
-  ) {
-    const dto = parsearContrato(ConciliarTransaccionSchema, body);
-    const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.finanzasService.conciliarTransaccion(transaccionId, entrenadorId, dto);
+  async conciliarTransaccion(@Req() req: any, @Param('id') transaccionId: string, @Body() body: unknown) {
+    return conciliarTransaccionControlador(this.finanzasService, req.user, transaccionId, body);
   }
 
-  /**
-   * RF-007: revertir un pago aprobado por error (motivo obligatorio). Rol: Entrenador dueño.
-   */
+  /** RF-007: revierte un pago aprobado por error (motivo obligatorio). Entrenador dueño. */
   @Post('transacciones/:id/revertir')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
   @HttpCode(HttpStatus.OK)
-  async revertirTransaccion(
-    @Req() req: any,
-    @Param('id') transaccionId: string,
-    @Body() body: unknown
-  ) {
-    if (!UUID_REGEX.test(transaccionId)) {
-      throw new NotFoundException('No encontramos ese pago. Actualiza la pantalla.');
-    }
-    const dto = parsearContrato(RevertirPagoSchema, body);
-    const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.finanzasService.revertirTransaccion(transaccionId, entrenadorId, dto);
+  async revertirTransaccion(@Req() req: any, @Param('id') transaccionId: string, @Body() body: unknown) {
+    return revertirTransaccionControlador(this.finanzasService, req.user, transaccionId, body);
   }
 
-  /**
-   * Historial financiero y resumen del alumno (cuotas, transacciones, saldos)
-   * WU24b: `transaccionesTotal` es el COUNT real SIEMPRE presente. `txLimit`/`txOffset` son
-   * OPT-IN: sin ellos `transacciones` trae todas (contrato histórico del resumen).
-   * Roles: Entrenador, Alumno titular
-   */
+  /** Historial y resumen del alumno (WU24b: transaccionesTotal siempre; txLimit/txOffset opt-in, sin ellos trae todas). Entrenador y Alumno titular. */
   @Get('clientes/:clienteId/historial')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR, Rol.ALUMNO)
@@ -415,36 +221,10 @@ export class FinanzasController {
     @Query('txLimit') txLimit?: string,
     @Query('txOffset') txOffset?: string
   ) {
-    if (!UUID_REGEX.test(clienteId)) {
-      throw new BadRequestException(MENSAJE_ALUMNO_NO_ENCONTRADO);
-    }
-    const entrenadorId =
-      req.user.rol === Rol.ALUMNO
-        ? req.user.entrenadorId
-        : req.user.entrenadorId || req.user.sub;
-
-    // WU24b: un valor ausente o no numérico de `txLimit` conserva el default "todas".
-    const txLimitParsed = txLimit !== undefined ? parseInt(txLimit, 10) : NaN;
-    const txLimitNum = Number.isFinite(txLimitParsed)
-      ? Math.min(Math.max(txLimitParsed, 1), LIMITE_TRANSACCIONES_HISTORIAL_MAXIMO)
-      : undefined;
-    const txOffsetNum = txOffset ? Math.max(parseInt(txOffset, 10) || 0, 0) : 0;
-
-    return this.finanzasService.obtenerHistorialCliente(
-      entrenadorId,
-      clienteId,
-      req.user.sub,
-      req.user.rol,
-      txLimitNum,
-      txOffsetNum
-    );
+    return obtenerHistorialClienteControlador(this.finanzasService, req.user, clienteId, txLimit, txOffset);
   }
 
-  /**
-   * Cobro directo inteligente en sala (1 paso): cobra la cuota abierta más antigua o adelanta la
-   * próxima de la suscripción. `x-idempotency-key` evita cobrar dos veces ante un doble clic.
-   * Rol: Entrenador
-   */
+  /** Cobro directo inteligente en sala (1 paso); x-idempotency-key evita el doble cobro. Entrenador. */
   @Post('clientes/:clienteId/cobro-directo-inteligente')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Rol.ENTRENADOR)
@@ -455,16 +235,6 @@ export class FinanzasController {
     @Headers('x-idempotency-key') idempotencyHeader: string | undefined,
     @Body() body: unknown
   ) {
-    if (!UUID_REGEX.test(clienteId)) {
-      throw new BadRequestException(MENSAJE_ALUMNO_NO_ENCONTRADO);
-    }
-    const dto = parsearContrato(CobroDirectoInteligenteSchema, body);
-    const entrenadorId = req.user.entrenadorId || req.user.sub;
-    return this.finanzasService.cobroDirectoInteligente(
-      entrenadorId,
-      clienteId,
-      dto,
-      idempotencyHeader
-    );
+    return cobroDirectoInteligenteControlador(this.finanzasService, req.user, clienteId, idempotencyHeader, body);
   }
 }
