@@ -1,9 +1,9 @@
 /**
  * Guardián del tope duro P5 (ODD `odd/tasks/modularizacion-api-ola1.md`):
  * ningún `.ts` bajo `apps/api/src` (salvo specs) pasa de 400 líneas.
- * Tras el cierre de la Ola 1 (prompt 110) el tope rige para TODO `src`;
- * las únicas excepciones son los 8 archivos de la "Ola 2 del API" listados en el ODD
- * (401-899 líneas), que tienen su propio ODD posterior bajo las mismas reglas.
+ * Tras el cierre de la Ola 2 (prompt 129) el tope rige para TODO `src` sin
+ * excepciones: la lista `EXCEPCIONES_API_OLA2_NO_TRABAJADA` queda vacía.
+ * Una excepción nueva solo se admite con una referencia explícita a su ODD.
  *
  * La recolección usa `node:fs` (el paquete del API tiene tipos de Node, a diferencia de web
  * que debe usar `import.meta.glob` de Vite). Resuelve `src/` desde el directorio
@@ -51,32 +51,25 @@ function recolectarFuentes(): Map<string, string> {
 }
 
 /**
- * Excepciones explícitas: SOLO los 8 archivos de la "Ola 2 del API"
- * (`odd/tasks/modularizacion-api-ola1.md`, "Ola 2 del API (ODD posterior,
- * 401-899 líneas)"). Aún no trabajados; tienen su propio ODD posterior.
- * Ningún archivo de la Ola 1 puede aparecer en esta lista (lo vigila el segundo test).
+ * Excepciones explícitas: vacía desde el cierre de la Ola 2 (prompt 129,
+ * ODD `odd/tasks/modularizacion-api-ola2.md`). Los 8 archivos de la "Ola 2 del API"
+ * ya quedaron por debajo del tope (fachada, barril, processor o controlador ≤ 250,
+ * piezas ≤ 300) y el guardián queda en verde. Una excepción nueva exige una
+ * referencia explícita a su ODD; ningún archivo de `casos-*` puede aparecer en
+ * esta lista (lo vigila el segundo test).
  *
- * Líneas medidas el 2026-10-13 con este mismo contador (segmentos de `split`;
- * las cifras del ODD entre paréntesis se midieron con `wc -l`, una menos):
- * - `src/modules/entrenamiento/plantillas.service.ts` (610; ODD 609)
- * - `src/modules/antropometria/antropometria-periodicidad.util.ts` (518; ODD 517)
- * - `src/modules/antropometria/processors/antropometria-recordatorio.processor.ts` (494; ODD 493)
- * - `src/modules/finanzas/finanzas.controller.ts` (471; ODD 470)
- * - `src/modules/notificaciones/notification-dispatcher.service.ts` (464; ODD 463)
- * - `src/modules/notificaciones/processors/resumen-semanal.processor.ts` (437; ODD 436)
- * - `src/modules/entrenador/entrenador.service.ts` (433; ODD 432)
- * - `src/common/config/validar-configuracion-produccion.ts` (404; ODD 403)
+ * Historial (medido con este mismo contador, segmentos de `split`; las cifras del
+ * ODD entre paréntesis se midieron con `wc -l`, una menos):
+ * - `src/modules/entrenamiento/plantillas.service.ts` (609 → 160)
+ * - `src/modules/antropometria/antropometria-periodicidad.util.ts` (517 → 27, barril)
+ * - `src/modules/antropometria/processors/antropometria-recordatorio.processor.ts` (493 → 267)
+ * - `src/modules/finanzas/finanzas.controller.ts` (470 → 240)
+ * - `src/modules/notificaciones/notification-dispatcher.service.ts` (463 → 173)
+ * - `src/modules/notificaciones/processors/resumen-semanal.processor.ts` (436 → 97)
+ * - `src/modules/entrenador/entrenador.service.ts` (432 → 50)
+ * - `src/common/config/validar-configuracion-produccion.ts` (403 → 30, barril)
  */
-export const EXCEPCIONES_API_OLA2_NO_TRABAJADA: string[] = [
-  'src/modules/entrenamiento/plantillas.service.ts',
-  'src/modules/antropometria/antropometria-periodicidad.util.ts',
-  'src/modules/antropometria/processors/antropometria-recordatorio.processor.ts',
-  'src/modules/finanzas/finanzas.controller.ts',
-  'src/modules/notificaciones/notification-dispatcher.service.ts',
-  'src/modules/notificaciones/processors/resumen-semanal.processor.ts',
-  'src/modules/entrenador/entrenador.service.ts',
-  'src/common/config/validar-configuracion-produccion.ts',
-];
+export const EXCEPCIONES_API_OLA2_NO_TRABAJADA: string[] = [];
 
 /**
  * Fachadas de la Ola 1 del ODD (A1-A7). Ninguna puede aparecer en
@@ -93,11 +86,13 @@ export const FACHADAS_API_OLA1: string[] = [
 ];
 
 /**
- * Carpetas de casos de uso de la Ola 1 (P2 del ODD). Ninguna ruta de excepción puede vivir bajo
- * uno de estos prefijos. La barra final evita confundir
- * `casos-finanzas/` con un nombre hermano más largo.
+ * Carpetas de casos y piezas del API (P2 del ODD de la Ola 1 y Q2 del ODD de la
+ * Ola 2). Ninguna ruta de excepción puede vivir bajo uno de estos prefijos.
+ * Incluye las 7 carpetas de la Ola 1 (A1-A7) y las 8 carpetas nuevas de la Ola 2
+ * (B1-B8). La barra final evita confundir `casos-finanzas/` con un nombre
+ * hermano más largo.
  */
-export const CARPETAS_CASOS_API_OLA1: string[] = [
+export const CARPETAS_CASOS_API: string[] = [
   'src/modules/finanzas/casos-finanzas/', // A1
   'src/modules/entrenamiento/casos-entrenamiento/', // A2
   'src/modules/alumnos/casos-alumnos/', // A3
@@ -105,6 +100,14 @@ export const CARPETAS_CASOS_API_OLA1: string[] = [
   'src/modules/antropometria/casos-antropometria/', // A5
   'src/modules/finanzas/casos-cartera/', // A6
   'src/modules/nutricion/casos-nutricion/', // A7
+  'src/modules/entrenamiento/casos-plantillas/', // B1
+  'src/modules/antropometria/periodicidad/', // B2
+  'src/modules/antropometria/processors/recordatorio/', // B3
+  'src/modules/finanzas/controlador-finanzas/', // B4
+  'src/modules/notificaciones/casos-despachador/', // B5
+  'src/modules/notificaciones/processors/resumen-semanal/', // B6
+  'src/modules/entrenador/casos-entrenador/', // B7
+  'src/common/config/validacion-produccion/', // B8
 ];
 
 /**
@@ -152,7 +155,7 @@ describe('Tope duro P5: ningun archivo de apps/api/src pasa de 400 lineas', () =
     }
 
     for (const ruta of EXCEPCIONES_API_OLA2_NO_TRABAJADA) {
-      for (const carpeta of CARPETAS_CASOS_API_OLA1) {
+      for (const carpeta of CARPETAS_CASOS_API) {
         expect(ruta.startsWith(carpeta), `${ruta} vive en carpeta casos-* de la Ola 1`).toBe(false);
       }
     }
