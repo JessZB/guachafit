@@ -38,9 +38,15 @@ export function useVistaSesion({ sesion, onSesionPlanificada }: OpcionesVista) {
     null
   );
 
-  useEffect(() => {
+  // Al cambiar de sesión la vista vuelve al foco. Se ajusta DURANTE el render (patrón de React
+  // para derivar estado de una prop) y no en un efecto: un efecto se ejecuta en una tarea
+  // posterior al commit, y un toque en "Ver entrenamiento completo" que cayera en ese hueco
+  // quedaría pisado por el `'foco'` tardío (W-52-2).
+  const [idSesionDeLaVista, setIdSesionDeLaVista] = useState(sesion?.id);
+  if (sesion?.id !== idSesionDeLaVista) {
+    setIdSesionDeLaVista(sesion?.id);
     setVistaEnCurso('foco');
-  }, [sesion?.id]);
+  }
   const abrirCorreccionSerie = (serieId: string) =>
     setSeriesEnCorreccion((previas) => new Set(previas).add(serieId));
   useEffect(() => {

@@ -184,48 +184,22 @@ describe('EntrenamientoPage · sesión EN_PROGRESO desde la caché sin conexión
     );
   });
 
-  it(
-    '(c) "Hacer ahora" en el ejercicio 2 guarda el índice 1 en sessionStorage',
-    // W-52-2: dos esperas `findByRole` encadenadas (hasta 5000 ms cada una) más la
-    // lectura Dexie y el render superan el `testTimeout` por defecto (5000 ms) cuando la
-    // máquina va cargada (suite completa o suites en paralelo). El presupuesto (20 s) cubre la
-    // suma de todas las esperas acotadas (5 s + 3x2 s de reintentos + 5 s) sin cambiar ninguna
-    // aserción.
-    { timeout: 20000 },
-    async () => {
-      await prepararCache(crearSesionEnProgreso());
-      render(<EntrenamientoPage />);
-      await screen.findByRole('region', { name: 'Entrenamiento en foco' }, { timeout: 5000 });
+  it('(c) "Hacer ahora" en el ejercicio 2 guarda el índice 1 en sessionStorage', async () => {
+    await prepararCache(crearSesionEnProgreso());
+    render(<EntrenamientoPage />);
+    await screen.findByRole('region', { name: 'Entrenamiento en foco' }, { timeout: 5000 });
 
-      // W-52-2: bajo carga, el clic en "Ver entrenamiento completo" a veces no conmuta:
-      // la vista de foco sigue montada con el botón presente y la lista nunca aparece (en el
-      // DOM del fallo se ve la sección "Entrenamiento en foco" con "Ejercicio 1 de 3", sin
-      // "Volver al enfoque" ni "Hacer ahora"). La transición es un `setVistaEnCurso('lista')`
-      // de un solo sentido (idempotente, no alterna): reintentar el clic es seguro y no oculta
-      // ningún defecto de alternancia. Se intentó la espera determinista de un solo clic
-      // (prompt 116, iteraciones 1-2): falla ~15% en solo (9/10 canónico) con la misma firma,
-      // así que se conserva el reintento acotado y W1 queda aceptado con evidencia, sin BLOCKER.
-      for (let intento = 0; intento < 3; intento++) {
-        const verLista = screen.queryByRole('button', { name: 'Ver entrenamiento completo' });
-        if (verLista) fireEvent.click(verLista);
-        // eslint-disable-next-line no-await-in-loop
-        const listaVisible = await screen
-          .findByRole('button', { name: 'Hacer ahora: Press de banca' }, { timeout: 2000 })
-          .then(() => true)
-          .catch(() => false);
-        if (listaVisible) break;
-      }
-      fireEvent.click(
-        await screen.findByRole(
-          'button',
-          { name: 'Hacer ahora: Press de banca' },
-          { timeout: 5000 }
-        )
-      );
+    fireEvent.click(screen.getByRole('button', { name: 'Ver entrenamiento completo' }));
+    fireEvent.click(
+      await screen.findByRole(
+        'button',
+        { name: 'Hacer ahora: Press de banca' },
+        { timeout: 5000 }
+      )
+    );
 
-      expect(sessionStorage.getItem(CLAVE_PREFERIDO)).toBe('1');
-    }
-  );
+    expect(sessionStorage.getItem(CLAVE_PREFERIDO)).toBe('1');
+  });
 
   it('C3.3: pegar "60 kg" en el input de peso de la serie en foco lo deja en 60', async () => {
     await prepararCache(crearSesionEnProgreso());
