@@ -15,7 +15,7 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 /** Tope duro P5: pasar de 400 exige justificación escrita en el reporte del módulo. */
 export const TOPE_LINEAS_ARCHIVO = 400;
@@ -139,53 +139,65 @@ function buscarArchivosExcedidos(fuentes: Map<string, string>): string[] {
   return excedidos.sort();
 }
 
-describe('Tope duro P5: ningun archivo de apps/api/src pasa de 400 lineas', () => {
-  it('ningun archivo fuera de excepciones pasa del tope', () => {
-    const excedidos = buscarArchivosExcedidos(recolectarFuentes());
+describe(
+  'Tope duro P5: ningun archivo de apps/api/src pasa de 400 lineas',
+  // La recolección recorre `src/` en frío (~11,7 s medidos): se hace una sola
+  // vez por archivo de test y el presupuesto cubre la lectura más lenta.
+  { timeout: 30000 },
+  () => {
+    // Las fuentes se recolectan UNA sola vez por archivo de test: recorrer `src/`
+    // en frío tarda ~11,7 s y repetirlo en cada test agota el timeout por defecto.
+    let fuentes: Map<string, string>;
 
-    expect(excedidos).toEqual([]);
-  });
+    beforeAll(() => {
+      fuentes = recolectarFuentes();
+    });
 
-  it('la lista de excepciones solo cubre la Ola 2: ninguna fachada ni carpeta casos-* de la Ola 1 esta en ella', () => {
-    for (const fachada of FACHADAS_API_OLA1) {
-      expect(
-        EXCEPCIONES_API_OLA2_NO_TRABAJADA,
-        `${fachada} no puede estar exceptuado`
-      ).not.toContain(fachada);
-    }
+    it('ningun archivo fuera de excepciones pasa del tope', () => {
+      const excedidos = buscarArchivosExcedidos(fuentes);
 
-    for (const ruta of EXCEPCIONES_API_OLA2_NO_TRABAJADA) {
-      for (const carpeta of CARPETAS_CASOS_API) {
-        expect(ruta.startsWith(carpeta), `${ruta} vive en carpeta casos-* de la Ola 1`).toBe(false);
+      expect(excedidos).toEqual([]);
+    });
+
+    it('la lista de excepciones no cubre fachadas ni carpetas casos-*', () => {
+      for (const fachada of FACHADAS_API_OLA1) {
+        expect(
+          EXCEPCIONES_API_OLA2_NO_TRABAJADA,
+          `${fachada} no puede estar exceptuado`
+        ).not.toContain(fachada);
       }
-    }
-  });
 
-  it('toda excepcion sigue haciendo falta: existe y pasa del tope', () => {
-    const fuentes = recolectarFuentes();
-    const innecesarias: string[] = [];
-
-    for (const ruta of EXCEPCIONES_API_OLA2_NO_TRABAJADA) {
-      const contenido = fuentes.get(ruta);
-
-      if (contenido === undefined || contarLineas(contenido) <= TOPE_LINEAS_ARCHIVO) {
-        innecesarias.push(ruta);
+      for (const ruta of EXCEPCIONES_API_OLA2_NO_TRABAJADA) {
+        for (const carpeta of CARPETAS_CASOS_API) {
+          expect(ruta.startsWith(carpeta), `${ruta} vive en carpeta casos-*`).toBe(false);
+        }
       }
-    }
+    });
 
-    expect(innecesarias).toEqual([]);
-  });
+    it('toda excepcion sigue haciendo falta: existe y pasa del tope', () => {
+      const innecesarias: string[] = [];
 
-  it('el recorrido incluye src y excluye los specs', () => {
-    const fuentes = recolectarFuentes();
-    const rutas: string[] = [...fuentes.keys()];
+      for (const ruta of EXCEPCIONES_API_OLA2_NO_TRABAJADA) {
+        const contenido = fuentes.get(ruta);
 
-    expect(rutas.length).toBeGreaterThan(100);
-    expect(rutas).toContain('src/modules/finanzas/finanzas.service.ts');
-    expect(rutas).toContain('src/modules/entrenamiento/plantillas.service.ts');
+        if (contenido === undefined || contarLineas(contenido) <= TOPE_LINEAS_ARCHIVO) {
+          innecesarias.push(ruta);
+        }
+      }
 
-    for (const ruta of rutas) {
-      expect(ruta.endsWith('.spec.ts')).toBe(false);
-    }
-  });
-});
+      expect(innecesarias).toEqual([]);
+    });
+
+    it('el recorrido incluye src y excluye los specs', () => {
+      const rutas: string[] = [...fuentes.keys()];
+
+      expect(rutas.length).toBeGreaterThan(100);
+      expect(rutas).toContain('src/modules/finanzas/finanzas.service.ts');
+      expect(rutas).toContain('src/modules/entrenamiento/plantillas.service.ts');
+
+      for (const ruta of rutas) {
+        expect(ruta.endsWith('.spec.ts')).toBe(false);
+      }
+    });
+  },
+);
