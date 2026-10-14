@@ -77,8 +77,8 @@ Orden: (M ∥ F) → S → D → R. Si R encuentra BLOCKERs, Claude redacta un p
 - [x] F: `107`.
 - [x] S: `108`, `109` (+ corrección `115`).
 - [x] D: `110`.
-- [ ] R: `111`–`114`.
-- [ ] Claude: verificación contra el diff, un commit por módulo, ADR-023, `docs(vault)` y limpieza.
+- [x] R: `111`–`114` (+ limpieza `116`).
+- [x] Claude: verificación contra el diff, un commit por módulo, ADR-023, `docs(vault)` y limpieza.
 
 ## Criterios de aceptación
 - Las 7 fachadas quedan ≤ 400 líneas, y ningún caso de uso pasa de 300. Los dos índices de `shared` quedan como barriles.
@@ -113,5 +113,14 @@ Orden: (M ∥ F) → S → D → R. Si R encuentra BLOCKERs, Claude redacta un p
   - Borrador `04_Decisiones/ADR-023-casos-de-uso-servicios-api.md` (propuesto).
   - Pendiente menor: los comentarios del guardián están en inglés, mientras que el de la web está en español.
 
+- 2026-10-13 (Claude): fase R verificada.
+  - `111`–`114` APTOS y sin BLOCKERs (WARNING: 0, 2, 0 y 8).
+  - **Hallazgo de Claude:** varios subagentes habían traducido al inglés comentarios en español (`casos-auth` 145/235). El `116` los restauró desde `fb87b92`, con una comparación sin comentarios idéntica.
+  - El `116` borró además 2 privados muertos de `CarteraService` (114-W7), corrigió la justificación de `hidratarPlanActivo` (114-W8) y el título de `rf005-rf008:664` (112-S1).
+  - W-52-2: la espera determinista de un solo clic falló ~15 % (9/10), así que se conserva el reintento acotado y W1 queda aceptado con evidencia. Es un clic sobre el botón montado que no conmuta, posible causa en la aplicación y no en el test: queda como pendiente aparte.
+  - Resultados: API 1805 x3 en corridas secuenciales, typechecks 0, builds en verde y guardián 4/4.
+  - Commit `54e4536`. ADR-023 aceptado y regla 15 añadida en la §6 de `00_Reglas_Desarrollo_SDD.md`. Los prompts y reportes 100–116 se borran. **ODD cerrado (Ola 1 del API).**
+
 ## Siguiente paso
-- El dueño lanza `111`–`114` en paralelo (solo lectura).
+- ODD de la Ola 2 del API: los 8 archivos de 401–899 líneas exceptuados en el guardián, más la normalización de nombres que pide el `114` (`*.caso.ts` frente a nombres sin sufijo; `ctx`/`casos`/`contexto`; `soporte-finanzas` y `bandeja-historial`) y la orquestación residual de `CarteraService.obtenerCartera`.
+- Investigar en `EntrenamientoPage` por qué el clic en "Ver entrenamiento completo" a veces no conmuta a la lista con la página cargada (W-52-2).

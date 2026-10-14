@@ -177,6 +177,13 @@ Reglas transversales del frontend, vinculantes para toda vista nueva (se revisan
    - Los componentes presentacionales no piden datos: reciben props y callbacks.
    - Ningún `.ts`/`.tsx` de `pages/` o `components/` pasa de 400 líneas. Lo vigila el test guardián `apps/web/src/tamano-archivos.spec.ts`, que desde el 2026-10-13 (cierre de la Ola 3) no admite excepciones. Cualquier excepción nueva exige añadirla de forma explícita al guardián con una referencia a su ODD, y el guardián falla en cuanto sobra.
    - Un refactor de estructura no edita specs existentes ni cambia el mecanismo de datos de la vista.
+15. **Servicios del API como fachada de casos de uso (desde 2026-10-13):**
+   - Todo servicio nuevo o trabajado del API sigue [[ADR-023-casos-de-uso-servicios-api]]:
+     - el servicio Nest es una fachada que delega y conserva su constructor y sus métodos públicos;
+     - los casos de uso van en `src/modules/<modulo>/casos-<servicio>/` como funciones o clases planas que reciben un contexto de dependencias explícito, sin providers nuevos de Nest;
+     - la lógica pura va en `*-reglas.ts`, con su spec unitario.
+   - Ningún `.ts` de `apps/api/src` (sin contar specs) pasa de 400 líneas. Lo vigila el test guardián `apps/api/src/tamano-archivos.spec.ts`; sus únicas excepciones son los 8 archivos de la Ola 2 del API.
+   - Un refactor que mueve código conserva los comentarios originales en español, palabra por palabra, y ejecuta la suite completa de los paquetes que lo consumen, no solo el typecheck: hay specs que leen el código fuente por ruta.
 
 ---
 

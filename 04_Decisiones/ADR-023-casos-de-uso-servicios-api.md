@@ -2,7 +2,7 @@
 id: ADR-023
 titulo: "ADR-023: Casos de uso planos en servicios del API (fachada + contexto explícito)"
 fecha: 2026-10-13
-estado: propuesto
+estado: aceptado
 decisores:
   - "Dueño del producto"
   - "Tech Lead"
@@ -16,9 +16,9 @@ tags:
 # ADR-023: Casos de uso planos en servicios del API (fachada + contexto explícito)
 
 ## 1. Estado
-`propuesto` (2026-10-13). Borrador de la fase D del ODD `odd/tasks/modularizacion-api-ola1.md`
-(prompt 110). Se acepta al cerrar el ODD con la revisión 4R sin BLOCKERs abiertos
-(prompts 111–114). Lo aplican los 7 servicios de la Ola 1 y lo vigila
+`aceptado` (2026-10-13). Nació como borrador en la fase D del ODD `odd/tasks/modularizacion-api-ola1.md`
+(prompt 110) y se aceptó al cerrarlo: revisión 4R (prompts 111–114) APTA y sin BLOCKERs, con la limpieza
+del prompt 116. Lo aplican los 7 servicios de la Ola 1 y lo vigila
 `apps/api/src/tamano-archivos.spec.ts`.
 
 ---
