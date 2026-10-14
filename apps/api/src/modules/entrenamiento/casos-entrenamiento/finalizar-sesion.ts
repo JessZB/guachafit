@@ -17,8 +17,8 @@ import {
 import type { FinalizarSesionDTO, FinalizarSesionResponseDTO } from '@guachafit/shared';
 import { obtenerFechaLocalYyyyMmDd } from '../../../common/adherencia.util';
 import { parsearContrato } from '../../../common/errores/parsear-contrato';
-import type { ContextoEntrenamiento } from './contexto';
-import { MENSAJE_HORA_INVALIDA, MENSAJE_SESION_NO_ENCONTRADA } from './contexto';
+import type { ContextoEntrenamiento } from './contexto-entrenamiento';
+import { MENSAJE_HORA_INVALIDA, MENSAJE_SESION_NO_ENCONTRADA } from './contexto-entrenamiento';
 import { obtenerSesionPorId } from './obtener-sesion-por-id';
 import { notificarEntrenadorSesionFinalizada } from './notificar-sesion-finalizada';
 import {

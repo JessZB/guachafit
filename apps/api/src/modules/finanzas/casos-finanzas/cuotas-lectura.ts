@@ -9,14 +9,12 @@ import {
   transaccionesPago,
 } from '@guachafit/database';
 import { toCents, toIsoSafe, MENSAJE_CUOTA_NO_ENCONTRADA } from './finanzas-reglas';
-import {
-  contextoRlsDeActor,
-  resolverComprobanteUrlCaso,
-} from './soporte-finanzas';
+import { contextoRlsDeActor } from './acceso-rls-finanzas';
+import { resolverComprobanteUrlCaso } from './comprobantes';
 import {
   obtenerTasaVigenteCaso,
   proyectarVESCaso,
-} from './tasas-conversion.caso';
+} from './tasas-conversion';
 import type { ContextoFinanzas } from './contexto-finanzas';
 
 // ===========================================================================

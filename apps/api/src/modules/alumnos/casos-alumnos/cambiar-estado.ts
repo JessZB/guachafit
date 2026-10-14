@@ -2,7 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { and, eq, isNull, perfilesAlumno } from '@guachafit/database';
 import { CambioEstadoAlumnoDTO, EstadoAlumno } from '@guachafit/shared';
 import { MENSAJE_ALUMNO_FUERA_DE_LISTA } from '../../../common/mensajes-acceso';
-import type { ContextoCasosAlumnos } from './contexto-casos';
+import type { ContextoAlumnos } from './contexto-alumnos';
 
 /**
  * §6: etiquetas humanas del estado de activación para los mensajes devueltos al usuario.
@@ -20,7 +20,7 @@ export const ETIQUETA_ESTADO_ACTIVACION: Record<EstadoAlumno, string> = {
  * Movido sin cambios desde `AlumnosService.cambiarEstado` (P3).
  */
 export async function cambiarEstado(
-  ctx: Pick<ContextoCasosAlumnos, 'withTenant'>,
+  ctx: Pick<ContextoAlumnos, 'withTenant'>,
   entrenadorId: string,
   alumnoId: string,
   dto: CambioEstadoAlumnoDTO

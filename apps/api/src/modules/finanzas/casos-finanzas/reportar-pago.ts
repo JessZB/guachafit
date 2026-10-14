@@ -29,9 +29,9 @@ import {
 import {
   calcularContravalorUSDCaso,
   obtenerTasaVigenteCaso,
-} from './tasas-conversion.caso';
-import { obtenerCuotaPorIdCaso } from './cuotas-lectura.caso';
-import { resolverComprobanteUrlCaso } from './soporte-finanzas';
+} from './tasas-conversion';
+import { obtenerCuotaPorIdCaso } from './cuotas-lectura';
+import { resolverComprobanteUrlCaso } from './comprobantes';
 import { PagoReportadoEvent } from '../../notificaciones/events/eventos-notificacion';
 import type { ContextoFinanzas } from './contexto-finanzas';
 

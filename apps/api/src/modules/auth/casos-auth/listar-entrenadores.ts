@@ -4,7 +4,7 @@ import {
   ListarEntrenadoresAdminQueryDTO,
   Rol,
 } from '@guachafit/shared';
-import type { ContextoCasosAuth } from './contexto-casos';
+import type { ContextoAuth } from './contexto-auth';
 
 /**
  * RF-010 RN-01 (WU Admin): listado de entrenadores para el panel maestro del Superadmin.
@@ -15,7 +15,7 @@ import type { ContextoCasosAuth } from './contexto-casos';
  * Movido sin cambios (P3).
  */
 export async function listarEntrenadores(
-  ctx: Pick<ContextoCasosAuth, 'db'>,
+  ctx: Pick<ContextoAuth, 'db'>,
   query: ListarEntrenadoresAdminQueryDTO
 ): Promise<ListadoEntrenadoresAdminDTO> {
   const { limit, offset } = query;

@@ -17,7 +17,7 @@ import {
   ordenarMonitorPorNombre,
   ordenarMonitorPorRiesgo,
 } from '../../../common/adherencia.util';
-import type { ContextoEntrenamiento } from './contexto';
+import type { ContextoEntrenamiento } from './contexto-entrenamiento';
 import { calcularRachaEfectiva, toIsoUtcString } from './reglas-racha';
 
 // ---------------------------------------------------------------------------

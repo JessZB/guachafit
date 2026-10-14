@@ -27,7 +27,7 @@ import {
 } from '../../../common/mensajes-acceso';
 import type { EventoCorreoCuenta } from '../../notificaciones/events/eventos-correo-cuenta';
 import { publicarCorreoCuenta } from '../../notificaciones/events/eventos-correo-cuenta';
-import type { ContextoCasosAuth } from './contexto-casos';
+import type { ContextoAuth } from './contexto-auth';
 
 /**
  * Ayudantes compartidos de sesión y acceso. Movido sin cambios desde los métodos privados de
@@ -36,7 +36,7 @@ import type { ContextoCasosAuth } from './contexto-casos';
 
 /** Genera los tokens JWT de acceso (15 min) y refresco (7 días). */
 export function generateTokens(
-  ctx: Pick<ContextoCasosAuth, 'jwtSecret' | 'refreshSecret'>,
+  ctx: Pick<ContextoAuth, 'jwtSecret' | 'refreshSecret'>,
   payload: JwtPayload
 ): { accessToken: string; refreshToken: string } {
   const accessToken = jwt.sign(payload, ctx.jwtSecret, { expiresIn: '15m' });
@@ -58,7 +58,7 @@ export function generateTokens(
  * consulta a BD en el guard, vive como máximo sus 15 minutos de TTL.
  */
 export async function verificarLicenciaEntrenadorActiva(
-  ctx: Pick<ContextoCasosAuth, 'db'>,
+  ctx: Pick<ContextoAuth, 'db'>,
   usuarioId: string
 ): Promise<{ nombres: string | null }> {
   const [perfil] = await ctx.db
@@ -91,7 +91,7 @@ export async function verificarLicenciaEntrenadorActiva(
  * es operable. Ambas tablas no tienen RLS: la lectura va por el pool raíz (`ctx.db`).
  */
 export async function verificarEntrenadorOperable(
-  ctx: Pick<ContextoCasosAuth, 'db'>,
+  ctx: Pick<ContextoAuth, 'db'>,
   entrenadorId: string
 ): Promise<void> {
   const [entrenador] = await ctx.db
@@ -117,7 +117,7 @@ export async function verificarEntrenadorOperable(
  * negocio: solo se registra.
  */
 export function publicarCorreoCuentaCaso(
-  ctx: Pick<ContextoCasosAuth, 'eventEmitter' | 'logger'>,
+  ctx: Pick<ContextoAuth, 'eventEmitter' | 'logger'>,
   nombreEvento: string,
   evento: EventoCorreoCuenta
 ): Promise<boolean> {
@@ -131,7 +131,7 @@ export function publicarCorreoCuentaCaso(
  * alumno o del entrenador (si lo hay) para personalizar el correo.
  */
 export async function verificarCuentaConAcceso(
-  ctx: Pick<ContextoCasosAuth, 'db' | 'withTenant'>,
+  ctx: Pick<ContextoAuth, 'db' | 'withTenant'>,
   usuario: {
     id: string;
     rol: string;
@@ -168,7 +168,7 @@ export async function verificarCuentaConAcceso(
  * este token; aquí solo se corta una cuenta que se deshabilitó o bloqueó después.
  */
 export async function usuarioConSesion(
-  ctx: Pick<ContextoCasosAuth, 'db'>,
+  ctx: Pick<ContextoAuth, 'db'>,
   usuarioId: string
 ) {
   const [usuario] = await ctx.db.select().from(usuarios).where(eq(usuarios.id, usuarioId));
@@ -179,7 +179,7 @@ export async function usuarioConSesion(
 }
 
 export async function exigirPasswordActual(
-  ctx: Pick<ContextoCasosAuth, 'cryptoService'>,
+  ctx: Pick<ContextoAuth, 'cryptoService'>,
   passwordHash: string | null,
   passwordActual: string
 ) {
@@ -192,7 +192,7 @@ export async function exigirPasswordActual(
 
 /** 409 si el correo ya es el de acceso de OTRA cuenta. */
 export async function exigirCorreoLibre(
-  ctx: Pick<ContextoCasosAuth, 'db'>,
+  ctx: Pick<ContextoAuth, 'db'>,
   correo: string,
   usuarioId: string
 ) {
@@ -210,7 +210,7 @@ export async function exigirCorreoLibre(
  * saludo. Lectura del perfil propio (RLS self del alumno, RNF-003).
  */
 export async function datosSesionDe(
-  ctx: Pick<ContextoCasosAuth, 'db' | 'withTenant'>,
+  ctx: Pick<ContextoAuth, 'db' | 'withTenant'>,
   usuario: {
     id: string;
     rol: string;

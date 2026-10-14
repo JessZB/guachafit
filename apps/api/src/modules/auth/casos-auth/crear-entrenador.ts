@@ -9,14 +9,14 @@ import {
 } from '@guachafit/shared';
 import { BienvenidaEntrenadorEvent } from '../../notificaciones/events/eventos-correo-cuenta';
 import { publicarCorreoCuentaCaso } from './acceso-comun';
-import type { ContextoCasosAuth } from './contexto-casos';
+import type { ContextoAuth } from './contexto-auth';
 
 /**
  * Creación de cuenta de Entrenador por SuperAdmin (RF-010, Escenario 1).
  * Movido sin cambios (P3).
  */
 export async function crearEntrenador(
-  ctx: ContextoCasosAuth,
+  ctx: ContextoAuth,
   dto: CrearEntrenadorDTO
 ): Promise<EntrenadorCreadoDTO> {
   // 1. Validar email único

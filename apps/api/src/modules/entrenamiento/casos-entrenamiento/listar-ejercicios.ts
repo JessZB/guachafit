@@ -1,7 +1,7 @@
 import { and, asc, eq, isNull, or } from '@guachafit/database';
 import { ejerciciosCatalogo } from '@guachafit/database';
 import type { EjercicioCatalogoDetalleDTO } from '@guachafit/shared';
-import type { ContextoEntrenamiento } from './contexto';
+import type { ContextoEntrenamiento } from './contexto-entrenamiento';
 import { toIsoUtcString } from './reglas-racha';
 
 // ---------------------------------------------------------------------------

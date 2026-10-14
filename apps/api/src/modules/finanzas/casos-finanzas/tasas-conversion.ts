@@ -22,7 +22,7 @@ import {
   multiplyDecimals,
   resolverTasa,
 } from './finanzas-reglas';
-import { contextoRlsDeActor, resolveClienteUsuarioId } from './soporte-finanzas';
+import { contextoRlsDeActor, resolveClienteUsuarioId } from './acceso-rls-finanzas';
 import type { ContextoFinanzas } from './contexto-finanzas';
 
 // ===========================================================================

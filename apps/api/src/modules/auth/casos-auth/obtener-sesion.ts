@@ -16,7 +16,7 @@ import {
   verificarEntrenadorOperable,
   verificarLicenciaEntrenadorActiva,
 } from './acceso-comun';
-import type { ContextoCasosAuth } from './contexto-casos';
+import type { ContextoAuth } from './contexto-auth';
 
 /**
  * RF-003 RN-03/RN-04 (WU RF-003a/b): sesión fresca del usuario autenticado para `GET /auth/me`.
@@ -28,7 +28,7 @@ import type { ContextoCasosAuth } from './contexto-casos';
  * Movido sin cambios (P3).
  */
 export async function obtenerSesion(
-  ctx: Pick<ContextoCasosAuth, 'db' | 'withTenant'>,
+  ctx: Pick<ContextoAuth, 'db' | 'withTenant'>,
   usuarioId: string
 ): Promise<AuthUserDTO> {
   const [usuario] = await ctx.db

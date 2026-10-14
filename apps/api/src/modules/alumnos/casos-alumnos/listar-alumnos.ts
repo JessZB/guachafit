@@ -18,7 +18,7 @@ import {
   Rol,
 } from '@guachafit/shared';
 import { escaparPatronLike } from '../../../common/cartera.util';
-import type { ContextoCasosAlumnos } from './contexto-casos';
+import type { ContextoAlumnos } from './contexto-alumnos';
 import {
   calcularResumenDirectorio,
   condicionSemaforoPago,
@@ -49,7 +49,7 @@ import { sanitizarPerfilParaRol } from './sanitizar-perfil';
  * Movido sin cambios desde `AlumnosService.listarAlumnos` (P3: mismo orden y forma de consultas).
  */
 export async function listarAlumnos(
-  ctx: ContextoCasosAlumnos,
+  ctx: ContextoAlumnos,
   entrenadorId: string,
   filtro?: FiltroDirectorioAlumnosDTO
 ): Promise<DirectorioAlumnosDTO> {

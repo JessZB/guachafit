@@ -31,7 +31,7 @@ import {
   usuarioConSesion,
   verificarCuentaConAcceso,
 } from './acceso-comun';
-import type { ContextoCasosAuth } from './contexto-casos';
+import type { ContextoAuth } from './contexto-auth';
 
 /**
  * `POST /usuarios/me/correo` (RF-018 RN-04/RN-05).
@@ -43,7 +43,7 @@ import type { ContextoCasosAuth } from './contexto-casos';
  * Movido sin cambios (P3).
  */
 export async function solicitarCambioCorreo(
-  ctx: ContextoCasosAuth,
+  ctx: ContextoAuth,
   usuarioId: string,
   dto: SolicitarCambioCorreoDTO
 ): Promise<SolicitudCambioCorreoDTO> {
@@ -94,7 +94,7 @@ export async function solicitarCambioCorreo(
 
 /** `DELETE /usuarios/me/correo-pendiente` (RF-018 RN-05): idempotente. */
 export async function cancelarCambioCorreoPendiente(
-  ctx: Pick<ContextoCasosAuth, 'db'>,
+  ctx: Pick<ContextoAuth, 'db'>,
   usuarioId: string
 ): Promise<{ mensaje: string }> {
   await ctx.db
@@ -125,7 +125,7 @@ export async function cancelarCambioCorreoPendiente(
  * Movido sin cambios (P3).
  */
 export async function confirmarCambioCorreo(
-  ctx: ContextoCasosAuth,
+  ctx: ContextoAuth,
   dto: ConfirmarCambioCorreoDTO
 ): Promise<{ mensaje: string }> {
   const tokenHash = ctx.cryptoService.hashSha256(dto.token);

@@ -13,8 +13,8 @@ import type {
   SincronizarSeriesBatchDTO,
 } from '@guachafit/shared';
 import { parsearContrato } from '../../../common/errores/parsear-contrato';
-import type { ContextoEntrenamiento } from './contexto';
-import { MENSAJE_SESION_NO_ENCONTRADA } from './contexto';
+import type { ContextoEntrenamiento } from './contexto-entrenamiento';
+import { MENSAJE_SESION_NO_ENCONTRADA } from './contexto-entrenamiento';
 import { obtenerSesionPorId } from './obtener-sesion-por-id';
 
 // ---------------------------------------------------------------------------

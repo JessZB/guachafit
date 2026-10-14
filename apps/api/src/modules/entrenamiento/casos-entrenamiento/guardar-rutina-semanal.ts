@@ -13,7 +13,7 @@ import {
 } from '../../../common/mensajes-acceso';
 import { parsearContrato } from '../../../common/errores/parsear-contrato';
 import { validarEjerciciosDeBloques } from '../catalogo-ejercicios';
-import type { ContextoEntrenamiento } from './contexto';
+import type { ContextoEntrenamiento } from './contexto-entrenamiento';
 import { toIsoUtcString } from './reglas-racha';
 
 // ---------------------------------------------------------------------------

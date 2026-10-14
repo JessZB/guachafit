@@ -24,7 +24,7 @@ import {
   type PerfilAlumnoFila,
 } from './finanzas-reglas';
 import { sumarMesesCalendario } from '../suscripcion-ciclo';
-import { emitirCuotaDeSuscripcionSiCorrespondeCaso } from './emision-ciclo.caso';
+import { emitirCuotaDeSuscripcionSiCorrespondeCaso } from './emision-ciclo';
 import type { ContextoFinanzas } from './contexto-finanzas';
 
 // ===========================================================================

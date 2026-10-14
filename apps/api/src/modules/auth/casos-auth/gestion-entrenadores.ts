@@ -11,7 +11,7 @@ import {
   EstadoLicencia,
   Rol,
 } from '@guachafit/shared';
-import type { ContextoCasosAuth } from './contexto-casos';
+import type { ContextoAuth } from './contexto-auth';
 
 /**
  * RF-010 RN-01 / §6 (WU Admin): habilita o deshabilita la CUENTA de un entrenador.
@@ -27,7 +27,7 @@ import type { ContextoCasosAuth } from './contexto-casos';
  * Movido sin cambios (P3).
  */
 export async function cambiarEstadoEntrenador(
-  ctx: Pick<ContextoCasosAuth, 'db'>,
+  ctx: Pick<ContextoAuth, 'db'>,
   usuarioId: string,
   dto: CambiarEstadoEntrenadorDTO,
   solicitanteId: string
@@ -81,7 +81,7 @@ export async function cambiarEstadoEntrenador(
  * Movido sin cambios (P3).
  */
 export async function cambiarLicenciaEntrenador(
-  ctx: Pick<ContextoCasosAuth, 'db'>,
+  ctx: Pick<ContextoAuth, 'db'>,
   usuarioId: string,
   dto: CambiarLicenciaEntrenadorDTO
 ): Promise<CambioLicenciaEntrenadorResultadoDTO> {

@@ -27,7 +27,7 @@ import {
   crearContexto,
   contextoPerfilDeActor as resolverContextoPerfilDeActor,
   type ContextoEntrenamiento,
-} from './casos-entrenamiento/contexto';
+} from './casos-entrenamiento/contexto-entrenamiento';
 import { crearEjercicio as crearEjercicioCaso } from './casos-entrenamiento/crear-ejercicio';
 import { listarEjercicios as listarEjerciciosCaso } from './casos-entrenamiento/listar-ejercicios';
 import { obtenerRutinaSemanalActiva as obtenerRutinaSemanalActivaCaso } from './casos-entrenamiento/obtener-rutina-semanal-activa';
@@ -110,7 +110,7 @@ export class EntrenamientoService {
 
   /**
    * RNF-003/ADR-011 (etapa 3): contexto RLS del perfil del alumno para rutas multi-rol.
-   * Delegación en el helper compartido (fuente única en `casos-entrenamiento/contexto.ts`).
+   * Delegación en el helper compartido (fuente única en `casos-entrenamiento/contexto-entrenamiento.ts`).
    */
   private contextoPerfilDeActor(
     rol: Rol,

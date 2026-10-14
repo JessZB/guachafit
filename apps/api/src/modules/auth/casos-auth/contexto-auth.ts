@@ -7,7 +7,7 @@ import type { CryptoService } from '../../../common/services/crypto.service';
  * Contexto explícito de dependencias (P2). Se construye una vez en el constructor de la
  * fachada; los casos de uso son funciones planas, nunca providers de Nest.
  */
-export interface ContextoCasosAuth {
+export interface ContextoAuth {
   db: Database;
   cryptoService: CryptoService;
   withTenant: WithTenantFn;

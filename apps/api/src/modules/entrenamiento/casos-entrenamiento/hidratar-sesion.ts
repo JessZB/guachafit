@@ -12,7 +12,7 @@ import type {
   SesionEntrenamientoDetalleDTO,
 } from '@guachafit/shared';
 import type { TenantRlsContext } from '@guachafit/database';
-import type { ContextoEntrenamiento } from './contexto';
+import type { ContextoEntrenamiento } from './contexto-entrenamiento';
 import { calcularDuracionMinutos, toIsoUtcString } from './reglas-racha';
 
 // ---------------------------------------------------------------------------

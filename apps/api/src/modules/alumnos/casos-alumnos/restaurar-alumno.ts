@@ -2,7 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { and, eq, perfilesAlumno, usuarios } from '@guachafit/database';
 import { EstadoAlumno, EstadoUsuario, RestaurarAlumnoDTO, Rol } from '@guachafit/shared';
 import { MENSAJE_ALUMNO_FUERA_DE_LISTA } from '../../../common/mensajes-acceso';
-import type { ContextoCasosAlumnos } from './contexto-casos';
+import type { ContextoAlumnos } from './contexto-alumnos';
 import { lanzarAccesoDenegado } from './acceso-rls';
 
 /**
@@ -10,7 +10,7 @@ import { lanzarAccesoDenegado } from './acceso-rls';
  * Movido sin cambios desde `AlumnosService.restaurarAlumno` (P3).
  */
 export async function restaurarAlumno(
-  ctx: ContextoCasosAlumnos,
+  ctx: ContextoAlumnos,
   entrenadorId: string,
   alumnoId: string,
   _dto?: RestaurarAlumnoDTO

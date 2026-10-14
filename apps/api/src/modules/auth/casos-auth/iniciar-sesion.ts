@@ -18,7 +18,7 @@ import {
   verificarEntrenadorOperable,
   verificarLicenciaEntrenadorActiva,
 } from './acceso-comun';
-import type { ContextoCasosAuth } from './contexto-casos';
+import type { ContextoAuth } from './contexto-auth';
 
 /**
  * A6: hash bcrypt de un texto que nunca es una contraseña real. Se compara contra él cuando el
@@ -33,7 +33,7 @@ const HASH_FICTICIO_SIN_USUARIO = '$2b$10$NE1sOETTV3S5BxjlNsXI6O6ENy1JcQJTkBlST3
  * Inicio de Sesión de Usuario (SuperAdmin, Entrenador o Alumno).
  * Movido sin cambios (P3).
  */
-export async function iniciarSesion(ctx: ContextoCasosAuth, dto: LoginUsuarioDTO) {
+export async function iniciarSesion(ctx: ContextoAuth, dto: LoginUsuarioDTO) {
   const [usuario] = await ctx.db
     .select()
     .from(usuarios)

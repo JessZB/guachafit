@@ -10,7 +10,7 @@ import type { TenantTransaction } from '@guachafit/database';
  * Contexto explícito de dependencias (P2). Se construye una vez en el constructor de la
  * fachada; los casos de uso son funciones planas, nunca providers de Nest.
  */
-export interface ContextoCasosAlumnos {
+export interface ContextoAlumnos {
   db: Database;
   cryptoService: CryptoService;
   eventEmitter?: EventEmitter2;

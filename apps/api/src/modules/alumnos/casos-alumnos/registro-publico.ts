@@ -8,7 +8,7 @@ import {
   Rol,
 } from '@guachafit/shared';
 import { AlumnoRegistradoEvent } from '../../notificaciones/events/eventos-notificacion';
-import type { ContextoCasosAlumnos } from './contexto-casos';
+import type { ContextoAlumnos } from './contexto-alumnos';
 
 /**
  * WU-E (RF-011 RN-07.4): publica el evento de dominio "Nuevo alumno registrado" hacia el coach.
@@ -18,7 +18,7 @@ import type { ContextoCasosAlumnos } from './contexto-casos';
  * Movido sin cambios desde `AlumnosService.notificarCoachNuevoAlumno` (P3).
  */
 function notificarCoachNuevoAlumno(
-  ctx: Pick<ContextoCasosAlumnos, 'eventEmitter' | 'logger'>,
+  ctx: Pick<ContextoAlumnos, 'eventEmitter' | 'logger'>,
   coach: { usuarioId: string; coachCode: string; nombres: string; apellidos: string; nombreComercial: string | null },
   alumno: {
     alumnoId: string;
@@ -70,7 +70,7 @@ function notificarCoachNuevoAlumno(
  * Movido sin cambios desde `AlumnosService.registroPublico` (P3).
  */
 export async function registroPublico(
-  ctx: ContextoCasosAlumnos,
+  ctx: ContextoAlumnos,
   dto: RegistroPublicoAlumnoDTO
 ) {
   const [coach] = await ctx.db

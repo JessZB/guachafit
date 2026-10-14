@@ -6,7 +6,7 @@ import {
   MENSAJE_PASSWORD_ACTUALIZADA,
 } from '../../../common/mensajes-acceso';
 import { verificarCuentaConAcceso } from './acceso-comun';
-import type { ContextoCasosAuth } from './contexto-casos';
+import type { ContextoAuth } from './contexto-auth';
 
 /**
  * `POST /auth/restablecer-password`.
@@ -19,7 +19,7 @@ import type { ContextoCasosAuth } from './contexto-casos';
  * Movido sin cambios (P3).
  */
 export async function restablecerPassword(
-  ctx: Pick<ContextoCasosAuth, 'cryptoService' | 'db' | 'withTenant'>,
+  ctx: Pick<ContextoAuth, 'cryptoService' | 'db' | 'withTenant'>,
   dto: RestablecerPasswordDTO
 ): Promise<{ mensaje: string }> {
   const tokenHash = ctx.cryptoService.hashSha256(dto.token);

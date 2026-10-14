@@ -2,7 +2,7 @@ import { ejerciciosCatalogo, ejerciciosSesion, seriesRegistro, sesionesEntrenami
 import { EstadoSesion, extraerPesoKgDeTexto } from '@guachafit/shared';
 import type { BloqueDiaRutinaDTO, SesionEntrenamientoDetalleDTO } from '@guachafit/shared';
 import { resolverEjercicioDelCatalogo } from '../catalogo-ejercicios';
-import type { ContextoEntrenamiento } from './contexto';
+import type { ContextoEntrenamiento } from './contexto-entrenamiento';
 import { hidratarSesion } from './hidratar-sesion';
 import { normalizarRpePrescrito, resumirPrescripcionParaAlumno } from './reglas-racha';
 

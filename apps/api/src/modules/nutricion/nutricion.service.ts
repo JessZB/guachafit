@@ -40,12 +40,12 @@ import type { ContextoNutricion } from './casos-nutricion/contexto-nutricion';
 import {
   obtenerMetasDeAlumno as obtenerMetasDeAlumnoCaso,
   obtenerMetasNutricionales as obtenerMetasNutricionalesCaso,
-} from './casos-nutricion/obtener-metas-nutricionales.caso';
-import { obtenerCheckinHoy as obtenerCheckinHoyCaso } from './casos-nutricion/obtener-checkin-hoy.caso';
-import { obtenerCheckinPorId as obtenerCheckinPorIdCaso } from './casos-nutricion/obtener-checkin-por-id.caso';
-import { listarCheckins as listarCheckinsCaso } from './casos-nutricion/listar-checkins.caso';
-import { registrarCheckinDiario as registrarCheckinDiarioCaso } from './casos-nutricion/registrar-checkin-diario.caso';
-import { definirMetasNutricionales as definirMetasNutricionalesCaso } from './casos-nutricion/definir-metas-nutricionales.caso';
+} from './casos-nutricion/obtener-metas-nutricionales';
+import { obtenerCheckinHoy as obtenerCheckinHoyCaso } from './casos-nutricion/obtener-checkin-hoy';
+import { obtenerCheckinPorId as obtenerCheckinPorIdCaso } from './casos-nutricion/obtener-checkin-por-id';
+import { listarCheckins as listarCheckinsCaso } from './casos-nutricion/listar-checkins';
+import { registrarCheckinDiario as registrarCheckinDiarioCaso } from './casos-nutricion/registrar-checkin-diario';
+import { definirMetasNutricionales as definirMetasNutricionalesCaso } from './casos-nutricion/definir-metas-nutricionales';
 
 // =============================================================================
 // SERVICIO DE NUTRICIÓN (RF-002)
@@ -65,7 +65,7 @@ export class NutricionService {
   private readonly withTenant: WithTenantFn;
 
   /** Contexto de dependencias explícito de los casos de uso (P2). */
-  private readonly contexto: ContextoNutricion;
+  private readonly ctx: ContextoNutricion;
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
@@ -73,7 +73,7 @@ export class NutricionService {
     @Optional() @Inject(WITH_TENANT) withTenant?: WithTenantFn
   ) {
     this.withTenant = withTenant ?? ((context, fn) => withTenantBase(context, fn, this.db));
-    this.contexto = {
+    this.ctx = {
       db: this.db,
       withTenant: this.withTenant,
       r2StorageService: this.r2StorageService,
@@ -102,7 +102,7 @@ export class NutricionService {
     desviacionCaloriasPct?: number;
     desviacionProteinasPct?: number;
   }> {
-    return registrarCheckinDiarioCaso(this.contexto, alumnoId, input, ahora);
+    return registrarCheckinDiarioCaso(this.ctx, alumnoId, input, ahora);
   }
 
   // ---------------------------------------------------------------------------
@@ -114,7 +114,7 @@ export class NutricionService {
    * Usada por el alumno (las suyas) y por el coach (las de su alumno, tras validar tenancy).
    */
   async obtenerMetasNutricionales(alumnoId: string): Promise<MetasNutricionalesDetalleDTO | null> {
-    return obtenerMetasNutricionalesCaso(this.contexto, alumnoId);
+    return obtenerMetasNutricionalesCaso(this.ctx, alumnoId);
   }
 
   /**
@@ -125,7 +125,7 @@ export class NutricionService {
     coachId: string,
     alumnoId: string
   ): Promise<MetasNutricionalesDetalleDTO | null> {
-    return obtenerMetasDeAlumnoCaso(this.contexto, coachId, alumnoId);
+    return obtenerMetasDeAlumnoCaso(this.ctx, coachId, alumnoId);
   }
 
   /**
@@ -145,7 +145,7 @@ export class NutricionService {
     alumnoId: string,
     dto: MetasNutricionalesDTO
   ): Promise<MetasNutricionalesDetalleDTO> {
-    return definirMetasNutricionalesCaso(this.contexto, coachId, alumnoId, dto);
+    return definirMetasNutricionalesCaso(this.ctx, coachId, alumnoId, dto);
   }
 
   /**
@@ -156,14 +156,14 @@ export class NutricionService {
     alumnoId: string,
     fecha?: string
   ): Promise<CheckinNutricionalDetalleDTO | null> {
-    return obtenerCheckinHoyCaso(this.contexto, alumnoId, fecha);
+    return obtenerCheckinHoyCaso(this.ctx, alumnoId, fecha);
   }
 
   /**
    * Obtener detalle de check-in nutricional por su ID.
    */
   async obtenerCheckinPorId(checkinId: string): Promise<CheckinNutricionalDetalleDTO> {
-    return obtenerCheckinPorIdCaso(this.contexto, checkinId);
+    return obtenerCheckinPorIdCaso(this.ctx, checkinId);
   }
 
   /**
@@ -177,6 +177,6 @@ export class NutricionService {
     callerRol?: Rol,
     callerId?: string
   ): Promise<CheckinNutricionalDetalleDTO[]> {
-    return listarCheckinsCaso(this.contexto, entrenadorId, alumnoId, filtro, callerRol, callerId);
+    return listarCheckinsCaso(this.ctx, entrenadorId, alumnoId, filtro, callerRol, callerId);
   }
 }

@@ -2,7 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { eq, perfilesAlumno, usuarios } from '@guachafit/database';
 import { Rol } from '@guachafit/shared';
 import { MENSAJE_ALUMNO_NO_ENCONTRADO } from '../../../common/mensajes-acceso';
-import type { ContextoCasosAlumnos } from './contexto-casos';
+import type { ContextoAlumnos } from './contexto-alumnos';
 import { contextoRlsDeActor, lanzarAccesoDenegado } from './acceso-rls';
 import { hidratarPlanActivo as hidratarPlanActivoBase } from './hidratar-plan-activo';
 import { sanitizarPerfilParaRol } from './sanitizar-perfil';
@@ -12,7 +12,7 @@ import { sanitizarPerfilParaRol } from './sanitizar-perfil';
  * Movido sin cambios desde `AlumnosService.obtenerPorId` (P3).
  */
 export async function obtenerPorId(
-  ctx: ContextoCasosAlumnos,
+  ctx: ContextoAlumnos,
   alumnoId: string,
   actorUserId: string,
   actorRole: Rol,

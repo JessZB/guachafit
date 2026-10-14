@@ -9,7 +9,7 @@ import type {
 import { CrearSesionEntrenamientoSchema } from '@guachafit/shared';
 import { MENSAJE_SIN_ACCESO_ALUMNO } from '../../../common/mensajes-acceso';
 import { parsearContrato } from '../../../common/errores/parsear-contrato';
-import type { ContextoEntrenamiento } from './contexto';
+import type { ContextoEntrenamiento } from './contexto-entrenamiento';
 import { obtenerSesionPorId } from './obtener-sesion-por-id';
 
 // ---------------------------------------------------------------------------

@@ -7,7 +7,7 @@ import type {
   SemanaEntrenamientoProgresoDTO,
 } from '@guachafit/shared';
 import { calcularRangoSemanaIso, obtenerDiaSugeridoBloque } from '../../../common/adherencia.util';
-import type { ContextoEntrenamiento } from './contexto';
+import type { ContextoEntrenamiento } from './contexto-entrenamiento';
 import { calcularRachaEfectiva, toIsoUtcString } from './reglas-racha';
 
 // ---------------------------------------------------------------------------

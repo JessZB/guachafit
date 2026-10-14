@@ -27,7 +27,7 @@ import {
   ConfirmarCambioCorreoDTO,
   SolicitudCambioCorreoDTO,
 } from '@guachafit/shared';
-import type { ContextoCasosAuth } from './casos-auth/contexto-casos';
+import type { ContextoAuth } from './casos-auth/contexto-auth';
 import { iniciarSesion } from './casos-auth/iniciar-sesion';
 import { obtenerSesion } from './casos-auth/obtener-sesion';
 import { establecerPasswordConToken } from './casos-auth/establecer-password-token';
@@ -72,7 +72,7 @@ export class AuthService {
    */
   private readonly withTenant: WithTenantFn;
 
-  private readonly casos: ContextoCasosAuth;
+  private readonly ctx: ContextoAuth;
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
@@ -87,7 +87,7 @@ export class AuthService {
     this.jwtSecret = jwtSecret;
     this.refreshSecret = refreshSecret;
     this.withTenant = withTenant ?? ((context, fn) => withTenantBase(context, fn, this.db));
-    this.casos = {
+    this.ctx = {
       db: this.db,
       cryptoService: this.cryptoService,
       withTenant: this.withTenant,
@@ -100,39 +100,39 @@ export class AuthService {
 
   /** User sign-in (SuperAdmin, Entrenador or Alumno). */
   async login(dto: LoginUsuarioDTO) {
-    return iniciarSesion(this.casos, dto);
+    return iniciarSesion(this.ctx, dto);
   }
 
   /** Sesión fresca del usuario autenticado para `GET /auth/me`. */
   async obtenerSesion(usuarioId: string): Promise<AuthUserDTO> {
-    return obtenerSesion(this.casos, usuarioId);
+    return obtenerSesion(this.ctx, usuarioId);
   }
 
   /** Establece la contraseña definitiva desde un token SHA-256 de invitación (RF-011). */
   async establecerPasswordConToken(dto: EstablecerPasswordConTokenDTO) {
-    return establecerPasswordConToken(this.casos, dto);
+    return establecerPasswordConToken(this.ctx, dto);
   }
 
   /** Access-token renewal via refresh token. */
   async refresh(refreshToken: string) {
-    return refrescarSesion(this.casos, refreshToken);
+    return refrescarSesion(this.ctx, refreshToken);
   }
 
   /** `POST /auth/recuperar-password` (uniform answer, background work). */
   async solicitarRecuperacionPassword(
     dto: SolicitarRecuperacionPasswordDTO
   ): Promise<{ mensaje: string }> {
-    return solicitarRecuperacionPassword(this.casos, dto);
+    return solicitarRecuperacionPassword(this.ctx, dto);
   }
 
   /** Background recovery work (link issue + email event). */
   async procesarSolicitudRecuperacion(email: string): Promise<void> {
-    return procesarSolicitudRecuperacion(this.casos, email);
+    return procesarSolicitudRecuperacion(this.ctx, email);
   }
 
   /** `POST /auth/restablecer-password` (single-use link redeem). */
   async restablecerPassword(dto: RestablecerPasswordDTO): Promise<{ mensaje: string }> {
-    return restablecerPassword(this.casos, dto);
+    return restablecerPassword(this.ctx, dto);
   }
 
   // RF-018 "Mi perfil": contraseña y correo de acceso del propio usuario.
@@ -142,7 +142,7 @@ export class AuthService {
     usuarioId: string,
     dto: CambiarPasswordDTO
   ): Promise<{ mensaje: string; accessToken: string; refreshToken: string }> {
-    return cambiarPassword(this.casos, usuarioId, dto);
+    return cambiarPassword(this.ctx, usuarioId, dto);
   }
 
   /** `POST /usuarios/me/correo` (RF-018 RN-04/RN-05). */
@@ -150,29 +150,29 @@ export class AuthService {
     usuarioId: string,
     dto: SolicitarCambioCorreoDTO
   ): Promise<SolicitudCambioCorreoDTO> {
-    return solicitarCambioCorreo(this.casos, usuarioId, dto);
+    return solicitarCambioCorreo(this.ctx, usuarioId, dto);
   }
 
   /** `DELETE /usuarios/me/correo-pendiente` (RF-018 RN-05): idempotent. */
   async cancelarCambioCorreoPendiente(usuarioId: string): Promise<{ mensaje: string }> {
-    return cancelarCambioCorreoPendiente(this.casos, usuarioId);
+    return cancelarCambioCorreoPendiente(this.ctx, usuarioId);
   }
 
   /** `POST /auth/confirmar-cambio-correo` (RF-018 RN-05/RN-06), public. */
   async confirmarCambioCorreo(dto: ConfirmarCambioCorreoDTO): Promise<{ mensaje: string }> {
-    return confirmarCambioCorreo(this.casos, dto);
+    return confirmarCambioCorreo(this.ctx, dto);
   }
 
   /** Coach account creation by SuperAdmin (RF-010, Scenario 1). */
   async crearEntrenador(dto: CrearEntrenadorDTO): Promise<EntrenadorCreadoDTO> {
-    return crearEntrenador(this.casos, dto);
+    return crearEntrenador(this.ctx, dto);
   }
 
   /** Listado de entrenadores para el panel maestro del Superadmin (RF-010 RN-01). */
   async listarEntrenadores(
     query: ListarEntrenadoresAdminQueryDTO
   ): Promise<ListadoEntrenadoresAdminDTO> {
-    return listarEntrenadores(this.casos, query);
+    return listarEntrenadores(this.ctx, query);
   }
 
   /** Enables or disables a coach ACCOUNT (RF-010 RN-01 / section 6). */
@@ -181,7 +181,7 @@ export class AuthService {
     dto: CambiarEstadoEntrenadorDTO,
     solicitanteId: string
   ): Promise<CambioEstadoEntrenadorResultadoDTO> {
-    return cambiarEstadoEntrenador(this.casos, usuarioId, dto, solicitanteId);
+    return cambiarEstadoEntrenador(this.ctx, usuarioId, dto, solicitanteId);
   }
 
   /** Activates or suspends a coach LICENSE (RF-010 RN-01). */
@@ -189,6 +189,6 @@ export class AuthService {
     usuarioId: string,
     dto: CambiarLicenciaEntrenadorDTO
   ): Promise<CambioLicenciaEntrenadorResultadoDTO> {
-    return cambiarLicenciaEntrenador(this.casos, usuarioId, dto);
+    return cambiarLicenciaEntrenador(this.ctx, usuarioId, dto);
   }
 }

@@ -27,11 +27,8 @@ import {
   zonaDelAlumno,
   MENSAJE_PAGO_NO_ENCONTRADO,
 } from './finanzas-reglas';
-import { retirarSaldoAFavorCaso } from './emision-ciclo.caso';
-import {
-  mapearCuotaDTOCaso,
-  mapearTransaccionDTOCaso,
-} from './soporte-finanzas';
+import { retirarSaldoAFavorCaso } from './emision-ciclo';
+import { mapearCuotaDTOCaso, mapearTransaccionDTOCaso } from './mapeo-dto-finanzas';
 import { PagoRevertidoEvent } from '../../notificaciones/events/eventos-notificacion';
 import type { ContextoFinanzas } from './contexto-finanzas';
 

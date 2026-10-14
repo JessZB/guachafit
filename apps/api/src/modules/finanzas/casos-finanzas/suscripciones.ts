@@ -21,8 +21,8 @@ import {
   type PerfilAlumnoFila,
   type PlanFila,
 } from './finanzas-reglas';
-import { buscarPerfilDeCarteraCaso, calcularCoberturaVigenteCaso, programarRecordatoriosDeEmisionCaso } from './emision-programada.caso';
-import { emitirCuotaDeSuscripcionSiCorrespondeCaso } from './emision-ciclo.caso';
+import { buscarPerfilDeCarteraCaso, calcularCoberturaVigenteCaso, programarRecordatoriosDeEmisionCaso } from './emision-programada';
+import { emitirCuotaDeSuscripcionSiCorrespondeCaso } from './emision-ciclo';
 import type { ContextoFinanzas } from './contexto-finanzas';
 
 // ===========================================================================

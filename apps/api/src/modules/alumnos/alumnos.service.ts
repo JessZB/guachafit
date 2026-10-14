@@ -24,7 +24,7 @@ import {
   Rol,
 } from '@guachafit/shared';
 import { calcularEdadDesdeFecha } from './casos-alumnos/edad-reglas';
-import type { ContextoCasosAlumnos } from './casos-alumnos/contexto-casos';
+import type { ContextoAlumnos } from './casos-alumnos/contexto-alumnos';
 import { sanitizarPerfilParaRol as sanitizarPerfilCaso } from './casos-alumnos/sanitizar-perfil';
 import { resolverCoachPublico as resolverCoachPublicoCaso } from './casos-alumnos/resolver-coach-publico';
 import { listarAlumnos as listarAlumnosCaso } from './casos-alumnos/listar-alumnos';
@@ -56,7 +56,7 @@ export class AlumnosService {
    * P2: contexto explícito de dependencias para los casos de uso en funciones planas,
    * construido una vez aquí. Nunca se registra como provider de Nest.
    */
-  private readonly casos: ContextoCasosAlumnos;
+  private readonly ctx: ContextoAlumnos;
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
@@ -71,7 +71,7 @@ export class AlumnosService {
     private readonly auditoria?: AuditoriaAccesosDenegadosService
   ) {
     this.withTenant = withTenant ?? ((context, fn) => withTenantBase(context, fn, this.db));
-    this.casos = {
+    this.ctx = {
       db: this.db,
       cryptoService: this.cryptoService,
       eventEmitter: this.eventEmitter,
@@ -96,7 +96,7 @@ export class AlumnosService {
    * Los alumnos jamás ven la ficha de salud privada; los coaches la reciben desencriptada.
    */
   sanitizarPerfilParaRol(perfil: any, actorRole: Rol): PerfilAlumnoDetalleDTO {
-    return sanitizarPerfilCaso(this.casos, perfil, actorRole);
+    return sanitizarPerfilCaso(this.ctx, perfil, actorRole);
   }
 
   /**
@@ -111,7 +111,7 @@ export class AlumnosService {
     entrenadorId: string,
     dto: AltaManualAlumnoDTO
   ): Promise<AltaManualAlumnoResultadoDTO> {
-    return crearAlumnoManualCaso(this.casos, entrenadorId, dto);
+    return crearAlumnoManualCaso(this.ctx, entrenadorId, dto);
   }
 
   /**
@@ -123,7 +123,7 @@ export class AlumnosService {
    * dos interruptores falló. No expone datos sensibles (teléfono, capacidad, cartera, etc.).
    */
   async resolverCoachPublico(code: string): Promise<CoachPublicoDTO> {
-    return resolverCoachPublicoCaso(this.casos, code);
+    return resolverCoachPublicoCaso(this.ctx, code);
   }
 
   /**
@@ -133,14 +133,14 @@ export class AlumnosService {
    * crea la cuenta vinculada al tenant y notifica al coach del nuevo registro.
    */
   async registroPublico(dto: RegistroPublicoAlumnoDTO) {
-    return registroPublicoCaso(this.casos, dto);
+    return registroPublicoCaso(this.ctx, dto);
   }
 
   /**
    * Cambio de estado de activación del alumno (RF-012)
    */
   async cambiarEstado(entrenadorId: string, alumnoId: string, dto: CambioEstadoAlumnoDTO) {
-    return cambiarEstadoCaso(this.casos, entrenadorId, alumnoId, dto);
+    return cambiarEstadoCaso(this.ctx, entrenadorId, alumnoId, dto);
   }
 
   /**
@@ -151,7 +151,7 @@ export class AlumnosService {
     alumnoId: string,
     dto: ActualizarPerfilAlumnoDTO
   ): Promise<PerfilAlumnoDetalleDTO> {
-    return actualizarAlumnoCaso(this.casos, entrenadorId, alumnoId, dto);
+    return actualizarAlumnoCaso(this.ctx, entrenadorId, alumnoId, dto);
   }
 
   /**
@@ -159,14 +159,14 @@ export class AlumnosService {
    * Prohibición absoluta de sentencias DELETE físicas
    */
   async softDelete(entrenadorId: string, alumnoId: string) {
-    return softDeleteCaso(this.casos, entrenadorId, alumnoId);
+    return softDeleteCaso(this.ctx, entrenadorId, alumnoId);
   }
 
   /**
    * Restauración de Alumno Dado de Baja Lógica (RF-012, RN-04)
    */
   async restaurarAlumno(entrenadorId: string, alumnoId: string, _dto?: RestaurarAlumnoDTO) {
-    return restaurarAlumnoCaso(this.casos, entrenadorId, alumnoId, _dto);
+    return restaurarAlumnoCaso(this.ctx, entrenadorId, alumnoId, _dto);
   }
 
   /**
@@ -193,7 +193,7 @@ export class AlumnosService {
     entrenadorId: string,
     filtro?: FiltroDirectorioAlumnosDTO
   ): Promise<DirectorioAlumnosDTO> {
-    return listarAlumnosCaso(this.casos, entrenadorId, filtro);
+    return listarAlumnosCaso(this.ctx, entrenadorId, filtro);
   }
 
   /**
@@ -229,13 +229,13 @@ export class AlumnosService {
     usuarioId: string,
     dto: ActualizarZonaHorariaAlumnoDTO
   ): Promise<{ zonaHoraria: string }> {
-    return actualizarZonaHorariaPropiaCaso(this.casos, usuarioId, dto);
+    return actualizarZonaHorariaPropiaCaso(this.ctx, usuarioId, dto);
   }
 
   /**
    * Obtener perfil por ID con aislamiento de Tenancy
    */
   async obtenerPorId(alumnoId: string, actorUserId: string, actorRole: Rol, actorEntrenadorId?: string) {
-    return obtenerPorIdCaso(this.casos, alumnoId, actorUserId, actorRole, actorEntrenadorId);
+    return obtenerPorIdCaso(this.ctx, alumnoId, actorUserId, actorRole, actorEntrenadorId);
   }
 }

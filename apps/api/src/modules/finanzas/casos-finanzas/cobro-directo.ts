@@ -32,9 +32,9 @@ import {
   calcularContravalorUSDCaso,
   obtenerTasaVigenteCaso,
   proyectarVESCaso,
-} from './tasas-conversion.caso';
-import { acreditarSaldoAFavorCaso } from './emision-ciclo.caso';
-import { cancelarRecordatoriosDeCuotaCaso } from './soporte-finanzas';
+} from './tasas-conversion';
+import { acreditarSaldoAFavorCaso } from './emision-ciclo';
+import { cancelarRecordatoriosDeCuotaCaso } from './recordatorios-cuota';
 import { CobroDirectoRegistradoEvent } from '../../notificaciones/events/eventos-notificacion';
 import type { ContextoFinanzas } from './contexto-finanzas';
 

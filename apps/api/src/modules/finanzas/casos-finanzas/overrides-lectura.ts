@@ -11,7 +11,7 @@ import {
 } from '@guachafit/database';
 import { MENSAJE_ALUMNO_FUERA_DE_LISTA } from '../../../common/mensajes-acceso';
 import { toIsoSafe } from './finanzas-reglas';
-import { resolveClienteUsuarioId } from './soporte-finanzas';
+import { resolveClienteUsuarioId } from './acceso-rls-finanzas';
 import type { ContextoFinanzas } from './contexto-finanzas';
 
 // ===========================================================================

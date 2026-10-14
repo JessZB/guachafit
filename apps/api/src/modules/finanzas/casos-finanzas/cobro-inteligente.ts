@@ -26,10 +26,10 @@ import {
   type EmisionCiclo,
   type PerfilAlumnoFila,
 } from './finanzas-reglas';
-import { buscarPerfilDeCarteraCaso, programarRecordatoriosDeEmisionCaso } from './emision-programada.caso';
-import { emitirCuotaDeCicloEnTxCaso } from './emision-ciclo.caso';
-import { obtenerTasaVigenteCaso } from './tasas-conversion.caso';
-import { cobroDirectoCaso } from './cobro-directo.caso';
+import { buscarPerfilDeCarteraCaso, programarRecordatoriosDeEmisionCaso } from './emision-programada';
+import { emitirCuotaDeCicloEnTxCaso } from './emision-ciclo';
+import { obtenerTasaVigenteCaso } from './tasas-conversion';
+import { cobroDirectoCaso } from './cobro-directo';
 import type { ContextoFinanzas } from './contexto-finanzas';
 
 // ===========================================================================

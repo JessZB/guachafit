@@ -15,13 +15,13 @@ import {
   verificarEntrenadorOperable,
   verificarLicenciaEntrenadorActiva,
 } from './acceso-comun';
-import type { ContextoCasosAuth } from './contexto-casos';
+import type { ContextoAuth } from './contexto-auth';
 
 /**
  * Renovación de token de acceso mediante Refresh Token.
  * Movido sin cambios (P3).
  */
-export async function refrescarSesion(ctx: ContextoCasosAuth, refreshToken: string) {
+export async function refrescarSesion(ctx: ContextoAuth, refreshToken: string) {
   let decoded: any;
   try {
     decoded = jwt.verify(refreshToken, ctx.refreshSecret);

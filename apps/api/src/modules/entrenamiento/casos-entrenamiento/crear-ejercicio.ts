@@ -2,7 +2,7 @@ import { CrearEjercicioCatalogoDTO, CrearEjercicioCatalogoSchema } from '@guacha
 import type { EjercicioCatalogoDetalleDTO } from '@guachafit/shared';
 import { ejerciciosCatalogo } from '@guachafit/database';
 import { parsearContrato } from '../../../common/errores/parsear-contrato';
-import type { ContextoEntrenamiento } from './contexto';
+import type { ContextoEntrenamiento } from './contexto-entrenamiento';
 import { toIsoUtcString } from './reglas-racha';
 
 // ---------------------------------------------------------------------------

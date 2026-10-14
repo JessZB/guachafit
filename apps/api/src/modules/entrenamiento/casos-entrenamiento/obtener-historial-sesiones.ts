@@ -10,8 +10,8 @@ import {
   MENSAJE_ALUMNO_NO_ENCONTRADO,
   MENSAJE_SIN_ACCESO_ALUMNO,
 } from '../../../common/mensajes-acceso';
-import type { ContextoEntrenamiento } from './contexto';
-import { contextoPerfilDeActor } from './contexto';
+import type { ContextoEntrenamiento } from './contexto-entrenamiento';
+import { contextoPerfilDeActor } from './contexto-entrenamiento';
 import { hidratarSesion } from './hidratar-sesion';
 
 // ---------------------------------------------------------------------------

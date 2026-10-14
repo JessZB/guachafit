@@ -14,7 +14,7 @@ import {
   usuarioConSesion,
 } from './acceso-comun';
 import { AvisoPasswordCambiadaEvent } from '../../notificaciones/events/eventos-correo-cuenta';
-import type { ContextoCasosAuth } from './contexto-casos';
+import type { ContextoAuth } from './contexto-auth';
 
 /**
  * `POST /usuarios/me/password` (RF-018 RN-08).
@@ -29,7 +29,7 @@ import type { ContextoCasosAuth } from './contexto-casos';
  * Movido sin cambios (P3).
  */
 export async function cambiarPassword(
-  ctx: ContextoCasosAuth,
+  ctx: ContextoAuth,
   usuarioId: string,
   dto: CambiarPasswordDTO
 ): Promise<{ mensaje: string; accessToken: string; refreshToken: string }> {

@@ -1,7 +1,7 @@
 import { and, desc, eq } from '@guachafit/database';
 import { sesionesEntrenamiento } from '@guachafit/database';
 import type { SesionEntrenamientoDetalleDTO } from '@guachafit/shared';
-import type { ContextoEntrenamiento } from './contexto';
+import type { ContextoEntrenamiento } from './contexto-entrenamiento';
 import { hidratarSesion } from './hidratar-sesion';
 
 // ---------------------------------------------------------------------------

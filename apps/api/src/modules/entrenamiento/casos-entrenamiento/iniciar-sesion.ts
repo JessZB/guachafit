@@ -4,8 +4,8 @@ import { sesionesEntrenamiento } from '@guachafit/database';
 import { EstadoSesion, IniciarSesionSchema, Rol } from '@guachafit/shared';
 import type { IniciarSesionDTO, SesionEntrenamientoDetalleDTO } from '@guachafit/shared';
 import { parsearContrato } from '../../../common/errores/parsear-contrato';
-import type { ContextoEntrenamiento } from './contexto';
-import { MENSAJE_HORA_INVALIDA, MENSAJE_SESION_NO_ENCONTRADA } from './contexto';
+import type { ContextoEntrenamiento } from './contexto-entrenamiento';
+import { MENSAJE_HORA_INVALIDA, MENSAJE_SESION_NO_ENCONTRADA } from './contexto-entrenamiento';
 import { obtenerSesionPorId } from './obtener-sesion-por-id';
 
 // ---------------------------------------------------------------------------

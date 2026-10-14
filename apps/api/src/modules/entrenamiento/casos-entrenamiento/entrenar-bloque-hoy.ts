@@ -9,7 +9,7 @@ import type {
   SesionEntrenamientoDetalleDTO,
 } from '@guachafit/shared';
 import { calcularRangoSemanaIso, obtenerDiaSugeridoBloque } from '../../../common/adherencia.util';
-import type { ContextoEntrenamiento } from './contexto';
+import type { ContextoEntrenamiento } from './contexto-entrenamiento';
 import { hidratarSesion } from './hidratar-sesion';
 import { instanciarSesionDesdeBloque } from './instanciar-sesion-desde-bloque';
 

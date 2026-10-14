@@ -2,7 +2,7 @@ import { ForbiddenException } from '@nestjs/common';
 import { TenantRlsContext } from '@guachafit/database';
 import { Rol } from '@guachafit/shared';
 import { MENSAJE_SIN_ACCESO_ALUMNO } from '../../../common/mensajes-acceso';
-import type { ContextoCasosAlumnos } from './contexto-casos';
+import type { ContextoAlumnos } from './contexto-alumnos';
 
 /**
  * RF-010 Escenario 2: registra el intento de acceso cruzado y devuelve el 403.
@@ -11,7 +11,7 @@ import type { ContextoCasosAlumnos } from './contexto-casos';
  * Movido sin cambios desde `AlumnosService.accesoDenegado` (P3).
  */
 export function lanzarAccesoDenegado(
-  ctx: Pick<ContextoCasosAlumnos, 'auditoria'>,
+  ctx: Pick<ContextoAlumnos, 'auditoria'>,
   actor: { usuarioId: string; rol: Rol },
   peticion: { ruta: string; metodo: string },
   motivo: 'ALUMNO_DE_OTRO_ENTRENADOR' | 'PERFIL_DE_OTRO_ALUMNO'

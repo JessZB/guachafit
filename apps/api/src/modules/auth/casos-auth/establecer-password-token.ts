@@ -17,7 +17,7 @@ import {
   verificarEntrenadorOperable,
   verificarLicenciaEntrenadorActiva,
 } from './acceso-comun';
-import type { ContextoCasosAuth } from './contexto-casos';
+import type { ContextoAuth } from './contexto-auth';
 
 /**
  * Establece contraseña definitiva a partir de token SHA-256 de invitación (RF-011, ARCH-003 §2.1).
@@ -27,7 +27,7 @@ import type { ContextoCasosAuth } from './contexto-casos';
  * Movido sin cambios (P3).
  */
 export async function establecerPasswordConToken(
-  ctx: ContextoCasosAuth,
+  ctx: ContextoAuth,
   dto: EstablecerPasswordConTokenDTO
 ) {
   const tokenHash = ctx.cryptoService.hashSha256(dto.token);

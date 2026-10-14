@@ -1,5 +1,5 @@
 import { SesionAlumnoFinalizadaEvent } from '../../notificaciones/events/eventos-notificacion';
-import type { ContextoEntrenamiento } from './contexto';
+import type { ContextoEntrenamiento } from './contexto-entrenamiento';
 
 // ---------------------------------------------------------------------------
 // NOTIFICACIÓN AL COACH TRAS FINALIZAR SESIÓN (RF-014 / ADR-010)

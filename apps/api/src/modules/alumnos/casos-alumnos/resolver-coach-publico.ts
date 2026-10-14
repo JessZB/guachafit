@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { eq, perfilesEntrenador, usuarios } from '@guachafit/database';
 import { CoachPublicoDTO, EstadoLicencia } from '@guachafit/shared';
-import type { ContextoCasosAlumnos } from './contexto-casos';
+import type { ContextoAlumnos } from './contexto-alumnos';
 
 /**
  * Resolución Pública del `coach_code` para el Deep Link de captación (RF-011, RN-06/RN-07.1).
@@ -13,7 +13,7 @@ import type { ContextoCasosAlumnos } from './contexto-casos';
  * Movido sin cambios desde `AlumnosService.resolverCoachPublico` (P3).
  */
 export async function resolverCoachPublico(
-  ctx: Pick<ContextoCasosAlumnos, 'db'>,
+  ctx: Pick<ContextoAlumnos, 'db'>,
   code: string
 ): Promise<CoachPublicoDTO> {
   const codigoNormalizado = code.trim().toUpperCase();

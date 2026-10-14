@@ -25,12 +25,9 @@ import {
   toCents,
   MENSAJE_PAGO_NO_ENCONTRADO,
 } from './finanzas-reglas';
-import { acreditarSaldoAFavorCaso } from './emision-ciclo.caso';
-import {
-  cancelarRecordatoriosDeCuotaCaso,
-  mapearCuotaDTOCaso,
-  mapearTransaccionDTOCaso,
-} from './soporte-finanzas';
+import { acreditarSaldoAFavorCaso } from './emision-ciclo';
+import { cancelarRecordatoriosDeCuotaCaso } from './recordatorios-cuota';
+import { mapearCuotaDTOCaso, mapearTransaccionDTOCaso } from './mapeo-dto-finanzas';
 import {
   PagoAprobadoEvent,
   PagoRechazadoEvent,

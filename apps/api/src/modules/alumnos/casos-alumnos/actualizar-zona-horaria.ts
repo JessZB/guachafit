@@ -2,7 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { eq, perfilesAlumno } from '@guachafit/database';
 import { ActualizarZonaHorariaAlumnoDTO } from '@guachafit/shared';
 import { MENSAJE_ALUMNO_NO_ENCONTRADO } from '../../../common/mensajes-acceso';
-import type { ContextoCasosAlumnos } from './contexto-casos';
+import type { ContextoAlumnos } from './contexto-alumnos';
 
 /**
  * LOTE API-N2 (RF-002): el alumno cambia SU zona horaria. El perfil se identifica por el usuario
@@ -11,7 +11,7 @@ import type { ContextoCasosAlumnos } from './contexto-casos';
  * Movido sin cambios desde `AlumnosService.actualizarZonaHorariaPropia` (P3).
  */
 export async function actualizarZonaHorariaPropia(
-  ctx: Pick<ContextoCasosAlumnos, 'withTenant'>,
+  ctx: Pick<ContextoAlumnos, 'withTenant'>,
   usuarioId: string,
   dto: ActualizarZonaHorariaAlumnoDTO
 ): Promise<{ zonaHoraria: string }> {

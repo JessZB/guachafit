@@ -39,39 +39,37 @@ import {
   calcularConversionCaso,
   obtenerTasaVigenteCaso,
   proyectarVESCaso,
-} from './casos-finanzas/tasas-conversion.caso';
+} from './casos-finanzas/tasas-conversion';
 import {
   actualizarPlanCaso,
   crearPlanCaso,
   listarPlanesPorEntrenadorCaso,
-} from './casos-finanzas/planes.caso';
+} from './casos-finanzas/planes';
 import {
   crearOverrideCaso,
   eliminarOverrideCaso,
-} from './casos-finanzas/overrides.caso';
-import { listarOverridesCaso } from './casos-finanzas/overrides-lectura.caso';
+} from './casos-finanzas/overrides';
+import { listarOverridesCaso } from './casos-finanzas/overrides-lectura';
 import {
   asignarSuscripcionCaso,
   obtenerSuscripcionCaso,
   quitarSuscripcionCaso,
-} from './casos-finanzas/suscripciones.caso';
+} from './casos-finanzas/suscripciones';
 import {
   emitirCuotasProgramadasCaso,
   reconciliarRecordatoriosCaso,
-} from './casos-finanzas/emision-programada.caso';
-import { emitirCuotaDeCicloEnTxCaso } from './casos-finanzas/emision-ciclo.caso';
-import { obtenerCuotaPorIdCaso } from './casos-finanzas/cuotas-lectura.caso';
-import {
-  listarBandejaConciliacionCaso,
-  obtenerHistorialClienteCaso,
-} from './casos-finanzas/bandeja-historial.caso';
-import { reportarPagoCaso } from './casos-finanzas/reportar-pago.caso';
-import { cobroDirectoCaso } from './casos-finanzas/cobro-directo.caso';
-import { conciliarTransaccionCaso } from './casos-finanzas/conciliar-transaccion.caso';
-import { revertirTransaccionCaso } from './casos-finanzas/revertir-transaccion.caso';
-import { anularCuotaCaso } from './casos-finanzas/anular-cuota.caso';
-import { cobroDirectoInteligenteCaso } from './casos-finanzas/cobro-inteligente.caso';
-import { resolverComprobanteUrlCaso } from './casos-finanzas/soporte-finanzas';
+} from './casos-finanzas/emision-programada';
+import { emitirCuotaDeCicloEnTxCaso } from './casos-finanzas/emision-ciclo';
+import { obtenerCuotaPorIdCaso } from './casos-finanzas/cuotas-lectura';
+import { listarBandejaConciliacionCaso } from './casos-finanzas/bandeja-conciliacion';
+import { obtenerHistorialClienteCaso } from './casos-finanzas/historial-cliente';
+import { reportarPagoCaso } from './casos-finanzas/reportar-pago';
+import { cobroDirectoCaso } from './casos-finanzas/cobro-directo';
+import { conciliarTransaccionCaso } from './casos-finanzas/conciliar-transaccion';
+import { revertirTransaccionCaso } from './casos-finanzas/revertir-transaccion';
+import { anularCuotaCaso } from './casos-finanzas/anular-cuota';
+import { cobroDirectoInteligenteCaso } from './casos-finanzas/cobro-inteligente';
+import { resolverComprobanteUrlCaso } from './casos-finanzas/comprobantes';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { R2StorageService } from '../antropometria/r2-storage.service';
 import { BillingSchedulerService } from './billing-scheduler.service';

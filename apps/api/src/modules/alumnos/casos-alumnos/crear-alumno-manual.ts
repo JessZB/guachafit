@@ -11,7 +11,7 @@ import {
   BienvenidaAlumnoEvent,
   publicarCorreoCuenta,
 } from '../../notificaciones/events/eventos-correo-cuenta';
-import type { ContextoCasosAlumnos } from './contexto-casos';
+import type { ContextoAlumnos } from './contexto-alumnos';
 import { calcularEdadDesdeFecha } from './edad-reglas';
 
 /**
@@ -24,7 +24,7 @@ import { calcularEdadDesdeFecha } from './edad-reglas';
  * Movido sin cambios desde `AlumnosService.crearAlumnoManual` (P3).
  */
 export async function crearAlumnoManual(
-  ctx: ContextoCasosAlumnos,
+  ctx: ContextoAlumnos,
   entrenadorId: string,
   dto: AltaManualAlumnoDTO
 ): Promise<AltaManualAlumnoResultadoDTO> {

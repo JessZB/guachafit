@@ -16,7 +16,7 @@ import {
   publicarCorreoCuentaCaso,
   verificarCuentaConAcceso,
 } from './acceso-comun';
-import type { ContextoCasosAuth } from './contexto-casos';
+import type { ContextoAuth } from './contexto-auth';
 
 /**
  * `POST /auth/recuperar-password`.
@@ -32,7 +32,7 @@ import type { ContextoCasosAuth } from './contexto-casos';
  * Movido sin cambios (P3).
  */
 export async function solicitarRecuperacionPassword(
-  ctx: ContextoCasosAuth,
+  ctx: ContextoAuth,
   dto: SolicitarRecuperacionPasswordDTO
 ): Promise<{ mensaje: string }> {
   const email = dto.email.toLowerCase().trim();
@@ -64,7 +64,7 @@ export async function solicitarRecuperacionPassword(
  * columna. El UPDATE repite la condición para que dos pedidos simultáneos no roten dos veces.
  */
 export async function procesarSolicitudRecuperacion(
-  ctx: ContextoCasosAuth,
+  ctx: ContextoAuth,
   email: string
 ): Promise<void> {
   const [usuario] = await ctx.db.select().from(usuarios).where(eq(usuarios.email, email));

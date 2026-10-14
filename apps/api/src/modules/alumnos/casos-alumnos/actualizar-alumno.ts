@@ -6,7 +6,7 @@ import {
   Rol,
 } from '@guachafit/shared';
 import { MENSAJE_ALUMNO_NO_ENCONTRADO } from '../../../common/mensajes-acceso';
-import type { ContextoCasosAlumnos } from './contexto-casos';
+import type { ContextoAlumnos } from './contexto-alumnos';
 import { lanzarAccesoDenegado } from './acceso-rls';
 import { hidratarPlanActivo as hidratarPlanActivoBase } from './hidratar-plan-activo';
 import { sanitizarPerfilParaRol } from './sanitizar-perfil';
@@ -16,7 +16,7 @@ import { sanitizarPerfilParaRol } from './sanitizar-perfil';
  * Movido sin cambios desde `AlumnosService.actualizarAlumno` (P3).
  */
 export async function actualizarAlumno(
-  ctx: ContextoCasosAlumnos,
+  ctx: ContextoAlumnos,
   entrenadorId: string,
   alumnoId: string,
   dto: ActualizarPerfilAlumnoDTO

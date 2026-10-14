@@ -31,7 +31,7 @@ import {
   instanteCorteUtc,
   periodoDeCorte,
 } from '../suscripcion-ciclo';
-import { resolverMontoCuotaCaso } from './monto-cuota.caso';
+import { resolverMontoCuotaCaso } from './monto-cuota';
 
 // ===========================================================================
 // 4c. EMISIÓN POR CICLO Y SALDO A FAVOR (RF-005 / RF-006 / RF-008)

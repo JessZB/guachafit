@@ -1,5 +1,5 @@
 import { PerfilAlumnoDetalleDTO, Rol, ZONA_HORARIA_ALUMNO_POR_DEFECTO } from '@guachafit/shared';
-import type { ContextoCasosAlumnos } from './contexto-casos';
+import type { ContextoAlumnos } from './contexto-alumnos';
 import { calcularEdadDesdeFecha } from './edad-reglas';
 
 /**
@@ -8,7 +8,7 @@ import { calcularEdadDesdeFecha } from './edad-reglas';
  * Movido sin cambios desde `AlumnosService.sanitizarPerfilParaRol` (P3).
  */
 export function sanitizarPerfilParaRol(
-  ctx: Pick<ContextoCasosAlumnos, 'cryptoService'>,
+  ctx: Pick<ContextoAlumnos, 'cryptoService'>,
   perfil: any,
   actorRole: Rol
 ): PerfilAlumnoDetalleDTO {

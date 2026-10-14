@@ -23,11 +23,9 @@ import {
   toCents,
   MENSAJE_CUOTA_NO_ENCONTRADA,
 } from './finanzas-reglas';
-import { acreditarSaldoAFavorCaso } from './emision-ciclo.caso';
-import {
-  cancelarRecordatoriosDeCuotaCaso,
-  mapearCuotaDTOCaso,
-} from './soporte-finanzas';
+import { acreditarSaldoAFavorCaso } from './emision-ciclo';
+import { cancelarRecordatoriosDeCuotaCaso } from './recordatorios-cuota';
+import { mapearCuotaDTOCaso } from './mapeo-dto-finanzas';
 import { CuotaAnuladaEvent } from '../../notificaciones/events/eventos-notificacion';
 import type { ContextoFinanzas } from './contexto-finanzas';
 

@@ -22,7 +22,7 @@ import {
   rechazoDeRecepcion,
 } from './acceso-nutricion';
 import { esClaveDeFotoComidaDelAlumno } from './claves-nutricion-reglas';
-import { obtenerCheckinPorId } from './obtener-checkin-por-id.caso';
+import { obtenerCheckinPorId } from './obtener-checkin-por-id';
 import { evaluarToleranciaNutricional } from './tolerancia-nutricional-reglas';
 import {
   conflictoCheckinYaRegistrado,

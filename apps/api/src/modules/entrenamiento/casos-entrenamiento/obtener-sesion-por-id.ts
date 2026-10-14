@@ -4,8 +4,8 @@ import { perfilesAlumno, sesionesEntrenamiento } from '@guachafit/database';
 import { Rol } from '@guachafit/shared';
 import type { SesionEntrenamientoDetalleDTO } from '@guachafit/shared';
 import { MENSAJE_SIN_ACCESO_ALUMNO } from '../../../common/mensajes-acceso';
-import type { ContextoEntrenamiento } from './contexto';
-import { MENSAJE_SESION_NO_ENCONTRADA, contextoPerfilDeActor } from './contexto';
+import type { ContextoEntrenamiento } from './contexto-entrenamiento';
+import { MENSAJE_SESION_NO_ENCONTRADA, contextoPerfilDeActor } from './contexto-entrenamiento';
 import { hidratarSesion } from './hidratar-sesion';
 
 // ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { and, eq, isNull, perfilesAlumno } from '@guachafit/database';
 import { MENSAJE_ALUMNO_FUERA_DE_LISTA } from '../../../common/mensajes-acceso';
-import type { ContextoCasosAlumnos } from './contexto-casos';
+import type { ContextoAlumnos } from './contexto-alumnos';
 
 /**
  * Borrado Lógico (Soft Delete) de Alumno (RF-012, RN-01, RN-02).
@@ -9,7 +9,7 @@ import type { ContextoCasosAlumnos } from './contexto-casos';
  * Movido sin cambios desde `AlumnosService.softDelete` (P3).
  */
 export async function softDelete(
-  ctx: Pick<ContextoCasosAlumnos, 'withTenant'>,
+  ctx: Pick<ContextoAlumnos, 'withTenant'>,
   entrenadorId: string,
   alumnoId: string
 ) {
