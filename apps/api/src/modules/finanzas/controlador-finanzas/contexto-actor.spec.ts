@@ -18,7 +18,7 @@ describe('contexto del actor del controlador de finanzas', () => {
   it('resuelve el entrenador del token y releva al sub si falta', () => {
     expect(resolverEntrenadorId({ entrenadorId: COACH, sub: ALUMNO })).toBe(COACH);
     expect(resolverEntrenadorId({ sub: COACH })).toBe(COACH);
-    expect(resolverEntrenadorId({})).toBe('');
+    expect(resolverEntrenadorId({})).toBeUndefined();
   });
 
   it('la tasa del alumno apunta a sí mismo con contexto propio', () => {
@@ -31,6 +31,16 @@ describe('contexto del actor del controlador de finanzas', () => {
       entrenadorId: COACH,
       objetivoClienteId: ALUMNO,
       contextoRls: { usuarioId: ALUMNO },
+    });
+  });
+
+  it('el alumno sin sub obtiene contexto propio indefinido', () => {
+    const contexto = resolverContextoTasaVigente({ rol: Rol.ALUMNO, entrenadorId: COACH });
+
+    expect(contexto).toEqual({
+      entrenadorId: COACH,
+      objetivoClienteId: undefined,
+      contextoRls: { usuarioId: undefined },
     });
   });
 

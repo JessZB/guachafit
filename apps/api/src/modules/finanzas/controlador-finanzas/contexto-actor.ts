@@ -11,9 +11,11 @@ export interface UsuarioActor {
 /**
  * Entrenador dueño del dato a partir del token.
  * Relevo histórico: si el token no trae `entrenadorId`, se usa `sub`.
+ * Sin ninguno de los dos devuelve `undefined`, igual que el controlador original
+ * (`req.user.entrenadorId || req.user.sub`); el tipo `string` replica el `any` de `req.user`.
  */
 export function resolverEntrenadorId(usuario: UsuarioActor): string {
-  return usuario.entrenadorId || usuario.sub || '';
+  return (usuario.entrenadorId || usuario.sub) as string;
 }
 
 /**
@@ -43,10 +45,10 @@ export function resolverContextoTasaVigente(
     throw new BadRequestException('No se pudo determinar el contexto del entrenador para la tasa.');
   }
 
+  // RNF-003/ADR-011 (etapa 3): el contexto RLS es el del actor (self del alumno, tenant del
+  // coach). Con rol alumno se usa siempre `sub`, como en el controlador original.
   const contextoRls =
-    usuario.rol === Rol.ALUMNO && usuario.sub
-      ? { usuarioId: usuario.sub }
-      : { entrenadorId };
+    usuario.rol === Rol.ALUMNO ? { usuarioId: usuario.sub as string } : { entrenadorId };
 
   return { entrenadorId, objetivoClienteId, contextoRls };
 }
