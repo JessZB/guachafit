@@ -28,40 +28,35 @@ import {
   Database,
   WithTenantFn,
   withTenant as withTenantBase,
-  and,
-  eq,
-  gte,
-  inArray,
-  isNotNull,
-  isNull,
-  lte,
-  perfilesAlumno,
-  usuarios,
-  controlesAntropometricos,
-  notificacionesInApp,
 } from '@guachafit/database';
 import {
   COLA_ANTROPOMETRIA_RECORDATORIO,
 } from '../../notificaciones/notificaciones.config';
 import { DRIZZLE_DB, WITH_TENANT } from '../../../database/database.module';
-import { EstadoAlumno, Modalidad, PeriodicidadAntropometria } from '@guachafit/shared';
-import {
-  fechaAnteriorYyyyMmDd,
-  instanteUtcDesdeMedianocheLocal,
-} from '../../../common/adherencia.util';
+import { Modalidad, PeriodicidadAntropometria } from '@guachafit/shared';
 import {
   MENSAJE_RECORDATORIO_ANTROPOMETRIA,
-  evaluarExpiracionAntropometria,
-  evaluarRecordatorioAntropometria,
-  sumarDiasCalendario,
 } from '../antropometria-periodicidad.util';
+import {
+  cargarAlumnosConCalendario,
+  consultarAvisosExpiracion,
+  consultarAvisosRecordatorio,
+  consultarControlesExpiracion,
+  consultarControlesRecordatorio,
+} from './recordatorio/recordatorio-lecturas';
+import {
+  calcularDesdeGlobalExpiracion,
+  calcularRangoGlobalRecordatorio,
+  filtrarCandidatosExpiracion,
+  filtrarCandidatosRecordatorio,
+} from './recordatorio/recordatorio-reglas';
+import {
+  emitirExpiracionesCandidatas,
+  emitirRecordatoriosCandidatos,
+} from './recordatorio/recordatorio-emision';
 import {
   JOB_GENERAR_RECORDATORIO_ANTROPOMETRIA,
 } from '../antropometria-recordatorio.scheduler';
-import {
-  CheckinAntropometricoExpiradoEvent,
-  RecordatorioCheckinAntropometricoEvent,
-} from '../../notificaciones/events/eventos-notificacion';
 
 /** Tipo de evento persistido en la bandeja: prefijo `ANTROPOMETRIA_` (icono de progreso físico). */
 export const TIPO_EVENTO_RECORDATORIO_ANTROPOMETRIA =
@@ -143,41 +138,12 @@ export class AntropometriaRecordatorioProcessor extends WorkerHost {
 
   /** Barrido principal (parametrizable en tests con un instante fijo). */
   async generarYDespachar(ahora: Date = new Date()): Promise<ResultadoBarridoAntropometria> {
-    const alumnos = await this.cargarAlumnosConCalendario();
+    const alumnos = await cargarAlumnosConCalendario(this.withTenant);
 
     const recordatorio = await this.despacharRecordatorios(alumnos, ahora);
     const expiracion = await this.despacharExpiraciones(alumnos, ahora);
 
     return { ...recordatorio, ...expiracion };
-  }
-
-  /** Alumnos con calendario configurado (modalidad incluida: §6 solo avisa a remotos). */
-  private async cargarAlumnosConCalendario(): Promise<AlumnoConCalendario[]> {
-    // RNF-003/ADR-011 (etapa 3): `perfiles_alumno` tiene RLS; barrido transversal de sistema con
-    // el bypass explícito `is_superadmin`.
-    return (await this.withTenant({ isSuperadmin: true }, (tx) =>
-      tx
-        .select({
-          usuarioId: perfilesAlumno.usuarioId,
-          entrenadorId: perfilesAlumno.entrenadorId,
-          nombres: perfilesAlumno.nombres,
-          apellidos: perfilesAlumno.apellidos,
-          modalidad: perfilesAlumno.modalidad,
-          periodicidad: perfilesAlumno.periodicidadAntropometria,
-          inicio: perfilesAlumno.antropometriaInicio,
-          timezone: usuarios.timezone,
-        })
-        .from(perfilesAlumno)
-        .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
-        .where(
-          and(
-            eq(perfilesAlumno.estadoActivacion, EstadoAlumno.ACTIVO),
-            isNull(perfilesAlumno.deletedAtUtc),
-            isNotNull(perfilesAlumno.periodicidadAntropometria),
-            isNotNull(perfilesAlumno.antropometriaInicio)
-          )
-        )
-    )) as AlumnoConCalendario[];
   }
 
   /** RN-01: recordatorio del día programado a la hora local del alumno (06:00). */
@@ -190,17 +156,7 @@ export class AntropometriaRecordatorioProcessor extends WorkerHost {
     }
 
     // Día programado + hora local del recordatorio (RN-01).
-    const candidatos = alumnos
-      .map((alumno) => ({
-        alumno,
-        recordatorio: evaluarRecordatorioAntropometria({
-          periodicidad: alumno.periodicidad,
-          antropometriaInicio: alumno.inicio,
-          timezone: alumno.timezone,
-          ahora,
-        }),
-      }))
-      .filter(({ recordatorio }) => recordatorio.corresponde && recordatorio.fechaProgramada);
+    const candidatos = filtrarCandidatosRecordatorio(alumnos, ahora);
 
     if (candidatos.length === 0) {
       return {
@@ -215,127 +171,39 @@ export class AntropometriaRecordatorioProcessor extends WorkerHost {
 
     // Rango global (inclusivo) de fechas de control a consultar: la ventana de 48 h de cada
     // candidato se resuelve después en memoria con su propio día local.
-    const desdeGlobal = candidatos
-      .map(({ recordatorio }) => fechaAnteriorYyyyMmDd(recordatorio.fechaProgramada!, 1))
-      .sort()[0];
-    const hastaGlobal = candidatos
-      .map(({ recordatorio }) => sumarDiasCalendario(recordatorio.fechaProgramada!, 1))
-      .sort()
-      .at(-1)!;
-    const inicioAvisoGlobalUtc = new Date(
-      Math.min(
-        ...candidatos.map(({ alumno, recordatorio }) =>
-          instanteUtcDesdeMedianocheLocal(recordatorio.fechaProgramada!, alumno.timezone).getTime()
-        )
-      )
-    );
+    const { desdeGlobal, hastaGlobal, inicioAvisoGlobalUtc } =
+      calcularRangoGlobalRecordatorio(candidatos);
 
-    const controles = (await this.db
-      .select({
-        alumnoId: controlesAntropometricos.alumnoId,
-        fechaEvaluacion: controlesAntropometricos.fechaEvaluacion,
-      })
-      .from(controlesAntropometricos)
-      .where(
-        and(
-          inArray(controlesAntropometricos.alumnoId, alumnoIds),
-          gte(controlesAntropometricos.fechaEvaluacion, desdeGlobal),
-          lte(controlesAntropometricos.fechaEvaluacion, hastaGlobal)
-        )
-      )) as Array<{ alumnoId: string; fechaEvaluacion: string }>;
+    const controles = await consultarControlesRecordatorio(
+      this.db,
+      alumnoIds,
+      desdeGlobal,
+      hastaGlobal
+    );
 
     // Idempotencia: avisos del MISMO tipo persistidos desde la medianoche local de cada alumno.
-    const avisosPrevios = (await this.db
-      .select({
-        usuarioId: notificacionesInApp.usuarioId,
-        createdAtUtc: notificacionesInApp.createdAtUtc,
-      })
-      .from(notificacionesInApp)
-      .where(
-        and(
-          inArray(notificacionesInApp.usuarioId, alumnoIds),
-          eq(notificacionesInApp.tipoEvento, TIPO_EVENTO_RECORDATORIO_ANTROPOMETRIA),
-          gte(notificacionesInApp.createdAtUtc, inicioAvisoGlobalUtc)
-        )
-      )) as Array<{ usuarioId: string; createdAtUtc: Date | string }>;
-
-    let omitidosPorReporte = 0;
-    let omitidosPorAviso = 0;
-    let despachados = 0;
-
-    for (const { alumno, recordatorio } of candidatos) {
-      const fechaProgramada = recordatorio.fechaProgramada!;
-      const desdeVentana = fechaAnteriorYyyyMmDd(fechaProgramada, 1);
-      const hastaVentana = sumarDiasCalendario(fechaProgramada, 1);
-
-      const yaReporto = controles.some(
-        (control) =>
-          control.alumnoId === alumno.usuarioId &&
-          control.fechaEvaluacion >= desdeVentana &&
-          control.fechaEvaluacion <= hastaVentana
-      );
-
-      if (yaReporto) {
-        omitidosPorReporte += 1;
-        continue;
-      }
-
-      const inicioAvisoLocal = instanteUtcDesdeMedianocheLocal(
-        fechaProgramada,
-        alumno.timezone
-      ).getTime();
-      const yaAvisado = avisosPrevios.some((aviso) => {
-        if (aviso.usuarioId !== alumno.usuarioId) return false;
-        const creado = new Date(aviso.createdAtUtc);
-        return !Number.isNaN(creado.getTime()) && creado.getTime() >= inicioAvisoLocal;
-      });
-
-      if (yaAvisado) {
-        omitidosPorAviso += 1;
-        continue;
-      }
-
-      try {
-        await this.eventEmitter.emitAsync(
-          RecordatorioCheckinAntropometricoEvent.NOMBRE,
-          new RecordatorioCheckinAntropometricoEvent({
-            tipoEvento: TIPO_EVENTO_RECORDATORIO_ANTROPOMETRIA,
-            destinatarioUserId: alumno.usuarioId,
-            entrenadorId: alumno.entrenadorId,
-            categoria: 'ANTROPOMETRIA',
-            titulo: 'Hoy es día de check-in',
-            cuerpo: MENSAJE_RECORDATORIO_ANTROPOMETRIA,
-            linkAccion: LINK_RECORDATORIO_ANTROPOMETRIA,
-            // RNF-004 §3: referencia determinista por alumno+fecha local (dedupe de push/email).
-            referenciaId: recordatorio.referenciaId ?? undefined,
-            datosAdicionales: {
-              alumnoId: alumno.usuarioId,
-              fechaProgramada,
-              periodicidad: alumno.periodicidad,
-            },
-            esCriticoSeguridad: false,
-          })
-        );
-        despachados += 1;
-      } catch (error) {
-        this.logger.warn(
-          `No se pudo despachar el recordatorio antropométrico del alumno ${alumno.usuarioId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
-      }
-    }
-
-    this.logger.log(
-      `Recordatorio antropométrico: ${despachados} despachados, ${omitidosPorReporte} ya reportaron, ` +
-        `${omitidosPorAviso} ya avisados (${alumnos.length} alumnos con calendario evaluados).`
+    const avisosPrevios = await consultarAvisosRecordatorio(
+      this.db,
+      alumnoIds,
+      inicioAvisoGlobalUtc,
+      TIPO_EVENTO_RECORDATORIO_ANTROPOMETRIA
     );
+
+    const emitido = await emitirRecordatoriosCandidatos({
+      candidatos,
+      controles,
+      avisosPrevios,
+      eventEmitter: this.eventEmitter,
+      logger: this.logger,
+      totalEvaluados: alumnos.length,
+      tipoEvento: TIPO_EVENTO_RECORDATORIO_ANTROPOMETRIA,
+      linkAccion: LINK_RECORDATORIO_ANTROPOMETRIA,
+      mensaje: MENSAJE_RECORDATORIO_ANTROPOMETRIA,
+    });
 
     return {
       evaluados: alumnos.length,
-      omitidosPorReporte,
-      omitidosPorAviso,
-      despachados,
+      ...emitido,
     };
   }
 
@@ -357,19 +225,7 @@ export class AntropometriaRecordatorioProcessor extends WorkerHost {
       'expiracionesDespachadas' | 'expiracionesOmitidasPorMedicion' | 'expiracionesOmitidasPorAviso'
     >
   > {
-    const candidatos = alumnos
-      .filter((alumno) => alumno.modalidad === Modalidad.REMOTO)
-      .map((alumno) => ({
-        alumno,
-        expiracion: evaluarExpiracionAntropometria({
-          alumnoId: alumno.usuarioId,
-          periodicidad: alumno.periodicidad,
-          antropometriaInicio: alumno.inicio,
-          timezone: alumno.timezone,
-          ahora,
-        }),
-      }))
-      .filter(({ expiracion }) => expiracion.expirado && expiracion.fechaProgramada);
+    const candidatos = filtrarCandidatosExpiracion(alumnos, ahora);
 
     if (candidatos.length === 0) {
       return {
@@ -385,109 +241,27 @@ export class AntropometriaRecordatorioProcessor extends WorkerHost {
 
     // Cota inferior global: la ventana de cada fecha programada `D` abre en `D-1` local. Sin cota
     // superior a propósito (una medición posterior también cuenta como atendida).
-    const desdeGlobal = candidatos
-      .map(({ expiracion }) => fechaAnteriorYyyyMmDd(expiracion.fechaProgramada!, 1))
-      .sort()[0];
+    const desdeGlobal = calcularDesdeGlobalExpiracion(candidatos);
 
-    const controles = (await this.db
-      .select({
-        alumnoId: controlesAntropometricos.alumnoId,
-        fechaEvaluacion: controlesAntropometricos.fechaEvaluacion,
-      })
-      .from(controlesAntropometricos)
-      .where(
-        and(
-          inArray(controlesAntropometricos.alumnoId, alumnoIds),
-          gte(controlesAntropometricos.fechaEvaluacion, desdeGlobal)
-        )
-      )) as Array<{ alumnoId: string; fechaEvaluacion: string }>;
+    const controles = await consultarControlesExpiracion(this.db, alumnoIds, desdeGlobal);
 
     // Idempotencia exacta por referencia determinista: el aviso de esa fecha programada ya emitido
     // para el coach (una segunda corrida del worker no duplica).
-    const avisosPrevios = (await this.db
-      .select({
-        usuarioId: notificacionesInApp.usuarioId,
-        referenciaId: notificacionesInApp.referenciaId,
-      })
-      .from(notificacionesInApp)
-      .where(
-        and(
-          inArray(notificacionesInApp.usuarioId, coachIds),
-          eq(notificacionesInApp.tipoEvento, TIPO_EVENTO_EXPIRACION_ANTROPOMETRIA),
-          inArray(notificacionesInApp.referenciaId, referencias)
-        )
-      )) as Array<{ usuarioId: string; referenciaId: string | null }>;
-
-    let expiracionesDespachadas = 0;
-    let expiracionesOmitidasPorMedicion = 0;
-    let expiracionesOmitidasPorAviso = 0;
-
-    for (const { alumno, expiracion } of candidatos) {
-      const fechaProgramada = expiracion.fechaProgramada!;
-      const desdeVentana = fechaAnteriorYyyyMmDd(fechaProgramada, 1);
-
-      const yaMedido = controles.some(
-        (control) =>
-          control.alumnoId === alumno.usuarioId && control.fechaEvaluacion >= desdeVentana
-      );
-      if (yaMedido) {
-        expiracionesOmitidasPorMedicion += 1;
-        continue;
-      }
-
-      const yaAvisado = avisosPrevios.some(
-        (aviso) =>
-          aviso.usuarioId === alumno.entrenadorId &&
-          aviso.referenciaId === expiracion.referenciaId
-      );
-      if (yaAvisado) {
-        expiracionesOmitidasPorAviso += 1;
-        continue;
-      }
-
-      const nombre = `${alumno.nombres} ${alumno.apellidos}`.trim();
-
-      try {
-        await this.eventEmitter.emitAsync(
-          CheckinAntropometricoExpiradoEvent.NOMBRE,
-          new CheckinAntropometricoExpiradoEvent({
-            tipoEvento: TIPO_EVENTO_EXPIRACION_ANTROPOMETRIA,
-            destinatarioUserId: alumno.entrenadorId,
-            entrenadorId: alumno.entrenadorId,
-            categoria: 'ANTROPOMETRIA',
-            titulo: 'Check-in antropométrico vencido',
-            cuerpo: `${nombre} no completó su medición del ${fechaProgramada}; considera reprogramar.`,
-            linkAccion: LINK_EXPIRACION_ANTROPOMETRIA,
-            // RNF-004 §3: referencia determinista por alumno + fecha programada (dedupe).
-            referenciaId: expiracion.referenciaId ?? undefined,
-            datosAdicionales: {
-              alumnoId: alumno.usuarioId,
-              fechaProgramada,
-              periodicidad: alumno.periodicidad,
-            },
-            esCriticoSeguridad: false,
-          })
-        );
-        expiracionesDespachadas += 1;
-      } catch (error) {
-        this.logger.warn(
-          `No se pudo despachar la expiración antropométrica del alumno ${alumno.usuarioId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
-      }
-    }
-
-    this.logger.log(
-      `Check-in antropométrico vencido: ${expiracionesDespachadas} avisos al coach, ` +
-        `${expiracionesOmitidasPorMedicion} con medición, ${expiracionesOmitidasPorAviso} ya avisados ` +
-        `(${candidatos.length} ventanas vencidas evaluadas).`
+    const avisosPrevios = await consultarAvisosExpiracion(
+      this.db,
+      coachIds,
+      referencias,
+      TIPO_EVENTO_EXPIRACION_ANTROPOMETRIA
     );
 
-    return {
-      expiracionesDespachadas,
-      expiracionesOmitidasPorMedicion,
-      expiracionesOmitidasPorAviso,
-    };
+    return emitirExpiracionesCandidatas({
+      candidatos,
+      controles,
+      avisosPrevios,
+      eventEmitter: this.eventEmitter,
+      logger: this.logger,
+      tipoEvento: TIPO_EVENTO_EXPIRACION_ANTROPOMETRIA,
+      linkAccion: LINK_EXPIRACION_ANTROPOMETRIA,
+    });
   }
 }
