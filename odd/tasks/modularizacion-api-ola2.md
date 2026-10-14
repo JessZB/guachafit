@@ -65,8 +65,8 @@ Orden: (M ∥ N) → D → R. Si R encuentra BLOCKERs, Claude redacta un prompt 
 - [x] M: `120`–`127`.
 - [x] N: `128`.
 - [x] D: `129`.
-- [ ] R: `130`–`133`.
-- [ ] Claude: verificación contra el diff, un commit por módulo, `docs(vault)` y limpieza.
+- [x] R: `130`–`133` (+ corrección `134`).
+- [x] Claude: verificación contra el diff, un commit por módulo, `docs(vault)` y limpieza.
 
 ## Criterios de aceptación
 - Los 8 archivos quedan ≤ 250 líneas (300 como máximo) y ninguna pieza nueva pasa de 300.
@@ -94,5 +94,17 @@ Orden: (M ∥ N) → D → R. Si R encuentra BLOCKERs, Claude redacta un prompt 
   - Commit `test(api)` del guardián.
   - Pendiente para la corrección: el guardián falló 1 vez en frío (11,7 s frente a los 5 s del timeout por defecto), porque recorre `src/` 3 veces. Además, el texto de una aserción aún dice "de la Ola 1".
 
+- 2026-10-14 (Claude): fase R verificada y ODD cerrado.
+  - `130`–`133` APTOS y sin BLOCKERs.
+  - **130-W1/W2, P4:** `contexto-actor.ts` cambiaba la semántica en un caso inalcanzable (alumno sin `sub`, `''` frente a `undefined`). Claude lo devolvió a la semántica exacta del controlador original (commit `df0516e`).
+  - **131-W1:** el guardián lee `src/` una sola vez y tolera la lectura en frío; 5 corridas de 351 a 669 ms (commit `7e3005f`).
+  - **W-52-2 resuelto en producción (commit `e7f1362`):**
+    - el `117` descartó la hipótesis `X → null → X`;
+    - el `118` confirmó la causa con un test determinista: el `useEffect` que reiniciaba la vista al foco se ejecutaba después del commit y pisaba el toque del alumno;
+    - la vista ahora se ajusta durante el render;
+    - el caso (c) de `EntrenamientoPage.cache` vuelve a su forma original de un clic (`fb87b92`): 10/10 solo y 10 suites completas en verde (2107).
+  - Resultados finales: API 1934, typechecks 0 y builds en verde.
+  - Los prompts y reportes 117, 118 y 120–134 se borran. **ODD cerrado (Ola 2 del API).**
+
 ## Siguiente paso
-- El dueño lanza `130`–`133` (solo lectura) y el `117`.
+- Modularización del API terminada: el guardián no tiene excepciones. Las SUGGESTIONs de `130`–`133` quedan como mejoras opcionales.

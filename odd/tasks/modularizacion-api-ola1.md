@@ -122,5 +122,5 @@ Orden: (M ∥ F) → S → D → R. Si R encuentra BLOCKERs, Claude redacta un p
   - Commit `54e4536`. ADR-023 aceptado y regla 15 añadida en la §6 de `00_Reglas_Desarrollo_SDD.md`. Los prompts y reportes 100–116 se borran. **ODD cerrado (Ola 1 del API).**
 
 ## Siguiente paso
-- ODD de la Ola 2 del API: los 8 archivos de 401–899 líneas exceptuados en el guardián, más la normalización de nombres que pide el `114` (`*.caso.ts` frente a nombres sin sufijo; `ctx`/`casos`/`contexto`; `soporte-finanzas` y `bandeja-historial`) y la orquestación residual de `CarteraService.obtenerCartera`.
-- Investigar en `EntrenamientoPage` por qué el clic en "Ver entrenamiento completo" a veces no conmuta a la lista con la página cargada (W-52-2).
+- ~~ODD de la Ola 2 del API~~ (cerrado el 2026-10-14): los 8 archivos de 401–899 líneas exceptuados en el guardián, más la normalización de nombres que pide el `114` (`*.caso.ts` frente a nombres sin sufijo; `ctx`/`casos`/`contexto`; `soporte-finanzas` y `bandeja-historial`) y la orquestación residual de `CarteraService.obtenerCartera`.
+- ~~Investigar W-52-2~~: resuelto el 2026-10-14 en `e7f1362` (efecto tardío en `use-vista-sesion.ts`); ver `odd/tasks/modularizacion-api-ola2.md`.
