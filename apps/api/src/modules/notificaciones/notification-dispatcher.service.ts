@@ -1,29 +1,19 @@
-import { Injectable, Inject, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { DRIZZLE_DB } from '../../database/database.module';
-import {
-  Database,
-  eq,
-  and,
-  desc,
-  count,
-  notificacionesInApp,
-  usuarios,
-} from '@guachafit/database';
+import type { Database } from '@guachafit/database';
+import { notificacionesInApp } from '@guachafit/database';
 import { PreferenciasNotificacionService } from './preferencias-notificacion.service';
 import { DispositivosService } from './dispositivos.service';
-import {
+import type {
   BandejaNotificacionesInAppDTO,
   EventoNotificacionPayload,
   FiltroBandejaInAppDTO,
-  LIMITE_IN_APP_POR_DEFECTO,
   NotificacionInAppDTO,
-  PreferenciasNotificacionDTO,
   Rol,
 } from '@guachafit/shared';
-import { decidirCanalesNotificacion } from './matriz-preferencias';
 import {
   EventoNotificacionDominio,
   PATRON_EVENTOS_NOTIFICACION,
@@ -33,23 +23,19 @@ import {
   CorreoCuentaPayload,
   PATRON_EVENTOS_CORREO_CUENTA,
   ResultadoDespachoCorreoCuenta,
-  TIEMPO_MAX_ENCOLADO_CORREO_CUENTA_MS,
-  TIPOS_CORREO_SEGURIDAD,
 } from './events/eventos-correo-cuenta';
-import { construirCorreoCuenta } from './correo/plantillas-correo';
 import { ADAPTADOR_CORREO, AdaptadorCorreo } from './correo/adaptador-correo';
-import { leerConfigCorreo, obtenerUrlWeb } from '../../common/config/correo';
-import { esperarConLimite } from '../../common/esperar-con-limite.util';
-import { enmascararCorreo } from '../../common/enmascarar-correo.util';
-import { createHash, randomUUID } from 'node:crypto';
+import { COLA_EMAIL, COLA_PUSH } from './notificaciones.config';
+import type { ContextoDespachador } from './casos-despachador/contexto-despachador';
+import { mapearNotificacionInApp as mapearNotificacionInAppCaso } from './casos-despachador/despachador-reglas';
+import { despacharCorreoCuenta as despacharCorreoCuentaCaso } from './casos-despachador/despachar-correo-cuenta';
+import { despacharEvento as despacharEventoCaso } from './casos-despachador/despachar-evento';
+import { listarNotificacionesInApp as listarNotificacionesInAppCaso } from './casos-despachador/listar-notificaciones-in-app';
 import {
-  COLA_EMAIL,
-  COLA_PUSH,
-  OPCIONES_JOB_EMAIL,
-  OPCIONES_JOB_PUSH,
-  RETENCION_FALLIDOS_CORREO_CUENTA,
-  construirJobIdNotificacion,
-} from './notificaciones.config';
+  marcarLeida as marcarLeidaCaso,
+  marcarTodasLeidas as marcarTodasLeidasCaso,
+} from './casos-despachador/marcar-notificaciones';
+import { resolverRolDestinatario as resolverRolDestinatarioCaso } from './casos-despachador/resolver-rol-destinatario';
 
 export interface DespachoResultado {
   inAppId: string;
@@ -62,6 +48,12 @@ export interface DespachoResultado {
 export class NotificationDispatcherService {
   private readonly logger = new Logger(NotificationDispatcherService.name);
 
+  /**
+   * P2: contexto explícito de dependencias para los casos de uso en funciones planas,
+   * construido una vez aquí. Nunca se registra como provider de Nest.
+   */
+  private readonly ctx: ContextoDespachador;
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
     private readonly preferenciasService: PreferenciasNotificacionService,
@@ -71,7 +63,17 @@ export class NotificationDispatcherService {
     // Para saber si un correo de cuenta sale de verdad (Brevo) o solo se registra (simulado).
     // Sin adaptador (tests que instancian el servicio a mano) se decide por la configuración.
     @Optional() @Inject(ADAPTADOR_CORREO) private readonly adaptadorCorreo?: AdaptadorCorreo
-  ) {}
+  ) {
+    this.ctx = {
+      db: this.db,
+      logger: this.logger,
+      preferenciasService: this.preferenciasService,
+      dispositivosService: this.dispositivosService,
+      pushQueue: this.pushQueue,
+      emailQueue: this.emailQueue,
+      adaptadorCorreo: this.adaptadorCorreo,
+    };
+  }
 
   /**
    * RF-014 RN-01/RN-02: punto de entrada event-driven del despachador.
@@ -112,93 +114,7 @@ export class NotificationDispatcherService {
    * correo sale tarde (el enlace sigue siendo válido mientras no venza).
    */
   async despacharCorreoCuenta(payload: CorreoCuentaPayload): Promise<ResultadoDespachoCorreoCuenta> {
-    const control = { cancelado: false };
-    const resultado = await esperarConLimite(
-      this.encolarCorreoCuenta(payload, control),
-      TIEMPO_MAX_ENCOLADO_CORREO_CUENTA_MS,
-      () => {
-        control.cancelado = true;
-      }
-    );
-
-    if (!resultado.ok) {
-      const motivo =
-        resultado.motivo === 'tiempo'
-          ? `la cola no respondió en ${TIEMPO_MAX_ENCOLADO_CORREO_CUENTA_MS} ms`
-          : resultado.error instanceof Error
-            ? resultado.error.message
-            : String(resultado.error);
-      // Sin el código ni el correo completo: solo tipo, usuario y destinatario enmascarado.
-      const linea = `No se pudo encolar el correo '${payload.tipo}' del usuario ${
-        payload.usuarioId
-      } (${enmascararCorreo(payload.email)}): ${motivo}`;
-      // La recuperación no tiene respaldo visible (su respuesta es genérica): es un error. Las
-      // bienvenidas tienen el enlace copiable en pantalla: aviso.
-      if (payload.tipo === 'RECUPERACION_PASSWORD') this.logger.error(linea);
-      else this.logger.warn(linea);
-      return { encolado: false, correoEnCamino: false };
-    }
-
-    this.logger.log(`Correo de cuenta '${payload.tipo}' encolado para el usuario ${payload.usuarioId}`);
-    return { encolado: true, correoEnCamino: this.entregaRealDeCorreo() };
-  }
-
-  private async encolarCorreoCuenta(
-    payload: CorreoCuentaPayload,
-    control: { cancelado: boolean }
-  ): Promise<void> {
-    await this.verificarColaEmailLista();
-    if (control.cancelado) return;
-
-    const correo = construirCorreoCuenta(payload, obtenerUrlWeb());
-    // Idempotencia por enlace: el mismo código no se encola dos veces; un enlace nuevo sí. El id
-    // lleva una huella del código, nunca el código en claro. Los avisos de seguridad sin enlace
-    // (RF-018) no tienen código: cada uno lleva un id propio para que BullMQ no descarte el
-    // segundo aviso por compartir id con uno anterior retenido.
-    const huella = payload.token
-      ? createHash('sha256').update(payload.token).digest('hex').slice(0, 16)
-      : `aviso_${randomUUID()}`;
-
-    await this.emailQueue.add(
-      'enviar-email',
-      {
-        usuarioId: payload.usuarioId,
-        email: payload.email,
-        nombreDestinatario: payload.nombre,
-        asunto: correo.asunto,
-        cuerpo: correo.texto,
-        html: correo.html,
-        tipoEvento: payload.tipo,
-        esCriticoSeguridad: TIPOS_CORREO_SEGURIDAD.has(payload.tipo),
-      },
-      {
-        ...OPCIONES_JOB_EMAIL,
-        jobId: `cuenta_${payload.tipo}_${payload.usuarioId}_${huella}`,
-        // El enlace de un solo uso no se retiene en Redis una vez entregado, y los fallidos solo
-        // 24 h (la copia de la DLQ va sin el enlace).
-        removeOnComplete: true,
-        removeOnFail: RETENCION_FALLIDOS_CORREO_CUENTA,
-      }
-    );
-  }
-
-  /**
-   * Lanza si la conexión de la cola existe pero no está lista (Redis caído o reconectando): así el
-   * job con el enlace no queda esperando en memoria a que Redis vuelva.
-   */
-  private async verificarColaEmailLista(): Promise<void> {
-    const cliente = (this.emailQueue as Partial<Queue>).client;
-    if (!cliente) return;
-    const conexion = (await cliente) as { status?: string } | undefined;
-    if (conexion?.status && conexion.status !== 'ready') {
-      throw new Error(`la conexión con la cola no está lista (${conexion.status})`);
-    }
-  }
-
-  private entregaRealDeCorreo(): boolean {
-    return this.adaptadorCorreo
-      ? this.adaptadorCorreo.entregaReal
-      : leerConfigCorreo().modo === 'brevo';
+    return despacharCorreoCuentaCaso(this.ctx, payload);
   }
 
   /**
@@ -209,132 +125,7 @@ export class NotificationDispatcherService {
    * 4. Encola en 'notificaciones-push' y/o 'notificaciones-email' según esa decisión.
    */
   async despacharEvento(evento: EventoNotificacionPayload): Promise<DespachoResultado> {
-    const nowUtc = new Date();
-    this.logger.log(
-      `[Despachador] Procesando evento '${evento.tipoEvento}' (${evento.categoria}) para usuario ${evento.destinatarioUserId}`
-    );
-
-    // -------------------------------------------------------------------------
-    // 1. Fallback In-App Universal (RN-02 Paso 1 & RN-04)
-    // -------------------------------------------------------------------------
-    const [inApp] = await this.db
-      .insert(notificacionesInApp)
-      .values({
-        usuarioId: evento.destinatarioUserId,
-        titulo: evento.titulo,
-        cuerpo: evento.cuerpo,
-        tipoEvento: evento.tipoEvento,
-        linkAccion: evento.linkAccion || null,
-        // RF-003 §6 / RNF-004 §3: la referencia de origen también viaja al In-App para que un
-        // barrido idempotente pueda pre-chequear su propio aviso (p. ej. expiración por alumno+fecha).
-        referenciaId: evento.referenciaId?.trim() || null,
-        leida: false,
-        createdAtUtc: nowUtc,
-      })
-      .returning();
-
-    // -------------------------------------------------------------------------
-    // 2. Preferencias del destinatario + rol (matriz RF-015 §A/§B)
-    // -------------------------------------------------------------------------
-    let prefs: PreferenciasNotificacionDTO | null = null;
-    try {
-      prefs = await this.preferenciasService.obtenerPreferencias(evento.destinatarioUserId);
-    } catch {
-      this.logger.warn(
-        `No se pudieron obtener preferencias para usuario ${evento.destinatarioUserId}. ` +
-          'Se aplican los defaults del doc RF-015 (In-App universal + canales obligatorios).'
-      );
-    }
-
-    const rolDestinatario =
-      prefs?.rol ?? (await this.resolverRolDestinatario(evento.destinatarioUserId));
-
-    // RF-015: fila de la matriz (rol + categoría) → canales efectivos. Los campos ausentes caen al
-    // default del doc y los canales obligatorios (RN-01) se fuerzan siempre.
-    const decision = decidirCanalesNotificacion(evento, rolDestinatario, prefs);
-
-    let pushEnqueued = false;
-    let emailEnqueued = false;
-    let activeTokens: string[] = [];
-
-    // -------------------------------------------------------------------------
-    // 3. Evaluación y Encolamiento Canal Push (BullMQ)
-    // -------------------------------------------------------------------------
-    if (decision.push) {
-      const activeDevices = await this.dispositivosService.listarDispositivosActivos(
-        evento.destinatarioUserId
-      );
-      activeTokens = activeDevices.map((d) => d.deviceToken);
-
-      if (activeTokens.length > 0) {
-        await this.pushQueue.add(
-          'enviar-push',
-          {
-            usuarioId: evento.destinatarioUserId,
-            tokens: activeTokens,
-            titulo: evento.titulo,
-            cuerpo: evento.cuerpo,
-            tipoEvento: evento.tipoEvento,
-            linkAccion: evento.linkAccion,
-            datosAdicionales: evento.datosAdicionales,
-          },
-          {
-            ...OPCIONES_JOB_PUSH,
-            // RNF-004 §3: idempotencia — reintentos/re-emisiones del mismo día UTC no duplican.
-            jobId: construirJobIdNotificacion(evento, nowUtc),
-          }
-        );
-        pushEnqueued = true;
-        this.logger.log(
-          `Job push encolado para ${activeTokens.length} dispositivos (matriz ${decision.filaMatriz ?? 'sin-fila'})`
-        );
-      }
-    }
-
-    // -------------------------------------------------------------------------
-    // 4. Evaluación y Encolamiento Canal Email (BullMQ)
-    // -------------------------------------------------------------------------
-    // `emailForzado` cubre RN-01: canal obligatorio de la fila (seguridad) o alerta crítica
-    // transaccional (comprobante de pago aprobado).
-    const isSecurityCritical = decision.emailForzado;
-
-    if (decision.email) {
-      const [destinatario] = await this.db
-        .select({ email: usuarios.email })
-        .from(usuarios)
-        .where(eq(usuarios.id, evento.destinatarioUserId))
-        .limit(1);
-
-      if (destinatario?.email) {
-        await this.emailQueue.add(
-          'enviar-email',
-          {
-            usuarioId: evento.destinatarioUserId,
-            email: destinatario.email,
-            asunto: evento.titulo,
-            cuerpo: evento.cuerpo,
-            tipoEvento: evento.tipoEvento,
-            linkAccion: evento.linkAccion,
-            datosAdicionales: evento.datosAdicionales,
-            esCriticoSeguridad: isSecurityCritical,
-          },
-          {
-            ...OPCIONES_JOB_EMAIL,
-            // RNF-004 §3: idempotencia — reintentos/re-emisiones del mismo día UTC no duplican.
-            jobId: construirJobIdNotificacion(evento, nowUtc),
-          }
-        );
-        emailEnqueued = true;
-        this.logger.log(`Job email encolado hacia ${enmascararCorreo(destinatario.email)}`);
-      }
-    }
-
-    return {
-      inAppId: inApp.id,
-      pushEnqueued,
-      emailEnqueued,
-      activeDeviceTokensCount: activeTokens.length,
-    };
+    return despacharEventoCaso(this.ctx, evento);
   }
 
   /**
@@ -346,17 +137,7 @@ export class NotificationDispatcherService {
    * `buscarDefinicionUnica` en `matriz-preferencias`).
    */
   private async resolverRolDestinatario(usuarioId: string): Promise<Rol> {
-    try {
-      const [fila] = await this.db
-        .select({ rol: usuarios.rol })
-        .from(usuarios)
-        .where(eq(usuarios.id, usuarioId))
-        .limit(1);
-
-      return fila?.rol ?? Rol.ALUMNO;
-    } catch {
-      return Rol.ALUMNO;
-    }
+    return resolverRolDestinatarioCaso(this.ctx, usuarioId);
   }
 
   // ===========================================================================
@@ -375,89 +156,18 @@ export class NotificationDispatcherService {
     usuarioId: string,
     filtro: Partial<FiltroBandejaInAppDTO> = {}
   ): Promise<BandejaNotificacionesInAppDTO> {
-    const limit = filtro.limit ?? LIMITE_IN_APP_POR_DEFECTO;
-    const offset = filtro.offset ?? 0;
-    const soloNoLeidas = filtro.soloNoLeidas ?? false;
-
-    const condicionUsuario = eq(notificacionesInApp.usuarioId, usuarioId);
-    const condicionLista = soloNoLeidas
-      ? and(condicionUsuario, eq(notificacionesInApp.leida, false))
-      : condicionUsuario;
-
-    const [filaTotal] = await this.db
-      .select({ total: count() })
-      .from(notificacionesInApp)
-      .where(condicionLista);
-
-    const [filaNoLeidas] = await this.db
-      .select({ total: count() })
-      .from(notificacionesInApp)
-      .where(and(condicionUsuario, eq(notificacionesInApp.leida, false)));
-
-    const rows = await this.db
-      .select()
-      .from(notificacionesInApp)
-      .where(condicionLista)
-      .orderBy(desc(notificacionesInApp.createdAtUtc), desc(notificacionesInApp.id))
-      .limit(limit)
-      .offset(offset);
-
-    return {
-      items: rows.map((r) => this.mapearNotificacionInApp(r)),
-      total: filaTotal?.total ?? 0,
-      limit,
-      offset,
-      totalNoLeidas: filaNoLeidas?.total ?? 0,
-    };
+    return listarNotificacionesInAppCaso(this.ctx, usuarioId, filtro);
   }
 
   private mapearNotificacionInApp(r: typeof notificacionesInApp.$inferSelect): NotificacionInAppDTO {
-    return {
-      id: r.id,
-      usuarioId: r.usuarioId,
-      titulo: r.titulo,
-      cuerpo: r.cuerpo,
-      tipoEvento: r.tipoEvento,
-      leida: r.leida,
-      linkAccion: r.linkAccion,
-      createdAtUtc:
-        r.createdAtUtc instanceof Date
-          ? r.createdAtUtc.toISOString()
-          : new Date(r.createdAtUtc).toISOString(),
-    };
+    return mapearNotificacionInAppCaso(r);
   }
 
   async marcarLeida(usuarioId: string, notificacionId: string): Promise<boolean> {
-    const [actualizado] = await this.db
-      .update(notificacionesInApp)
-      .set({ leida: true })
-      .where(
-        and(
-          eq(notificacionesInApp.id, notificacionId),
-          eq(notificacionesInApp.usuarioId, usuarioId)
-        )
-      )
-      .returning();
-
-    if (!actualizado) {
-      throw new NotFoundException('No encontramos ese aviso. Actualiza la pantalla.');
-    }
-
-    return true;
+    return marcarLeidaCaso(this.ctx, usuarioId, notificacionId);
   }
 
   async marcarTodasLeidas(usuarioId: string): Promise<number> {
-    const res = await this.db
-      .update(notificacionesInApp)
-      .set({ leida: true })
-      .where(
-        and(
-          eq(notificacionesInApp.usuarioId, usuarioId),
-          eq(notificacionesInApp.leida, false)
-        )
-      )
-      .returning();
-
-    return res.length;
+    return marcarTodasLeidasCaso(this.ctx, usuarioId);
   }
 }
