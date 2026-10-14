@@ -62,8 +62,8 @@ Objetivo de tamaño: el archivo original (fachada, barril, processor o controlad
 Orden: (M ∥ N) → D → R. Si R encuentra BLOCKERs, Claude redacta un prompt `validacion` de corrección.
 
 ## Checklist
-- [ ] M: `120`–`127`.
-- [ ] N: `128`.
+- [x] M: `120`–`127`.
+- [x] N: `128`.
 - [ ] D: `129`.
 - [ ] R: `130`–`133`.
 - [ ] Claude: verificación contra el diff, un commit por módulo, `docs(vault)` y limpieza.
@@ -79,6 +79,14 @@ Orden: (M ∥ N) → D → R. Si R encuentra BLOCKERs, Claude redacta un prompt 
 
 ## Progreso
 - 2026-10-13: ODD creado y prompts `120`–`133` redactados.
+- 2026-10-13 (Claude): fases M y N verificadas contra el diff.
+  - Archivos: plantillas 609 → 160, periodicidad 517 → 27 (barril), recordatorio 493 → 267, `FinanzasController` 470 → 240, despachador 463 → 173, resumen semanal 436 → 97, entrenador 432 → 50 y validación de configuración 403 → 31 (barril). La pieza más grande tiene 244 líneas. El reporte del `122` decía 237 líneas para el recordatorio; mide 267, dentro del máximo de 300.
+  - Constructores, decoradores, métodos públicos y exports intactos. En `FinanzasController`, la tabla de las 21 rutas es idéntica (verbo, ruta, guards, roles, `@HttpCode` y firma).
+  - Conteos idénticos en los 8 módulos y en la normalización: `withTenant(`, `FOR UPDATE`, transacciones, eventos y colas, `throw`, DML y literales de error.
+  - **Corrección de Claude en el `127`:** el barril con `export *` exponía 10 auxiliares internos nuevos (`problemasCors`, `primerValor`…). Ahora reexporta de forma explícita los 16 nombres originales; typecheck 0.
+  - `128`: 21 renombres sin `.caso`, 3 contextos `contexto-<servicio>.ts`, campo `ctx` en las 7 fachadas, `soporte-finanzas` y `bandeja-historial` partidos, y `CarteraService` 227 → 111.
+  - Sin specs existentes editados, sin cambios en `*.module.ts`. Inglés nuevo en comentarios: 1 línea en total.
+  - Commits `83b658a`..`dbe13a2`.
 
 ## Siguiente paso
-- El dueño lanza `120`–`128` en paralelo.
+- El dueño lanza `129`.
