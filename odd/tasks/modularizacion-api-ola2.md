@@ -64,7 +64,7 @@ Orden: (M ∥ N) → D → R. Si R encuentra BLOCKERs, Claude redacta un prompt 
 ## Checklist
 - [x] M: `120`–`127`.
 - [x] N: `128`.
-- [ ] D: `129`.
+- [x] D: `129`.
 - [ ] R: `130`–`133`.
 - [ ] Claude: verificación contra el diff, un commit por módulo, `docs(vault)` y limpieza.
 
@@ -88,5 +88,11 @@ Orden: (M ∥ N) → D → R. Si R encuentra BLOCKERs, Claude redacta un prompt 
   - Sin specs existentes editados, sin cambios en `*.module.ts`. Inglés nuevo en comentarios: 1 línea en total.
   - Commits `83b658a`..`dbe13a2`.
 
+- 2026-10-13 (Claude): `129` verificado.
+  - `EXCEPCIONES_API_OLA2_NO_TRABAJADA` vacía; `CARPETAS_CASOS_API` cubre las 15 carpetas (A1–A7 y B1–B8).
+  - API: 1933 tests x3 en corridas secuenciales, typecheck 0 y build en verde. Web: 2105 tests, typecheck 0 y build en verde. Shared: typecheck 0. E2E omitidos.
+  - Commit `test(api)` del guardián.
+  - Pendiente para la corrección: el guardián falló 1 vez en frío (11,7 s frente a los 5 s del timeout por defecto), porque recorre `src/` 3 veces. Además, el texto de una aserción aún dice "de la Ola 1".
+
 ## Siguiente paso
-- El dueño lanza `129`.
+- El dueño lanza `130`–`133` (solo lectura) y el `117`.
