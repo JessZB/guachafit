@@ -15,8 +15,13 @@ import type { ContextoCasosAlumnos } from './contexto-casos';
 import { calcularEdadDesdeFecha } from './edad-reglas';
 
 /**
- * Manual student onboarding by the coach (RF-011, path A).
- * Moved verbatim from `AlumnosService.crearAlumnoManual` (P3).
+ * Alta Manual de Alumno por el Entrenador (RF-011, Vía A)
+ *
+ * WU-E (RN-05): tras confirmar la transacción se publica el evento de bienvenida (evento →
+ * despachador → cola `notificaciones-email` → worker); este servicio nunca envía el correo. El
+ * token de un solo uso también se devuelve para que el entrenador comparta el enlace como
+ * respaldo. `correoEnviado` (y el mensaje) solo afirman el envío si el correo quedó en camino.
+ * Movido sin cambios desde `AlumnosService.crearAlumnoManual` (P3).
  */
 export async function crearAlumnoManual(
   ctx: ContextoCasosAlumnos,

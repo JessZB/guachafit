@@ -4,8 +4,9 @@ import { MENSAJE_ALUMNO_FUERA_DE_LISTA } from '../../../common/mensajes-acceso';
 import type { ContextoCasosAlumnos } from './contexto-casos';
 
 /**
- * Logical delete (soft delete) of a student (RF-012, RN-01, RN-02).
- * Moved verbatim from `AlumnosService.softDelete` (P3).
+ * Borrado Lógico (Soft Delete) de Alumno (RF-012, RN-01, RN-02).
+ * Prohibición absoluta de sentencias DELETE físicas.
+ * Movido sin cambios desde `AlumnosService.softDelete` (P3).
  */
 export async function softDelete(
   ctx: Pick<ContextoCasosAlumnos, 'withTenant'>,

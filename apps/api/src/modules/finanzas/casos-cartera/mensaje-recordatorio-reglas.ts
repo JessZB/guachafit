@@ -1,5 +1,5 @@
 /**
- * Reglas puras del mensaje de recordatorio manual RN-02 (movida verbatim desde
+ * Reglas puras del mensaje de recordatorio manual RN-02 (movida sin cambios desde
  * `cartera.service.ts`; la fachada la re-exporta para conservar el contrato).
  */
 

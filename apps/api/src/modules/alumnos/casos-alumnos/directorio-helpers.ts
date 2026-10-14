@@ -21,13 +21,22 @@ import {
 export type SemaforoPago = 'al_dia' | 'por_vencer' | 'moroso' | 'sin_cuota';
 
 /**
- * WU25a: nil UUID (RFC 4122) standing for "no candidates" inside an `IN`.
- * Moved verbatim from the facade (P3).
+ * WU25a: UUID nil (RFC 4122) para representar "sin candidatos" en un `IN`.
+ * `IN ()` no es SQL válido y un filtro sin coincidencias debe devolver 0 filas (no romper la
+ * consulta); ningún perfil real usa este UUID.
+ * Movido sin cambios desde la fachada (P3).
  */
 export const UUID_SIN_CANDIDATOS = '00000000-0000-4000-8000-000000000000';
 
 /**
- * WU19: real portfolio counters for the directory KPIs. Moved verbatim (P3).
+ * WU19: contadores reales de la cartera para los KPIs del directorio.
+ *
+ * Tres COUNT en el servidor (jamás se traen los perfiles a memoria):
+ * 1. Agrupado de alumnos vigentes por estado + modalidad (suma de grupos).
+ * 2. Archivados (soft-deleted).
+ * 3. Morosos: alumnos vigentes con al menos una cuota vencida; se reutiliza la misma regla
+ *    de la bandeja "Alumnos en Mora" del dashboard (`entrenador.service.ts`) para no divergir.
+ * Movido sin cambios (P3).
  */
 export async function calcularResumenDirectorio(
   tx: TenantTransaction,
@@ -102,7 +111,14 @@ export async function calcularResumenDirectorio(
 }
 
 /**
- * WU25a/WU23/WU-H: student sets per payment semaphore, in batch. Moved verbatim (P3).
+ * WU25a/WU23/WU-H: conjuntos de alumnos por semáforo de pago con tres consultas en lote:
+ * 1. `enMora`: alumnos con al menos una cuota que cumple `condicionCuotaEnMora`.
+ * 2. `porVencer`: alumnos con al menos una cuota que cumple `condicionCuotaPorVencer`.
+ * 3. `conCuota`: alumnos con al menos una cuota no anulada (vigente o vencida).
+ *
+ * Sin `alumnoUsuarioIds` cubre la cartera completa del coach (filtro server-side); con la
+ * lista de la página, solo esos alumnos (hidratación por fila, sin N+1).
+ * Movido sin cambios (P3).
  */
 export async function calcularConjuntosSemaforoPago(
   tx: TenantTransaction,
@@ -156,8 +172,16 @@ export async function calcularConjuntosSemaforoPago(
 }
 
 /**
- * WU25a: SQL condition for filtering the directory by payment semaphore.
- * Moved verbatim (P3).
+ * WU25a: condición SQL para filtrar el directorio por semáforo de pago.
+ *
+ * Reutiliza la MISMA regla de mora del resumen (`condicionCuotaEnMora`) y la misma definición
+ * de "al día" que `hidratarSemaforoPago` (tiene al menos una cuota no anulada y ninguna en
+ * mora). El conjunto de ids se resuelve en una consulta agregada previa (sin subqueries en el
+ * WHERE, que romperían el aislamiento por tenant y la lectura del plan).
+ *
+ * `sin_cuota` es el complemento (no tiene ninguna cuota registrada): se expresa con un
+ * `NOT IN` sobre los alumnos con cuota; si nadie tiene cuota, no se agrega condición.
+ * Movido sin cambios (P3).
  */
 export async function condicionSemaforoPago(
   tx: TenantTransaction,
@@ -182,7 +206,19 @@ export async function condicionSemaforoPago(
 }
 
 /**
- * WU23: hydrates `semaforoPago` for the listed directory page. Moved verbatim (P3).
+ * WU23: hidrata `semaforoPago` de la página listada del directorio.
+ *
+ * Contexto: la pestaña "En Mora" y los badges de fila dependían de `semaforoPago`, un campo
+ * que ninguna ruta del API completaba (siempre `undefined` => la UI asumía "Al día"). Con el
+ * KPI `resumen.morosos` ya real, la pestaña decía "En Mora (N)" y la lista mostraba 0 filas.
+ *
+ * Reutiliza `calcularConjuntosSemaforoPago` (misma condición de mora que el resumen) limitado a
+ * los `usuarioId` de la página, para no traer las cuotas de toda la cartera:
+ * 1. `moroso`: tiene al menos una cuota que cumple la condición de mora.
+ * 2. `por_vencer`: no está en mora y tiene una cuota impaga a ≤5 días del corte (WU-H).
+ * 3. `al_dia`: tiene al menos una cuota no anulada que no está en mora ni por vencer.
+ * 4. `sin_cuota`: no tiene ninguna cuota registrada (ni vigente ni vencida).
+ * Movido sin cambios (P3).
  */
 export async function hidratarSemaforoPago(
   tx: TenantTransaction,

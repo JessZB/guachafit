@@ -30,11 +30,11 @@ import { publicarCorreoCuenta } from '../../notificaciones/events/eventos-correo
 import type { ContextoCasosAuth } from './contexto-casos';
 
 /**
- * Shared session/access helpers. Moved verbatim from the private methods of
- * `AuthService` (P3): same queries, same order, same errors and messages.
+ * Ayudantes compartidos de sesión y acceso. Movido sin cambios desde los métodos privados de
+ * `AuthService` (P3): mismas consultas, mismo orden, mismos errores y mensajes.
  */
 
-/** Generates the 15-minute access JWT and the 7-day refresh JWT. */
+/** Genera los tokens JWT de acceso (15 min) y refresco (7 días). */
 export function generateTokens(
   ctx: Pick<ContextoCasosAuth, 'jwtSecret' | 'refreshSecret'>,
   payload: JwtPayload
@@ -49,9 +49,13 @@ export function generateTokens(
 }
 
 /**
- * RF-010 section 6 (WU Admin): a coach account only operates with an `ACTIVA`
- * license. Revocation is real (no blacklists): state is checked against the DB
- * on every session cycle.
+ * RF-010 §6 (WU Admin): una cuenta de entrenador SOLO opera con licencia `ACTIVA`.
+ *
+ * Mecanismo de revocación real (sin listas negras): el estado se verifica contra la BD en cada
+ * ciclo de sesión - login, refresh y `GET /auth/me` -, así que deshabilitar la cuenta o
+ * suspender la licencia bloquea de inmediato el refresh y cierra la sesión de la web en el
+ * siguiente `/auth/me`. El UNICO límite es el access token ya emitido: al ser JWT stateless sin
+ * consulta a BD en el guard, vive como máximo sus 15 minutos de TTL.
  */
 export async function verificarLicenciaEntrenadorActiva(
   ctx: Pick<ContextoCasosAuth, 'db'>,
@@ -75,10 +79,16 @@ export async function verificarLicenciaEntrenadorActiva(
 }
 
 /**
- * RF-010 section 6 (CASCADA-COACH): the alumno only operates when their coach
- * is operable — enabled account (`usuarios.activo`) AND current license.
- * Single message that does not reveal which switch failed. Both tables have no
- * RLS: the read goes through the root pool (`ctx.db`).
+ * RF-010 §6 (CASCADA-COACH): el alumno solo opera si su entrenador está operable - cuenta
+ * habilitada (`usuarios.activo`) Y licencia vigente (`perfiles_entrenador.estado_licencia`).
+ *
+ * Se evalúa en autenticación y derivado en runtime (login, `/auth/me`, refresh y canje), NO por
+ * request: el guard no consulta la BD y no paga coste por petición (RF-010 §7). Al reactivar
+ * cualquiera de los dos interruptores, el desbloqueo del alumno es inmediato en su siguiente
+ * ciclo de sesión. El mensaje es único y no revela cuál de los dos falló.
+ *
+ * Semántica espejo del helper de licencia: sin fila en `perfiles_entrenador` el entrenador no
+ * es operable. Ambas tablas no tienen RLS: la lectura va por el pool raíz (`ctx.db`).
  */
 export async function verificarEntrenadorOperable(
   ctx: Pick<ContextoCasosAuth, 'db'>,
@@ -102,9 +112,9 @@ export async function verificarEntrenadorOperable(
 }
 
 /**
- * Publishes an account email and reports whether it is really on its way
- * (bounded wait, see `publicarCorreoCuenta`). A bus or queue failure NEVER
- * changes the business-flow outcome: it is only logged.
+ * Publica un correo de cuenta y devuelve si quedó realmente en camino (espera acotada, ver
+ * `publicarCorreoCuenta`). Un fallo del bus o de la cola NUNCA cambia el resultado del flujo de
+ * negocio: solo se registra.
  */
 export function publicarCorreoCuentaCaso(
   ctx: Pick<ContextoCasosAuth, 'eventEmitter' | 'logger'>,
@@ -115,10 +125,10 @@ export function publicarCorreoCuentaCaso(
 }
 
 /**
- * Does the account have platform access? Same rule as login/refresh/redeem:
- * enabled and not blocked; coach with active license; alumno not archived and
- * with an operable coach (RF-010 section 6 cascade). Throws the matching 401;
- * returns the alumno or coach name (when known) to personalize the email.
+ * ¿La cuenta tiene acceso a la plataforma? Misma regla que login/refresh/canje:
+ * habilitada y no bloqueada; coach con licencia activa; alumno no archivado y con entrenador
+ * operable (cascada RF-010 §6). Lanza el 401 claro correspondiente; devuelve el nombre del
+ * alumno o del entrenador (si lo hay) para personalizar el correo.
  */
 export async function verificarCuentaConAcceso(
   ctx: Pick<ContextoCasosAuth, 'db' | 'withTenant'>,
@@ -137,7 +147,7 @@ export async function verificarCuentaConAcceso(
     return { nombre: nombres };
   }
   if (usuario.rol === Rol.ALUMNO) {
-    // RNF-003/ADR-011 (stage 3): self profile read with RLS (`current_usuario_id`).
+    // RNF-003/ADR-011 (etapa 3): lectura self del perfil con RLS (`current_usuario_id`).
     const [perfil] = await ctx.withTenant({ usuarioId: usuario.id }, (tx) =>
       tx.select().from(perfilesAlumno).where(eq(perfilesAlumno.usuarioId, usuario.id))
     );
@@ -153,10 +163,9 @@ export async function verificarCuentaConAcceso(
 }
 
 /**
- * "Mi perfil" session user. The full access rules (archived alumno, coach
- * without license, coach cascade) were already enforced by login and each
- * refresh before issuing this token; here only an account disabled or blocked
- * afterwards is cut off.
+ * Usuario de la sesión de "Mi perfil". Las reglas completas de acceso (alumno archivado, coach
+ * sin licencia, cascada del entrenador) ya las aplicaron el login y cada refresh antes de emitir
+ * este token; aquí solo se corta una cuenta que se deshabilitó o bloqueó después.
  */
 export async function usuarioConSesion(
   ctx: Pick<ContextoCasosAuth, 'db'>,
@@ -181,7 +190,7 @@ export async function exigirPasswordActual(
   }
 }
 
-/** 409 when the email is already the access email of ANOTHER account. */
+/** 409 si el correo ya es el de acceso de OTRA cuenta. */
 export async function exigirCorreoLibre(
   ctx: Pick<ContextoCasosAuth, 'db'>,
   correo: string,
@@ -197,8 +206,8 @@ export async function exigirCorreoLibre(
 }
 
 /**
- * Session and email data for the user: token `entrenadorId` and greeting name.
- * Self profile read (alumno RLS self, RNF-003).
+ * Datos para la sesión y los correos del usuario: `entrenadorId` del token y nombre para el
+ * saludo. Lectura del perfil propio (RLS self del alumno, RNF-003).
  */
 export async function datosSesionDe(
   ctx: Pick<ContextoCasosAuth, 'db' | 'withTenant'>,

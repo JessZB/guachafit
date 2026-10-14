@@ -5,8 +5,10 @@ import { MENSAJE_SIN_ACCESO_ALUMNO } from '../../../common/mensajes-acceso';
 import type { ContextoCasosAlumnos } from './contexto-casos';
 
 /**
- * RF-010 scenario 2: audits the cross-access attempt and returns the 403.
- * Moved verbatim from `AlumnosService.accesoDenegado` (P3).
+ * RF-010 Escenario 2: registra el intento de acceso cruzado y devuelve el 403.
+ * Solo metadatos mínimos (actor, rol, patrón de ruta, método y motivo): nunca el id ni datos del
+ * alumno. Best-effort: un fallo de la auditoría jamás cambia la respuesta 403.
+ * Movido sin cambios desde `AlumnosService.accesoDenegado` (P3).
  */
 export function lanzarAccesoDenegado(
   ctx: Pick<ContextoCasosAlumnos, 'auditoria'>,
@@ -23,8 +25,11 @@ export function lanzarAccesoDenegado(
 }
 
 /**
- * RNF-003/ADR-011 (stage 3): RLS context for routes serving more than one role.
- * Moved verbatim from `AlumnosService.contextoRlsDeActor` (P3).
+ * RNF-003/ADR-011 (etapa 3): contexto RLS para rutas que atienden a más de un rol.
+ * - ALUMNO -> self-select (`current_usuario_id`).
+ * - ENTRENADOR -> tenant del coach (su `usuarioId` es el `entrenadorId` del tenant).
+ * - SUPERADMIN -> bypass explícito `is_superadmin`.
+ * Movido sin cambios desde `AlumnosService.contextoRlsDeActor` (P3).
  */
 export function contextoRlsDeActor(
   actorUserId: string,

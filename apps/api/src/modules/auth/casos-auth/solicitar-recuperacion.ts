@@ -19,14 +19,17 @@ import {
 import type { ContextoCasosAuth } from './contexto-casos';
 
 /**
- * `POST /auth/recuperar-password`. ALWAYS answers the same message in the same
- * time, whether or not the account exists: it never reveals if the email is
- * registered or the account state. Against timing enumeration, ALL
- * account-dependent work (lookup, access rules, code generation and saving,
- * email queueing) runs in the background (`procesarSolicitudRecuperacion`)
- * and the response does not wait for it. Background-work errors are only
- * logged (masked email); the person may ask for the link again.
- * Moved verbatim (P3).
+ * `POST /auth/recuperar-password`.
+ *
+ * Responde SIEMPRE el mismo mensaje y en el mismo tiempo, exista o no la cuenta: no revela si
+ * el correo está registrado ni el estado de la cuenta.
+ *
+ * Contra la enumeración por tiempo, TODO el trabajo que depende de la cuenta (búsqueda, reglas
+ * de acceso, generación y guardado del código, encolado del correo) corre en segundo plano
+ * (`procesarSolicitudRecuperacion`) y la respuesta no lo espera: el camino visible es idéntico
+ * para un correo registrado y uno que no lo está. Los errores de ese trabajo solo se registran
+ * (con el correo enmascarado); la persona puede volver a pedir el enlace.
+ * Movido sin cambios (P3).
  */
 export async function solicitarRecuperacionPassword(
   ctx: ContextoCasosAuth,
@@ -48,17 +51,17 @@ export async function solicitarRecuperacionPassword(
 }
 
 /**
- * Background recovery work (see `solicitarRecuperacionPassword`). Only when
- * the account has access is a single-use random code generated (only its
- * SHA-256 hash is stored, with the `VIGENCIA_ENLACE_RECUPERACION_MS` life)
- * and the event ending in the email published.
+ * Trabajo en segundo plano de la recuperación (ver `solicitarRecuperacionPassword`).
  *
- * Against foreign-link voiding: when a live link issued less than
- * `INTERVALO_MINIMO_NUEVO_ENLACE_RECUPERACION_MS` ago exists, it is neither
- * rotated nor resent (the person's link keeps working). Past that interval a
- * new one is issued and the old one stops working. Issuance is derived from
- * the expiry (`expira - vigencia`): no extra column needed. The UPDATE repeats
- * the condition so two simultaneous requests do not rotate twice.
+ * Solo si la cuenta tiene acceso se genera un código aleatorio de un solo uso (se guarda SOLO su
+ * hash SHA-256, con la vigencia `VIGENCIA_ENLACE_RECUPERACION_MS`) y se publica el evento que
+ * termina en el correo.
+ *
+ * Contra la anulación del enlace ajeno: si ya hay un enlace vigente emitido hace menos de
+ * `INTERVALO_MINIMO_NUEVO_ENLACE_RECUPERACION_MS`, no se rota ni se envía otro correo (el enlace
+ * de la persona sigue sirviendo). Pasado ese intervalo sí se emite uno nuevo y el anterior deja
+ * de servir. La emisión se deduce del vencimiento (`expira - vigencia`): no hace falta otra
+ * columna. El UPDATE repite la condición para que dos pedidos simultáneos no roten dos veces.
  */
 export async function procesarSolicitudRecuperacion(
   ctx: ContextoCasosAuth,
@@ -80,7 +83,7 @@ export async function procesarSolicitudRecuperacion(
     throw error;
   }
 
-  // A link expiring after this instant was issued less than the minimum interval ago.
+  // Un enlace que vence después de este instante fue emitido hace menos del intervalo mínimo.
   const limiteRecienEmitido = limiteEnlaceRecienEmitido(
     Date.now(),
     VIGENCIA_ENLACE_RECUPERACION_MS,

@@ -6,8 +6,8 @@ import type { ContextoCasosAlumnos } from './contexto-casos';
 import { lanzarAccesoDenegado } from './acceso-rls';
 
 /**
- * Restoration of a logically deleted student (RF-012, RN-04).
- * Moved verbatim from `AlumnosService.restaurarAlumno` (P3).
+ * Restauración de Alumno Dado de Baja Lógica (RF-012, RN-04).
+ * Movido sin cambios desde `AlumnosService.restaurarAlumno` (P3).
  */
 export async function restaurarAlumno(
   ctx: ContextoCasosAlumnos,

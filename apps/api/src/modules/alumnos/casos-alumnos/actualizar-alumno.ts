@@ -12,8 +12,8 @@ import { hidratarPlanActivo as hidratarPlanActivoBase } from './hidratar-plan-ac
 import { sanitizarPerfilParaRol } from './sanitizar-perfil';
 
 /**
- * Full record and health-file edition by the coach (RF-011, RF-012).
- * Moved verbatim from `AlumnosService.actualizarAlumno` (P3).
+ * Edición completa de la ficha e información de alumnos por el entrenador (RF-011, RF-012).
+ * Movido sin cambios desde `AlumnosService.actualizarAlumno` (P3).
  */
 export async function actualizarAlumno(
   ctx: ContextoCasosAlumnos,

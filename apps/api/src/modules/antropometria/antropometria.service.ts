@@ -35,10 +35,10 @@ export { TIPO_EVENTO_CHECKIN_RECIBIDO, LINK_COLA_ANTROPOMETRIA_COACH };
 export type { ComparativaAngularResultadoDTO };
 
 /**
- * Antropometria facade (P1/P2): keeps the file, the class name, the decorators,
- * the identical constructor and every public method. Each method now delegates
- * to a use case in `casos-antropometria/` with the dependency context built
- * once in the constructor. No behavior change (P3).
+ * Fachada de antropometría (P1/P2): conserva el archivo, el nombre de la clase, los decoradores,
+ * el constructor idéntico y cada método público. Cada método delega ahora en un caso de uso
+ * de `casos-antropometria/` con el contexto de dependencias construido una vez en el
+ * constructor. Sin cambio de comportamiento (P3).
  */
 @Injectable()
 export class AntropometriaService {

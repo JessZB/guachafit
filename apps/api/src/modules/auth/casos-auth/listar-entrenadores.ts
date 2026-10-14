@@ -7,11 +7,12 @@ import {
 import type { ContextoCasosAuth } from './contexto-casos';
 
 /**
- * RF-010 RN-01 (WU Admin): coach listing for the Superadmin master panel.
- * Only ENTRENADOR-role accounts with a profile (inner join): a user without a
- * coach profile is not an operable coach and is excluded. Returns the repo
- * standard paginated envelope, with `total` as the real COUNT (not the page
- * size). Order: most recent signup first. Moved verbatim (P3).
+ * RF-010 RN-01 (WU Admin): listado de entrenadores para el panel maestro del Superadmin.
+ *
+ * Solo cuentas con rol ENTRENADOR y su perfil (inner join): un usuario sin perfil de entrenador
+ * no es un entrenador operable y no aparece. Devuelve el envelope paginado estándar del repo,
+ * con `total` como COUNT real (no el tamaño de la página). Orden: alta más reciente primero.
+ * Movido sin cambios (P3).
  */
 export async function listarEntrenadores(
   ctx: Pick<ContextoCasosAuth, 'db'>,

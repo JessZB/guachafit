@@ -5,8 +5,10 @@ import { MENSAJE_ALUMNO_NO_ENCONTRADO } from '../../../common/mensajes-acceso';
 import type { ContextoCasosAlumnos } from './contexto-casos';
 
 /**
- * LOTE API-N2 (RF-002): the student changes their own time zone.
- * Moved verbatim from `AlumnosService.actualizarZonaHorariaPropia` (P3).
+ * LOTE API-N2 (RF-002): el alumno cambia SU zona horaria. El perfil se identifica por el usuario
+ * autenticado (nunca por un id del cuerpo) y la escritura corre con el contexto self, cubierta
+ * por la política `rls_perfiles_alumno_self_update`. Solo se escribe esta columna.
+ * Movido sin cambios desde `AlumnosService.actualizarZonaHorariaPropia` (P3).
  */
 export async function actualizarZonaHorariaPropia(
   ctx: Pick<ContextoCasosAlumnos, 'withTenant'>,

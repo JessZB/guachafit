@@ -1,16 +1,16 @@
 /**
- * Pure recovery-link timing rules (no I/O).
- * Extracted from `AuthService.procesarSolicitudRecuperacion` (P3): a link
- * expiring after the freshly-issued cutoff was issued less than the minimum
- * interval ago, so it must not rotate nor resend mail.
+ * Reglas puras de vigencia del enlace de recuperación (sin E/S).
+ * Extraído de `AuthService.procesarSolicitudRecuperacion` (P3): un enlace
+ * que vence después del corte de recién emitido se emitió hace menos del
+ * intervalo mínimo, así que no debe rotar ni reenviar correo.
  */
-/** Minimum gap between two links for the same account (15 minutes). */
+/** Separación mínima entre dos enlaces de la misma cuenta (15 minutos). */
 export const INTERVALO_MINIMO_NUEVO_ENLACE_RECUPERACION_MS = 15 * 60_000;
 
 /**
- * Cutoff for the minimum-interval rule: a link expiring after this instant
- * was issued less than the minimum interval ago. Issuance is derived from
- * the expiry (`expira - vigencia`): no extra column needed.
+ * Corte de la regla del intervalo mínimo: un enlace que vence después de este instante
+ * se emitió hace menos del intervalo mínimo. La emisión se deduce del
+ * vencimiento (`expira - vigencia`): no hace falta otra columna.
  */
 export function limiteEnlaceRecienEmitido(
   ahoraMs: number,
@@ -20,7 +20,7 @@ export function limiteEnlaceRecienEmitido(
   return new Date(ahoraMs + vigenciaMs - intervaloMinimoMs);
 }
 
-/** True when the current link is still fresh and must keep working. */
+/** Verdadero cuando el enlace vigente sigue fresco y debe seguir sirviendo. */
 export function enlaceRecienEmitido(
   expiraActual: Date | null,
   limiteRecienEmitido: Date

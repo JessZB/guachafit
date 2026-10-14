@@ -12,9 +12,8 @@ import type { CallerAntropometria, ContextoAntropometria } from './contexto-antr
 import { contextoRlsDeCaller } from './antropometria-reglas';
 
 /**
- * Generates a direct PUT presigned URL to Cloudflare R2 with a 15-minute TTL
- * (RNF-001, ADR-007). Applies hybrid RBAC validation: on-site students cannot
- * upload antropometria body photos.
+ * Genera URL presignada PUT directa a Cloudflare R2 con TTL de 15 minutos (RNF-001, ADR-007).
+ * Aplica validación RBAC híbrida: los alumnos presenciales no pueden subir fotos corporales de antropometría.
  */
 export async function solicitarPresignedUploadUrl(
   ctx: ContextoAntropometria,

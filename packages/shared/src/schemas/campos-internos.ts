@@ -11,11 +11,11 @@ import {
 } from './comunes';
 
 // =============================================================================
-// INTERNAL SCHEMA FIELDS (not part of the `@guachafit/shared` public surface)
+// CAMPOS INTERNOS DE ESQUEMAS (fuera de la superficie pública de `@guachafit/shared`)
 // =============================================================================
-// Single home for the helpers that `schemas/index.ts` declared once at HEAD.
-// This module is intentionally NOT re-exported from the barrel: domain modules
-// import it directly from `./campos-internos`.
+// Hogar único de los ayudantes que `schemas/index.ts` declaraba una vez en HEAD.
+// Este módulo NO se reexporta a propósito desde el barril: los módulos de dominio
+// lo importan directo desde `./campos-internos`.
 
 /** Peso en kg del contrato: formato decimal y tope. `permiteVacio` acepta '' como "sin peso". */
 export function campoPesoKg(mensajeFormato: string, opciones: { permiteVacio?: boolean } = {}) {

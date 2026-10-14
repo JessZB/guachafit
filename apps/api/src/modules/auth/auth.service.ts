@@ -53,10 +53,10 @@ import {
 export { INTERVALO_MINIMO_NUEVO_ENLACE_RECUPERACION_MS } from './casos-auth/recuperacion-reglas';
 
 /**
- * Auth facade (P1): keeps the file, class name, decorators, identical
- * constructor and every public method. Each method delegates to a use case
- * in `casos-auth/` with an explicit dependency context built below (P2).
- * Data semantics are unchanged (P3).
+ * Fachada de autenticación (P1): conserva el archivo, el nombre de la clase, los decoradores,
+ * el constructor idéntico y cada método público. Cada método delega en un caso de uso de
+ * `casos-auth/` con el contexto explícito de dependencias construido abajo (P2).
+ * La semántica de datos no cambia (P3).
  */
 @Injectable()
 export class AuthService {
@@ -103,12 +103,12 @@ export class AuthService {
     return iniciarSesion(this.casos, dto);
   }
 
-  /** Fresh session of the authenticated user for `GET /auth/me`. */
+  /** Sesión fresca del usuario autenticado para `GET /auth/me`. */
   async obtenerSesion(usuarioId: string): Promise<AuthUserDTO> {
     return obtenerSesion(this.casos, usuarioId);
   }
 
-  /** Sets the final password from an invitation SHA-256 token (RF-011). */
+  /** Establece la contraseña definitiva desde un token SHA-256 de invitación (RF-011). */
   async establecerPasswordConToken(dto: EstablecerPasswordConTokenDTO) {
     return establecerPasswordConToken(this.casos, dto);
   }
@@ -168,7 +168,7 @@ export class AuthService {
     return crearEntrenador(this.casos, dto);
   }
 
-  /** Coach listing for the Superadmin master panel (RF-010 RN-01). */
+  /** Listado de entrenadores para el panel maestro del Superadmin (RF-010 RN-01). */
   async listarEntrenadores(
     query: ListarEntrenadoresAdminQueryDTO
   ): Promise<ListadoEntrenadoresAdminDTO> {

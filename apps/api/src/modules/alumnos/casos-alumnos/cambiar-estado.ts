@@ -5,7 +5,9 @@ import { MENSAJE_ALUMNO_FUERA_DE_LISTA } from '../../../common/mensajes-acceso';
 import type { ContextoCasosAlumnos } from './contexto-casos';
 
 /**
- * §6: human labels for the activation state. Moved verbatim (P3).
+ * §6: etiquetas humanas del estado de activación para los mensajes devueltos al usuario.
+ * Nunca se interpola el valor crudo del enum (`inactivo_pausado`).
+ * Movido sin cambios (P3).
  */
 export const ETIQUETA_ESTADO_ACTIVACION: Record<EstadoAlumno, string> = {
   [EstadoAlumno.ACTIVO]: 'activo',
@@ -14,8 +16,8 @@ export const ETIQUETA_ESTADO_ACTIVACION: Record<EstadoAlumno, string> = {
 };
 
 /**
- * Student activation-state change (RF-012). Moved verbatim from
- * `AlumnosService.cambiarEstado` (P3).
+ * Cambio de estado de activación del alumno (RF-012).
+ * Movido sin cambios desde `AlumnosService.cambiarEstado` (P3).
  */
 export async function cambiarEstado(
   ctx: Pick<ContextoCasosAlumnos, 'withTenant'>,

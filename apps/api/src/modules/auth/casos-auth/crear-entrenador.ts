@@ -11,12 +11,15 @@ import { BienvenidaEntrenadorEvent } from '../../notificaciones/events/eventos-c
 import { publicarCorreoCuentaCaso } from './acceso-comun';
 import type { ContextoCasosAuth } from './contexto-casos';
 
-/** Coach account creation by SuperAdmin (RF-010, Scenario 1). Moved verbatim (P3). */
+/**
+ * Creación de cuenta de Entrenador por SuperAdmin (RF-010, Escenario 1).
+ * Movido sin cambios (P3).
+ */
 export async function crearEntrenador(
   ctx: ContextoCasosAuth,
   dto: CrearEntrenadorDTO
 ): Promise<EntrenadorCreadoDTO> {
-  // 1. Unique email.
+  // 1. Validar email único
   const [existenteEmail] = await ctx.db
     .select()
     .from(usuarios)
@@ -26,7 +29,7 @@ export async function crearEntrenador(
     throw new ConflictException('Este correo ya se encuentra registrado.');
   }
 
-  // 2. Unique coachCode.
+  // 2. Validar coachCode único
   const [existenteCode] = await ctx.db
     .select()
     .from(perfilesEntrenador)
@@ -36,7 +39,7 @@ export async function crearEntrenador(
     throw new ConflictException('Ese código de entrenador ya está en uso.');
   }
 
-  // 3. Welcome token or direct-password hash.
+  // 3. Generar token de bienvenida o hashear contraseña directa
   let passwordHash: string | null = null;
   let tokenHash: string | null = null;
   let tokenExpira: Date | null = null;
@@ -51,7 +54,7 @@ export async function crearEntrenador(
     rawToken = tokenData.rawToken;
   }
 
-  // 4. Create user.
+  // 4. Crear usuario
   const [nuevoUsuario] = await ctx.db
     .insert(usuarios)
     .values({
@@ -65,7 +68,7 @@ export async function crearEntrenador(
     })
     .returning();
 
-  // 5. Create coach profile.
+  // 5. Crear perfil de entrenador
   const [nuevoCoach] = await ctx.db
     .insert(perfilesEntrenador)
     .values({
@@ -81,10 +84,9 @@ export async function crearEntrenador(
     })
     .returning();
 
-  // RF-010 Scenario 1: without a direct password, the welcome with the
-  // activation link goes out by email (event → dispatcher → queue). Queueing
-  // confirmation is awaited (bounded) only to avoid promising a send that did
-  // not happen; the panel copyable link is the fallback.
+  // RF-010 Escenario 1: sin contraseña directa, la bienvenida con el enlace de activación sale
+  // por correo (evento → despachador → cola). Se espera la confirmación del encolado (acotada)
+  // solo para no prometer un envío que no ocurrió; el enlace copiable del panel es el respaldo.
   const correoEnviado = rawToken
     ? await publicarCorreoCuentaCaso(
         ctx,

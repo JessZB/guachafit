@@ -37,20 +37,19 @@ import {
 } from './antropometria-constantes';
 import { obtenerControlPorIdInterno } from './hidratar-control';
 
-// Re-exported so the facade keeps its public contract from a single place.
+// Reexportado para que la fachada conserve su contrato público desde un solo lugar.
 export { TIPO_EVENTO_CHECKIN_RECIBIDO, LINK_COLA_ANTROPOMETRIA_COACH };
 
 /**
- * Registers an antropometric evaluation applying hybrid RBAC (ADR-001, RF-003):
- * - On-site (by Coach): verified on-site origin, approved state, immediate fechaAprobacionUtc.
- * - Remote (by Student): self-reported origin, pending-approval state, null fechaAprobacionUtc.
- * - On-site (by Student): 403 Forbidden (read-only).
- * - Remote (by Student) OUTSIDE the RN-04/§6 window: 400 with the real window detail.
+ * Registra una evaluación antropométrica aplicando RBAC híbrido (ADR-001, RF-003):
+ * - Presencial (por Coach): origen presencial_verificado, estado aprobado, fechaAprobacionUtc inmediata.
+ * - Remoto (por Alumno): origen remoto_autoreporte, estado pendiente_aprobacion, fechaAprobacionUtc nula.
+ * - Presencial (por Alumno): 403 Forbidden (solo lectura).
+ * - Remoto (por Alumno) FUERA de la ventana de RN-04/§6: 400 con el detalle de la ventana real.
  *
- * WU RF-003a: the window is evaluated ONLY for the student self-report and ONLY when
- * the coach already configured periodicity + anchor (without a calendar there is no
- * window and the previous behavior is kept). The timezone is the user's
- * (`usuarios.timezone`).
+ * WU RF-003a: la ventana se evalúa SOLO para el autoreporte del alumno y SOLO cuando el coach ya
+ * configuró periodicidad + ancla (sin calendario no hay ventana y se conserva el comportamiento
+ * previo). La zona horaria es la del usuario (`usuarios.timezone`).
  */
 export async function registrarCheckin(
   ctx: ContextoAntropometria,

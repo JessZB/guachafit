@@ -28,8 +28,25 @@ import { hidratarPlanActivo as hidratarPlanActivoBase } from './hidratar-plan-ac
 import { sanitizarPerfilParaRol } from './sanitizar-perfil';
 
 /**
- * Coach student directory listing (RF-011, RF-012). Moved verbatim from
- * `AlumnosService.listarAlumnos` (P3: same query order and shape).
+ * Listar Directorio de Alumnos del Entrenador (RF-011, RF-012)
+ *
+ * WU19: respuesta paginada `{ items, total, limit, offset, resumen }`.
+ * - `items`: página actual (default 100, techo 100) con la búsqueda y filtros aplicados EN SQL,
+ *   con orden estable por `createdAtUtc` + `id` para que el offset no repita ni salte filas.
+ * - `total`: COUNT real de filas que cumplen la consulta (sin traer el resto a memoria).
+ * - `resumen`: contadores de la cartera COMPLETA (COUNT en el servidor) para los KPIs del
+ *   directorio; no dependen de la página, la búsqueda ni los filtros.
+ *
+ * WU24: la búsqueda server-side acepta `q` (canónico) o `busqueda` (alias legado) y combina
+ * ILIKE con escape de `%`, `_` y `\` sobre nombre/apellido/correo/documento.
+ *
+ * WU25a: `soloArchivados` (pestaña dedicada de archivados) y `semaforoPago` (pestaña "En Mora")
+ * se resuelven también en SQL, ANTES del `limit`/`offset`, para que la paginación numerada sea
+ * coherente entre páginas. El `resumen` nunca se altera por los filtros.
+ *
+ * `incluirArchivados: true` devuelve la cartera completa (vigentes + archivados); el default
+ * `false` mantiene la semántica histórica de solo alumnos vigentes.
+ * Movido sin cambios desde `AlumnosService.listarAlumnos` (P3: mismo orden y forma de consultas).
  */
 export async function listarAlumnos(
   ctx: ContextoCasosAlumnos,

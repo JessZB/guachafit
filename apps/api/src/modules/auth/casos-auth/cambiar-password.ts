@@ -17,16 +17,16 @@ import { AvisoPasswordCambiadaEvent } from '../../notificaciones/events/eventos-
 import type { ContextoCasosAuth } from './contexto-casos';
 
 /**
- * `POST /usuarios/me/password` (RF-018 RN-08). Requires the current password
- * and a different new one. Stamps `passwordCambiadaEn` (refresh rejects
- * sessions opened before, except the current one, which gets new tokens
- * issued in the same second) and notifies by email.
+ * `POST /usuarios/me/password` (RF-018 RN-08).
  *
- * Whoever rotates the password may be kicking out an intruder: ALL links
- * granting account access that the intruder could have requested with the
- * stolen session are voided (recovery and, above all, a pending email change
- * towards their own inbox, whose confirmation is public).
- * Moved verbatim (P3).
+ * Exige la contraseña actual y una nueva distinta. Marca `passwordCambiadaEn` (el refresh
+ * rechaza las sesiones abiertas antes, salvo la actual, que recibe tokens nuevos emitidos en el
+ * mismo segundo) y avisa por correo.
+ *
+ * Quien rota la contraseña puede estar echando a un intruso: se anulan TODOS los enlaces que
+ * dan acceso a la cuenta y que el intruso pudo pedir con la sesión robada (recuperación y, sobre
+ * todo, un cambio de correo pendiente hacia su propio buzón, cuya confirmación es pública).
+ * Movido sin cambios (P3).
  */
 export async function cambiarPassword(
   ctx: ContextoCasosAuth,

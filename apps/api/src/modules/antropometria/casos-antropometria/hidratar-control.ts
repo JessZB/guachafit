@@ -16,10 +16,9 @@ import {
 } from './antropometria-reglas';
 
 /**
- * RNF-001: returns the photo only if its key belongs to the student's
- * antropometria vault. A row with a foreign key (accepted before the write
- * guard) is not signed and is logged without student data or the key, so it
- * can be cleaned up.
+ * RNF-001: devuelve la foto solo si su clave pertenece a la bóveda de antropometría del alumno.
+ * Una fila con clave ajena (aceptada antes de validar la escritura) no se firma y se registra
+ * sin datos del alumno ni la clave, para poder sanearla.
  */
 export function fotoFirmable<T extends { id: string; storageKey: string }>(
   ctx: ContextoAntropometria,
@@ -48,7 +47,7 @@ export async function hidratarControl(
       .where(eq(fotosAntropometria.controlId, control.id))
       .orderBy(asc(fotosAntropometria.createdAtUtc));
 
-    // Defense in depth (RNF-001): only keys of this student's vault are signed.
+    // Defensa en profundidad (RNF-001): solo se firman claves de la bóveda de este alumno.
     const firmables = fotosRows.filter((f) => fotoFirmable(ctx, f, control.alumnoId));
     fotos = await Promise.all(
       firmables.map(async (f) => ({
@@ -62,9 +61,9 @@ export async function hidratarControl(
     );
   }
 
-  // RF-003 RN-02 (WU RF-003a): legacy aliases resolved on read. `brazoCm`/`musloCm` keep
-  // the historical data (controls before the new columns) and the new model also exposes
-  // them as `brazoRelajadoCm`/`musloMedioCm`; the new columns take precedence.
+  // RF-003 RN-02 (WU RF-003a): alias legados resueltos en lectura. `brazoCm`/`musloCm` conservan
+  // los datos históricos (controles previos a las columnas nuevas) y el modelo nuevo los expone
+  // también como `brazoRelajadoCm`/`musloMedioCm`; las columnas nuevas tienen precedencia.
   const perimetros = construirPerimetrosDTO(control);
   const pliegues = construirPlieguesDTO(control);
 

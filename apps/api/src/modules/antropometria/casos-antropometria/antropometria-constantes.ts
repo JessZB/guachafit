@@ -1,8 +1,8 @@
 /**
- * Public contract constants of the antropometria module.
- * Imported by the facade (re-exported for specs) and by the use cases.
- * Moved verbatim from `antropometria.service.ts` (P1: the specs import two
- * of them from the service path).
+ * Constantes del contrato público del módulo de antropometría.
+ * La fachada las importa (y las reexporta para los specs) y también los casos de uso.
+ * Movido sin cambios desde `antropometria.service.ts` (P1: los specs importan dos
+ * de ellas desde la ruta del servicio).
  */
 
 /** RF-003 Escenario 2 (cierre): aviso al coach del check-in remoto pendiente de validación. */

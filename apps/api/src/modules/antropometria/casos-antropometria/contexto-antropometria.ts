@@ -4,7 +4,7 @@ import type { Database, WithTenantFn } from '@guachafit/database';
 import type { Rol } from '@guachafit/shared';
 import type { R2StorageService } from '../r2-storage.service';
 
-/** Actor of the request, as received by the facade methods. */
+/** Actor de la petición, tal como lo reciben los métodos de la fachada. */
 export interface CallerAntropometria {
   id: string;
   rol: Rol;
@@ -12,9 +12,9 @@ export interface CallerAntropometria {
 }
 
 /**
- * Explicit dependency context (P2): the facade builds it once in its
- * constructor and every use case receives it as its first argument.
- * No new Nest providers are registered.
+ * Contexto explícito de dependencias (P2): la fachada lo construye una vez en su
+ * constructor y cada caso de uso lo recibe como primer argumento.
+ * No se registra ningún provider nuevo de Nest.
  */
 export interface ContextoAntropometria {
   db: Database;

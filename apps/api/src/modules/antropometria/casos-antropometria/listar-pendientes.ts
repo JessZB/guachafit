@@ -7,12 +7,11 @@ import type { ContextoAntropometria } from './contexto-antropometria';
 import { hidratarControl } from './hidratar-control';
 
 /**
- * Lists controls pending validation for the coach inbox.
+ * Lista controles pendientes de validación para la bandeja del entrenador.
  *
- * WU24b: `{ items, total, limit, offset }` envelope with a real COUNT in SQL.
- * The current order (descending `fechaEvaluacion`) is kept with a stable
- * tiebreak by `createdAtUtc`/`id` so `offset` advances without repeating or
- * skipping rows.
+ * WU24b: envelope `{ items, total, limit, offset }` con COUNT real en SQL. El orden actual
+ * (`fechaEvaluacion` descendente) se conserva con desempate estable por `createdAtUtc`/`id`
+ * para que `offset` avance sin repetir ni saltar filas.
  */
 export async function listarPendientes(
   ctx: ContextoAntropometria,

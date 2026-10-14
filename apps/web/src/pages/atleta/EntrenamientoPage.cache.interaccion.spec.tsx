@@ -186,22 +186,25 @@ describe('EntrenamientoPage · sesión EN_PROGRESO desde la caché sin conexión
 
   it(
     '(c) "Hacer ahora" en el ejercicio 2 guarda el índice 1 en sessionStorage',
-    // W-52-2: two chained `findByRole` waits (up to 5000 ms each) plus the Dexie
-    // read and render exceed the default `testTimeout` (5000 ms) when the machine
-    // is loaded (full suite or parallel suites). The budget (20 s) covers the sum
-    // of all capped waits (5 s + 3x2 s retries + 5 s) without changing any assertion.
+    // W-52-2: dos esperas `findByRole` encadenadas (hasta 5000 ms cada una) más la
+    // lectura Dexie y el render superan el `testTimeout` por defecto (5000 ms) cuando la
+    // máquina va cargada (suite completa o suites en paralelo). El presupuesto (20 s) cubre la
+    // suma de todas las esperas acotadas (5 s + 3x2 s de reintentos + 5 s) sin cambiar ninguna
+    // aserción.
     { timeout: 20000 },
     async () => {
       await prepararCache(crearSesionEnProgreso());
       render(<EntrenamientoPage />);
       await screen.findByRole('region', { name: 'Entrenamiento en foco' }, { timeout: 5000 });
 
-      // W-52-2: under load the discrete click on "Ver entrenamiento completo" is
-      // occasionally swallowed (the focus view stays mounted, no transition ever
-      // happens). Re-dispatch it — bounded, with active waiting only — until the
-      // list view actually renders. The behavioral assertion below is unchanged:
-      // the same "Hacer ahora" button is clicked and the same sessionStorage
-      // value is expected.
+      // W-52-2: bajo carga, el clic en "Ver entrenamiento completo" a veces no conmuta:
+      // la vista de foco sigue montada con el botón presente y la lista nunca aparece (en el
+      // DOM del fallo se ve la sección "Entrenamiento en foco" con "Ejercicio 1 de 3", sin
+      // "Volver al enfoque" ni "Hacer ahora"). La transición es un `setVistaEnCurso('lista')`
+      // de un solo sentido (idempotente, no alterna): reintentar el clic es seguro y no oculta
+      // ningún defecto de alternancia. Se intentó la espera determinista de un solo clic
+      // (prompt 116, iteraciones 1-2): falla ~15% en solo (9/10 canónico) con la misma firma,
+      // así que se conserva el reintento acotado y W1 queda aceptado con evidencia, sin BLOCKER.
       for (let intento = 0; intento < 3; intento++) {
         const verLista = screen.queryByRole('button', { name: 'Ver entrenamiento completo' });
         if (verLista) fireEvent.click(verLista);

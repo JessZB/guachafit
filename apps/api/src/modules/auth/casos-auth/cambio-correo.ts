@@ -34,12 +34,13 @@ import {
 import type { ContextoCasosAuth } from './contexto-casos';
 
 /**
- * `POST /usuarios/me/correo` (RF-018 RN-04/RN-05). With the correct current
- * password and a free email, stores the pending email with the hash of a
- * single-use link (24 h) and sends it to the NEW email. A new request replaces
- * the previous one. The copyable link is only returned outside production and
- * when the email did not go out: in production returning it would let someone
- * confirm someone else's email. Moved verbatim (P3).
+ * `POST /usuarios/me/correo` (RF-018 RN-04/RN-05).
+ *
+ * Con la contraseña actual correcta y un correo libre, guarda el correo pendiente con el hash de
+ * un enlace de un solo uso (24 h) y lo envía al correo NUEVO. Una solicitud nueva reemplaza a la
+ * anterior. El enlace copiable solo se devuelve fuera de producción y si el correo no salió: en
+ * producción devolverlo dejaría confirmar un correo ajeno.
+ * Movido sin cambios (P3).
  */
 export async function solicitarCambioCorreo(
   ctx: ContextoCasosAuth,
@@ -91,7 +92,7 @@ export async function solicitarCambioCorreo(
   return respuesta;
 }
 
-/** `DELETE /usuarios/me/correo-pendiente` (RF-018 RN-05): idempotent. */
+/** `DELETE /usuarios/me/correo-pendiente` (RF-018 RN-05): idempotente. */
 export async function cancelarCambioCorreoPendiente(
   ctx: Pick<ContextoCasosAuth, 'db'>,
   usuarioId: string
@@ -109,19 +110,19 @@ export async function cancelarCambioCorreoPendiente(
 }
 
 /**
- * `POST /auth/confirmar-cambio-correo` (RF-018 RN-05/RN-06), public. Looks the
- * link up by hash and life, checks the pending email is still free and applies
- * it with a hash-conditioned UPDATE (two simultaneous redeems cannot use it
- * twice). Notifies the PREVIOUS email.
+ * `POST /auth/confirmar-cambio-correo` (RF-018 RN-05/RN-06), público.
  *
- * - Same access rule as the other links (`verificarCuentaConAcceso`): a
- *   disabled account, an archived alumno or a license-less coach do not
- *   confirm (invalid link).
- * - When another account takes the email between the check and the UPDATE,
- *   the unique index answers (23505) and is mapped to the same clear 409.
- * - The pending recovery link is voided: it went to the PREVIOUS inbox, which
- *   is no longer the access one.
- * Moved verbatim (P3).
+ * Busca el enlace por su hash y vigencia, comprueba que el correo pendiente siga libre y lo
+ * aplica con un UPDATE condicionado al hash (dos canjes simultáneos no lo usan dos veces). Avisa
+ * al correo ANTERIOR.
+ *
+ * - Misma regla de acceso que el resto de los enlaces (`verificarCuentaConAcceso`): una cuenta
+ *   deshabilitada, un alumno archivado o un coach sin licencia no confirman (enlace inválido).
+ * - Si otra cuenta toma el correo entre la comprobación y el UPDATE, el índice único responde
+ *   (23505) y se traduce al mismo 409 claro.
+ * - El enlace de recuperación pendiente se anula: viajó al buzón ANTERIOR, que ya no es el de
+ *   acceso.
+ * Movido sin cambios (P3).
  */
 export async function confirmarCambioCorreo(
   ctx: ContextoCasosAuth,

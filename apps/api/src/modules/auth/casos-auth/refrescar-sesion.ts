@@ -17,7 +17,10 @@ import {
 } from './acceso-comun';
 import type { ContextoCasosAuth } from './contexto-casos';
 
-/** Access-token renewal via refresh token. Moved verbatim (P3). */
+/**
+ * Renovación de token de acceso mediante Refresh Token.
+ * Movido sin cambios (P3).
+ */
 export async function refrescarSesion(ctx: ContextoCasosAuth, refreshToken: string) {
   let decoded: any;
   try {
@@ -31,14 +34,14 @@ export async function refrescarSesion(ctx: ContextoCasosAuth, refreshToken: stri
     .from(usuarios)
     .where(eq(usuarios.id, decoded.sub));
 
-  // "Bloqueado total" (RF-012): inactive or blocked accounts do not renew tokens.
+  // "Bloqueado total" (RF-012): inactivo o bloqueado no renueva tokens.
   if (!usuario || !usuario.activo || usuario.estado === EstadoUsuario.BLOQUEADO) {
     throw new UnauthorizedException(MENSAJE_SESION_VENCIDA);
   }
 
-  // Whoever resets the password may be kicking out an intruder: sessions opened
-  // before the change no longer renew (`iat` in seconds; a refresh issued in
-  // the same second as the change stays valid).
+  // Quien restablece la contraseña puede estar echando a un intruso: las sesiones abiertas
+  // antes del cambio ya no se
+  // renuevan (`iat` en segundos; un refresh emitido en el mismo segundo del cambio sigue válido).
   if (
     usuario.passwordCambiadaEn &&
     typeof decoded.iat === 'number' &&
@@ -50,24 +53,23 @@ export async function refrescarSesion(ctx: ContextoCasosAuth, refreshToken: stri
   let entrenadorId: string | undefined;
   if (usuario.rol === Rol.ENTRENADOR) {
     entrenadorId = usuario.id;
-    // RF-010 section 6: the license is re-verified on every refresh; a
-    // suspended account does not renew.
+    // RF-010 §6: la licencia se re-verifica en cada refresh; una cuenta suspendida no renueva.
     await verificarLicenciaEntrenadorActiva(ctx, usuario.id);
   } else if (usuario.rol === Rol.ALUMNO) {
-    // RNF-003/ADR-011 (stage 3): refresh — self profile read with RLS.
+    // RNF-003/ADR-011 (etapa 3): refresh — lectura self del perfil con RLS.
     const [perfil] = await ctx.withTenant({ usuarioId: usuario.id }, (tx) =>
       tx.select().from(perfilesAlumno).where(eq(perfilesAlumno.usuarioId, usuario.id))
     );
 
-    // RF-012 RN-02: soft delete also revokes token renewal.
+    // RF-012 RN-02: la baja lógica también revoca la renovación de tokens.
     if (perfil?.deletedAtUtc) {
       throw new UnauthorizedException(MENSAJE_CUENTA_ARCHIVADA);
     }
 
     entrenadorId = perfil?.entrenadorId;
 
-    // RF-010 section 6 (CASCADA-COACH): the alumno refresh re-verifies the
-    // coach; a disabled account or suspended license cuts renewal at once.
+    // RF-010 §6 (CASCADA-COACH): el refresh del alumno re-verifica a su entrenador; una cuenta
+    // deshabilitada o una licencia suspendida cortan la renovación de inmediato.
     if (entrenadorId) {
       await verificarEntrenadorOperable(ctx, entrenadorId);
     }

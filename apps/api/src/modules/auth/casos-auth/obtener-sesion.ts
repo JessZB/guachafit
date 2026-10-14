@@ -19,11 +19,13 @@ import {
 import type { ContextoCasosAuth } from './contexto-casos';
 
 /**
- * RF-003 RN-03/RN-04 (WU RF-003a/b): fresh session of the authenticated user
- * for `GET /auth/me`. Unlike reading the JWT claim (15-minute life), the
- * profile modality and anthropometric calendar are resolved live: a coach
- * changing the alumno modality or periodicity is reflected immediately.
- * Moved verbatim (P3).
+ * RF-003 RN-03/RN-04 (WU RF-003a/b): sesión fresca del usuario autenticado para `GET /auth/me`.
+ *
+ * A diferencia de leer el claim del JWT (15 min de vida), aquí se resuelve la modalidad y el
+ * calendario antropométrico del perfil en el momento: un coach que cambia la modalidad o la
+ * periodicidad del alumno se refleja de inmediato y el formulario de la web pasa a solo lectura
+ * (o avisa de su ventana) sin esperar la rotación del token.
+ * Movido sin cambios (P3).
  */
 export async function obtenerSesion(
   ctx: Pick<ContextoCasosAuth, 'db' | 'withTenant'>,
@@ -43,17 +45,17 @@ export async function obtenerSesion(
   let modalidad: Modalidad | null = null;
   let periodicidadAntropometria: PeriodicidadAntropometria | null = null;
   let antropometriaInicio: string | null = null;
-  // LOTE API-N2: alumno profile zone (nutrition-report window and deadline).
+  // LOTE API-N2: zona del perfil del alumno (ventana y plazo del reporte nutricional).
   let zonaHoraria: string | null = null;
 
   if (usuario.rol === Rol.ENTRENADOR) {
     entrenadorId = usuario.id;
-    // RF-010 section 6: `/auth/me` is the web verification cycle. A suspended
-    // license (or a disabled account, already rejected above) closes the
-    // session without waiting for the access-token TTL.
+    // RF-010 §6: `/auth/me` es el ciclo de verificación de la web. Una licencia suspendida (o
+    // una cuenta deshabilitada, ya rechazada arriba) cierra la sesión sin esperar al TTL del
+    // access token.
     await verificarLicenciaEntrenadorActiva(ctx, usuario.id);
   } else if (usuario.rol === Rol.ALUMNO) {
-    // RNF-003/ADR-011 (stage 3): self profile read with RLS (`current_usuario_id`).
+    // RNF-003/ADR-011 (etapa 3): lectura self del perfil con RLS (`current_usuario_id`).
     const [perfil] = await ctx.withTenant({ usuarioId: usuario.id }, (tx) =>
       tx
         .select({
@@ -76,15 +78,13 @@ export async function obtenerSesion(
     zonaHoraria = perfil ? perfil.zonaHoraria ?? ZONA_HORARIA_ALUMNO_POR_DEFECTO : null;
     entrenadorId = perfil?.entrenadorId;
     modalidad = perfil?.modalidad ?? null;
-    // RF-003 RN-01 (WU RF-003b): the calendar travels with the session so the
-    // alumno web can warn about the check-in window without the
-    // `perfiles_alumno` UUID.
+    // RF-003 RN-01 (WU RF-003b): el calendario viaja con la sesión para que la web del alumno
+    // pueda avisar de su ventana de check-in sin necesitar el UUID de `perfiles_alumno`.
     periodicidadAntropometria = perfil?.periodicidadAntropometria ?? null;
     antropometriaInicio = perfil?.antropometriaInicio ?? null;
 
-    // RF-010 section 6 (CASCADA-COACH): the alumno `/auth/me` also reflects
-    // the cascade; when the coach becomes inoperable, the web closes the
-    // session without waiting for the access-token TTL.
+    // RF-010 §6 (CASCADA-COACH): `/auth/me` del alumno también refleja la cascada; si su
+    // entrenador queda inoperable, la web cierra la sesión sin esperar al TTL del access token.
     if (entrenadorId) {
       await verificarEntrenadorOperable(ctx, entrenadorId);
     }

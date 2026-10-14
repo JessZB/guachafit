@@ -20,10 +20,11 @@ import {
 import type { ContextoCasosAuth } from './contexto-casos';
 
 /**
- * Sets the final password from an SHA-256 invitation token (RF-011, ARCH-003
- * section 2.1). WU-E: a valid token alone does not enable activation.
- * Inactive or blocked accounts (RF-012 "bloqueado total") and soft-deleted
- * alumnos are rejected without consuming the token. Moved verbatim (P3).
+ * Establece contraseña definitiva a partir de token SHA-256 de invitación (RF-011, ARCH-003 §2.1).
+ *
+ * WU-E: un token vigente NO habilita por sí solo la activación. Se rechazan cuentas inactivas o
+ * bloqueadas (RF-012 "bloqueado total") y alumnos con baja lógica, sin consumir el token.
+ * Movido sin cambios (P3).
  */
 export async function establecerPasswordConToken(
   ctx: ContextoCasosAuth,
@@ -52,25 +53,23 @@ export async function establecerPasswordConToken(
     throw new UnauthorizedException(MENSAJE_CUENTA_DESACTIVADA);
   }
 
-  // Profile resolution happens BEFORE writing: an archived alumno does not
-  // activate the account.
+  // La resolución del perfil ocurre ANTES de escribir: un alumno archivado no activa su cuenta.
   let entrenadorId: string | undefined;
   let modalidad: Modalidad | null = null;
-  // ADR-019: the profile zone travels with the session (as in `/auth/me`) so
-  // the web counts the nutrition-report window with the server zone from first render.
+  // ADR-019: la zona del perfil viaja con la sesión (como en `/auth/me`) para que la web cuente
+  // la ventana del reporte nutricional con la misma zona que el servidor desde el primer render.
   let zonaHoraria: string | null = null;
   if (usuario.rol === Rol.ENTRENADOR) {
-    // RF-010 section 6: a suspended license cannot redeem the invitation
-    // either (redeem issues tokens; it would be a third session path without
-    // the verification cycle).
+    // RF-010 §6: una licencia suspendida tampoco puede canjear la invitación (el canje emite
+    // tokens; sería una tercera vía de sesión sin el ciclo de verificación).
     await verificarLicenciaEntrenadorActiva(ctx, usuario.id);
   } else if (usuario.rol === Rol.ALUMNO) {
-    // RNF-003/ADR-011 (stage 3): invitation redeem — self profile read with RLS.
+    // RNF-003/ADR-011 (etapa 3): canje de invitación — lectura self del perfil con RLS.
     const [perfil] = await ctx.withTenant({ usuarioId: usuario.id }, (tx) =>
       tx.select().from(perfilesAlumno).where(eq(perfilesAlumno.usuarioId, usuario.id))
     );
 
-    // RF-012 RN-02: soft delete revokes access; same message as login.
+    // RF-012 RN-02: la baja lógica revoca el acceso; el mensaje es el mismo que en el login.
     if (perfil?.deletedAtUtc) {
       throw new UnauthorizedException(MENSAJE_CUENTA_ARCHIVADA);
     }
@@ -79,8 +78,8 @@ export async function establecerPasswordConToken(
     modalidad = perfil?.modalidad ?? null;
     zonaHoraria = perfil ? perfil.zonaHoraria ?? ZONA_HORARIA_ALUMNO_POR_DEFECTO : null;
 
-    // RF-010 section 6 (CASCADA-COACH): redeem issues a session, so it also
-    // requires an operable coach; the token is not consumed when the cascade blocks.
+    // RF-010 §6 (CASCADA-COACH): el canje emite sesión, así que también exige un entrenador
+    // operable; el token no se consume cuando la cascada bloquea.
     if (entrenadorId) {
       await verificarEntrenadorOperable(ctx, entrenadorId);
     }
@@ -88,7 +87,7 @@ export async function establecerPasswordConToken(
 
   const passwordHash = await ctx.cryptoService.hashPassword(dto.password);
 
-  // Update user: store password and clear token (single use, RNF-003).
+  // Actualizar usuario: guardar contraseña y limpiar token (Un solo uso, RNF-003)
   await ctx.db
     .update(usuarios)
     .set({

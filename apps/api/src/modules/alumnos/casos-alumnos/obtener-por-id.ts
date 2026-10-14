@@ -8,8 +8,8 @@ import { hidratarPlanActivo as hidratarPlanActivoBase } from './hidratar-plan-ac
 import { sanitizarPerfilParaRol } from './sanitizar-perfil';
 
 /**
- * Profile lookup by id with tenancy isolation. Moved verbatim from
- * `AlumnosService.obtenerPorId` (P3).
+ * Obtener perfil por ID con aislamiento de Tenancy.
+ * Movido sin cambios desde `AlumnosService.obtenerPorId` (P3).
  */
 export async function obtenerPorId(
   ctx: ContextoCasosAlumnos,

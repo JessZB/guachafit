@@ -4,8 +4,8 @@ import type { Database, WithTenantFn } from '@guachafit/database';
 import type { CryptoService } from '../../../common/services/crypto.service';
 
 /**
- * Explicit dependency context (P2). Built once in the facade constructor;
- * use cases are plain functions, never Nest providers.
+ * Contexto explícito de dependencias (P2). Se construye una vez en el constructor de la
+ * fachada; los casos de uso son funciones planas, nunca providers de Nest.
  */
 export interface ContextoCasosAuth {
   db: Database;

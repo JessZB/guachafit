@@ -4,8 +4,13 @@ import { CoachPublicoDTO, EstadoLicencia } from '@guachafit/shared';
 import type { ContextoCasosAlumnos } from './contexto-casos';
 
 /**
- * Public resolution of the `coach_code` deep link (RF-011, RN-06/RN-07.1).
- * Moved verbatim from `AlumnosService.resolverCoachPublico` (P3).
+ * Resolución Pública del `coach_code` para el Deep Link de captación (RF-011, RN-06/RN-07.1).
+ *
+ * Solo devuelve identidad comercial del coach cuando el código existe Y el coach está operable
+ * (cuenta habilitada y licencia vigente). Un código inexistente, uno deshabilitado y uno con
+ * licencia suspendida responden igual (404): nunca se filtra qué códigos existen ni cuál de los
+ * dos interruptores falló. No expone datos sensibles (teléfono, capacidad, cartera, etc.).
+ * Movido sin cambios desde `AlumnosService.resolverCoachPublico` (P3).
  */
 export async function resolverCoachPublico(
   ctx: Pick<ContextoCasosAlumnos, 'db'>,

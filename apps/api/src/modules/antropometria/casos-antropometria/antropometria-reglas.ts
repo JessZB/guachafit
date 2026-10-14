@@ -8,8 +8,8 @@ import { R2StorageService } from '../r2-storage.service';
 import type { CallerAntropometria } from './contexto-antropometria';
 
 /**
- * Pure business rules of the antropometria module (no I/O).
- * Extracted verbatim from `antropometria.service.ts` (P3: identical semantics).
+ * Reglas puras de negocio del módulo de antropometría (sin E/S).
+ * Extraído sin cambios de `antropometria.service.ts` (P3: semántica idéntica).
  */
 
 export function toIsoUtcString(date: Date | string | null | undefined): string | null {
@@ -22,9 +22,8 @@ export function toIsoUtcString(date: Date | string | null | undefined): string |
 export const MENSAJE_CONTROL_NO_ENCONTRADO = 'No encontramos esa medición. Actualiza la pantalla.';
 
 /**
- * RNF-001: the key must be an object of THIS student's antropometria vault,
- * with the structure emitted by the presign. Case-insensitive: the contract
- * accepts UUIDs in any case.
+ * RNF-001: la clave es un objeto de la bóveda de antropometría de ESE alumno, con la estructura que
+ * emite el presign. Sin distinguir mayúsculas: el contrato acepta UUID en cualquier caja.
  */
 export function esClaveFotoDelAlumno(storageKey: string, alumnoId: string): boolean {
   return (
@@ -34,10 +33,10 @@ export function esClaveFotoDelAlumno(storageKey: string, alumnoId: string): bool
 }
 
 /**
- * RNF-003/ADR-011: RLS context of the profile according to the request actor.
+ * RNF-003/ADR-011 (etapa 3): contexto RLS del perfil según el actor de la petición.
  * - ALUMNO -> self-select (`current_usuario_id`).
- * - ENTRENADOR -> coach tenant.
- * - SUPERADMIN -> explicit bypass.
+ * - ENTRENADOR -> tenant del coach.
+ * - SUPERADMIN -> bypass explícito.
  */
 export function contextoRlsDeCaller(caller: CallerAntropometria): TenantRlsContext {
   if (caller.rol === Rol.ALUMNO) return { usuarioId: caller.id };
@@ -58,9 +57,8 @@ export interface PerimetroEntrada {
 }
 
 /**
- * RF-003 RN-02: legacy aliases. `brazoCm` is the RELAXED arm and `musloCm` is
- * the MID thigh; the new payload takes precedence and the legacy one keeps
- * working (never both empty).
+ * RF-003 RN-02 (WU RF-003a): alias legados. `brazoCm` = brazo RELAJADO y `musloCm` = muslo
+ * MEDIO; el payload nuevo tiene precedencia y el legado sigue funcionando (nunca ambos vacíos).
  */
 export function resolverAliasPerimetros(perimetro?: PerimetroEntrada | null): {
   brazoRelajadoCm: string | null;
@@ -72,7 +70,7 @@ export function resolverAliasPerimetros(perimetro?: PerimetroEntrada | null): {
   };
 }
 
-// Minimal structural view of a persisted control row (legacy columns included).
+// Vista estructural mínima de una fila de control persistida (incluye columnas legadas).
 export interface FilaControlAntropometrico {
   cuelloCm?: string | null;
   pechoCm?: string | null;
@@ -90,9 +88,9 @@ export interface FilaControlAntropometrico {
 }
 
 /**
- * RF-003 RN-02: legacy aliases resolved on read. `brazoCm`/`musloCm` keep the
- * historical data (controls before the new columns) and the new model also
- * exposes them as `brazoRelajadoCm`/`musloMedioCm`; the new columns win.
+ * RF-003 RN-02 (WU RF-003a): alias legados resueltos en lectura. `brazoCm`/`musloCm` conservan
+ * los datos históricos (controles previos a las columnas nuevas) y el modelo nuevo los expone
+ * también como `brazoRelajadoCm`/`musloMedioCm`; las columnas nuevas tienen precedencia.
  */
 export function construirPerimetrosDTO(
   control: FilaControlAntropometrico

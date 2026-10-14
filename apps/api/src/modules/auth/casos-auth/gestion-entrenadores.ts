@@ -14,18 +14,17 @@ import {
 import type { ContextoCasosAuth } from './contexto-casos';
 
 /**
- * RF-010 RN-01 / section 6 (WU Admin): enables or disables a coach ACCOUNT.
+ * RF-010 RN-01 / §6 (WU Admin): habilita o deshabilita la CUENTA de un entrenador.
  *
- * Rules:
- * - The collection is coaches: an alumno id (or a missing one) answers 404.
- * - The Superadmin cannot disable itself (400).
- * - Idempotent: repeating the same state does not write and returns
- *   `cambioAplicado: false`.
+ * Reglas:
+ * - La colección es de entrenadores: un id de alumno (o inexistente) responde 404.
+ * - El Superadmin no puede deshabilitarse a sí mismo (400).
+ * - Idempotente: repetir el mismo estado no escribe y devuelve `cambioAplicado: false`.
  *
- * Disabling revokes the session at the next verification cycle: login and
- * refresh reject it at once and `/auth/me` closes the web session; the
- * already-issued access token expires in 15 minutes at most.
- * Moved verbatim (P3).
+ * La deshabilitación revoca la sesión en el siguiente ciclo de verificación: login y refresh
+ * la rechazan de inmediato y `/auth/me` cierra la sesión de la web; el access token ya emitido
+ * expira como máximo en 15 minutos (ver `verificarLicenciaEntrenadorActiva`).
+ * Movido sin cambios (P3).
  */
 export async function cambiarEstadoEntrenador(
   ctx: Pick<ContextoCasosAuth, 'db'>,
@@ -74,12 +73,12 @@ export async function cambiarEstadoEntrenador(
 }
 
 /**
- * RF-010 RN-01 (WU Admin): activates or suspends a coach LICENSE.
+ * RF-010 RN-01 (WU Admin): activa o suspende la LICENCIA de un entrenador.
  *
- * Real effects of the `SUSPENDIDA_SUPERADMIN` state (same as a disabled
- * account): the public `coach_code` resolution stops resolving (RF-011
- * RN-07.1), coach login and refresh are rejected and `/auth/me` closes the
- * session. Idempotent. Moved verbatim (P3).
+ * Efectos reales del estado `SUSPENDIDA_SUPERADMIN` (los mismos que la cuenta deshabilitada):
+ * la resolución pública del `coach_code` deja de resolver (RF-011 RN-07.1), el login y el
+ * refresh del coach se rechazan y `/auth/me` cierra su sesión. Idempotente.
+ * Movido sin cambios (P3).
  */
 export async function cambiarLicenciaEntrenador(
   ctx: Pick<ContextoCasosAuth, 'db'>,

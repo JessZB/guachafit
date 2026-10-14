@@ -1,6 +1,6 @@
 /**
- * Pure age calculation (RF-011, RN-02). No I/O, no Nest dependencies.
- * Moved verbatim from `AlumnosService.calcularEdad` (P3: identical semantics).
+ * Cálculo puro de edad (RF-011, RN-02). Sin E/S ni dependencias de Nest.
+ * Movido sin cambios desde `AlumnosService.calcularEdad` (P3: semántica idéntica).
  */
 export function calcularEdadDesdeFecha(fechaNacimiento: string): number {
   const nacimiento = new Date(fechaNacimiento);

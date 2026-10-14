@@ -9,12 +9,14 @@ import { verificarCuentaConAcceso } from './acceso-comun';
 import type { ContextoCasosAuth } from './contexto-casos';
 
 /**
- * `POST /auth/restablecer-password`. Validates the token (hash, live) and the
- * account (same access rule as login), applies the activation password policy
- * (shared contract) and consumes the token in the SAME hash-conditioned
- * UPDATE: two simultaneous redeems cannot use it twice. Also voids a pending
- * invitation and stamps `passwordCambiadaEn` (refresh rejects prior sessions).
- * Issues no session: the web goes to sign-in. Moved verbatim (P3).
+ * `POST /auth/restablecer-password`.
+ *
+ * Valida el token (hash, vigente) y la cuenta (misma regla de acceso que el login), aplica la
+ * política de contraseña de la activación (contrato compartido) y consume el token en el MISMO
+ * UPDATE condicionado al hash: dos canjes simultáneos no pueden usarlo dos veces. También anula
+ * una invitación pendiente y marca `passwordCambiadaEn` (el refresh rechaza sesiones previas).
+ * No emite sesión: la web lleva al inicio de sesión.
+ * Movido sin cambios (P3).
  */
 export async function restablecerPassword(
   ctx: Pick<ContextoCasosAuth, 'cryptoService' | 'db' | 'withTenant'>,

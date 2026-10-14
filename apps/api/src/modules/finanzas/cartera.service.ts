@@ -49,13 +49,11 @@ import {
   TIPO_EVENTO_RECORDATORIO_MANUAL,
   HORAS_COOLDOWN_RECORDATORIO_MANUAL,
 } from './casos-cartera/mensaje-recordatorio-reglas';
-import { proyectarSaldoCon } from './casos-cartera/proyectar-saldo-reglas';
 import type { ContextoCartera, ContextoTasa } from './casos-cartera/contexto-cartera';
 import { calcularResumenCartera } from './casos-cartera/calcular-resumen-cartera';
 import { listarCuotasPorUrgencia as listarCuotasPorUrgenciaCaso } from './casos-cartera/listar-cuotas-urgencia';
 import { listarRevisionCartera } from './casos-cartera/listar-revision-cartera';
 import { listarAlDiaCartera } from './casos-cartera/listar-al-dia-cartera';
-import { obtenerUltimasGestiones as obtenerUltimasGestionesCaso } from './casos-cartera/obtener-ultimas-gestiones';
 import { enviarRecordatorioManual as enviarRecordatorioManualCaso } from './casos-cartera/enviar-recordatorio-manual';
 
 export type { DatosMensajeRecordatorioManual };
@@ -225,27 +223,5 @@ export class CarteraService {
     clienteId: string
   ): Promise<RecordatorioManualResultadoDTO> {
     return enviarRecordatorioManualCaso(this.ctx, entrenadorId, clienteId);
-  }
-
-  /** Último recordatorio manual por alumno (para la columna "última gestión" de la lista). */
-  private async obtenerUltimasGestiones(ids: string[]): Promise<Map<string, string>> {
-    return obtenerUltimasGestionesCaso(this.ctx, ids);
-  }
-
-  /**
-   * Proyección informativa en Bs: override del alumno > tasa activa del coach.
-   * Sin tasa utilizable devuelve `null` (nunca una tasa inventada).
-   */
-  private proyectarSaldo(
-    saldoUsd: string,
-    tasaOverride: string | null,
-    tasaBase: string | null
-  ): { tasaAplicada: string | null; saldoPendienteBs: string | null } {
-    return proyectarSaldoCon(
-      (saldo, tasa) => this.finanzasService.proyectarVES(saldo, tasa),
-      saldoUsd,
-      tasaOverride,
-      tasaBase
-    );
   }
 }

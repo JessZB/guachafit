@@ -53,8 +53,8 @@ export class AlumnosService {
   private readonly withTenant: WithTenantFn;
 
   /**
-   * P2: explicit dependency context for the plain-function use cases,
-   * built once here. Never registered as Nest providers.
+   * P2: contexto explícito de dependencias para los casos de uso en funciones planas,
+   * construido una vez aquí. Nunca se registra como provider de Nest.
    */
   private readonly casos: ContextoCasosAlumnos;
 
@@ -78,7 +78,8 @@ export class AlumnosService {
       withTenant: this.withTenant,
       auditoria: this.auditoria,
       logger: this.logger,
-      // Late-bound so specs stubbing the private keep working (P1).
+      // Enlace tardío: `api3-integridad-datos.spec.ts:431` sustituye este privado con `vi.fn`,
+      // así que se resuelve en cada llamada para que ese spec siga funcionando (P1).
       hidratarPlanActivo: (tx, entrenadorId, ids) => this.hidratarPlanActivo(tx, entrenadorId, ids),
     };
   }

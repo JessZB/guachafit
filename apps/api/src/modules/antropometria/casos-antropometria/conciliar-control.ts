@@ -14,8 +14,7 @@ import { MENSAJE_CONTROL_NO_ENCONTRADO } from './antropometria-reglas';
 import { obtenerControlPorIdInterno } from './hidratar-control';
 
 /**
- * Conciliation of a remote check-in by the coach (approval or rejection with
- * a mandatory reason).
+ * Conciliación de check-in remoto por el entrenador (aprobación o rechazo con motivo obligatorio).
  */
 export async function conciliarControl(
   ctx: ContextoAntropometria,

@@ -19,9 +19,9 @@ export interface ComparativaAngularResultadoDTO extends ComparativaAngularDTO {
 }
 
 /**
- * Angular photo comparator (Week A vs Week B) (RF-004).
- * Validates Approved state on both dates and generates presigned GET URLs with 900s TTL.
- * Handles missing perspectives without throwing a 500.
+ * Comparador fotográfico angular (Semana A vs Semana B) (RF-004).
+ * Valida estado Aprobado en ambas fechas y genera presigned GET URLs con TTL 900s.
+ * Maneja perspectivas faltantes sin lanzar error 500.
  */
 export async function obtenerComparativaFotografica(
   ctx: ContextoAntropometria,

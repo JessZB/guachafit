@@ -18,8 +18,21 @@ export interface PlanActivoInfo {
 }
 
 /**
- * RF-005: hydrates the active plan and agreed price for a batch of students.
- * Moved verbatim from `AlumnosService.hidratarPlanActivo` (P3).
+ * RF-005: hidrata el "plan activo" y el precio acordado de un lote de alumnos.
+ *
+ * Semántica (el plan sale de datos reales, nunca de un valor inventado):
+ * 0. Suscripción del alumno (`perfiles_alumno.plan_suscrito_id`, M5-L1): es el plan asignado y
+ *    gana sobre todo lo demás; el precio acordado sale del override de ESE plan (o `null`).
+ * 1. Sin suscripción, override vigente del alumno (el más reciente si tuviera varios): define
+ *    plan activo, nombre del plan y `precioAcordadoUsd` (puede ser 0.00 en becados).
+ * 2. Sin override: el plan de la ÚLTIMA cuota emitida por el coach (la deuda vigente describe
+ *    el plan contratado). `precioAcordadoOverride` queda `null` (hereda precio del catálogo).
+ * 3. Sin nada de lo anterior: sin plan (los campos quedan `null` y la UI dice "Sin plan asignado").
+ *
+ * El aislamiento de tenant se garantiza filtrando por los planes y cuotas del propio entrenador;
+ * se resuelve con consultas en lote (sin N+1) sobre las tablas `overrides_cliente_plan`,
+ * `planes_membresia` y `cuotas_membresia`.
+ * Movido sin cambios desde `AlumnosService.hidratarPlanActivo` (P3).
  */
 export async function hidratarPlanActivo(
   tx: TenantTransaction,

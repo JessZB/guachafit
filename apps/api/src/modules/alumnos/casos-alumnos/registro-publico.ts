@@ -11,8 +11,11 @@ import { AlumnoRegistradoEvent } from '../../notificaciones/events/eventos-notif
 import type { ContextoCasosAlumnos } from './contexto-casos';
 
 /**
- * WU-E (RF-011 RN-07.4): publishes the "new student registered" domain event.
- * Moved verbatim from `AlumnosService.notificarCoachNuevoAlumno` (P3).
+ * WU-E (RF-011 RN-07.4): publica el evento de dominio "Nuevo alumno registrado" hacia el coach.
+ * La categoría `ALUMNOS` ("Nuevos Registros" en RF-015 §B) se persiste siempre en la bandeja
+ * In-App (RF-014 RN-04); los canales externos quedan deshabilitados hasta que RF-015 defina
+ * sus columnas de preferencia (no se reutilizan las de otra categoría).
+ * Movido sin cambios desde `AlumnosService.notificarCoachNuevoAlumno` (P3).
  */
 function notificarCoachNuevoAlumno(
   ctx: Pick<ContextoCasosAlumnos, 'eventEmitter' | 'logger'>,
@@ -60,8 +63,11 @@ function notificarCoachNuevoAlumno(
 }
 
 /**
- * Self-service public registration via the coachCode deep link (RF-011, path B).
- * Moved verbatim from `AlumnosService.registroPublico` (P3).
+ * Registro Público Autónomo vía Deep Link coachCode (RF-011, Vía B)
+ *
+ * RN-07: valida el código y la operabilidad del coach (cuenta habilitada y licencia vigente),
+ * crea la cuenta vinculada al tenant y notifica al coach del nuevo registro.
+ * Movido sin cambios desde `AlumnosService.registroPublico` (P3).
  */
 export async function registroPublico(
   ctx: ContextoCasosAlumnos,

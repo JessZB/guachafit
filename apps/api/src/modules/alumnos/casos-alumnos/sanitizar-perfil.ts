@@ -3,8 +3,9 @@ import type { ContextoCasosAlumnos } from './contexto-casos';
 import { calcularEdadDesdeFecha } from './edad-reglas';
 
 /**
- * Sanitizes the DTO according to the querying actor's role (RF-011, scenario 3).
- * Moved verbatim from `AlumnosService.sanitizarPerfilParaRol` (P3).
+ * Sanitiza el DTO según el rol del actor que consulta (RF-011, Escenario 3 / RNF-003).
+ * Los alumnos jamás ven la ficha de salud privada; los coaches la reciben desencriptada.
+ * Movido sin cambios desde `AlumnosService.sanitizarPerfilParaRol` (P3).
  */
 export function sanitizarPerfilParaRol(
   ctx: Pick<ContextoCasosAlumnos, 'cryptoService'>,

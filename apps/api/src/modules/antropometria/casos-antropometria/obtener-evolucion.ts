@@ -24,17 +24,16 @@ import type { CallerAntropometria, ContextoAntropometria } from './contexto-antr
 import { hidratarControl } from './hidratar-control';
 
 /**
- * Queries the multi-axis body evolution history (RF-004).
- * Invariant ADR-001: strictly filters evaluations in Approved state.
- * Generates signed GET URLs with a 15 min TTL for each photo.
+ * Consulta el historial de evolución corporal multieje (RF-004).
+ * Invariante ADR-001: Filtra estrictamente las evaluaciones en estado Aprobado.
+ * Genera URLs firmadas GET con TTL de 15 min para cada foto.
  *
- * WU24b: `controlesTotal` is the real COUNT always present and `totalEvaluaciones`
- * keeps that same total (it used to be `evaluaciones.length`; unpaginated the value
- * is identical). `controlesLimit`/`controlesOffset` are OPT-IN: without them the
- * series comes COMPLETE (contract of the student charts) and with them the slice
- * is resolved with LIMIT/OFFSET in SQL. Order: ascending `fechaEvaluacion`
- * (current chronological) with a stable tiebreak by `createdAtUtc` and `id` so
- * `controlesOffset` neither repeats nor skips rows.
+ * WU24b: `controlesTotal` es el COUNT real SIEMPRE presente y `totalEvaluaciones` conserva
+ * ese mismo total (antes era `evaluaciones.length`; sin paginar el valor es idéntico).
+ * `controlesLimit`/`controlesOffset` son OPT-IN: sin ellos la serie viene COMPLETA (contrato
+ * de los charts del alumno) y con ellos el slice se resuelve con LIMIT/OFFSET en SQL.
+ * Orden: `fechaEvaluacion` ascendente (cronológico actual) con desempate estable por
+ * `createdAtUtc` e `id` para que `controlesOffset` no repita ni salte filas.
  */
 export async function obtenerEvolucion(
   ctx: ContextoAntropometria,

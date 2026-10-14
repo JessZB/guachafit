@@ -10,27 +10,27 @@ const AHORA = 1_000_000_000_000;
 const LIMITE = limiteEnlaceRecienEmitido(AHORA, VIGENCIA, INTERVALO);
 
 describe('limiteEnlaceRecienEmitido', () => {
-  it('derives the cutoff from expiry minus life plus interval', () => {
+  it('deduce el corte como vencimiento menos intervalo', () => {
     expect(LIMITE.getTime()).toBe(AHORA + VIGENCIA - INTERVALO);
   });
 });
 
 describe('enlaceRecienEmitido', () => {
-  it('returns false without a current expiry', () => {
+  it('devuelve false sin vencimiento vigente', () => {
     expect(enlaceRecienEmitido(null, LIMITE)).toBe(false);
   });
 
-  it('returns true for a link issued inside the minimum interval', () => {
+  it('devuelve true para un enlace emitido dentro del intervalo mínimo', () => {
     expect(enlaceRecienEmitido(new Date(AHORA + VIGENCIA - 60_000), LIMITE)).toBe(true);
   });
 
-  it('returns false for a link older than the minimum interval', () => {
+  it('devuelve false para un enlace más viejo que el intervalo mínimo', () => {
     expect(enlaceRecienEmitido(new Date(AHORA + VIGENCIA - INTERVALO - 1_000), LIMITE)).toBe(
       false
     );
   });
 
-  it('returns false exactly at the boundary', () => {
+  it('devuelve false justo en el límite', () => {
     expect(enlaceRecienEmitido(new Date(AHORA + VIGENCIA - INTERVALO), LIMITE)).toBe(false);
   });
 });

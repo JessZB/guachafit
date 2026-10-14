@@ -7,8 +7,8 @@ import type { PlanActivoInfo } from './hidratar-plan-activo';
 import type { TenantTransaction } from '@guachafit/database';
 
 /**
- * Explicit dependency context (P2). Built once in the facade constructor;
- * use cases are plain functions, never Nest providers.
+ * Contexto explícito de dependencias (P2). Se construye una vez en el constructor de la
+ * fachada; los casos de uso son funciones planas, nunca providers de Nest.
  */
 export interface ContextoCasosAlumnos {
   db: Database;
@@ -18,10 +18,10 @@ export interface ContextoCasosAlumnos {
   auditoria?: AuditoriaAccesosDenegadosService;
   logger: Logger;
   /**
-   * Late-bound plan hydration. The facade passes an arrow that resolves
-   * `this.hidratarPlanActivo` at call time so specs stubbing the private
-   * method keep working (P1 contract). Falls back to the extracted function
-   * when absent.
+   * Hidratación de plan con enlace tardío. La fachada pasa una flecha que resuelve
+   * `this.hidratarPlanActivo` en cada llamada para que los specs que sustituyen el
+   * privado sigan funcionando (contrato P1; ver `api3-integridad-datos.spec.ts:431`).
+   * Si falta, se usa la función extraída.
    */
   hidratarPlanActivo?: (
     tx: TenantTransaction,
