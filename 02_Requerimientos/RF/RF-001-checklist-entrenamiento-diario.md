@@ -175,7 +175,7 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
   - Idempotencia con TTL y dedupe concurrente (§7.3). Códigos estables en `@guachafit/shared` (`SESION_NO_INICIADA`, `SESION_VACIA`) que la web usa para clasificar rechazos, con respaldo por texto (LOTE API-2 `eeec4e0`).
 - Límites honestos / pendientes:
   - **Migración `0014` por aplicar** en los entornos (sin ella el API no arranca en producción: verifica migraciones pendientes al arrancar y solo avisa en desarrollo).
-  - Carrera de orden **preexistente** en `EntrenamientoPage`: un envío directo ya en vuelo puede llegar después de un cambio encolado posterior de la misma sesión; no se corrigió en este lote.
+  - Carrera de orden **preexistente** en `EntrenamientoPage`: un envío directo ya en vuelo puede llegar después de un cambio encolado posterior de la misma sesión; no se corrigió en este lote. **Resuelta el 2026-10-15 en §7.17.**
   - Idempotencia en memoria del proceso (§7.3): válida con una sola instancia del API.
 - Evidencia: web 701 → **771** tests tras los módulos 1-2 del front (777 tras API-2 y **785** tras API-3); API **986** tras API-3 (852 antes del lote API-1).
 
@@ -232,12 +232,19 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
   - web 1624/1624, typecheck y build limpios;
   - revisión de legibilidad aprobada con observaciones, sus hallazgos corregidos en el mismo commit.
 
+### 7.17. Orden de los envíos de una sesión (2026-10-15, `a4371fe`, lote E9)
+- **Problema (Judgment Day de diseño, 2026-10-12):** un envío directo en vuelo podía llegar después de un cambio encolado posterior de la misma sesión (marcar y desmarcar con mala señal dejaba la serie marcada); un directo que fallaba se re-encolaba con la hora del fallo; finalizar se adelantaba a series en vuelo; y un rechazo tardío deshacía un toque posterior.
+- **Decisiones del dueño:** el orden se garantiza dentro del dispositivo, y con red lenta el segundo cambio puede verse unos segundos como "por enviar" (2026-10-12). El rechazo tardío de un toque ya superado no se avisa: opción A (2026-10-15).
+- **Mecanismo** ([[ADR-024-orden-envios-sesion-entrenamiento]]):
+  - con un envío directo de la sesión en vuelo, el cambio siguiente se encola detrás, y la cola no saca nada de esa sesión hasta que el vuelo termina;
+  - todo lo encolado lleva la hora de la acción;
+  - el directo tiene un plazo de 15 s y, si vence, se re-encola con la misma clave;
+  - un rechazo tardío solo revierte si el toque sigue siendo el último de su serie;
+  - el porcentaje y la racha se recalculan del estado actual.
+- **Límite:** el orden se garantiza dentro de la misma pestaña; varias pestañas o dispositivos no se coordinan.
+- **Evidencia:**
+  - web 2130/2130, typecheck y build sin errores; el test U8, antes inestable, pasa 30/30;
+  - revisión con las 4 lentes (riesgo, fiabilidad, resiliencia y legibilidad) APTA, sin bloqueos, y sus avisos corregidos en el mismo commit.
+
 ### Pendiente
-- Carrera de orden preexistente en `EntrenamientoPage` (§7.10): un envío directo en vuelo puede llegar después de un cambio encolado posterior de la misma sesión.
-  - **Diagnóstico (Judgment Day de diseño, 2026-10-12):**
-    - la carrera es real;
-    - un directo que falla se re-encola detrás de lo posterior, con la hora del fallo;
-    - finalizar puede adelantarse a series en vuelo;
-    - un rechazo tardío deshace un toque posterior.
-  - **Decisión del dueño:** el orden se garantiza dentro del dispositivo. Con red lenta, el segundo cambio puede verse unos segundos como "por enviar". El uso desde varias pestañas o dispositivos queda como límite.
-  - **Estado:** tests en rojo escritos (lote E9); falta la implementación. Ver [[Handoff_Entrenamiento_Pendientes]].
+- Ninguno abierto de §7.10. El uso desde varias pestañas o dispositivos queda como límite documentado (ver §7.17).
