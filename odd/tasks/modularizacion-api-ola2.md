@@ -106,5 +106,10 @@ Orden: (M ∥ N) → D → R. Si R encuentra BLOCKERs, Claude redacta un prompt 
   - Resultados finales: API 1934, typechecks 0 y builds en verde.
   - Los prompts y reportes 117, 118 y 120–134 se borran. **ODD cerrado (Ola 2 del API).**
 
+- 2026-10-15 (Claude): SUGGESTIONs revisadas. Solo se conservaron las del `133`; los reportes `130`–`132` se borraron al cerrar el ODD, sin registrar sus SUGGESTIONs.
+  - **JSDoc duplicado del despachador:** resuelto. La fachada (`notification-dispatcher.service.ts`) deja una línea que apunta a `casos-despachador/despachar-evento.ts`.
+  - **`contexto-actor.ts` frente a `contexto-<servicio>`:** no se actúa. Los `contexto-<servicio>` son contextos de dependencias; `contexto-actor` resuelve el actor de la petición desde el token, que es otro concepto, y su nombre lo describe mejor.
+  - **`entrenamiento.service.ts` (334) y `emision-programada.ts` (289) por encima del objetivo de 250:** no se actúa. Están dentro de los topes (400 para fachadas y 300 para casos), y partir un caso de emisión de cuotas (P4) para ganar unas 40 líneas no compensa el riesgo.
+
 ## Siguiente paso
-- Modularización del API terminada: el guardián no tiene excepciones. Las SUGGESTIONs de `130`–`133` quedan como mejoras opcionales.
+- Modularización del API terminada: el guardián no tiene excepciones y las SUGGESTIONs conocidas están cerradas.
