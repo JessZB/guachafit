@@ -117,13 +117,7 @@ export class NotificationDispatcherService {
     return despacharCorreoCuentaCaso(this.ctx, payload);
   }
 
-  /**
-   * Pipeline de despacho desacoplado Event-Driven (RF-014 RN-02).
-   * 1. Registra de forma universal e inmediata en la bandeja In-App (campana del usuario).
-   * 2. Consulta la matriz de preferencias del destinatario y su rol (RF-015 §A/§B).
-   * 3. Resuelve la fila (rol + categoría): canales obligatorios (RN-01) + preferencias + defaults.
-   * 4. Encola en 'notificaciones-push' y/o 'notificaciones-email' según esa decisión.
-   */
+  /** Pipeline de despacho (RF-014 RN-02): ver `casos-despachador/despachar-evento.ts`. */
   async despacharEvento(evento: EventoNotificacionPayload): Promise<DespachoResultado> {
     return despacharEventoCaso(this.ctx, evento);
   }
