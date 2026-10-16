@@ -9,6 +9,7 @@
  */
 import { expect } from 'vitest';
 import { screen, within } from '@testing-library/react';
+import type { OutboxMutation } from '../../lib/offline-db';
 
 /** Copia profunda de un fixture JSON plano (evita compartir referencias entre tests). */
 export function clonar<T>(valor: T): T {
@@ -40,4 +41,38 @@ export function tarjetaDe(nombreEjercicio: string): HTMLElement {
   }
   expect(actual).not.toBeNull();
   throw new Error(`tarjetaDe: no se encontró la tarjeta de "${nombreEjercicio}"`);
+}
+
+/**
+ * Lote E9 (RF-001 §7.10): filas encoladas del PUT de series de una sesión, con
+ * filtro opcional por serie y estado. Reúne las 6 copias del filtro que vivían
+ * en `orden.interaccion` (×5) y `rechazo.interaccion` (×1): mismo comportamiento
+ * que cada copia (endpoint exacto + `series[0]` del payload).
+ */
+export function filasSerieEncolada(
+  filas: OutboxMutation[],
+  sesionId: string,
+  filtro: { serieId?: string; completada?: boolean } = {}
+): OutboxMutation[] {
+  return filas.filter((f) => {
+    if (f.endpoint !== `/sesiones/${sesionId}/series`) return false;
+    const primera = (
+      f.payload as { series?: Array<{ serieId?: string; completada?: boolean }> }
+    )?.series?.[0];
+    if (filtro.serieId !== undefined && primera?.serieId !== filtro.serieId) return false;
+    if (filtro.completada !== undefined && primera?.completada !== filtro.completada)
+      return false;
+    return true;
+  });
+}
+
+/**
+ * Lote E9: filas encoladas del POST `/finalizar` de una sesión (P3 del spec de
+ * orden). Separa el caso de finalizar del de series para no mezclar endpoints.
+ */
+export function filasFinalizarEncoladas(
+  filas: OutboxMutation[],
+  sesionId: string
+): OutboxMutation[] {
+  return filas.filter((f) => f.endpoint === `/sesiones/${sesionId}/finalizar`);
 }

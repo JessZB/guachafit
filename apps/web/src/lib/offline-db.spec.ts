@@ -29,8 +29,10 @@ import {
   queueOfflineMutation,
   recoverStuckMutations,
   retryMutation,
+  seleccionarMutacionesElegibles,
   type CachedNutricion,
   type CachedRutina,
+  type OutboxMutation,
 } from './offline-db';
 
 function fakeSesion(id: string): CachedRutina['sesion'] {
@@ -500,5 +502,76 @@ describe('offline-db: clearOfflineData (higiene de logout)', () => {
   it('es idempotente y no falla con la base vacía', async () => {
     await expect(clearOfflineData()).resolves.toBeUndefined();
     await expect(clearOfflineData()).resolves.toBeUndefined();
+  });
+});
+
+describe('offline-db (E9) · U4: queueOfflineMutation admite creadoEnMs explícito', () => {
+  it('U4 · con creadoEnMs: 1234 guarda createdAt: 1234 (sin la opción, Date.now())', async () => {
+    const conMarca = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie', undefined, {
+      creadoEnMs: 1234,
+    });
+    // Con creadoEnMs, createdAt guarda la marca de la acción (offline-db.ts:199).
+    expect((await offlineDb.outboxMutations.get(conMarca))?.createdAt).toBe(1234);
+
+    const antes = Date.now();
+    const sinMarca = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie');
+    expect((await offlineDb.outboxMutations.get(sinMarca))?.createdAt).toBeGreaterThanOrEqual(antes);
+  });
+});
+
+describe('offline-db (E9) · U5/U6: selección con grupos en vuelo y orden del re-encolado', () => {
+  function fila(endpoint: string, createdAt: number): OutboxMutation {
+    return {
+      endpoint,
+      method: 'PUT',
+      payload: {},
+      description: endpoint,
+      idempotencyKey: `key-${endpoint}-${createdAt}`,
+      status: 'pending',
+      createdAt,
+      attempts: 0,
+    };
+  }
+
+  it('U5 · con gruposEnVuelo sesion:A, ninguna de A es elegible; B y no-sesión sí', () => {
+    const todas = [
+      fila('/sesiones/A/series', 1000),
+      fila('/sesiones/A/finalizar', 1001),
+      fila('/sesiones/B/series', 1002),
+      fila('/nutricion/checkin-diario', 1003),
+    ];
+    const elegibles = seleccionarMutacionesElegibles(todas, 2000, new Set(['sesion:A']));
+    expect(elegibles.map((m) => m.endpoint).sort()).toEqual(
+      ['/nutricion/checkin-diario', '/sesiones/B/series'].sort()
+    );
+  });
+
+  it('U5 · regresión: sin el tercer argumento el resultado es idéntico al actual', () => {
+    const todas = [
+      fila('/sesiones/A/series', 1000),
+      fila('/sesiones/B/series', 1001),
+      fila('/nutricion/checkin-diario', 1002),
+    ];
+    expect(seleccionarMutacionesElegibles(todas, 2000).map((m) => m.endpoint)).toEqual([
+      '/sesiones/A/series',
+      '/sesiones/B/series',
+      '/nutricion/checkin-diario',
+    ]);
+  });
+
+  it('U6 · k2 encolada (createdAt 2000) y luego k1 con creadoEnMs 1000: sale primero k1', async () => {
+    const k2 = await queueOfflineMutation('/sesiones/s1/series', 'PUT', { cual: 'k2' }, 'k2');
+    await offlineDb.outboxMutations.update(k2, { createdAt: 2000 });
+    const k1 = await queueOfflineMutation(
+      '/sesiones/s1/series',
+      'PUT',
+      { cual: 'k1' },
+      'k1',
+      undefined,
+      { creadoEnMs: 1000 }
+    );
+
+    const elegibles = seleccionarMutacionesElegibles(await offlineDb.outboxMutations.toArray(), Date.now());
+    expect(elegibles.map((m) => m.id)).toEqual([k1, k2]);
   });
 });

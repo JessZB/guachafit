@@ -3,6 +3,7 @@
  * Funciones puras o con el almacenamiento inyectado, sin React.
  */
 import type { SesionEntrenamientoDetalleDTO } from '@guachafit/shared';
+import { estimarCumpleRachaPorVolumen } from './racha';
 
 /**
  * Copia para editar sin tocar el estado anterior: ejercicios, series y cada serie son objetos
@@ -17,6 +18,24 @@ export function clonarSesionParaEdicion(
       ...ejercicio,
       series: ejercicio.series.map((serie) => ({ ...serie })),
     })),
+  };
+}
+
+/**
+ * Porcentaje de series completadas y estimación local de la racha desde las series ACTUALES.
+ * D8 (RN-02): la racha usa la MISMA regla que el servidor (volumen ponderado con fallback a
+ * series), no un simple % de series; el servidor sigue siendo la autoridad.
+ */
+export function recalcularCumplimiento(sesion: SesionEntrenamientoDetalleDTO): {
+  porcentajeCumplimiento: string;
+  cumpleReglaRacha: boolean;
+} {
+  const series = sesion.ejercicios.flatMap((ejercicio) => ejercicio.series);
+  const completadas = series.filter((serie) => serie.completada).length;
+  return {
+    porcentajeCumplimiento:
+      series.length > 0 ? ((completadas / series.length) * 100).toFixed(2) : '0.00',
+    cumpleReglaRacha: estimarCumpleRachaPorVolumen(series),
   };
 }
 

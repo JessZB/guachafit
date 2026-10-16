@@ -38,6 +38,7 @@ import {
   MENSAJE_REPORTE_CON_OTROS_DATOS,
 } from './nutricion-checkin';
 import { queryClient } from './query-client';
+import { alLiberarGrupo, gruposConEnvioEnVuelo } from './envios-en-vuelo';
 
 // ---------------------------------------------------------------------------
 // Backoff exponencial con jitter (WU4)
@@ -80,6 +81,8 @@ const listeners = new Set<SyncListener>();
 const EMPTY_SUMMARY: OutboxSummary = { pending: 0, failed: 0, rejected: 0 };
 
 let isSyncing = false;
+/** Lote E9: alguien pidió procesar mientras había una pasada en curso; se hará otra al acabar. */
+let pasadaExtraPedida = false;
 let currentState: SyncStatusState = { isSyncing: false, summary: EMPTY_SUMMARY };
 
 function emit(): void {
@@ -332,6 +335,7 @@ async function processCheckinNutricionalConFotos(item: OutboxMutation): Promise<
 
 export async function processOutboxQueue(): Promise<ProcessOutboxResult> {
   if (isSyncing) {
+    pasadaExtraPedida = true;
     return { processed: 0, failed: 0, rejected: 0, skipped: true };
   }
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -360,7 +364,9 @@ export async function processOutboxQueue(): Promise<ProcessOutboxResult> {
 
     while (true) {
       if (typeof navigator !== 'undefined' && !navigator.onLine) break;
-      const item = (await getDueMutations()).find((candidata) => {
+      // Lote E9: las sesiones con un envío directo en vuelo no sacan nada hasta que termine.
+      const elegibles = await getDueMutations(Date.now(), gruposConEnvioEnVuelo());
+      const item = elegibles.find((candidata) => {
         if (candidata.id === undefined || vistasEnEstaPasada.has(candidata.id)) return false;
         const grupo = grupoCausalDeMutacion(candidata);
         return !grupo || !gruposDetenidos.has(grupo);
@@ -464,6 +470,14 @@ export async function processOutboxQueue(): Promise<ProcessOutboxResult> {
   } finally {
     isSyncing = false;
     await refreshOutboxStatus();
+    // Lote E9: un grupo liberado (o algo encolado) a mitad de la pasada se drena sin esperar
+    // al intervalo.
+    if (pasadaExtraPedida) {
+      pasadaExtraPedida = false;
+      processOutboxQueue().catch((err) => {
+        console.warn('[Guachafit Sync] Falló la pasada extra de la cola', err);
+      });
+    }
   }
 
   return { processed, failed, rejected, skipped: false };
@@ -472,6 +486,17 @@ export async function processOutboxQueue(): Promise<ProcessOutboxResult> {
 // ---------------------------------------------------------------------------
 // Disparadores de sincronización: evento `online`, carga de la app e intervalo
 // ---------------------------------------------------------------------------
+
+// Lote E9: al terminar el envío directo de una sesión, su cola retenida sale en orden. No
+// depende de `window` (solo memoria), así que también funciona fuera del navegador.
+const bajaDrenadoAlLiberar = alLiberarGrupo(() => {
+  processOutboxQueue().catch((err) => {
+    console.warn('[Guachafit Sync] Falló el drenado tras liberar un envío en vuelo', err);
+  });
+});
+// En desarrollo, la recarga en caliente vuelve a evaluar el módulo: se da de baja el oyente
+// anterior para no drenar dos veces por cada liberación.
+import.meta.hot?.dispose(() => bajaDrenadoAlLiberar());
 
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {

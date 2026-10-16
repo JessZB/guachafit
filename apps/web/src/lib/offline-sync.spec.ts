@@ -19,6 +19,10 @@ import {
   offlineDb,
   queueOfflineMutation,
 } from './offline-db';
+import {
+  registrarEnvioEnVuelo,
+  reiniciarEnviosEnVueloParaTests,
+} from './envios-en-vuelo';
 
 vi.mock('./api-client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./api-client')>();
@@ -417,5 +421,86 @@ describe('offline-sync: sesión vencida conserva la cola', () => {
     expect(result).toMatchObject({ processed: 1, skipped: false });
     expect(mockedApiClient.mock.calls[0][1]?.idempotencyKey).toBe('key-relogin');
     expect((await offlineDb.outboxMutations.get(id))?.status).toBe('synced');
+  });
+});
+
+/** Sondeo por condición sin dependencias nuevas (este spec corre en entorno node). */
+async function esperarHasta(condicion: () => boolean, mensaje: string): Promise<void> {
+  const limite = Date.now() + 2_000;
+  for (;;) {
+    if (condicion()) return;
+    if (Date.now() > limite) throw new Error(`timeout esperando: ${mensaje}`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+describe('offline-sync (E9) · U7: un grupo en vuelo no se envía y se drena solo al liberar', () => {
+  it('U7 · con sesion:A en vuelo, processOutboxQueue no la envía; al liberar se procesa sola', async () => {
+    // El registro de envíos en vuelo retiene al grupo hasta que se libera.
+    const liberar = registrarEnvioEnVuelo('sesion:A');
+    try {
+      const id = await queueOfflineMutation('/sesiones/A/series', 'PUT', {}, 'Serie A', 'k-a');
+      mockedApiClient.mockResolvedValue(null);
+
+      const resultado = await processOutboxQueue();
+
+      expect(resultado.processed).toBe(0);
+      expect(mockedApiClient).not.toHaveBeenCalled();
+      expect((await offlineDb.outboxMutations.get(id))?.status).toBe('pending');
+
+      // Al liberar, la pasada se dispara sola: sin llamar a processOutboxQueue a mano.
+      liberar();
+      await esperarHasta(
+        () => mockedApiClient.mock.calls.length > 0,
+        'la cola de sesion:A debió enviarse sola al liberar el grupo'
+      );
+      expect((await offlineDb.outboxMutations.get(id))?.status).toBe('synced');
+    } finally {
+      reiniciarEnviosEnVueloParaTests();
+    }
+  });
+});
+
+describe('offline-sync (E9) · U8: llamada concurrente + pasada extra', () => {
+  it('U8 · si se llama mientras procesa, devuelve skipped:true y lo encolado entre medias se envía', async () => {
+    let resolverA: ((valor: unknown) => void) | null = null;
+    mockedApiClient.mockImplementationOnce(
+      () =>
+        new Promise((resolver) => {
+          resolverA = resolver as (valor: unknown) => void;
+        })
+    );
+    mockedApiClient.mockResolvedValue(null);
+    await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie A', 'k-a');
+
+    const primera = processOutboxQueue();
+    // Puerta por condición (40-R1): la primera pasada ya está en vuelo con A antes de
+    // encolar B, así que la llamada concurrente ve `isSyncing` y devuelve `skipped:true`
+    // de forma determinista (sin esta espera, `resolverA` podía seguir en `null`).
+    await esperarHasta(
+      () => resolverA !== null,
+      'la primera pasada debió entrar en apiClient(A)'
+    );
+    const idB = await queueOfflineMutation('/sesiones/s1/series', 'PUT', {}, 'Serie B', 'k-b');
+    const concurrente = await processOutboxQueue();
+    expect(concurrente.skipped).toBe(true);
+
+    (resolverA as ((valor: unknown) => void) | null)?.(null);
+    const resultadoPrimera = await primera;
+
+    // Sin llamada manual: B se envía al acabar (hoy, en la misma pasada de drenado; la
+    // espera por condición lo deja robusto si el drenado cambia de forma).
+    expect(resultadoPrimera.skipped).toBe(false);
+    await esperarHasta(
+      () =>
+        (mockedApiClient.mock.calls.map((llamada) => llamada[1]?.idempotencyKey) as string[]).includes(
+          'k-b'
+        ),
+      'B debió enviarse al acabar la primera pasada'
+    );
+    expect((await offlineDb.outboxMutations.get(idB))?.status).toBe('synced');
+    expect(
+      mockedApiClient.mock.calls.map((llamada) => llamada[1]?.idempotencyKey)
+    ).toEqual(['k-a', 'k-b']);
   });
 });

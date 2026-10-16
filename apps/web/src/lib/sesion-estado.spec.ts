@@ -18,7 +18,9 @@ import {
   clonarSesionParaEdicion,
   guardarEjercicioPreferido,
   leerEjercicioPreferido,
+  recalcularCumplimiento,
 } from './sesion-estado';
+import { estimarCumpleRachaPorVolumen } from './racha';
 
 /** Sesión EN_PROGRESO de 2 ejercicios (2 y 1 series) con valores anidados que se mutarán. */
 function crearSesion(): SesionEntrenamientoDetalleDTO {
@@ -200,5 +202,68 @@ describe('C2.4 · guardarEjercicioPreferido: persistir o limpiar el preferido', 
 
     expect(() => guardarEjercicioPreferido(almacen, 'sesion-1', 1)).not.toThrow();
     expect(() => guardarEjercicioPreferido(almacen, 'sesion-1', null)).not.toThrow();
+  });
+});
+
+describe('U9 · recalcularCumplimiento: % y racha desde las series actuales', () => {
+  /** 4 series con prescripción de 60 kg × 10 reps; `completadas` = índices a marcar. */
+  function sesionCon(completadas: number[]): SesionEntrenamientoDetalleDTO {
+    return {
+      id: 'sesion-1',
+      alumnoId: 'alumno-1',
+      bloqueId: 'bloque-1',
+      fechaProgramada: '2026-10-12',
+      timezoneCliente: 'America/Caracas',
+      estado: EstadoSesion.EN_PROGRESO,
+      porcentajeCumplimiento: '0.00',
+      ejercicios: [
+        {
+          id: 'es-1',
+          sesionId: 'sesion-1',
+          ejercicioId: 'ej-1',
+          orden: 1,
+          ejercicio: {
+            id: 'ej-1',
+            nombre: 'Sentadilla',
+            grupoMuscular: 'Piernas',
+            activo: true,
+            createdAtUtc: '2026-10-01T00:00:00.000Z',
+          },
+          series: [1, 2, 3, 4].map((n) => ({
+            id: `s-${n}`,
+            ejercicioSesionId: 'es-1',
+            numeroSerie: n,
+            repsObjetivo: 10,
+            repsLogradas: completadas.includes(n) ? 10 : null,
+            pesoKg: completadas.includes(n) ? '60.00' : null,
+            pesoPrescritoKg: '60.00',
+            rpe: null,
+            descansoSegundos: 90,
+            completada: completadas.includes(n),
+            ...(completadas.includes(n)
+              ? { timestampCompletadaUtc: '2026-10-12T10:00:00.000Z' }
+              : {}),
+          })),
+        },
+      ],
+      createdAtUtc: '2026-10-01T00:00:00.000Z',
+      updatedAtUtc: '2026-10-01T00:00:00.000Z',
+    };
+  }
+
+  it('U9 · 0 de 0 → 0.00 y 1 de 4 → 25.00', () => {
+    const vacia = { ...sesionCon([]), ejercicios: [] };
+    expect(recalcularCumplimiento(vacia).porcentajeCumplimiento).toBe('0.00');
+    expect(recalcularCumplimiento(sesionCon([1])).porcentajeCumplimiento).toBe('25.00');
+  });
+
+  it('U9 · la racha coincide con estimarCumpleRachaPorVolumen de las mismas series', () => {
+    for (const completadas of [[], [1], [1, 2, 3], [1, 2, 3, 4]] as number[][]) {
+      const sesion = sesionCon(completadas);
+      const series = sesion.ejercicios.flatMap((e) => e.series);
+      expect(recalcularCumplimiento(sesion).cumpleReglaRacha).toBe(
+        estimarCumpleRachaPorVolumen(series)
+      );
+    }
   });
 });

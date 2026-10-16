@@ -181,7 +181,7 @@ export async function queueOfflineMutation(
   payload: any,
   description: string,
   idempotencyKey?: string,
-  opciones: { alumnoId?: string; capturadoEnMs?: number } = {}
+  opciones: { alumnoId?: string; capturadoEnMs?: number; creadoEnMs?: number } = {}
 ): Promise<number> {
   const mutationId = await offlineDb.outboxMutations.add({
     endpoint,
@@ -194,7 +194,12 @@ export async function queueOfflineMutation(
     ...(opciones.capturadoEnMs !== undefined ? { capturadoEnMs: opciones.capturadoEnMs } : {}),
     idempotencyKey: idempotencyKey || generateIdempotencyKey(),
     status: 'pending',
-    createdAt: Date.now(),
+    // Lote E9: un envío directo que se re-encola conserva la hora de la ACCIÓN, para que el
+    // orden FIFO lo deje antes de un cambio posterior de la misma sesión ya encolado.
+    // Invariante: `creadoEnMs` solo con la marca de `marcaDeAccionMs()` del toque, nunca una
+    // hora inventada o futura (adelantaría la mutación en la cola). Toda mutación de sesión
+    // debe llevarla; `capturadoEnMs` es otra cosa (dominio nutricional, viaja al servidor).
+    createdAt: opciones.creadoEnMs ?? Date.now(),
     attempts: 0,
     lastAttemptAt: null,
     lastError: null,
@@ -466,14 +471,17 @@ function ordenarPorCreacion(a: OutboxMutation, b: OutboxMutation): number {
  *   todas las posteriores de SU sesión; otras sesiones y tipos siguen.
  * - "Finalizar" nunca sale mientras queden series de esa sesión sin enviar.
  * - Una rechazada no detiene su sesión (espera la decisión del usuario).
+ * - Lote E9: una sesión con un envío directo en vuelo (`gruposEnVuelo`) no saca nada hasta
+ *   que ese envío termine; así la cola no se adelanta a lo que ya va por la red.
  * Las elegibles de una misma sesión salen en el orden en que se encolaron.
  */
 export function seleccionarMutacionesElegibles(
   todas: OutboxMutation[],
-  now: number = Date.now()
+  now: number = Date.now(),
+  gruposEnVuelo?: ReadonlySet<string>
 ): OutboxMutation[] {
   const ordenadas = [...todas].sort(ordenarPorCreacion);
-  const gruposDetenidos = new Set<string>();
+  const gruposDetenidos = new Set<string>(gruposEnVuelo ?? []);
   const elegibles: OutboxMutation[] = [];
 
   ordenadas.forEach((item, indice) => {
@@ -504,9 +512,12 @@ export function seleccionarMutacionesElegibles(
 }
 
 /** Mutaciones elegibles ahora: pendientes + fallidas cuyo backoff ya venció (orden causal D1). */
-export async function getDueMutations(now: number = Date.now()): Promise<OutboxMutation[]> {
+export async function getDueMutations(
+  now: number = Date.now(),
+  gruposEnVuelo?: ReadonlySet<string>
+): Promise<OutboxMutation[]> {
   const all = await offlineDb.outboxMutations.toArray();
-  return seleccionarMutacionesElegibles(all, now);
+  return seleccionarMutacionesElegibles(all, now, gruposEnVuelo);
 }
 
 /** D1: ¿queda algo de esta sesión sin llegar al servidor? (para no adelantarse a la cola). */

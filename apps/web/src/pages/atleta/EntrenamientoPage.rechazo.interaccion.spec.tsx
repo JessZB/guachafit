@@ -57,8 +57,9 @@ vi.mock('../../lib/api-client', async (importOriginal) => {
 });
 
 import { ApiError, apiClient } from '../../lib/api-client';
+import { offlineDb } from '../../lib/offline-db';
 import { EntrenamientoPage } from './EntrenamientoPage';
-import { clonar, tarjetaDe } from './entrenamiento.spec-helper';
+import { clonar, filasSerieEncolada, tarjetaDe } from './entrenamiento.spec-helper';
 
 type MockFn = ReturnType<typeof vi.fn>;
 const mockApi = apiClient as unknown as MockFn & {
@@ -429,7 +430,18 @@ describe('EntrenamientoPage · rama "no cerrar" del cronómetro (contrato 4)', (
     ).toBeTruthy();
 
     await waitFor(() => expect(pendientes.has('s-1')).toBe(true), { timeout: 5000 });
-    await waitFor(() => expect(pendientes.has('s-2')).toBe(true), { timeout: 5000 });
+    // E9 (RF-001 §7.10): con s-1 en vuelo, el marcado de s-2 no sale en directo sino que se
+    // encola detrás; se espera la fila encolada (el beforeEach no deja token, así que no se
+    // drena y permanece observable en outboxMutations).
+    await waitFor(
+      async () => {
+        const filas = await offlineDb.outboxMutations.toArray();
+        expect(
+          filasSerieEncolada(filas, SESION_ID, { serieId: 's-2', completada: true })
+        ).toHaveLength(1);
+      },
+      { timeout: 5000 }
+    );
 
     // Se rechaza A, no la vigente B: el cronómetro de B sigue abierto y el aviso sube al
     // banner (el foco vigente ya está en otro ejercicio).

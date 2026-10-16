@@ -1,10 +1,9 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { generateIdempotencyKey } from '../../../lib/api-client';
 import { resolverBloqueoAlumno, type BloqueoAlumno } from '../../../lib/acceso-alumno';
-import { clonarSesionParaEdicion } from '../../../lib/sesion-estado';
+import { clonarSesionParaEdicion, recalcularCumplimiento } from '../../../lib/sesion-estado';
 import { triggerHaptic } from '../../../lib/haptics';
 import { offlineDb } from '../../../lib/offline-db';
-import { estimarCumpleRachaPorVolumen } from '../../../lib/racha';
 import { normalizarKgParaContrato } from '../../../lib/weight-unit';
 import {
   construirPayloadSerie,
@@ -65,6 +64,10 @@ export function useMarcadoSerie(opciones: OpcionesMarcado) {
     posicionFocoVigente,
     serieDelCronometroVigente,
   } = opciones;
+  // Lote E9 (guarda G): última operación de marcado emitida por serie. Un rechazo tardío solo
+  // revierte la serie si su operación sigue siendo la última; si se volvió a tocar, manda la
+  // intención más nueva.
+  const ultimaOperacionPorSerie = useRef(new Map<string, number>());
 
   // Toggle set completion and trigger rest timer
   const handleToggleSet = useCallback(
@@ -87,6 +90,8 @@ export function useMarcadoSerie(opciones: OpcionesMarcado) {
         return;
       }
       const pesoNormalizado = normalizarKgParaContrato(serie.pesoKg);
+      const operacion = (ultimaOperacionPorSerie.current.get(serie.id) ?? 0) + 1;
+      ultimaOperacionPorSerie.current.set(serie.id, operacion);
 
       serie.completada = willBeCompleted;
       if (willBeCompleted) {
@@ -123,22 +128,8 @@ export function useMarcadoSerie(opciones: OpcionesMarcado) {
         triggerHaptic('light');
       }
 
-      // Recompute compliance percentage
-      let totalSeries = 0;
-      let completedSeries = 0;
-      updated.ejercicios.forEach((e) => {
-        e.series.forEach((s) => {
-          totalSeries++;
-          if (s.completada) completedSeries++;
-        });
-      });
-      const pct = totalSeries > 0 ? ((completedSeries / totalSeries) * 100).toFixed(2) : '0.00';
-      updated.porcentajeCumplimiento = pct;
-      // D8 (RN-02): la estimación local usa la MISMA regla que el servidor (volumen ponderado
-      // con fallback a series), no un simple % de series; el servidor sigue siendo la autoridad.
-      updated.cumpleReglaRacha = estimarCumpleRachaPorVolumen(
-        updated.ejercicios.flatMap((e) => e.series)
-      );
+      // Porcentaje y racha estimada (D8, RN-02) desde las series ya actualizadas.
+      Object.assign(updated, recalcularCumplimiento(updated));
 
       setSesion(updated);
 
@@ -191,20 +182,27 @@ export function useMarcadoSerie(opciones: OpcionesMarcado) {
       // D6: rechazo de datos con conexión → la serie vuelve a como estaba y el error se ve junto a ella.
       // Solo se revierte lo que tocó el marcado: el peso, las reps o el RPE editados mientras el
       // envío estaba en vuelo se conservan (revisión E7, W1).
-      setSesion((actual) => {
-        if (!actual || actual.id !== updated.id) return actual;
-        const revertida = revertirSerieRechazada(actual, {
-          ejercicioIndex,
-          serieIndex,
-          serieAntes,
-          porcentajeAntes,
-          rachaAntes,
+      // E9 (guarda G): si la serie se volvió a marcar o desmarcar después, no se revierte; y el
+      // porcentaje y la racha se recalculan desde el estado ACTUAL, no desde la instantánea.
+      const sigueVigente = ultimaOperacionPorSerie.current.get(serie.id) === operacion;
+      if (sigueVigente) {
+        setSesion((actual) => {
+          if (!actual || actual.id !== updated.id) return actual;
+          const base = revertirSerieRechazada(actual, {
+            ejercicioIndex,
+            serieIndex,
+            serieAntes,
+            porcentajeAntes,
+            rachaAntes,
+          });
+          const revertida = { ...base, ...recalcularCumplimiento(base) };
+          void cacheSesion(revertida);
+          return revertida;
         });
-        void cacheSesion(revertida);
-        return revertida;
-      });
+      }
       const cronometro = serieDelCronometroVigente.current;
       if (
+        sigueVigente &&
         willBeCompleted &&
         cronometro?.ejercicioIndex === ejercicioIndex &&
         cronometro?.serieIndex === serieIndex
@@ -212,6 +210,9 @@ export function useMarcadoSerie(opciones: OpcionesMarcado) {
         setIsRestTimerOpen(false);
         setActiveSerieKey(null);
       }
+      // E9 (decisión del dueño, opción A): el rechazo de un toque ya superado por otro posterior
+      // no se avisa; lo que el alumno quiere es el último toque, que sigue su curso.
+      if (!sigueVigente) return;
       triggerHaptic('warning');
       const mensajeRechazo =
         resultado.error instanceof Error && resultado.error.message
