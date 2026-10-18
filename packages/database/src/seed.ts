@@ -123,11 +123,30 @@ async function seed() {
     await db.delete(usuarios);
 
     // -------------------------------------------------------------------------
+    // 0. Superadministrador Demo (panel /admin y /admin/ajustes)
+    // -------------------------------------------------------------------------
+    console.log('🛡️ Creando Superadministrador Demo: admin@guachafit.com...');
+    const nowUtc = new Date();
+
+    // El superadmin no tiene ficha ni fila de preferencias: el login y /admin/ajustes solo
+    // necesitan la cuenta activa (la matriz de preferencias se crea con defaults al primer acceso).
+    await db.insert(usuarios).values({
+      email: 'admin@guachafit.com',
+      passwordHash: hashPassword('Password123!'),
+      rol: Rol.SUPERADMIN,
+      estado: EstadoUsuario.ACTIVO,
+      timezone: 'America/Caracas',
+      temaUi: 'system',
+      activo: true,
+      createdAtUtc: nowUtc,
+      updatedAtUtc: nowUtc,
+    });
+
+    // -------------------------------------------------------------------------
     // 1. Entrenador Demo (Head Coach)
     // -------------------------------------------------------------------------
     console.log('👤 Creando Entrenador Demo: Carlos Silva (Head Coach)...');
     const coachPasswordHash = hashPassword('Password123!');
-    const nowUtc = new Date();
 
     const [coachUser] = await db
       .insert(usuarios)
@@ -1398,6 +1417,9 @@ async function seed() {
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
     console.log(`✨ [GUACHAFIT SEED] Seeding completado exitosamente en ${duration}s.`);
     console.log('----------------------------------------------------------------');
+    console.log('🔑 Credenciales Demo Superadministrador:');
+    console.log('   Email:    admin@guachafit.com');
+    console.log('   Password: Password123!');
     console.log('🔑 Credenciales Demo Entrenador:');
     console.log('   Email:    entrenador@guachafit.com');
     console.log('   Password: Password123!');
