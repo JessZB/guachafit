@@ -115,7 +115,7 @@ Then el sistema debe clonar los 4 ejercicios a la rutina de Carlos
   - **Evidencia:**
     - web 2159/2159, typecheck y build sin errores, flujo individual intacto (36 tests);
     - revisión con las 4 lentes (riesgo y fiabilidad NO APTO por los dos bloqueantes, resueltos y probados en el mismo commit).
-  - **Seguimientos:**
-    - sin test del orden de foco del flujo masivo (revisión de fiabilidad, W2);
-    - un detalle desactualizado seguido de un 400 de ajustes no ofrece salida dentro del diálogo (revisión de resiliencia, W4);
-    - la huella no normaliza el orden de los alumnos (ya ocurría antes de este lote).
+  - **Seguimientos (revisados el 2026-10-18):**
+    - sin test del orden de foco del flujo masivo (revisión de fiabilidad, W2): en curso, prompt de tests `51`;
+    - un detalle desactualizado seguido de un 400 de ajustes no ofrece salida dentro del diálogo (revisión de resiliencia, W4): **no se actúa**. El API responde "Uno de los ajustes no corresponde a esta plantilla. Ábrela de nuevo." (`ajustes-reglas.ts:6`), y cerrar y reabrir el diálogo recarga el detalle;
+    - la huella no normaliza el orden de los alumnos (ya ocurría antes de este lote): **cerrado sin cambios**. Con el intento congelado tras un fallo ambiguo, la selección no puede cambiar entre un intento y su reintento, que es el único momento en que se compara la huella.
