@@ -26,7 +26,19 @@ tags:
    → Desde 2026-10-04 hay dos migraciones nuevas: `0014` (indicaciones del coach en la sesión del alumno) y `0015` (recuperación de contraseña: 3 columnas opcionales en `usuarios`). El API revisa al arrancar que no falten migraciones: en desarrollo solo avisa en la consola; en producción no arranca.
 3. **Datos de ejemplo** (⚠️ borra y recarga los datos):
    `pnpm --filter @guachafit/database db:seed`
-   → Las credenciales de prueba están definidas en `packages/database/src/seed.ts`.
+   → Las credenciales de prueba están definidas en `packages/database/src/seed.ts`. Todos los usuarios usan la contraseña **`Password123!`**:
+
+   | Rol | Correo | Para probar |
+   |---|---|---|
+   | Superadministrador | `admin@guachafit.com` | `/admin`: alta y lista de entrenadores, cuentas y licencias; `/admin/ajustes` (solo correo y contraseña) |
+   | Entrenador | `entrenador@guachafit.com` | Carlos Silva, código de coach `GUACHA-COACH`: panel, alumnos, plantillas, cobros, cartera, conciliación y ajustes |
+   | Alumno | `andres.perez@guachafit.com` | Al día (plan de $35 pagado por Zelle) y con una sesión completada: entrenamiento, progreso y nutrición |
+   | Alumno | `mariana.gomez@guachafit.com` | Pago pendiente de revisión (Bs. 1.295 a tasa 37,00): conciliación desde el entrenador |
+   | Alumno | `roberto.mendoza@guachafit.com` | Moroso, con una cuota de $40 vencida hace 5 días: cartera y recordatorios |
+   | Alumno | `valeria.castillo@guachafit.com` | En onboarding, con el código `GUACHA-8821` |
+   | Alumno | `diego.morales@guachafit.com` | Inactivo o pausado, con historial de mediciones: acceso por estado (RF-012) y antropometría |
+
+   Los datos solo existen después de ejecutar el seed: si falta un usuario (por ejemplo, el superadministrador, añadido el 2026-10-18), vuelve a ejecutarlo.
 4. **API**: `pnpm --filter @guachafit/api dev` → queda en `http://localhost:4000` (documentación en `/api/docs`).
 5. **Web**: `pnpm --filter @guachafit/web dev` → abre `http://localhost:3000`.
 6. **Modo demo** (sin tocar la base de datos, **solo en desarrollo**): en el login hay botones **"Modo Coach"** y **"Modo Alumno"**. Aparece un banner de "Modo demo — datos de ejemplo". Ideal para recorrer pantallas rápido.
