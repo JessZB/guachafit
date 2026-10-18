@@ -12,7 +12,7 @@
  * `@testing-library/user-event` no está instalado: se usa `fireEvent`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ModoAsignacionPlantilla } from '@guachafit/shared';
 
@@ -671,5 +671,99 @@ describe('AsignacionMasivaPlantilla pasos (E10) · M13–M15', () => {
 
     diferido.resolver?.(respuestaAsignacionOk([ALUMNO_A.id]));
     expect(await screen.findByText('Plantilla asignada a 1 de 1 alumno.')).toBeTruthy();
+  });
+});
+
+/* ================================================================== */
+/* Foco del flujo masivo (seguimiento E10 · prompt 51, hallazgo W2).    */
+/* Fija el orden de foco: el título al cambiar de paso y el resumen de  */
+/* errores por encima del título. Usa document.activeElement como el    */
+/* spec del flujo individual.                                           */
+/* ================================================================== */
+
+describe('AsignacionMasivaPlantilla pasos · foco (51 · F1–F5)', () => {
+  it('F1 · al abrir, el foco no salta al título del paso 1; queda en el primer focusable del diálogo', async () => {
+    sesionMock.isDemoMode = true;
+    montar();
+    await screen.findByText(NOMBRE_A);
+
+    const titulo = screen.getByText('Paso 1 de 3 · Elegir alumnos');
+    const cerrar = screen.getByRole('button', { name: 'Cerrar asignación a alumnos' });
+    // useDialogoAccesible enfoca el primer focusable (el cierre X); el título lleva tabIndex={-1}.
+    expect(document.activeElement).toBe(cerrar);
+    expect(document.activeElement).not.toBe(titulo);
+  });
+
+  it('F2 · al pasar del paso 1 al 2, el foco va al título "Paso 2 de 3 · Revisar y ajustar"', async () => {
+    mockFlujoReal(async () => respuestaAsignacionOk([ALUMNO_A.id]));
+    montar();
+    await screen.findByText(NOMBRE_A);
+
+    await irAPaso2([NOMBRE_A]);
+
+    const titulo = await screen.findByText('Paso 2 de 3 · Revisar y ajustar');
+    expect(document.activeElement).toBe(titulo);
+  });
+
+  it('F3 · al pasar al paso 3 el foco va a su título; con "Atrás" vuelve al título del paso anterior', async () => {
+    mockFlujoReal(async () => respuestaAsignacionOk([ALUMNO_A.id]));
+    montar();
+    await screen.findByText(NOMBRE_A);
+
+    await irAPaso2([NOMBRE_A]);
+    await irAPaso3();
+
+    expect(await screen.findByText('Paso 3 de 3 · Confirmar')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByText('Paso 3 de 3 · Confirmar'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Atrás' }));
+    expect(await screen.findByText('Paso 2 de 3 · Revisar y ajustar')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByText('Paso 2 de 3 · Revisar y ajustar'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Atrás' }));
+    expect(await screen.findByText('Paso 1 de 3 · Elegir alumnos')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByText('Paso 1 de 3 · Elegir alumnos'));
+  });
+
+  it('F4 · con reps "10-8" y "Asignar a N alumnos", el foco va al resumen de errores, no al título del paso 2', async () => {
+    mockFlujoReal(async () => respuestaAsignacionOk([ALUMNO_A.id]));
+    montar();
+    await screen.findByText(NOMBRE_A);
+
+    await irAPaso2([NOMBRE_A]);
+    fireEvent.click(screen.getByRole('button', { name: 'Ajustar Press Plano con Mancuernas' }));
+    fireEvent.change(screen.getByLabelText('Repeticiones'), { target: { value: '10-8' } });
+    await irAPaso3();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Asignar a 1 alumno' }));
+    expect(await screen.findByText('Paso 2 de 3 · Revisar y ajustar')).toBeTruthy();
+
+    const resumen = await screen.findByRole('alert');
+    expect(resumen.textContent).toContain('Revisa estos ajustes antes de asignar:');
+    // El efecto del resumen se declara tras el del título, así que gana el resumen.
+    await waitFor(() => {
+      expect(document.activeElement).toBe(resumen);
+    });
+    expect(document.activeElement).not.toBe(screen.getByText('Paso 2 de 3 · Revisar y ajustar'));
+  });
+
+  it('F5 · desde el resumen de errores, activar el error lleva el foco al campo con error', async () => {
+    mockFlujoReal(async () => respuestaAsignacionOk([ALUMNO_A.id]));
+    montar();
+    await screen.findByText(NOMBRE_A);
+
+    await irAPaso2([NOMBRE_A]);
+    fireEvent.click(screen.getByRole('button', { name: 'Ajustar Press Plano con Mancuernas' }));
+    fireEvent.change(screen.getByLabelText('Repeticiones'), { target: { value: '10-8' } });
+    await irAPaso3();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Asignar a 1 alumno' }));
+    await screen.findByText('Paso 2 de 3 · Revisar y ajustar');
+    await screen.findByRole('alert');
+
+    fireEvent.click(screen.getByRole('button', { name: /Repeticiones no válidas/ }));
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByLabelText('Repeticiones'));
+    });
   });
 });
