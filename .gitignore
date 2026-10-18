@@ -62,4 +62,4 @@ logs/
 
 # Briefs y salidas de despachos a OpenCode (artefactos del director)
 .opencode-briefs/
-.opencode-prompts/
+.external-agents/

@@ -187,40 +187,47 @@ Reglas transversales del frontend, vinculantes para toda vista nueva (se revisan
 
 ---
 
-## 🤝 7. Flujo de Trabajo Claude Code + OpenCode (vigente desde 2026-10-06)
+## 🤝 7. Flujo de Trabajo: Claude Code como orquestador + agentes externos (vigente desde 2026-10-18)
 
-> **Divide y vencerás:** Claude Code se concentra en escribir código de calidad y documentación; OpenCode escribe y ejecuta los tests y corre las revisiones. El dueño lanza OpenCode desde otra terminal. Para este proyecto, este flujo **prevalece** sobre la regla global `opencode-director` (allí OpenCode es el único escritor de código; aquí no).
+> **Divide y vencerás:** Claude Code dirige y valida; un subagente de Claude escribe el código; los tests y las revisiones extensas los ejecutan **agentes externos**: agentes de otros CLI, fuera del ecosistema de Claude, que el dueño lanza desde otra terminal. Este flujo sustituye al del 2026-10-06, en el que Claude escribía el código y un CLI externo concreto hacía los tests. Para este proyecto, **prevalece** sobre cualquier regla global de dirección de agentes.
 
 ### 7.1. Roles
 
 | Rol | Hace | No hace |
 |---|---|---|
-| **Claude Code** (director y escritor) | Audita, aclara requisitos (una pregunta a la vez), escribe el código de producción (front, API, shared, migraciones) y el doc-sync del vault, redacta los prompts para OpenCode, verifica cada reporte contra el `git diff` y hace los commits. | No escribe ni ejecuta tests, no lanza sub-agentes de revisión (4R) ni de validación, no hace push. |
-| **OpenCode** (`opencode-go/deepseek-v4.1-flash#max`) | Escribe los tests (TDD, fase roja), ejecuta suites, typecheck y build, y hace las revisiones 4R y las validaciones acotadas. Siempre deja un reporte `.md`. | No toca código de producción (salvo que el prompt lo autorice de forma explícita), no hace commit ni push, no lee `.env`. |
-| **Dueño** | Ejecuta cada prompt en la TUI de OpenCode, avisa cuando termina y decide producto. | — |
+| **Claude Code** (orquestador y validador) | Audita, aclara requisitos (una pregunta a la vez), diseña y fija los contratos de cada lote, delega la escritura del código al subagente escritor y **valida el código generado** contra el diseño y el `git diff` antes de aceptarlo. Escribe el doc-sync del vault, redacta los prompts de los agentes externos, verifica cada reporte contra el `git diff` y hace los commits. | No escribe código de producción (lo delega), no escribe ni ejecuta tests, no hace push. |
+| **Subagente escritor** (Claude Haiku 5.5, `effort: high`) | Escribe el código de producción (front, API, shared, migraciones) y las correcciones de los hallazgos, a partir de un encargo preciso de Claude: archivos, cambios exactos, decisiones resueltas y prohibiciones. Devuelve la lista de archivos con sus líneas, dónde cumple cada contrato y cualquier desviación con su porqué. | No escribe ni ejecuta tests, no edita specs, no hace commit ni push, no lee `.env`. |
+| **Agentes externos** (otros CLI, fuera del ecosistema de Claude) | Escriben los tests (TDD, fase roja), ejecutan suites, typecheck y build, y hacen las revisiones 4R y las validaciones acotadas. Siempre dejan un reporte `.md`. | No tocan código de producción (salvo que el prompt lo autorice de forma explícita), no hacen commit ni push, no leen `.env`. |
+| **Dueño** | Ejecuta cada prompt en el agente externo que elija, avisa cuando termina y decide producto. | — |
 
 ### 7.2. Carpeta de prompts
 
-- Ruta: `.opencode-prompts/` en la raíz del repo (ignorada por git). Los reportes van en `.opencode-prompts/reportes/`.
+- Ruta: `.external-agents/` en la raíz del repo (ignorada por git). Los reportes van en `.external-agents/reportes/`.
 - Nombre: `<NN>-<lote>-<tipo>.md`, con `tipo` ∈ `tests`, `verificacion`, `review-risk`, `review-reliability`, `review-resilience`, `review-readability`, `validacion`. El reporte se llama igual con sufijo `.reporte.md`.
-- El dueño abre **OpenCode en modo interactivo (TUI)** en otra terminal, en la raíz del repo, con el modelo `opencode-go/deepseek-v4.1-flash#max`, para ver en vivo su razonamiento y lo que hace. Claude **no** ejecuta OpenCode ni entrega comandos `opencode run`; solo indica el archivo y la instrucción a pegar en la TUI:
+- Los prompts no dependen de ninguna herramienta concreta: describen la tarea, la superficie y el reporte, y cualquier agente externo debe poder ejecutarlos.
+- El dueño abre el agente externo en modo interactivo, en otra terminal y en la raíz del repo, para ver en vivo lo que hace, y elige el modelo. Claude **no** ejecuta el agente externo ni entrega comandos para lanzarlo; solo indica el archivo y la instrucción a pegar:
   ```text
-  Lee y ejecuta exactamente el prompt .opencode-prompts/<NN>-<lote>-<tipo>.md y deja el reporte en la ruta que indica.
+  Lee y ejecuta exactamente el prompt .external-agents/<NN>-<lote>-<tipo>.md y deja el reporte en la ruta que indica.
   ```
+- Si el lote tiene varios prompts independientes de solo lectura (por ejemplo, las 4 revisiones), Claude puede dar una sola instrucción que los lance en paralelo.
 
 ### 7.3. Ciclo por lote
 
 1. **Auditoría y decisiones:** Claude audita el módulo y resuelve con el dueño las decisiones de producto.
-2. **Tests en rojo:** Claude genera el prompt `tests`. OpenCode escribe los tests de los criterios, los ejecuta, confirma que **fallan por la razón esperada** y lo reporta.
-3. **Implementación:** Claude escribe el código de producción hasta cumplir los criterios, sin tocar los tests salvo error evidente (que se reporta).
-4. **Verificación:** prompt `verificacion`. OpenCode corre la suite completa de los paquetes afectados, typecheck y build, y reporta los números (re-ejecuta una vez los tests HTTP intermitentes del API antes de darlos por fallidos).
+2. **Tests en rojo:** Claude genera el prompt `tests` con los contratos exactos. El agente externo escribe los tests, los ejecuta, confirma que **fallan por la razón esperada** y lo reporta. Un test rojo afirma solo el comportamiento nuevo: nunca espera el comportamiento viejo para luego afirmar lo contrario.
+3. **Implementación:** Claude encarga el código de producción al subagente escritor (Haiku 5.5, `effort: high`) y **valida el resultado**: revisa el diff, comprueba cada contrato y cada desviación declarada, y devuelve el encargo si algo no cuadra. Los tests no se tocan salvo error evidente, que se reporta.
+4. **Verificación:** prompt `verificacion`. El agente externo corre la suite completa de los paquetes afectados, typecheck y build, y reporta los números (re-ejecuta una vez los tests HTTP intermitentes del API antes de darlos por fallidos).
 5. **Revisión:** prompts `review-*` de solo lectura. Riesgo medio: un enfoque (el del riesgo dominante). Auth, seguridad, permisos, datos o migraciones, o más de 400 líneas: los cuatro.
-6. **Corrección:** Claude corrige los hallazgos y, si hubo cambios, genera un prompt `validacion` (re-ejecuta las suites y confirma cada hallazgo como resuelto o no).
+6. **Corrección:** Claude verifica cada hallazgo en el código, resuelve con el dueño los que son de producto y encarga las correcciones al subagente escritor. Si hubo cambios, genera un prompt `validacion` (re-ejecuta las suites y confirma cada hallazgo como resuelto o no).
 7. **Cierre:** Claude verifica cada reporte contra el diff y hace el commit de código y su commit `docs(vault)` de doc-sync (ver §2.4). Commits convencionales en español, sin `Co-Authored-By` y sin push.
-8. **Limpieza:** con el lote cerrado, Claude borra los prompts y reportes del lote de `.opencode-prompts/` para dejar sitio a los siguientes.
+8. **Limpieza:** con el lote cerrado, Claude borra los prompts y reportes del lote de `.external-agents/`. Antes, anota en el ODD o en el RF los hallazgos que quedan como seguimiento, para que no se pierdan con los reportes.
 
 ### 7.4. Contenido mínimo de cada prompt
 
 `Contexto` (repo, rama, requisito, commits de referencia) · `Objetivo` · `Superficie permitida` (archivos que puede crear o tocar) · `Prohibido` (`.env`, commit, push, dependencias nuevas, código de producción si no está autorizado) · `Tareas` · `Comandos de verificación` · `Reporte` (ruta exacta y formato).
 
 El reporte debe incluir: resumen, archivos tocados, comandos ejecutados con resultados observados (números), estado por criterio (CUMPLE / NO, con razón), hallazgos con severidad (BLOCKER / WARNING / SUGGESTION) y `archivo:línea`, y bloqueos. Nada se declara sin haberlo observado; Claude no acepta un reporte sin evidencia.
+
+### 7.5. Encargo al subagente escritor
+
+Cada encargo incluye: el objetivo y la decisión del dueño; los tests o contratos que debe cumplir (y que debe leer primero); el diseño con las decisiones ya resueltas; la superficie (archivos a crear, cambiar o borrar); las restricciones (tamaños de §6.14 y §6.15, sin cambios fuera del alcance); las prohibiciones (no ejecutar tests, no editar specs, no hacer commit ni push, no leer `.env`, no añadir dependencias); y el formato de la respuesta (archivos con sus líneas, dónde cumple cada contrato, desviaciones y `git status --short`).
