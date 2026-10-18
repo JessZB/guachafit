@@ -99,4 +99,23 @@ Then el sistema debe clonar los 4 ejercicios a la rutina de Carlos
   - Textos de 14 px y 12 px para lo secundario, sin 11 px; pantalla completa en móvil con "Atrás"/"Siguiente" fijos abajo; cada paso se anuncia y recibe el foco. La lógica (carga, modo demo, ajustes, idempotencia, asignación) no cambió: verificada con una comparación mecánica. En modo demo no se llama a `onAsignada` (el refresco del padre consulta el API).
   - Evidencia: lote 152/152, web sin fallos del lote, typecheck y build limpios; revisión de legibilidad y UX sin bloqueos, sus hallazgos corregidos en `3c68eed`.
   - Nombres de las acciones en la ficha en minúscula inicial (2026-10-12, `63369d7`): "Cargar desde plantilla" (asignar una plantilla) y "Editar rutina semanal" (editor manual); "Asignar a alumnos" en Plantillas es la asignación masiva, otra acción. Pegar `'60 kg'` en el Peso de los ajustes escribe el número; en Series y Repeticiones el pegado sigue el filtro del campo y no se escribe (`7ca9fcf`).
-  - Pendiente: extraer cada paso del modal a su propio componente si el formulario crece; unificar `SelectorPlantillaAsignacion` y `AsignacionMasivaPlantilla` (duplicación heredada del módulo 2).
+  - ~~Pendiente: extraer cada paso del modal a su propio componente si el formulario crece~~: hecho en la modularización de vistas (Ola 2). ~~Unificar `SelectorPlantillaAsignacion` y `AsignacionMasivaPlantilla`~~: hecho el 2026-10-18 (lote E10, ver abajo).
+- Implementado (2026-10-18, `7817765`, lote E10) — **asignación masiva en 3 pasos con ajustes comunes** (RN-03, "Asignar a alumnos" en Plantillas).
+  - **Decisión del dueño (opción B):** la masiva admite ajustes y sigue el mismo flujo que la individual. Los ajustes se aplican igual a todos los alumnos elegidos. No hay ajustes distintos por alumno: el API recibe un solo arreglo `ajustes` para todos los `alumnoIds`, sin cambios en el API ni en `@guachafit/shared`.
+  - **Paso 1 · Elegir alumnos:** búsqueda, "Cargar más alumnos" y máximo 50, como antes. "Siguiente" exige al menos un alumno.
+  - **Paso 2 · Revisar y ajustar:** el mismo paso de la individual (hook compartido `use-ajustes-plantilla`), con todos los días abiertos. El detalle de la plantilla se carga con un plazo de 15 s. Si falla, se muestra el error con "Reintentar" y "Siguiente" queda bloqueado. En modo demo, una plantilla sin detalle de demo permite seguir sin ajustes.
+  - **Paso 3 · Confirmar:**
+    - "Añadir" sigue siendo el modo por defecto; "Reemplazar" pide confirmación.
+    - Muestra una frase de resumen ("Se asignará «X» a 3 alumnos con 1 ajuste. Se añade a su rutina actual.") y el botón "Asignar a N alumnos".
+    - El resultado se muestra por alumno.
+  - **Idempotencia:**
+    - los ajustes viajan en un orden canónico, el mismo que usa la huella de la clave: el servidor calcula su huella sobre el cuerpo tal cual llega, y otro orden duplicaba los días en un reintento (bloqueante de la revisión de riesgo);
+    - **tras un fallo ambiguo el intento queda congelado** (decisión del dueño, opción A): no se puede volver atrás ni cambiar el modo, solo reintentar lo mismo con la misma clave o cerrar, y se explica junto al error;
+    - un error 4xx claro no congela nada.
+  - **Evidencia:**
+    - web 2159/2159, typecheck y build sin errores, flujo individual intacto (36 tests);
+    - revisión con las 4 lentes (riesgo y fiabilidad NO APTO por los dos bloqueantes, resueltos y probados en el mismo commit).
+  - **Seguimientos:**
+    - sin test del orden de foco del flujo masivo (revisión de fiabilidad, W2);
+    - un detalle desactualizado seguido de un 400 de ajustes no ofrece salida dentro del diálogo (revisión de resiliencia, W4);
+    - la huella no normaliza el orden de los alumnos (ya ocurría antes de este lote).
