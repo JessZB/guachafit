@@ -1,14 +1,17 @@
 /**
  * RF-017 RN-03 (A6): asignar una plantilla a varios alumnos a la vez (máximo 50 por envío).
  *
- * Usa el endpoint existente `POST /plantillas/:id/asignar` (acepta `alumnoIds[]`) y muestra el
- * resultado por alumno con mensajes humanos: los errores técnicos de `resultados[].error` pasan
- * por la traducción de mensajes-error. Reemplazar la rutina actual pide confirmación.
+ * Usa el endpoint existente `POST /plantillas/:id/asignar` (acepta `alumnoIds[]` y un único
+ * arreglo de `ajustes`) y muestra el resultado por alumno con mensajes humanos: los errores
+ * técnicos de `resultados[].error` pasan por la traducción de mensajes-error. Reemplazar la
+ * rutina actual pide confirmación.
  *
- * Ola 3 (prompt 83): contenedor orquestador. Los datos viven en
- * `asignacion-masiva-plantilla/use-directorio-alumnos-asignacion` y
- * `asignacion-masiva-plantilla/use-envio-asignacion-masiva` (mismo mecanismo: R9);
- * el JSX vive en las piezas presentacionales de esa carpeta.
+ * Lote E10: mismo flujo en 3 pasos que la asignación individual — elegir alumnos → revisar y
+ * ajustar (ajustes comunes a todos) → confirmar (modo, envío y resultado por alumno).
+ *
+ * Contenedor orquestador. Los datos viven en los hooks de `asignacion-masiva-plantilla/`
+ * (directorio, detalle, pasos y envío; mismo mecanismo: R9) y el JSX en sus piezas
+ * presentacionales; el paso de revisión y la barra se comparten con `selector-plantilla-asignacion/`.
  */
 import type { PlantillaRutinaResumenDTO } from '@guachafit/shared';
 import { useAuth } from '../../context/auth-context';
@@ -17,14 +20,19 @@ import {
   MENSAJE_ASIGNACION_INCIERTA,
   textoConfirmacionReemplazo,
 } from '../../lib/asignacion-masiva';
+import { PASOS_ASIGNACION_MASIVA } from '../../lib/asignacion-pasos';
 import { DialogoConfirmacion } from '../common/DialogoConfirmacion';
 import { CabeceraAsignacion } from './asignacion-masiva-plantilla/CabeceraAsignacion';
-import { SelectorModoAsignacion } from './asignacion-masiva-plantilla/SelectorModoAsignacion';
 import { ListaAlumnosAsignacion } from './asignacion-masiva-plantilla/ListaAlumnosAsignacion';
+import { PasoRevisarAsignacionMasiva } from './asignacion-masiva-plantilla/PasoRevisarAsignacionMasiva';
+import { PasoConfirmarAsignacionMasiva } from './asignacion-masiva-plantilla/PasoConfirmarAsignacionMasiva';
 import { ResultadoAsignacion } from './asignacion-masiva-plantilla/ResultadoAsignacion';
-import { PieAsignacion } from './asignacion-masiva-plantilla/PieAsignacion';
 import { useDirectorioAlumnosAsignacion } from './asignacion-masiva-plantilla/use-directorio-alumnos-asignacion';
+import { useDetallePlantillaAsignacion } from './asignacion-masiva-plantilla/use-detalle-plantilla-asignacion';
+import { usePasosAsignacionMasiva } from './asignacion-masiva-plantilla/use-pasos-asignacion-masiva';
 import { useEnvioAsignacionMasiva } from './asignacion-masiva-plantilla/use-envio-asignacion-masiva';
+import { IndicadorPasos } from './selector-plantilla-asignacion/IndicadorPasos';
+import { BarraNavegacionPasos } from './selector-plantilla-asignacion/BarraNavegacionPasos';
 
 interface AsignacionMasivaPlantillaProps {
   plantilla: PlantillaRutinaResumenDTO;
@@ -34,6 +42,8 @@ interface AsignacionMasivaPlantillaProps {
 export function AsignacionMasivaPlantilla({ plantilla, onCerrar }: AsignacionMasivaPlantillaProps) {
   const { isDemoMode } = useAuth();
   const directorio = useDirectorioAlumnosAsignacion({ isDemoMode });
+  const detalle = useDetallePlantillaAsignacion({ plantillaId: plantilla.id, isDemoMode });
+  const pasos = usePasosAsignacionMasiva({ detalle: detalle.detalle });
   const envio = useEnvioAsignacionMasiva({
     plantillaId: plantilla.id,
     plantillaNombre: plantilla.nombre,
@@ -48,6 +58,29 @@ export function AsignacionMasivaPlantilla({ plantilla, onCerrar }: AsignacionMas
     },
   });
 
+  const { paso, ajustes } = pasos;
+  const seleccionados = directorio.seleccion.length;
+
+  // Paso 1: hace falta al menos un alumno. Paso 2: el detalle cargado (o la demo sin vista previa).
+  const puedeAvanzar =
+    paso === 'alumnos'
+      ? seleccionados > 0
+      : !detalle.cargando &&
+        !detalle.error &&
+        (detalle.detalle !== null || detalle.sinVistaPreviaDemo);
+
+  /** Ajustes inválidos → vuelve al paso 2 con su resumen; si no, sigue el flujo de envío. */
+  const confirmar = () => {
+    if (envio.isAsignando) return;
+    const ajustesValidos = ajustes.prepararAjustes();
+    if (ajustesValidos === null) {
+      pasos.setPaso('revisar');
+      return;
+    }
+    ajustes.setErroresAjustes([]);
+    envio.confirmar(ajustesValidos);
+  };
+
   return (
     <div
       onClick={(evento) => {
@@ -61,24 +94,32 @@ export function AsignacionMasivaPlantilla({ plantilla, onCerrar }: AsignacionMas
         aria-modal="true"
         aria-labelledby="asignacion-masiva-titulo"
         tabIndex={-1}
-        className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+        className="rounded-3xl bg-card border border-border shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col"
       >
-        <CabeceraAsignacion
-          nombrePlantilla={plantilla.nombre}
-          cerrarDeshabilitado={envio.isAsignando}
-          onCerrar={onCerrar}
-        />
-
-        {envio.resultados ? (
-          <ResultadoAsignacion
-            resultados={envio.resultados}
-            exitosos={envio.exitosos}
+        <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 space-y-3">
+          <CabeceraAsignacion
+            nombrePlantilla={plantilla.nombre}
+            cerrarDeshabilitado={envio.isAsignando}
             onCerrar={onCerrar}
           />
-        ) : (
-          <>
-            <SelectorModoAsignacion modo={envio.modo} onCambiarModo={envio.setModo} />
+          {!envio.resultados && (
+            <IndicadorPasos
+              paso={paso}
+              pasos={PASOS_ASIGNACION_MASIVA}
+              indicePaso={pasos.indicePaso}
+              tituloRef={pasos.refTituloPaso}
+            />
+          )}
+        </div>
 
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-4 space-y-4">
+          {envio.resultados ? (
+            <ResultadoAsignacion
+              resultados={envio.resultados}
+              exitosos={envio.exitosos}
+              onCerrar={onCerrar}
+            />
+          ) : paso === 'alumnos' ? (
             <ListaAlumnosAsignacion
               alumnos={directorio.alumnos}
               seleccion={directorio.seleccion}
@@ -95,15 +136,51 @@ export function AsignacionMasivaPlantilla({ plantilla, onCerrar }: AsignacionMas
               onReintentar={directorio.reintentarCarga}
               onCargarMas={directorio.cargarMas}
             />
-
-            <PieAsignacion
-              errorAsignacion={envio.errorAsignacion}
-              seleccionados={directorio.seleccion.length}
-              isAsignando={envio.isAsignando}
-              onCancelar={onCerrar}
-              onConfirmar={envio.confirmar}
+          ) : paso === 'revisar' ? (
+            <PasoRevisarAsignacionMasiva
+              idBase={pasos.idBase}
+              detalle={detalle.detalle}
+              cargando={detalle.cargando}
+              error={detalle.error}
+              sinVistaPreviaDemo={detalle.sinVistaPreviaDemo}
+              diasAbiertos={pasos.diasAbiertos}
+              ajustes={ajustes}
+              onAlternarDia={pasos.alternarDia}
+              onReintentar={detalle.reintentar}
             />
-          </>
+          ) : (
+            <PasoConfirmarAsignacionMasiva
+              plantillaNombre={plantilla.nombre}
+              cantidad={seleccionados}
+              nombreUnico={envio.nombreUnico}
+              numeroAjustes={ajustes.ajustesPendientes}
+              modo={envio.modo}
+              errorAsignacion={envio.errorAsignacion}
+              intentoCongelado={envio.intentoCongelado}
+              onCambiarModo={envio.setModo}
+            />
+          )}
+        </div>
+
+        {!envio.resultados && (
+          <BarraNavegacionPasos
+            paso={paso}
+            pasos={PASOS_ASIGNACION_MASIVA}
+            textoCerrar="Cancelar"
+            textoConfirmar={
+              envio.isAsignando
+                ? 'Asignando…'
+                : `Asignar a ${seleccionados} alumno${seleccionados === 1 ? '' : 's'}`
+            }
+            asignacionCompletada={false}
+            isAsignando={envio.isAsignando}
+            atrasDeshabilitado={envio.intentoCongelado}
+            puedeAvanzar={puedeAvanzar}
+            onCerrar={onCerrar}
+            onAtras={pasos.retroceder}
+            onAvanzar={pasos.avanzar}
+            onConfirmar={confirmar}
+          />
         )}
       </div>
 
@@ -111,7 +188,7 @@ export function AsignacionMasivaPlantilla({ plantilla, onCerrar }: AsignacionMas
         abierto={envio.confirmandoReemplazo}
         idTitulo="asignacion-masiva-confirmar-reemplazo"
         titulo="Reemplazar la rutina actual"
-        detalle={textoConfirmacionReemplazo(directorio.seleccion.length, envio.nombreUnico)}
+        detalle={textoConfirmacionReemplazo(seleccionados, envio.nombreUnico)}
         textoConfirmar="Sí, reemplazar"
         variante="peligro"
         onCancelar={() => envio.setConfirmandoReemplazo(false)}

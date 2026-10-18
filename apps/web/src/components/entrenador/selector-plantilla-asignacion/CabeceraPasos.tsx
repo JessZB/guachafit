@@ -1,12 +1,13 @@
 /**
  * Cabecera del selector: título, alumno, botón de cierre y paso actual
- * con su barra de progreso.
+ * con su barra de progreso (`IndicadorPasos`).
  *
  * Recorte verbatim del módulo `selector-plantilla-asignacion` (prompt 71, lote B).
  */
 import type { RefObject } from 'react';
 import { X } from 'lucide-react';
-import { PASOS_ASIGNACION, textoPaso, type PasoAsignacion } from '../../../lib/asignacion-pasos';
+import type { PasoAsignacion } from '../../../lib/asignacion-pasos';
+import { IndicadorPasos } from './IndicadorPasos';
 
 export function CabeceraPasos({
   alumnoNombre,
@@ -39,25 +40,7 @@ export function CabeceraPasos({
           <X className="h-5 w-5" aria-hidden="true" />
         </button>
       </div>
-      <div className="space-y-1.5">
-        <p
-          ref={tituloRef}
-          tabIndex={-1}
-          aria-live="polite"
-          aria-atomic="true"
-          className="text-sm font-semibold text-foreground focus:outline-hidden"
-        >
-          {textoPaso(paso)}
-        </p>
-        <div className="grid grid-cols-3 gap-1.5" aria-hidden="true">
-          {PASOS_ASIGNACION.map((p, i) => (
-            <span
-              key={p}
-              className={`h-1.5 rounded-full ${i <= indicePaso ? 'bg-primary' : 'bg-secondary'}`}
-            />
-          ))}
-        </div>
-      </div>
+      <IndicadorPasos paso={paso} indicePaso={indicePaso} tituloRef={tituloRef} />
     </div>
   );
 }

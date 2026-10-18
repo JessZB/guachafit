@@ -3,10 +3,14 @@
  *
  * Envío de la asignación masiva con idempotencia y fallo ambiguo. Recorte verbatim de
  * `AsignacionMasivaPlantilla.tsx:67-79,179-247` (mismo mecanismo: `apiClient` directo + demo local).
+ *
+ * Lote E10: `confirmar` recibe los ajustes comunes ya validados; viajan en el cuerpo (solo si
+ * hay alguno) y forman parte de la huella de la clave de idempotencia. El modo demo los ignora.
  */
 import { useRef, useState } from 'react';
 import {
   ModoAsignacionPlantilla,
+  type AjusteEjercicioPlantillaDTO,
   type AsignacionPlantillaResponseDTO,
 } from '@guachafit/shared';
 import { apiClient } from '../../../lib/api-client';
@@ -15,6 +19,7 @@ import {
   MENSAJE_ASIGNACION_INCIERTA,
   describirResultadosAsignacion,
   esFalloAmbiguoAsignacion,
+  ordenarAjustesCanonico,
   requiereConfirmacionReintento,
   resolverClaveAsignacion,
   type FilaResultadoAsignacion,
@@ -45,6 +50,8 @@ export function useEnvioAsignacionMasiva({
   const [falloAmbiguo, setFalloAmbiguo] = useState(false);
   const [confirmandoReintento, setConfirmandoReintento] = useState(false);
   const intentoAsignacion = useRef<IntentoAsignacion | null>(null);
+  // Ajustes del intento en curso: los fija `confirmar` y los usan los diálogos al reenviar.
+  const ajustesIntento = useRef<AjusteEjercicioPlantillaDTO[]>([]);
 
   const enviarAsignacion = async () => {
     setConfirmandoReemplazo(false);
@@ -62,7 +69,15 @@ export function useEnvioAsignacionMasiva({
       return;
     }
 
-    const intento = resolverClaveAsignacion(intentoAsignacion.current, seleccion, modo);
+    // Orden canónico: la huella de la clave y el cuerpo salen del mismo arreglo (lote E10, B-1).
+    const ajustes = ordenarAjustesCanonico(ajustesIntento.current);
+    const intento = resolverClaveAsignacion(
+      intentoAsignacion.current,
+      seleccion,
+      modo,
+      undefined,
+      ajustes
+    );
     intentoAsignacion.current = intento;
 
     setIsAsignando(true);
@@ -71,7 +86,11 @@ export function useEnvioAsignacionMasiva({
         `/plantillas/${plantillaId}/asignar`,
         {
           method: 'POST',
-          body: JSON.stringify({ alumnoIds: seleccion, modo }),
+          body: JSON.stringify({
+            alumnoIds: seleccion,
+            modo,
+            ...(ajustes.length > 0 ? { ajustes } : {}),
+          }),
           idempotent: true,
           idempotencyKey: intento.clave,
         }
@@ -100,8 +119,9 @@ export function useEnvioAsignacionMasiva({
     }
   };
 
-  const confirmar = () => {
+  const confirmar = (ajustes: AjusteEjercicioPlantillaDTO[] = []) => {
     if (seleccion.length === 0 || isAsignando) return;
+    ajustesIntento.current = ajustes;
     if (modo === ModoAsignacionPlantilla.REEMPLAZAR) {
       setConfirmandoReemplazo(true);
       return;
@@ -123,6 +143,9 @@ export function useEnvioAsignacionMasiva({
     setConfirmandoReemplazo,
     isAsignando,
     errorAsignacion,
+    // Tras un fallo ambiguo el intento queda congelado hasta confirmarse o cerrar el diálogo: no
+    // cambian alumnos, ajustes ni modo; solo se puede reintentar con la misma clave.
+    intentoCongelado: falloAmbiguo,
     resultados,
     confirmandoReintento,
     setConfirmandoReintento,

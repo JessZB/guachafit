@@ -3,7 +3,11 @@
  * Lógica pura (selección con tope, textos de confirmación y resultado por alumno) para poder
  * testearla sin DOM.
  */
-import { ModoAsignacionPlantilla, type ResultadoAsignacionAlumnoDTO } from '@guachafit/shared';
+import {
+  ModoAsignacionPlantilla,
+  type AjusteEjercicioPlantillaDTO,
+  type ResultadoAsignacionAlumnoDTO,
+} from '@guachafit/shared';
 import { ApiError, generateIdempotencyKey } from './api-client';
 import { traducirMensajeSuelto } from './mensajes-error';
 
@@ -144,7 +148,7 @@ export function esFalloAmbiguoAsignacion(error: unknown): boolean {
   return true;
 }
 
-/** Intento de asignación: misma selección + mismo modo comparten clave de idempotencia. */
+/** Intento de asignación: misma selección, modo y ajustes comparten clave de idempotencia. */
 export interface IntentoAsignacion {
   huella: string;
   clave: string;
@@ -164,18 +168,62 @@ export function requiereConfirmacionReintento(
 }
 
 /**
+ * Copia de un valor con las claves de cada objeto en orden alfabético y sin los `undefined` (JSON
+ * los omite de todos modos). Así dos ajustes con el mismo contenido serializan igual aunque sus
+ * campos lleguen en otro orden.
+ */
+function conClavesOrdenadas(valor: unknown): unknown {
+  if (Array.isArray(valor)) return valor.map(conClavesOrdenadas);
+  if (valor !== null && typeof valor === 'object') {
+    const registro = valor as Record<string, unknown>;
+    const copia: Record<string, unknown> = {};
+    for (const clave of Object.keys(registro).sort()) {
+      if (registro[clave] !== undefined) copia[clave] = conClavesOrdenadas(registro[clave]);
+    }
+    return copia;
+  }
+  return valor;
+}
+
+/**
+ * Orden canónico de los ajustes (lote E10, B-1): cada uno con sus claves ordenadas y el arreglo
+ * ordenado por esa misma serialización. El cuerpo de la petición y la huella de la clave usan este
+ * arreglo, así el servidor (que hashea el cuerpo tal cual llega) recibe siempre el mismo texto.
+ */
+export function ordenarAjustesCanonico(
+  ajustes: readonly AjusteEjercicioPlantillaDTO[]
+): AjusteEjercicioPlantillaDTO[] {
+  return ajustes
+    .map((ajuste) => {
+      const canonico = conClavesOrdenadas(ajuste) as AjusteEjercicioPlantillaDTO;
+      return { ajuste: canonico, texto: JSON.stringify(canonico) };
+    })
+    .sort((a, b) => (a.texto < b.texto ? -1 : a.texto > b.texto ? 1 : 0))
+    .map(({ ajuste }) => ajuste);
+}
+
+/** Huella de los ajustes: la misma serialización canónica que el cuerpo enviado (lote E10). */
+function huellaAjustes(ajustes: readonly AjusteEjercicioPlantillaDTO[]): string {
+  const serializados = ordenarAjustesCanonico(ajustes).map((ajuste) => JSON.stringify(ajuste));
+  return `[${serializados.join(',')}]`;
+}
+
+/**
  * `POST /plantillas/:id/asignar` acepta `X-Idempotency-Key`. Cada asignación usa una clave; los
- * reintentos de la MISMA selección y modo la reutilizan, así el servidor puede devolver la
+ * reintentos de la MISMA selección, modo y ajustes la reutilizan, así el servidor puede devolver la
  * respuesta original en vez de volver a añadir los días (mientras recuerde la clave). Otra
- * selección u otro modo es otra asignación y recibe una clave nueva.
+ * selección, otro modo u otros ajustes es otra asignación y recibe una clave nueva. Sin ajustes la
+ * huella es la de siempre (`modo|ids`).
  */
 export function resolverClaveAsignacion(
   previo: IntentoAsignacion | null,
   alumnoIds: string[],
   modo: ModoAsignacionPlantilla,
-  generarClave: () => string = generateIdempotencyKey
+  generarClave: () => string = generateIdempotencyKey,
+  ajustes: readonly AjusteEjercicioPlantillaDTO[] = []
 ): IntentoAsignacion {
-  const huella = `${modo}|${alumnoIds.join(',')}`;
+  const base = `${modo}|${alumnoIds.join(',')}`;
+  const huella = ajustes.length > 0 ? `${base}|${huellaAjustes(ajustes)}` : base;
   if (previo && previo.huella === huella) return previo;
   return { huella, clave: generarClave() };
 }

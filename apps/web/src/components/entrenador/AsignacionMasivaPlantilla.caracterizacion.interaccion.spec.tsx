@@ -51,12 +51,14 @@ type MockFn = ReturnType<typeof vi.fn>;
 const mockApi = apiClient as unknown as MockFn;
 
 const PLANTILLA: PlantillaRutinaResumenDTO = {
-  id: 'p-demo-1',
+  // E10: la plantilla del fixture debe tener detalle en `demo-plantillas.ts`
+  // (el paso 2 lo lee en modo demo). 'p-demo-1' no existe ahí; esta sí.
+  id: '22222222-2222-4222-8222-222222222201',
   entrenadorId: 'e1',
   nombre: 'Tren Superior Hipertrofia A',
   nivelObjetivo: NivelObjetivoPlantilla.INTERMEDIO,
-  totalDias: 3,
-  totalEjercicios: 9,
+  totalDias: 2,
+  totalEjercicios: 8,
   activa: true,
   createdAtUtc: '2026-09-01T10:00:00.000Z',
   updatedAtUtc: '2026-09-20T10:00:00.000Z',
@@ -94,13 +96,14 @@ afterEach(() => {
 /* ================================================================== */
 
 describe('AsignacionMasivaPlantilla caracterización · modo demo', () => {
-  it('1. render inicial: título, plantilla, radios, buscador, roster y asignar deshabilitado', async () => {
-    montar();
+  // E10 (decisión B): el masivo pasa a 3 pasos (elegir alumnos → revisar y
+  // ajustar → confirmar). Los tests 1, 2, 4, 5 y 6 cubren el flujo nuevo;
+  // el 3 y el 7 no cambian.
+  it('1. paso 1: título "Paso 1 de 3 · Elegir alumnos", roster, contador y "Siguiente" deshabilitado con 0; "Cancelar" cierra', async () => {
+    const { onCerrar } = montar();
 
-    expect(screen.getByRole('dialog', { name: 'Asignar a alumnos' })).toBeTruthy();
+    expect(await screen.findByText('Paso 1 de 3 · Elegir alumnos')).toBeTruthy();
     expect(screen.getByText('Plantilla «Tren Superior Hipertrofia A» · elige hasta 50 alumnos.')).toBeTruthy();
-    expect(screen.getByRole('radio', { name: /Añadir a la rutina actual/ })).toBeTruthy();
-    expect(screen.getByRole('radio', { name: /Reemplazar la rutina actual/ })).toBeTruthy();
     expect(screen.getByLabelText('Alumnos')).toBeTruthy();
     expect(screen.getByPlaceholderText('Buscar por nombre...')).toBeTruthy();
 
@@ -108,22 +111,26 @@ describe('AsignacionMasivaPlantilla caracterización · modo demo', () => {
     expect(await screen.findByText(NOMBRE_1)).toBeTruthy();
     expect(screen.getByText(NOMBRE_2)).toBeTruthy();
     expect(screen.getByText(/0 de 50 seleccionados/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Asignar a 0 alumnos' })).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Asignar a 0 alumnos' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Siguiente' }) as HTMLButtonElement).disabled).toBe(
+      true
+    );
     expect(mockApi).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(onCerrar).toHaveBeenCalledTimes(1);
   });
 
-  it('2. marcar y desmarcar un alumno actualiza el contador y el botón de asignar', async () => {
+  it('2. con ≥1 alumno "Siguiente" lleva al paso 2 con los días y ejercicios de la plantilla', async () => {
     montar();
     await screen.findByText(NOMBRE_1);
 
     marcarAlumno(NOMBRE_1);
     expect(screen.getByText(/1 de 50 seleccionados/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Asignar a 1 alumno' })).toBeTruthy();
 
-    marcarAlumno(NOMBRE_1);
-    expect(screen.getByText(/0 de 50 seleccionados/)).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Asignar a 0 alumnos' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+    expect(await screen.findByText('Paso 2 de 3 · Revisar y ajustar')).toBeTruthy();
+    expect(screen.getByText('Press Plano con Mancuernas')).toBeTruthy();
+    expect(screen.getByText('Jalón al Pecho Agarre Neutro')).toBeTruthy();
   });
 
   it('3. búsqueda en demo filtra por nombre; sin coincidencias muestra el vacío de búsqueda', async () => {
@@ -142,12 +149,26 @@ describe('AsignacionMasivaPlantilla caracterización · modo demo', () => {
     expect(mockApi).not.toHaveBeenCalled();
   });
 
-  it('4. modo añadir asigna directo en demo y muestra el resultado por alumno con "Listo"', async () => {
+  it('4. en demo, elegir 2 alumnos y avanzar asigna en modo "Añadir" (por defecto) y muestra el resultado con "Listo"', async () => {
     const { onCerrar } = montar();
     await screen.findByText(NOMBRE_1);
 
     marcarAlumno(NOMBRE_1);
     marcarAlumno(NOMBRE_2);
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+
+    expect(await screen.findByText('Paso 2 de 3 · Revisar y ajustar')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+
+    expect(await screen.findByText('Paso 3 de 3 · Confirmar')).toBeTruthy();
+    expect(
+      (screen.getByRole('radio', { name: /Añadir a la rutina actual/ }) as HTMLInputElement).checked
+    ).toBe(true);
+    expect(
+      screen.getByText(
+        'Se asignará «Tren Superior Hipertrofia A» a 2 alumnos sin ajustes. Se añade a su rutina actual.'
+      )
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Asignar a 2 alumnos' }));
 
     expect(await screen.findByText('Plantilla asignada a 2 de 2 alumnos.')).toBeTruthy();
@@ -158,11 +179,17 @@ describe('AsignacionMasivaPlantilla caracterización · modo demo', () => {
     expect(onCerrar).toHaveBeenCalledTimes(1);
   });
 
-  it('5. modo reemplazar pide confirmación con el nombre del único alumno; cancelar no asigna', async () => {
+  it('5. en el paso 3, "Reemplazar" pide confirmación con el nombre del único alumno; "Cancelar" se queda en el paso 3 sin asignar', async () => {
     montar();
     await screen.findByText(NOMBRE_1);
 
     marcarAlumno(NOMBRE_1);
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+
+    expect(await screen.findByText('Paso 2 de 3 · Revisar y ajustar')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+
+    expect(await screen.findByText('Paso 3 de 3 · Confirmar')).toBeTruthy();
     fireEvent.click(screen.getByRole('radio', { name: /Reemplazar la rutina actual/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Asignar a 1 alumno' }));
 
@@ -178,7 +205,7 @@ describe('AsignacionMasivaPlantilla caracterización · modo demo', () => {
       within(dialogoConfirmacion as HTMLElement).getByRole('button', { name: 'Cancelar' })
     );
     expect(screen.queryByText(/Plantilla asignada a/)).toBeNull();
-    expect(screen.getByPlaceholderText('Buscar por nombre...')).toBeTruthy();
+    expect(screen.getByText('Paso 3 de 3 · Confirmar')).toBeTruthy();
   });
 
   it('6. confirmar el reemplazo en demo asigna y el texto usa el conteo con varios alumnos', async () => {
@@ -187,6 +214,12 @@ describe('AsignacionMasivaPlantilla caracterización · modo demo', () => {
 
     marcarAlumno(NOMBRE_1);
     marcarAlumno(NOMBRE_2);
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+
+    expect(await screen.findByText('Paso 2 de 3 · Revisar y ajustar')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+
+    expect(await screen.findByText('Paso 3 de 3 · Confirmar')).toBeTruthy();
     fireEvent.click(screen.getByRole('radio', { name: /Reemplazar la rutina actual/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Asignar a 2 alumnos' }));
 
@@ -228,6 +261,42 @@ describe('AsignacionMasivaPlantilla caracterización · modo real con API simula
       if (url.startsWith('/alumnos?')) return Promise.resolve({ items, total });
       return Promise.reject(new Error(`URL no mockeada: ${url}`));
     });
+  }
+
+  // E10: detalle servido por `GET /plantillas/:id` para el paso 2 en modo real
+  // (1 día con 2 ejercicios). El código vigente nunca lo pide.
+  const DETALLE_MASIVO = {
+    id: PLANTILLA.id,
+    nombre: PLANTILLA.nombre,
+    bloques: [
+      {
+        diaId: 'd1',
+        diaSugerido: 1,
+        titulo: 'Día 1 (Lunes): Empuje',
+        ejercicios: [
+          {
+            id: 'e1',
+            ejercicioId: 'c1',
+            nombre: 'Press Plano con Mancuernas',
+            series: 4,
+            reps: '10',
+            peso: '60',
+          },
+          {
+            id: 'e2',
+            ejercicioId: 'c2',
+            nombre: 'Jalón al Pecho Agarre Neutro',
+            series: 4,
+            reps: '12',
+            peso: '65',
+          },
+        ],
+      },
+    ],
+  };
+
+  function esPeticionDetalle(url: string, opciones?: { method?: string }): boolean {
+    return url === `/plantillas/${PLANTILLA.id}` && (!opciones?.method || opciones.method === 'GET');
   }
 
   beforeEach(() => {
@@ -282,10 +351,13 @@ describe('AsignacionMasivaPlantilla caracterización · modo real con API simula
     expect(screen.queryByRole('button', { name: 'Cargar más alumnos' })).toBeNull();
   });
 
-  it('11. asignar envía POST con alumnoIds y modo, y muestra el resultado del servidor', async () => {
+  it('11. con 1 alumno, avanzar a confirmar y asignar envía POST con alumnoIds y modo, y muestra el resultado del servidor', async () => {
     mockApi.mockImplementation((url: string, opciones?: { method?: string; body?: string }) => {
       if ((url as string).startsWith('/alumnos?')) {
         return Promise.resolve({ items: [ALUMNO_A, ALUMNO_B], total: 2 });
+      }
+      if (esPeticionDetalle(url, opciones)) {
+        return Promise.resolve(DETALLE_MASIVO);
       }
       if (url === `/plantillas/${PLANTILLA.id}/asignar` && opciones?.method === 'POST') {
         return Promise.resolve({
@@ -305,6 +377,13 @@ describe('AsignacionMasivaPlantilla caracterización · modo real con API simula
     await screen.findByText(nombreCompleto(ALUMNO_A));
 
     marcarAlumno(nombreCompleto(ALUMNO_A));
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+
+    expect(await screen.findByText('Paso 2 de 3 · Revisar y ajustar')).toBeTruthy();
+    expect(screen.getByText('Press Plano con Mancuernas')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+
+    expect(await screen.findByText('Paso 3 de 3 · Confirmar')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Asignar a 1 alumno' }));
 
     expect(await screen.findByText('Plantilla asignada a 1 de 1 alumno.')).toBeTruthy();
@@ -322,6 +401,9 @@ describe('AsignacionMasivaPlantilla caracterización · modo real con API simula
     mockApi.mockImplementation((url: string, opciones?: { method?: string }) => {
       if ((url as string).startsWith('/alumnos?')) {
         return Promise.resolve({ items: [ALUMNO_A], total: 1 });
+      }
+      if (esPeticionDetalle(url, opciones)) {
+        return Promise.resolve(DETALLE_MASIVO);
       }
       if (url === `/plantillas/${PLANTILLA.id}/asignar` && opciones?.method === 'POST') {
         intentosPost += 1;
@@ -341,6 +423,12 @@ describe('AsignacionMasivaPlantilla caracterización · modo real con API simula
     await screen.findByText(nombreCompleto(ALUMNO_A));
 
     marcarAlumno(nombreCompleto(ALUMNO_A));
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+
+    expect(await screen.findByText('Paso 2 de 3 · Revisar y ajustar')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+
+    expect(await screen.findByText('Paso 3 de 3 · Confirmar')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Asignar a 1 alumno' }));
 
     const alerta = await screen.findByRole('alert');
@@ -359,6 +447,9 @@ describe('AsignacionMasivaPlantilla caracterización · modo real con API simula
     mockApi.mockImplementation((url: string, opciones?: { method?: string }) => {
       if ((url as string).startsWith('/alumnos?')) {
         return Promise.resolve({ items: [ALUMNO_A], total: 1 });
+      }
+      if (esPeticionDetalle(url, opciones)) {
+        return Promise.resolve(DETALLE_MASIVO);
       }
       if (url === `/plantillas/${PLANTILLA.id}/asignar` && opciones?.method === 'POST') {
         return Promise.reject(
@@ -381,6 +472,12 @@ describe('AsignacionMasivaPlantilla caracterización · modo real con API simula
     await screen.findByText(nombreCompleto(ALUMNO_A));
 
     marcarAlumno(nombreCompleto(ALUMNO_A));
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+
+    expect(await screen.findByText('Paso 2 de 3 · Revisar y ajustar')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+
+    expect(await screen.findByText('Paso 3 de 3 · Confirmar')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Asignar a 1 alumno' }));
 
     const alerta = await screen.findByRole('alert');

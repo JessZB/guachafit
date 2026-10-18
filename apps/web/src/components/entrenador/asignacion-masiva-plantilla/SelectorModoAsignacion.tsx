@@ -12,12 +12,15 @@ import { ModoAsignacionPlantilla } from '@guachafit/shared';
 export function SelectorModoAsignacion({
   modo,
   onCambiarModo,
+  deshabilitado = false,
 }: {
   modo: ModoAsignacionPlantilla;
   onCambiarModo: (modo: ModoAsignacionPlantilla) => void;
+  /** Bloquea el cambio de modo (asignación masiva tras un fallo ambiguo). */
+  deshabilitado?: boolean;
 }) {
   return (
-    <fieldset className="space-y-2">
+    <fieldset className={deshabilitado ? 'space-y-2 opacity-60' : 'space-y-2'}>
       <legend className="text-xs font-bold text-foreground mb-2">
         ¿Qué hacemos con la rutina actual?
       </legend>
@@ -48,6 +51,7 @@ export function SelectorModoAsignacion({
               value={opcion.valor}
               checked={modo === opcion.valor}
               onChange={() => onCambiarModo(opcion.valor)}
+              disabled={deshabilitado}
               className="sr-only"
             />
             <span className="text-xs font-bold text-foreground block">{opcion.titulo}</span>

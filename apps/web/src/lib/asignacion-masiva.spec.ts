@@ -11,6 +11,7 @@ import {
   esFalloAmbiguoAsignacion,
   hayMasAlumnos,
   mensajeListaVaciaAlumnos,
+  ordenarAjustesCanonico,
   requiereConfirmacionReintento,
   resolverClaveAsignacion,
   textoConfirmacionReemplazo,
@@ -180,5 +181,104 @@ describe('asignacion-masiva: clave de idempotencia por intento', () => {
     expect(
       resolverClaveAsignacion(primero, ['a', 'b'], ModoAsignacionPlantilla.REEMPLAZAR, generar).clave
     ).toBe('clave-3');
+  });
+});
+
+/* ================================================================== */
+/* Lote E10 (RF-017 RN-03) · la huella incluye los ajustes.            */
+/* Fase verde: `resolverClaveAsignacion` se usa con su firma real      */
+/* (quinto parámetro `ajustes`). La compatibilidad sin quinto          */
+/* argumento ya la cubren los 3 `it` existentes de arriba.             */
+/* ================================================================== */
+
+describe('asignacion-masiva E10 · L4: la huella incluye los ajustes', () => {
+  let contador = 0;
+  const generar = () => `clave-${++contador}`;
+
+  it('mismos ids, modo y ajustes reutiliza la clave; en otro orden también; un ajuste distinto la renueva', () => {
+    contador = 0;
+    const resolver = resolverClaveAsignacion;
+    const ajustes = [{ diaId: 'd1', nombre: 'Press Plano', pesoPrescritoKg: '70' }];
+    const primero = resolver(null, ['a', 'b'], ModoAsignacionPlantilla.FUSIONAR, generar, ajustes);
+    // Mismo contenido reutiliza la clave…
+    expect(
+      resolver(primero, ['a', 'b'], ModoAsignacionPlantilla.FUSIONAR, generar, [...ajustes]).clave
+    ).toBe(primero.clave);
+    // …en otro orden también (huella canónica)…
+    const reordenados = [
+      { diaId: 'd2', nombre: 'Remo', pesoPrescritoKg: '50' },
+      { diaId: 'd1', nombre: 'Press Plano', pesoPrescritoKg: '70' },
+    ];
+    const baseOrdenada = resolver(
+      null,
+      ['a', 'b'],
+      ModoAsignacionPlantilla.FUSIONAR,
+      generar,
+      [...reordenados].reverse()
+    );
+    // Mismo contenido en otro orden reutiliza la clave (huella canónica con los ajustes).
+    expect(
+      resolver(baseOrdenada, ['a', 'b'], ModoAsignacionPlantilla.FUSIONAR, generar, reordenados)
+        .clave
+    ).toBe(baseOrdenada.clave);
+    // Un ajuste distinto renueva la clave: la huella incluye los ajustes.
+    expect(
+      resolver(
+        primero,
+        ['a', 'b'],
+        ModoAsignacionPlantilla.FUSIONAR,
+        generar,
+        [{ diaId: 'd1', nombre: 'Press Plano', pesoPrescritoKg: '80' }]
+      ).clave
+    ).not.toBe(primero.clave);
+  });
+
+  it('sin ajustes frente a con ajustes, otro modo u otros ids → clave nueva', () => {
+    contador = 0;
+    const resolver = resolverClaveAsignacion;
+    const primero = resolver(null, ['a', 'b'], ModoAsignacionPlantilla.FUSIONAR, generar);
+    // Sin quinto argumento frente a con ajustes renueva la clave (la huella incluye los ajustes).
+    expect(
+      resolver(
+        primero,
+        ['a', 'b'],
+        ModoAsignacionPlantilla.FUSIONAR,
+        generar,
+        [{ diaId: 'd1', nombre: 'Press Plano', pesoPrescritoKg: '70' }]
+      ).clave
+    ).not.toBe(primero.clave);
+    expect(
+      resolver(primero, ['a', 'b'], ModoAsignacionPlantilla.REEMPLAZAR, generar, []).clave
+    ).not.toBe(primero.clave);
+    expect(
+      resolver(primero, ['a'], ModoAsignacionPlantilla.FUSIONAR, generar, []).clave
+    ).not.toBe(primero.clave);
+  });
+});
+
+describe('asignacion-masiva E10 · B-1: orden canónico de los ajustes', () => {
+  it('los mismos ajustes en otro orden, o con sus claves en otro orden, devuelven el mismo JSON.stringify', () => {
+    const base = [
+      { diaId: 'd1', nombre: 'Press Plano', pesoPrescritoKg: '70' },
+      { diaId: 'd2', nombre: 'Remo', pesoPrescritoKg: '50' },
+    ];
+    const enOtroOrden = [...base].reverse();
+    const clavesEnOtroOrden = [
+      { pesoPrescritoKg: '70', diaId: 'd1', nombre: 'Press Plano' },
+      { nombre: 'Remo', pesoPrescritoKg: '50', diaId: 'd2' },
+    ];
+    const canonico = JSON.stringify(ordenarAjustesCanonico(base));
+    expect(JSON.stringify(ordenarAjustesCanonico(enOtroOrden))).toBe(canonico);
+    expect(JSON.stringify(ordenarAjustesCanonico(clavesEnOtroOrden))).toBe(canonico);
+  });
+
+  it('no muta la entrada', () => {
+    const entrada = [
+      { diaId: 'd2', nombre: 'Remo', pesoPrescritoKg: '50' },
+      { diaId: 'd1', nombre: 'Press Plano', pesoPrescritoKg: '70' },
+    ];
+    const copia = JSON.parse(JSON.stringify(entrada));
+    ordenarAjustesCanonico(entrada);
+    expect(entrada).toEqual(copia);
   });
 });

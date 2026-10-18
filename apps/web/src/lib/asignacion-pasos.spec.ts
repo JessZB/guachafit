@@ -6,7 +6,13 @@
  */
 import { describe, expect, it } from 'vitest';
 import { ModoAsignacionPlantilla, type BloqueDiaRutinaDTO } from '@guachafit/shared';
-import { resumenAsignacion, textoEjercicioPlantilla, textoPaso } from './asignacion-pasos';
+import {
+  PASOS_ASIGNACION_MASIVA,
+  resumenAsignacion,
+  resumenAsignacionMasiva,
+  textoEjercicioPlantilla,
+  textoPaso,
+} from './asignacion-pasos';
 
 type EjercicioPlantilla = BloqueDiaRutinaDTO['ejercicios'][number];
 
@@ -85,5 +91,68 @@ describe('asignacion-pasos · resumenAsignacion', () => {
     expect(
       resumenAsignacion({ ...base, numeroAjustes: 1, modo: ModoAsignacionPlantilla.REEMPLAZAR })
     ).toBe('Se asignará «Fuerza 4 días» a Ana Pérez con 1 ajuste. Reemplaza su rutina actual.');
+  });
+});
+
+/* ================================================================== */
+/* Lote E10 (RF-017 RN-03) · asignación masiva en 3 pasos.             */
+/* Contratos L1–L3: exports estáticos (fase verde).                    */
+/* ================================================================== */
+
+describe('asignacion-pasos masiva 3 pasos (E10 · L1–L3)', () => {
+  it("L1 · PasoAsignacion admite 'alumnos' y PASOS_ASIGNACION_MASIVA es ['alumnos','revisar','confirmar']", () => {
+    expect(PASOS_ASIGNACION_MASIVA).toEqual(['alumnos', 'revisar', 'confirmar']);
+  });
+
+  it("L1 · 'alumnos' está incluido en los pasos del flujo masivo", () => {
+    expect(PASOS_ASIGNACION_MASIVA).toContain('alumnos');
+  });
+
+  it('L2 · textoPaso con PASOS_ASIGNACION_MASIVA titula cada paso del masivo', () => {
+    const pasos = PASOS_ASIGNACION_MASIVA;
+    expect(textoPaso('alumnos', pasos)).toBe('Paso 1 de 3 · Elegir alumnos');
+    expect(textoPaso('revisar', pasos)).toBe('Paso 2 de 3 · Revisar y ajustar');
+    expect(textoPaso('confirmar', pasos)).toBe('Paso 3 de 3 · Confirmar');
+  });
+
+  it("L2 · textoPaso('alumnos', PASOS_ASIGNACION_MASIVA) es el título del paso 1 masivo", () => {
+    expect(textoPaso('alumnos', PASOS_ASIGNACION_MASIVA)).toBe('Paso 1 de 3 · Elegir alumnos');
+  });
+
+  it('L3 · 3 alumnos, 1 ajuste, FUSIONAR usa la frase masiva exacta', () => {
+    expect(typeof resumenAsignacionMasiva).toBe('function');
+    expect(
+      resumenAsignacionMasiva({
+        plantillaNombre: 'Fuerza',
+        cantidad: 3,
+        numeroAjustes: 1,
+        modo: ModoAsignacionPlantilla.FUSIONAR,
+      })
+    ).toBe('Se asignará «Fuerza» a 3 alumnos con 1 ajuste. Se añade a su rutina actual.');
+  });
+
+  it('L3 · 1 alumno con nombreUnico, 0 ajustes, REEMPLAZAR nombra al alumno', () => {
+    expect(typeof resumenAsignacionMasiva).toBe('function');
+    expect(
+      resumenAsignacionMasiva({
+        plantillaNombre: 'Fuerza',
+        cantidad: 1,
+        nombreUnico: 'Ana Pérez',
+        numeroAjustes: 0,
+        modo: ModoAsignacionPlantilla.REEMPLAZAR,
+      })
+    ).toBe('Se asignará «Fuerza» a Ana Pérez sin ajustes. Reemplaza su rutina actual.');
+  });
+
+  it("L3 · 2 ajustes usa el plural 'con 2 ajustes'", () => {
+    expect(typeof resumenAsignacionMasiva).toBe('function');
+    expect(
+      resumenAsignacionMasiva({
+        plantillaNombre: 'Fuerza',
+        cantidad: 2,
+        numeroAjustes: 2,
+        modo: ModoAsignacionPlantilla.FUSIONAR,
+      })
+    ).toContain('con 2 ajustes');
   });
 });

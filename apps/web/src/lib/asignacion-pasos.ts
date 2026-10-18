@@ -6,19 +6,32 @@ import { ModoAsignacionPlantilla, type BloqueDiaRutinaDTO } from '@guachafit/sha
 import { interpretarPesoPrescrito } from './entrada-numerica';
 import { formatearSegundos } from './sesion-tiempos';
 
-export type PasoAsignacion = 'elegir' | 'revisar' | 'confirmar';
+/** 'alumnos' solo existe en la asignación masiva (lote E10); 'elegir', solo en la individual. */
+export type PasoAsignacion = 'alumnos' | 'elegir' | 'revisar' | 'confirmar';
 
+/** Pasos de la asignación individual (expediente del alumno). */
 export const PASOS_ASIGNACION: readonly PasoAsignacion[] = ['elegir', 'revisar', 'confirmar'];
 
+/** Pasos de la asignación masiva (RF-017 RN-03, lote E10): elegir alumnos → revisar → confirmar. */
+export const PASOS_ASIGNACION_MASIVA: readonly PasoAsignacion[] = [
+  'alumnos',
+  'revisar',
+  'confirmar',
+];
+
 const TITULO_PASO: Record<PasoAsignacion, string> = {
+  alumnos: 'Elegir alumnos',
   elegir: 'Elegir plantilla',
   revisar: 'Revisar y ajustar',
   confirmar: 'Confirmar',
 };
 
-/** 'Paso 1 de 3 · Elegir plantilla'. */
-export function textoPaso(paso: PasoAsignacion): string {
-  return `Paso ${PASOS_ASIGNACION.indexOf(paso) + 1} de ${PASOS_ASIGNACION.length} · ${TITULO_PASO[paso]}`;
+/** 'Paso 1 de 3 · Elegir plantilla'. `pasos` indica el flujo (por defecto, el individual). */
+export function textoPaso(
+  paso: PasoAsignacion,
+  pasos: readonly PasoAsignacion[] = PASOS_ASIGNACION
+): string {
+  return `Paso ${pasos.indexOf(paso) + 1} de ${pasos.length} · ${TITULO_PASO[paso]}`;
 }
 
 /** '4 × 10 · 60 kg · Esfuerzo 8 · 1 min 30 s' (el nombre va aparte). */
@@ -63,4 +76,26 @@ export function resumenAsignacion({
       ? 'Reemplaza su rutina actual.'
       : 'Se añade a su rutina actual.';
   return `Se asignará «${plantillaNombre}» a ${alumnoNombre} ${ajustes}. ${efecto}`;
+}
+
+/**
+ * Frase del paso de confirmación de la asignación masiva (lote E10): mismo estilo que
+ * `resumenAsignacion`; con un solo alumno conocido se nombra, si no, se cuenta.
+ */
+export function resumenAsignacionMasiva({
+  plantillaNombre,
+  cantidad,
+  nombreUnico,
+  numeroAjustes,
+  modo,
+}: {
+  plantillaNombre: string;
+  cantidad: number;
+  nombreUnico?: string;
+  numeroAjustes: number;
+  modo: ModoAsignacionPlantilla;
+}): string {
+  const destinatario =
+    cantidad === 1 && nombreUnico ? nombreUnico : `${cantidad} alumno${cantidad === 1 ? '' : 's'}`;
+  return resumenAsignacion({ plantillaNombre, alumnoNombre: destinatario, numeroAjustes, modo });
 }

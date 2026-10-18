@@ -4,6 +4,10 @@
  *
  * Recorte verbatim del módulo `selector-plantilla-asignacion` (prompt 71, lote B).
  * Presentacional: no pide datos; recibe el detalle, los ajustes y callbacks.
+ *
+ * Lote E10: con `diasAbiertos` el acordeón admite varios días abiertos a la vez (asignación
+ * masiva); cada pulsación entrega el `diaId` a `onSeleccionarDia` y el contenedor alterna.
+ * Sin esa prop se comporta como siempre: un solo día abierto (`diaAbierto`).
  */
 import type { RefObject } from 'react';
 import { AlertCircle, ChevronDown } from 'lucide-react';
@@ -22,6 +26,7 @@ export function PasoRevisar({
   overrides,
   erroresAjustes,
   diaAbierto,
+  diasAbiertos,
   ajustando,
   asignacionCompletada,
   resumenErroresRef,
@@ -37,6 +42,8 @@ export function PasoRevisar({
   overrides: Record<string, OverrideAjusteEjercicio>;
   erroresAjustes: ErrorAjuste[];
   diaAbierto: string | null;
+  /** Días abiertos a la vez (modo de varios días); si se pasa, `diaAbierto` se ignora. */
+  diasAbiertos?: ReadonlySet<string>;
   ajustando: Set<string>;
   /** Tras un éxito no se permite editar: cada asignación crea/fusiona bloques reales. */
   asignacionCompletada: boolean;
@@ -98,7 +105,9 @@ export function PasoRevisar({
 
       <div className="divide-y divide-border/70 border-y border-border/70">
         {bloquesPreview.map((bloque) => {
-          const abierto = diaAbierto === bloque.diaId;
+          const abierto = diasAbiertos
+            ? diasAbiertos.has(bloque.diaId)
+            : diaAbierto === bloque.diaId;
           const idPanel = `${idBase}-dia-${bloque.diaId}`;
           return (
             <section key={bloque.diaId}>
@@ -107,7 +116,9 @@ export function PasoRevisar({
                   type="button"
                   aria-expanded={abierto}
                   aria-controls={idPanel}
-                  onClick={() => onSeleccionarDia(abierto ? null : bloque.diaId)}
+                  onClick={() =>
+                    onSeleccionarDia(diasAbiertos || !abierto ? bloque.diaId : null)
+                  }
                   className="w-full min-h-12 py-3 flex items-center justify-between gap-3 text-left cursor-pointer"
                 >
                   <span className="min-w-0">
