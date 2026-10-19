@@ -173,7 +173,22 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 ## 5. Directorio de Alumnos
 
 - [ ] Busca por nombre, apellido, correo o documento (filtrando en el servidor, no solo lo visible).
-- [ ] **Pestaña "En Mora"**: ahora coincide con el número del KPI (antes decía N y mostraba 0 filas).
+- [ ] **Cabecera "Mis alumnos" (desde 2026-10-19):** arriba solo están el título y los botones **"Invitar"** e **"Inscribir"**. Ya no hay tarjetas KPI ni el banner del enlace. En móvil el primer alumno aparece mucho antes.
+- [ ] **Chips con conteo:** "Vigentes N" está marcado al entrar y **no** muestra archivados. "Archivados N" muestra solo las bajas, con "Restaurar". Si pulsas otra vez el chip activo, vuelves a "Vigentes". Recarga la página: mientras carga, los chips no muestran "0".
+- [ ] **Invitar:** pulsa "Invitar". Se abre un diálogo con tu enlace de captación, "Copiar enlace" y "Compartir por WhatsApp". Esc lo cierra.
+- [ ] **Ordenar por:** prueba las cuatro opciones.
+  - "Nombre (A-Z)": orden alfabético.
+  - "Sin entrenar primero": arriba los que nunca entrenaron y luego los que llevan más tiempo sin entrenar.
+  - "Mayor racha": arriba las rachas más largas.
+  - Cambiar el orden te devuelve a la página 1 y el orden se mantiene entre páginas.
+- [ ] **Tarjeta:** muestra el estado (Activo/Pausado), la modalidad legible, "Entrenó hoy/ayer/hace N días" o **"Sin entrenar hace N días"** (en color de aviso y con icono, a partir de 7 días) y "Racha de N días" si la hay.
+- [ ] **Teclado:**
+  - Tab llega al nombre y Enter abre el expediente.
+  - Tab llega a WhatsApp y Enter abre WhatsApp, **no** el expediente.
+  - En la vista tabla, Tab llega al nombre de cada fila y Enter abre el expediente.
+- [ ] **Tabla:** las columnas son Alumno, Estado, Modalidad, Plan, Último entreno, Racha, Pago y Acciones.
+- [ ] **Privacidad (vía API):** con el token del entrenador, `GET /alumnos` → ningún alumno trae `fichaSaludPrivada`. `GET /alumnos/:id` sí la trae.
+- [ ] **Chip "En mora"**: el número del chip coincide con las filas que muestra.
 - [ ] **Paginación numerada** con "Mostrando X de N" — ya no se pierden alumnos después del número 50.
 - [ ] Las filas muestran el **plan real** o "Sin plan asignado" (ya no un "Plan Estándar" inventado).
 

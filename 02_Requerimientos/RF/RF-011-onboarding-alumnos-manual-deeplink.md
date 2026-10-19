@@ -4,7 +4,7 @@ modulo: Onboarding
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-10-04
+fecha_verificacion: 2026-10-19
 problema_origen: "[[PROB-003-acceso-onboarding-dashboard-central]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -73,6 +73,11 @@ Permite al entrenador captar e incorporar alumnos tanto en el entorno físico de
   - *Cards Compactas Densas:* Tarjetas escaneables de ~120px de altura con avatar circular, semáforo de pagos (`Al Día`, `Por Vencer`, `Moroso`), badges de modalidad y estado, botón directo de WhatsApp y navegación al expediente.
   - *Vista Tabla:* Filas ordenables de alta densidad operativa.
   - KPIs en cabecera con recuento de alumnos totales, activos, pausados, morosos y modalidades.
+  - *Actualización 2026-10-19 (lote "Mis alumnos"):*
+    - Los KPIs pasan a ser **chips de filtro con conteo**: Vigentes (por defecto, sin archivados), Activos, Pausados, En mora y Archivados.
+    - Cada alumno muestra su **último entreno** (aviso a partir de 7 días sin entrenar) y su **racha efectiva**.
+    - La lista se puede **ordenar** por alta más reciente (por defecto), nombre A-Z, sin entrenar primero o mayor racha. El orden se aplica en el servidor.
+    - El enlace de captación se abre desde el botón **"Invitar"**.
 - **RN-09 (Expediente Deportivo 360° - `/coach/alumnos/:id`):** Al seleccionar un alumno, se accede a una pantalla dedicada con cabecera fija de identidad y 4 pestañas de gestión operativa:
   1. *Resumen & Ficha Médica:* Datos personales, ficha médica cifrada (AES-256-GCM) y asignación de Plan del catálogo (`RF-005`) con override de precio/tasa.
   2. *Finanzas & Pagos:* Resumen del mes actual, histórico acumulado de cobros y modal de Cobro Directo Inteligente en sala.
@@ -146,3 +151,42 @@ Then la aplicación debe navegar a "/coach/alumnos/al-001"
   - **Respaldo:** la web sigue mostrando el enlace copiable (válido 48 h, un solo uso) en ambos casos; la vigencia sale de una sola fuente (`packages/shared/src/cuenta.ts`).
   - **Límites honestos:** `correoEnviado: true` significa "encolado con proveedor real", **no** "entregado en el buzón" (un rechazo posterior de Brevo va a la DLQ sin avisar al coach); un `add` ya enviado a ioredis no se puede retirar, así que si Redis vuelve tras el límite el correo puede salir tarde (el enlace sigue sirviendo mientras no venza); el tope del plan gratuito de Brevo es de 300 correos/día (ADR-018).
   - Evidencia: API 986 → **1087** tests (1 skipped; `apps/api/test/bdd/api4-correo-real.spec.ts`, `api4-correo-garantias.spec.ts`, `rf011-wu-e-onboarding.spec.ts`); web 785 → **797**.
+- Implementado (2026-10-19, lote "Mis alumnos" `26917bb`): directorio rediseñado para que el coach priorice (RN-08, Escenario 4).
+  - **Privacidad:**
+    - `GET /alumnos` ya no selecciona, descifra ni envía `fichaSaludPrivada` (`sanitizarPerfilDirectorio`).
+    - La ficha de salud solo viaja en el detalle `GET /alumnos/:id` (Escenario 3).
+  - **Señales por alumno** (`AlumnoDirectorioItemDTO`):
+    - `ultimaSesionFecha` es el `MAX(fecha_fin_utc)` de las sesiones COMPLETADA. Lo calcula una subconsulta escalar correlacionada, acotada a las filas ya filtradas por `entrenador_id`, porque `sesiones_entrenamiento` no tiene RLS.
+    - `rachaDias` es la racha **efectiva**: 0 si `rachaUltimaFecha` es anterior a ayer en el día local del alumno, con la misma regla que `calcularRachaEfectiva`.
+    - `rachaUltimaFecha`.
+  - **Orden** (RN-08, "filas ordenables"):
+    - Parámetro `orden` = `alta_reciente` (por defecto) | `nombre` | `sin_entrenar` (los que nunca entrenaron, primero) | `mayor_racha`.
+    - Se aplica en SQL antes de `limit`/`offset`, con desempate por `id` ([[ADR-013-paginacion-server-side-stack-listas]]).
+    - En `mayor_racha`, el "ayer" de cada zona de la cartera se calcula en JS y llega como parámetro. Así una zona horaria inválida no provoca un 500 en el directorio y usa el mismo respaldo UTC que el mapeo del ítem.
+  - **Rendimiento:** migración `0023` con el índice `idx_sesiones_alumno_estado_fin (alumno_id, estado, fecha_fin_utc)`.
+  - **Web** (`/coach/alumnos`):
+    - Título "Mis alumnos".
+    - Chips con conteo como único filtro de estado. "Vigentes" va por defecto y ya no mezcla bajas.
+    - Selector "Ordenar por".
+    - Diálogo "Invitar" con el enlace de captación (`ModalEnlaceCaptacion`), en lugar del banner fijo.
+    - Tarjeta con estado de activación, modalidad legible, último entreno ("Sin entrenar hace N días" con icono a partir de 7 días) y racha.
+    - Tabla de 8 columnas: Alumno, Estado, Modalidad, Plan, Último entreno, Racha, Pago y Acciones.
+    - Esqueleto de carga, sin "0" falsos en los chips.
+    - Aviso con "Reintentar" si falla una recarga con la lista en pantalla.
+  - **Accesibilidad:**
+    - La tarjeta deja de ser un `role="button"` con controles anidados. El nombre es el botón principal y cubre la tarjeta ("stretched link"). WhatsApp y Restaurar son controles hermanos: Enter sobre ellos ya no abre el expediente.
+    - Foco visible en el buscador y en `ChipFiltro`.
+  - **Límites honestos:**
+    - Si falla la petición de **otro** filtro, orden o página, se ve el error a pantalla completa. No se muestran filas de otro filtro como si fueran las actuales.
+    - La vista no indica todavía la antigüedad de los datos servidos desde la caché offline ([[ADR-014-actualizaciones-guiadas-sw-frescura-offline]]). Queda como seguimiento.
+    - En el modo demo la racha se cuenta con el día local del navegador.
+  - **Seguimiento:**
+    - Mostrar la frescura offline en "Mis alumnos", con el patrón de `AlumnoDetallePage`.
+    - En móvil (< `sm`), el buscador y el selector de orden se apilan en dos filas a propósito, para mejorar el área táctil. Se puede reevaluar.
+    - `listar-alumnos.ts` importa la regla pura `calcularRachaEfectiva` del módulo `entrenamiento`. Conviene moverla a un sitio común si la frontera de ADR-023 lo exige.
+  - **Evidencia:**
+    - web **2220/2220**;
+    - API **1954** (53 saltados);
+    - E2E contra Postgres `mis-alumnos-directorio-orden.e2e.spec.ts` **24/24**;
+    - typecheck y build de shared, API y web en verde;
+    - revisión 4R sin BLOCKER, con sus 13 hallazgos corregidos y validados.

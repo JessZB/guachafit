@@ -271,8 +271,19 @@ Listado principal de la cartera del coach con búsqueda, filtros y paginación s
 
 - **Método y Ruta:** `GET /alumnos`
 - **Permisos:** `entrenador`, `superadmin`.
-- **Parámetros de consulta:** `q` (búsqueda literal case-insensitive sobre nombre/apellido/correo/documento, máx. 200 caracteres), `estado`, `modalidad`, `incluirArchivados` (default `false`), `soloArchivados` (default `false`; tiene prioridad sobre `incluirArchivados`), `semaforoPago` (`moroso | al_dia | sin_cuota`), `limit` (default y techo 100) y `offset` (default 0).
-- **Respuesta Exitosa (`200 OK`):** envelope `{ items, total, limit, offset, resumen }`. `resumen` son contadores de la cartera COMPLETA (COUNT en el servidor) y nunca se altera por la búsqueda, los filtros ni la página.
+- **Parámetros de consulta:** `q` (búsqueda literal case-insensitive sobre nombre/apellido/correo/documento, máx. 200 caracteres), `estado`, `modalidad`, `incluirArchivados` (default `false`), `soloArchivados` (default `false`; tiene prioridad sobre `incluirArchivados`), `semaforoPago` (`moroso | al_dia | sin_cuota`), `orden` (`alta_reciente` por defecto | `nombre` | `sin_entrenar` | `mayor_racha`; un valor desconocido → 400), `limit` (default y techo 100) y `offset` (default 0).
+- **Orden (desde 2026-10-19):** se aplica en SQL antes de `limit`/`offset`, y en todos los casos desempata por `id`.
+  - `alta_reciente`: `createdAtUtc` desc.
+  - `nombre`: `lower(nombres)` y luego `lower(apellidos)`.
+  - `sin_entrenar`: última sesión completada ascendente; los que nunca entrenaron van primero.
+  - `mayor_racha`: racha efectiva desc, luego `lower(nombres)`.
+- **Respuesta Exitosa (`200 OK`):** envelope `{ items, total, limit, offset, resumen }`.
+  - `resumen` son contadores de la cartera COMPLETA (COUNT en el servidor) y nunca se altera por la búsqueda, los filtros, el orden ni la página.
+  - Cada ítem es un `AlumnoDirectorioItemDTO`:
+    - **sin `fichaSaludPrivada`**, que solo se expone en `GET /alumnos/:id`;
+    - `ultimaSesionFecha` (ISO UTC o `null`);
+    - `rachaDias` (racha efectiva);
+    - `rachaUltimaFecha` (`YYYY-MM-DD` o `null`).
 ```json
 {
   "items": [

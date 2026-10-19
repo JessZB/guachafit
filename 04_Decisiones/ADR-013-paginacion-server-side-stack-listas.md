@@ -54,7 +54,11 @@ Elegimos la **Opción B (offset + envelope estándar con opt-in)** porque da un 
    - `GET /finanzas/conciliacion/bandeja`: default 25, techo 100 (FIFO).
    - `GET /antropometria/pendientes`: default 25, techo 100.
 2. **Paginación opt-in para series completas:** `GET /finanzas/clientes/{clienteId}/historial` (`txLimit`/`txOffset` + `transaccionesTotal`) y `GET /antropometria/evolucion/{alumnoId}` (`controlesLimit`/`controlesOffset` + `controlesTotal`) conservan el comportamiento histórico cuando no reciben parámetros; los charts siguen pidiendo la serie completa.
-3. **Filtros server-side antes del slice:** `q`, `estado`, `modalidad`, `incluirArchivados`, `soloArchivados` y `semaforoPago` en el directorio; `q`, `semaforo` y `orden` en el monitor. Los totales de contexto (`resumen`) siempre describen la cartera completa, no la página.
+3. **Filtros server-side antes del slice:** `q`, `estado`, `modalidad`, `incluirArchivados`, `soloArchivados`, `semaforoPago` y `orden` en el directorio; `q`, `semaforo` y `orden` en el monitor.
+   - El `orden` del directorio se añadió el 2026-10-19 (lote "Mis alumnos").
+   - Va en SQL, con desempate total por `id`, para que el offset no repita ni salte filas.
+   - La regla vale para todo listado paginado: ordenar en memoria la página ya cortada está prohibido, porque ordena cada página por separado y no la cartera.
+   - Ese orden se prueba con un E2E contra Postgres real (`apps/api/test/bdd/mis-alumnos-directorio-orden.e2e.spec.ts`). El mock drizzle de los BDD ignora `orderBy` y no puede demostrarlo. Los totales de contexto (`resumen`) siempre describen la cartera completa, no la página.
 4. **Stack de UI:** componente `Paginacion` (Radix DropdownMenu para filas por página 10/25/50/100, números con elipsis, `aria-current="page"`, controles deshabilitados durante la carga) y hook `usePaginacionServidor` sobre TanStack Query (`placeholderData: keepPreviousData` para evitar parpadeo al cambiar de página y `AbortSignal` para cancelar consultas obsoletas).
 5. **Honestidad de datos:** el filtro de semáforo del monitor se aplica en el servidor, pero el semáforo se calcula en memoria (agregados por alumno), no como columna SQL consultable.
 6. **Deuda declarada:** los filtros de página visible (bandeja de conciliación, pendientes antropométricos y pagos del alumno con copy "en esta página") y la lista de plantillas sin paginar quedan registrados en [[03_Contratos_API_Especificacion]] §1.2 y en las notas de [[RF-017-banco-plantillas-rutinas-entrenamiento]].
