@@ -8,6 +8,7 @@ import { construirDestinoRegistro } from './lib/onboarding-links';
 // Layout & Guards
 import { AppLayout } from './components/layout/AppLayout';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
+import { ErrorRuta } from './components/common/ErrorRuta';
 
 // Public Page Fallback
 function PublicFallback() {
@@ -128,180 +129,188 @@ function RegistroRedirect() {
 }
 
 export const router = createBrowserRouter([
-  // Public Routes
+  // ER1 (prompt 54): la raíz sin `path` aporta `errorElement` a todas las rutas. Si un
+  // módulo perezoso no se descarga o una página falla, se muestra ErrorRuta en vez de la
+  // pantalla técnica por defecto de React Router. Sin `element`, solo renderiza su Outlet.
   {
-    path: '/login',
-    element: (
-      <Suspense fallback={<PublicFallback />}>
-        <LoginPage />
-      </Suspense>
-    ),
-  },
-  {
-    path: '/onboarding',
-    element: (
-      <Suspense fallback={<PublicFallback />}>
-        <OnboardingPage />
-      </Suspense>
-    ),
-  },
-  {
-    path: '/registro',
-    element: <RegistroRedirect />,
-  },
-  {
-    path: '/activar',
-    element: (
-      <Suspense fallback={<PublicFallback />}>
-        <ActivacionPage />
-      </Suspense>
-    ),
-  },
-  {
-    path: '/recuperar',
-    element: (
-      <Suspense fallback={<PublicFallback />}>
-        <RecuperarPage />
-      </Suspense>
-    ),
-  },
-  {
-    path: '/restablecer',
-    element: (
-      <Suspense fallback={<PublicFallback />}>
-        <RestablecerPage />
-      </Suspense>
-    ),
-  },
-  {
-    path: '/confirmar-correo',
-    element: (
-      <Suspense fallback={<PublicFallback />}>
-        <ConfirmarCorreoPage />
-      </Suspense>
-    ),
-  },
-  {
-    path: '/',
-    element: <RootRedirect />,
-  },
-
-  // Athlete Protected Routes
-  {
-    element: <ProtectedRoute allowedRoles={[Rol.ALUMNO]} />,
+    errorElement: <ErrorRuta />,
     children: [
-      {
-        element: <AppLayout />,
-        children: [
-          {
-            path: '/app/hoy',
-            element: <EntrenamientoPage />,
-          },
-          {
-            path: '/app/menu',
-            element: <AtletaMenuPage />,
-          },
-          {
-            path: '/app/nutricion',
-            element: <NutricionPage />,
-          },
-          {
-            path: '/app/progreso',
-            element: <ProgresoPage />,
-          },
-          {
-            path: '/app/pagos',
-            element: <PagosPage />,
-          },
-          {
-            path: '/app/ajustes',
-            element: <AjustesAlumnoPage />,
-          },
-          {
-            // RF-018 RN-09: la antigua "Mis notificaciones" vive ahora en Ajustes.
-            path: '/app/preferencias',
-            element: <Navigate to="/app/ajustes?tab=notificaciones" replace />,
-          },
-        ],
-      },
-    ],
-  },
+    // Public Routes
+    {
+      path: '/login',
+      element: (
+        <Suspense fallback={<PublicFallback />}>
+          <LoginPage />
+        </Suspense>
+      ),
+    },
+    {
+      path: '/onboarding',
+      element: (
+        <Suspense fallback={<PublicFallback />}>
+          <OnboardingPage />
+        </Suspense>
+      ),
+    },
+    {
+      path: '/registro',
+      element: <RegistroRedirect />,
+    },
+    {
+      path: '/activar',
+      element: (
+        <Suspense fallback={<PublicFallback />}>
+          <ActivacionPage />
+        </Suspense>
+      ),
+    },
+    {
+      path: '/recuperar',
+      element: (
+        <Suspense fallback={<PublicFallback />}>
+          <RecuperarPage />
+        </Suspense>
+      ),
+    },
+    {
+      path: '/restablecer',
+      element: (
+        <Suspense fallback={<PublicFallback />}>
+          <RestablecerPage />
+        </Suspense>
+      ),
+    },
+    {
+      path: '/confirmar-correo',
+      element: (
+        <Suspense fallback={<PublicFallback />}>
+          <ConfirmarCorreoPage />
+        </Suspense>
+      ),
+    },
+    {
+      path: '/',
+      element: <RootRedirect />,
+    },
 
-  // Coach Protected Routes
-  {
-    element: <ProtectedRoute allowedRoles={[Rol.ENTRENADOR]} />,
-    children: [
-      {
-        element: <AppLayout />,
-        children: [
-          {
-            path: '/coach/dashboard',
-            element: <DashboardPage />,
-          },
-          {
-            path: '/coach/menu',
-            element: <CoachMenuPage />,
-          },
-          {
-            path: '/coach/conciliacion',
-            element: <ConciliacionPage />,
-          },
-          {
-            path: '/coach/cartera',
-            element: <CarteraPage />,
-          },
-          {
-            path: '/coach/alumnos',
-            element: <AlumnosPage />,
-          },
-          {
-            path: '/coach/monitor-adherencia',
-            element: <MonitorAdherenciaPage />,
-          },
-          {
-            path: '/coach/alumnos/:id',
-            element: <AlumnoDetallePage />,
-          },
-          {
-            path: '/coach/plantillas',
-            element: <PlantillasPage />,
-          },
-          {
-            path: '/coach/antropometria',
-            element: <AntropometriaPage />,
-          },
-          {
-            path: '/coach/ajustes',
-            element: <AjustesPage />,
-          },
-        ],
-      },
-    ],
-  },
+    // Athlete Protected Routes
+    {
+      element: <ProtectedRoute allowedRoles={[Rol.ALUMNO]} />,
+      children: [
+        {
+          element: <AppLayout />,
+          children: [
+            {
+              path: '/app/hoy',
+              element: <EntrenamientoPage />,
+            },
+            {
+              path: '/app/menu',
+              element: <AtletaMenuPage />,
+            },
+            {
+              path: '/app/nutricion',
+              element: <NutricionPage />,
+            },
+            {
+              path: '/app/progreso',
+              element: <ProgresoPage />,
+            },
+            {
+              path: '/app/pagos',
+              element: <PagosPage />,
+            },
+            {
+              path: '/app/ajustes',
+              element: <AjustesAlumnoPage />,
+            },
+            {
+              // RF-018 RN-09: la antigua "Mis notificaciones" vive ahora en Ajustes.
+              path: '/app/preferencias',
+              element: <Navigate to="/app/ajustes?tab=notificaciones" replace />,
+            },
+          ],
+        },
+      ],
+    },
 
-  // Superadmin Protected Routes (RF-010 RN-01: solo administración de la plataforma)
-  {
-    element: <ProtectedRoute allowedRoles={[Rol.SUPERADMIN]} />,
-    children: [
-      {
-        element: <AppLayout />,
-        children: [
-          {
-            path: '/admin',
-            element: <AdminPage />,
-          },
-          {
-            path: '/admin/ajustes',
-            element: <AjustesAdminPage />,
-          },
-        ],
-      },
-    ],
-  },
+    // Coach Protected Routes
+    {
+      element: <ProtectedRoute allowedRoles={[Rol.ENTRENADOR]} />,
+      children: [
+        {
+          element: <AppLayout />,
+          children: [
+            {
+              path: '/coach/dashboard',
+              element: <DashboardPage />,
+            },
+            {
+              path: '/coach/menu',
+              element: <CoachMenuPage />,
+            },
+            {
+              path: '/coach/conciliacion',
+              element: <ConciliacionPage />,
+            },
+            {
+              path: '/coach/cartera',
+              element: <CarteraPage />,
+            },
+            {
+              path: '/coach/alumnos',
+              element: <AlumnosPage />,
+            },
+            {
+              path: '/coach/monitor-adherencia',
+              element: <MonitorAdherenciaPage />,
+            },
+            {
+              path: '/coach/alumnos/:id',
+              element: <AlumnoDetallePage />,
+            },
+            {
+              path: '/coach/plantillas',
+              element: <PlantillasPage />,
+            },
+            {
+              path: '/coach/antropometria',
+              element: <AntropometriaPage />,
+            },
+            {
+              path: '/coach/ajustes',
+              element: <AjustesPage />,
+            },
+          ],
+        },
+      ],
+    },
 
-  // Fallback
-  {
-    path: '*',
-    element: <Navigate to="/" replace />,
+    // Superadmin Protected Routes (RF-010 RN-01: solo administración de la plataforma)
+    {
+      element: <ProtectedRoute allowedRoles={[Rol.SUPERADMIN]} />,
+      children: [
+        {
+          element: <AppLayout />,
+          children: [
+            {
+              path: '/admin',
+              element: <AdminPage />,
+            },
+            {
+              path: '/admin/ajustes',
+              element: <AjustesAdminPage />,
+            },
+          ],
+        },
+      ],
+    },
+
+    // Fallback
+    {
+      path: '*',
+      element: <Navigate to="/" replace />,
+    },
+    ],
   },
 ]);
