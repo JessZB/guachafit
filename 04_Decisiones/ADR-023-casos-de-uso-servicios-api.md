@@ -145,3 +145,13 @@ permanente del API, con la red de P3–P7:
   presupuesto de 20 s y reintento acotado del clic, con los 6 `expect`
   intactos; debe pasar en verde dentro de la suite completa sin re-corridas
   (R12).
+
+## 7. Incidente posterior: dependencias del constructor importadas solo como tipo (2026-10-19)
+- **Qué pasó:** el API no arrancaba (`Nest can't resolve dependencies of the AntropometriaService (DRIZZLE_DB, ?, Function, WITH_TENANT)`). En el refactor de la fachada (`43a4048`), `R2StorageService` y `EventEmitter2` pasaron a `import type`. TypeScript borra esos imports al compilar, `emitDecoratorMetadata` escribe `Function` como tipo del parámetro y Nest no puede inyectarlo.
+- **Por qué no lo vio nadie:**
+  - los specs crean las fachadas con `new Servicio(...)` y nunca pasan por la inyección de Nest;
+  - vitest compila con esbuild, que no emite `design:paramtypes`, así que ni un `Test.createTestingModule` resolvería las dependencias, estuvieran rotas o no;
+  - la verificación comparó el texto del constructor (idéntico), pero no sus imports.
+- **Corrección:** los dos imports vuelven a ser imports de valor, como antes del refactor.
+- **Guardián:** `apps/api/src/inyeccion-dependencias.spec.ts` falla si un `@Injectable`, `@Controller` o `@Processor` anota un parámetro del constructor sin `@Inject(<token>)` con un tipo importado solo como tipo. Se comprobó que habría detectado este caso.
+- **Regla para la P1 de futuras olas:** "constructor idéntico" incluye los imports de los tipos de sus parámetros. Un parámetro que Nest resuelve por clase se importa siempre como valor.
