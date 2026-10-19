@@ -288,6 +288,7 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 
 - [ ] **Datos inválidos → mensaje claro:** envía un formulario con un dato fuera de rango (p. ej. un peso negativo) → el mensaje **nombra el campo** en español y no muestra textos como "Zod", "uuid", "null" o "token".
 - [ ] **Error 500 con referencia:** ante un fallo inesperado del servidor (p. ej. detén la base de datos y recarga una lista) el mensaje es **"Tuvimos un problema. Inténtalo de nuevo en unos minutos. (Ref. xxxxxxxx)"**; busca esa referencia en la consola del API: aparece junto al método y la ruta.
+- [ ] **Pantalla que no se pudo abrir (desde 2026-10-19, lote ER1):** con la app abierta en una pantalla (por ejemplo, el login), reinicia el servidor de la web (`pnpm --filter @guachafit/web dev`) y, sin recargar, pulsa **"¿Olvidaste tu contraseña?"** → en lugar de la pantalla técnica ("Unexpected Application Error!") ves **"Hay una versión nueva de GUACHAFIT"** con el botón **"Recargar"**, que abre la pantalla al pulsarlo. Repite con DevTools → Network → **Offline** antes de pulsar → ves **"No se pudo abrir esta pantalla sin conexión"** con **"Reintentar"**. La app no recarga nunca sola.
 - [ ] **Mensajes sin jerga y con tuteo:** recorre login, altas, plantillas, nutrición y pagos provocando errores: ningún mensaje trata de "usted" ni menciona tenant, JWT, token, refresh, roles en mayúsculas o identificadores internos.
 
 ## 10. Notificaciones (campana, preferencias y resumen semanal)

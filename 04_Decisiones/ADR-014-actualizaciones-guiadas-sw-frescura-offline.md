@@ -78,3 +78,12 @@ Elegimos la **Opción C**: el Service Worker queda en espera (`registerType: 'pr
 - Requerimientos asociados: [[RF-001-checklist-entrenamiento-diario]] (checklist offline y logout con pendientes), [[RF-002-nutricion-agil-reporte-rapido]] y [[RF-003-checkin-antropometrico-rbac-hibrido]] (capturas offline que no deben perderse por una recarga).
 - Decisiones relacionadas: [[ADR-004-stack-frontend-pwa-offline-first]] (PWA offline-first, Dexie/IndexedDB, `storage.persist()`), [[ADR-012-modo-demo-explicito-datos-sinteticos]] (el logout no pide confirmación en modo demo).
 - Implementación (commits `9f121e5` y `e37c235`): `apps/web/vite.config.ts` (`registerType: 'prompt'`, manifest, runtime caching 24h), `apps/web/src/lib/pwa-actualizacion.ts`, `apps/web/src/lib/frescura-cache.ts`, `apps/web/src/lib/use-frescura-offline.ts`, `apps/web/src/lib/use-logout-seguro.ts`, `apps/web/src/components/common/ActualizacionDisponible.tsx`, `apps/web/src/components/common/AvisoDatosOffline.tsx`, `apps/web/src/components/common/DialogoLogoutPendientes.tsx`.
+
+## 6. Ampliación: pantallas que no se pueden abrir tras una actualización (2026-10-19, lote ER1)
+- **Problema:** las páginas se cargan con `lazy()`. Si se publica una versión nueva con la app abierta (o se reinicia el servidor de desarrollo), al navegar a una página que aún no se había cargado el navegador no encuentra su módulo, y React Router mostraba su pantalla técnica por defecto.
+- **Decisión:** una ruta raíz sin `path` en `apps/web/src/router.tsx` aporta `errorElement: <ErrorRuta />` a toda la app (`apps/web/src/components/common/ErrorRuta.tsx`, con la lógica pura en `apps/web/src/lib/errores-ruta.ts`):
+  - fallo de carga de módulo con conexión → "Hay una versión nueva de GUACHAFIT", con **Recargar**;
+  - fallo de carga sin conexión → "No se pudo abrir esta pantalla sin conexión", con **Reintentar**;
+  - cualquier otro error → "Algo salió mal al abrir esta pantalla", con **Reintentar** e **Ir al inicio**.
+- Coherente con este ADR: la recarga solo ocurre cuando el usuario pulsa el botón, y el texto técnico del error nunca se muestra (va a la consola).
+- **Seguimiento:** si la página de inicio de un rol falla siempre al renderizar (no al descargarse), "Ir al inicio" vuelve a la misma pantalla de error; no hay bucle automático y queda "Reintentar".
