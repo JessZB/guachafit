@@ -27,7 +27,7 @@ export function ChipFiltro({ activo, onClick, className = '', children }: ChipFi
       type="button"
       aria-pressed={activo}
       onClick={onClick}
-      className={`min-h-11 inline-flex items-center justify-center px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+      className={`min-h-11 inline-flex items-center justify-center px-3 rounded-xl text-xs font-bold transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-primary ${
         activo
           ? 'bg-primary text-primary-foreground'
           : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'

@@ -39,11 +39,15 @@ export function SemaforoPagoTexto({ semaforo }: { semaforo: SemaforoPagoValor })
   return <BadgeEstado tono={estadoPago.tono}>{estadoPago.texto}</BadgeEstado>;
 }
 
-/** Punto posicional sobre el avatar de la tarjeta (verbatim `:860-863`). */
+/**
+ * Punto posicional sobre el avatar de la tarjeta (verbatim `:860-863`). Decorativo: el texto del
+ * pago lo da `SemaforoPagoTexto` junto al punto, así que no se anuncia dos veces.
+ */
 export function PuntoSemaforoPago({ semaforo }: { semaforo: SemaforoPagoValor }) {
   const estadoPago = etiquetaSemaforoPago(semaforo);
   return (
     <span
+      aria-hidden="true"
       className={`absolute -top-1 -right-1 h-3 w-3 rounded-full border-2 border-card ${CLASES_PUNTO_SEMAFORO_PAGO[estadoPago.tono]}`}
       title={`Estado de pago: ${estadoPago.texto}`}
     />

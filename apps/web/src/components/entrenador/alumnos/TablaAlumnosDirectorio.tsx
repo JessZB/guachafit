@@ -1,33 +1,43 @@
 /**
- * Módulo `alumnos` (fase B, prompt 53) · tabla densa del directorio.
+ * Módulo `alumnos` (fase B, prompt 53) · tabla del directorio "Mis alumnos".
  *
- * Extraída de `pages/entrenador/AlumnosPage.tsx:944-1065` (7 columnas).
- * Clasificación: CANDIDATO (hoy único: carcasa de tabla densa en
- * `TablaCartera.tsx:269-297` con contrato distinto —`PerfilAlumnoDetalleDTO` vs
- * `FilaCarteraDTO`—; inventario 42 §3).
+ * Mis alumnos (2026-10-19): columnas Alumno, Estado, Modalidad, Plan, Último entreno, Racha, Pago y
+ * Acciones. Documento y Contacto salen de la tabla; el teléfono se alcanza por la acción de WhatsApp.
  *
- * R5: conserva idénticos los 7 encabezados ("Alumno/Documento/Modalidad/Estado/
- * Semáforo de Pago/Contacto/Acciones"), la navegación por fila, "Contactar por
- * WhatsApp a {nombres}" (`wa.me`), "Ver expediente de {..}", "Restaurar alumno
- * {..}" y el badge "Archivado".
- * §6: acciones de 44px, texto ≥ 12px, peso ≤ 700.
+ * - Teclado (D9): el nombre es un botón enfocable; Enter (y el clic) lleva al expediente. Ya no hay
+ *   clic de fila: la navegación vive en controles con nombre accesible.
+ * - R5: "Contactar por WhatsApp a {nombres}", "Ver expediente de {..}", "Restaurar alumno {..}" y el
+ *   badge "Archivado" se conservan.
+ * §6: acciones de 44px (`min-h-11`), texto ≥ 12px, peso ≤ 700, foco visible.
  * Presentacional: solo props, sin `useQuery` ni `api-client` (R1).
  */
 
 import type { MouseEvent } from 'react';
-import { ChevronRight, MessageSquare, RefreshCw } from 'lucide-react';
-import type { PerfilAlumnoDetalleDTO } from '@guachafit/shared';
+import { AlertTriangle, ChevronRight, MessageSquare, RefreshCw } from 'lucide-react';
+import type { AlumnoDirectorioItemDTO } from '@guachafit/shared';
 import { triggerHaptic } from '../../../lib/haptics';
-import { formatearDocumento } from '../../../lib/etiquetas-dominio';
+import { etiquetaModalidad } from '../../../lib/etiquetas-dominio';
+import { describirRacha, describirUltimoEntreno } from '../../../lib/alumnos-directorio-actividad';
 import { AvatarIniciales } from './AvatarIniciales';
 import { BadgeEstadoAlumno } from './BadgeEstadoAlumno';
 import { SemaforoPagoTexto } from './SemaforoPago';
 
 export interface TablaAlumnosDirectorioProps {
-  alumnos: PerfilAlumnoDetalleDTO[];
+  alumnos: AlumnoDirectorioItemDTO[];
   onVerExpediente: (id: string) => void;
   onRestaurar: (id: string, e: MouseEvent) => void;
 }
+
+const ENCABEZADOS = [
+  'Alumno',
+  'Estado',
+  'Modalidad',
+  'Plan',
+  'Último entreno',
+  'Racha',
+  'Pago',
+  'Acciones',
+] as const;
 
 export function TablaAlumnosDirectorio({
   alumnos,
@@ -39,60 +49,82 @@ export function TablaAlumnosDirectorio({
       <table className="w-full text-xs text-left">
         <thead className="border-b border-border/80 text-muted-foreground uppercase text-xs">
           <tr>
-            <th className="py-3 px-3">Alumno</th>
-            <th className="py-3 px-3">Documento</th>
-            <th className="py-3 px-3">Modalidad</th>
-            <th className="py-3 px-3">Estado</th>
-            <th className="py-3 px-3">Semáforo de Pago</th>
-            <th className="py-3 px-3">Contacto</th>
-            <th className="py-3 px-3 text-right">Acciones</th>
+            {ENCABEZADOS.map((encabezado) => (
+              <th
+                key={encabezado}
+                className={`py-3 px-3 ${encabezado === 'Acciones' ? 'text-right' : ''}`}
+              >
+                {encabezado}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody className="divide-y divide-border/50">
           {alumnos.map((a) => {
             const isArchived = Boolean(a.deletedAtUtc);
+            const ultimoEntreno = describirUltimoEntreno(a.ultimaSesionFecha, new Date());
+            const racha = describirRacha(a.rachaDias);
 
             return (
-              <tr
-                key={a.id}
-                onClick={() => onVerExpediente(a.id)}
-                className="hover:bg-secondary/30 transition-colors cursor-pointer group"
-              >
-                <td className="py-3 px-3">
+              <tr key={a.id} className="hover:bg-secondary/30 transition-colors group">
+                <td className="py-2 px-3">
                   <div className="flex items-center gap-2.5">
                     <AvatarIniciales nombres={a.nombres} apellidos={a.apellidos} variante="tabla" />
-                    <div>
-                      <p className="font-bold text-foreground group-hover:text-primary transition-colors">
+                    <div className="min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          triggerHaptic('light');
+                          onVerExpediente(a.id);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter') return;
+                          e.preventDefault();
+                          triggerHaptic('light');
+                          onVerExpediente(a.id);
+                        }}
+                        className="min-h-11 text-left font-bold text-foreground group-hover:text-primary transition-colors focus-visible:outline-2 focus-visible:outline-primary rounded-md"
+                      >
                         {a.nombres} {a.apellidos}
-                      </p>
-                      <span className="text-xs text-muted-foreground">{a.email}</span>
+                      </button>
+                      <span className="block text-xs text-muted-foreground">{a.email}</span>
                     </div>
                   </div>
                 </td>
 
-                <td className="py-3 px-3 font-mono">
-                  {formatearDocumento(a.tipoDocumento, a.numeroDocumento) ?? '—'} ({a.edadCalculada}
-                  a)
+                <td className="py-3 px-3">
+                  <BadgeEstadoAlumno estadoActivacion={a.estadoActivacion} archivado={isArchived} />
+                </td>
+
+                <td className="py-3 px-3 text-muted-foreground">{etiquetaModalidad(a.modalidad)}</td>
+
+                <td className="py-3 px-3">
+                  {/* D6: sin plan real se muestra "Sin plan asignado"; nunca un nombre inventado. */}
+                  {a.planActivoNombre ? (
+                    <span>{a.planActivoNombre}</span>
+                  ) : (
+                    <span className="italic text-muted-foreground">Sin plan asignado</span>
+                  )}
                 </td>
 
                 <td className="py-3 px-3">
-                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-secondary text-foreground border border-border uppercase">
-                    {a.modalidad}
+                  <span
+                    className={`inline-flex items-center gap-1.5 ${
+                      ultimoEntreno.alerta ? 'font-bold text-warning' : 'text-muted-foreground'
+                    }`}
+                  >
+                    {ultimoEntreno.alerta && (
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    )}
+                    <span>{ultimoEntreno.texto}</span>
                   </span>
                 </td>
 
-                <td className="py-3 px-3">
-                  <BadgeEstadoAlumno
-                    estadoActivacion={a.estadoActivacion}
-                    archivado={isArchived}
-                  />
-                </td>
+                <td className="py-3 px-3 text-foreground">{racha ?? '—'}</td>
 
-                <td className="py-3 px-3 font-mono font-bold">
+                <td className="py-3 px-3">
                   <SemaforoPagoTexto semaforo={a.semaforoPago} />
                 </td>
-
-                <td className="py-3 px-3 font-mono text-muted-foreground">{a.telefonoWhatsapp}</td>
 
                 <td className="py-3 px-3 text-right" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center justify-end gap-2">
@@ -100,20 +132,20 @@ export function TablaAlumnosDirectorio({
                       href={`https://wa.me/${a.telefonoWhatsapp.replace(/[^0-9]/g, '')}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="min-h-11 min-w-11 flex items-center justify-center rounded-lg bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer"
+                      className="min-h-11 min-w-11 flex items-center justify-center rounded-lg bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
                       aria-label={`Contactar por WhatsApp a ${a.nombres}`}
                     >
-                      <MessageSquare className="h-3.5 w-3.5 text-success" />
+                      <MessageSquare className="h-4 w-4 text-success" aria-hidden="true" />
                     </a>
 
                     {isArchived ? (
                       <button
                         type="button"
                         onClick={(e) => onRestaurar(a.id, e)}
-                        className="min-h-11 py-1 px-3 rounded-lg bg-primary text-primary-foreground font-bold text-xs flex items-center gap-1 cursor-pointer hover:brightness-110 active:scale-95 transition-all"
+                        className="min-h-11 py-1 px-3 rounded-lg bg-primary text-primary-foreground font-bold text-xs flex items-center gap-1 cursor-pointer hover:brightness-110 active:scale-95 transition-all focus-visible:outline-2 focus-visible:outline-primary"
                         aria-label={`Restaurar alumno ${a.nombres} ${a.apellidos}`}
                       >
-                        <RefreshCw className="h-3 w-3" />
+                        <RefreshCw className="h-3 w-3" aria-hidden="true" />
                         <span>Restaurar</span>
                       </button>
                     ) : (
@@ -123,10 +155,10 @@ export function TablaAlumnosDirectorio({
                           triggerHaptic('light');
                           onVerExpediente(a.id);
                         }}
-                        className="min-h-11 min-w-11 flex items-center justify-center rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 transition-all cursor-pointer"
+                        className="min-h-11 min-w-11 flex items-center justify-center rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
                         aria-label={`Ver expediente de ${a.nombres} ${a.apellidos}`}
                       >
-                        <ChevronRight className="h-3.5 w-3.5" />
+                        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>
                     )}
                   </div>

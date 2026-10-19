@@ -210,3 +210,14 @@ export enum ModoAsignacionPlantilla {
   REEMPLAZAR = 'REEMPLAZAR',
   FUSIONAR = 'FUSIONAR',
 }
+
+/**
+ * Lote Mis alumnos (2026-10-19): orden del directorio de alumnos del entrenador, aplicado en SQL
+ * antes de la paginación. `ALTA_RECIENTE` es el default y conserva el orden histórico.
+ */
+export enum OrdenDirectorioAlumnos {
+  ALTA_RECIENTE = 'alta_reciente',
+  NOMBRE = 'nombre',
+  SIN_ENTRENAR = 'sin_entrenar',
+  MAYOR_RACHA = 'mayor_racha',
+}

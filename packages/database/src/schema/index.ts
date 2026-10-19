@@ -463,7 +463,16 @@ export const sesionesEntrenamiento = pgTable('sesiones_entrenamiento', {
   notasAlumno: text('notas_alumno'),
   createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
   updatedAtUtc: timestamp('updated_at_utc', { withTimezone: true }).defaultNow().notNull(),
-});
+  },
+  (table) => ({
+    /** Lote Mis alumnos: último entrenamiento completado por alumno (subconsulta del directorio). */
+    alumnoEstadoFinIndex: index('idx_sesiones_alumno_estado_fin').on(
+      table.alumnoId,
+      table.estado,
+      table.fechaFinUtc
+    ),
+  })
+);
 
 export const ejerciciosSesion = pgTable('ejercicios_sesion', {
   id: uuid('id').defaultRandom().primaryKey(),

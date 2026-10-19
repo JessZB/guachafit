@@ -9,6 +9,7 @@ import {
   EstadoAlumno,
   EstadoCuota,
   EstadoMedicion,
+  Modalidad,
   OrigenAntropometria,
   TipoDocumento,
 } from '@guachafit/shared';
@@ -26,6 +27,16 @@ const ETIQUETAS_ESTADO_ACTIVACION: Record<EstadoAlumno, string> = {
 /** Estado de activación del alumno; un valor desconocido cae en "Sin dato" (nunca crudo). */
 export function etiquetaEstadoActivacion(estado?: string | null): string {
   return ETIQUETAS_ESTADO_ACTIVACION[estado as EstadoAlumno] ?? 'Sin dato';
+}
+
+const ETIQUETAS_MODALIDAD: Record<Modalidad, string> = {
+  [Modalidad.PRESENCIAL]: 'Presencial',
+  [Modalidad.REMOTO]: 'Remoto',
+};
+
+/** Modalidad del alumno en lenguaje humano; nunca el valor crudo del dominio. */
+export function etiquetaModalidad(modalidad?: string | null): string {
+  return ETIQUETAS_MODALIDAD[modalidad as Modalidad] ?? 'Sin dato';
 }
 
 /**

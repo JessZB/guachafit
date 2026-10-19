@@ -1,16 +1,16 @@
 /**
- * Módulo `alumnos` (fase B, prompt 53) · contenedor orquestador del directorio.
+ * Módulo `alumnos` (fase B, prompt 53) · contenedor orquestador de "Mis alumnos".
  *
- * Reescrito desde 1306 líneas como contenedor (R2: ≤ 300): lee el modo de sesión,
- * conecta los hooks de datos y compone las secciones. Sin JSX de detalle (R1):
- * cada sección vive en `components/entrenador/alumnos/`.
+ * Mis alumnos (2026-10-19): cabecera con "Invitar" e "Inscribir Manual", controles con chips de
+ * estado con conteo, orden y la lista en tarjetas o tabla. Los KPI y el banner de captación salen de
+ * la vista; el enlace de captación vive en el diálogo "Invitar".
  *
- * - Datos: `useDirectorioAlumnos` (paginación server-side + filtros + restaurar),
+ * - Datos: `useDirectorioAlumnos` (paginación server-side + filtros + orden + restaurar),
  *   `useAltaManualAlumno` (modal + `POST /alumnos/manual`) y `useEnlaceCaptacion`
- *   (`GET /entrenador/perfil`), con el MISMO mecanismo que usaba la vista (R9).
- * - R5: los roles, labels y textos que consultan los specs viven intactos en los
- *   componentes extraídos; este archivo conserva el orden y las condiciones de
- *   render (carga → error → acción → vacío → lista → modal).
+ *   (`GET /entrenador/perfil`).
+ * - R2: contenedor ≤ 300 líneas; cada sección vive en `components/entrenador/alumnos/`.
+ * - Orden de render: cabecera → controles → paginación → carga / error / acción / vacío → lista →
+ *   diálogos.
  */
 
 import { useState } from 'react';
@@ -19,20 +19,19 @@ import { AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../context/auth-context';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import { Paginacion } from '../../components/common/Paginacion';
-import {
-  type ModoVistaDirectorio,
-} from '../../lib/alumnos-directorio-filtros';
+import type { ModoVistaDirectorio } from '../../lib/alumnos-directorio-filtros';
 import { useDirectorioAlumnos } from '../../components/entrenador/alumnos/use-directorio-alumnos';
 import { useAltaManualAlumno } from '../../components/entrenador/alumnos/use-alta-manual-alumno';
 import { useEnlaceCaptacion } from '../../components/entrenador/alumnos/use-enlace-captacion';
 import { CabeceraAlumnos } from '../../components/entrenador/alumnos/CabeceraAlumnos';
-import { FilaKpisCartera } from '../../components/entrenador/alumnos/FilaKpisCartera';
-import { BannerCaptacion } from '../../components/entrenador/alumnos/BannerCaptacion';
 import { FiltrosDirectorioAlumnos } from '../../components/entrenador/alumnos/FiltrosDirectorioAlumnos';
+import { EsqueletoDirectorio } from '../../components/entrenador/alumnos/EsqueletoDirectorio';
 import { EstadoErrorDirectorio } from '../../components/entrenador/alumnos/EstadoErrorDirectorio';
+import { AvisoErrorDirectorio } from '../../components/entrenador/alumnos/AvisoErrorDirectorio';
 import { EstadoVacioDirectorio } from '../../components/entrenador/alumnos/EstadoVacioDirectorio';
 import { TarjetaAlumnoDirectorio } from '../../components/entrenador/alumnos/TarjetaAlumnoDirectorio';
 import { TablaAlumnosDirectorio } from '../../components/entrenador/alumnos/TablaAlumnosDirectorio';
+import { ModalEnlaceCaptacion } from '../../components/entrenador/alumnos/ModalEnlaceCaptacion';
 import { ModalInscripcionAlumno } from '../../components/entrenador/alumnos/ModalInscripcionAlumno';
 import { FormularioAltaManual } from '../../components/entrenador/alumnos/FormularioAltaManual';
 import { ExitoAltaManualAlumno } from '../../components/entrenador/alumnos/ExitoAltaManualAlumno';
@@ -41,6 +40,7 @@ export function AlumnosPage() {
   const navigate = useNavigate();
   const { isDemoMode } = useAuth();
   const [viewMode, setViewMode] = useState<ModoVistaDirectorio>('cards');
+  const [invitacionAbierta, setInvitacionAbierta] = useState(false);
 
   const directorio = useDirectorioAlumnos({ isDemoMode });
   const captacion = useEnlaceCaptacion({ isDemoMode });
@@ -53,74 +53,53 @@ export function AlumnosPage() {
 
   // U3b: Escape, trampa de Tab, foco inicial y restore del foco al disparador.
   const refModalInscripcion = useDialogoAccesible({ abierto: alta.isModalOpen, onCerrar: alta.cerrarModal });
+  const cerrarInvitacion = () => setInvitacionAbierta(false);
+  const refModalInvitacion = useDialogoAccesible({ abierto: invitacionAbierta, onCerrar: cerrarInvitacion });
 
   const verExpediente = (id: string) => navigate(`/coach/alumnos/${id}`);
 
   const {
     alumnos,
     total,
-    cargando,
     isLoading,
     error,
+    hayDatos,
     pagina,
     tamano,
-    kpis,
+    resumen,
     filterEstado,
     filterModalidad,
     search,
+    orden,
     actionError,
   } = directorio;
+  // F3: solo sin datos en pantalla el error ocupa la vista; con lista visible es un aviso inline.
+  const errorSinDatos = Boolean(error) && !hayDatos;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300 pb-12">
-      {/* HEADER PRINCIPAL */}
-      <div className="p-6 rounded-3xl bg-card border border-border shadow-md space-y-4">
-        <CabeceraAlumnos
-          viewMode={viewMode}
-          onCambiarVista={setViewMode}
-          onInscribir={alta.abrirModalInscripcion}
-        />
-
-        {/* KPIs EN CABECERA INTERACTIVOS */}
-        <FilaKpisCartera
-          kpis={kpis}
-          filterEstado={filterEstado}
-          filterModalidad={filterModalidad}
-          onCambiarEstado={directorio.setFilterEstado}
-          onCambiarModalidad={directorio.setFilterModalidad}
-          onVerCarteraCompleta={() => {
-            directorio.setFilterEstado('todos');
-            directorio.setFilterModalidad('todas');
-          }}
-        />
-      </div>
-
-      {/* BANNER DE CAPTACIÓN / DEEP LINK (RF-011 Vía B) */}
-      <BannerCaptacion
-        registrationUrl={captacion.registrationUrl}
-        coachCode={captacion.coachCode}
-        coachCodeError={captacion.coachCodeError}
-        isDemoMode={isDemoMode}
-        copiado={captacion.isCopied}
-        errorCopia={captacion.errorCopiaCaptacion}
-        onCopiar={captacion.handleCopyLink}
+    <div className="space-y-5 animate-in fade-in duration-300 pb-12">
+      <CabeceraAlumnos
+        onInvitar={() => setInvitacionAbierta(true)}
+        onInscribir={alta.abrirModalInscripcion}
       />
 
-      {/* FILTROS Y BÚSQUEDA */}
+      {/* CHIPS DE ESTADO, BÚSQUEDA, ORDEN, MODALIDAD Y VISTA */}
       <FiltrosDirectorioAlumnos
-        kpis={kpis}
+        resumen={resumen}
         filterEstado={filterEstado}
         filterModalidad={filterModalidad}
         search={search}
+        orden={orden}
+        viewMode={viewMode}
         onCambiarEstado={directorio.setFilterEstado}
         onCambiarModalidad={directorio.setFilterModalidad}
         onCambiarBusqueda={directorio.setSearch}
+        onCambiarOrden={directorio.setOrden}
+        onCambiarVista={setViewMode}
       />
 
-      {/* WU25a: paginación numerada server-side (contador + filas por página 10/25/50/100).
-          WU26: con total=0 no se pinta ("Página 1 de 1 · 0 registros" sobra junto al estado
-          vacío, tenga o no filtros activos). */}
-      {!isLoading && !error && total > 0 && (
+      {/* WU25a: paginación numerada server-side. WU26: con total=0 no se pinta. */}
+      {!isLoading && !errorSinDatos && total > 0 && (
         <div className="px-1">
           <Paginacion
             pagina={pagina}
@@ -128,18 +107,26 @@ export function AlumnosPage() {
             total={total}
             onCambiarPagina={directorio.setPagina}
             onCambiarTamano={directorio.setTamano}
-            cargando={cargando}
+            cargando={directorio.cargando}
           />
         </div>
       )}
 
+      {/* Mis alumnos (2026-10-19): esqueleto con nombre accesible; nada de cifras falsas al cargar */}
+      {isLoading && <EsqueletoDirectorio />}
+
       {/* D2: error de carga honesto con reintento (sin roster demo fuera del modo demo) */}
-      {!isLoading && error && (
+      {!isLoading && error && !hayDatos && (
         <EstadoErrorDirectorio mensaje={error} onReintentar={directorio.recargar} />
       )}
 
+      {/* F3: la lista sigue visible si la consulta falla con datos previos; el aviso ofrece reintentar */}
+      {!isLoading && error && hayDatos && (
+        <AvisoErrorDirectorio mensaje={error} onReintentar={directorio.recargar} />
+      )}
+
       {/* D5: fallo visible de acciones (restaurar) sin mutación local silenciosa */}
-      {!isLoading && !error && actionError && (
+      {!isLoading && !errorSinDatos && actionError && (
         <div
           role="alert"
           className="p-3 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-center gap-2"
@@ -150,15 +137,15 @@ export function AlumnosPage() {
       )}
 
       {/* WU25a: estado vacío honesto — cartera sin alumnos o búsqueda/filtros sin coincidencias */}
-      {!isLoading && !error && total === 0 && (
+      {!isLoading && !errorSinDatos && total === 0 && (
         <EstadoVacioDirectorio
           hayFiltrosActivos={directorio.hayFiltrosActivos}
           onLimpiarFiltros={directorio.limpiarFiltros}
         />
       )}
 
-      {/* VISTA 1: CARDS COMPACTAS DENSAS (~120px) */}
-      {viewMode === 'cards' && (
+      {/* VISTA 1: TARJETAS */}
+      {!isLoading && !errorSinDatos && total > 0 && viewMode === 'cards' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
           {alumnos.map((a) => (
             <TarjetaAlumnoDirectorio
@@ -171,8 +158,8 @@ export function AlumnosPage() {
         </div>
       )}
 
-      {/* VISTA 2: VISTA TABLA */}
-      {viewMode === 'table' && (
+      {/* VISTA 2: TABLA */}
+      {!isLoading && !errorSinDatos && total > 0 && viewMode === 'table' && (
         <TablaAlumnosDirectorio
           alumnos={alumnos}
           onVerExpediente={verExpediente}
@@ -180,7 +167,22 @@ export function AlumnosPage() {
         />
       )}
 
-      {/* MODAL: INSCRIPCIÓN MANUAL EN SALA */}
+      {/* DIÁLOGO: INVITAR (enlace de captación) */}
+      {invitacionAbierta && (
+        <ModalEnlaceCaptacion
+          refDialogo={refModalInvitacion}
+          onCerrar={cerrarInvitacion}
+          registrationUrl={captacion.registrationUrl}
+          coachCode={captacion.coachCode}
+          coachCodeError={captacion.coachCodeError}
+          isDemoMode={isDemoMode}
+          copiado={captacion.isCopied}
+          errorCopia={captacion.errorCopiaCaptacion}
+          onCopiar={captacion.handleCopyLink}
+        />
+      )}
+
+      {/* DIÁLOGO: INSCRIPCIÓN MANUAL EN SALA */}
       {alta.isModalOpen && (
         <ModalInscripcionAlumno refDialogo={refModalInscripcion} onCerrar={alta.cerrarModal}>
           {alta.alumnoCreado ? (

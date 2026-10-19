@@ -24,7 +24,7 @@ import {
   TipoDocumento,
   type AltaManualAlumnoResultadoDTO,
   type DirectorioAlumnosDTO,
-  type PerfilAlumnoDetalleDTO,
+  type AlumnoDirectorioItemDTO,
   type PerfilEntrenadorDTO,
   type ResumenDirectorioAlumnosDTO,
 } from '@guachafit/shared';
@@ -79,7 +79,7 @@ const mockCopiar = copiarAlPortapapeles as unknown as MockFn;
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const ALUMNO_ACTIVO: PerfilAlumnoDetalleDTO = {
+const ALUMNO_ACTIVO: AlumnoDirectorioItemDTO = {
   id: 'al-001',
   usuarioId: 'u-001',
   entrenadorId: 'coach-01',
@@ -95,10 +95,13 @@ const ALUMNO_ACTIVO: PerfilAlumnoDetalleDTO = {
   estadoActivacion: EstadoAlumno.ACTIVO,
   planActivoNombre: 'Presencial Completo',
   semaforoPago: 'al_dia',
+  ultimaSesionFecha: null,
+  rachaDias: 0,
+  rachaUltimaFecha: null,
   createdAtUtc: '2026-01-10T00:00:00.000Z',
 };
 
-const ALUMNO_MORA: PerfilAlumnoDetalleDTO = {
+const ALUMNO_MORA: AlumnoDirectorioItemDTO = {
   id: 'al-002',
   usuarioId: 'u-002',
   entrenadorId: 'coach-01',
@@ -115,10 +118,13 @@ const ALUMNO_MORA: PerfilAlumnoDetalleDTO = {
   // D6: sin plan real se muestra "Sin plan asignado", nunca un nombre inventado.
   planActivoNombre: null,
   semaforoPago: 'moroso',
+  ultimaSesionFecha: null,
+  rachaDias: 0,
+  rachaUltimaFecha: null,
   createdAtUtc: '2026-02-10T00:00:00.000Z',
 };
 
-const ALUMNO_ARCHIVADO: PerfilAlumnoDetalleDTO = {
+const ALUMNO_ARCHIVADO: AlumnoDirectorioItemDTO = {
   id: 'al-003',
   usuarioId: 'u-003',
   entrenadorId: 'coach-01',
@@ -134,6 +140,9 @@ const ALUMNO_ARCHIVADO: PerfilAlumnoDetalleDTO = {
   estadoActivacion: EstadoAlumno.INACTIVO_PAUSADO,
   planActivoNombre: 'Presencial 3 Dias',
   semaforoPago: 'sin_cuota',
+  ultimaSesionFecha: null,
+  rachaDias: 0,
+  rachaUltimaFecha: null,
   deletedAtUtc: '2026-06-01T00:00:00.000Z',
   createdAtUtc: '2026-03-10T00:00:00.000Z',
 };
@@ -149,7 +158,7 @@ const RESUMEN_BASE: ResumenDirectorioAlumnosDTO = {
 };
 
 function respuestaDirectorio(
-  items: PerfilAlumnoDetalleDTO[],
+  items: AlumnoDirectorioItemDTO[],
   total: number,
   resumen: ResumenDirectorioAlumnosDTO = RESUMEN_BASE,
 ): DirectorioAlumnosDTO {
@@ -354,22 +363,22 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('AlumnosPage · caracterización: cabecera y KPIs', () => {
-  it('C1 · renderiza el título y los 6 KPIs con los contadores del resumen del servidor', async () => {
+  it('C1 · renderiza el h1 "Mis alumnos" y los chips de estado con los conteos del resumen', async () => {
     montar();
-    expect(await screen.findByRole('heading', { name: 'Gestión de Alumnos' })).toBeTruthy();
-    expect(await screen.findByRole('button', { name: /Total Cartera 3/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Activos 2/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Pausados 0/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /En Mora 1/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Presenciales 1/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Archivados 1/ })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Mis alumnos' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Total Cartera/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Vigentes 2' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Activos 2' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Pausados 0' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'En mora 1' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Archivados 1' })).toBeTruthy();
   });
 
-  it('C2 · el KPI "En Mora" filtra por semáforo moroso en el servidor', async () => {
+  it('C2 · el chip "En mora" filtra por semáforo moroso en el servidor', async () => {
     montar();
     await esperarDirectorio();
     const antes = llamadasDirectorio().length;
-    fireEvent.click(screen.getByRole('button', { name: 'En Mora 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'En mora 1' }));
     await waitFor(
       () => {
         expect(llamadasDirectorio().length).toBeGreaterThan(antes);
@@ -379,30 +388,35 @@ describe('AlumnosPage · caracterización: cabecera y KPIs', () => {
     );
   });
 
-  it('C3 · el KPI "Total Cartera" pide la cartera completa con archivados incluidos', async () => {
+  it('C3 · el chip "Vigentes" pide solo vigentes, sin archivados en la petición', async () => {
     montar();
     await esperarDirectorio();
-    fireEvent.click(screen.getByRole('button', { name: 'En Mora 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'En mora 1' }));
     await waitFor(() => expect(ultimaLlamadaDirectorio()).toContain('semaforoPago=moroso'), {
       timeout: 4000,
     });
     const antes = llamadasDirectorio().length;
-    fireEvent.click(screen.getByRole('button', { name: /Total Cartera 3/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Vigentes 2' }));
     await waitFor(
       () => {
         expect(llamadasDirectorio().length).toBeGreaterThan(antes);
-        expect(ultimaLlamadaDirectorio()).toContain('incluirArchivados=true');
+        expect(ultimaLlamadaDirectorio()).not.toContain('incluirArchivados');
+        expect(ultimaLlamadaDirectorio()).not.toContain('soloArchivados');
       },
       { timeout: 4000 },
     );
   });
 
-  it('C4 · la carga inicial pide "Todos" con archivados incluidos (coherente con el KPI)', async () => {
+  it('C4 · la carga inicial pide "Vigentes" sin archivados (ni incluir ni solo)', async () => {
     montar();
     await esperarDirectorio();
-    expect(llamadasDirectorio()[0]).toContain('incluirArchivados=true');
+    expect(llamadasDirectorio()[0]).not.toContain('incluirArchivados');
+    expect(llamadasDirectorio()[0]).not.toContain('soloArchivados');
     expect(llamadasDirectorio()[0]).toContain('limit=25');
     expect(llamadasDirectorio()[0]).toContain('offset=0');
+    expect(
+      screen.getByRole('button', { name: 'Vigentes 2' }).getAttribute('aria-pressed'),
+    ).toBe('true');
   });
 });
 
@@ -411,7 +425,7 @@ describe('AlumnosPage · caracterización: cabecera y KPIs', () => {
 // ---------------------------------------------------------------------------
 
 describe('AlumnosPage · caracterización: vista, filtros y búsqueda', () => {
-  it('C5 · arranca en tarjetas y el toggle cambia a tabla con sus 7 columnas', async () => {
+  it('C5 · arranca en tarjetas y el toggle cambia a tabla con sus 8 columnas', async () => {
     montar();
     await esperarDirectorio();
     const aTarjetas = screen.getByRole('button', { name: 'Vista en tarjetas' });
@@ -424,11 +438,12 @@ describe('AlumnosPage · caracterización: vista, filtros y búsqueda', () => {
     const encabezados = await screen.findAllByRole('columnheader');
     expect(encabezados.map((th) => th.textContent)).toEqual([
       'Alumno',
-      'Documento',
-      'Modalidad',
       'Estado',
-      'Semáforo de Pago',
-      'Contacto',
+      'Modalidad',
+      'Plan',
+      'Último entreno',
+      'Racha',
+      'Pago',
       'Acciones',
     ]);
     // La tabla también expone "Ver expediente …", pero ya no hay tarjetas: el enlace
@@ -438,23 +453,26 @@ describe('AlumnosPage · caracterización: vista, filtros y búsqueda', () => {
     ).toBeNull();
   });
 
-  it('C6 · los chips de estado viajan al servidor (activo / archivados / todos)', async () => {
+  it('C6 · los chips de estado viajan al servidor (activo / archivados / vigentes)', async () => {
     montar();
     await esperarDirectorio();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Activos (2)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Activos 2' }));
     await waitFor(() => expect(ultimaLlamadaDirectorio()).toContain('estado=activo'), {
       timeout: 4000,
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Archivados (1)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Archivados 1' }));
     await waitFor(() => expect(ultimaLlamadaDirectorio()).toContain('soloArchivados=true'), {
       timeout: 4000,
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Todos (3)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Vigentes 2' }));
     await waitFor(
-      () => expect(ultimaLlamadaDirectorio()).toContain('incluirArchivados=true'),
+      () => {
+        expect(ultimaLlamadaDirectorio()).not.toContain('incluirArchivados');
+        expect(ultimaLlamadaDirectorio()).not.toContain('soloArchivados');
+      },
       { timeout: 4000 },
     );
   });
@@ -504,10 +522,11 @@ describe('AlumnosPage · caracterización: vista, filtros y búsqueda', () => {
 // ---------------------------------------------------------------------------
 
 describe('AlumnosPage · caracterización: carga, vacío, error y paginación', () => {
-  it('C9 · mientras carga no muestra ni lista ni vacío ni error', async () => {
+  it('C9 · mientras carga muestra el skeleton y no muestra ni lista ni vacío ni error', async () => {
     retenerDirectorio = true;
     montar();
-    expect(await screen.findByRole('heading', { name: 'Gestión de Alumnos' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Mis alumnos' })).toBeTruthy();
+    expect(await screen.findByRole('status', { name: 'Cargando alumnos' })).toBeTruthy();
     expect(
       screen.queryByRole('button', { name: 'Ver expediente de Carlos Mendoza' }),
     ).toBeNull();
@@ -591,11 +610,21 @@ describe('AlumnosPage · caracterización: tarjetas y tabla', () => {
     expect(await screen.findByText('Expediente al-001')).toBeTruthy();
   });
 
-  it('C15 · la tarjeta navega con Enter (teclado)', async () => {
+  it('C15 · click en "Ver expediente" navega; keyDown sobre el contenedor no reacciona', async () => {
+    // F6 (stretched link): el contenedor es un <article> sin rol ni tabIndex ni
+    // onKeyDown; el nombre es un <button> "Ver expediente de X" que navega con
+    // click (o Enter nativo). `fireEvent.keyDown` no dispara click en jsdom.
     montar();
     await esperarDirectorio();
-    const tarjeta = screen.getByRole('button', { name: 'Ver expediente de Carlos Mendoza' });
+    const boton = screen.getByRole('button', { name: 'Ver expediente de Carlos Mendoza' });
+    const tarjeta = boton.closest('article');
+    if (!tarjeta) throw new Error('La tarjeta del alumno no es un <article>.');
+    expect(tarjeta.getAttribute('role')).toBeNull();
+    expect(tarjeta.getAttribute('tabindex')).toBeNull();
     fireEvent.keyDown(tarjeta, { key: 'Enter' });
+    expect(screen.queryByText('Expediente al-001')).toBeNull();
+
+    fireEvent.click(boton);
     expect(await screen.findByText('Expediente al-001')).toBeTruthy();
   });
 
@@ -630,19 +659,36 @@ describe('AlumnosPage · caracterización: tarjetas y tabla', () => {
     ).toBeTruthy();
   });
 
-  it('C19-WARNING · Enter con el foco en "Restaurar" también navega (teclado vs puntero divergen)', async () => {
-    // Caracteriza el defecto conocido del reporte 42 (WARNING AlumnosPage.tsx:841-847): con
-    // puntero el click interno no navega (stopPropagation), pero con teclado el Enter burbujea
-    // al contenedor y navega al expediente aunque el foco esté en la acción interna.
+  it('C19 · Enter/Espacio en "Restaurar" o WhatsApp no navega; ningún botón anida controles', async () => {
+    // F6 (stretched link): WhatsApp y "Restaurar" son hermanos del botón "Ver
+    // expediente de X" por encima del enlace extendido (`z-10`); ya no hay
+    // `onKeyDown` en el contenedor que filtrar por `target`.
     montar();
     await esperarDirectorio();
-    const tarjeta = screen.getByRole('button', { name: 'Ver expediente de Roberto Diaz' });
+    const boton = screen.getByRole('button', { name: 'Ver expediente de Roberto Diaz' });
+    const tarjeta = boton.closest('article');
+    if (!tarjeta) throw new Error('La tarjeta del alumno no es un <article>.');
     const restaurar = within(tarjeta).getByRole('button', {
       name: 'Restaurar alumno Roberto Diaz',
     });
+    expect(boton.contains(restaurar)).toBe(false);
+    const whatsapp = within(tarjeta).getByRole('link', {
+      name: 'Enviar mensaje de WhatsApp a Roberto',
+    });
+    expect(boton.contains(whatsapp)).toBe(false);
+    // Ningún botón de la tarjeta anida controles interactivos.
+    for (const control of within(tarjeta).getAllByRole('button')) {
+      expect(within(control).queryByRole('button')).toBeNull();
+      expect(within(control).queryByRole('link')).toBeNull();
+    }
+
     restaurar.focus();
     fireEvent.keyDown(restaurar, { key: 'Enter', bubbles: true });
-    expect(await screen.findByText('Expediente al-003')).toBeTruthy();
+    fireEvent.keyDown(restaurar, { key: ' ', bubbles: true });
+    whatsapp.focus();
+    fireEvent.keyDown(whatsapp, { key: 'Enter', bubbles: true });
+    fireEvent.keyDown(whatsapp, { key: ' ', bubbles: true });
+    expect(screen.queryByText('Expediente al-003')).toBeNull();
   });
 
   it('C20 · la tabla navega por fila y por "Ver expediente", con WhatsApp y badge Archivado', async () => {
@@ -862,50 +908,50 @@ describe('AlumnosPage · caracterización: modal de inscripción manual', () => 
 // ---------------------------------------------------------------------------
 
 describe('AlumnosPage · caracterización: captación y modo demo', () => {
-  it('C31 · con coachCode muestra el código, copia el enlace y ofrece WhatsApp', async () => {
+  it('C31 · "Invitar" abre el diálogo de captación con el enlace y permite copiarlo', async () => {
     montar();
     await esperarDirectorio();
-    expect(screen.getByText('Tu enlace de registro para alumnos')).toBeTruthy();
-    expect(screen.getByText('COACH123')).toBeTruthy();
+    expect(screen.queryByText('Tu enlace de registro para alumnos')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Copiar enlace' }));
-    expect(await screen.findByRole('button', { name: '¡Enlace copiado!' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Invitar' }));
+    const dialogo = await screen.findByRole('dialog');
+    expect(dialogo.textContent).toContain('COACH123');
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Copiar enlace' }));
     expect(mockCopiar).toHaveBeenCalledWith(
       `${window.location.origin}/onboarding?coach=COACH123`,
     );
-
-    const compartir = screen.getByRole('link', { name: 'Compartir por WhatsApp' });
-    expect(compartir.getAttribute('href')).toContain('https://wa.me/');
-    expect(compartir.getAttribute('href')).toContain(encodeURIComponent('COACH123'));
   });
 
-  it('C32 · si la copia de captación falla, el aviso es visible', async () => {
+  it('C32 · si la copia del enlace de invitación falla, el aviso es visible', async () => {
     mockCopiar.mockResolvedValue(false);
     montar();
     await esperarDirectorio();
-    fireEvent.click(screen.getByRole('button', { name: 'Copiar enlace' }));
-    expect(await screen.findByText(MENSAJE_COPIA_FALLIDA)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Invitar' }));
+    const dialogo = await screen.findByRole('dialog');
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Copiar enlace' }));
+    expect(await within(dialogo).findByText(MENSAJE_COPIA_FALLIDA)).toBeTruthy();
   });
 
-  it('C33 · si el perfil no carga, el banner lo dice y deshabilita la copia', async () => {
+  it('C33 · si el perfil no carga, el diálogo de invitación lo dice y deshabilita la copia', async () => {
     errorPerfil = new Error('caído');
     montar();
     await esperarDirectorio();
+    fireEvent.click(screen.getByRole('button', { name: 'Invitar' }));
+    const dialogo = await screen.findByRole('dialog');
     expect(
-      await screen.findByText('No se pudo cargar tu enlace de captación. Recarga la página.'),
+      await within(dialogo).findByText(
+        'No se pudo cargar tu enlace de captación. Recarga la página.',
+      ),
     ).toBeTruthy();
-    expect(screen.getByText('Enlace no disponible')).toBeTruthy();
     expect(
-      (screen.getByRole('button', { name: 'Copiar enlace' }) as HTMLButtonElement).disabled,
+      (within(dialogo).getByRole('button', { name: 'Copiar enlace' }) as HTMLButtonElement)
+        .disabled,
     ).toBe(true);
   });
 
-  it('C34 · en demo no consulta la API y usa el roster local con la misma semántica', async () => {
+  it('C34 · en demo no consulta la API y usa el roster local; la captación vive en "Invitar"', async () => {
     sesionMock.isDemoMode = true;
     montar();
-    expect(
-      await screen.findByText(/En la demo no se muestra tu código real/),
-    ).toBeTruthy();
     await screen.findByRole('button', { name: 'Ver expediente de Carlos Alberto Mendoza Silva' });
     expect(
       mockApi.mock.calls.some(([endpoint]) => String(endpoint) === '/entrenador/perfil'),
@@ -914,8 +960,8 @@ describe('AlumnosPage · caracterización: captación y modo demo', () => {
       mockApi.mock.calls.some(([endpoint]) => String(endpoint).startsWith('/alumnos?')),
     ).toBe(false);
 
-    // Misma semántica de filtros sobre el roster local: "En Mora" oculta a los al día.
-    const morososDemo = screen.getByRole('button', { name: /En Mora \(\d+\)/ });
+    // Misma semántica de filtros sobre el roster local, con los chips nuevos "En mora N".
+    const morososDemo = screen.getByRole('button', { name: /En mora \d+/ });
     fireEvent.click(morososDemo);
     await waitFor(
       () =>
@@ -928,6 +974,14 @@ describe('AlumnosPage · caracterización: captación y modo demo', () => {
     );
     expect(
       screen.getByRole('button', { name: 'Ver expediente de Roberto Díaz Navarro' }),
+    ).toBeTruthy();
+
+    // La captación ya no está en la vista: vive en el diálogo "Invitar".
+    expect(screen.queryByText(/En la demo no se muestra tu código real/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Invitar' }));
+    const dialogo = await screen.findByRole('dialog');
+    expect(
+      await within(dialogo).findByText(/En la demo no se muestra tu código real/),
     ).toBeTruthy();
   });
 });

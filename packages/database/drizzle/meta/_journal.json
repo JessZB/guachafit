@@ -162,6 +162,13 @@
       "when": 1791826770636,
       "tag": "0022_anulacion_cuotas",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792435957092,
+      "tag": "0023_sesiones_indice_ultima_sesion",
+      "breakpoints": true
     }
   ]
 }

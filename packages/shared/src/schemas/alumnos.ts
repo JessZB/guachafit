@@ -3,6 +3,7 @@ import {
   TipoDocumento,
   EstadoAlumno,
   Modalidad,
+  OrdenDirectorioAlumnos,
   PeriodicidadAntropometria,
 } from '../enums';
 import {
@@ -132,6 +133,16 @@ export const FiltroDirectorioAlumnosSchema = z.object({
    * nunca lo produce (la hidratación por fila solo emite al_dia/moroso/sin_cuota).
    */
   semaforoPago: z.enum(['moroso', 'al_dia', 'sin_cuota']).optional(),
+  /**
+   * Lote Mis alumnos (2026-10-19): orden del directorio, aplicado en SQL antes de `limit`/`offset`.
+   * Default `alta_reciente` (orden histórico por alta y `id`).
+   */
+  orden: z
+    .nativeEnum(OrdenDirectorioAlumnos, {
+      errorMap: () => ({ message: 'El orden indicado no es válido' }),
+    })
+    .optional()
+    .default(OrdenDirectorioAlumnos.ALTA_RECIENTE),
   limit: z
     .coerce
     .number()

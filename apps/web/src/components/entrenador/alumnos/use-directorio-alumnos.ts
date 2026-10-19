@@ -11,12 +11,15 @@
  *   `lib/alumnos-directorio-filtros` (misma semántica, sin duplicar).
  * - R5: `handleRestaurarAlumno` recarga la página actual desde el servidor en lugar
  *   de mutar la fila en memoria; el fallo queda visible en `role="alert"`.
+ * - Mis alumnos (2026-10-19): el orden es parte del estado y de la clave de caché; en demo se
+ *   ordena con `ordenarAlumnosDirectorio` antes de paginar.
  */
 
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
-import type {
-  DirectorioAlumnosDTO,
-  PerfilAlumnoDetalleDTO,
+import { useCallback, useEffect, useState, type MouseEvent } from 'react';
+import {
+  OrdenDirectorioAlumnos,
+  type AlumnoDirectorioItemDTO,
+  type DirectorioAlumnosDTO,
 } from '@guachafit/shared';
 import { apiClient } from '../../../lib/api-client';
 import {
@@ -26,6 +29,7 @@ import {
   type FiltroEstadoDirectorio,
   type FiltroModalidadDirectorio,
 } from '../../../lib/directorio-alumnos';
+import { ordenarAlumnosDirectorio } from '../../../lib/alumnos-directorio-actividad';
 import { usePaginacionServidor } from '../../../lib/use-paginacion-servidor';
 import { useValorDebounced } from '../../../lib/use-valor-debounced';
 import { rebanarPagina } from '../../../lib/paginacion';
@@ -41,16 +45,19 @@ export function useDirectorioAlumnos({ isDemoMode }: { isDemoMode: boolean }) {
   const [tamano, setTamano] = useState(TAMANO_PAGINA_POR_DEFECTO);
   const [search, setSearch] = useState('');
   const qDebounced = useValorDebounced(search);
-  const [filterEstado, setFilterEstado] = useState<FiltroEstadoDirectorio>('todos');
+  // Mis alumnos (2026-10-19): la vista arranca en "Vigentes" (sin bajas lógicas), modalidad
+  // "Todas" y orden "Alta más reciente".
+  const [filterEstado, setFilterEstado] = useState<FiltroEstadoDirectorio>('vigentes');
   const [filterModalidad, setFilterModalidad] = useState<FiltroModalidadDirectorio>('todas');
+  const [orden, setOrden] = useState<OrdenDirectorioAlumnos>(OrdenDirectorioAlumnos.ALTA_RECIENTE);
   // D5: fallo de mutación visible; nunca éxito falso ni alumno fantasma.
   const [actionError, setActionError] = useState<string | null>(null);
 
   /**
    * WU25a: carga de UNA página del directorio. Los filtros viajan al servidor (`q`, `estado`,
-   * `modalidad`, `soloArchivados`/`incluirArchivados`, `semaforoPago`) y el `resumen` sigue
-   * llegando completo en cada respuesta para los KPIs. En modo demo se filtra y se corta el
-   * roster local con la MISMA semántica, sin llamadas API.
+   * `modalidad`, `soloArchivados`, `semaforoPago`) junto con el `orden`, y el `resumen` sigue
+   * llegando completo en cada respuesta para los chips. En modo demo se filtra, se ordena y se
+   * corta el roster local con la MISMA semántica, sin llamadas API.
    */
   const cargarPagina = useCallback(
     async ({
@@ -70,12 +77,13 @@ export function useDirectorioAlumnos({ isDemoMode }: { isDemoMode: boolean }) {
           estado: filterEstado,
           modalidad: filterModalidad,
         });
+        const ordenados = ordenarAlumnosDirectorio(filtrados, orden, new Date());
         return {
-          items: rebanarPagina(filtrados, paginaSolicitada, tamanoSolicitado),
-          total: filtrados.length,
+          items: rebanarPagina(ordenados, paginaSolicitada, tamanoSolicitado),
+          total: ordenados.length,
           limit: tamanoSolicitado,
           offset,
-          // Los KPIs demo siempre describen la cartera completa, como el servidor.
+          // El resumen demo siempre describe la cartera completa, como el servidor.
           resumen: calcularResumenDirectorio(ROSTER_DEMO_DIRECTORIO),
         };
       }
@@ -86,21 +94,23 @@ export function useDirectorioAlumnos({ isDemoMode }: { isDemoMode: boolean }) {
         q: qDebounced,
         estado: filterEstado,
         modalidad: filterModalidad,
+        orden,
       });
 
       return apiClient<DirectorioAlumnosDTO>(`/alumnos?${parametros.toString()}`, { signal });
     },
-    [isDemoMode, qDebounced, filterEstado, filterModalidad]
+    [isDemoMode, qDebounced, filterEstado, filterModalidad, orden]
   );
 
-  const paginacion = usePaginacionServidor<PerfilAlumnoDetalleDTO, DirectorioAlumnosDTO>({
-    // La clave incluye los filtros activos: cada combinación tiene su propia caché y su página.
+  const paginacion = usePaginacionServidor<AlumnoDirectorioItemDTO, DirectorioAlumnosDTO>({
+    // La clave incluye los filtros y el orden: cada combinación tiene su propia caché y su página.
     clave: [
       'directorio-alumnos',
       isDemoMode ? 'demo' : 'real',
       qDebounced.trim(),
       filterEstado,
       filterModalidad,
+      orden,
     ],
     pagina,
     tamano,
@@ -116,18 +126,19 @@ export function useDirectorioAlumnos({ isDemoMode }: { isDemoMode: boolean }) {
     recargar,
     respuesta,
   } = paginacion;
+  // Sin respuesta todavía el resumen es null: los chips no muestran conteo (nunca un "0" falso).
   const resumen = respuesta?.resumen ?? null;
   // Solo la PRIMERA carga (sin datos en pantalla) muestra esqueletos; los cambios de página
   // conservan la lista anterior gracias a `keepPreviousData`.
   const isLoading = cargando && !respuesta;
   const error = errorCarga?.message ?? null;
 
-  // WU25a: cualquier cambio de búsqueda/filtro/tamaño vuelve a la página 1 (el offset anterior
-  // ya no aplica). El modo demo también reinicia para no arrastrar páginas del roster real.
+  // WU25a: cualquier cambio de búsqueda/filtro/orden/tamaño vuelve a la página 1 (el offset
+  // anterior ya no aplica). El modo demo también reinicia para no arrastrar páginas del roster real.
   useEffect(() => {
     setPagina(1);
     setActionError(null);
-  }, [qDebounced, filterEstado, filterModalidad, tamano, isDemoMode]);
+  }, [qDebounced, filterEstado, filterModalidad, orden, tamano, isDemoMode]);
 
   const handleRestaurarAlumno = async (alumnoId: string, e: MouseEvent) => {
     e.stopPropagation();
@@ -143,20 +154,13 @@ export function useDirectorioAlumnos({ isDemoMode }: { isDemoMode: boolean }) {
     }
   };
 
-  // WU25a: KPIs reales de la cartera. Vienen del `resumen` del servidor (COUNT real, cartera
-  // completa, independiente de la página y de los filtros); en demo se derivan del roster local
-  // y sirven de respaldo si una respuesta no trae resumen.
-  const kpis = useMemo(
-    () => resumen ?? calcularResumenDirectorio(alumnos),
-    [resumen, alumnos]
-  );
-
   // WU25a: con paginación server-side la lista ya llega filtrada y recortada a la página actual.
   const hayFiltrosActivos = hayFiltrosDirectorioActivos(search, filterEstado, filterModalidad);
 
+  // Mis alumnos (2026-10-19): limpiar restaura búsqueda, "Vigentes" y "Todas"; el orden se conserva.
   const limpiarFiltros = useCallback(() => {
     setSearch('');
-    setFilterEstado('todos');
+    setFilterEstado('vigentes');
     setFilterModalidad('todas');
   }, []);
 
@@ -171,14 +175,17 @@ export function useDirectorioAlumnos({ isDemoMode }: { isDemoMode: boolean }) {
     setFilterEstado,
     filterModalidad,
     setFilterModalidad,
+    orden,
+    setOrden,
     alumnos,
     total,
     cargando,
     isLoading,
     error,
+    // F3: con datos ya en pantalla, un error de la consulta no sustituye la lista.
+    hayDatos: respuesta !== undefined,
     recargar,
     resumen,
-    kpis,
     hayFiltrosActivos,
     limpiarFiltros,
     actionError,

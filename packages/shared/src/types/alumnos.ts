@@ -84,8 +84,22 @@ export interface ResumenDirectorioAlumnosDTO {
   archivados: number;
 }
 
+/**
+ * Lote Mis alumnos (2026-10-19): ítem del listado `GET /alumnos`. No incluye la ficha de salud
+ * (`fichaSaludPrivada` solo se expone en el detalle `GET /alumnos/:id`). La racha es la EFECTIVA
+ * (0 si la cadena se rompió) y `ultimaSesionFecha` es el último entrenamiento completado.
+ */
+export type AlumnoDirectorioItemDTO = Omit<
+  PerfilAlumnoDetalleDTO,
+  'fichaSaludPrivada' | 'ultimaSesionFecha' | 'rachaDias' | 'rachaUltimaFecha'
+> & {
+  ultimaSesionFecha: string | null;
+  rachaDias: number;
+  rachaUltimaFecha: string | null;
+};
+
 /** WU19: respuesta paginada de `GET /alumnos` (contrato interno consumido por el directorio). */
-export interface DirectorioAlumnosDTO extends PaginadoDTO<PerfilAlumnoDetalleDTO> {
+export interface DirectorioAlumnosDTO extends PaginadoDTO<AlumnoDirectorioItemDTO> {
   /** Contadores reales de la cartera completa para los KPIs (independientes de la página). */
   resumen: ResumenDirectorioAlumnosDTO;
 }

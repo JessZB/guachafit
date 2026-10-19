@@ -25,6 +25,23 @@ export function sanitizarPerfilParaRol(
   }
 
   return {
+    ...camposBasePerfil(perfil),
+    fichaSaludPrivada: fichaSalud,
+  };
+}
+
+/**
+ * Lote Mis alumnos (2026-10-19): ítem del listado del directorio. Usa los mismos campos base que
+ * la ficha pero NO descifra ni incluye la clave `fichaSaludPrivada` (ni como null): la ficha de
+ * salud solo se expone en `GET /alumnos/:id`.
+ */
+export function sanitizarPerfilDirectorio(perfil: any): Omit<PerfilAlumnoDetalleDTO, 'fichaSaludPrivada'> {
+  return camposBasePerfil(perfil);
+}
+
+/** Campos comunes a la ficha y al ítem del directorio (sin la ficha de salud). */
+function camposBasePerfil(perfil: any): Omit<PerfilAlumnoDetalleDTO, 'fichaSaludPrivada'> {
+  return {
     id: perfil.id,
     usuarioId: perfil.usuarioId,
     entrenadorId: perfil.entrenadorId,
@@ -44,7 +61,6 @@ export function sanitizarPerfilParaRol(
     planActivoId: perfil.planActivoId ?? null,
     planActivoNombre: perfil.planActivoNombre ?? null,
     precioAcordadoOverride: perfil.precioAcordadoOverride ?? null,
-    fichaSaludPrivada: fichaSalud,
     zonaHoraria: perfil.zonaHoraria ?? ZONA_HORARIA_ALUMNO_POR_DEFECTO,
     deletedAtUtc: perfil.deletedAtUtc ? new Date(perfil.deletedAtUtc).toISOString() : null,
     createdAtUtc: perfil.createdAtUtc ? new Date(perfil.createdAtUtc).toISOString() : new Date().toISOString(),

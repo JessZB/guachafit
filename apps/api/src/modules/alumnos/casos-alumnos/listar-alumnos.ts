@@ -1,8 +1,6 @@
 import {
   and,
-  asc,
   count,
-  desc,
   eq,
   ilike,
   isNotNull,
@@ -15,9 +13,12 @@ import {
   DirectorioAlumnosDTO,
   FiltroDirectorioAlumnosDTO,
   LIMITE_DIRECTORIO_ALUMNOS_POR_DEFECTO,
-  Rol,
+  OrdenDirectorioAlumnos,
+  ZONA_HORARIA_ALUMNO_POR_DEFECTO,
 } from '@guachafit/shared';
 import { escaparPatronLike } from '../../../common/cartera.util';
+import { obtenerFechaLocalYyyyMmDd } from '../../../common/adherencia.util';
+import { calcularRachaEfectiva } from '../../entrenamiento/casos-entrenamiento/reglas-racha';
 import type { ContextoAlumnos } from './contexto-alumnos';
 import {
   calcularResumenDirectorio,
@@ -25,7 +26,13 @@ import {
   hidratarSemaforoPago,
 } from './directorio-helpers';
 import { hidratarPlanActivo as hidratarPlanActivoBase } from './hidratar-plan-activo';
-import { sanitizarPerfilParaRol } from './sanitizar-perfil';
+import {
+  contextoRachaPorZona,
+  expresionUltimaSesion,
+  ordenDirectorio,
+  zonasDistintasDelCoach,
+} from './orden-directorio';
+import { sanitizarPerfilDirectorio } from './sanitizar-perfil';
 
 /**
  * Listar Directorio de Alumnos del Entrenador (RF-011, RF-012)
@@ -47,6 +54,11 @@ import { sanitizarPerfilParaRol } from './sanitizar-perfil';
  * `incluirArchivados: true` devuelve la cartera completa (vigentes + archivados); el default
  * `false` mantiene la semántica histórica de solo alumnos vigentes.
  * Movido sin cambios desde `AlumnosService.listarAlumnos` (P3: mismo orden y forma de consultas).
+ *
+ * Lote Mis alumnos (2026-10-19): el listado ya no incluye `fichaSaludPrivada` (solo el detalle
+ * `GET /alumnos/:id`). Cada ítem trae `ultimaSesionFecha`, la racha EFECTIVA (`rachaDias`) y
+ * `rachaUltimaFecha`. El parámetro `orden` (default `alta_reciente`) se aplica en SQL antes del
+ * `limit`/`offset` (ADR-013), con desempate por `id`.
  */
 export async function listarAlumnos(
   ctx: ContextoAlumnos,
@@ -56,7 +68,10 @@ export async function listarAlumnos(
   const limit = filtro?.limit ?? LIMITE_DIRECTORIO_ALUMNOS_POR_DEFECTO;
   const offset = filtro?.offset ?? 0;
   const busqueda = (filtro?.q ?? filtro?.busqueda ?? '').trim();
+  const orden = filtro?.orden ?? OrdenDirectorioAlumnos.ALTA_RECIENTE;
   const hidratarPlan = ctx.hidratarPlanActivo ?? hidratarPlanActivoBase;
+  // Un único instante para la racha de SQL (orden `mayor_racha`) y para el mapeo de los ítems.
+  const ahora = new Date();
 
   const { filaTotal, records, resumen, semaforosPago, planesActivos } = await ctx.withTenant(
     { entrenadorId },
@@ -100,6 +115,12 @@ export async function listarAlumnos(
 
       const whereDirectorio = and(...conditions);
 
+      // La zona se resuelve en JS (ver orden-directorio.ts): solo `mayor_racha` necesita el "ayer" por zona.
+      const racha =
+        orden === OrdenDirectorioAlumnos.MAYOR_RACHA
+          ? contextoRachaPorZona(await zonasDistintasDelCoach(tx, entrenadorId), ahora)
+          : undefined;
+
       const [filaTotal, records, resumen] = await Promise.all([
         tx
           .select({ total: count() })
@@ -118,18 +139,20 @@ export async function listarAlumnos(
             email: usuarios.email,
             fechaNacimiento: perfilesAlumno.fechaNacimiento,
             telefonoWhatsapp: perfilesAlumno.telefonoWhatsapp,
-            fichaSaludPrivada: perfilesAlumno.fichaSaludPrivada,
             estadoActivacion: perfilesAlumno.estadoActivacion,
             modalidad: perfilesAlumno.modalidad,
             tasaFijadaOverride: perfilesAlumno.tasaFijadaOverride,
             zonaHoraria: perfilesAlumno.zonaHoraria,
+            rachaDias: perfilesAlumno.rachaDias,
+            rachaUltimaFecha: perfilesAlumno.rachaUltimaFecha,
+            ultimaSesionFecha: expresionUltimaSesion(),
             deletedAtUtc: perfilesAlumno.deletedAtUtc,
             createdAtUtc: perfilesAlumno.createdAtUtc,
           })
           .from(perfilesAlumno)
           .innerJoin(usuarios, eq(perfilesAlumno.usuarioId, usuarios.id))
           .where(whereDirectorio)
-          .orderBy(desc(perfilesAlumno.createdAtUtc), asc(perfilesAlumno.id))
+          .orderBy(...ordenDirectorio(orden, racha))
           .limit(limit)
           .offset(offset),
         calcularResumenDirectorio(tx, entrenadorId),
@@ -151,14 +174,19 @@ export async function listarAlumnos(
     }
   );
 
+  // Lote Mis alumnos (2026-10-19): racha efectiva con el día local de cada alumno, misma regla que
+  // `expresionRachaEfectiva` (orden `mayor_racha`) y el mismo `ahora`.
   const items = records.map((perfil) => {
     const planActivo = planesActivos.get(perfil.usuarioId);
+    const hoyLocal = obtenerFechaLocalYyyyMmDd(
+      ahora,
+      perfil.zonaHoraria || ZONA_HORARIA_ALUMNO_POR_DEFECTO
+    );
     return {
-      ...sanitizarPerfilParaRol(
-        ctx,
-        planActivo ? { ...perfil, ...planActivo } : perfil,
-        Rol.ENTRENADOR
-      ),
+      ...sanitizarPerfilDirectorio(planActivo ? { ...perfil, ...planActivo } : perfil),
+      ultimaSesionFecha: perfil.ultimaSesionFecha?.toISOString() ?? null,
+      rachaDias: calcularRachaEfectiva(perfil.rachaDias ?? 0, perfil.rachaUltimaFecha ?? null, hoyLocal),
+      rachaUltimaFecha: perfil.rachaUltimaFecha ?? null,
       semaforoPago: semaforosPago.get(perfil.usuarioId)!,
     };
   });

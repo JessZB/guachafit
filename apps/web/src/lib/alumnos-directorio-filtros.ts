@@ -10,7 +10,7 @@
  * - Sin React, sin red, sin JSX: testeable en Node (R1, capa "lógica pura").
  */
 
-import { EstadoAlumno, Modalidad } from '@guachafit/shared';
+import { EstadoAlumno, Modalidad, type OrdenDirectorioAlumnos } from '@guachafit/shared';
 import type {
   FiltroEstadoDirectorio,
   FiltroModalidadDirectorio,
@@ -27,15 +27,21 @@ export interface ParametrosDirectorioAlumnos {
   q: string;
   estado: FiltroEstadoDirectorio;
   modalidad: FiltroModalidadDirectorio;
+  /**
+   * Mis alumnos (2026-10-19): el orden viaja siempre al servidor. Se tipa con los literales del
+   * enum (`OrdenDirectorioAlumnos`) para aceptar tanto el enum como sus valores en texto.
+   */
+  orden: `${OrdenDirectorioAlumnos}`;
 }
 
 /**
  * Construye los `URLSearchParams` del `GET /alumnos` con la MISMA semántica que la
  * vista vigente:
- * - `todos` = cartera completa (vigentes + archivados), coherente con el KPI "Total Cartera".
+ * - `vigentes` = cartera sin bajas lógicas: no envía `incluirArchivados` ni `soloArchivados`.
  * - `mora` filtra por `semaforoPago=moroso` (no por `estado`).
  * - `Todas` no envía `modalidad`.
  * - La búsqueda viaja recortada como `q` (vacía = ausente).
+ * - `orden` viaja siempre (por defecto `alta_reciente` en la vista).
  */
 export function construirParametrosDirectorioAlumnos(
   filtros: ParametrosDirectorioAlumnos
@@ -44,14 +50,13 @@ export function construirParametrosDirectorioAlumnos(
   const parametros = new URLSearchParams({
     limit: String(filtros.tamano),
     offset: String(offset),
+    orden: filtros.orden,
   });
   if (filtros.q.trim().length > 0) parametros.set('q', filtros.q.trim());
   if (filtros.estado === 'activo') parametros.set('estado', EstadoAlumno.ACTIVO);
   if (filtros.estado === 'pausado') parametros.set('estado', EstadoAlumno.INACTIVO_PAUSADO);
   if (filtros.estado === 'mora') parametros.set('semaforoPago', 'moroso');
   if (filtros.estado === 'archivados') parametros.set('soloArchivados', 'true');
-  // "Todos" = cartera completa (vigentes + archivados), coherente con el KPI "Total Cartera".
-  if (filtros.estado === 'todos') parametros.set('incluirArchivados', 'true');
   if (filtros.modalidad === 'presencial') parametros.set('modalidad', Modalidad.PRESENCIAL);
   if (filtros.modalidad === 'remoto') parametros.set('modalidad', Modalidad.REMOTO);
   return parametros;
@@ -60,11 +65,12 @@ export function construirParametrosDirectorioAlumnos(
 /**
  * WU25a: con paginación server-side la lista ya llega filtrada; el estado vacío
  * distingue "cartera vacía" de "sin resultados por búsqueda/filtros".
+ * Mis alumnos (2026-10-19): el estado neutro es `vigentes`; el orden no cuenta como filtro.
  */
 export function hayFiltrosDirectorioActivos(
   search: string,
   estado: FiltroEstadoDirectorio,
   modalidad: FiltroModalidadDirectorio
 ): boolean {
-  return search.trim().length > 0 || estado !== 'todos' || modalidad !== 'todas';
+  return search.trim().length > 0 || estado !== 'vigentes' || modalidad !== 'todas';
 }
