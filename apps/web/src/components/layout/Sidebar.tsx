@@ -53,8 +53,10 @@ export function Sidebar() {
 
   const links = isSuperadmin ? adminLinks : isCoach ? coachLinks : athleteLinks;
 
+  // En desktop la sidebar queda fija bajo el header sticky. 61.5px = altura del header en lg
+  // (pt 12 + pb 12 + borde 1 + fila de 36.5px); debe coincidir con Header.tsx.
   return (
-    <aside className="hidden lg:flex flex-col w-64 border-r border-border/80 bg-card/40 p-4 min-h-[calc(100vh-57px)]">
+    <aside className="hidden lg:flex flex-col w-64 border-r border-border/80 bg-card/40 p-4 lg:sticky lg:top-[61.5px] lg:self-start lg:h-[calc(100dvh-61.5px)] lg:overflow-y-auto">
       <div className="mb-6 px-3">
         <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           <Activity className="h-3.5 w-3.5 text-primary" />
