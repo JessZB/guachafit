@@ -2,7 +2,8 @@ import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
 import { DRIZZLE_DB, WITH_TENANT } from '../../database/database.module';
 import { withTenant as withTenantBase } from '@guachafit/database';
 import type { Database, WithTenantFn } from '@guachafit/database';
-import type { EventEmitter2 } from '@nestjs/event-emitter';
+// Deben ser imports de valor: Nest resuelve las dependencias del constructor desde los metadatos del decorador (`import type` los borra).
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { Rol } from '@guachafit/shared';
 import { LIMITE_COLA_ANTROPOMETRIA_POR_DEFECTO } from '@guachafit/shared';
 import type {
@@ -16,7 +17,8 @@ import type {
   PresignedUploadUrlDTO,
   PresignedUploadUrlResponseDTO,
 } from '@guachafit/shared';
-import type { R2StorageService } from './r2-storage.service';
+// Deben ser imports de valor: Nest resuelve las dependencias del constructor desde los metadatos del decorador (`import type` los borra).
+import { R2StorageService } from './r2-storage.service';
 import type { ContextoAntropometria } from './casos-antropometria/contexto-antropometria';
 import {
   TIPO_EVENTO_CHECKIN_RECIBIDO,
