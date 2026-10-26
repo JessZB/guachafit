@@ -4,8 +4,12 @@
  * Espeja EXACTAMENTE lo que cada fila ya renderiza: aprobado → "Verificado",
  * rechazado → "Rechazado", revertido → "Revertido" (RF-007) y cualquier otro valor → "En Revisión"
  * (pendiente).
+ *
+ * Expone también `tonoEstadoTransaccion` (tono del badge de la fila, con el mismo criterio de
+ * estados que las etiquetas).
  */
 import { EstadoConciliacion, type TransaccionPagoDetalleDTO } from '@guachafit/shared';
+import type { TonoSemaforo } from './adherencia';
 
 export type FiltroEstadoTransaccionPago = EstadoConciliacion | 'todos';
 
@@ -32,6 +36,20 @@ export function etiquetaEstadoTransaccion(estado: string | null | undefined): st
       return 'Revertido';
     default:
       return 'En Revisión';
+  }
+}
+
+/** Tono del badge según el estado normalizado (mismo criterio que el filtro). */
+export function tonoEstadoTransaccion(estado: string | null | undefined): TonoSemaforo {
+  switch (normalizarEstadoTransaccion(estado)) {
+    case EstadoConciliacion.APROBADO:
+      return 'success';
+    case EstadoConciliacion.RECHAZADO:
+      return 'danger';
+    case EstadoConciliacion.REVERTIDO:
+      return 'neutral';
+    default:
+      return 'warning';
   }
 }
 

@@ -43,7 +43,7 @@ export function HistorialTransaccionesAlumno({
 }: HistorialTransaccionesAlumnoProps) {
   return (
     <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4">
-      <div className="flex items-center justify-between border-b border-border/80 pb-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/80 pb-3">
         <h4 className="font-bold text-sm text-foreground">Historial de Transacciones & Abonos</h4>
         <span className="text-xs text-muted-foreground font-mono">
           {finanzas

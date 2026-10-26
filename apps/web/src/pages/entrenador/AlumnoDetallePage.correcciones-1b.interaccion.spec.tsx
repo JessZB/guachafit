@@ -394,7 +394,7 @@ function controlDeEtiqueta(texto: string, selector: 'input' | 'select'): HTMLEle
 
 /** Guarda el expediente y espera a que el flujo termine (botón habilitado de nuevo). */
 async function guardarExpediente(): Promise<void> {
-  const guardar = await screen.findByRole('button', { name: /Guardar Cambios/ });
+  const guardar = await screen.findByRole('button', { name: /Guardar cambios/ });
   fireEvent.click(guardar);
   await waitFor(() => expect((guardar as HTMLButtonElement).disabled).toBe(false));
   await act(async () => {
@@ -499,7 +499,7 @@ async function confirmarQuitarPlan(): Promise<void> {
 
 /** Abre el modal de cobro en sala de la ficha (la página debe estar montada en la pestaña finanzas). */
 async function abrirCobroFicha(): Promise<HTMLElement> {
-  const abrir = await screen.findByRole('button', { name: /Registrar Cobro Directo en Sala/ });
+  const abrir = await screen.findByRole('button', { name: /Cobrar en sala/ });
   fireEvent.click(abrir);
   return screen.findByRole('dialog');
 }
@@ -518,7 +518,7 @@ describe('AlumnoDetallePage · correcciones 1B: orden de escritura (V1)', () => 
     const selector = await selectorDePlan();
     fireEvent.change(selector, { target: { value: PLAN_B.id } });
     await campoFechaInicio();
-    fireEvent.change(controlDeEtiqueta('Precio Acordado ($ USD)', 'input'), {
+    fireEvent.change(controlDeEtiqueta('Precio acordado (USD)', 'input'), {
       target: { value: '35.00' },
     });
 
@@ -543,7 +543,7 @@ describe('AlumnoDetallePage · correcciones 1B: orden de escritura (V1)', () => 
     const selector = await selectorDePlan();
     fireEvent.change(selector, { target: { value: PLAN_B.id } });
     await campoFechaInicio();
-    fireEvent.change(controlDeEtiqueta('Precio Acordado ($ USD)', 'input'), {
+    fireEvent.change(controlDeEtiqueta('Precio acordado (USD)', 'input'), {
       target: { value: '0.00' },
     });
 
@@ -567,7 +567,7 @@ describe('AlumnoDetallePage · correcciones 1B: orden de escritura (V1)', () => 
     const selector = await selectorDePlan();
     await waitFor(() => expect(selector.value).toBe(PLAN_A.id));
     fireEvent.change(selector, { target: { value: PLAN_B.id } });
-    fireEvent.change(controlDeEtiqueta('Precio Acordado ($ USD)', 'input'), {
+    fireEvent.change(controlDeEtiqueta('Precio acordado (USD)', 'input'), {
       target: { value: '30.00' },
     });
 
@@ -605,7 +605,7 @@ describe('AlumnoDetallePage · correcciones 1B: override sin cargar (V2)', () =>
     montarFicha();
 
     const precio = await waitFor(() => {
-      const control = controlDeEtiqueta('Precio Acordado ($ USD)', 'input') as HTMLInputElement;
+      const control = controlDeEtiqueta('Precio acordado (USD)', 'input') as HTMLInputElement;
       expect(control.disabled).toBe(true);
       return control;
     });
@@ -632,7 +632,7 @@ describe('AlumnoDetallePage · correcciones 1B: mensajes por paso (V3)', () => {
     const selector = await selectorDePlan();
     fireEvent.change(selector, { target: { value: PLAN_B.id } });
     await campoFechaInicio();
-    fireEvent.change(controlDeEtiqueta('Precio Acordado ($ USD)', 'input'), {
+    fireEvent.change(controlDeEtiqueta('Precio acordado (USD)', 'input'), {
       target: { value: '35.00' },
     });
 
@@ -654,7 +654,7 @@ describe('AlumnoDetallePage · correcciones 1B: mensajes por paso (V3)', () => {
     const selector = await selectorDePlan();
     fireEvent.change(selector, { target: { value: PLAN_B.id } });
     await campoFechaInicio();
-    fireEvent.change(controlDeEtiqueta('Precio Acordado ($ USD)', 'input'), {
+    fireEvent.change(controlDeEtiqueta('Precio acordado (USD)', 'input'), {
       target: { value: '35.00' },
     });
 
@@ -677,7 +677,7 @@ describe('AlumnoDetallePage · correcciones 1B: mensajes por paso (V3)', () => {
     const selector = await selectorDePlan();
     await waitFor(() => expect(selector.value).toBe(PLAN_A.id));
     fireEvent.change(selector, { target: { value: PLAN_B.id } });
-    fireEvent.change(controlDeEtiqueta('Precio Acordado ($ USD)', 'input'), {
+    fireEvent.change(controlDeEtiqueta('Precio acordado (USD)', 'input'), {
       target: { value: '30.00' },
     });
 
@@ -698,7 +698,7 @@ describe('AlumnoDetallePage · correcciones 1B: mensajes por paso (V3)', () => {
     montarFicha();
 
     const precio = await waitFor(() => {
-      const control = controlDeEtiqueta('Precio Acordado ($ USD)', 'input') as HTMLInputElement;
+      const control = controlDeEtiqueta('Precio acordado (USD)', 'input') as HTMLInputElement;
       expect(control.value).toBe('35.00');
       return control;
     });
@@ -742,7 +742,7 @@ describe('AlumnoDetallePage · correcciones 1B: reconciliación tras un fallo (V
     expect(screen.queryByText('Fecha de inicio')).toBeNull();
   });
 
-  it('V4b · el DELETE falla pero el GET devuelve null: "Sin plan asignado" junto al aviso', async () => {
+  it('V4b · el DELETE falla pero el GET devuelve null: "Sin plan" junto al aviso', async () => {
     suscripcionServidor = SUSCRIPCION_A;
     perfilActual = { ...PERFIL_BASE, planActivoId: null, planActivoNombre: null };
     alBorrarSuscripcion = () => {
@@ -755,7 +755,7 @@ describe('AlumnoDetallePage · correcciones 1B: reconciliación tras un fallo (V
 
     await waitFor(() => expect(llamadasSuscripcion('DELETE')).toHaveLength(1));
     expect(await screen.findByText(/No se pudo quitar el plan/)).toBeTruthy();
-    expect((await screen.findAllByText('Sin plan asignado')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Sin plan')).length).toBeGreaterThan(0);
   });
 
   it('V4c · si la reconciliación también falla, la tarjeta conserva su estado anterior', async () => {
@@ -772,7 +772,7 @@ describe('AlumnoDetallePage · correcciones 1B: reconciliación tras un fallo (V
     await waitFor(() => expect(llamadasSuscripcion('DELETE')).toHaveLength(1));
     expect(await screen.findByText(/No se pudo quitar el plan/)).toBeTruthy();
     expect(screen.getByText(/Próxima cuota: vence el 14\/11\/2026/)).toBeTruthy();
-    expect(screen.queryByText('Sin plan asignado')).toBeNull();
+    expect(screen.queryByText('Sin plan')).toBeNull();
   });
 });
 
@@ -784,7 +784,7 @@ describe('AlumnoDetallePage · correcciones 1B: quitar plan limpia el precio (V5
     montarFicha();
 
     const precio = await waitFor(() => {
-      const control = controlDeEtiqueta('Precio Acordado ($ USD)', 'input') as HTMLInputElement;
+      const control = controlDeEtiqueta('Precio acordado (USD)', 'input') as HTMLInputElement;
       expect(control.value).toBe('35.00');
       return control;
     });
@@ -938,7 +938,7 @@ describe('AlumnoDetallePage · correcciones 1B (2.ª ronda): la reconciliación 
     // La reconciliación (GET → null) alinea el selector con el servidor: queda en ''.
     const selector = await selectorDePlan();
     await waitFor(() => expect(selector.value).toBe(''));
-    expect((await screen.findAllByText('Sin plan asignado')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Sin plan')).length).toBeGreaterThan(0);
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
     // Guardar el expediente sin tocar nada: solo el PATCH, ninguna escritura financiera.
@@ -981,7 +981,7 @@ describe('AlumnoDetallePage · correcciones 1B (2.ª ronda): el éxito nombra so
 
     // Ficha cargada: plan vigente sin cambios y precio precargado del override, sin tocar.
     await waitFor(() => {
-      const precio = controlDeEtiqueta('Precio Acordado ($ USD)', 'input') as HTMLInputElement;
+      const precio = controlDeEtiqueta('Precio acordado (USD)', 'input') as HTMLInputElement;
       expect(precio.value).toBe('35.00');
     });
     fireEvent.change(controlDeEtiqueta('Teléfono / WhatsApp', 'input'), {
@@ -1026,7 +1026,7 @@ describe('AlumnoDetallePage · correcciones 1B (2.ª ronda): el éxito nombra so
     montarFicha();
 
     const precio = await waitFor(() => {
-      const control = controlDeEtiqueta('Precio Acordado ($ USD)', 'input') as HTMLInputElement;
+      const control = controlDeEtiqueta('Precio acordado (USD)', 'input') as HTMLInputElement;
       expect(control.value).toBe('35.00');
       return control;
     });
@@ -1049,7 +1049,7 @@ describe('AlumnoDetallePage · correcciones 1B (2.ª ronda): el éxito nombra so
     const selector = await selectorDePlan();
     fireEvent.change(selector, { target: { value: PLAN_B.id } });
     await campoFechaInicio();
-    fireEvent.change(controlDeEtiqueta('Precio Acordado ($ USD)', 'input'), {
+    fireEvent.change(controlDeEtiqueta('Precio acordado (USD)', 'input'), {
       target: { value: '35.00' },
     });
 

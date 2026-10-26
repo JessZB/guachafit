@@ -75,7 +75,7 @@ export function CabeceraSesion({
               <Clock className="h-3 w-3" />
               <span>{duracion ? `${duracion} de duración` : 'Sin duración registrada'}</span>
               {chipRecuperada === undefined && sesion.esDiaDescansoOriginal && (
-                <span>· Recuperada en día de descanso</span>
+                <span>Recuperada · día de descanso</span>
               )}
             </p>
           </div>

@@ -20,7 +20,6 @@ function renderPanel(): string {
   return renderToStaticMarkup(
     createElement(PanelNutricionAlumno, {
       alumnoUsuarioId: 'alumno-1',
-      alumnoNombre: 'Ana',
       isDemoMode: true,
     })
   );

@@ -1,13 +1,14 @@
 /**
  * Badge de estado de activación del alumno (cabecera de la ficha).
  *
- * CANDIDATO a `common/` sobre `ui/BadgeEstado` (fase D, matriz 48 fila 13): copia verificable en
- * `pages/entrenador/AlumnosPage.tsx:996-1007` (R3.3). Se conserva el markup exacto porque la
- * sustitución no es mecánica (ramas archivado/activo/no-activo + `etiquetaEstadoActivacion`).
- * §6: 11px mínimo, pesos ≤ 700, tokens con variante oscura.
+ * Se apoya en `ui/BadgeEstado`: archivado = neutro, activo = primario (info), resto = ámbar.
+ * El punto de color es decorativo (`aria-hidden`). Candidato a `common/` (fase D, matriz 48
+ * fila 13). §6: 11px mínimo, pesos ≤ 700, tokens con variante oscura.
  */
 import { EstadoAlumno } from '@guachafit/shared';
+import { BadgeEstado } from '../../ui/BadgeEstado';
 import { etiquetaEstadoActivacion } from '../../../lib/etiquetas-dominio';
+import type { TonoSemaforo } from '../../../lib/adherencia';
 
 interface BadgeEstadoActivacionAlumnoProps {
   estadoActivacion: EstadoAlumno;
@@ -18,26 +19,14 @@ export function BadgeEstadoActivacionAlumno({
   estadoActivacion,
   archivado,
 }: BadgeEstadoActivacionAlumnoProps) {
+  const activo = !archivado && estadoActivacion === EstadoAlumno.ACTIVO;
+  const tono: TonoSemaforo = archivado ? 'neutral' : activo ? 'info' : 'warning';
+  const clasePunto = archivado ? 'bg-muted-foreground' : activo ? 'bg-primary' : 'bg-warning';
+
   return (
-    <span
-      className={`px-3 py-1 rounded-full text-[11px] font-bold tracking-wide uppercase border flex items-center gap-1.5 shadow-2xs ${
-        archivado
-          ? 'bg-secondary text-muted-foreground border-border/80'
-          : estadoActivacion === EstadoAlumno.ACTIVO
-          ? 'bg-primary/15 text-primary border-primary/30'
-          : 'bg-warning/15 text-warning border-warning/30'
-      }`}
-    >
-      <span
-        className={`h-1.5 w-1.5 rounded-full ${
-          archivado
-            ? 'bg-muted-foreground'
-            : estadoActivacion === EstadoAlumno.ACTIVO
-            ? 'bg-primary'
-            : 'bg-warning'
-        }`}
-      />
+    <BadgeEstado tono={tono}>
+      <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${clasePunto}`} />
       {archivado ? 'Archivado' : etiquetaEstadoActivacion(estadoActivacion)}
-    </span>
+    </BadgeEstado>
   );
 }

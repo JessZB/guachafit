@@ -59,7 +59,9 @@ export function RutinaSemanalAlumno({
           <button
             type="button"
             onClick={onEditarRutina}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer"
+            disabled={isArchived}
+            title={isArchived ? 'Restaura al alumno para asignarle una rutina' : undefined}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Pencil className="h-3.5 w-3.5" />
             <span>Editar rutina semanal</span>
@@ -71,9 +73,19 @@ export function RutinaSemanalAlumno({
         <div className="p-8 rounded-2xl bg-card border border-dashed border-border/70 text-center">
           <ClipboardList className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-40" />
           <p className="text-xs text-muted-foreground">
-            Este alumno aún no tiene una rutina semanal activa. Usa «Editar / Asignar
-            Rutina» para crear su planificación.
+            Este alumno aún no tiene una rutina semanal activa. Usa «Asignar rutina» para
+            crear su planificación.
           </p>
+          <button
+            type="button"
+            onClick={onEditarRutina}
+            disabled={isArchived}
+            title={isArchived ? 'Restaura al alumno para asignarle una rutina' : undefined}
+            className="mt-4 min-h-11 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            <span>Asignar rutina</span>
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">

@@ -408,7 +408,7 @@ describe('B0 · pestaña entrenamiento: último entrenamiento', () => {
     sesionesActuales = [sesionFixture(0)];
     rutinaActual = [BLOQUE_EMPUJE];
     montarFicha();
-    await screen.findByRole('heading', { name: /Último Entrenamiento Realizado/ });
+    await screen.findByRole('heading', { name: /Último entrenamiento/ });
     expect(screen.getByText('85.00% cumplido')).toBeTruthy();
     expect(
       screen.getByRole('button', { name: 'Ver historial completo' })
@@ -426,7 +426,7 @@ describe('B0 · pestaña entrenamiento: último entrenamiento', () => {
     ultimaActual = null;
     sesionesActuales = [sesionFixture(0)];
     montarFicha();
-    await screen.findByRole('heading', { name: /Último Entrenamiento Realizado/ });
+    await screen.findByRole('heading', { name: /Último entrenamiento/ });
   });
 
   it('no muestra la tarjeta cuando no hay sesiones realizadas', async () => {
@@ -434,7 +434,7 @@ describe('B0 · pestaña entrenamiento: último entrenamiento', () => {
     sesionesActuales = [];
     montarFicha();
     await screen.findByRole('heading', { name: /Historial de Sesiones/ });
-    expect(screen.queryByRole('heading', { name: /Último Entrenamiento/ })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /Último entrenamiento/ })).toBeNull();
     expect(screen.queryByRole('heading', { name: /Entrenamiento en Progreso/ })).toBeNull();
   });
 });
@@ -512,7 +512,7 @@ describe('B0 · pestaña entrenamiento: navegación', () => {
     ultimaActual = null;
     sesionesActuales = [];
     montarFicha(`/coach/alumnos/${CLIENTE_ID}`);
-    const tab = await screen.findByRole('tab', { name: 'Entrenamiento & Rutinas' });
+    const tab = await screen.findByRole('tab', { name: 'Entrenos' });
     fireEvent.click(tab);
     await screen.findByRole('heading', { name: /Historial de Sesiones/ });
     expect(screen.getByTestId('sonda-ubicacion').textContent).toContain('tab=entrenamiento');

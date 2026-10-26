@@ -24,27 +24,13 @@
 import { EstadoConciliacion, type TransaccionPagoDetalleDTO } from '@guachafit/shared';
 import { AlertTriangle, Eye } from 'lucide-react';
 import { BadgeEstado } from '../../ui/BadgeEstado';
-import type { TonoSemaforo } from '../../../lib/adherencia';
 import { etiquetaMetodoPago } from '../../../lib/conciliacion-filtros';
 import { formatFechaCalendario } from '../../../lib/date-format';
 import {
   etiquetaEstadoTransaccion,
   normalizarEstadoTransaccion,
+  tonoEstadoTransaccion,
 } from '../../../lib/pagos-historial-filtros';
-
-/** Tono del badge según el estado normalizado (mismo criterio que el filtro). */
-function tonoEstadoTransaccion(estado: string | null | undefined): TonoSemaforo {
-  switch (normalizarEstadoTransaccion(estado)) {
-    case EstadoConciliacion.APROBADO:
-      return 'success';
-    case EstadoConciliacion.RECHAZADO:
-      return 'danger';
-    case EstadoConciliacion.REVERTIDO:
-      return 'neutral';
-    default:
-      return 'warning';
-  }
-}
 
 export interface FilaTransaccionPagoProps {
   tx: TransaccionPagoDetalleDTO;

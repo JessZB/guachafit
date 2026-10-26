@@ -1,7 +1,8 @@
 /**
  * Sección RN-01 del panel de nutrición del alumno (Ola 2).
  *
- * Recorte verbatim de `PanelNutricionAlumno.tsx`: cabecera con el botón del
+ * Extraída de `PanelNutricionAlumno.tsx`. No es un recorte verbatim: se quitó la prop
+ * `alumnoNombre` porque el título no usa el nombre del alumno. Incluye la cabecera con el botón del
  * editor (bloqueado hasta conocer las metas guardadas), estados honestos de
  * carga/error/vacío, grilla de objetivos y recursos educativos. Presentacional
  * (R1): recibe props y callbacks, no pide datos.
@@ -12,7 +13,6 @@ import type { MetasNutricionalesDetalleDTO } from '@guachafit/shared';
 import { AlertTriangle, ExternalLink, FileText, Loader2, Pencil, Target } from 'lucide-react';
 
 export function SeccionMetasNutricion({
-  alumnoNombre,
   metas,
   edicionMetas,
   isCargandoMetas,
@@ -20,7 +20,6 @@ export function SeccionMetasNutricion({
   onAbrirEditor,
   onReintentarMetas,
 }: {
-  alumnoNombre?: string | null;
   metas: MetasNutricionalesDetalleDTO | null;
   edicionMetas: EstadoEdicionMetas;
   isCargandoMetas: boolean;
@@ -37,7 +36,7 @@ export function SeccionMetasNutricion({
         <div className="flex items-center gap-2">
           <Target className="h-4 w-4 text-primary" />
           <h3 className="font-bold text-sm text-foreground">
-            Metas nutricionales{alumnoNombre ? ` de ${alumnoNombre}` : ''}
+            Metas nutricionales
           </h3>
         </div>
         <button

@@ -9,9 +9,12 @@
  * W-6: conserva los hermanos `label` + control en el mismo contenedor (`Monto Recibido`,
  * `Moneda`, `Fecha de la operación`), `role="dialog"` + `aria-modal` y el
  * `aria-label="Cerrar cobro directo"` que consultan los specs.
+ * Cada control y el título se asocian con `useId` (dos modales no repiten `id`). Solo el monto
+ * recibido es numérico (`inputMode="decimal"`). El botón de cerrar tiene área táctil `min-h-11`.
  *
  * §6: 11px mínimo, pesos ≤ 700, tokens con variante oscura, error honesto (`role="alert"`).
  */
+import { useId } from 'react';
 import type React from 'react';
 import { Moneda } from '@guachafit/shared';
 import { AlertCircle, CheckCircle2, DollarSign, X } from 'lucide-react';
@@ -49,6 +52,12 @@ export function ModalCobroSala({
     setIsCobroModalOpen,
   } = cobro;
   const onCerrar = () => setIsCobroModalOpen(false);
+  const idBase = useId();
+  const idTitulo = `${idBase}-titulo`;
+  const idMonto = `${idBase}-monto`;
+  const idMoneda = `${idBase}-moneda`;
+  const idFecha = `${idBase}-fecha`;
+  const idNotas = `${idBase}-notas`;
   return (
     <div
       onClick={(e) => {
@@ -60,21 +69,22 @@ export function ModalCobroSala({
         ref={refDialogo}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="modal-cobro-title"
+        aria-labelledby={idTitulo}
         tabIndex={-1}
         className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto"
       >
         <div className="flex items-center justify-between border-b border-border/80 pb-3">
           <div className="flex items-center gap-2">
             <DollarSign className="h-5 w-5 text-success" />
-            <h3 id="modal-cobro-title" className="font-bold text-base text-foreground">
-              Cobro Directo en Sala
+            <h3 id={idTitulo} className="font-bold text-base text-foreground">
+              Cobrar en sala
             </h3>
           </div>
           <button
+            type="button"
             onClick={onCerrar}
             aria-label="Cerrar cobro directo"
-            className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
+            className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
           >
             <X className="h-4 w-4" />
           </button>
@@ -113,8 +123,9 @@ export function ModalCobroSala({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-muted-foreground">Monto Recibido</label>
+                <label htmlFor={idMonto} className="text-xs font-semibold text-muted-foreground">Monto Recibido</label>
                 <input
+                  id={idMonto}
                   type="text"
                   inputMode="decimal"
                   required
@@ -125,8 +136,9 @@ export function ModalCobroSala({
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-muted-foreground">Moneda</label>
+                <label htmlFor={idMoneda} className="text-xs font-semibold text-muted-foreground">Moneda</label>
                 <select
+                  id={idMoneda}
                   value={moneda}
                   onChange={(e) => onCambiarMoneda(e.target.value as Moneda)}
                   className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
@@ -138,11 +150,11 @@ export function ModalCobroSala({
             </div>
 
             <div className="space-y-1">
-              <label htmlFor="ficha-cobro-fecha" className="text-xs font-semibold text-muted-foreground">
+              <label htmlFor={idFecha} className="text-xs font-semibold text-muted-foreground">
                 Fecha de la operación
               </label>
               <input
-                id="ficha-cobro-fecha"
+                id={idFecha}
                 type="date"
                 max={fechaCalendarioLocal()}
                 value={fecha}
@@ -159,8 +171,9 @@ export function ModalCobroSala({
             )}
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-muted-foreground">Notas Internas</label>
+              <label htmlFor={idNotas} className="text-xs font-semibold text-muted-foreground">Notas Internas</label>
               <input
+                id={idNotas}
                 type="text"
                 value={notas}
                 onChange={(e) => onCambiarNotas(e.target.value)}

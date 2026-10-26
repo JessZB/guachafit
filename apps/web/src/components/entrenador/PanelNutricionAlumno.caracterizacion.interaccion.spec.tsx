@@ -32,7 +32,6 @@ function renderDemo() {
     <PanelNutricionAlumno
       alumnoUsuarioId="alumno-1"
       alumnoPerfilId="perfil-1"
-      alumnoNombre="Ana"
       isDemoMode
     />
   );
@@ -51,7 +50,7 @@ function renderReal(config: { metas: unknown; checkins: unknown }) {
     return Promise.resolve(null);
   });
   render(
-    <PanelNutricionAlumno alumnoUsuarioId="alumno-1" alumnoNombre="Ana" isDemoMode={false} />
+    <PanelNutricionAlumno alumnoUsuarioId="alumno-1" isDemoMode={false} />
   );
 }
 
@@ -62,11 +61,11 @@ async function abrirEditorDemo() {
 }
 
 describe('PanelNutricionAlumno · caracterización (demo: secciones)', () => {
-  it('muestra las tres secciones con el nombre del alumno', async () => {
+  it('muestra las tres secciones', async () => {
     renderDemo();
 
     expect(
-      await screen.findByRole('heading', { name: 'Metas nutricionales de Ana' })
+      await screen.findByRole('heading', { name: 'Metas nutricionales' })
     ).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Zona horaria del alumno' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Reportes de los últimos 30 días' })).toBeTruthy();

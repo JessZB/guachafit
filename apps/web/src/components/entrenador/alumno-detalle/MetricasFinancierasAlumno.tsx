@@ -26,21 +26,16 @@ export function MetricasFinancierasAlumno({ finanzas }: MetricasFinancierasAlumn
           <span className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">
             Saldo Pendiente Actual
           </span>
+          {/* Punto decorativo: el estado se lee en el texto de abajo, no solo por color */}
           <span
+            aria-hidden="true"
             className={`h-2 w-2 rounded-full ${
               !finanzas
                 ? 'bg-muted-foreground'
                 : Number(finanzas.saldoPendienteTotalUsd || 0) > 0
-                ? 'bg-danger animate-pulse'
+                ? 'bg-danger animate-pulse motion-reduce:animate-none'
                 : 'bg-success'
             }`}
-            title={
-              !finanzas
-                ? 'Dato no disponible'
-                : Number(finanzas.saldoPendienteTotalUsd || 0) > 0
-                ? 'Cuota en mora/pendiente'
-                : 'Solvente'
-            }
           />
         </div>
         <p

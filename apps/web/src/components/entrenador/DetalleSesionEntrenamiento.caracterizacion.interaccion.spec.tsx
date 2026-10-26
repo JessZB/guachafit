@@ -87,11 +87,11 @@ describe('DetalleSesionEntrenamiento · caracterización (cabecera y acordeón)'
       <DetalleSesionEntrenamiento
         sesion={sesion}
         mostrarSeries={false}
-        chipRecuperada="Recuperada en Lunes (Día de descanso)"
+        chipRecuperada="Recuperada · Lunes"
       />,
     );
 
-    expect(screen.getByText('Recuperada en Lunes (Día de descanso)')).toBeTruthy();
+    expect(screen.getByText('Recuperada · Lunes')).toBeTruthy();
     expect(screen.getByText('Completada')).toBeTruthy();
     expect(screen.queryByText(/Tiempo entre series/)).toBeNull();
     expect(screen.queryByText('Nota del coach')).toBeNull();
@@ -183,7 +183,7 @@ describe('DetalleSesionEntrenamiento · caracterización (chips de cabecera)', (
   it('sin chipRecuperada y en día de descanso original conserva el texto plano', () => {
     render(<DetalleSesionEntrenamiento sesion={sesionBase({ esDiaDescansoOriginal: true })} />);
 
-    expect(screen.getByText(/Recuperada en día de descanso/)).toBeTruthy();
+    expect(screen.getByText(/Recuperada · día de descanso/)).toBeTruthy();
   });
 
   it('con chipRecuperada nula no rinde ningún chip de recuperación', () => {

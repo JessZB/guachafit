@@ -17,11 +17,11 @@ describe('DetalleSesionEntrenamiento (WU16: props de la ficha del alumno)', () =
       createElement(DetalleSesionEntrenamiento, {
         sesion,
         mostrarSeries: false,
-        chipRecuperada: 'Recuperada en Lunes (Día de descanso)',
+        chipRecuperada: 'Recuperada · Lunes',
       })
     );
 
-    expect(html).toContain('Recuperada en Lunes (Día de descanso)');
+    expect(html).toContain('Recuperada · Lunes');
     expect(html).toContain('Completada');
     expect(html).not.toContain('Tiempo entre series');
     expect(html).not.toContain('Nota del coach');

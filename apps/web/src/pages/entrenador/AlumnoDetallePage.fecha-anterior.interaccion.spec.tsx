@@ -222,7 +222,7 @@ function montarPagina(): void {
 
 /** Abre el modal de cobro en sala de la ficha (la página debe estar montada). */
 async function abrirCobro(): Promise<HTMLElement> {
-  const abrir = await screen.findByRole('button', { name: /Registrar Cobro Directo en Sala/ });
+  const abrir = await screen.findByRole('button', { name: /Cobrar en sala/ });
   fireEvent.click(abrir);
   return screen.findByRole('dialog');
 }

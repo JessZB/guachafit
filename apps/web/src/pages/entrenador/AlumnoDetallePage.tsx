@@ -274,7 +274,6 @@ export function AlumnoDetallePage() {
           {/* El endpoint de check-ins usa `usuarios.id` (alumno.usuarioId), no el id del perfil. */}
           <PanelNutricionAlumno
             alumnoUsuarioId={alumno.usuarioId} alumnoPerfilId={alumno.id}
-            alumnoNombre={`${alumno.nombres} ${alumno.apellidos}`.trim()}
             zonaHoraria={alumno.zonaHoraria}
             onZonaHorariaGuardada={(zonaHoraria) => {
               // Solo si la ficha abierta sigue siendo la del alumno al que se le guardó la zona.

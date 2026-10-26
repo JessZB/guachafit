@@ -82,7 +82,7 @@ export function usePlanSuscripcionAlumno({
       return overrides;
     } catch (err: unknown) {
       const mensaje =
-        err instanceof Error ? err.message : 'No se pudo cargar el override vigente del alumno.';
+        err instanceof Error ? err.message : 'No se pudo cargar la tarifa especial vigente del alumno.';
       setOverrideError(mensaje);
       return [];
     }
@@ -178,7 +178,7 @@ export function usePlanSuscripcionAlumno({
       return {
         ok: false,
         error:
-          err instanceof Error ? err.message : 'No se pudo guardar el override del alumno.',
+          err instanceof Error ? err.message : 'No se pudo guardar la tarifa especial del alumno.',
       };
     }
   };
@@ -274,9 +274,9 @@ export function usePlanSuscripcionAlumno({
     if (!perfil || overridesAlumno.length === 0) return;
     solicitarConfirmacion({
       ...separarPreguntaYDetalle(
-        '¿Quitar el override de este alumno? Volverá a los valores del plan del catálogo y a la tasa global.'
+        '¿Quitar la tarifa especial de este alumno? Volverá a los valores del plan del catálogo y a la tasa global.'
       ),
-      boton: 'Quitar override',
+      boton: 'Quitar tarifa especial',
       accion: () => quitarOverrideConfirmado(perfil, setAlumno),
     });
   };
@@ -292,7 +292,7 @@ export function usePlanSuscripcionAlumno({
       setPrecioOverride('');
       setTasaFijadaOverride('');
       setAlumno((prev) => (prev ? { ...prev, precioAcordadoOverride: null } : prev));
-      notificarExito('Override eliminado: el alumno vuelve a los valores del catálogo (demo).');
+      notificarExito('Tarifa especial eliminada: el alumno vuelve a los valores del catálogo (demo).');
       return;
     }
 
@@ -309,10 +309,10 @@ export function usePlanSuscripcionAlumno({
       }
       setPrecioOverride('');
       await cargarOverrides(perfil.usuarioId);
-      notificarExito('Override eliminado: el alumno vuelve a los valores del catálogo.');
+      notificarExito('Tarifa especial eliminada: el alumno vuelve a los valores del catálogo.');
     } catch (err: unknown) {
       notificarError(
-        err instanceof Error ? err.message : 'No se pudo quitar el override. Inténtalo de nuevo.'
+        err instanceof Error ? err.message : 'No se pudo quitar la tarifa especial. Inténtalo de nuevo.'
       );
     }
   };

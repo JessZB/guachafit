@@ -2,7 +2,8 @@
  * Métricas antropométricas actuales con deltas (organismo ÚNICO).
  *
  * Presentacional: recibe los controles ordenados (más reciente primero) y pinta las tarjetas
- * de peso, % grasa, cintura y brazo/pecho. Extraído de
+ * de peso, % grasa, cintura, brazo y pecho (cada una con su etiqueta). Cuadrícula de una
+ * columna por debajo de 420px. Extraído de
  * `pages/entrenador/AlumnoDetallePage.tsx` (SL-5). Los deltas viven en
  * `lib/alumno-detalle-metricas.ts` (`calcularDeltasAntropometricos`). Debe montarse sobre
  * `MetricCard` en la consolidación D; hoy conserva el markup.
@@ -26,7 +27,7 @@ export function MetricasAntropometricas({ controles }: MetricasAntropometricasPr
   );
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
       <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1">
         <span className="text-[11px] uppercase font-bold text-muted-foreground block">Peso Actual</span>
         <div className="flex items-baseline gap-2">
@@ -86,9 +87,16 @@ export function MetricasAntropometricas({ controles }: MetricasAntropometricasPr
       </div>
 
       <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1">
-        <span className="text-[11px] uppercase font-bold text-muted-foreground block">Brazo / Pecho</span>
-        <p className="text-2xl font-bold font-mono text-primary">
-          {actual.brazoCm ?? '—'} / {actual.pechoCm ?? '—'} cm
+        <span className="text-[11px] uppercase font-bold text-muted-foreground block">Brazo</span>
+        <p className="text-2xl font-bold font-mono text-foreground">
+          {actual.brazoCm ? `${actual.brazoCm} cm` : '—'}
+        </p>
+      </div>
+
+      <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1">
+        <span className="text-[11px] uppercase font-bold text-muted-foreground block">Pecho</span>
+        <p className="text-2xl font-bold font-mono text-foreground">
+          {actual.pechoCm ? `${actual.pechoCm} cm` : '—'}
         </p>
       </div>
     </div>

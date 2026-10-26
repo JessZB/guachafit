@@ -120,7 +120,7 @@ export function HistorialSesionesAlumno({
                 }
                 chipRecuperada={
                   ses.esDiaDescansoOriginal
-                    ? `Recuperada en ${diaSemanaCapitalizado || 'Descanso'} (Día de descanso)`
+                    ? `Recuperada · ${diaSemanaCapitalizado || 'día de descanso'}`
                     : null
                 }
                 mostrarGrupoMuscular

@@ -73,13 +73,13 @@ export function PestanaResumenAlumno({
               refSelectorPlan={refSelectorPlan}
             />
 
-            {/* Ficha Médica Confidencial */}
+            {/* Salud y limitaciones */}
             <FichaMedicaConfidencial valor={fichaSaludPrivada} onCambiar={onCambiarFichaSalud} />
           </div>
         </div>
 
-        {/* Botón Guardar Cambios */}
-        <div className="flex items-center justify-end gap-3 pt-2">
+        {/* Botón Guardar cambios: en móvil apila mensajes y botón a ancho completo */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-3 pt-2">
           {mensajeExito && (
             <span className="text-xs font-bold text-success flex items-center gap-1.5 animate-in fade-in">
               <CheckCircle2 className="h-4 w-4" />
@@ -89,7 +89,7 @@ export function PestanaResumenAlumno({
           {mensajeError && (
             <span
               role="alert"
-              className="text-xs font-bold text-destructive flex items-center gap-1.5 animate-in fade-in max-w-md text-right"
+              className="text-xs font-bold text-destructive flex items-center gap-1.5 animate-in fade-in max-w-md sm:text-right"
             >
               <AlertCircle className="h-4 w-4 shrink-0" />
               {mensajeError}
@@ -98,9 +98,9 @@ export function PestanaResumenAlumno({
           <button
             type="submit"
             disabled={guardando}
-            className="py-3 px-6 rounded-2xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all disabled:opacity-50 cursor-pointer"
+            className="w-full sm:w-auto min-h-11 py-3 px-6 rounded-2xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all disabled:opacity-50 cursor-pointer"
           >
-            {guardando ? 'Guardando expediente...' : 'Guardar Cambios de Ficha & Plan'}
+            {guardando ? 'Guardando expediente...' : 'Guardar cambios'}
           </button>
         </div>
       </form>

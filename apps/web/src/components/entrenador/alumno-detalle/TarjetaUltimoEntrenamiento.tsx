@@ -3,9 +3,10 @@
  *
  * Presentacional: sesión, etiqueta de estado y callback por props (R1). Extraída de
  * `pages/entrenador/AlumnoDetallePage.tsx` (SL-6). `MonitorAdherenciaPage.tsx:747-800` solo
- * muestra un texto de "últ. sesión", no la tarjeta. Conserva idénticos los títulos
- * (`Último Entrenamiento Realizado`, `Entrenamiento en Progreso`), el chip de % cumplido y
- * el botón `Ver historial completo` que consultan los specs.
+ * muestra un texto de "últ. sesión", no la tarjeta. El `<h3>` es `Último entrenamiento` (o
+ * `Entrenamiento en Progreso` mientras la sesión está abierta) y la fecha va en una línea
+ * secundaria, fuera del título. Conserva el chip de % cumplido y el botón
+ * `Ver historial completo` que consultan los specs.
  *
  * §6: 11px mínimo, pesos ≤ 700, tokens con variante oscura.
  */
@@ -45,17 +46,19 @@ export function TarjetaUltimoEntrenamiento({
       className="scroll-mt-24 p-6 rounded-3xl bg-card border border-border shadow-md space-y-4"
     >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/80 pb-3">
-        <div className="flex items-center gap-2">
-          <Dumbbell className="h-4 w-4 text-primary" />
-          <h3 className="font-bold text-sm text-foreground">
-            {ultimoEntrenamiento.estado === EstadoSesion.EN_PROGRESO
-              ? 'Entrenamiento en Progreso'
-              : 'Último Entrenamiento Realizado'}{' '}
-            (
-            {formatFechaCalendario(ultimoEntrenamiento.fechaProgramada) ||
-              ultimoEntrenamiento.fechaProgramada}
-            )
-          </h3>
+        <div className="flex items-start gap-2">
+          <Dumbbell className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+          <div className="space-y-0.5">
+            <h3 className="font-bold text-sm text-foreground">
+              {ultimoEntrenamiento.estado === EstadoSesion.EN_PROGRESO
+                ? 'Entrenamiento en Progreso'
+                : 'Último entrenamiento'}
+            </h3>
+            <p className="text-[11px] font-mono text-muted-foreground">
+              {formatFechaCalendario(ultimoEntrenamiento.fechaProgramada) ||
+                ultimoEntrenamiento.fechaProgramada}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <span

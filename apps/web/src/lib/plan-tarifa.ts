@@ -1,5 +1,5 @@
 /**
- * RF-005: plan comercial y tarifa acordada por alumno (override).
+ * RF-005: plan y tarifa especial del alumno (override).
  *
  * Reglas que materializa este módulo (lógica pura, testeable sin UI):
  * - RN-02: el override del alumno puede fijar `precioAcordadoUsd` y/o `tasaFijadaOverride`.
@@ -65,7 +65,7 @@ export function normalizarTasaEspecial(valor: string): string {
 /**
  * Decide qué hacer con la tarifa (override) al guardar la ficha.
  *
- * - Sin plan seleccionado: no se toca ningún override (se quitan con "Quitar override"); un
+ * - Sin plan seleccionado: no se toca ningún override (se quitan con "Quitar tarifa especial"); un
  *   precio acordado sin plan es un error. La tasa suelta se guarda por el PATCH legado.
  * - Con plan seleccionado y sin precio ni tasa: no hace falta override; se eliminan los vigentes.
  * - Con plan seleccionado y precio o tasa: se crea/actualiza el override del plan elegido y se

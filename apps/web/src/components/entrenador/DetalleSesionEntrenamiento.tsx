@@ -31,8 +31,8 @@ export interface DetalleSesionEntrenamientoProps {
   titulo?: string | null;
   /**
    * Texto del chip ámbar cuando la sesión se recuperó en un día de descanso (WU16, ficha del
-   * alumno: "Recuperada en Lunes (Día de descanso)"). Sin la prop se conserva el texto plano
-   * del monitor ("Recuperada en día de descanso").
+   * alumno: "Recuperada · Lunes"). Sin la prop se conserva el texto plano del monitor
+   * ("Recuperada · día de descanso").
    */
   chipRecuperada?: string | null;
   /** Acciones extra en la fila de chips de la cabecera (p. ej. el toggle Ver/Ocultar series). */

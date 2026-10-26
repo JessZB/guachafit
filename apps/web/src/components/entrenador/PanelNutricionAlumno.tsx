@@ -48,7 +48,6 @@ export interface PanelNutricionAlumnoProps {
   alumnoUsuarioId: string;
   /** Id del perfil (`PATCH /alumnos/:id`); sin él no se ofrece cambiar la zona horaria. */
   alumnoPerfilId?: string;
-  alumnoNombre?: string | null;
   /** ADR-019: zona horaria del perfil del alumno. */
   zonaHoraria?: string | null;
   onZonaHorariaGuardada?: (zonaHoraria: string) => void;
@@ -61,7 +60,6 @@ const DIAS_VENTANA = 30;
 export function PanelNutricionAlumno({
   alumnoUsuarioId,
   alumnoPerfilId,
-  alumnoNombre,
   zonaHoraria,
   onZonaHorariaGuardada,
   isDemoMode,
@@ -128,7 +126,6 @@ export function PanelNutricionAlumno({
       {/* RN-01: metas del alumno                                              */}
       {/* ------------------------------------------------------------------ */}
       <SeccionMetasNutricion
-        alumnoNombre={alumnoNombre}
         metas={metas}
         edicionMetas={edicionMetas}
         isCargandoMetas={isCargandoMetas}

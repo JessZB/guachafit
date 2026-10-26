@@ -1,13 +1,16 @@
 /**
- * Tarjeta de plan comercial y tarifa acordada del alumno (RF-005, organismo ÚNICO candidato).
+ * Tarjeta de plan y tarifa del alumno (RF-005, organismo ÚNICO candidato).
  *
  * Presentacional: recibe el estado del plan y callbacks, sin `api-client` ni `useQuery` (R1).
  * Extraída de `pages/entrenador/AlumnoDetallePage.tsx` (SL-3). No se halló equivalente en
- * otra vista. Conserva idénticos los textos que consultan los specs (`Precio Acordado ($ USD)`,
- * `Sin plan asignado`, `Fecha de inicio`, `Quitar plan`, `Próxima cuota: vence el…`).
+ * otra vista. Los campos se llaman `Precio acordado (USD)` y `Tasa especial (Bs por USD)`; los
+ * estados `Sin plan`, `Plan asignado` y `Sin dato`. La tarifa especial del alumno es el antiguo
+ * "override" del dominio: la API y los hooks conservan sus nombres, la interfaz no.
  *
- * §6: 11px mínimo, pesos ≤ 700, tokens con variante oscura, estados honestos (`role="alert"`).
+ * §6: 11px mínimo, pesos ≤ 700, tokens con variante oscura, estados honestos (`role="alert"`),
+ * área táctil `min-h-11`. Cada control tiene su etiqueta asociada con `useId`.
  */
+import { useId } from 'react';
 import type React from 'react';
 import type {
   OverridePlanDetalleDTO,
@@ -69,6 +72,11 @@ export function TarjetaPlanTarifaAlumno({
     setTasaFijadaOverride,
     setFechaInicioPlan,
   } = plan;
+  const idBase = useId();
+  const idSelectorPlan = `${idBase}-plan`;
+  const idPrecio = `${idBase}-precio`;
+  const idTasa = `${idBase}-tasa`;
+  const idFechaInicio = `${idBase}-fecha-inicio`;
   const hoyLocal = plan.hoyDelAlumno(zonaHoraria);
   /** WU-J (RF-005): override vigente (el más reciente) y plan elegido del catálogo. */
   const overrideVigente = overridesAlumno.length > 0 ? overridesAlumno[0] : null;
@@ -79,7 +87,7 @@ export function TarjetaPlanTarifaAlumno({
       <div className="flex items-center justify-between border-b border-border/80 pb-3">
         <div className="flex items-center gap-2">
           <CreditCard className="h-4 w-4 text-primary" />
-          <h3 className="font-bold text-sm text-foreground">Plan Comercial & Tarifa (RF-005)</h3>
+          <h3 className="font-bold text-sm text-foreground">Plan y tarifa</h3>
         </div>
         {/* M5-L1B: el badge dice la verdad sobre el plan (suscripción) o que no hay dato. */}
         {suscripcionError ? (
@@ -92,7 +100,7 @@ export function TarjetaPlanTarifaAlumno({
           </span>
         ) : (
           <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase">
-            Sin plan asignado
+            Sin plan
           </span>
         )}
       </div>
@@ -119,8 +127,8 @@ export function TarjetaPlanTarifaAlumno({
 
       {overrideVigente && (
         <div className="rounded-2xl border border-primary/25 bg-primary/5 p-3 space-y-1.5">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-bold text-foreground">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-bold text-foreground min-w-0">
               {textoPrecioVigente(
                 overrideVigente,
                 planesCatalogo.find((p) => p.id === overrideVigente.planId) ??
@@ -130,11 +138,11 @@ export function TarjetaPlanTarifaAlumno({
             <button
               type="button"
               onClick={onQuitarOverride}
-              className="inline-flex items-center gap-1 text-[11px] font-bold text-destructive hover:underline cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
-              title="Quitar el override y volver a los valores del catálogo"
+              className="inline-flex items-center gap-1 min-h-11 text-[11px] font-bold text-destructive hover:underline cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+              title="Quitar la tarifa especial y volver a los valores del catálogo"
             >
               <Trash2 className="h-3 w-3" />
-              Quitar override
+              Quitar tarifa especial
             </button>
           </div>
           <p className="text-[11px] text-muted-foreground">
@@ -156,8 +164,11 @@ export function TarjetaPlanTarifaAlumno({
 
       <div className="space-y-3">
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-muted-foreground">Plan Asignado del Catálogo</label>
+          <label htmlFor={idSelectorPlan} className="text-xs font-semibold text-muted-foreground">
+            Plan Asignado del Catálogo
+          </label>
           <select
+            id={idSelectorPlan}
             ref={refSelectorPlan}
             value={selectedPlanId}
             disabled={Boolean(suscripcionError)}
@@ -174,7 +185,7 @@ export function TarjetaPlanTarifaAlumno({
                 setTasaFijadaOverride(overrideDelPlan.tasaFijadaOverride);
               }
             }}
-            className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary disabled:opacity-60"
+            className="w-full min-h-11 px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary disabled:opacity-60"
           >
             {/* Con plan vigente no hay opción vacía: quitarlo es "Quitar plan". */}
             {!suscripcion && <option value="">Elige un plan…</option>}
@@ -208,14 +219,14 @@ export function TarjetaPlanTarifaAlumno({
             inicio (hoy por defecto); con plan vigente → próxima cuota y "Quitar plan". */}
         {suscripcion ? (
           <div className="rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 space-y-1">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[11px] font-bold text-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[11px] font-bold text-foreground min-w-0">
                 {textoProximaCuota(suscripcion)}
               </p>
               <button
                 type="button"
                 onClick={onQuitarPlan}
-                className="inline-flex items-center gap-1 text-[11px] font-bold text-destructive hover:underline cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+                className="inline-flex items-center gap-1 min-h-11 text-[11px] font-bold text-destructive hover:underline cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
               >
                 <Trash2 className="h-3 w-3" />
                 Quitar plan
@@ -232,20 +243,17 @@ export function TarjetaPlanTarifaAlumno({
           !suscripcionError &&
           selectedPlanId && (
             <div className="space-y-1">
-              <label
-                htmlFor="ficha-plan-fecha-inicio"
-                className="text-xs font-semibold text-muted-foreground"
-              >
+              <label htmlFor={idFechaInicio} className="text-xs font-semibold text-muted-foreground">
                 Fecha de inicio
               </label>
               <input
-                id="ficha-plan-fecha-inicio"
+                id={idFechaInicio}
                 type="date"
                 value={fechaInicioPlan}
                 min={rangoFechaInicioSuscripcion(hoyLocal).minimo}
                 max={rangoFechaInicioSuscripcion(hoyLocal).maximo}
                 onChange={(e) => setFechaInicioPlan(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                className="w-full min-h-11 px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
               />
               <p className="text-[11px] text-muted-foreground">
                 Ese día vence la primera cuota; las siguientes vencen cada{' '}
@@ -258,33 +266,37 @@ export function TarjetaPlanTarifaAlumno({
           )
         )}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted-foreground">
-              Precio Acordado ($ USD)
+            <label htmlFor={idPrecio} className="text-xs font-semibold text-muted-foreground">
+              Precio acordado (USD)
             </label>
             <input
+              id={idPrecio}
               type="text"
+              inputMode="decimal"
               value={precioOverride}
               disabled={Boolean(overrideError)}
               onChange={(e) => setPrecioOverride(e.target.value)}
-              placeholder="Vacío = precio del plan"
-              className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground font-mono font-bold focus:outline-hidden focus:border-primary"
+              placeholder="Del plan"
+              className="w-full min-h-11 px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground font-mono font-bold focus:outline-hidden focus:border-primary"
             />
             <p className="text-[11px] text-muted-foreground">
               Vacío hereda el precio del plan. 0.00 = becado.
             </p>
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted-foreground">
-              Tasa Especial Override (VES)
+            <label htmlFor={idTasa} className="text-xs font-semibold text-muted-foreground">
+              Tasa especial (Bs por USD)
             </label>
             <input
+              id={idTasa}
               type="text"
+              inputMode="decimal"
               value={tasaFijadaOverride}
               onChange={(e) => setTasaFijadaOverride(e.target.value)}
-              placeholder="Vacío = tasa global"
-              className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground font-mono focus:outline-hidden focus:border-primary"
+              placeholder="Global"
+              className="w-full min-h-11 px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground font-mono focus:outline-hidden focus:border-primary"
             />
             <p className="text-[11px] text-muted-foreground">
               Vacío usa la tasa global del entrenador.

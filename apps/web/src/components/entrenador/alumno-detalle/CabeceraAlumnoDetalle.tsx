@@ -3,7 +3,10 @@
  *
  * Presentacional: recibe el perfil y callbacks, no llama a `api-client` ni a `useQuery` (R1).
  * Extraído de `pages/entrenador/AlumnoDetallePage.tsx` (SL-2). El `DialogoConfirmacion`
- * compartido de la ficha vive en el contenedor (sirve también a quitar plan/override).
+ * compartido de la ficha vive en el contenedor (sirve también a quitar plan/tarifa especial).
+ *
+ * El aviso de salud se titula "Salud y limitaciones", recorta el texto a 2 líneas (completo en
+ * `title`) y su botón "Ver detalle" abre la pestaña de Perfil.
  *
  * §6: táctil `min-h-11`, 11px mínimo, tokens con variante oscura, pesos ≤ 700, estados honestos
  * (`role="alert"` en el error, `role="status"` en el éxito).
@@ -13,7 +16,7 @@ import type { SemaforoPago } from '../../../lib/etiquetas-dominio';
 import { BadgeEstadoPagoAlumno } from './BadgeEstadoPagoAlumno';
 import { BadgeEstadoActivacionAlumno } from './BadgeEstadoActivacionAlumno';
 import { BotonWhatsapp } from './BotonWhatsapp';
-import { formatearDocumento } from '../../../lib/etiquetas-dominio';
+import { etiquetaModalidad, formatearDocumento } from '../../../lib/etiquetas-dominio';
 import {
   AlertCircle,
   CheckCircle2,
@@ -77,7 +80,7 @@ export function CabeceraAlumnoDetalle({
               {/* Badge Modalidad */}
               <span className="px-3 py-1 rounded-full text-[11px] font-bold tracking-wide uppercase bg-secondary/80 text-foreground border border-border/70 flex items-center gap-1.5 shadow-2xs">
                 <span className="h-1.5 w-1.5 rounded-full bg-foreground/50" />
-                {alumno.modalidad}
+                {etiquetaModalidad(alumno.modalidad)}
               </span>
             </div>
 
@@ -185,19 +188,25 @@ export function CabeceraAlumnoDetalle({
         </div>
       )}
 
-      {/* ALERTA: Ficha médica confidencial resumen en cabecera si existe */}
+      {/* Resumen de salud y limitaciones en cabecera si existe (texto completo en la ficha) */}
       {alumno.fichaSaludPrivada && (
-        <div className="p-3 rounded-2xl bg-warning/10 border border-warning/20 text-xs flex items-center justify-between gap-3 text-warning">
-          <div className="flex items-center gap-2">
-            <Lock className="h-4 w-4 text-warning shrink-0" />
-            <span className="font-semibold text-foreground">Alerta Médica:</span>
-            <span className="truncate">{alumno.fichaSaludPrivada}</span>
+        <div className="p-3 rounded-2xl bg-warning/10 border border-warning/20 text-xs flex items-start justify-between gap-3 text-warning">
+          <div className="flex items-start gap-2 min-w-0">
+            <Lock className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+            <div className="min-w-0 space-y-0.5">
+              <span className="block font-semibold text-foreground">Salud y limitaciones</span>
+              <span className="line-clamp-2 block" title={alumno.fichaSaludPrivada}>
+                {alumno.fichaSaludPrivada}
+              </span>
+            </div>
           </div>
           <button
+            type="button"
             onClick={onVerFichaCompleta}
-            className="text-[11px] font-bold text-primary underline hover:text-primary/80 cursor-pointer"
+            aria-label={`Ver salud y limitaciones de ${alumno.nombres}`}
+            className="min-h-11 px-2 shrink-0 text-[11px] font-bold text-primary underline hover:text-primary/80 cursor-pointer"
           >
-            Ver Ficha Completa
+            <span>Ver detalle</span>
           </button>
         </div>
       )}

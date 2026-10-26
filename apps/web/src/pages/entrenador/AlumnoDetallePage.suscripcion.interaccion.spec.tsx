@@ -285,7 +285,7 @@ async function campoFechaInicio(): Promise<HTMLInputElement> {
 
 /** Guarda el expediente y espera a que el flujo termine (botón habilitado de nuevo). */
 async function guardarExpediente(): Promise<void> {
-  const guardar = await screen.findByRole('button', { name: /Guardar Cambios/ });
+  const guardar = await screen.findByRole('button', { name: /Guardar cambios/ });
   fireEvent.click(guardar);
   await waitFor(() => expect((guardar as HTMLButtonElement).disabled).toBe(false));
   await act(async () => {
@@ -337,7 +337,7 @@ describe('AlumnoDetallePage · contrato D: plan desde la suscripción', () => {
 
     const selector = await selectorDePlan();
     await waitFor(() => expect(selector.value).toBe(''));
-    expect((await screen.findAllByText('Sin plan asignado')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Sin plan')).length).toBeGreaterThan(0);
 
     await guardarExpediente();
 
@@ -438,7 +438,7 @@ describe('AlumnoDetallePage · contrato D: plan desde la suscripción', () => {
     expect(llamadasSuscripcion('DELETE')).toHaveLength(0);
   });
 
-  it('D6b · Quitar plan confirmado llama al DELETE y la tarjeta queda Sin plan asignado', async () => {
+  it('D6b · Quitar plan confirmado llama al DELETE y la tarjeta queda Sin plan', async () => {
     suscripcionServidor = SUSCRIPCION_A;
     perfilActual = { ...PERFIL_BASE, planActivoId: null, planActivoNombre: null };
     montarFicha();
@@ -454,7 +454,7 @@ describe('AlumnoDetallePage · contrato D: plan desde la suscripción', () => {
 
     await waitFor(() => expect(llamadasSuscripcion('DELETE')).toHaveLength(1));
     await waitFor(() =>
-      expect(screen.getAllByText('Sin plan asignado').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Sin plan').length).toBeGreaterThan(0)
     );
   });
 
@@ -497,7 +497,7 @@ describe('AlumnoDetallePage · contrato D: plan desde la suscripción', () => {
     const aviso = await screen.findByText(/Próxima cuota: vence el/);
     expect(aviso.textContent).toContain('29/10/2026');
 
-    const guardar = await screen.findByRole('button', { name: /Guardar Cambios/ });
+    const guardar = await screen.findByRole('button', { name: /Guardar cambios/ });
     fireEvent.click(guardar);
     await waitFor(() => expect((guardar as HTMLButtonElement).disabled).toBe(false));
 
