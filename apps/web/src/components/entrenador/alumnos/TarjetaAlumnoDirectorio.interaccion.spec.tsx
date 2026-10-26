@@ -79,6 +79,22 @@ function contenedorFlecha(container: HTMLElement): HTMLElement | null {
   return (svg?.parentElement as HTMLElement | undefined) ?? null;
 }
 
+/** Contenedor de acciones: ancestro directo con `z-10` del enlace de WhatsApp. */
+function contenedorAcciones(whatsapp: HTMLElement): HTMLElement | null {
+  return whatsapp.closest('.z-10') as HTMLElement | null;
+}
+
+/** Un elemento "hereda" `pointer-events-none` si él o un ancestro dentro del contenedor lo declara. */
+function heredaPointerEventsNone(elemento: HTMLElement, raiz: HTMLElement): boolean {
+  let actual: HTMLElement | null = elemento;
+  while (actual) {
+    if (actual.className.includes('pointer-events-none')) return true;
+    if (actual === raiz) break;
+    actual = actual.parentElement;
+  }
+  return false;
+}
+
 describe('TarjetaAlumnoDirectorio · flecha decorativa', () => {
   it('T1 · alumno no archivado: el contenedor de la flecha es decorativo y deja pasar el clic', () => {
     const { container } = montar(ALUMNO_ACTIVO);
@@ -121,5 +137,71 @@ describe('TarjetaAlumnoDirectorio · flecha decorativa', () => {
     fireEvent.click(whatsapp);
 
     expect(onVerExpediente).not.toHaveBeenCalled();
+  });
+});
+
+describe('TarjetaAlumnoDirectorio · contenedor de acciones (T5-T7)', () => {
+  it('T5 · el contenedor z-10 con WhatsApp y flecha deja pasar el clic', () => {
+    montar(ALUMNO_ACTIVO);
+    const whatsapp = screen.getByRole('link', { name: 'Enviar mensaje de WhatsApp a Carlos' });
+
+    const acciones = contenedorAcciones(whatsapp);
+    expect(acciones).toBeTruthy();
+    expect(acciones!.className).toContain('pointer-events-none');
+    // Contiene tanto el enlace como el contenedor decorativo de la flecha.
+    expect(acciones!.querySelector('svg.lucide-chevron-right')).toBeTruthy();
+  });
+
+  it('T6 · los únicos controles con clic llevan pointer-events-auto (activo)', () => {
+    montar(ALUMNO_ACTIVO);
+    const whatsapp = screen.getByRole('link', { name: 'Enviar mensaje de WhatsApp a Carlos' });
+
+    expect(whatsapp.className).toContain('pointer-events-auto');
+  });
+
+  it('T6 · los únicos controles con clic llevan pointer-events-auto (archivado)', () => {
+    montar(ALUMNO_ARCHIVADO);
+    const whatsapp = screen.getByRole('link', { name: 'Enviar mensaje de WhatsApp a Roberto' });
+    const restaurar = screen.getByRole('button', { name: 'Restaurar alumno Roberto Diaz' });
+
+    expect(whatsapp.className).toContain('pointer-events-auto');
+    expect(restaurar.className).toContain('pointer-events-auto');
+  });
+
+  it('T7 · todo control dentro del contenedor es pointer-events-auto y lo decorativo no intercepta', () => {
+    // Interpretación documentada: un `aria-hidden` DENTRO de un `a`/`button` hereda del control
+    // (auto) y es correcto; la regla "none o hereda de none" aplica a lo decorativo que no vive
+    // dentro de un control (p. ej. la flecha). Si un control nuevo sin `pointer-events-auto`
+    // rompiera el clic, este test falla.
+    for (const alumno of [ALUMNO_ACTIVO, ALUMNO_ARCHIVADO]) {
+      const { container, unmount } = render(
+        <TarjetaAlumnoDirectorio
+          alumno={alumno}
+          onVerExpediente={vi.fn()}
+          onRestaurar={vi.fn()}
+        />,
+      );
+      const whatsapp = screen.getByRole('link', {
+        name: `Enviar mensaje de WhatsApp a ${alumno.nombres}`,
+      });
+      const acciones = contenedorAcciones(whatsapp)!;
+
+      for (const control of Array.from(acciones.querySelectorAll<HTMLElement>('a, button'))) {
+        expect(control.className).toContain('pointer-events-auto');
+      }
+
+      for (const decorativo of Array.from(
+        acciones.querySelectorAll<HTMLElement>('[aria-hidden="true"]'),
+      )) {
+        const dentroDeControl = decorativo.closest('a, button');
+        if (dentroDeControl) {
+          expect(dentroDeControl.className).toContain('pointer-events-auto');
+        } else {
+          expect(heredaPointerEventsNone(decorativo, acciones)).toBe(true);
+        }
+      }
+
+      unmount();
+    }
   });
 });

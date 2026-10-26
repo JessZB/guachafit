@@ -7,7 +7,7 @@
  * - R5: el nombre es el control principal, un `<button>` con `aria-label="Ver expediente de {..}"`
  *   cuyo enlace extendido (`after:`) cubre la tarjeta entera. WhatsApp ("Enviar mensaje de WhatsApp a
  *   {nombres}") y "Restaurar alumno {..}" van encima (`z-10`) y ejecutan solo su acción (PATCH +
- *   recarga, sin navegar). La flecha decorativa (`aria-hidden`, `pointer-events-none`) no intercepta el clic: este pasa al enlace extendido y abre el expediente.
+ *   recarga, sin navegar). La flecha decorativa (`aria-hidden`, `pointer-events-none`) y el contenedor de pago y acciones (`pointer-events-none`) no interceptan el clic: este pasa al enlace extendido y abre el expediente. Solo WhatsApp y Restaurar (`pointer-events-auto`) lo reciben.
  * - Teclado: Tab llega al nombre y Enter/Espacio abren el expediente de forma nativa; Enter sobre
  *   WhatsApp o Restaurar no navega (corrige D8 sin filtrar eventos).
  * - Alerta: el color se acompaña de un icono con `aria-hidden` y del texto (no depende solo del color).
@@ -92,18 +92,18 @@ export function TarjetaAlumnoDirectorio({
         )}
       </div>
 
-      {/* Pago y acciones: el contenedor va encima del enlace extendido del nombre */}
+      {/* Pago y acciones: el contenedor deja pasar el clic (`pointer-events-none`) y solo WhatsApp y Restaurar lo reciben (`pointer-events-auto`); la flecha y los huecos abren el expediente. */}
       <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
         <SemaforoPagoTexto semaforo={a.semaforoPago} />
 
-        <div className="relative z-10 ml-auto flex items-center gap-2">
+        <div className="pointer-events-none relative z-10 ml-auto flex items-center gap-2">
           <a
             href={`https://wa.me/${a.telefonoWhatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
               `Hola ${a.nombres}, te contacto desde Guachafit.`
             )}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="min-h-11 min-w-11 flex items-center justify-center rounded-lg bg-success/15 hover:bg-success/30 text-success border border-success/20 transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-success"
+            className="pointer-events-auto min-h-11 min-w-11 flex items-center justify-center rounded-lg bg-success/15 hover:bg-success/30 text-success border border-success/20 transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-success"
             title="Enviar mensaje por WhatsApp"
             aria-label={`Enviar mensaje de WhatsApp a ${a.nombres}`}
           >
@@ -114,7 +114,7 @@ export function TarjetaAlumnoDirectorio({
             <button
               type="button"
               onClick={(e) => onRestaurar(a.id, e)}
-              className="min-h-11 py-1 px-3 rounded-lg bg-primary text-primary-foreground font-bold text-xs flex items-center gap-1 cursor-pointer hover:brightness-110 active:scale-95 transition-all focus-visible:outline-2 focus-visible:outline-primary"
+              className="pointer-events-auto min-h-11 py-1 px-3 rounded-lg bg-primary text-primary-foreground font-bold text-xs flex items-center gap-1 cursor-pointer hover:brightness-110 active:scale-95 transition-all focus-visible:outline-2 focus-visible:outline-primary"
               title="Restaurar alumno archivado"
               aria-label={`Restaurar alumno ${a.nombres} ${a.apellidos}`}
             >
