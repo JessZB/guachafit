@@ -93,10 +93,10 @@ export function TarjetaAlumnoDirectorio({
       </div>
 
       {/* Pago y acciones: el contenedor va encima del enlace extendido del nombre */}
-      <div className="flex items-center justify-between gap-2 pt-1">
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
         <SemaforoPagoTexto semaforo={a.semaforoPago} />
 
-        <div className="relative z-10 flex items-center gap-2">
+        <div className="relative z-10 ml-auto flex items-center gap-2">
           <a
             href={`https://wa.me/${a.telefonoWhatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
               `Hola ${a.nombres}, te contacto desde Guachafit.`

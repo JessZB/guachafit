@@ -39,9 +39,9 @@ export function TarjetaResumenCuota({
   const etiqueta = etiquetaEstadoCuota(cuota.estado);
   return (
     <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md relative overflow-hidden">
-      <div className="flex items-center justify-between border-b border-border/60 pb-4">
-        <div>
-          <span className="text-xs font-bold text-primary uppercase tracking-wider">
+      <div className="flex items-center justify-between gap-3 border-b border-border/60 pb-4">
+        <div className="min-w-0">
+          <span className="text-xs font-bold text-primary uppercase tracking-wider break-words">
             {cuota.planNombre}
           </span>
           <div className="text-xs text-muted-foreground mt-0.5">

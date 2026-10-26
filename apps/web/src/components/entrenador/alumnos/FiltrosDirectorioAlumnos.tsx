@@ -2,7 +2,8 @@
  * Módulo `alumnos` (fase B, prompt 53) · controles del directorio "Mis alumnos".
  *
  * Mis alumnos (2026-10-19), en tres filas:
- * 1. Búsqueda + "Ordenar por" (select nativo con etiqueta visible).
+ * 1. Búsqueda + "Ordenar por" en una sola fila, también en móvil (en móvil la etiqueta queda solo para
+ *    lectores de pantalla y un icono la sustituye visualmente; desde `sm` se ve el texto).
  * 2. Chips de estado con conteo: Vigentes, Activos, Pausados, En mora y Archivados. El conteo sale de
  *    `resumen`; sin resumen el chip no muestra número (nunca "0"). Pulsar el chip activo vuelve a
  *    "Vigentes".
@@ -13,7 +14,7 @@
  * Presentacional: solo props, sin `useQuery` ni `api-client` (R1).
  */
 
-import { LayoutGrid, Search, Table as TableIcon } from 'lucide-react';
+import { ArrowUpDown, LayoutGrid, Search, Table as TableIcon } from 'lucide-react';
 import { OrdenDirectorioAlumnos, type ResumenDirectorioAlumnosDTO } from '@guachafit/shared';
 import type {
   FiltroEstadoDirectorio,
@@ -71,8 +72,8 @@ export function FiltrosDirectorioAlumnos({
   return (
     <div className="space-y-3">
       {/* Búsqueda y orden */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="relative flex-1">
+      <div className="flex flex-row items-center gap-2 sm:gap-3">
+        <div className="relative flex-1 min-w-0">
           <Search
             className="h-4 w-4 text-muted-foreground absolute left-3.5 top-1/2 -translate-y-1/2"
             aria-hidden="true"
@@ -88,21 +89,30 @@ export function FiltrosDirectorioAlumnos({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <label htmlFor="orden-directorio" className="text-xs font-bold text-muted-foreground whitespace-nowrap">
+          <label
+            htmlFor="orden-directorio"
+            className="sr-only sm:not-sr-only text-xs font-bold text-muted-foreground whitespace-nowrap"
+          >
             Ordenar por
           </label>
-          <select
-            id="orden-directorio"
-            value={orden}
-            onChange={(e) => onCambiarOrden(e.target.value as OrdenDirectorioAlumnos)}
-            className="min-h-11 flex-1 sm:flex-none rounded-xl bg-card border border-border px-3 text-xs text-foreground cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
-          >
-            {OPCIONES_ORDEN.map((opcion) => (
-              <option key={opcion.valor} value={opcion.valor}>
-                {opcion.texto}
-              </option>
-            ))}
-          </select>
+          <div className="relative shrink-0">
+            <ArrowUpDown
+              className="sm:hidden absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none"
+              aria-hidden="true"
+            />
+            <select
+              id="orden-directorio"
+              value={orden}
+              onChange={(e) => onCambiarOrden(e.target.value as OrdenDirectorioAlumnos)}
+              className="min-h-11 max-w-[9.5rem] sm:max-w-none pl-9 pr-3 sm:pl-3 rounded-xl bg-card border border-border text-xs text-foreground cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+            >
+              {OPCIONES_ORDEN.map((opcion) => (
+                <option key={opcion.valor} value={opcion.valor}>
+                  {opcion.texto}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 

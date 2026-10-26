@@ -18,7 +18,7 @@ import {
 } from '@guachafit/shared';
 import { escaparPatronLike } from '../../../common/cartera.util';
 import { obtenerFechaLocalYyyyMmDd } from '../../../common/adherencia.util';
-import { calcularRachaEfectiva } from '../../entrenamiento/casos-entrenamiento/reglas-racha';
+import { calcularRachaEfectiva } from '../../../common/racha.util';
 import type { ContextoAlumnos } from './contexto-alumnos';
 import {
   calcularResumenDirectorio,

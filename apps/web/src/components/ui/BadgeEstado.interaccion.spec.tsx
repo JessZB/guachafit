@@ -39,4 +39,27 @@ describe('BadgeEstado', () => {
     expect(badge.getAttribute('class')).toContain('bg-secondary');
     expect(badge.getAttribute('class')).toContain('text-muted-foreground');
   });
+
+  it.each(['success', 'warning', 'danger', 'info', 'neutral'] as const)(
+    'B1 · la raíz no se parte ni se encoge en flex (tono %s)',
+    (tono) => {
+      render(<BadgeEstado tono={tono}>Cuota pendiente</BadgeEstado>);
+
+      const badge = screen.getByText('Cuota pendiente');
+      expect(badge.getAttribute('class')).toContain('whitespace-nowrap');
+      expect(badge.getAttribute('class')).toContain('shrink-0');
+    },
+  );
+
+  it('B2 · las clases de className se añaden sin sustituir las del tono', () => {
+    render(
+      <BadgeEstado tono="info" className="ml-2">
+        Extra
+      </BadgeEstado>,
+    );
+
+    const badge = screen.getByText('Extra');
+    expect(badge.getAttribute('class')).toContain('bg-primary/15');
+    expect(badge.getAttribute('class')).toContain('ml-2');
+  });
 });

@@ -62,7 +62,7 @@ export function FilaTransaccionPago({ tx, onVerComprobante, onCorregir }: FilaTr
     >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="font-bold text-sm text-foreground capitalize">
               {etiquetaMetodoPago(tx.metodoPago)}
             </span>

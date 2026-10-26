@@ -15,13 +15,13 @@
  *   ordena con `ordenarAlumnosDirectorio` antes de paginar.
  */
 
-import { useCallback, useEffect, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
 import {
   OrdenDirectorioAlumnos,
   type AlumnoDirectorioItemDTO,
   type DirectorioAlumnosDTO,
 } from '@guachafit/shared';
-import { apiClient } from '../../../lib/api-client';
+import { apiClient, resolverUrlApi } from '../../../lib/api-client';
 import {
   calcularResumenDirectorio,
   filtrarDirectorioDemo,
@@ -52,6 +52,20 @@ export function useDirectorioAlumnos({ isDemoMode }: { isDemoMode: boolean }) {
   const [orden, setOrden] = useState<OrdenDirectorioAlumnos>(OrdenDirectorioAlumnos.ALTA_RECIENTE);
   // D5: fallo de mutación visible; nunca éxito falso ni alumno fantasma.
   const [actionError, setActionError] = useState<string | null>(null);
+
+  /** Query string del `GET /alumnos` para una página concreta, con los filtros y el orden actuales. */
+  const construirParametros = useCallback(
+    (paginaSolicitada: number, tamanoSolicitado: number): string =>
+      construirParametrosDirectorioAlumnos({
+        tamano: tamanoSolicitado,
+        pagina: paginaSolicitada,
+        q: qDebounced,
+        estado: filterEstado,
+        modalidad: filterModalidad,
+        orden,
+      }).toString(),
+    [qDebounced, filterEstado, filterModalidad, orden]
+  );
 
   /**
    * WU25a: carga de UNA página del directorio. Los filtros viajan al servidor (`q`, `estado`,
@@ -88,18 +102,19 @@ export function useDirectorioAlumnos({ isDemoMode }: { isDemoMode: boolean }) {
         };
       }
 
-      const parametros = construirParametrosDirectorioAlumnos({
-        tamano: tamanoSolicitado,
-        pagina: paginaSolicitada,
-        q: qDebounced,
-        estado: filterEstado,
-        modalidad: filterModalidad,
-        orden,
-      });
-
-      return apiClient<DirectorioAlumnosDTO>(`/alumnos?${parametros.toString()}`, { signal });
+      return apiClient<DirectorioAlumnosDTO>(
+        `/alumnos?${construirParametros(paginaSolicitada, tamanoSolicitado)}`,
+        { signal }
+      );
     },
-    [isDemoMode, qDebounced, filterEstado, filterModalidad, orden]
+    [isDemoMode, qDebounced, filterEstado, filterModalidad, orden, construirParametros]
+  );
+
+  // URL absoluta de la página visible: sirve a `AvisoDatosOffline` para datar la copia guardada.
+  // En demo no hay consulta real, así que no hay URL que datar.
+  const urlConsulta = useMemo(
+    () => (isDemoMode ? null : resolverUrlApi(`/alumnos?${construirParametros(pagina, tamano)}`)),
+    [isDemoMode, construirParametros, pagina, tamano]
   );
 
   const paginacion = usePaginacionServidor<AlumnoDirectorioItemDTO, DirectorioAlumnosDTO>({
@@ -186,6 +201,7 @@ export function useDirectorioAlumnos({ isDemoMode }: { isDemoMode: boolean }) {
     hayDatos: respuesta !== undefined,
     recargar,
     resumen,
+    urlConsulta,
     hayFiltrosActivos,
     limpiarFiltros,
     actionError,

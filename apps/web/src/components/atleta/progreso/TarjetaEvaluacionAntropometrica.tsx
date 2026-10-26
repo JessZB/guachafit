@@ -33,8 +33,8 @@ export function TarjetaEvaluacionAntropometrica({
   const estadoMedicion = etiquetaEstadoMedicion(item.estado);
   return (
     <div className="p-5 rounded-3xl bg-card border border-border/80 shadow-xs space-y-3">
-      <div className="flex items-center justify-between border-b border-border/50 pb-3">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-3">
+        <div className="flex flex-wrap min-w-0 items-center gap-2">
           <Calendar className="h-4 w-4 text-primary" />
           <span className="font-bold text-sm text-foreground">
             {formatFechaCalendario(item.fechaEvaluacion) ?? item.fechaEvaluacion}

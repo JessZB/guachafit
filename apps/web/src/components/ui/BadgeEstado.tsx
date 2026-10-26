@@ -19,6 +19,7 @@
  *
  * §6: `text-[11px]` (piso exacto), `font-bold` (700), solo tokens con variante
  * claro/oscuro. Sin dominio ni datos (R9).
+ * El texto del badge nunca se parte ni se encoge dentro de un flex (lote "Mis alumnos", 2026-10-19).
  */
 import type { ReactNode } from 'react';
 import type { TonoSemaforo } from '../../lib/adherencia';
@@ -40,7 +41,7 @@ export interface BadgeEstadoProps {
 export function BadgeEstado({ tono, className = '', children }: BadgeEstadoProps) {
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-bold uppercase tracking-wide ${
+      className={`inline-flex items-center gap-1 whitespace-nowrap shrink-0 px-2 py-0.5 rounded-full border text-[11px] font-bold uppercase tracking-wide ${
         CLASES_TONO[tono] ?? CLASES_TONO.neutral
       } ${className}`}
     >

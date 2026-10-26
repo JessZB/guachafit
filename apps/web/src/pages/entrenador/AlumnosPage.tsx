@@ -8,9 +8,11 @@
  * - Datos: `useDirectorioAlumnos` (paginación server-side + filtros + orden + restaurar),
  *   `useAltaManualAlumno` (modal + `POST /alumnos/manual`) y `useEnlaceCaptacion`
  *   (`GET /entrenador/perfil`).
+ * - Sin conexión (fuera de demo): con datos, `AvisoDatosOffline` sobre la lista; sin datos y con
+ *   error, el aviso de sin datos sustituye a `EstadoErrorDirectorio`; con datos y error sin conexión solo queda `AvisoDatosOffline` (TanStack reintenta al reconectar).
  * - R2: contenedor ≤ 300 líneas; cada sección vive en `components/entrenador/alumnos/`.
- * - Orden de render: cabecera → controles → paginación → carga / error / acción / vacío → lista →
- *   diálogos.
+ * - Orden de render: cabecera → controles → aviso sin conexión → paginación → carga / error / acción /
+ *   vacío → lista → diálogos.
  */
 
 import { useState } from 'react';
@@ -18,6 +20,8 @@ import { useNavigate } from 'react-router-dom';
 import { AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../context/auth-context';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
+import { useFrescuraOffline } from '../../lib/use-frescura-offline';
+import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import { Paginacion } from '../../components/common/Paginacion';
 import type { ModoVistaDirectorio } from '../../lib/alumnos-directorio-filtros';
 import { useDirectorioAlumnos } from '../../components/entrenador/alumnos/use-directorio-alumnos';
@@ -39,6 +43,7 @@ import { ExitoAltaManualAlumno } from '../../components/entrenador/alumnos/Exito
 export function AlumnosPage() {
   const navigate = useNavigate();
   const { isDemoMode } = useAuth();
+  const { isOnline } = useFrescuraOffline(null);
   const [viewMode, setViewMode] = useState<ModoVistaDirectorio>('cards');
   const [invitacionAbierta, setInvitacionAbierta] = useState(false);
 
@@ -72,9 +77,12 @@ export function AlumnosPage() {
     search,
     orden,
     actionError,
+    urlConsulta,
   } = directorio;
   // F3: solo sin datos en pantalla el error ocupa la vista; con lista visible es un aviso inline.
   const errorSinDatos = Boolean(error) && !hayDatos;
+  // Sin conexión fuera de demo: la lista guardada se marca como tal; en demo no hay consulta real.
+  const sinConexionReal = !isDemoMode && !isOnline;
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300 pb-12">
@@ -98,6 +106,9 @@ export function AlumnosPage() {
         onCambiarVista={setViewMode}
       />
 
+      {/* Mis alumnos (2026-10-19): sin conexión con la lista ya visible, aviso con la frescura de la copia */}
+      {sinConexionReal && hayDatos && <AvisoDatosOffline url={urlConsulta} />}
+
       {/* WU25a: paginación numerada server-side. WU26: con total=0 no se pinta. */}
       {!isLoading && !errorSinDatos && total > 0 && (
         <div className="px-1">
@@ -116,12 +127,17 @@ export function AlumnosPage() {
       {isLoading && <EsqueletoDirectorio />}
 
       {/* D2: error de carga honesto con reintento (sin roster demo fuera del modo demo) */}
-      {!isLoading && error && !hayDatos && (
+      {!isLoading && error && !hayDatos && !sinConexionReal && (
         <EstadoErrorDirectorio mensaje={error} onReintentar={directorio.recargar} />
       )}
 
+      {/* Sin conexión y sin datos: el error no es definitivo; TanStack reintenta al reconectar */}
+      {!isLoading && error && !hayDatos && sinConexionReal && (
+        <AvisoDatosOffline variante="sin-datos" />
+      )}
+
       {/* F3: la lista sigue visible si la consulta falla con datos previos; el aviso ofrece reintentar */}
-      {!isLoading && error && hayDatos && (
+      {!isLoading && error && hayDatos && !sinConexionReal && (
         <AvisoErrorDirectorio mensaje={error} onReintentar={directorio.recargar} />
       )}
 

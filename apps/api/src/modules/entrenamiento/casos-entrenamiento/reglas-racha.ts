@@ -132,19 +132,10 @@ export function actualizarRacha(
 }
 
 /**
- * Racha efectiva para DTO/monitor: si `rachaUltimaFecha` es anterior a ayer, la cadena
- * se considera rota y se muestra 0. Si es hoy o ayer, se muestra `rachaDias`.
+ * `calcularRachaEfectiva` vive en `common/racha.util.ts` (compartida con `alumnos`);
+ * se reexporta aquí para mantener los imports históricos de entrenamiento.
  */
-export function calcularRachaEfectiva(
-  rachaDias: number,
-  rachaUltimaFecha: string | null | undefined,
-  fechaLocal: string
-): number {
-  if (!rachaUltimaFecha) return 0;
-  const ayer = fechaAnteriorYyyyMmDd(fechaLocal, 1);
-  if (rachaUltimaFecha < ayer) return 0;
-  return Math.max(0, rachaDias ?? 0);
-}
+export { calcularRachaEfectiva } from '../../../common/racha.util';
 
 /**
  * Resumen de la prescripción para el alumno, sin jerga ("Reps", "Peso: Sugerido"):
