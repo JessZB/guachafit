@@ -78,11 +78,12 @@ Permite al entrenador captar e incorporar alumnos tanto en el entorno físico de
     - Cada alumno muestra su **último entreno** (aviso a partir de 7 días sin entrenar) y su **racha efectiva**.
     - La lista se puede **ordenar** por alta más reciente (por defecto), nombre A-Z, sin entrenar primero o mayor racha. El orden se aplica en el servidor.
     - El enlace de captación se abre desde el botón **"Invitar"**.
-- **RN-09 (Expediente Deportivo 360° - `/coach/alumnos/:id`):** Al seleccionar un alumno, se accede a una pantalla dedicada con cabecera fija de identidad y 4 pestañas de gestión operativa:
-  1. *Resumen & Ficha Médica:* Datos personales, ficha médica cifrada (AES-256-GCM) y asignación de Plan del catálogo (`RF-005`) con override de precio/tasa.
-  2. *Finanzas & Pagos:* Resumen del mes actual, histórico acumulado de cobros y modal de Cobro Directo Inteligente en sala.
-  3. *Antropometría & Medidas:* Métricas biométricas con deltas comparativos, histórico de check-ins y fotos evolutivas.
-  4. *Entrenamiento & Rutinas:* Planificación semanal por bloques de días con series/reps y auditoría de última sesión con RPE y reporte de molestias.
+- **RN-09 (Expediente Deportivo 360° - `/coach/alumnos/:id`):** Al seleccionar un alumno, se accede a una pantalla dedicada con cabecera fija de identidad y 5 pestañas de gestión operativa (nombres desde 2026-10-26; la URL conserva `?tab=resumen|finanzas|antropometria|entrenamiento|nutricion`):
+  1. *Perfil:* Datos personales, "Salud y limitaciones" (texto cifrado con AES-256-GCM, hasta 2000 caracteres) y "Plan y tarifa" (`RF-005`) con precio acordado y tasa especial.
+  2. *Pagos:* Resumen del mes actual, histórico acumulado de cobros y modal de Cobro Directo Inteligente en sala.
+  3. *Medidas:* Métricas biométricas con deltas comparativos, histórico de check-ins y fotos evolutivas.
+  4. *Entrenos:* Planificación semanal por bloques de días con series/reps y auditoría de última sesión con RPE y reporte de molestias.
+  5. *Nutrición:* Metas nutricionales y calendario de reportes del alumno.
 
 ---
 
@@ -195,3 +196,11 @@ Then la aplicación debe navegar a "/coach/alumnos/al-001"
   - **Corrección posterior (`67399c2` y segundo arreglo):** la flecha decorativa `>` de la tarjeta estaba dentro del contenedor de acciones (`z-10`) e interceptaba el clic sin hacer nada. `pointer-events-none` solo en la flecha no bastó: el clic caía en el contenedor. Ahora el contenedor lleva `pointer-events-none` y solo WhatsApp y Restaurar llevan `pointer-events-auto`; la flecha y los huecos llegan al enlace extendido del nombre y abren el expediente (spec `TarjetaAlumnoDirectorio.interaccion.spec.tsx`, que fija clases porque jsdom no hace hit-testing; web **2244/2244**). La tabla no tiene el problema: su flecha es un botón real.
   - **Límite honesto:** si la conexión se pierde a mitad de sesión y se pide una combinación nueva de filtros, TanStack Query pausa la consulta y se ven los esqueletos hasta reconectar (comportamiento previo, sin aviso propio).
   - **Evidencia:** web **2236/2236**; API **2015** (1 saltado); typecheck y build de API y web en verde; revisión de fiabilidad sin BLOCKER, con H1–H3 y H5 corregidos y validados y H4 (ancho del buscador a 360px) llevado a la guía manual.
+- Implementado (2026-10-26, `ad1788f`): rediseño de textos, badges y formularios de la ficha del alumno (`/coach/alumnos/:id`), solo web.
+  - **Tabs:** Perfil · Pagos · Medidas · Entrenos · Nutrición. Las claves de `?tab=` no cambian, así que los enlaces desde cartera y actividad siguen válidos. El tab Pagos con deuda anuncia "Saldo pendiente N dólares" y muestra el saldo con dos decimales.
+  - **"Salud y limitaciones":** sustituye a "Alerta Médica". La cabecera muestra el texto con 2 líneas (completo en el `title`) y "Ver detalle"; la tarjeta de edición tiene contador `N/2000`. No cambia ningún dato, DTO ni la API: sigue siendo el mismo campo cifrado de texto libre.
+  - **Badges:** pago, activación y modalidad usan `ui/BadgeEstado`, que no parte su texto (`whitespace-nowrap shrink-0`). Las filas con badge junto a texto largo (cuota, transacción, ejercicio, historial) dejan bajar el badge de línea. El estado de una transacción es un badge, y el monto rechazado o revertido deja de verse en verde con "+".
+  - **Formularios:** etiquetas asociadas a su campo (`useId`), campos de al menos 44px, `inputMode` numérico en importes y medidas, y una columna en móvil. "Override" y "(RF-005)" desaparecen del texto visible: se dice "Plan y tarifa", "Precio acordado (USD)" y "Tasa especial (Bs por USD)".
+  - **Rutina de un alumno archivado:** los botones de editar y asignar rutina quedan deshabilitados, como ya lo estaba "Cargar desde plantilla".
+  - **Evidencia:** web **2343/2343**; typecheck y build en verde; revisión de los cuatro enfoques sin BLOCKER, con los hallazgos introducidos por el lote corregidos y validados.
+  - **Pendiente de los siguientes lotes** (decididos con el dueño, 2026-10-26): tabs segmentadas con icono, carga y recarga sin tapar la ficha, reorganización por tab (la rutina primero en Entrenos y la zona horaria en Perfil) y cabecera con "Más acciones".

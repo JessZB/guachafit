@@ -4,7 +4,7 @@ modulo: Finanzas
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-10-10
+fecha_verificacion: 2026-10-26
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -109,7 +109,7 @@ Then el monto total a pagar debe ser exactamente de $40.00 USD
 - Evidencia: `rf005-rf008-suscripcion-ciclo.spec.ts`, `rf005-rf008-suscripcion-servicio.spec.ts`, `rf005-rf009-m5l1-correcciones.spec.ts`; API **1447** aprobados (6 omitidos).
 
 ### Plan del alumno en la ficha (2026-10-10, `e0747e2`)
-- **Tarjeta "Plan Comercial & Tarifa":** el plan sale de la suscripción (`GET /finanzas/suscripciones`; sin plan responde vacío y se muestra "Sin plan asignado").
+- **Tarjeta "Plan y tarifa" (antes "Plan Comercial & Tarifa"; textos renombrados el 2026-10-26, `ad1788f`):** el plan sale de la suscripción (`GET /finanzas/suscripciones`; sin plan responde vacío y se muestra "Sin plan").
   - El primer plan pide la **fecha de inicio**, con el "hoy" del alumno (su zona) por defecto y el mismo rango que la API. La ayuda dice cada cuánto vencen las cuotas.
   - Con plan vigente se ve "Próxima cuota: vence el DD/MM/AAAA" y **Quitar plan** (con confirmación). Cambiar de plan aplica desde la próxima cuota, sin fecha.
   - Si la suscripción no carga, se avisa y el selector queda bloqueado (nunca se asigna un plan por error).
@@ -122,5 +122,5 @@ Then el monto total a pagar debe ser exactamente de $40.00 USD
 - **Decisión del dueño:** se retira `POST /finanzas/cuotas/emitir`. Las cuotas solo se emiten desde la suscripción del alumno, así que la regla de solape y la zona horaria se aplican siempre. RN-03 (override > catálogo) y el becado siguen cubiertos por la emisión por suscripción.
 
 ### Pendiente
-- **Precio residual tras reconciliar:** si "Quitar plan" se aplicó en el servidor pero su respuesta se perdió, el campo "Precio Acordado" conserva el valor y el siguiente guardado pide "Elige un plan…" hasta vaciarlo. En modo demo, el éxito del guardado sigue con el texto fijo "Expediente, plan y tarifa…".
+- **Precio residual tras reconciliar:** si "Quitar plan" se aplicó en el servidor pero su respuesta se perdió, el campo "Precio acordado (USD)" conserva el valor y el siguiente guardado pide "Elige un plan…" hasta vaciarlo. En modo demo, el éxito del guardado sigue con el texto fijo "Expediente, plan y tarifa…".
 - Editor de `beneficiosPersonalizados` en la UI (la API los persiste y los devuelve, pero la ficha no los edita) y selección de "fuente de cambio particular" por cliente (hoy la tasa especial es un valor fijo).
