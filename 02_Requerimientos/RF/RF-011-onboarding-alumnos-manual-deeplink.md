@@ -4,7 +4,7 @@ modulo: Onboarding
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-10-19
+fecha_verificacion: 2026-10-26
 problema_origen: "[[PROB-003-acceso-onboarding-dashboard-central]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -178,15 +178,19 @@ Then la aplicación debe navegar a "/coach/alumnos/al-001"
     - Foco visible en el buscador y en `ChipFiltro`.
   - **Límites honestos:**
     - Si falla la petición de **otro** filtro, orden o página, se ve el error a pantalla completa. No se muestran filas de otro filtro como si fueran las actuales.
-    - La vista no indica todavía la antigüedad de los datos servidos desde la caché offline ([[ADR-014-actualizaciones-guiadas-sw-frescura-offline]]). Queda como seguimiento.
+    - ~~La vista no indica la antigüedad de los datos servidos desde la caché offline.~~ Resuelto el 2026-10-26 (`0c75f50`, ver abajo).
     - En el modo demo la racha se cuenta con el día local del navegador.
-  - **Seguimiento:**
-    - Mostrar la frescura offline en "Mis alumnos", con el patrón de `AlumnoDetallePage`.
-    - En móvil (< `sm`), el buscador y el selector de orden se apilan en dos filas a propósito, para mejorar el área táctil. Se puede reevaluar.
-    - `listar-alumnos.ts` importa la regla pura `calcularRachaEfectiva` del módulo `entrenamiento`. Conviene moverla a un sitio común si la frontera de ADR-023 lo exige.
+  - **Seguimiento:** los tres puntos se cerraron el 2026-10-26 (bloque siguiente).
   - **Evidencia:**
     - web **2220/2220**;
     - API **1954** (53 saltados);
     - E2E contra Postgres `mis-alumnos-directorio-orden.e2e.spec.ts` **24/24**;
     - typecheck y build de shared, API y web en verde;
     - revisión 4R sin BLOCKER, con sus 13 hallazgos corregidos y validados.
+- Implementado (2026-10-26, `0c75f50`): seguimiento del lote "Mis alumnos".
+  - **Badges en una línea:** `ui/BadgeEstado` ya no parte su texto ni se encoge dentro de un flex (`whitespace-nowrap shrink-0`). "Cuota pendiente" se ve en una sola línea. Las filas donde un badge largo podía desbordar a 360px dejan bajarlo de línea (`flex-wrap` / `min-w-0`): tarjeta de "Mis alumnos" (pago y acciones), evaluación antropométrica, fila de pago y resumen de cuota del alumno.
+  - **Frescura sin conexión ([[ADR-014-actualizaciones-guiadas-sw-frescura-offline]]):** fuera de demo y sin conexión, con lista visible se muestra `AvisoDatosOffline` ("Sin conexión · datos guardados · actualizado hace N"), datado con la URL exacta de la página consultada. Sin datos guardados, "Sin conexión y sin datos guardados" sustituye a la pantalla de error genérica. Sin conexión no se apila además el aviso de error de recarga. Al reconectar el aviso desaparece.
+  - **Móvil:** buscador y "Ordenar por" en una sola fila; en móvil la etiqueta queda para lectores de pantalla y un icono la sustituye visualmente.
+  - **Frontera de módulos ([[ADR-023-casos-de-uso-servicios-api]]):** `calcularRachaEfectiva` vive en `apps/api/src/common/racha.util.ts`; `reglas-racha.ts` la re-exporta (misma referencia) y `alumnos` ya no importa de `entrenamiento` (lo vigila `mis-alumnos-racha-comun.spec.ts`).
+  - **Límite honesto:** si la conexión se pierde a mitad de sesión y se pide una combinación nueva de filtros, TanStack Query pausa la consulta y se ven los esqueletos hasta reconectar (comportamiento previo, sin aviso propio).
+  - **Evidencia:** web **2236/2236**; API **2015** (1 saltado); typecheck y build de API y web en verde; revisión de fiabilidad sin BLOCKER, con H1–H3 y H5 corregidos y validados y H4 (ancho del buscador a 360px) llevado a la guía manual.

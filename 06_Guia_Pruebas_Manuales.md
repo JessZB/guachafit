@@ -187,6 +187,9 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - Tab llega a WhatsApp y Enter abre WhatsApp, **no** el expediente.
   - En la vista tabla, Tab llega al nombre de cada fila y Enter abre el expediente.
 - [ ] **Tabla:** las columnas son Alumno, Estado, Modalidad, Plan, Último entreno, Racha, Pago y Acciones.
+- [ ] **Badges en una línea (desde 2026-10-26):** "Cuota pendiente" y los demás badges se ven en una sola línea. A 360px de ancho, en una tarjeta archivada (con "Restaurar"), el badge y los botones no se salen de la tarjeta: si no caben, los botones bajan a otra línea alineados a la derecha. Revisa también, como alumno, la evaluación antropométrica, los pagos y el resumen de cuota.
+- [ ] **Móvil, buscador y orden (360px):** el buscador y el selector de orden comparten una fila; el selector muestra un icono ↕ en lugar de "Ordenar por" y el buscador sigue siendo cómodo para escribir. Desde tablet se ve el texto "Ordenar por".
+- [ ] **Sin conexión:** con la lista cargada, activa el modo avión (o "Offline" en DevTools) y recarga: arriba de la lista aparece "Sin conexión · datos guardados · actualizado hace N". Sin datos guardados de esa combinación de filtros aparece "Sin conexión y sin datos guardados" en lugar del error genérico. Al reconectar el aviso desaparece. En el modo demo nunca aparece.
 - [ ] **Privacidad (vía API):** con el token del entrenador, `GET /alumnos` → ningún alumno trae `fichaSaludPrivada`. `GET /alumnos/:id` sí la trae.
 - [ ] **Chip "En mora"**: el número del chip coincide con las filas que muestra.
 - [ ] **Paginación numerada** con "Mostrando X de N" — ya no se pierden alumnos después del número 50.
