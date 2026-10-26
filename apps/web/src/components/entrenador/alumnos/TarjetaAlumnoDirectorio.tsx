@@ -7,7 +7,7 @@
  * - R5: el nombre es el control principal, un `<button>` con `aria-label="Ver expediente de {..}"`
  *   cuyo enlace extendido (`after:`) cubre la tarjeta entera. WhatsApp ("Enviar mensaje de WhatsApp a
  *   {nombres}") y "Restaurar alumno {..}" van encima (`z-10`) y ejecutan solo su acción (PATCH +
- *   recarga, sin navegar).
+ *   recarga, sin navegar). La flecha decorativa (`aria-hidden`, `pointer-events-none`) no intercepta el clic: este pasa al enlace extendido y abre el expediente.
  * - Teclado: Tab llega al nombre y Enter/Espacio abren el expediente de forma nativa; Enter sobre
  *   WhatsApp o Restaurar no navega (corrige D8 sin filtrar eventos).
  * - Alerta: el color se acompaña de un icono con `aria-hidden` y del texto (no depende solo del color).
@@ -123,9 +123,10 @@ export function TarjetaAlumnoDirectorio({
             </button>
           ) : (
             <div
-              className="min-h-11 min-w-11 flex items-center justify-center rounded-lg bg-secondary/70 text-muted-foreground border border-border/60 group-hover:border-primary/40 group-hover:bg-primary group-hover:text-primary-foreground transition-all group-hover:translate-x-0.5"
+              className="pointer-events-none min-h-11 min-w-11 flex items-center justify-center rounded-lg bg-secondary/70 text-muted-foreground border border-border/60 group-hover:border-primary/40 group-hover:bg-primary group-hover:text-primary-foreground transition-all group-hover:translate-x-0.5"
               aria-hidden="true"
             >
+              {/* Flecha decorativa: deja pasar el clic al enlace extendido del nombre (abre el expediente). */}
               <ChevronRight className="h-3.5 w-3.5 transition-colors" />
             </div>
           )}
