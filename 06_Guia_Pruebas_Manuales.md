@@ -334,7 +334,9 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 - [ ] **Fotos en el control en sala (coach):** en la ficha del alumno → "Registrar Control en Sala" aparecen las mismas casillas; las fotos guardadas se ven luego en la galería del alumno y en el comparador.
 - [ ] **Ficha del alumno, tabs y textos (desde 2026-10-26):**
   - Los tabs se llaman **Perfil, Pagos, Medidas, Entrenos y Nutrición**. La URL conserva `?tab=resumen|finanzas|antropometria|entrenamiento|nutricion`, así que los enlaces antiguos siguen funcionando.
-  - Con deuda, el tab **Pagos** muestra el saldo con dos decimales (por ejemplo `$40.00`).
+  - La barra es un control segmentado: en el móvil (360px) las 5 pestañas caben en una fila **sin deslizar**, con el icono sobre el nombre; la activa va rellena. Prueba también con el texto del sistema ampliado: "Nutrición" puede cortarse con puntos suspensivos.
+  - Con deuda, el tab **Pagos** muestra un **punto rojo** en la esquina en el móvil y el saldo con dos decimales (por ejemplo `$40.00`) desde tablet.
+  - Con las flechas del teclado (← →, Inicio, Fin) se mueve entre pestañas y cada una se activa al llegar.
   - A 360px de ancho ningún tab, badge ni formulario se sale de la pantalla ni parte su texto en dos líneas ("Cuota pendiente", "Sin cuota emitida", "Sin plan").
 - [ ] **Salud y limitaciones (antes "Alerta Médica"):**
   - Si el alumno tiene texto de salud, la cabecera muestra **"Salud y limitaciones"** con hasta 2 líneas y el botón **"Ver detalle"**, que lleva al tab Perfil. Sin texto, el aviso no aparece.
