@@ -7,6 +7,11 @@
  * (Perfil, Pagos, Medidas, Entrenos, Nutrición). Extraída de
  * `pages/entrenador/AlumnoDetallePage.tsx` (SL-2).
  *
+ * Control segmentado de 5 columnas, sin scroll horizontal: en móvil cada pestaña apila el icono
+ * sobre una etiqueta de 11px; desde `sm` el icono va a la izquierda de la etiqueta (12px).
+ * El badge de deuda de Pagos es un punto en la esquina superior derecha en móvil y muestra el
+ * importe desde `sm`.
+ *
  * §6: 11px mínimo, pesos ≤ 700, tokens con variante oscura, área táctil `min-h-11`.
  * El badge de deuda se anuncia como "Saldo pendiente N dólares" (sin símbolo, dos decimales).
  */
@@ -22,6 +27,9 @@ interface PestanasFichaAlumnoProps {
   saldoDeudaUsd: string | null;
 }
 
+const claseIcono = 'h-4 w-4 shrink-0';
+const claseEtiqueta = 'text-[11px] sm:text-xs truncate max-w-full';
+
 export function PestanasFichaAlumno({
   activa,
   propsTablist,
@@ -29,50 +37,52 @@ export function PestanasFichaAlumno({
   saldoDeudaUsd,
 }: PestanasFichaAlumnoProps) {
   const claseTab = (clave: TabFichaAlumno) =>
-    `min-h-11 py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap focus-visible:outline-2 focus-visible:outline-primary ${
+    `relative min-h-11 min-w-0 px-1 py-1.5 sm:px-3 rounded-xl flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 font-bold transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-primary ${
       activa === clave
         ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
-        : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
+        : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
     }`;
 
   return (
     <div
       {...propsTablist}
       aria-label="Pestañas de la ficha del alumno"
-      className="flex items-center gap-2 border-b border-border/80 pb-2 overflow-x-auto"
+      className="grid grid-cols-5 gap-1 p-1 rounded-2xl bg-secondary/60 border border-border/60"
     >
       <button type="button" {...propsTab('resumen')} className={claseTab('resumen')}>
-        <User className="h-4 w-4" />
-        <span>Perfil</span>
+        <User className={claseIcono} aria-hidden="true" />
+        <span className={claseEtiqueta}>Perfil</span>
       </button>
 
       <button type="button" {...propsTab('finanzas')} className={claseTab('finanzas')}>
-        <DollarSign className="h-4 w-4" />
-        <span>Pagos</span>
+        <DollarSign className={claseIcono} aria-hidden="true" />
+        <span className={claseEtiqueta}>Pagos</span>
         {saldoDeudaUsd && Number(saldoDeudaUsd) > 0 && (
           <span
             role="img"
             aria-label={`Saldo pendiente ${Number(saldoDeudaUsd).toFixed(2)} dólares`}
-            className="px-1.5 py-0.5 rounded-full text-[11px] bg-danger-strong text-white font-bold font-mono"
+            className="absolute top-1 right-1 sm:static h-2.5 w-2.5 sm:h-auto sm:w-auto rounded-full bg-danger-strong text-white font-bold font-mono sm:px-1.5 sm:py-0.5 sm:text-[11px]"
           >
-            ${Number(saldoDeudaUsd).toFixed(2)}
+            <span className="hidden sm:inline">
+              <span>${Number(saldoDeudaUsd).toFixed(2)}</span>
+            </span>
           </span>
         )}
       </button>
 
       <button type="button" {...propsTab('antropometria')} className={claseTab('antropometria')}>
-        <Scale className="h-4 w-4" />
-        <span>Medidas</span>
+        <Scale className={claseIcono} aria-hidden="true" />
+        <span className={claseEtiqueta}>Medidas</span>
       </button>
 
       <button type="button" {...propsTab('entrenamiento')} className={claseTab('entrenamiento')}>
-        <Dumbbell className="h-4 w-4" />
-        <span>Entrenos</span>
+        <Dumbbell className={claseIcono} aria-hidden="true" />
+        <span className={claseEtiqueta}>Entrenos</span>
       </button>
 
       <button type="button" {...propsTab('nutricion')} className={claseTab('nutricion')}>
-        <Utensils className="h-4 w-4" />
-        <span>Nutrición</span>
+        <Utensils className={claseIcono} aria-hidden="true" />
+        <span className={claseEtiqueta}>Nutrición</span>
       </button>
     </div>
   );
