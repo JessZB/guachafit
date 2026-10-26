@@ -182,6 +182,7 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - "Mayor racha": arriba las rachas más largas.
   - Cambiar el orden te devuelve a la página 1 y el orden se mantiene entre páginas.
 - [ ] **Tarjeta:** muestra el estado (Activo/Pausado), la modalidad legible, "Entrenó hoy/ayer/hace N días" o **"Sin entrenar hace N días"** (en color de aviso y con icono, a partir de 7 días) y "Racha de N días" si la hay.
+- [ ] **Flecha de la tarjeta (desde 2026-10-26):** pulsa la flecha `>` junto a WhatsApp: abre el expediente del alumno, igual que pulsar cualquier otra zona de la tarjeta. WhatsApp sigue abriendo solo WhatsApp.
 - [ ] **Teclado:**
   - Tab llega al nombre y Enter abre el expediente.
   - Tab llega a WhatsApp y Enter abre WhatsApp, **no** el expediente.
