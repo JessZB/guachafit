@@ -9,7 +9,7 @@ import {
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import { useTabsAccesibles } from '../../lib/use-tabs-accesibles';
 import { SelectorPlantillaAsignacion } from '../../components/entrenador/SelectorPlantillaAsignacion';
-import { PanelNutricionAlumno } from '../../components/entrenador/PanelNutricionAlumno';
+import { PestanaNutricionAlumno } from '../../components/entrenador/alumno-detalle/PestanaNutricionAlumno';
 import { DialogoConfirmacion } from '../../components/common/DialogoConfirmacion';
 import { useFrescuraOffline } from '../../lib/use-frescura-offline';
 import { calcularSemaforoPago } from '../../lib/alumno-detalle-metricas';
@@ -198,6 +198,9 @@ export function AlumnoDetallePage() {
           propsPanel={tabsFicha.propsPanel('resumen')} onGuardar={guardar.guardarExpediente}
           formulario={expediente.formulario} plan={plan} planesCatalogo={expediente.planesCatalogo}
           zonaHoraria={expediente.alumno?.zonaHoraria}
+          alumnoPerfilId={alumno.id} zonaHorariaAlumno={alumno.zonaHoraria} isDemoMode={isDemoMode}
+          onZonaHorariaGuardada={(z) => expediente.actualizarZonaHoraria(alumno.id, z)}
+          hayCambiosSinGuardar={expediente.hayCambiosSinGuardar}
           onQuitarPlan={() => plan.solicitarQuitarPlan(expediente.alumno)}
           onQuitarOverride={() => plan.solicitarQuitarOverride(expediente.alumno, expediente.setAlumno)}
           refSelectorPlan={refSelectorPlan}
@@ -266,26 +269,7 @@ export function AlumnoDetallePage() {
         />
       )}
 
-      {activeTab === 'nutricion' && alumno && (
-        <div
-          {...tabsFicha.propsPanel('nutricion')}
-          className="animate-in fade-in-50 duration-200 slide-in-from-bottom-1"
-        >
-          {/* El endpoint de check-ins usa `usuarios.id` (alumno.usuarioId), no el id del perfil. */}
-          <PanelNutricionAlumno
-            alumnoUsuarioId={alumno.usuarioId} alumnoPerfilId={alumno.id}
-            zonaHoraria={alumno.zonaHoraria}
-            onZonaHorariaGuardada={(zonaHoraria) => {
-              // Solo si la ficha abierta sigue siendo la del alumno al que se le guardó la zona.
-              const perfilId = alumno.id;
-              expediente.setAlumno((prev) =>
-                prev && prev.id === perfilId ? { ...prev, zonaHoraria } : prev
-              );
-            }}
-            isDemoMode={isDemoMode}
-          />
-        </div>
-      )}
+      {activeTab === 'nutricion' && alumno && <PestanaNutricionAlumno propsPanel={tabsFicha.propsPanel('nutricion')} alumno={alumno} isDemoMode={isDemoMode} />}
 
       {isPlantillaModalOpen && alumno && (
         <SelectorPlantillaAsignacion

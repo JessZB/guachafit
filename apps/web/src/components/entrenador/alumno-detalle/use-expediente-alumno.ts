@@ -54,6 +54,7 @@ import {
 } from '../../../lib/alumno-detalle-demo';
 import type { RetornoPlanSuscripcion } from './use-plan-suscripcion-alumno';
 import {
+  datosPersonalesModificados,
   formularioModificado,
   MENSAJE_FICHA_DESACTUALIZADA,
   type ValoresFormularioExpediente,
@@ -150,6 +151,10 @@ export function useExpedienteAlumno({
     nombres, apellidos, tipoDocumento, numeroDocumento, fechaNacimiento, telefonoWhatsapp,
     modalidad, fichaSaludPrivada, periodicidadAntropometria, antropometriaInicio,
   };
+  // Aviso de cambios sin guardar: solo los datos personales (el calendario se guarda aparte).
+  const hayCambiosSinGuardar = alumno
+    ? datosPersonalesModificados(alumno, valoresFormulario)
+    : false;
   const formularioRef = useRef(valoresFormulario);
   formularioRef.current = valoresFormulario;
   const alumnoRef = useRef(alumno);
@@ -339,9 +344,16 @@ export function useExpedienteAlumno({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alumnoId, isDemoMode]);
 
+  /** Zona horaria guardada desde Perfil: solo si la ficha abierta sigue siendo ese perfil. */
+  const actualizarZonaHoraria = (perfilId: string, zonaHoraria: string) => {
+    setAlumno((prev) => (prev && prev.id === perfilId ? { ...prev, zonaHoraria } : prev));
+  };
+
   return {
     alumno,
     setAlumno,
+    actualizarZonaHoraria,
+    hayCambiosSinGuardar,
     isLoading,
     error,
     formulario: {

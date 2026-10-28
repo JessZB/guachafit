@@ -31,7 +31,6 @@ function renderDemo() {
   render(
     <PanelNutricionAlumno
       alumnoUsuarioId="alumno-1"
-      alumnoPerfilId="perfil-1"
       isDemoMode
     />
   );
@@ -67,7 +66,9 @@ describe('PanelNutricionAlumno · caracterización (demo: secciones)', () => {
     expect(
       await screen.findByRole('heading', { name: 'Metas nutricionales' })
     ).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Zona horaria del alumno' })).toBeTruthy();
+    // L6.5: la zona se edita en Perfil; aquí solo se remite a esa pestaña.
+    expect(screen.queryByRole('heading', { name: 'Zona horaria del alumno' })).toBeNull();
+    expect(screen.getByText('La zona horaria del alumno se cambia en Perfil.')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Reportes de los últimos 30 días' })).toBeTruthy();
   });
 
@@ -110,13 +111,9 @@ describe('PanelNutricionAlumno · caracterización (demo: secciones)', () => {
     expect(screen.getAllByText(/no adjuntó fotos de platos/).length).toBeGreaterThan(0);
   });
 
-  it('la zona horaria declara la ventana del reporte y en demo el guardado se simula con éxito', async () => {
-    renderDemo();
-
-    expect(await screen.findByText(/Su reporte se abre de/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar zona horaria' }));
-    expect(await screen.findByText('Zona horaria guardada.')).toBeTruthy();
-  });
+  // El guardado de la zona vivía aquí; desde L6.3 se edita en Perfil: el caso se movió
+  // a `AlumnoDetallePage.reorganizacion.interaccion.spec.tsx` (L6.4b, modo demo) y el PATCH
+  // en línea lo cubre L6.4. Nutrición solo remite a Perfil (L6.5).
 });
 
 describe('PanelNutricionAlumno · caracterización (demo: editor de metas)', () => {

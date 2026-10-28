@@ -31,7 +31,6 @@ import {
 } from '../../lib/nutricion-metas';
 import { estadoEdicionMetas } from '../../lib/editor-metas-nutricion';
 import { SeccionMetasNutricion } from './panel-nutricion-alumno/SeccionMetasNutricion';
-import { SeccionZonaHorariaNutricion } from './panel-nutricion-alumno/SeccionZonaHorariaNutricion';
 import { SeccionCalendarioNutricion } from './panel-nutricion-alumno/SeccionCalendarioNutricion';
 import { EditorMetasNutricion } from './panel-nutricion-alumno/EditorMetasNutricion';
 import { useMetasNutricionAlumno } from './panel-nutricion-alumno/use-metas-nutricion-alumno';
@@ -46,11 +45,8 @@ import type { FotoComidaDetalleDTO } from '@guachafit/shared';
 export interface PanelNutricionAlumnoProps {
   /** `usuarios.id` del alumno: clave real de check-ins y del presign (no el id del perfil). */
   alumnoUsuarioId: string;
-  /** Id del perfil (`PATCH /alumnos/:id`); sin él no se ofrece cambiar la zona horaria. */
-  alumnoPerfilId?: string;
-  /** ADR-019: zona horaria del perfil del alumno. */
+  /** ADR-019: zona horaria del perfil del alumno (se edita en Perfil). */
   zonaHoraria?: string | null;
-  onZonaHorariaGuardada?: (zonaHoraria: string) => void;
   isDemoMode: boolean;
 }
 
@@ -59,9 +55,7 @@ const DIAS_VENTANA = 30;
 
 export function PanelNutricionAlumno({
   alumnoUsuarioId,
-  alumnoPerfilId,
   zonaHoraria,
-  onZonaHorariaGuardada,
   isDemoMode,
 }: PanelNutricionAlumnoProps) {
   // ADR-019: "hoy" del alumno, el calendario y las horas de registro se cuentan en la zona de su
@@ -134,15 +128,8 @@ export function PanelNutricionAlumno({
         onReintentarMetas={() => void cargarMetas()}
       />
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Zona horaria del alumno (ADR-019)                                    */}
-      {/* ------------------------------------------------------------------ */}
-      <SeccionZonaHorariaNutricion
-        zonaHorariaAlumno={zonaHorariaAlumno}
-        alumnoPerfilId={alumnoPerfilId}
-        isDemoMode={isDemoMode}
-        onZonaHorariaGuardada={onZonaHorariaGuardada}
-      />
+      {/* La zona horaria del alumno (ADR-019) se edita en Perfil; aquí solo se indica. */}
+      <p className="text-xs text-muted-foreground">La zona horaria del alumno se cambia en Perfil.</p>
 
       {/* ------------------------------------------------------------------ */}
       {/* Calendario de reportes (últimos 30 días)                             */}

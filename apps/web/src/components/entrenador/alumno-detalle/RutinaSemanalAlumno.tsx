@@ -37,7 +37,6 @@ export function RutinaSemanalAlumno({
 }: RutinaSemanalAlumnoProps) {
   return (
     <div
-      id="seccion-rutina-semanal"
       className="scroll-mt-24 pt-6 border-t border-border/70 space-y-4"
     >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

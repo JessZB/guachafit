@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * RF-003 "fotos del check-in" · contrato 18 (opcional): el modal "Registrar Control en Sala" de
+ * RF-003 "fotos del check-in" · contrato 18 (opcional): el modal "Registrar control" de
  * `AlumnoDetallePage` contiene `SelectorFotosCheckin` y el POST `/antropometria/checkin` lleva
  * `fotos: [{ angulo, storageKey }]` cuando hay una foto lista.
  *
@@ -138,7 +138,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** Monta el expediente en el tab Antropometría y abre el modal "Registrar Control en Sala". */
+/** Monta el expediente en el tab Antropometría y abre el modal "Registrar control". */
 async function abrirModalControl(): Promise<HTMLElement> {
   render(
     <MemoryRouter initialEntries={[`/coach/alumnos/${CLIENTE_ID}?tab=antropometria`]}>
@@ -148,7 +148,7 @@ async function abrirModalControl(): Promise<HTMLElement> {
     </MemoryRouter>
   );
 
-  const abrir = await screen.findByRole('button', { name: /Registrar Control en Sala/ });
+  const abrir = await screen.findByRole('button', { name: 'Registrar control' });
   fireEvent.click(abrir);
   return screen.findByRole('dialog');
 }
@@ -238,7 +238,7 @@ describe('AlumnoDetallePage · contrato 18 (opcional): fotos del control en sala
     fireEvent.click(guardar);
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
-    fireEvent.click(await screen.findByRole('button', { name: /Registrar Control en Sala/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Registrar control' }));
     const dialogoReabierto = await screen.findByRole('dialog');
     expect(within(dialogoReabierto).queryByAltText('Foto frontal lista')).toBeNull();
     expect(

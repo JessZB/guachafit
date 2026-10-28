@@ -49,3 +49,28 @@ export function formularioModificado(
     valores.antropometriaInicio !== (alumnoAnterior.antropometriaInicio ?? '')
   );
 }
+
+/**
+ * ¿Hay datos personales sin guardar? Compara SOLO los 8 campos del expediente (sin el calendario
+ * antropométrico, que se guarda aparte). Los textos se comparan recortados porque el guardado
+ * envía `trim()` y el perfil vuelve recortado.
+ *
+ * Asimetría deliberada con `formularioModificado`: aquí los textos se comparan con `trim()` para que
+ * un espacio sobrante no encienda el aviso "Cambios sin guardar". `formularioModificado` (recarga
+ * silenciosa) compara en crudo para no rehidratar encima de un borrador con espacios.
+ */
+export function datosPersonalesModificados(
+  alumno: PerfilAlumnoDetalleDTO,
+  valores: ValoresFormularioExpediente
+): boolean {
+  return (
+    valores.nombres.trim() !== alumno.nombres.trim() ||
+    valores.apellidos.trim() !== alumno.apellidos.trim() ||
+    valores.tipoDocumento !== alumno.tipoDocumento ||
+    valores.numeroDocumento.trim() !== alumno.numeroDocumento.trim() ||
+    valores.fechaNacimiento !== alumno.fechaNacimiento ||
+    valores.telefonoWhatsapp.trim() !== alumno.telefonoWhatsapp.trim() ||
+    valores.modalidad !== alumno.modalidad ||
+    valores.fichaSaludPrivada.trim() !== (alumno.fichaSaludPrivada || '').trim()
+  );
+}

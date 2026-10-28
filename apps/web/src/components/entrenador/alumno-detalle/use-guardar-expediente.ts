@@ -96,7 +96,7 @@ export function useGuardarExpediente({
 
     // La tasa especial viaja por el POST del override cuando hay plan elegido (el override la
     // sincroniza en `perfiles_alumno`); sin plan elegido, el PATCH conserva el contrato legado.
-    const payload: Record<string, unknown> = {
+    const datosPersonales = {
       nombres: formulario.nombres.trim(),
       apellidos: formulario.apellidos.trim(),
       tipoDocumento: formulario.tipoDocumento,
@@ -108,6 +108,7 @@ export function useGuardarExpediente({
         ? formulario.fichaSaludPrivada.trim()
         : null,
     };
+    const payload: Record<string, unknown> = { ...datosPersonales };
     if (decisionPlanTarifa.accion !== 'guardar_override') {
       payload.tasaFijadaOverride = plan.tasaFijadaOverride.trim()
         ? plan.tasaFijadaOverride.trim()
@@ -117,6 +118,9 @@ export function useGuardarExpediente({
     // MODO DEMO EXPLÍCITO: el guardado vive en estado local, sin llamadas reales (el banner
     // demo visible lo declara). Nunca se declara éxito de un servidor que no respondió.
     if (isDemoMode) {
+      // Los datos personales guardados pasan al perfil (sin llamadas reales) para que no queden
+      // marcados como "Cambios sin guardar".
+      setAlumno((prev) => (prev ? { ...prev, ...datosPersonales } : prev));
       if (decisionSuscripcion.accion !== 'ninguna') {
         const planDemo = planesCatalogo.find((p) => p.id === decisionSuscripcion.payload.planId);
         plan.setSuscripcion((prev) => {

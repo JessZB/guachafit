@@ -1,14 +1,15 @@
 /**
- * Pestaña Antropometría del alumno (contenedor de pestaña ÚNICO).
+ * Pestaña Medidas del alumno (contenedor de pestaña ÚNICO).
  *
- * Compone el header con el botón de control en sala, el calendario de check-in, las
- * métricas con deltas, el gráfico de la serie completa y la tabla paginada. Recibe los
- * hooks de dominio y conecta sus datos con los hijos (SL-5, recompuesta en SL-8).
+ * Compone la cabecera con el botón de registro de control, las métricas con deltas, el gráfico
+ * de la serie completa, la tabla paginada y, plegado al final, el calendario de check-in. Los
+ * datos van primero; el calendario es un ajuste que se consulta menos (decisión del dueño).
+ * Recibe los hooks de dominio y conecta sus datos con los hijos (SL-5, recompuesta en SL-8).
  *
  * §6: 11px mínimo, pesos ≤ 700, tokens con variante oscura, estados honestos.
  */
 import { AlertCircle, Plus } from 'lucide-react';
-import type { PerfilAlumnoDetalleDTO, PeriodicidadAntropometria } from '@guachafit/shared';
+import { PeriodicidadAntropometria, type PerfilAlumnoDetalleDTO } from '@guachafit/shared';
 import type { PropsPanel } from '../../../lib/use-tabs-accesibles';
 import { GraficoEvolucion } from '../../common/GraficoEvolucion';
 import { CalendarioCheckinAntropometrico } from './CalendarioCheckinAntropometrico';
@@ -17,6 +18,13 @@ import { TablaControlesAntropometricos } from './TablaControlesAntropometricos';
 import type { RetornoCalendarioAntropometrico } from './use-calendario-antropometrico';
 import type { RetornoControlesAntropometricos } from './use-controles-antropometricos';
 import type { RetornoSerieEvolucion } from './use-serie-evolucion';
+
+/** Nombre de cada periodicidad, tal como lo muestra el selector del calendario. */
+const ETIQUETA_PERIODICIDAD: Partial<Record<PeriodicidadAntropometria, string>> = {
+  [PeriodicidadAntropometria.SEMANAL]: 'Semanal',
+  [PeriodicidadAntropometria.QUINCENAL]: 'Quincenal',
+  [PeriodicidadAntropometria.MENSUAL]: 'Mensual',
+};
 
 interface PestanaAntropometriaAlumnoProps {
   propsPanel: PropsPanel;
@@ -43,12 +51,18 @@ export function PestanaAntropometriaAlumno({
   controles,
   serie,
 }: PestanaAntropometriaAlumnoProps) {
+  // El resumen plegado lee el valor GUARDADO: `periodicidad` es el borrador del calendario, que
+  // aún no se persiste hasta pulsar "Guardar Calendario".
+  const periodicidadGuardada = alumno?.periodicidadAntropometria;
+  const estadoCalendario =
+    (periodicidadGuardada && ETIQUETA_PERIODICIDAD[periodicidadGuardada]) || 'Sin configurar';
+
   return (
     <div {...propsPanel} className="space-y-6 animate-in fade-in-50 duration-200 slide-in-from-bottom-1">
-      {/* Header con botón de nuevo control */}
+      {/* Cabecera con el botón de registro de control */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-6 rounded-3xl bg-card border border-border shadow-xs">
         <div>
-          <h3 className="text-lg font-bold text-foreground">Evolución Corporal & Medidas</h3>
+          <h3 className="text-lg font-bold text-foreground">Medidas y evolución</h3>
           <p className="text-xs text-muted-foreground">
             Control antropométrico multieje, porcentaje graso y registros de pesaje.
           </p>
@@ -56,24 +70,12 @@ export function PestanaAntropometriaAlumno({
         <button
           type="button"
           onClick={onRegistrarControl}
-          className="py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 active:scale-95 hover:brightness-110 transition-all flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+          className="min-h-11 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 active:scale-95 hover:brightness-110 transition-all flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
         >
           <Plus className="h-4 w-4" />
-          <span>Registrar Control en Sala</span>
+          <span>Registrar control</span>
         </button>
       </div>
-
-      {/* RF-003 RN-01 (WU RF-003b): calendario de check-in del alumno (periodicidad + ancla).
-          Decisión del WU: vive en este tab porque es un ajuste del control antropométrico; el
-          formulario del expediente (Resumen) queda enfocado en datos personales y plan. */}
-      <CalendarioCheckinAntropometrico
-        alumno={alumno}
-        periodicidad={periodicidad}
-        inicio={inicio}
-        onCambiarPeriodicidad={onCambiarPeriodicidad}
-        onCambiarInicio={onCambiarInicio}
-        calendario={calendario}
-      />
 
       {/* Métricas Actuales con Deltas */}
       <MetricasAntropometricas controles={controles.controlesAntro} />
@@ -100,6 +102,25 @@ export function PestanaAntropometriaAlumno({
         fuente={controles}
         usuarioId={alumno?.usuarioId}
       />
+
+      {/* RF-003 RN-01 (WU RF-003b): calendario de check-in del alumno (periodicidad + ancla).
+          Va plegado al final: los datos van primero y el ajuste se abre bajo demanda. */}
+      <details className="rounded-3xl bg-card border border-border shadow-xs">
+        <summary className="min-h-11 cursor-pointer flex items-center justify-between gap-3 p-6 rounded-3xl font-bold text-sm text-foreground focus-visible:outline-2 focus-visible:outline-primary">
+          <span>Calendario de check-in</span>
+          <span className="text-xs font-semibold text-muted-foreground">{estadoCalendario}</span>
+        </summary>
+        <div className="px-3 pb-3">
+          <CalendarioCheckinAntropometrico
+            alumno={alumno}
+            periodicidad={periodicidad}
+            inicio={inicio}
+            onCambiarPeriodicidad={onCambiarPeriodicidad}
+            onCambiarInicio={onCambiarInicio}
+            calendario={calendario}
+          />
+        </div>
+      </details>
     </div>
   );
 }

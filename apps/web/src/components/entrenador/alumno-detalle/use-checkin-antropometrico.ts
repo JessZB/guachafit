@@ -57,7 +57,7 @@ export function useCheckinAntropometrico({
     setIsAntroModalOpen(true);
   };
 
-  // N3: "Registrar Control en Sala" persiste en la API real (POST /antropometria/checkin,
+  // N3: "Registrar control" (control en sala) persiste en la API real (POST /antropometria/checkin,
   // rol ENTRENADOR => presencial_verificado aprobado de inmediato). En modo demo se conserva
   // el comportamiento local con gate explícito; nunca un éxito falso.
   const guardarCheckin = async (e: React.FormEvent) => {

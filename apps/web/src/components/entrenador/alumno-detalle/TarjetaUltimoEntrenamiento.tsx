@@ -42,7 +42,6 @@ export function TarjetaUltimoEntrenamiento({
 }: TarjetaUltimoEntrenamientoProps) {
   return (
     <div
-      id="seccion-ultimo-entrenamiento"
       className="scroll-mt-24 p-6 rounded-3xl bg-card border border-border shadow-md space-y-4"
     >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/80 pb-3">

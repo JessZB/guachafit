@@ -1,15 +1,15 @@
 /**
- * Sección de zona horaria del panel de nutrición del alumno, ADR-019 (Ola 2).
+ * Sección de zona horaria del alumno en la pestaña Perfil, ADR-019.
  *
- * Recorte verbatim de `PanelNutricionAlumno.tsx`. Presentacional (R1): recibe
- * la zona ya resuelta y el resto como props, no pide datos.
+ * Movida desde el panel de nutrición (ya no vive allí): la zona la edita el entrenador en Perfil
+ * y las fechas de cuotas y reportes de nutrición se calculan con ella. Las mediciones antropométricas
+ * usan `usuarios.timezone` en el servidor, no esta zona. Presentacional (R1): recibe la zona ya
+ * resuelta y el resto como props, no pide datos.
  */
-import { ZonaHorariaPerfil } from '../../common/ZonaHorariaPerfil';
-import { HORARIO_VENTANA_CHECKIN } from '../../../lib/nutricion-checkin';
-import { horaDeZona } from '../../../lib/zona-horaria';
 import { Clock } from 'lucide-react';
+import { ZonaHorariaPerfil } from '../../common/ZonaHorariaPerfil';
 
-export function SeccionZonaHorariaNutricion({
+export function SeccionZonaHorariaAlumno({
   zonaHorariaAlumno,
   alumnoPerfilId,
   isDemoMode,
@@ -32,8 +32,7 @@ export function SeccionZonaHorariaNutricion({
         </h3>
       </div>
       <p className="text-xs text-muted-foreground">
-        Su reporte se abre de {HORARIO_VENTANA_CHECKIN} en {horaDeZona(zonaHorariaAlumno)}, y las
-        horas de registro se muestran en esa zona.
+        Las fechas de sus cuotas y reportes de nutrición se calculan en esta zona.
       </p>
       {alumnoPerfilId && (
         <ZonaHorariaPerfil
