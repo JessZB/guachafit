@@ -9,7 +9,7 @@
  * ejercicios vinculados al catálogo deben llevar un UUID real. C4: borrar un día o un
  * ejercicio pide confirmación. D7: sin conexión no se puede guardar la rutina.
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type {
   BloqueDiaRutinaDTO,
   EjercicioCatalogoDetalleDTO,
@@ -42,6 +42,8 @@ export function useRutinaAlumno({ hayConexion }: ParametrosRutinaAlumno) {
   // Planificación semanal de entrenamiento por bloques de días (vacía hasta cargar la real;
   // en modo demo se hidrata con fixtures locales).
   const [rutinaSemanal, setRutinaSemanal] = useState<BloqueDiaRutinaDTO[]>([]);
+  // Fallo real al pedir la rutina activa (red/5xx): no es "sin rutina" y se avisa con reintento.
+  const [errorRutina, setErrorRutina] = useState<string | null>(null);
   const [ejerciciosCatalogo, setEjerciciosCatalogo] = useState<EjercicioCatalogoDetalleDTO[]>([]);
 
   // Modal Prescripción / Edición de Rutina
@@ -77,17 +79,25 @@ export function useRutinaAlumno({ hayConexion }: ParametrosRutinaAlumno) {
   const hayFiltroCatalogo =
     selectedGrupoMuscular !== 'Todos' || filtroBusquedaEj.trim() !== '';
 
+  // Evita dos peticiones de refresco en vuelo (doble clic en "Reintentar").
+  const refrescandoRutinaRef = useRef(false);
   /**
    * WU6b: refresca solo la rutina activa tras asignar una plantilla, sin disparar el
    * estado de carga global (que desmontaría el modal de asignación antes de ver el resultado).
+   * El error se limpia SOLO con una respuesta correcta. Un fallo real deja `errorRutina` (con
+   * reintento en la pestaña) y conserva los bloques previos.
    */
   const refrescarRutinaActiva = async (alumnoId: string | undefined) => {
-    if (!alumnoId) return;
-    const res = await apiClient<RutinaSemanalDetalleDTO>(
-      `/rutinas/alumno/${alumnoId}/activa`
-    ).catch(() => null);
-    if (res && Array.isArray(res.bloques) && res.bloques.length > 0) {
-      setRutinaSemanal(res.bloques);
+    if (!alumnoId || refrescandoRutinaRef.current) return;
+    refrescandoRutinaRef.current = true;
+    try {
+      const res = await apiClient<RutinaSemanalDetalleDTO>(`/rutinas/alumno/${alumnoId}/activa`);
+      setRutinaSemanal(res && Array.isArray(res.bloques) ? res.bloques : []);
+      setErrorRutina(null);
+    } catch {
+      setErrorRutina('No se pudo cargar la rutina semanal');
+    } finally {
+      refrescandoRutinaRef.current = false;
     }
   };
 
@@ -309,6 +319,7 @@ export function useRutinaAlumno({ hayConexion }: ParametrosRutinaAlumno) {
       });
       triggerHaptic('success');
       setRutinaSemanal(bloquesNormalizados);
+      setErrorRutina(null);
       // WU5: el mensaje de éxito persiste inline hasta que el coach cierre el modal.
       setRutinaSuccessMsg(
         'Planificación semanal guardada y activada. Tu alumno ya la ve en su app y cuenta para el seguimiento semanal.'
@@ -326,6 +337,8 @@ export function useRutinaAlumno({ hayConexion }: ParametrosRutinaAlumno) {
   return {
     rutinaSemanal,
     setRutinaSemanal,
+    errorRutina,
+    setErrorRutina,
     ejerciciosCatalogo,
     setEjerciciosCatalogo,
     isRutinaModalOpen,

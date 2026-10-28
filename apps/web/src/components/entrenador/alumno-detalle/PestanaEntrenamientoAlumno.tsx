@@ -38,6 +38,8 @@ interface PestanaEntrenamientoAlumnoProps {
   archivado: boolean;
   onCargarPlantilla: () => void;
   onEditarRutina: () => void;
+  errorRutina?: string | null;
+  onReintentarRutina?: () => void;
 }
 
 export function PestanaEntrenamientoAlumno({
@@ -49,6 +51,8 @@ export function PestanaEntrenamientoAlumno({
   archivado,
   onCargarPlantilla,
   onEditarRutina,
+  errorRutina,
+  onReintentarRutina,
 }: PestanaEntrenamientoAlumnoProps) {
   // WU5: "Último Entrenamiento Realizado" solo considera sesiones completadas o en progreso.
   // WU25b: la fuente canónica del "último" es el endpoint `/ultima` y el historial solo es
@@ -137,6 +141,8 @@ export function PestanaEntrenamientoAlumno({
         archivado={archivado}
         onCargarPlantilla={onCargarPlantilla}
         onEditarRutina={onEditarRutina}
+        errorRutina={errorRutina}
+        onReintentarRutina={onReintentarRutina}
       />
     </div>
   );

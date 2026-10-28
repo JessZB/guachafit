@@ -112,7 +112,7 @@ export function AlumnoDetallePage() {
   });
   const cobro = useCobroSala({
     alumnoId: id, isDemoMode, usuarioId: expediente.alumno?.usuarioId,
-    onCobroConfirmado: () => expediente.recargarExpediente(),
+    onCobroConfirmado: () => expediente.recargarExpediente({ silencioso: true }),
     precioOverrideVigente: plan.overrideVigente?.precioAcordadoUsd ?? null,
     selectedPlanId: plan.selectedPlanId, planesCatalogo: expediente.planesCatalogo,
     planActivoId: expediente.alumno?.planActivoId ?? null,
@@ -174,7 +174,7 @@ export function AlumnoDetallePage() {
 
       <CabeceraAlumnoDetalle
         alumno={alumno} semaforo={semaforo} archivado={isArchived}
-        errorAccion={ciclo.headerActionError} exitoAccion={ciclo.headerActionSuccess}
+        errorAccion={ciclo.headerActionError ?? plan.avisoCarga} exitoAccion={ciclo.headerActionSuccess}
         onCambiarEstado={ciclo.solicitarCambioEstado} onArchivar={ciclo.solicitarArchivo}
         onRestaurar={ciclo.restaurarAlumno} onVerFichaCompleta={() => cambiarTab('resumen')}
       />
@@ -230,10 +230,10 @@ export function AlumnoDetallePage() {
       {activeTab === 'entrenamiento' && (
         <PestanaEntrenamientoAlumno
           propsPanel={tabsFicha.propsPanel('entrenamiento')} sesiones={sesiones}
-          bloquesRutina={rutina.rutinaSemanal} expandidaId={expandedSesionId}
+          bloquesRutina={rutina.rutinaSemanal} errorRutina={rutina.errorRutina} expandidaId={expandedSesionId}
           onAlternarExpandida={setExpandedSesionId} archivado={isArchived}
           onCargarPlantilla={() => { triggerHaptic('light'); setIsPlantillaModalOpen(true); }}
-          onEditarRutina={rutina.abrirModalPrescribirRutina}
+          onEditarRutina={rutina.abrirModalPrescribirRutina} onReintentarRutina={() => void rutina.refrescarRutinaActiva(id)}
         />
       )}
 

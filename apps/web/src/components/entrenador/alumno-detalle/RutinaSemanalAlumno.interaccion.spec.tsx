@@ -7,7 +7,7 @@
  * ("Cargar desde plantilla", "Editar rutina semanal") se conservan.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { BloqueDiaRutinaDTO } from '@guachafit/shared';
 import { RutinaSemanalAlumno } from './RutinaSemanalAlumno';
 
@@ -107,5 +107,55 @@ describe('RutinaSemanalAlumno · comportamiento existente', () => {
     expect(screen.queryByText(/aún no tiene una rutina semanal activa/i)).toBeNull();
     expect(screen.getByText('Día 1 (Lunes): Empuje')).toBeTruthy();
     expect(screen.getByText('Press de banca')).toBeTruthy();
+  });
+
+  it('sin errorRutina no cambia nada: estado vacío sin alert', () => {
+    renderRutina([]);
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText(/aún no tiene una rutina semanal activa/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Asignar rutina' })).toBeTruthy();
+  });
+});
+
+describe('RutinaSemanalAlumno · L5.8 error de carga con reintento', () => {
+  it('muestra el alert con el mensaje, el botón Reintentar y oculta el vacío', () => {
+    const onReintentarRutina = vi.fn();
+    render(
+      <RutinaSemanalAlumno
+        bloques={[]}
+        archivado={false}
+        onCargarPlantilla={vi.fn()}
+        onEditarRutina={vi.fn()}
+        errorRutina="No se pudo cargar la rutina semanal"
+        onReintentarRutina={onReintentarRutina}
+      />
+    );
+
+    const alerta = screen.getByRole('alert');
+    expect(alerta.textContent).toContain('No se pudo cargar la rutina semanal');
+    expect(within(alerta).getByRole('button', { name: 'Reintentar' })).toBeTruthy();
+    expect(screen.queryByText(/aún no tiene una rutina semanal activa/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Asignar rutina' })).toBeNull();
+  });
+
+  it('Reintentar llama a onReintentarRutina una vez y no navega', () => {
+    const onReintentarRutina = vi.fn();
+    const onEditarRutina = vi.fn();
+    render(
+      <RutinaSemanalAlumno
+        bloques={[]}
+        archivado={false}
+        onCargarPlantilla={vi.fn()}
+        onEditarRutina={onEditarRutina}
+        errorRutina="No se pudo cargar la rutina semanal"
+        onReintentarRutina={onReintentarRutina}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+
+    expect(onReintentarRutina).toHaveBeenCalledTimes(1);
+    expect(onEditarRutina).not.toHaveBeenCalled();
   });
 });

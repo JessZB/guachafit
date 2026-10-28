@@ -56,6 +56,14 @@ export function usePlanSuscripcionAlumno({
     setSaveSuccessMsg(null);
     setSaveErrorMsg(mensaje);
   };
+  // Avisos de CARGA (catálogo, última sesión, recarga silenciosa): canal propio, no `saveErrorMsg`.
+  const [avisoCarga, setAvisoCarga] = useState<string | null>(null);
+  const notificarAvisoCarga = (mensaje: string) => {
+    setAvisoCarga(mensaje);
+  };
+  const limpiarAvisoCarga = () => {
+    setAvisoCarga(null);
+  };
 
   /**
    * M5-L1B: "hoy" en la zona del alumno, la misma con la que la API valida la fecha de inicio
@@ -334,6 +342,9 @@ export function usePlanSuscripcionAlumno({
     saveErrorMsg,
     notificarExito,
     notificarError,
+    avisoCarga,
+    notificarAvisoCarga,
+    limpiarAvisoCarga,
     setOverridesAlumno,
     setOverrideError,
     setSuscripcion,

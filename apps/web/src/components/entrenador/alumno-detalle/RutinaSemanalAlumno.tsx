@@ -6,10 +6,13 @@
  * `Rutina Semanal Asignada`, el conteo (`1 ejercicio`), los botones `Editar rutina semanal`
  * y `Cargar desde plantilla`, y el estado vacío que consultan los specs.
  *
+ * Con `errorRutina` (fallo real al cargar, no "sin rutina") muestra un aviso `role="alert"` con
+ * «Reintentar» y NO muestra el estado vacío ni «Asignar rutina».
+ *
  * §6: 11px mínimo, pesos ≤ 700, tokens con variante oscura.
  */
 import type { BloqueDiaRutinaDTO } from '@guachafit/shared';
-import { ClipboardList, Pencil } from 'lucide-react';
+import { AlertCircle, ClipboardList, Pencil } from 'lucide-react';
 import { pluralizar } from '../../../lib/pluralizar';
 import { FilaEjercicioPrescrito } from './FilaEjercicioPrescrito';
 
@@ -19,6 +22,9 @@ export interface RutinaSemanalAlumnoProps {
   archivado: boolean;
   onCargarPlantilla: () => void;
   onEditarRutina: () => void;
+  /** Fallo al cargar la rutina: aviso con reintento en lugar del estado vacío. */
+  errorRutina?: string | null;
+  onReintentarRutina?: () => void;
 }
 
 export function RutinaSemanalAlumno({
@@ -26,6 +32,8 @@ export function RutinaSemanalAlumno({
   archivado: isArchived,
   onCargarPlantilla,
   onEditarRutina,
+  errorRutina,
+  onReintentarRutina,
 }: RutinaSemanalAlumnoProps) {
   return (
     <div
@@ -69,7 +77,29 @@ export function RutinaSemanalAlumno({
         </div>
       </div>
 
+      {errorRutina && (
+        <div
+          role="alert"
+          className="p-4 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+        >
+          <span className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            {errorRutina}
+          </span>
+          {onReintentarRutina && (
+            <button
+              type="button"
+              onClick={onReintentarRutina}
+              className="min-h-11 inline-flex items-center px-4 py-2 rounded-xl border border-destructive/40 bg-background text-destructive font-bold text-xs hover:bg-destructive/10 active:scale-[0.98] transition-all cursor-pointer"
+            >
+              Reintentar
+            </button>
+          )}
+        </div>
+      )}
+
       {rutinaSemanal.length === 0 ? (
+        errorRutina ? null : (
         <div className="p-8 rounded-2xl bg-card border border-dashed border-border/70 text-center">
           <ClipboardList className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-40" />
           <p className="text-xs text-muted-foreground">
@@ -87,6 +117,7 @@ export function RutinaSemanalAlumno({
             <span>Asignar rutina</span>
           </button>
         </div>
+        )
       ) : (
         <div className="grid grid-cols-1 gap-4">
         {rutinaSemanal.map((bloque) => (

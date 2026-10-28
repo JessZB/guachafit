@@ -10,8 +10,18 @@
  * cada dominio expone sus setters/cargadores y este hook los invoca. Los tipos de esas
  * dependencias se declaran aquí para que los hooks de dominio los implementen sin ciclos
  * de importación (los hooks de dominio importan estos tipos, nunca al revés).
+ *
+ * Recarga silenciosa (`recargarExpediente({ silencioso: true })`, tras un cobro): sin spinner ni
+ * limpiar `error`. Si falla, conserva los datos y avisa con `plan.notificarAvisoCarga`. El formulario
+ * de datos personales y de ficha de salud solo se rehidrata si NO está modificado (el calendario, igual).
+ * El borrador de "Plan y tarifa" (plan, precio, tasa, fecha de inicio) NO está protegido: se rehidrata
+ * desde el servidor en cada recarga (límite conocido, RF-011).
+ *
+ * Avisos por fallos silenciosos (también en la carga inicial): catálogo de planes y última sesión
+ * (un 404 de última sesión = sin sesiones, sin aviso). La rutina distingue "sin rutina" (estado
+ * vacío) de un fallo real (`errorRutina` con reintento).
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type React from 'react';
 import {
   Modalidad,
@@ -25,7 +35,7 @@ import {
   type RutinaSemanalDetalleDTO,
   type SesionEntrenamientoDetalleDTO,
 } from '@guachafit/shared';
-import { apiClient } from '../../../lib/api-client';
+import { ApiError, apiClient } from '../../../lib/api-client';
 import { rebanarPagina } from '../../../lib/paginacion';
 import { sesionesDemoAlumno } from '../../../lib/demo-sesiones';
 import { esSesionRealizada } from '../../../lib/alumno-detalle-metricas';
@@ -43,6 +53,11 @@ import {
   crearSuscripcionDemoAlumno,
 } from '../../../lib/alumno-detalle-demo';
 import type { RetornoPlanSuscripcion } from './use-plan-suscripcion-alumno';
+import {
+  formularioModificado,
+  MENSAJE_FICHA_DESACTUALIZADA,
+  type ValoresFormularioExpediente,
+} from './expediente-formulario';
 
 /** Lo que la carga inicial necesita del dominio de transacciones. */
 export interface CargaTransaccionesDeps {
@@ -78,6 +93,7 @@ export interface CargaControlesDeps {
 export interface CargaRutinaDeps {
   setEjerciciosCatalogo: React.Dispatch<React.SetStateAction<EjercicioCatalogoDetalleDTO[]>>;
   setRutinaSemanal: React.Dispatch<React.SetStateAction<BloqueDiaRutinaDTO[]>>;
+  setErrorRutina: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 export interface ParametrosExpediente {
@@ -129,6 +145,18 @@ export function useExpedienteAlumno({
 
   const [planesCatalogo, setPlanesCatalogo] = useState<PlanMembresiaDetalleDTO[]>([]);
 
+  // Valores VIGENTES (se refrescan en cada render) para decidir la rehidratación tras los `await`.
+  const valoresFormulario: ValoresFormularioExpediente = {
+    nombres, apellidos, tipoDocumento, numeroDocumento, fechaNacimiento, telefonoWhatsapp,
+    modalidad, fichaSaludPrivada, periodicidadAntropometria, antropometriaInicio,
+  };
+  const formularioRef = useRef(valoresFormulario);
+  formularioRef.current = valoresFormulario;
+  const alumnoRef = useRef(alumno);
+  alumnoRef.current = alumno;
+  // Generación de la carga: una respuesta de una recarga ya superada no aplica su estado.
+  const cargaIdRef = useRef(0);
+
   const hidratarFormulario = (perfil: PerfilAlumnoDetalleDTO) => {
     setNombres(perfil.nombres);
     setApellidos(perfil.apellidos);
@@ -142,17 +170,24 @@ export function useExpedienteAlumno({
     setAntropometriaInicio(perfil.antropometriaInicio ?? '');
   };
 
-  const cargarExpediente = async () => {
+  const cargarExpediente = async (opciones?: { silencioso?: boolean }) => {
     if (!alumnoId) return;
-    setIsLoading(true);
-    setError(null);
+    const silencioso = opciones?.silencioso === true;
+    const cargaId = ++cargaIdRef.current;
+    const vigente = () => cargaId === cargaIdRef.current;
+    plan.limpiarAvisoCarga();
+    if (!silencioso) {
+      setIsLoading(true);
+      setError(null);
+    }
 
     // MODO DEMO EXPLÍCITO (isDemoMode): fixtures locales y cero llamadas contra la API real.
     // Los datos de ejemplo SOLO pueden mostrarse con la bandera activa (banner global visible).
     if (isDemoMode) {
       const demoPerfil = crearPerfilDemoAlumno(alumnoId);
+      const modificado = formularioModificado(alumnoRef.current, formularioRef.current);
       setAlumno(demoPerfil);
-      hidratarFormulario(demoPerfil);
+      if (!silencioso || !modificado) hidratarFormulario(demoPerfil);
       plan.setSelectedPlanId(demoPerfil.planActivoId || '');
       plan.setSuscripcion(crearSuscripcionDemoAlumno());
       plan.setSuscripcionError(null);
@@ -178,6 +213,7 @@ export function useExpedienteAlumno({
       void sesiones.cargarHistorial(1, tamanoHistorial);
 
       rutina.setEjerciciosCatalogo(crearCatalogoDemo());
+      rutina.setErrorRutina(null);
       rutina.setRutinaSemanal(crearRutinaDemoAlumno());
 
       const demoControles = controlesDemoAlumno();
@@ -195,16 +231,24 @@ export function useExpedienteAlumno({
       const perfilRes = await apiClient<PerfilAlumnoDetalleDTO>(`/alumnos/${alumnoId}`).catch(
         () => null
       );
+      if (!vigente()) return;
 
       if (!perfilRes) {
-        setError(
-          'No se pudo cargar el expediente del alumno. Revisa tu conexión e inténtalo de nuevo.'
-        );
+        if (silencioso) {
+          plan.notificarAvisoCarga(MENSAJE_FICHA_DESACTUALIZADA);
+        } else {
+          setError(
+            'No se pudo cargar el expediente del alumno. Revisa tu conexión e inténtalo de nuevo.'
+          );
+        }
         return;
       }
 
+      // Recarga silenciosa: el formulario solo se rehidrata si no hay cambios sin guardar. Se mira
+      // ANTES de `setAlumno`, sobre la foto del último render confirmado.
+      const modificado = formularioModificado(alumnoRef.current, formularioRef.current);
       setAlumno(perfilRes);
-      hidratarFormulario(perfilRes);
+      if (!silencioso || !modificado) hidratarFormulario(perfilRes);
       plan.setTasaFijadaOverride(perfilRes.tasaFijadaOverride || '');
 
       // WU25b: cada listado paginado arranca en la página 1 y el total cacheado de controles se
@@ -218,10 +262,14 @@ export function useExpedienteAlumno({
       // resumen completo y la página 1 de transacciones (un fallo deja el aviso de la pestaña,
       // nunca cifras inventadas).
       await transacciones.cargarTransacciones(1, tamanoTx);
+      if (!vigente()) return;
 
       // 3. Catálogo de planes (vacío real = sin planes, nunca planes inventados)
       const planesRes = await apiClient<PlanMembresiaDetalleDTO[]>('/finanzas/planes').catch(
-        () => []
+        () => {
+          if (vigente()) plan.notificarAvisoCarga('No se pudo cargar el catálogo de planes.');
+          return [];
+        }
       );
       setPlanesCatalogo(Array.isArray(planesRes) ? planesRes : []);
 
@@ -235,7 +283,11 @@ export function useExpedienteAlumno({
       // 4. Última sesión: sin dato => sin tarjeta de "último entrenamiento" (nunca fabricada).
       const sesionRes = await apiClient<SesionEntrenamientoDetalleDTO>(
         `/sesiones/alumno/${alumnoId}/ultima`
-      ).catch(() => null);
+      ).catch((err: unknown) => {
+        // 404 = sin sesiones (no es un fallo): solo cualquier otro error avisa.
+        if (vigente() && !(err instanceof ApiError && err.status === 404)) plan.notificarAvisoCarga('No se pudo cargar el último entrenamiento.');
+        return null;
+      });
       sesiones.setUltimaSesion(sesionRes ?? null);
 
       // 5. WU25b: historial de sesiones paginado (envelope `{ items, total, limit, offset }`);
@@ -248,26 +300,36 @@ export function useExpedienteAlumno({
       ).catch(() => []);
       rutina.setEjerciciosCatalogo(Array.isArray(catalogoRes) ? catalogoRes : []);
 
-      // 7. Rutina semanal activa persistida (sin rutina => estado vacío honesto)
-      const rutinaActivaRes = await apiClient<RutinaSemanalDetalleDTO>(
-        `/rutinas/alumno/${alumnoId}/activa`
-      ).catch(() => null);
-      rutina.setRutinaSemanal(
-        rutinaActivaRes &&
-          Array.isArray(rutinaActivaRes.bloques) &&
-          rutinaActivaRes.bloques.length > 0
-          ? rutinaActivaRes.bloques
-          : []
-      );
+      // 7. Rutina semanal activa persistida: sin rutina (vacía o sin bloques) => estado vacío;
+      // un fallo real (red/5xx) => aviso con reintento, nunca el estado vacío.
+      try {
+        const rutinaActivaRes = await apiClient<RutinaSemanalDetalleDTO>(
+          `/rutinas/alumno/${alumnoId}/activa`
+        );
+        rutina.setErrorRutina(null);
+        rutina.setRutinaSemanal(
+          rutinaActivaRes &&
+            Array.isArray(rutinaActivaRes.bloques) &&
+            rutinaActivaRes.bloques.length > 0
+            ? rutinaActivaRes.bloques
+            : []
+        );
+      } catch {
+        rutina.setErrorRutina('No se pudo cargar la rutina semanal');
+      }
 
       // 8. N3/WU25b: controles antropométricos reales paginados (la página 1 son los más
       // recientes); un fallo muestra aviso visible, nunca una tabla vacía pasando por
       // "sin registros".
       await controles.cargarControles(1, tamanoControles, perfilRes.usuarioId);
     } catch {
-      setError('Error al cargar la información del alumno.');
+      if (silencioso) {
+        plan.notificarAvisoCarga(MENSAJE_FICHA_DESACTUALIZADA);
+      } else {
+        setError('Error al cargar la información del alumno.');
+      }
     } finally {
-      setIsLoading(false);
+      if (vigente()) setIsLoading(false);
     }
   };
 
