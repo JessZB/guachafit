@@ -337,6 +337,14 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - La barra es un control segmentado: en el móvil (360px) las 5 pestañas caben en una fila **sin deslizar**, con el icono sobre el nombre; la activa va rellena. Prueba también con el texto del sistema ampliado: "Nutrición" puede cortarse con puntos suspensivos.
   - Con deuda, el tab **Pagos** muestra un **punto rojo** en la esquina en el móvil y el saldo con dos decimales (por ejemplo `$40.00`) desde tablet.
   - Con las flechas del teclado (← →, Inicio, Fin) se mueve entre pestañas y cada una se activa al llegar.
+- [ ] **Actualización de la ficha tras un cobro (desde 2026-10-28):**
+  - Abre un alumno con deuda, ve al tab Pagos y registra un cobro en sala. La ficha **no** debe volver a mostrar "Cargando Expediente…": el tab, el scroll y el saldo se actualizan solos.
+  - En Perfil escribe algo en "Nombres" **sin guardar**, ve a Pagos y cobra: al volver a Perfil tu texto sigue ahí.
+  - Con la red cortada justo después del cobro, la ficha sigue visible y la cabecera dice "No se pudo actualizar la ficha. Los datos mostrados pueden estar desactualizados."
+  - Límite conocido: si editas "Plan y tarifa" sin guardar y cobras, esa edición se pierde.
+- [ ] **Errores de carga (desde 2026-10-28):**
+  - Con el servicio de planes caído aparece "No se pudo cargar el catálogo de planes." en la cabecera, en cualquier tab; al recuperarse y recargar, desaparece. Un error al **guardar** el perfil solo se ve dentro de Perfil, no en Pagos ni Entrenos.
+  - Con la rutina sin poder cargarse, el tab Entrenos muestra "No se pudo cargar la rutina semanal" con **Reintentar**, y **no** el texto "aún no tiene una rutina semanal activa". Un alumno que de verdad no tiene rutina sí muestra ese texto.
   - A 360px de ancho ningún tab, badge ni formulario se sale de la pantalla ni parte su texto en dos líneas ("Cuota pendiente", "Sin cuota emitida", "Sin plan").
 - [ ] **Salud y limitaciones (antes "Alerta Médica"):**
   - Si el alumno tiene texto de salud, la cabecera muestra **"Salud y limitaciones"** con hasta 2 líneas y el botón **"Ver detalle"**, que lleva al tab Perfil. Sin texto, el aviso no aparece.

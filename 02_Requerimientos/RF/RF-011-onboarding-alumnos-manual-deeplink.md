@@ -205,4 +205,17 @@ Then la aplicación debe navegar a "/coach/alumnos/al-001"
   - **Evidencia:** web **2343/2343**; typecheck y build en verde; revisión de los cuatro enfoques sin BLOCKER, con los hallazgos introducidos por el lote corregidos y validados.
   - **Tabs segmentadas (`8b4504a`, 2026-10-26):** la barra de pestañas es un control segmentado de 5 columnas iguales sin scroll horizontal. En móvil el icono va sobre una etiqueta de 11px y el saldo de la deuda es un punto en la esquina de Pagos (el lector de pantalla anuncia "Saldo pendiente N dólares"); desde `sm`, icono y texto en línea y el importe visible. Web **2351/2351**; la revisión de fiabilidad no dio BLOCKER ni WARNING.
   - **Límite honesto:** con zoom de texto al 200% la etiqueta "Nutrición" puede cortarse con elipsis, y una sexta pestaña exigiría replantear la barra (cuadrícula fija de 5).
-  - **Pendiente de los siguientes lotes** (decididos con el dueño, 2026-10-26): carga y recarga sin tapar la ficha, reorganización por tab (la rutina primero en Entrenos y la zona horaria en Perfil) y cabecera con "Más acciones".
+  - **Carga honesta y recarga silenciosa (`f22ba4c`, 2026-10-26/28):**
+    - Tras confirmar un cobro, la ficha se actualiza en segundo plano: no vuelve el spinner a pantalla completa, se conservan el tab, el scroll y los modales, y no se pisa lo que el entrenador estaba escribiendo en los datos personales, la ficha de salud y el calendario de check-in.
+    - Si la actualización falla, la ficha conserva lo que ya muestra y avisa en la cabecera: "No se pudo actualizar la ficha. Los datos mostrados pueden estar desactualizados."
+    - Una respuesta de una carga antigua ya no sustituye a la de una más reciente (contador de generación).
+    - Los fallos de carga tienen su propio canal (`avisoCarga`), separado del de guardado: se muestran en la cabecera de cualquier tab, se limpian al empezar la siguiente carga y el error de guardado de Perfil ya no aparece en Pagos o Entrenos.
+    - Rutina: un fallo de red o 5xx se ve como "No se pudo cargar la rutina semanal" con "Reintentar" (un solo clic efectivo por petición), y ya no como "aún no tiene una rutina". La API responde 204 sin cuerpo cuando no hay rutina. El aviso se limpia al guardar una rutina con éxito.
+    - También avisan, en lugar de fallar en silencio, el catálogo de planes y la última sesión (un 404 de última sesión significa "sin sesiones" y no avisa).
+    - Evidencia: web **2371/2371**; typecheck, build y guardianes en verde (`use-expediente-alumno.ts` 375/400; `AlumnoDetallePage.tsx` 300/300). La revisión de fiabilidad dio 1 BLOCKER y 3 WARNING, corregidos y validados.
+  - **Límites honestos de la carga:**
+    - El borrador de "Plan y tarifa" (plan elegido, precio acordado, tasa especial y fecha de inicio) sí se rehidrata desde el servidor en cada recarga, también la silenciosa; si el entrenador lo edita sin guardar y luego cobra, se pierde.
+    - La recarga vuelve a la página 1 de los historiales (lo deseable para ver el cobro nuevo, pero también reinicia la página que se miraba).
+    - La carga sigue siendo una cascada de ~8 peticiones secuenciales; paralelizarla es un lote aparte por su riesgo.
+    - En modo demo, el cobro no dispara la recarga.
+  - **Pendiente de los siguientes lotes** (decididos con el dueño, 2026-10-26): reorganización por tab (la rutina primero en Entrenos y la zona horaria en Perfil) y cabecera con "Más acciones".
