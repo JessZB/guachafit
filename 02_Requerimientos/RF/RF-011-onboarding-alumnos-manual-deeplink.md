@@ -218,4 +218,11 @@ Then la aplicación debe navegar a "/coach/alumnos/al-001"
     - La recarga vuelve a la página 1 de los historiales (lo deseable para ver el cobro nuevo, pero también reinicia la página que se miraba).
     - La carga sigue siendo una cascada de ~8 peticiones secuenciales; paralelizarla es un lote aparte por su riesgo.
     - En modo demo, el cobro no dispara la recarga.
-  - **Pendiente de los siguientes lotes** (decididos con el dueño, 2026-10-26): reorganización por tab (la rutina primero en Entrenos y la zona horaria en Perfil) y cabecera con "Más acciones".
+  - **Reorganización por tab (`3535cde`, 2026-10-28):**
+    - *Entrenos:* la rutina semanal asignada va primero, luego el último entrenamiento y al final el historial (revierte la decisión WU16 de historial arriba). Se quitan las píldoras de ancla; "Ver historial completo" sigue llevando al historial.
+    - *Perfil:* orden datos personales → "Salud y limitaciones" → "Plan y tarifa" → "Guardar cambios" → "Zona horaria del alumno" (fuera del formulario, porque se guarda sola). Junto al botón aparece "Cambios sin guardar" cuando se modifican los datos personales o la ficha de salud (no lo activan el calendario de check-in, que se guarda en Medidas, ni los espacios sobrantes).
+    - *Zona horaria:* se edita en Perfil y ya no en Nutrición, que muestra "La zona horaria del alumno se cambia en Perfil." El texto dice que la zona gobierna las fechas de cuotas y reportes de nutrición.
+    - *Medidas:* "Medidas y evolución" con el botón "Registrar control"; primero las métricas, el gráfico y el historial de controles, y al final el calendario de check-in plegado (`<details>`), cuyo resumen muestra la periodicidad **guardada** o "Sin configurar".
+    - Evidencia: web **2383/2383**; typecheck, build y guardianes en verde (`AlumnoDetallePage.tsx` baja a 284/300 al extraer `PestanaNutricionAlumno`). La revisión de fiabilidad no dio BLOCKER; sus 2 WARNING y 2 SUGGESTION se corrigieron y validaron.
+  - **Límite honesto (preexistente, API):** hay dos columnas de zona horaria. La que edita el entrenador es `perfiles_alumno.zonaHoraria` (cuotas, planes y nutrición); el calendario de mediciones antropométricas y sus recordatorios usan `usuarios.timezone`, que este cambio no toca. Unificarlas es una decisión de API pendiente.
+  - **Pendiente del siguiente lote** (decidido con el dueño, 2026-10-26): cabecera con el chip "Salud y limitaciones" y su panel, menú "Más acciones" y franja de datos clave.
