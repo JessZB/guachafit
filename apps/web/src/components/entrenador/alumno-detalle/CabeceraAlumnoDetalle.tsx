@@ -5,8 +5,9 @@
  * Extraído de `pages/entrenador/AlumnoDetallePage.tsx` (SL-2). El `DialogoConfirmacion`
  * compartido de la ficha vive en el contenedor (sirve también a quitar plan/tarifa especial).
  *
- * El aviso de salud se titula "Salud y limitaciones", recorta el texto a 2 líneas (completo en
- * `title`) y su botón "Ver detalle" abre la pestaña de Perfil.
+ * L7: WhatsApp queda visible; Pausar/Reactivar, Suspender por pago y Archivar viven en el menú
+ * "Más acciones" (`MenuAccionesAlumno`). La salud se muestra como chip que despliega el texto
+ * completo (`ChipSaludAlumno`). La franja de datos clave va en la página, bajo esta cabecera.
  *
  * §6: táctil `min-h-11`, 11px mínimo, tokens con variante oscura, pesos ≤ 700, estados honestos
  * (`role="alert"` en el error, `role="status"` en el éxito).
@@ -16,18 +17,15 @@ import type { SemaforoPago } from '../../../lib/etiquetas-dominio';
 import { BadgeEstadoPagoAlumno } from './BadgeEstadoPagoAlumno';
 import { BadgeEstadoActivacionAlumno } from './BadgeEstadoActivacionAlumno';
 import { BotonWhatsapp } from './BotonWhatsapp';
+import { MenuAccionesAlumno } from './MenuAccionesAlumno';
+import { ChipSaludAlumno } from './ChipSaludAlumno';
 import { etiquetaModalidad, formatearDocumento } from '../../../lib/etiquetas-dominio';
 import {
   AlertCircle,
   CheckCircle2,
-  DollarSign,
-  Lock,
   Mail,
-  PauseCircle,
   Phone,
-  PlayCircle,
   RefreshCw,
-  Trash2,
   User,
 } from 'lucide-react';
 
@@ -99,6 +97,13 @@ export function CabeceraAlumnoDetalle({
                 {alumno.telefonoWhatsapp}
               </span>
             </div>
+
+            {/* Salud y limitaciones: chip que despliega la ficha completa */}
+            <ChipSaludAlumno
+              key={alumno.id}
+              fichaSaludPrivada={alumno.fichaSaludPrivada}
+              onVerFichaCompleta={onVerFichaCompleta}
+            />
           </div>
         </div>
 
@@ -107,50 +112,13 @@ export function CabeceraAlumnoDetalle({
           {/* WhatsApp 1-Tap */}
           <BotonWhatsapp telefono={alumno.telefonoWhatsapp} nombres={alumno.nombres} />
 
-          {/* Ciclo de Vida RF-012: Pausar / Suspender por pago / Reactivar */}
+          {/* Ciclo de Vida RF-012: Pausar / Reactivar / Suspender por pago / Archivar en el menú */}
           {!archivado && (
-            <>
-              {alumno.estadoActivacion === EstadoAlumno.ACTIVO ? (
-                <button
-                  onClick={() => onCambiarEstado(EstadoAlumno.INACTIVO_PAUSADO)}
-                  className="min-h-11 py-2 px-3 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs border border-border flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                  title="Pausar alumno temporalmente por viaje o lesión"
-                >
-                  <PauseCircle className="h-4 w-4 text-warning" />
-                  <span>Pausar</span>
-                </button>
-              ) : (
-                <button
-                  onClick={() => onCambiarEstado(EstadoAlumno.ACTIVO)}
-                  className="min-h-11 py-2 px-3 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs border border-border flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                  title="Reactivar alumno"
-                >
-                  <PlayCircle className="h-4 w-4 text-success" />
-                  <span>Reactivar</span>
-                </button>
-              )}
-
-              {alumno.estadoActivacion !== EstadoAlumno.SUSPENDIDO_PAGO && (
-                <button
-                  onClick={() => onCambiarEstado(EstadoAlumno.SUSPENDIDO_PAGO)}
-                  className="min-h-11 py-2 px-3 rounded-xl bg-warning/10 hover:bg-warning/20 text-warning font-semibold text-xs border border-warning/25 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                  title="Suspender la planificación por mensualidad pendiente"
-                >
-                  <DollarSign className="h-4 w-4" />
-                  <span>Suspender por pago</span>
-                </button>
-              )}
-
-              {/* Archivar (los datos se conservan) */}
-              <button
-                onClick={onArchivar}
-                className="min-h-11 py-2 px-3 rounded-xl bg-destructive/10 hover:bg-destructive/20 text-destructive font-semibold text-xs border border-destructive/20 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                title="Archivar alumno (sus datos se conservan)"
-              >
-                <Trash2 className="h-4 w-4" />
-                <span>Archivar</span>
-              </button>
-            </>
+            <MenuAccionesAlumno
+              estado={alumno.estadoActivacion}
+              onCambiarEstado={onCambiarEstado}
+              onArchivar={onArchivar}
+            />
           )}
 
           {/* Si está archivado: Restaurar */}
@@ -185,29 +153,6 @@ export function CabeceraAlumnoDetalle({
         >
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           <span>{exitoAccion}</span>
-        </div>
-      )}
-
-      {/* Resumen de salud y limitaciones en cabecera si existe (texto completo en la ficha) */}
-      {alumno.fichaSaludPrivada && (
-        <div className="p-3 rounded-2xl bg-warning/10 border border-warning/20 text-xs flex items-start justify-between gap-3 text-warning">
-          <div className="flex items-start gap-2 min-w-0">
-            <Lock className="h-4 w-4 text-warning shrink-0 mt-0.5" />
-            <div className="min-w-0 space-y-0.5">
-              <span className="block font-semibold text-foreground">Salud y limitaciones</span>
-              <span className="line-clamp-2 block" title={alumno.fichaSaludPrivada}>
-                {alumno.fichaSaludPrivada}
-              </span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onVerFichaCompleta}
-            aria-label={`Ver salud y limitaciones de ${alumno.nombres}`}
-            className="min-h-11 px-2 shrink-0 text-[11px] font-bold text-primary underline hover:text-primary/80 cursor-pointer"
-          >
-            <span>Ver detalle</span>
-          </button>
         </div>
       )}
     </div>

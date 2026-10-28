@@ -12,10 +12,11 @@ import { SelectorPlantillaAsignacion } from '../../components/entrenador/Selecto
 import { PestanaNutricionAlumno } from '../../components/entrenador/alumno-detalle/PestanaNutricionAlumno';
 import { DialogoConfirmacion } from '../../components/common/DialogoConfirmacion';
 import { useFrescuraOffline } from '../../lib/use-frescura-offline';
-import { calcularSemaforoPago } from '../../lib/alumno-detalle-metricas';
+import { calcularSemaforoPago, resolverUltimoEntrenamiento } from '../../lib/alumno-detalle-metricas';
 import type { ConfirmacionFicha } from '../../lib/alumno-detalle-textos';
 import { CabeceraAlumnoDetalle } from '../../components/entrenador/alumno-detalle/CabeceraAlumnoDetalle';
 import { PestanasFichaAlumno } from '../../components/entrenador/alumno-detalle/PestanasFichaAlumno';
+import { FranjaDatosClaveAlumno } from '../../components/entrenador/alumno-detalle/FranjaDatosClaveAlumno';
 import { PestanaResumenAlumno } from '../../components/entrenador/alumno-detalle/PestanaResumenAlumno';
 import { useExpedienteAlumno } from '../../components/entrenador/alumno-detalle/use-expediente-alumno';
 import { usePlanSuscripcionAlumno } from '../../components/entrenador/alumno-detalle/use-plan-suscripcion-alumno';
@@ -186,6 +187,11 @@ export function AlumnoDetallePage() {
         textoConfirmar={confirmacionFicha?.boton ?? ''} variante={confirmacionFicha?.variante}
         procesando={ciclo.confirmandoFicha} onCancelar={() => setConfirmacionFicha(null)}
         onConfirmar={() => void ciclo.ejecutarConfirmacionFicha(confirmacionFicha, () => setConfirmacionFicha(null))}
+      />
+
+      <FranjaDatosClaveAlumno
+        finanzas={tx.finanzas} ultimaSesion={resolverUltimoEntrenamiento(sesiones.ultimaSesion, sesiones.historialSesiones)}
+        controles={controles.controlMasReciente ? [controles.controlMasReciente] : []} ahora={new Date()} onIrATab={cambiarTab}
       />
 
       <PestanasFichaAlumno

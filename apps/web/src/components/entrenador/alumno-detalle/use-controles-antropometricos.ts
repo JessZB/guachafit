@@ -40,6 +40,11 @@ export function useControlesAntropometricos({ isDemoMode }: ParametrosControlesA
   const [controlesDemo, setControlesDemo] = useState<ControlAntroFila[]>(() =>
     controlesDemoAlumno()
   );
+  // W3: el peso de la franja es el control más reciente, no el de la página abierta. Solo cambia
+  // al cargar la página 1 (o con la primera fila del demo); navegar a otras páginas no lo toca.
+  const [controlMasReciente, setControlMasReciente] = useState<ControlAntroFila | null>(
+    () => (isDemoMode ? (controlesDemoAlumno()[0] ?? null) : null)
+  );
   const [controlesTotal, setControlesTotal] = useState(0);
   // N3: error honesto al re-consultar los controles reales del alumno (nunca lista "vaciada" en silencio).
   const [controlesErrorMsg, setControlesErrorMsg] = useState<string | null>(null);
@@ -79,6 +84,7 @@ export function useControlesAntropometricos({ isDemoMode }: ParametrosControlesA
     try {
       if (isDemoMode) {
         setControlesAntro(rebanarPagina(controlesDemo, paginaSolicitada, tamanoSolicitado));
+        if (paginaSolicitada === 1) setControlMasReciente(controlesDemo[0] ?? null);
         setControlesTotal(controlesDemo.length);
         setControlesErrorMsg(null);
         return true;
@@ -107,9 +113,11 @@ export function useControlesAntropometricos({ isDemoMode }: ParametrosControlesA
           res = await consultar(offsetReal, limiteReal);
         }
       }
+      const filas = res.evaluaciones.map(mapearControlAntro).reverse();
       totalControlesRef.current = total;
       setControlesTotal(total);
-      setControlesAntro(res.evaluaciones.map(mapearControlAntro).reverse());
+      setControlesAntro(filas);
+      if (paginaSolicitada === 1) setControlMasReciente(filas[0] ?? null);
       setControlesErrorMsg(null);
       const totalPaginas = calcularTotalPaginas(total, tamanoSolicitado);
       if (paginaSolicitada > totalPaginas && !reintento) {
@@ -144,6 +152,8 @@ export function useControlesAntropometricos({ isDemoMode }: ParametrosControlesA
     setControlesAntro,
     controlesDemo,
     setControlesDemo,
+    controlMasReciente,
+    setControlMasReciente,
     controlesTotal,
     setControlesTotal,
     controlesErrorMsg,

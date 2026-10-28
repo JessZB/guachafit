@@ -81,6 +81,7 @@ export function useCheckinAntropometrico({
       controles.setControlesDemo(actualizados);
       controles.setControlesTotal(actualizados.length);
       controles.setPaginaControles(1);
+      controles.setControlMasReciente(nuevo);
       controles.setControlesAntro(
         rebanarPagina(actualizados, 1, controles.tamanoControles)
       );
@@ -132,10 +133,12 @@ export function useCheckinAntropometrico({
         usuarioId
       );
       if (!refrescado) {
+        const filaCreada = mapearControlAntro(creado);
         controles.setControlesAntro((prev) => [
-          mapearControlAntro(creado),
+          filaCreada,
           ...prev.filter((c) => c.id !== creado.id),
         ]);
+        controles.setControlMasReciente(filaCreada);
       }
       controles.setControlesErrorMsg(null);
       setIsAntroModalOpen(false);
