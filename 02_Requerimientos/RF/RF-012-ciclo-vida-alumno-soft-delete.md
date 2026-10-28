@@ -4,7 +4,7 @@ modulo: Clientes
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-10-19
+fecha_verificacion: 2026-10-28
 problema_origen: "[[PROB-003-acceso-onboarding-dashboard-central]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -128,3 +128,4 @@ Then el sistema debe ejecutar PATCH /alumnos/:id/restaurar
   - Los archivados se consultan en su propio chip **"Archivados N"** (`soloArchivados=true`), con el botón Restaurar.
   - Si se pulsa otra vez el chip activo, la lista vuelve a "Vigentes".
   - La tarjeta y la tabla muestran el estado de activación con texto: Activo, Pausado o Archivado.
+- Implementado (2026-10-28, `b6c2dc2`): en la ficha del alumno, las acciones Pausar/Reactivar, Suspender por pago y Archivar se agrupan en el menú **"Más acciones"** de la cabecera, con las mismas condiciones y la misma confirmación (`DialogoConfirmacion`). "Restaurar Alumno" sigue visible cuando el alumno está archivado.

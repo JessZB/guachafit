@@ -347,7 +347,10 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - Con la rutina sin poder cargarse, el tab Entrenos muestra "No se pudo cargar la rutina semanal" con **Reintentar**, y **no** el texto "aún no tiene una rutina semanal activa". Un alumno que de verdad no tiene rutina sí muestra ese texto.
   - A 360px de ancho ningún tab, badge ni formulario se sale de la pantalla ni parte su texto en dos líneas ("Cuota pendiente", "Sin cuota emitida", "Sin plan").
 - [ ] **Salud y limitaciones (antes "Alerta Médica"):**
-  - Si el alumno tiene texto de salud, la cabecera muestra **"Salud y limitaciones"** con hasta 2 líneas y el botón **"Ver detalle"**, que lleva al tab Perfil. Sin texto, el aviso no aparece.
+  - Si el alumno tiene texto de salud, la cabecera muestra el chip **"Salud y limitaciones"**, plegado: el texto no se ve (ni al pasar el ratón). Al pulsarlo se abre con el texto completo y **"Editar en Perfil"**; Escape o un segundo clic lo pliegan. Sin texto, el chip no aparece. Con un texto muy largo, el panel no crece sin límite y se puede desplazar (también con Tab y flechas).
+- [ ] **Cabecera de la ficha (desde 2026-10-28):**
+  - Se ven WhatsApp y **"Más acciones"**. El menú ofrece Pausar (o Reactivar), Suspender por pago y Archivar; cada una pide la confirmación de siempre. Con el alumno archivado solo aparece "Restaurar Alumno". Con el teclado: Enter abre el menú, las flechas se mueven y Escape lo cierra.
+  - Bajo la cabecera, la franja muestra **Saldo pendiente, Próxima cuota, Último entreno y Peso**; cada uno lleva a su tab. Comprueba que la próxima cuota muestra la **fecha** (no "—") en un alumno con cuota, que "Peso" es el del último control aunque en Medidas pases a la página 2 del historial, y que tras registrar un control el peso nuevo aparece en la franja. A 360px los valores pueden ocupar dos líneas, pero no se cortan.
   - En el tab Perfil, la tarjeta **"Salud y limitaciones"** tiene un contador `N/2000` y no deja escribir más de 2000 caracteres.
   - Solo la ve el entrenador.
 - [ ] **Formularios de la ficha:** al tocar una etiqueta ("Nombres", "Precio acordado (USD)", "Peso"…) el cursor entra en su campo; en el móvil los campos numéricos abren el teclado numérico; los campos miden al menos 44px de alto; el botón es **"Guardar cambios"**, a todo el ancho en móvil.
