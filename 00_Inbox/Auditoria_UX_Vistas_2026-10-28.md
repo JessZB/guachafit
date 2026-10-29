@@ -119,7 +119,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | ID | Lote | Vistas | Resuelve | Reutiliza / crea | Riesgo | API | Dependencia |
 |---|---|---|---|---|---|---|---|
 | UX-01 ✅ `8cc2a89` | Extraer `ui/BarraTabsSegmentada` | Ficha del alumno (wrapper) | base de CFG-01, ALU-23, ALU-25, COB-22, SEG-20 | `PestanasFichaAlumno`, `use-tabs-accesibles`; spec nuevo | bajo-medio (spec de la ficha) | no | ninguna |
-| UX-02 | Regla global `motion-reduce` | Toda la app | ENT-06, SEG-15 (parte) | CSS base | bajo | no | ninguna |
+| UX-02 ✅ `a670b4b` | Regla global `motion-reduce` | Toda la app | ENT-06, SEG-15 (parte) | CSS base | bajo | no | ninguna |
 | UX-03 | Piezas compartidas de formulario y formato | `components/ajustes/CampoAjustes`, `lib/` | ALU-27, base de CFG-07, CFG-14, CFG-18, ALU-02; COB-15, SEG-09 | `CampoAjustes` + `inputMode`/sufijo/`select`/`role="alert"`; helper `formatMonto` | bajo | no | ninguna |
 | UX-04 | Cabecera: sincronización táctil y menú "Cuenta" | Header (todos los roles) | ENT-01, SEG-30 | `MenuAccionesAlumno` (Radix), `BotonTactil`, `IndicadorColaOffline` | medio (compartido con alumno) | no | ninguna |
 | UX-05 | Cobros: carga y datos honestos | Conciliación, Cartera | COB-01, COB-04, COB-16, COB-17, COB-24 | `EstadoCarga/Error/Vacio`, `AvisoDatosOffline`, `EsqueletoDirectorio`; borra `ErrorBandejaConciliacion` | bajo | no | ninguna |
@@ -156,6 +156,11 @@ Cobertura: los hallazgos BAJA no listados se resuelven con el lote de su área a
 - `ariaLabel: ""` en un item deja el tab sin nombre accesible: usar `aria-label={ariaLabel || undefined}` (`BarraTabsSegmentada.tsx:80`).
 - Con 1 item la barra usa `grid-cols-2` (columna vacía): documentar que el átomo exige 2 o más.
 - Menor: `toBeTruthy()` redundante sobre `getBy*` en `BarraTabsSegmentada.interaccion.spec.tsx:254,256-258,316`.
+
+**Seguimientos de UX-02 (revisión de fiabilidad, 2026-10-28), a resolver con el lote de cada área:**
+- Spinners sin texto ni `role="status"`, quietos con movimiento reducido: `SyncQueuePanel.tsx:182`, `ComparadorFotos.tsx:235`, `ComparadorAntropometrico.tsx:220,289,339`, `PestanaAntropometriaAlumno.tsx:86`. Corrección: texto visible o `ui/EstadoCarga`.
+- `ui/EstadoCarga` (`EstadoCarga.tsx:28`) solo tiene el texto en `sr-only`: con movimiento reducido, quien ve la pantalla solo ve un círculo quieto. Valorar texto visible.
+- Botones cuyo icono gira pero el rótulo no cambia (p. ej. `DialogoConfirmacion.tsx:93`, `SyncQueuePanel.tsx:261,321`, `CabeceraMonitor.tsx:78`): valorar un rótulo en gerundio mientras procesan.
 
 ## 4. Decisiones pendientes del dueño
 

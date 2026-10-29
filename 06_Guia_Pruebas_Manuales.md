@@ -301,6 +301,11 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 - [ ] **Tema claro**: todo legible (antes los estados eran ilegibles por contraste bajo). Alterna claro/oscuro/sistema.
 - [ ] **Teclado (desktop)**: Tab recorre; los modales atrapan el foco; Escape cierra y devuelve el foco; pestañas se mueven con flechas; el botón de sincronización de la cabecera responde a teclado.
 - [ ] **Diálogos de confirmación propios:** las confirmaciones (borrar día, reemplazar rutina, acciones del admin…) son diálogos de la app, no la ventana gris del navegador; Escape los cierra y el foco vuelve al botón.
+- [ ] **Movimiento reducido (desde 2026-10-28, UX-02):** en DevTools → menú ⋮ → *More tools* → **Rendering** → *Emulate CSS media feature prefers-reduced-motion* = **reduce** (o activa "Reducir movimiento" en el sistema).
+  - Nada pulsa ni se desliza: puntos rojos de deuda, chips en riesgo, menús que se abren y botones de pestaña cambian al instante.
+  - Abre y cierra el menú "Más acciones" de la ficha y el menú de la cabecera: se abren y **se cierran** con normalidad.
+  - Los spinners se quedan quietos. Límite conocido: en la cola offline, el comparador de fotos, el comparador antropométrico y el gráfico de Medidas de la ficha, el spinner no tiene texto, así que no se nota que está cargando.
+  - Con la emulación en *No emulation*, las animaciones vuelven como antes.
 - [ ] **Peso de letra moderado (desde 2026-10-10):** en ninguna pantalla hay textos "ultranegros". Títulos, cifras y etiquetas se ven en negrita normal (700 como máximo), tanto en el tema claro como en el oscuro y en el móvil.
 
 ## 9.1. Errores y mensajes (todos los roles)

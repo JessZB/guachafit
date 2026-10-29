@@ -185,6 +185,13 @@ Reglas transversales del frontend, vinculantes para toda vista nueva (se revisan
    - Ningún `.ts` de `apps/api/src` (sin contar specs) pasa de 400 líneas. Lo vigila el test guardián `apps/api/src/tamano-archivos.spec.ts`; sus únicas excepciones son los 8 archivos de la Ola 2 del API.
    - Un refactor que mueve código conserva los comentarios originales en español, palabra por palabra, y ejecuta la suite completa de los paquetes que lo consumen, no solo el typecheck: hay specs que leen el código fuente por ruta.
 
+16. **Movimiento reducido global (desde 2026-10-28, UX-02):**
+   - `apps/web/src/index.css` termina con un único `@media (prefers-reduced-motion: reduce)`, sin capa y con `!important`. Fija animaciones y transiciones a 0.01ms, una iteración, y `scroll-behavior: auto`. Usa duración mínima y no `animation: none`, para que las animaciones de entrada acaben en su estado final y Radix reciba `animationend`.
+   - Las clases `motion-reduce:` sueltas pasan a ser opcionales.
+   - Lo vigila el guardián `apps/web/src/estilo-movimiento-reducido.spec.ts`.
+   - El desplazamiento suave pedido desde JS no lo cubre la regla: todo `scrollIntoView({ behavior: 'smooth' })` consulta `matchMedia('(prefers-reduced-motion: reduce)')`, como `PestanaEntrenamientoAlumno`.
+   - Un spinner no es la única señal de carga: va con texto visible o con `ui/EstadoCarga`, porque con movimiento reducido se queda quieto.
+
 ---
 
 ## 🤝 7. Flujo de Trabajo: Claude Code como orquestador + agentes externos (vigente desde 2026-10-18)
