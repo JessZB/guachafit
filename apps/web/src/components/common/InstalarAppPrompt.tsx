@@ -129,10 +129,18 @@ function InstructivoInstalacion({ onClose, onNoVolverAMostrar }: InstructivoInst
  * - iOS/iPadOS Safari: abre un instructivo de 3 pasos.
  * Se oculta si la app ya corre instalada, si el usuario descartó la invitación
  * (30 días) o si el navegador no ofrece ninguna vía de instalación.
+ * UX-04: `onDisponibilidad` informa al padre si la invitación está visible.
  */
-export function InstalarAppPrompt() {
+interface InstalarAppPromptProps {
+  onDisponibilidad?: (disponible: boolean) => void;
+}
+
+export function InstalarAppPrompt({ onDisponibilidad }: InstalarAppPromptProps = {}) {
   const [eventoDiferido, setEventoDiferido] = useState<EventoInstalacionDiferida | null>(null);
-  const [esIOS, setEsIOS] = useState(false);
+  // Inicialización síncrona: evita que el primer render muestre la marca genérica antes de detectar iOS.
+  const [esIOS] = useState(
+    () => typeof navigator !== 'undefined' && esIOSSafari(navigator.userAgent, navigator.maxTouchPoints ?? 0)
+  );
   const [yaInstalada, setYaInstalada] = useState(false);
   const [descartado, setDescartado] = useState(false);
   const [instructivoAbierto, setInstructivoAbierto] = useState(false);
@@ -157,7 +165,6 @@ export function InstalarAppPrompt() {
     media.addEventListener?.('change', actualizarModo);
     window.addEventListener('beforeinstallprompt', manejarBeforeInstallPrompt);
     window.addEventListener('appinstalled', manejarAppInstalled);
-    setEsIOS(esIOSSafari(navigator.userAgent, navigator.maxTouchPoints ?? 0));
     setDescartado(
       descarteVigente(leerDescarteDeInstalacion(obtenerAlmacenamientoLocal()), Date.now())
     );
@@ -189,7 +196,13 @@ export function InstalarAppPrompt() {
     }
   }, [eventoDiferido, marcarDescarte]);
 
-  if (yaInstalada || descartado || (!eventoDiferido && !esIOS)) return null;
+  const disponible = !(yaInstalada || descartado || (!eventoDiferido && !esIOS));
+
+  useEffect(() => {
+    onDisponibilidad?.(disponible);
+  }, [disponible, onDisponibilidad]);
+
+  if (!disponible) return null;
 
   return (
     <>
@@ -200,9 +213,13 @@ export function InstalarAppPrompt() {
         }
         aria-label="Instalar la aplicación GUACHAFIT en este dispositivo"
         title="Instalar app"
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer border bg-primary/15 text-primary border-primary/30 hover:bg-primary/25 active:scale-95 transition-all"
+        className="flex items-center gap-1.5 min-h-11 min-w-11 justify-center px-3 rounded-full text-xs font-semibold cursor-pointer border bg-primary/15 text-primary border-primary/30 hover:bg-primary/25 active:scale-95 transition-all"
       >
-        {esIOS ? <Share className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
+        {esIOS ? (
+          <Share className="h-3.5 w-3.5" aria-hidden="true" />
+        ) : (
+          <Download className="h-3.5 w-3.5" aria-hidden="true" />
+        )}
         <span className="hidden md:inline">Instalar app</span>
       </button>
 

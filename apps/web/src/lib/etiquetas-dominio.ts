@@ -11,6 +11,7 @@ import {
   EstadoMedicion,
   Modalidad,
   OrigenAntropometria,
+  Rol,
   TipoDocumento,
 } from '@guachafit/shared';
 import type { EtiquetaVisual } from './adherencia';
@@ -120,4 +121,21 @@ export function formatearDocumento(
   const numero = (numeroDocumento ?? '').trim();
   if (!tipo || !numero) return null;
   return `${tipo.replace(/_+$/, '').toUpperCase()}-${numero}`;
+}
+
+/**
+ * Rol de la cuenta en lenguaje humano para el menú "Cuenta" (UX-04, SEG-30).
+ * Un rol nulo, vacío o desconocido devuelve cadena vacía: nunca se imprime el valor crudo.
+ */
+export function etiquetaRol(rol: string | null | undefined): string {
+  switch (rol) {
+    case Rol.ENTRENADOR:
+      return 'Entrenador';
+    case Rol.ALUMNO:
+      return 'Alumno';
+    case Rol.SUPERADMIN:
+      return 'Administrador';
+    default:
+      return '';
+  }
 }
