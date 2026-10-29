@@ -136,3 +136,22 @@ body {
   /* Contenido scrollable: despeja el bottom nav (6rem) + home indicator. */
   padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
 }
+
+/* Movimiento reducido global (UX-02, T7 de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md).
+   Va sin capa y con !important: las utilidades de Tailwind (animate-pulse, animate-spin,
+   animate-in, transition-*) se declaran dentro de capas y sin !important, así que esta
+   regla gana en la cascada. Fuerza una duración mínima en lugar de anular la animación,
+   para que las animaciones de entrada terminen en su estado final visible.
+   Con esta regla, las clases motion-reduce: dispersas pasan a ser opcionales.
+   El desplazamiento suave pedido desde JS (scrollIntoView con behavior smooth) no queda
+   cubierto por esta regla. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

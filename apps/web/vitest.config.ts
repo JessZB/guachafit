@@ -23,5 +23,10 @@ export default defineConfig({
     globals: false,
     // V12: garantiza `TZ=America/Caracas` en cada worker antes de importar cualquier test.
     setupFiles: ['./vitest.setup.ts'],
+    // UX-02: permite que Vitest procese `index.css` para que las importaciones con `?raw`
+    // devuelvan el contenido real del archivo en lugar de una cadena vacía.
+    css: {
+      include: [/(^|[\\/])index\.css(\?.*)?$/],
+    },
   },
 });
