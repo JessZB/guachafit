@@ -1,62 +1,110 @@
 ---
 id: HANDOFF-RETOMA
-titulo: "Handoff — Prompt para retomar el módulo 5 (Pagos y cartera)"
-fecha: 2026-10-12
+titulo: "Handoff: retomar el trabajo con los lotes de la auditoría UX de las vistas del entrenador y del alumno"
+fecha: 2026-10-28
 estado: activo
 tags:
   - handoff
   - retoma
   - orquestador
+  - ux
   - metodologia
 ---
 
 # 🔁 Prompt de retoma (copiar y pegar al inicio de la próxima sesión)
 
-> Uso: abrir una sesión nueva en la bóveda GUACHAFIT y pegar el bloque de abajo tal cual. El módulo de Entrenamiento lo trabaja OTRA sesión en paralelo: ver [[Handoff_Modulo_Entrenamiento]].
+> Para usarlo, abre una sesión nueva en la bóveda GUACHAFIT y pega el bloque de abajo tal cual. Los hallazgos y el plan de lotes están en [[Auditoria_UX_Vistas_2026-10-28]].
 
 ```markdown
-# Retomar: módulo 5 (Pagos y cartera) de GUACHAFIT, sesión nueva
+# Retomar: lotes de la auditoría UX/UI de GUACHAFIT, sesión nueva
 
-Repo/vault: C:\Users\jesus\OneDrive\Documentos\Obsidian Vault\Trabajo\GUACHAFIT (rama main, sin push).
+Repo/vault: C:\Users\jesus\OneDrive\Documentos\Obsidian Vault\Trabajo\GUACHAFIT
+Rama `main`, que sigue a `origin/main` en el repo PRIVADO https://github.com/JessZB/guachafit. No cambies la visibilidad.
+Push solo cuando yo lo pida explícitamente.
 
-## Flujo de trabajo (Claude + OpenCode; reglas en 00_Reglas_Desarrollo_SDD.md §7 y ~/.claude/rules/opencode-director.md)
-- Tú (Claude) diriges, escribes el código de producción y el doc-sync. NO escribes ni ejecutas tests y NO lanzas sub-agentes de revisión.
-- Pruebas y revisiones van como prompts para OpenCode en `.opencode-prompts/<NN>-<lote>-<tipo>.md`; reportes en `.opencode-prompts/reportes/<mismo>.reporte.md`. Yo los ejecuto en la TUI de OpenCode pegando: `Lee y ejecuta exactamente el prompt .opencode-prompts/<archivo>.md y deja el reporte en la ruta que indica.` NUNCA ejecutes opencode ni des comandos `opencode run`.
-- Ciclo por lote: tests (fase roja con contratos exactos) → implementas → verificación → revisión (1 enfoque si riesgo medio; 4 si dinero/datos/seguridad/migraciones o >400 líneas) → corrección → validación → commit de código + commit `docs(vault): ...` → borrar los prompts y reportes del lote.
-- Verifica cada reporte contra `git status`/`git diff` (que OpenCode no haya tocado producción) antes de aceptarlo.
-- Commits convencionales en español, SIN Co-Authored-By. No hacer push. Puedes editar `.env.example`; NUNCA leas ni edites `.env`. `.claude/settings.json` y `Notas del 09-10-2026.md` sin seguimiento no son parte del trabajo.
-- Una pregunta a la vez; ante decisiones de producto, pregúntame con tu recomendación y su porqué.
-- Para editar con comillas/backticks usa un script Python escrito con Write (los heredocs de Bash fallan) y ancla los patrones al salto de línea previo (un patrón con N espacios coincide dentro de una línea con más espacios).
+## Qué hay que hacer
+Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (141 hallazgos, 41 ALTA; 29 lotes UX-01…UX-29; 10 decisiones D1–D10).
+- Empieza por las fundaciones transversales, en orden:
+  - **UX-01** extraer `ui/BarraTabsSegmentada` desde `components/entrenador/alumno-detalle/PestanasFichaAlumno.tsx` + `lib/use-tabs-accesibles.ts`. `PestanasFichaAlumno` queda como wrapper con el mismo DOM y sus specs no cambian.
+  - **UX-02** regla global `motion-reduce`.
+  - **UX-03** piezas compartidas de formulario y formato.
+  - **UX-04** cabecera: sincronización táctil y menú "Cuenta".
+- Después, por área: Cobros (UX-05…10), Seguimiento (UX-11…16), Ajustes y Plantillas (UX-17…20) y Alumno (UX-21…29).
+- Los lotes marcados ⛔ dependen de una decisión mía (sección 4 del documento). Pregúntamela cuando llegues a ese lote, UNA a la vez, con la recomendación que trae el documento y su porqué.
+- Antes de cada lote, vuelve a leer el código citado (`archivo:línea`): la auditoría fue estática y los anchos a 360px son inferidos.
+- Los reportes originales de cada área están en `.external-agents/auditoria-ux/01…05-*.md` (y el brief en `00-brief.md`). La carpeta está en `.gitignore`; bórrala solo cuando se cierren todos los lotes.
 
-## CONVIVENCIA CON LA OTRA SESIÓN (importante)
-- Otra sesión trabaja en Entrenamiento en la MISMA rama y el MISMO árbol (EntrenamientoPage, components/atleta, modo-foco, SelectorPlantillaAsignacion, asignacion-pasos…, prompts `.opencode-prompts/1x-3x-e*`).
-- Haz commit SIEMPRE nombrando tus archivos (`git add <lista>`), nunca `git add -A`. Antes de commitear revisa `git status` y que los archivos compartidos (p. ej. `packages/shared/src/*`) solo lleven tus cambios.
-- Si necesitas editar un archivo que la otra sesión tiene modificado sin commit, espera a que lo commitee.
-- En los prompts para OpenCode di qué archivos son ajenos y pide demostrar en aislamiento cualquier fallo ajeno. Los timeouts de 5 s en specs HTTP del API son por carga: se re-ejecutan en aislamiento.
-- Engram puede fallar con "multiple active runtime sessions": avisa y sigue.
+## Flujo de trabajo (reglas en 00_Reglas_Desarrollo_SDD.md §7)
+- **Tú (Claude)** orquestas y validas. Defines los contratos, revisas cada diff y cada reporte contra `git status`/`git diff`, haces el doc-sync y los commits. No escribes ni ejecutas tests.
+- **El código de producción lo escribe un subagente Haiku** (`model: haiku`, `effort: high`) con un prompt autocontenido. Restricciones del prompt: solo producción, nada de specs, tests ni builds, ni leer `.env`. Pídele el cómputo de líneas del guardián y que liste los specs que se romperán.
+- **Tests y revisiones los hace un agente externo** con prompts en `.external-agents/<NN>-<lote>-<tipo>.md`. El reporte va en `.external-agents/reportes/<mismo>.reporte.md`. Yo los ejecuto pegando exactamente:
+  `Lee y ejecuta exactamente el prompt .external-agents/<archivo>.md y deja el reporte en la ruta que indica.`
+  NUNCA ejecutes tú al agente externo.
+- **Ciclo por lote:**
+  1. Tests en fase roja, con contratos exactos (el prompt sirve también de especificación para Haiku).
+  2. Haiku implementa y tú revisas el diff.
+  3. Verificación en paralelo con la revisión. Revisión de 1 enfoque si el riesgo es medio. Los 4 enfoques (risk, reliability, resilience, readability) si toca dinero, datos o seguridad, o si el diff de producción pasa de 400 líneas (cuéntalo con `git diff --numstat`, incluidos los archivos nuevos vía `git add -N`).
+  4. Corrección con Haiku.
+  5. Validación.
+  6. Commit de código y commit `docs(vault): …` (RF afectado + `06_Guia_Pruebas_Manuales.md`).
+  7. Borrar los prompts y reportes del lote.
+- **Autorizaciones de specs:** en la fase roja el agente externo no toca specs existentes; solo lista los que se romperán. En la verificación autoriza explícitamente los ajustes de texto, selector u orden, sin debilitar aserciones.
+- **Commits:** convencionales, en español, SIN Co-Authored-By. Usa `git add <archivos del lote>` o `git add -A apps/web/src` cuando el lote borre archivos.
+- **Archivos fuera del trabajo:** `.claude/settings.json` y `Notas del 09-10-2026.md` quedan sin seguimiento.
+- **Pruebas manuales:** yo pruebo con `pnpm dev`. NO me pidas build, preview ni incógnito, salvo cambios que dependan del Service Worker.
+- **Editar textos con comillas o backticks:** usa la herramienta Edit, o un script Python escrito con Write (los heredocs de Bash fallan con comillas).
 
-## Estado del módulo 5 (PAUSADO por decisión del dueño el 2026-10-12; no hay lote en curso)
-- Saldo a favor (RF-006 RN-05): API `afd3f7c`/`cefec40`, web `b975905`/`1492ef3`. Migración 0019.
-- Reversión de pagos aprobados (RF-007): API `4878d7e`/`613737b` (migraciones 0020 y 0021), web `e16039d`/`e7191ae`.
-- Pagos con fecha anterior (RF-007/RF-009): `cea825b` + doc-sync `376bbdb`. Regla provisional de "hoy": la API compara con el día de `Pacific/Kiritimati` y la web usa el día del dispositivo.
-- Anulación de cuotas (RF-008), **solo API**: `7f46acc` + doc-sync `ac976a5`. `POST /finanzas/cuotas/:id/anular` (motivo obligatorio; 409 con pagos en revisión o aprobados; devuelve el saldo a favor aplicado; aviso `CUOTA_ANULADA`). Migración 0022: motivo/fecha/autor e índice único parcial (`estado <> 'anulada'`). Una cuota anulada no ocupa su periodo: se corrige una cuota mal emitida anulando, quitando el plan y reasignándolo. Reglas completas en RF-008 §7.
+## Lecciones que aplicar en cada lote
+- **Guardián de tamaño** (`apps/web/src/tamano-archivos.spec.ts`): cuenta `split(/\r?\n/).length`, que es `wc -l` + 1. El tope es 400 por archivo. Las páginas deben quedar en 300 o menos (regla §6/ADR-022); el guardián solo lo impone a los contenedores ya trabajados. `DashboardPage.tsx` (386) y `AtletaMenuPage.tsx` (365) son deuda frente a esa regla.
+- **Fechas de la API:** suelen llegar en ISO con hora (`toISOString`). Para ISO usa `formatFechaLocal`; `formatFechaCalendario` solo acepta `YYYY-MM-DD`. **Los fixtures de los tests deben usar el formato real de la API**: un fixture irreal escondió un BLOCKER en L7.
+- **jsdom:** no calcula layout ni hace hit-testing, así que las clases se fijan solo donde no hay alternativa. `toContainElement` (jest-dom) no está registrado, usa `contains`. `CSS.escape` puede no existir. Las páginas completas tardan más de 5 s en montar: usa `vi.setConfig({ testTimeout: 20000 })` en el spec. Los timeouts sueltos de la suite completa se repiten aislados.
+- **Radix DropdownMenu en tests:** ábrelo con teclado (`ArrowDown`).
+- **Enlace extendido en tarjetas:** todo contenedor o icono decorativo que quede por encima lleva `pointer-events-none`, y los controles reales `pointer-events-auto`.
+- **Datos sensibles:** nunca en `title`. Usa un disclosure plegado sin el texto en el DOM (`ChipSaludAlumno`).
+- **Recargas:**
+  - no tapan la pantalla ni pisan lo que se edita (refs + `formularioModificado`);
+  - un contador de generación descarta respuestas antiguas;
+  - los fallos de carga van por su propio canal (`avisoCarga`), separado de los de guardado.
+- **"Sin datos" no es "falló la carga":** una respuesta 204 vacía es "sin datos", y un error ofrece Reintentar.
+- **Reportes del agente externo:** contrasta siempre con `ls` y `wc`. Ya hubo uno que dijo "no modifiqué archivos" y había ampliado un spec, y otro que dio mal el número de líneas.
+- **Engram:** puede fallar con "multiple active runtime sessions". Avisa y sigue.
 
-## Pendientes del módulo 5 (orden propuesto)
-1. **Web de la anulación de cuotas:** botón "Anular cuota" en la ficha (historial de cuotas) con diálogo de motivo obligatorio y los avisos aprobados ("este periodo no se cobrará aunque el alumno siga entrenando"; si tiene plan, "quítalo si dejó el gimnasio"); estado "Anulada" con el motivo en Pagos del alumno (hoy `lib/estado-cuota.ts` muestra "Sin cuota vigente"). No en demo.
-2. **Congelar la membresía (lesión o viaje)** con la cuota ya pagada: correr el próximo vencimiento N días. Antes decidir con el dueño: máximo de días, si detiene recordatorios y cómo convive con la pausa de alumno existente.
-3. **Condonar el resto de una cuota con abono** (cerrarla con lo abonado). Decisión de producto pendiente.
-4. **Zona horaria del alumno:** guardar la zona del dispositivo al activar la cuenta, avisar si la del dispositivo difiere de la configurada y validar la fecha de pago con la zona del alumno (sustituye la regla provisional de Kiritimati).
-5. **PagosPage del alumno:** idempotencia del reporte, recarga, modo demo (Pagos y Conciliación llaman al API en demo), comprobantes sin EXIF, accesibilidad.
-6. **Lote web P2 de Control de Cobros:** mostrar `proximoCorte`, precio residual tras reconciliar, éxito en modo demo, jerga, `htmlFor`, precarga de becados.
-7. **Seguimientos:** reconciliador de la invariante de saldo (RNF-002; las cuotas anuladas quedan fuera de la invariante), `ReportarPagoSchema` sin tope de monto, `fechaOperacion` solo valida formato (`2026-02-30` pasa), dos ventanas de "recaudado del mes" (UTC frente a hora del servidor), mensajes de éxito que no se borran solos, mutaciones sin `tiempoLimiteMs`, e2e de RF-006 que usa el barrido global de emisión, `obtenerCuotaPorId` no expone el motivo de anulación.
-Después: módulo 6 (Dashboard del entrenador, RF-013), 7 (Notificaciones, RF-014..016, RNF-004), 8 (PWA offline transversal).
+## Estado al 2026-10-28
+- Rediseño de la ficha del alumno (`/coach/alumnos/:id`) CERRADO:
 
-## Referencias
-- Tests base (al 2026-10-12): web ~1622, API ~1735 (+29 omitidas). Docker: `guachafit-postgres` (migraciones con `pnpm db:migrate`; la base local ya está en la 0022).
-- **e2e:** vitest del API no carga `.env`. Definir en la terminal de OpenCode `$env:E2E_DATABASE_URL='postgres://postgres:postgres@localhost:5432/guachafit'` (credenciales dev del compose) y aplicar antes las migraciones pendientes.
-- Decisiones: ADR-020 (suscripción y emisión automática, índice parcial desde la 0022), ADR-015 (borrado best-effort en la bóveda), ADR-017/018 (hosting, correo).
-- Piezas a reutilizar: `lib/saldo-a-favor.ts`, `lib/pagos-historial-filtros.ts`, `lib/cobro-sala.ts`, `DialogoConfirmacion` (con `confirmarDeshabilitado`), `estadoCuotaTrasRetirarAbono`, `repartirAbono`, `api-client` (`tiempoLimiteMs`), `lib/imagen-comprimida.ts`.
-- Para cambiar contratos ya revisados, validar primero el paquete de reglas con un Día del Juicio (así se encontraron los críticos de la anulación).
+  | Lote | Commit |
+  |---|---|
+  | L1–L3 | `ad1788f` |
+  | L4 | `8b4504a` |
+  | L5 | `f22ba4c` |
+  | L6 | `3535cde` |
+  | L7 | `b6c2dc2` |
+  | Docs | `541254e` |
 
-Empieza revisando memoria (mem_search "guachafit módulo 5") y pregúntame qué pendiente retomar.
+  Detalle en RF-011, RF-012 y `06_Guia_Pruebas_Manuales.md` §5.
+- "Mis alumnos" (`/coach/alumnos`) cerrado (lotes de octubre, `26917bb` … `fd4cd63`).
+- Pendientes de la ficha anotados en RF-011, no decididos:
+  - el borrador de "Plan y tarifa" se pisa en la recarga;
+  - paralelizar la carga inicial;
+  - fusionar los KPI de Pagos;
+  - unificar las dos zonas horarias: `perfiles_alumno.zonaHoraria` frente a `usuarios.timezone`, decisión de API.
+- Módulo 5 (Pagos y cartera) sigue PAUSADO desde el 2026-10-12. Sus pendientes:
+  - web de la anulación de cuotas;
+  - congelar la membresía;
+  - condonar el resto de una cuota;
+  - zona horaria del alumno al activar la cuenta;
+  - PagosPage;
+  - lote P2 de Control de Cobros;
+  - seguimientos de RNF-002.
+
+  Varios coinciden con los lotes UX de Cobros (UX-05…10) y de Pago del alumno (UX-21/22): al llegar ahí, revisa si conviene juntarlos.
+- Tests base: web **2427/2427**. API ~2015 (1 omitido; e2e con `E2E_DATABASE_URL`).
+
+## Piezas a reutilizar (de la ficha y de "Mis alumnos")
+- **`components/ui/`:** `BadgeEstado` (`whitespace-nowrap shrink-0`), `BotonTactil`, `ChipFiltro`, `EstadoCarga`, `EstadoError`, `EstadoVacio`.
+- **`components/common/`:** `Paginacion` (+ `lib/use-paginacion-servidor`), `AvisoDatosOffline` (+ `lib/use-frescura-offline`), `DialogoConfirmacion`, `ZonaHorariaPerfil`.
+- **`components/entrenador/alumno-detalle/`:** `PestanasFichaAlumno` (fuente de `BarraTabsSegmentada`), `MenuAccionesAlumno` (Radix DropdownMenu), `ChipSaludAlumno`, `FranjaDatosClaveAlumno` (+ `lib/datos-clave-alumno.ts`), `SeccionZonaHorariaAlumno`, el patrón `<details>` de `PestanaAntropometriaAlumno` y el aviso "Cambios sin guardar" de `PestanaResumenAlumno`.
+- **`lib/`:** `use-tabs-accesibles`, `use-dialogo-accesible`, `etiquetas-dominio`, `date-format`, `alumnos-directorio-actividad` (`describirUltimoEntreno`), `alumno-detalle-metricas` (`resolverUltimoEntrenamiento`, `esSesionRealizada`).
+
+Empieza revisando la memoria (`mem_search "guachafit auditoría UX"` y `"ficha del alumno"`). Lee 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (secciones 2, 3 y 4) y propón arrancar con UX-01, con sus contratos de tests en fase roja.
 ```

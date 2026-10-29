@@ -1,0 +1,335 @@
+---
+id: AUDITORIA-UX-2026-10-28
+titulo: "Auditoría UX/UI de las vistas del entrenador y del alumno"
+fecha: 2026-10-28
+estado: activo
+tags:
+  - auditoria
+  - ux
+  - ui
+  - accesibilidad
+  - lotes
+---
+
+# Auditoría UX/UI de las vistas del entrenador y del alumno
+
+Base: commit `541254e`, rama `main`. Reglas aplicadas: [[00_Reglas_Desarrollo_SDD]] §6 y [[ADR-022-estructura-componentes-atomicos-web]]. Cinco auditores leyeron el código sin ejecutar la app. **Todo lo que se dice de anchos a 360px está inferido por clases CSS, no medido.** Los números de línea de los componentes hijos son aproximados (±3) donde el reporte lo indicaba.
+
+## 1. Resumen ejecutivo
+
+141 hallazgos: 41 ALTA, 74 MEDIA, 26 BAJA, repartidos en cinco áreas:
+
+| Área (prefijo de ID) | Vistas | ALTA | MEDIA | BAJA | Total |
+|---|---|---|---|---|---|
+| COB | Cobros del entrenador: Conciliación y Cartera | 8 | 17 | 6 | 31 |
+| SEG | Dashboard, Monitor, Antropometría, Menú y navegación del entrenador | 11 | 16 | 5 | 32 |
+| CFG | Plantillas y Ajustes del entrenador (Planes, Tasas) | 10 | 13 | 4 | 27 |
+| ENT, NAV, PRO, MEN | Entrenamiento, Progreso, Menú y barra inferior del alumno | 5 | 16 | 3 | 24 |
+| ALU | Nutrición, Pagos y Ajustes del alumno | 7 | 12 | 8 | 27 |
+| **Total** | | **41** | **74** | **26** | **141** |
+
+`CFG-27` es un hallazgo positivo (no tocar) contado como BAJA en el reporte.
+
+### Los hallazgos más graves
+
+| # | ID | Qué pasa |
+|---|---|---|
+| 1 | COB-18 | Al pasar el cobro en efectivo de USD a Bs., el monto precargado no se convierte: "50" USD queda como 50 Bs. y se puede registrar un cobro equivocado. |
+| 2 | COB-03 | El motivo de rechazo no se limpia al cancelar: llega precargado al rechazo del pago de otro alumno. |
+| 3 | ALU-01 | El formulario de pago del alumno arranca con `'1300.00'` (`use-reporte-pago.ts:73`): se puede enviar un monto inventado. |
+| 4 | COB-01, COB-17 | Conciliación muestra "Bandeja al día" durante la carga inicial (`ConciliacionPage.tsx:37-41`); Cartera muestra "Sin tasa de cambio" a todos mientras carga. Vacíos falsos. |
+| 5 | SEG-01 | Dashboard pinta "0 pendientes" mientras carga y también cuando la carga falla. |
+| 6 | COB-02 | Si el rechazo falla, el error queda tapado por el modal que sigue abierto, y no hay estado "procesando" (doble envío). |
+| 7 | CFG-10 | "Desactivar" un plan se ejecuta al primer clic, sin confirmación y sin bloqueo de doble clic. |
+| 8 | ALU-05 | Adjuntar el comprobante de pago es un `div onClick` sin teclado ni rol: un usuario de teclado o lector no puede completar el flujo. |
+
+Menciones siguientes: MEN-02 ("Listo para iniciar" es el valor por defecto, `AtletaMenuPage.tsx:242`), ENT-02 (finalizar sesión irreversible sin resumen de series), SEG-12 (tarjeta del Monitor con `onClick` sin foco), CFG-15 (código `ADR-003` visible, `ConversorTasas.tsx:76`, y chip "Vigente" sin tasa).
+
+### Qué está bien (no tocar)
+
+- Fechas: cada área usa el helper correcto (`formatFechaCalendario` para `YYYY-MM-DD`, `formatFechaLocal` para ISO); el único dudoso es ALU-12.
+- Cobros: `Paginacion` ya cumple 44px; `ModalCobroCartera` es el patrón de error dentro del modal; todos los archivos de cobros caben en los límites.
+- Ajustes: Perfil y "Correo y contraseña" (`components/ajustes/*`) tienen labels con `htmlFor`, `aria-describedby`, `role="alert"`, 44px y cambios sin guardar protegidos.
+- Plantillas: estados vacíos que distinguen "sin resultados", "no hay plantillas" y error con Reintentar; confirmación inline y reversible al desactivar (CFG-27).
+- Monitor: los chips del semáforo usan texto y número, no solo color.
+- Entrenamiento del alumno: el spinner de `/app/hoy` solo aparece sin datos; el error de carga está separado del vacío con Reintentar; hay `AvisoDatosOffline`; los modales usan `useDialogoAccesible`; `ModoFoco` tiene región viva; los badges de medición usan `BadgeEstado`.
+- Nutrición: el modo sin conexión y el error de carga son honestos (`ErrorCargaReporteHoy`, ALU-22); `SelectorSemaforo` usa icono, texto y `aria-pressed`; `inputMode` correcto; `DiarioFotografico` es el modelo de botón de adjuntar accesible.
+- Pagos: los badges de estado ya usan `BadgeEstado`.
+
+### Correcciones del orquestador a los reportes
+
+- `DashboardPage.tsx` (386 líneas) y `AtletaMenuPage.tsx` (365) **pasan** el guardián `tamano-archivos.spec.ts` (tope 400 por archivo; las listas de excepciones están vacías). El tope de 300 por página es la regla de §6 y ADR-022, que el guardián solo impone a los contenedores ya trabajados: es **deuda frente a la regla, no un test rojo** (corrige SEG-03 y MEN-01).
+- Verificados en código: `use-reporte-pago.ts:73` precarga `'1300.00'`; `ConciliacionPage.tsx:37-41` muestra la bandeja vacía con `total === 0` también en la carga inicial; `AtletaMenuPage.tsx:242` "Listo para iniciar" es el valor por defecto; `ConversorTasas.tsx:76` muestra "ADR-003" en texto visible.
+
+## 2. Hallazgos transversales
+
+**T1 · Vacíos falsos durante la carga y errores disfrazados.** COB-01, COB-17, SEG-01, SEG-02, MEN-02, CFG-13, ALU-22 (falta la variante `sin-datos` en Pagos). Corrección común: rama de carga antes de la de vacío (`ui/EstadoCarga` o esqueleto), contadores en "—" hasta tener datos, y error con `ui/EstadoError` + Reintentar en un canal separado del error de guardado.
+
+**T2 · Recargas que tapan con spinner o pisan lo que hay.** CFG-20 (`use-plantillas-banco.ts:42-45`), PRO-01 (`use-evolucion-progreso.ts:24-26,47`), COB-24 (KPIs viejos con error), SEG-17 (por verificar), MEN-03 (el efecto no cancela). Corrección: distinguir `cargandoInicial` de `recargando`; con datos y fallo de recarga, aviso propio sobre la lista previa (patrón `AvisoErrorDirectorio`).
+
+**T3 · `AvisoDatosOffline` / `use-frescura-offline` ausente.** COB-16, SEG-02, SEG-18, SEG-23, CFG-13, MEN-03, PRO-04. Reutilizar tal cual.
+
+**T4 · Labels sin `htmlFor` / sin `useId`; errores sin `role="alert"` ni `aria-describedby`.** COB-06, CFG-07, CFG-14, CFG-18, ALU-02, ALU-05, ALU-27, PRO-03. Pieza común: ampliar `CampoAjustes` (ya resuelve id, `aria-invalid`, `aria-describedby`, `min-h-11`) con `inputMode='decimal'`, `select`, sufijo de unidad y `role="alert"`; usarlo en Planes, Tasa, Conversor y Pago del alumno.
+
+**T5 · Objetivos táctiles menores de 44px y texto de 12px en inputs (zoom en iOS).** COB-05, COB-10, COB-12, COB-19, COB-23, SEG-12, SEG-13, SEG-21, SEG-23, SEG-30, CFG-07, CFG-10, CFG-21, ENT-01, ENT-07, PRO-02, ALU-03, ALU-06, ALU-08, ALU-10. Corrección: `BotonTactil` / `min-h-11`, inputs `text-base sm:text-sm`. En COB-19 el dueño puede aceptar `md:min-h-9` en escritorio (decisión del dueño, ver D3).
+
+**T6 · Tabs con scroll horizontal o apretadas: tres copias de la barra y tres candidatos.** Copias: `PestanasFichaAlumno`, `PantallaAjustes.tsx:99-117` (CFG-02, ALU-23), `ajustes-entrenador/PestanasAjustes.tsx` (CFG-01, ALU-25). Candidatos: `PestanasCartera` (COB-22), `EncabezadoAntropometria` (SEG-20) y, si PRO-05 pasa a URL, las vistas de Progreso. Se extrae `ui/BarraTabsSegmentada` (lote UX-01):
+
+```ts
+export interface ItemTab<K extends string> {
+  clave: K;
+  etiqueta: string;          // corta, 11px en móvil
+  icono: LucideIcon;
+  ariaLabel?: string;        // nombre accesible largo (p. ej. "Correo y contraseña")
+  indicador?: { texto: string; ariaLabel: string } | null; // punto en móvil, texto desde sm
+}
+interface BarraTabsSegmentadaProps<K extends string> {
+  items: readonly ItemTab<K>[];
+  activa: K;
+  propsTablist: PropsTablist;       // de useTabsAccesibles
+  propsTab: (clave: K) => PropsTab;
+  ariaLabel: string;                // "Pestañas de la ficha del alumno" / "Secciones de ajustes"
+}
+```
+
+- Columnas con mapa fijo (Tailwind v4 no admite clases dinámicas): `{2,3,4,5,6}`; el `2` sirve a Antropometría (SEG-20), el `4` a Cartera, el `5` a la ficha y Ajustes del entrenador.
+- El DOM no cambia: los hijos directos del tablist siguen siendo `<button role="tab">`, con `role="img"` + `aria-label` en el indicador y `svg[aria-hidden="true"]`, porque el spec consulta rol, nombre y estructura (`PestanasFichaAlumno.interaccion.spec.tsx:133,148,178,195,247`).
+- `PestanasFichaAlumno` queda como wrapper delgado (~30 líneas): arma `items` (Perfil, Pagos, Medidas, Entrenos, Nutrición, iconos actuales) y el `indicador` de deuda (`saldoDeudaUsd > 0` → `{texto:'$40.00', ariaLabel:'Saldo pendiente 40.00 dólares'}`), con `ariaLabel="Pestañas de la ficha del alumno"`. Correr ese spec antes y después.
+- El conteo de `Planes (N)` y el contador de Cartera usan el mismo slot `indicador`; decidir al implementar si un contador numérico se muestra como número también en móvil (el punto está pensado para deuda).
+- Etiquetas cortas de Ajustes (las claves `?tab=` no cambian): Perfil, Acceso (`ariaLabel` "Correo y contraseña"), Avisos, Planes, Tasa; alumno: Perfil, Acceso, Avisos, Horario (icono `Clock`, no `BellRing`). Los specs de Ajustes buscan `tab` "Correo y contraseña" (`AjustesPage.interaccion.spec.tsx:126,147`).
+
+**T7 · `motion-reduce` ausente.** ENT-06 (`CtaFinalizarSesion.tsx:14`, `ResumenMetricasSesion.tsx:23`, `AtletaMenuPage.tsx:235`, `AppLayout.tsx:35`, `ProgresoPage.tsx:107,171,208`, `HubProgreso.tsx:35`, `ModalFinalizarSesion.tsx:44`, `BottomNav.tsx:59,62`, `IndicadorColaOffline.tsx:34`), SEG-15 (`animate-pulse` en el chip rojo), MEN-02. No hay regla global (el grep del auditor no halló `prefers-reduced-motion` en los `*.css` de `src`); solo `BadgeEstadoPagoAlumno.tsx:20` usa `motion-reduce`. Propuesta (lote UX-02): una regla global única en el CSS base que anule animaciones y transiciones bajo `@media (prefers-reduced-motion: reduce)` (duración mínima, una sola iteración, `scroll-behavior: auto`) más un spec que la verifique; así los `motion-reduce:` sueltos pasan a ser opcionales.
+
+**T8 · Jerga y códigos internos visibles; etiquetas largas o con Title Case.** CFG-15 (chip "ADR-003 Vigente", `ConversorTasas.tsx:76`), COB-08b ("Presigned URL… TTL 15 min, ADR-007", "R2 no configurado"), SEG-25 (cinco nombres para el mismo destino), CFG-03, CFG-11, COB-13, COB-23 (bug "en En Mora"), COB-30, ALU-11, ALU-24, PRO-06, MEN-06, ENT-10 ("coach" vs "entrenador"). Referencias: [[ADR-003-deuda-maestra-usd-liquidacion-multitasa]], [[ADR-007-almacenamiento-fotos-privadas-cloudflare-r2-presigned-urls]].
+
+**T9 · Valores precargados o afirmados sin datos.** ALU-01 (pago `1300.00`), ENT-09b (esfuerzo 8 enviado sin tocarlo), CFG-09 (plan nuevo con precio `40.00` y dos beneficios de ejemplo), COB-18 (monto USD que pasa a Bs.), COB-04 ("comprobante verificado"), SEG-06 ("Operación Activa"), MEN-02, CFG-15 ("Vigente" sin tasa), SEG-28/MEN-05 (nombre inventado desde el correo), SEG-24 (posible "undefined kg"), COB-17.
+
+**T10 · Feedback de error o éxito lejos del punto de acción o sin anuncio.** `alert()` nativo: CFG-06 (`use-planes-comerciales.ts:75,110`). Error tapado o arriba de la página: COB-02, COB-11, ALU-04, SEG-22b, CFG-16. Corrección: error dentro del modal o junto al campo con `role="alert"`, éxito con `role="status"` y cierre manual, sin `setTimeout` sin limpiar (COB-11, SEG-22b, ALU-07b).
+
+**T11 · Acciones irreversibles o difíciles de deshacer sin confirmación o sin resumen.** CFG-10 (desactivar plan), ENT-02 (finalizar sesión), COB-26 y COB-18 (cobro en efectivo "aprobado al instante"), COB-27 (el recordatorio sale antes de verse), CFG-08 y PRO-05 (se pierde lo escrito al cerrar), COB-02. Reutilizar `DialogoConfirmacion` (`variante="peligro"`, `confirmarDeshabilitado`) o el patrón de resumen previo, no un segundo diálogo cuando basta una línea.
+
+**T12 · Páginas por encima de 300 líneas.** `DashboardPage.tsx` 386 (SEG-03) y `AtletaMenuPage.tsx` 365 (MEN-01): deuda frente a la regla, el guardián no falla (ver correcciones). Cerca del límite: `AjustesPage.tsx` 258 (baja a ~120 con UX-17), `CoachMenuPage.tsx` 287, `ModalPlanComercial.tsx` 245 (se reduce con `CampoAjustes`).
+
+**T13 · Otros patrones repetidos.** Badges propios sin `whitespace-nowrap shrink-0` y `truncate` sobre datos clave: COB-09, COB-21, SEG-08, SEG-15, SEG-16, CFG-11, CFG-23, ENT-08, MEN-04, ALU-06, ALU-18 → `ui/BadgeEstado` y `line-clamp-2 break-words`. Paginación solo arriba de la lista: COB-12, SEG-17. Estados de carga/error/vacío duplicados de `ui/`: COB-01, COB-14, COB-24, SEG-18, SEG-23, CFG-13. Tarjeta clicable sin patrón de enlace extendido: SEG-04, SEG-07, SEG-12 (decisión 10, `pointer-events-none`). Modales a mano con el mismo armazón: COB-02, COB-26, COB-27, COB-08 → `common/ModalAccesible` (overlay, título, cierre 44px, `max-h-[90vh] overflow-y-auto`, `error`, `procesando`).
+
+## 3. Plan de lotes unificado
+
+Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno. ⛔ = depende de una decisión pendiente (sección 4). "API" indica si toca API o datos (requiere decisión del dueño). Todos son sin API salvo donde se indica.
+
+| ID | Lote | Vistas | Resuelve | Reutiliza / crea | Riesgo | API | Dependencia |
+|---|---|---|---|---|---|---|---|
+| UX-01 | Extraer `ui/BarraTabsSegmentada` | Ficha del alumno (wrapper) | base de CFG-01, ALU-23, ALU-25, COB-22, SEG-20 | `PestanasFichaAlumno`, `use-tabs-accesibles`; spec nuevo | bajo-medio (spec de la ficha) | no | ninguna |
+| UX-02 | Regla global `motion-reduce` | Toda la app | ENT-06, SEG-15 (parte) | CSS base | bajo | no | ninguna |
+| UX-03 | Piezas compartidas de formulario y formato | `components/ajustes/CampoAjustes`, `lib/` | ALU-27, base de CFG-07, CFG-14, CFG-18, ALU-02; COB-15, SEG-09 | `CampoAjustes` + `inputMode`/sufijo/`select`/`role="alert"`; helper `formatMonto` | bajo | no | ninguna |
+| UX-04 | Cabecera: sincronización táctil y menú "Cuenta" | Header (todos los roles) | ENT-01, SEG-30 | `MenuAccionesAlumno` (Radix), `BotonTactil`, `IndicadorColaOffline` | medio (compartido con alumno) | no | ninguna |
+| UX-05 | Cobros: carga y datos honestos | Conciliación, Cartera | COB-01, COB-04, COB-16, COB-17, COB-24 | `EstadoCarga/Error/Vacio`, `AvisoDatosOffline`, `EsqueletoDirectorio`; borra `ErrorBandejaConciliacion` | bajo | no | ninguna |
+| UX-06 | Cobros: rechazo seguro | Conciliación | COB-02, COB-03, COB-06 | `DialogoConfirmacion` peligro o `ModalAccesible`, `BotonTactil` | medio (specs de interacción) | no | ninguna |
+| UX-07 | Cobros: táctil, badges y tabs en móvil | Conciliación, Cartera | COB-05, 07, 08(a,c,d), 09, 10, 12, 19, 20, 21, 22, 23, 25 | `ChipFiltro`, `BotonTactil`, `BadgeEstado`, `BarraTabsSegmentada`, `MenuAccionesAlumno` | medio | no | UX-01; ⛔ D3 (menú "Más" en COB-20) |
+| UX-08 | Cobros: modal de cobro y feedback | Cartera | COB-18, COB-26, COB-11 | `useId`, `inputMode`, `role="status"`, línea resumen previa | medio | no (salvo conversión con tasa del servidor) | ⛔ D1; UX-03 |
+| UX-09 | Cobros: recordatorio y enlace a la bandeja | Cartera → Conciliación | COB-27, COB-28 | `?q=` en `useFiltrosConciliacion`, `onError` de miniatura | medio | **sí** para la vista previa del mensaje | ⛔ D2 |
+| UX-10 | Cobros: copy y pulido | Conciliación, Cartera | COB-13, 14, 15, 29, 30, 31, 08b, 16 (resto) | `EstadoVacio`, `formatMonto` | bajo | no | UX-03 |
+| UX-11 | Dashboard: carga honesta | Dashboard | SEG-01, SEG-02, SEG-06 | `EstadoCarga/Error`, `AvisoDatosOffline`, `use-frescura-offline` | bajo | no | ninguna |
+| UX-12 | Dashboard: partir la página (<300) | Dashboard | SEG-03, SEG-10 | `use-dashboard-comando`, `GridKpisDashboard`, `BandejaPagos`, `ListaRiesgoDashboard`, fixture demo | medio (specs) | no | UX-11 |
+| UX-13 | Dashboard: KPI y filas accionables | Dashboard | SEG-04, 05, 07, 08, 09, 11 | enlace extendido, `FranjaDatosClaveAlumno`, `BadgeEstado`, `formatMonto` | medio | no (rutas existentes) | UX-12, UX-03; ⛔ D4 (SEG-05) |
+| UX-14 | Monitor: táctil y estados | Monitor | SEG-12, 13, 14, 15, 16, 17, 18, 19 | `ChipFiltro` con conteo, enlace extendido, `BotonTactil`, `Paginacion` al pie | medio (spec C15 caracteriza el defecto actual) | no | UX-02 |
+| UX-15 | Antropometría del entrenador en móvil | Antropometría | SEG-20, 21, 22, 23, 24 | `BarraTabsSegmentada` (2 columnas), `BotonTactil`, `BadgeEstado`, `EstadoError` | medio | no (búsqueda en servidor sí: aparte) | UX-01 |
+| UX-16 | Navegación y menú del entrenador | Menú, BottomNav, Sidebar | SEG-25, 26, 27, 28, 29, 31, 32 | tabla única en `lib/etiquetas-dominio`, `FranjaDatosClaveAlumno`, insignias con conteo | medio-alto (specs por nombre, p. ej. `Sidebar.spec.tsx`) | no con `dashboard-comando`; endpoint ligero sí | ⛔ D4, D5; UX-04 |
+| UX-17 | Ajustes: una pantalla y tabs segmentadas | Ajustes (entrenador y alumno) | CFG-01, 02, 03, 04, 05; ALU-23, 24, 25 | `BarraTabsSegmentada`, `PantallaAjustes` con `renderPestana`; se elimina `PestanasAjustes` | medio-alto (specs de `AjustesPage` y `PantallaAjustes`) | no | UX-01; ⛔ D6 |
+| UX-18 | Planes comerciales | Ajustes > Planes | CFG-06, 07, 08, 09, 10, 11, 12, 13 | `CampoAjustes`, `DialogoConfirmacion`/confirmación inline de `TarjetaPlantilla`, `BadgeEstado`, `EstadoCarga` | medio | no | UX-03, UX-17; ⛔ D7 (CFG-09, CFG-11) |
+| UX-19 | Tasa de cambio sin jerga y accesible | Ajustes > Tasa | CFG-14, 15, 16, 17, 18, 19 | `CampoAjustes`, `<details>` con resumen guardado (patrón `PestanaAntropometriaAlumno`), `AvisosAjustes` | bajo-medio (specs de textos de tasa) | no | UX-03, UX-17 |
+| UX-20 | Plantillas: recarga honesta y táctil | Plantillas | CFG-20, 21, 22, 23, 24, 25, 26 | `BadgeEstado`, patrón `AvisoErrorDirectorio` | bajo | no | ninguna |
+| UX-21 | Pago del alumno: formulario honesto y accesible | Pagos > Reportar pago | ALU-01, 02, 03, 04, 05, 06, 08, 09, 10 | `CampoAjustes`, `AvisosAjustes`, modelo `DiarioFotografico`, `BotonTactil` | medio (specs con `1300.00` y localización por `parentElement`) | no | UX-03; ⛔ D8 |
+| UX-22 | Pago del alumno: idempotencia | Pagos | ALU-07 | reutilizar `storageKey` en el reintento; clave de idempotencia | medio | **sí** | UX-21; ⛔ D8 |
+| UX-23 | Nutrición: ventana, calendario y campos | Nutrición | ALU-16, 17, 18, 19, 21 | `horaDeZona`, `HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL`, `rutaAjustes`, `CampoAjustes`, `pluralizar` | bajo-medio | no | UX-03 |
+| UX-24 | Menú y navegación del alumno: honesto y partido | Menú, BottomNav | MEN-01 a MEN-06, NAV-01 | `use-resumen-menu`, `TarjetaEntrenarHoy`, `TarjetaAccesoAlumno`, `ChipRacha`, `BadgeEstado`, `EstadoError`; `aria-label` en la barra | medio (el cuarto destino es aparte) | no | UX-02; ⛔ D5 solo para el cuarto destino |
+| UX-25 | Sesión de entrenamiento: táctil y chips | `/app/hoy` | ENT-04, 05, 07, 08, PRO-02 | `BotonTactil`, `BadgeEstado`, `CampoMedidaCheckin` | bajo | no | UX-02 |
+| UX-26 | Cierre de sesión seguro | `ModalFinalizarSesion` | ENT-02, 03, 09(a,b), 10; ENT-09(c) | `DialogoConfirmacion`/`ModalCierreVacio`, `CtaFinalizarSesion` parametrizable | medio | no; ENT-09(c) toca el formato de `notas` | ⛔ D10 solo para (c) |
+| UX-27 | Progreso: carga y formulario | Progreso | PRO-01, 03, 05, 06, 07 | `EstadoCarga`, `AvisoErrorEvolucion`, `?vista=` en URL, aviso "Cambios sin guardar" | medio | no | UX-05 como referencia de patrón |
+| UX-28 | Check-in sin conexión | Progreso > Check-in | PRO-04 | `AvisoDatosOffline`, `use-frescura-offline` | alto si se encola (cola offline) | **sí** si se encola | ⛔ D9 |
+| UX-29 | Pulido del alumno: fechas, copy y zona horaria | Pagos, Ajustes alumno | ALU-11, 12, 13, 14, 15, 26 | `formatFechaLocal`, `horaDeZona` | bajo | no | UX-17 |
+
+Cobertura: los hallazgos BAJA no listados se resuelven con el lote de su área al pasar por el archivo.
+
+## 4. Decisiones pendientes del dueño
+
+Deduplicadas de las 15 preguntas de los reportes (cada una con la recomendación del auditor).
+
+| # | Decisión | Recomendación y porqué | Bloquea |
+|---|---|---|---|
+| D1 | Al cambiar el cobro en efectivo de USD a Bs., ¿convertir el monto con la tasa vigente, limpiarlo o dejarlo con una línea de confirmación? | Limpiar al cambiar de moneda y mostrar antes del botón "Se registrarán X Bs. (≈ $Y USD)": convertir en silencio inventaría un monto (COB-18). | UX-08 |
+| D2 | ¿Ver el texto del recordatorio antes de enviarlo? Obliga al API a entregar el mensaje en una consulta previa. | Sí: hoy el entrenador envía sin ver qué se manda (COB-27). Sin respuesta, se hace solo el `?q=` y el `onError` de la miniatura. | UX-09 (parte) |
+| D3 | En móvil, ¿"Recordatorio" y "Ver ficha" a un menú "Más", dejando visible solo "Registrar cobro"? ¿Se acepta `md:min-h-9` en escritorio? | Sí al menú, igual que la ficha (decisión 7 del brief): hoy son tres botones de 28px que envuelven (COB-19, COB-20). | UX-07 (COB-20) |
+| D4 | ¿El Dashboard es "qué atender hoy" (franja de pendientes arriba) o un tablero de negocio? ¿Los conteos salen del endpoint `dashboard-comando` o de uno ligero (toca API)? | "Qué atender hoy" con `dashboard-comando`, sin API nueva: el dato `bandejasRapidas` ya existe (SEG-05, SEG-26, SEG-27). | UX-13 (SEG-05), UX-16 |
+| D5 | ¿Unificar los nombres de navegación (Panel, Seguimiento, Evaluaciones, Cobros, Pagos) aunque cambien textos que algunos tests consultan? ¿Un cuarto destino "Progreso" en la barra del alumno? | Sí a unificar (SEG-25: cinco nombres para un destino). Progreso: mantenerlo en el Menú hasta decidir; el auditor lo considera aceptable para el flujo de gimnasio (NAV-01). | UX-16 (SEG-25), UX-24 (cuarto destino) |
+| D6 | Ajustes del entrenador: etiquetas cortas (Acceso, Avisos, Planes, Tasa) y ¿qué tab abre por defecto? | Etiquetas cortas sí: sin ellas las tabs no caben a 360px (inferido). Dejar Perfil primero para no cambiar `?tab=` por defecto, salvo que se prefiera abrir en Planes o Tasa. | UX-17 |
+| D7 | Planes: ¿el precio es por mes o por toda la duración? ¿Se quitan el precio `40.00` y los dos beneficios precargados? | Quitar la precarga (CFG-09: datos no elegidos) y aclarar la semántica del precio: hoy dice "USD / mes" aunque el plan dure N meses (CFG-11). | UX-18 |
+| D8 | Reporte de pago: ¿empieza vacío (se actualizan los specs que usan `1300.00` y localizan por `parentElement`)? ¿El API acepta clave de idempotencia o rechaza duplicados por referencia+monto+fecha? | Sí a vaciar (ALU-01 es ALTA). Sin idempotencia en el API solo hay mitigación en el cliente (ALU-07). | UX-21, UX-22 |
+| D9 | Check-in antropométrico con fotos sin conexión: ¿encolar o avisar y bloquear el envío? | Avisar y bloquear: no toca datos. Encolar es riesgo alto y requiere diseño de cola offline (PRO-04). | UX-28 |
+| D10 | Esfuerzo de la sesión: ¿arrancar sin valor? ¿Separar el valor de "molestia" del texto con emoji dentro de `notas`? | Sí al esfuerzo sin valor inicial (ENT-09b). Separar `notas` va aparte porque cambia el formato de los datos (ENT-09c). | UX-26 (ENT-09c) |
+
+## 5. Hallazgos por área
+
+Prioridad: A = ALTA, M = MEDIA. Los BAJA van en una línea por área al final de cada tabla.
+
+### COB · Cobros del entrenador
+
+| ID | P | Vista | Archivo:línea | Problema | Corrección |
+|---|---|---|---|---|---|
+| COB-01 | A | Conciliación | `ConciliacionPage.tsx:37-41`, `use-bandeja-conciliacion.ts:84` | En la carga inicial `total` es 0 y se muestra "Bandeja al día" | Rama `enCargaInicial` con `EstadoCarga`; error con `EstadoError` |
+| COB-02 | A | Conciliación | `ModalRechazoConciliacion.tsx:73-87`, `use-acciones-conciliacion.ts:44,76-93` | Error del rechazo tapado por el modal; sin `procesando`; Escape cierra en vuelo | Error con `role="alert"` dentro del modal; `DialogoConfirmacion` peligro |
+| COB-03 | A | Conciliación | `use-acciones-conciliacion.ts:115,121-124` | El motivo de rechazo no se limpia y llega al alumno equivocado | Limpiar al abrir y al cerrar |
+| COB-04 | A | Conciliación | `TarjetaTransaccionConciliacion.tsx:85-88` | "Comprobante verificado" fijo, incluso con "Sin captura digital" | Quitar o mostrar dato real "Con/Sin comprobante" |
+| COB-05 | A | Conciliación | `FiltrosConciliacion.tsx:44-70` | Chips sin `aria-pressed`, ~28px | `ui/ChipFiltro` |
+| COB-17 | A | Cartera | `CarteraPage.tsx:81,115`, `BuscadorCartera.tsx:51-67` | `sinTasa` es `true` mientras carga el resumen; aviso falso | `sinTasa = resumen !== null && !hayTasaProyectable(resumen)`; solo en mora/por vencer |
+| COB-18 | A | Cartera | `useCobroCartera.ts:86-87`, `ModalCobroCartera.tsx:124-137` | Monto USD pasa a Bs. sin convertir; el campo no indica unidad | Sufijo de unidad, limpiar al cambiar, línea resumen previa (D1) |
+| COB-19 | A | Cartera | `BotonAccionCartera.tsx:33`, `ModalCobro:63-70,169-185`, `ModalRecordatorio:62-69,135-173`, `CabeceraCartera:26-31` | Acciones y modales de ~28-40px | `BotonTactil`/`min-h-11`, cierres de 44px |
+| COB-06 | M | Conciliación | `ModalRechazoConciliacion.tsx:62` | `<label>` sin `htmlFor`; cierre ~28px; botones sin `type` | `useId`, `min-h-11`, `BotonTactil` |
+| COB-07 | M | Conciliación | `VisorComprobanteConciliacion.tsx:106` | `bg-black/50` color crudo | `bg-secondary/40` o `bg-foreground/10` |
+| COB-08 | M | Conciliación | `VisorComprobanteConciliacion.tsx:47,106,133,152-156` | Botones fuera de vista en pantallas bajas (no verificado); jerga "Presigned URL… ADR-007"; "Abrir original" tapa la imagen; título largo | `overflow-y-auto`; textos en español claro; "Comprobante de pago" |
+| COB-09 | M | Conciliación | `TarjetaTransaccionConciliacion.tsx:30-37,40` | Nombre y chip sin `flex-wrap`/`min-w-0`; método en mayúsculas | `BadgeEstado`, `line-clamp-2 break-words`, `break-all` en referencia |
+| COB-10 | M | Conciliación | `TarjetaTransaccionConciliacion.tsx:48,91-103` | Botones de ~32px y etiquetas largas | `BotonTactil`, "Aprobar"/"Rechazar", `flex-col sm:flex-row` |
+| COB-11 | M | Conciliación | `use-acciones-conciliacion.ts:72-73,99-100`, `AvisosAccionConciliacion.tsx:16-21` | Éxito desaparece a 3 s, sin `role="status"`, lejos de la tarjeta | `role="status"`, 6-8 s con cierre, limpiar timer |
+| COB-12 | M | Conciliación | `FiltrosConciliacion.tsx:76-83`, `ConciliacionPage.tsx:43-65` | Buscador de 36px y 12px; paginación solo arriba | `min-h-11`, `autoComplete="off"`, `Paginacion` bajo la lista |
+| COB-13 | M | Conciliación | `Encabezado:22,29`, `FiltrosConciliacion:89-91` | Conteo duplicado; Title Case; nombres distintos al de Cartera | Sentence case, "Pagos por validar"; quitar `font-mono` del texto |
+| COB-20 | M | Cartera | `AccionesFilaCartera.tsx` | Botones idénticos sin nombre del alumno; tres botones que envuelven | `aria-label` con nombre; menú "Más" en móvil (D3) |
+| COB-21 | M | Cartera | `CeldaAlumnoCartera.tsx:24`, `BadgeCartera.tsx:28` | `truncate` sobre el nombre; badge sin `whitespace-nowrap` | `line-clamp-2 break-words`; `ui/BadgeEstado` |
+| COB-22 | M | Cartera | `PestanasCartera.tsx:38-69` | Cuatro tabs con `flex-wrap` que ocupan 2-3 filas (inferido) | `BarraTabsSegmentada` de 4 columnas: Mora, Por vencer, Revisión, Al día |
+| COB-23 | M | Cartera | `BuscadorCartera.tsx:44-48` | "Mostrando 3 de 3 registros en En Mora"; sin `aria-live`; buscador de 36px | "3 registros · En mora", `aria-live="polite"`, `min-h-11` |
+| COB-24 | M | Cartera | `CarteraPage.tsx:91-103,118-125` | Error/carga propios sin roles; KPIs viejos con error; salto de layout | `EstadoError` + esqueleto de KPIs; separar error de recarga |
+| COB-25 | M | Cartera | `ResumenCartera.tsx:47-55` | `Link` sin foco visible; mora y por vencer no enlazan a su pestaña | `focus-visible:outline-2`; enlazar `?pestana=` |
+| COB-26 | M | Cartera | `ModalCobroCartera.tsx:101-187`, `useCobroCartera.ts:94-157` | Cobro en efectivo "aprobado al instante"; `type="number"`, ids estáticos, sin `max-h` | Línea resumen previa, `inputMode="decimal"`, `useId`, `overflow-y-auto` |
+| COB-27 | M | Cartera | `ModalRecordatorioCartera.tsx:156-173` | El mensaje se envía antes de verse | Vista previa (requiere API, D2) |
+| COB-28 | M | Cartera | `TablaEscritorioCartera.tsx:86-95`, `AccionesFilaCartera.tsx:28-37` | Miniatura sin `onError`; "Revisar en bandeja" no identifica el pago | `?q=<alumno>` como búsqueda inicial; "Comprobante no disponible" |
+
+BAJA: COB-14 (bandeja vacía sin salida a Cartera), COB-15 (importes sin helper `formatMonto`), COB-16 (sin `AvisoDatosOffline`; `h3` sin jerarquía), COB-29 (tabla sin `caption`), COB-30 (cuatro nombres para dos pantallas; `title` en táctil), COB-31 (badges "USD"/"≤ 5 días" sin valor).
+
+### SEG · Seguimiento, menú y navegación del entrenador
+
+| ID | P | Vista | Archivo:línea | Problema | Corrección |
+|---|---|---|---|---|---|
+| SEG-01 | A | Dashboard | `DashboardPage.tsx:245,270` | `|| 0` y "0 pendientes" en carga y en error | "—" hasta tener datos; con error, solo el enlace |
+| SEG-02 | A | Dashboard | `DashboardPage.tsx:25-46,120-160` | `isLoading` sin efecto; listas vacías con error; sin aviso offline | `EstadoCarga`, `EstadoError`, `AvisoDatosOffline` |
+| SEG-03 | A | Dashboard | `DashboardPage.tsx:1-386`, `:31-46` | Página sobre 300 (deuda frente a la regla; el guardián no falla); fetch con `useEffect` en la página | Extraer hook, `GridKpisDashboard`, `ListaRiesgoDashboard`, fixture demo |
+| SEG-04 | A | Dashboard | `DashboardPage.tsx:163-231`, `MetricCard.tsx:41` | KPIs no accionables; `hover` falso en tarjetas sin enlace | Enlace extendido a monitor/`?pestana=mora`; quitar `hover` |
+| SEG-12 | A | Monitor | `TarjetaAlumnoMonitor.tsx:~61-67,120-140` | `article` con `onClick` sin foco; Link de ~32px | Patrón de `TarjetaAlumnoDirectorio`; controles `min-h-11 min-w-11` |
+| SEG-13 | A | Monitor | `CabeceraMonitor.tsx:~71-79` | "Actualizar" ~36px; buscador de 12px | `BotonTactil`; input `text-base sm:text-xs` |
+| SEG-20 | A | Antropometría | `EncabezadoAntropometria.tsx:39-60` | Pestañas sin `tablist`/`aria-selected`; "Comparador Antes / Después" no cabe | `BarraTabsSegmentada` de 2 columnas: "Por revisar", "Comparar" |
+| SEG-21 | A | Antropometría | `TarjetaControlPendiente.tsx:~101-123` | Fila de acciones sin wrap; botones ~34px | `flex-col-reverse sm:flex-row`, `BotonTactil` |
+| SEG-22 | A | Antropometría | `TarjetaControlPendiente.tsx:~37-50`, `AntropometriaPage.tsx:126-153` | Cabecera sin wrap; nombre del alumno al final; éxito sin `role="status"` y con timer | Nombre como `h3`, `flex-wrap min-w-0`, `role="status"` |
+| SEG-25 | A | Navegación | Sidebar, BottomNav, `CoachMenuPage.tsx:160,168,196` | Cinco nombres para el mismo destino; "Ver alumnos" repetido | Tabla única en `lib/etiquetas-dominio` (D5) |
+| SEG-26 | A | Navegación | `BottomNav.tsx:19-23` | Sin insignias de pendientes; solo 3 destinos | Insignias con conteo y `aria-label` (D4) |
+| SEG-05 | M | Dashboard | `DashboardPage.tsx:162` | Lo accionable queda ~1100px abajo en 360px | Franja "Requiere tu atención" (D4) |
+| SEG-06 | M | Dashboard | `DashboardPage.tsx:138-140` | Badge fijo "Operación Activa" | Quitar o "Actualizado hace X" |
+| SEG-07 | M | Dashboard | `DashboardPage.tsx:297-301,305-320,342-346,352-365` | Emoji; filas no enlazan a la ficha; "Ver todos" solo con más de 5 | Filas como `Link` ≥44px, `EstadoVacio` sin emoji |
+| SEG-08 | M | Dashboard | `MetricCard.tsx:57`, `DashboardPage.tsx:187` | `truncate` en el badge del KPI; "Montos en USD" en verde | `whitespace-nowrap`/`BadgeEstado`; USD al subtítulo |
+| SEG-09 | M | Dashboard | `DashboardPage.tsx:179-182` | Montos "$1900.00" sin formato | `formatMonto` común |
+| SEG-14 | M | Monitor | `CabeceraMonitor.tsx:~85-155` | Chips propios; "En riesgo (Rojo)" | `ChipFiltro` con conteo; etiquetas cortas con icono distinto |
+| SEG-15 | M | Monitor | `TarjetaAlumnoMonitor.tsx:~104-118,138-152` | `animate-pulse` sin `motion-reduce`; barra solo por color; chip propio | `motion-safe:`; `BadgeEstado` |
+| SEG-16 | M | Monitor | `TarjetaAlumnoMonitor.tsx:~76` | `truncate` sobre el nombre | `line-clamp-2 break-words` |
+| SEG-17 | M | Monitor | `MonitorAdherenciaPage.tsx:89-98,75` | Paginación solo arriba; posible spinner en recarga (no verificado) | `Paginacion` al pie; no sustituir la lista |
+| SEG-18 | M | Monitor | `EstadosMonitor.tsx` | Duplica `EstadoCarga/Error/Vacio`; sin aviso offline | Sustituir y añadir `AvisoDatosOffline` |
+| SEG-23 | M | Antropometría | `AntropometriaPage.tsx:155-194`, `ColaPendientesAntropometria.tsx:~73-83` | Error de la cola oculta el comparador; buscador de 12px que solo filtra la página | `EstadoError` solo en "Por revisar"; "Buscar en esta página" |
+| SEG-24 | M | Antropometría | `TarjetaControlPendiente.tsx:~85-95` | `pesoKg` sin formato ni "—"; fecha cruda si no es `YYYY-MM-DD` | "—" como en `datos-clave-alumno`; verificar el DTO |
+| SEG-27 | M | Menú | `CoachMenuPage.tsx:54-283` | 8 tarjetas sin datos vivos; hero fija | `FranjaDatosClaveAlumno` con pendientes; hero según conteo |
+| SEG-28 | M | Menú | `CoachMenuPage.tsx:22-23,37,44-50,65` | Nombre inventado desde el correo; badges decorativos | Nombre del perfil o "Hola"; quitar relleno |
+| SEG-29 | M | Menú | `CoachMenuPage.tsx` | Foco sin offset; iconos sin `aria-hidden`; contraste de `text-warning` no verificado | `aria-hidden`, offset |
+| SEG-30 | M | Cabecera | `Header.tsx:103-271` | ~8 controles en 328px; sync y fallos de ~28px (no medido) | Menú "Cuenta" (Radix), `min-h-11` |
+
+BAJA: SEG-10 (imports duplicados; "Panel administrativo"/"Resumen del Negocio"), SEG-11 (`p-6` anidado a 360px), SEG-19 ("Últ. sesión", "Racha: 0 días"), SEG-31 (BottomNav 11px; tablet 768-1023px solo con 3 destinos), SEG-32 (doble relleno inferior).
+
+### CFG · Plantillas y Ajustes del entrenador
+
+| ID | P | Vista | Archivo:línea | Problema | Corrección |
+|---|---|---|---|---|---|
+| CFG-01 | A | Ajustes | `PestanasAjustes.tsx:44-47,55,61`, `PantallaAjustes.tsx:99-103` | 5 tabs con scroll horizontal (inferido); `sm:min-h-0`; iconos sin `aria-hidden` | `BarraTabsSegmentada` |
+| CFG-02 | A | Ajustes | `PestanasAjustes.tsx:7-9`, `PantallaAjustes.tsx:99-117`, `AjustesPage.tsx:135-168` | Barra duplicada y lógica de `AjustesPage` duplicada | `AjustesPage` usa `PantallaAjustes` con `renderPestana` |
+| CFG-06 | A | Planes | `use-planes-comerciales.ts:75,110` | `alert()` nativo; error de guardado y de carga comparten estado | `errorGuardado` local al modal con `role="alert"` |
+| CFG-07 | A | Planes | `ModalPlanComercial.tsx:124-172,95-100,209-215` | Labels sin `htmlFor`; precio sin `inputMode`; quitar beneficio sin nombre; cierre ~28px | `CampoAjustes`, `aria-label` con `min-h-11` |
+| CFG-08 | A | Planes | `ModalPlanComercial.tsx:41-48,70-76` | Fondo o Escape cierran y pierden lo escrito | `confirmandoCierre` como `ModalPlantilla` |
+| CFG-10 | A | Planes | `TarjetaPlanComercial.tsx:84-95`, `use-planes-comerciales.ts:123-142` | Desactivar sin confirmación; botones ~30px; doble PATCH | Confirmación inline/`DialogoConfirmacion`; bloquear en vuelo |
+| CFG-14 | A | Tasa | `FormularioTasa.tsx:95,149,161,172,99-143` | Cuatro labels sin `htmlFor`; fuentes sin `aria-pressed`/`radiogroup` | `CampoAjustes` con `inputMode="decimal"`; `role="radio"` en `radiogroup` |
+| CFG-15 | A | Tasa | `FormularioTasa.tsx:58-68,82,190`, `ConversorTasas.tsx:76` | Chip "ADR-003 Vigente" (falso sin tasa); títulos con jerga | "Tasa de cambio", quitar chip, "Guardar tasa" |
+| CFG-20 | A | Plantillas | `use-plantillas-banco.ts:42-45`, `PlantillasPage.tsx:130` | Cada recarga reemplaza la lista por el spinner | `cargandoInicial` vs `recargando`; aviso sobre la lista previa |
+| CFG-21 | A | Plantillas | `FiltrosPlantillas.tsx:87-101` | Buscador y selector de ~34px, 12px | `min-h-11`, `text-base sm:text-sm` |
+| CFG-03 | M | Ajustes | `ajustes.ts:36-42`, `PestanasAjustes.tsx:22` | Etiquetas largas; `BellRing` repetido | Etiquetas cortas con `ariaLabel` largo (D6) |
+| CFG-04 | M | Ajustes | `AjustesPage.tsx:105-119` | Subtítulo enumera todo; "Nuevo plan" en la cabecera global | Subtítulo corto; acción en `PanelPlanes` |
+| CFG-05 | M | Avisos | `PestanaNotificaciones.tsx:13-21` | Tarjeta redundante; "como entrenador" | `TarjetaAjustes` "Avisos" |
+| CFG-09 | M | Planes | `ModalPlanComercial.tsx:19,43` | Precio `40.00` y dos beneficios precargados | Vacíos con placeholder (D7) |
+| CFG-11 | M | Planes | `TarjetaPlanComercial.tsx:22-27,37,44,49,60` | "Activo en Catálogo", "USD / mes" ambiguo, sin `break-words`, badge propio | "Nuevo plan"/"Editar plan", `BadgeEstado`, `break-words` (D7) |
+| CFG-13 | M | Planes | `PanelPlanes.tsx:36-58`, `AjustesPage.tsx:69-79` | Sin estado de carga; error bajo tarjetas cargadas; sin aviso offline | `EstadoCarga`, `AvisoDatosOffline` |
+| CFG-16 | M | Tasa | `FormularioTasa.tsx:70-79`, `use-tasas-cambio.ts:112` | Éxito sin `role="status"` y permanente; sin "Cambios sin guardar" | `AvisosAjustes`; comparar contra `tasaVigente` |
+| CFG-17 | M | Tasa | `FormularioTasa.tsx:82-90` | Texto de "Sin tasa" largo | Dos líneas, icono y color |
+| CFG-18 | M | Tasa | `ConversorTasas.tsx:36-66` | Labels sin `htmlFor`; `type="number"`; símbolo `absolute` fijo | `CampoAjustes` con sufijo; plegar en `<details>` |
+| CFG-19 | M | Tasa | `AjustesPage.tsx:190-226` | Muestra directo el formulario de edición | Resumen guardado + formulario en `<details>` |
+| CFG-22 | M | Plantillas | `FiltrosPlantillas.tsx:116-121` | Contador técnico en `font-mono` | "N plantillas", `aria-live="polite"` |
+| CFG-23 | M | Plantillas | `TarjetaPlantilla.tsx:90-100` | Badge propio sin `whitespace-nowrap` | `BadgeEstado` |
+| CFG-24 | M | Plantillas | `TarjetaPlantilla.tsx:131-133` | Motivo de "Asignar" deshabilitado solo en `title` | Texto visible o `aria-describedby` |
+
+BAJA: CFG-12 (opciones "1 Mes (Mensual)"), CFG-25 (iconos sin `aria-hidden`), CFG-26 (párrafo largo en `CabeceraPlantillas`), CFG-27 (positivo, no tocar).
+
+### ENT · Entrenamiento, Progreso, Menú y navegación del alumno
+
+| ID | P | Vista | Archivo:línea | Problema | Corrección |
+|---|---|---|---|---|---|
+| ENT-01 | A | Cabecera | `Header.tsx:112-157` | Sync y "rechazados" de ~28px; contador oculto en móvil | `min-h-11 min-w-11`, número visible |
+| ENT-02 | A | Sesión | `use-cierre-sesion.ts:86-98`, `ModalFinalizarSesion.tsx:61-117` | Finalizar sin resumen de series pendientes | "Hiciste 3 de 12 series…" en el modal |
+| PRO-01 | A | Progreso | `ProgresoPage.tsx:97`, `use-evolucion-progreso.ts:24-26,47` | Recarga cubre con spinner; fallo borra la evolución | Spinner solo sin datos; error sin vaciar |
+| MEN-01 | A | Menú | `AtletaMenuPage.tsx` (365) | Sobre 300 (deuda frente a la regla; el guardián no falla); mezcla fetch y 4 tarjetas | `use-resumen-menu`, `TarjetaEntrenarHoy`, `TarjetaAccesoAlumno`, `ChipRacha` |
+| MEN-02 | A | Menú | `AtletaMenuPage.tsx:233-242` | "Listo para iniciar" por defecto, en carga, error y completado | Derivar de datos; "Sin datos"/"Completado hoy"; quitar pulso |
+| ENT-03 | M | Sesión | `EntrenamientoPage.tsx:181` | "Finalizar" solo arriba de la lista | Repetir `CtaFinalizarSesion` al final |
+| ENT-04 | M | Sesión | `ChipsBloquesSemana.tsx:106`, `EntrenamientoPage.tsx:117` | "Hoy" se pinta en el bloque seleccionado | Usar `esSugeridoHoy`/`fechaProgramada` |
+| ENT-05 | M | Sesión | `ChipsBloquesSemana.tsx:34,79-81,116-121` | Fecha del bloque pendiente solo en `title`; scroll horizontal | `fechaVisible` siempre; `flex-wrap`; `aria-current` |
+| ENT-06 | M | Varias | ver T7 | Animaciones sin `motion-reduce` | Regla global (UX-02) |
+| ENT-07 | M | Sesión | `FilaSerieEdicion.tsx:95,157` | −/+ de 32-36px en `sm` | `w-11` en todos los anchos |
+| ENT-08 | M | Sesión | `FilaSerieEdicion.tsx:138` | `truncate` en "Plan: 60 kg" | `break-words` |
+| ENT-09 | M | Sesión | `ModalFinalizarSesion.tsx:90,107`, `use-cierre-sesion.ts:62-63,73-78` | Rejilla de 5 con etiquetas largas (inferido); esfuerzo 8 por defecto; emoji dentro de `notas` | Etiquetas en extremos; sin valor inicial; valor interno aparte (D10) |
+| NAV-01 | M | Navegación | `BottomNav.tsx:19-23,39`, `AppLayout.tsx:32-38` | `<nav>` sin `aria-label`; "Cargando módulo…" sin `role` | `aria-label`; `EstadoCarga`; cuarto destino a evaluar (D5) |
+| PRO-02 | M | Progreso | `CampoMedidaCheckin.tsx:22` | Campos de ~40px | `min-h-11` |
+| PRO-03 | M | Progreso | `CampoMedidaCheckin.tsx:44-51` | Error sin `aria-describedby`; foco al enviar con error sin verificar | `aria-describedby`, foco al primer error |
+| PRO-04 | M | Progreso | `FormularioCheckinAntropometrico.tsx:168-175` | El envío no avisa de que no hay conexión | `AvisoDatosOffline` y bloquear (D9) |
+| PRO-05 | M | Progreso | `ProgresoPage.tsx:43` | `vistaActiva` en estado: Atrás sale de Progreso; se pierde el formulario | `?vista=` en URL; "Cambios sin guardar" |
+| PRO-06 | M | Progreso | `ProgresoPage.tsx:113,116`, `HubProgreso.tsx:42`, `Formulario…:90,173,50` | Jerga y Title Case; dos nombres para "evolución" | "Mi progreso", "Tus medidas", "Enviar a mi entrenador" |
+| MEN-03 | M | Menú | `AtletaMenuPage.tsx:96-103` | Falla la semana sin Reintentar ni aviso; efecto sin cancelar | `EstadoError` compacto, `AvisoDatosOffline` |
+| MEN-04 | M | Menú | `AtletaMenuPage.tsx:317-327,36-51` | Badge de cuota propio sin `whitespace-nowrap` | `BadgeEstado`, `flex-wrap min-w-0` |
+| MEN-05 | M | Menú | `AtletaMenuPage.tsx:113-114,135-165` | Nombre desde el correo; cabecera sin `min-w-0` (inferido) | Nombre real o "Hola"; `flex-wrap` |
+
+BAJA: ENT-10 ("coach"/"entrenador", botón sin `type`), PRO-07 (`porcentajeGrasa` 0 como vacío; peso sin formato), MEN-06 (Title Case, emoji, barra sin `role="progressbar"`).
+
+### ALU · Nutrición, Pagos y Ajustes del alumno
+
+| ID | P | Vista | Archivo:línea | Problema | Corrección |
+|---|---|---|---|---|---|
+| ALU-01 | A | Pagos | `use-reporte-pago.ts:73` | Monto precargado `'1300.00'` | Inicio `''`, placeholder, validar >0 (D8) |
+| ALU-02 | A | Pagos | `FormularioReportePago.tsx:207,224,236,269,282` | Labels sin `htmlFor`/`id` | `useId`; `CampoAjustes` generalizado; specs por `getByLabelText` |
+| ALU-03 | A | Pagos | `FormularioReportePago.tsx:211,228,243,277,296,306` | Controles y submit de ~40px | `min-h-11` |
+| ALU-04 | A | Pagos | `PestanaReportePago.tsx:289-293`, `use-reporte-pago.ts:108,113,141,166,202` | Todos los errores en un banner arriba sin `role="alert"` | Errores por campo con `aria-describedby`; banner junto al botón |
+| ALU-05 | A | Pagos | `SubidaComprobantePago.tsx:353,366-369` | Zona de adjuntar `div onClick` sin teclado; label no asociado | `<button type="button">` `min-h-11` (modelo `DiarioFotografico.tsx:67`) |
+| ALU-16 | A | Nutrición | `AccionesGuardarReporte.tsx:509` | "A partir de las 18:00" fijo, ignora la zona del perfil | `HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL` y `horaDeZona(zonaPerfil)` |
+| ALU-23 | A | Ajustes | `PantallaAjustes.tsx:99-117` | Píldoras con scroll horizontal; "Zona horaria" fuera de vista (inferido) | `BarraTabsSegmentada` de 4 columnas |
+| ALU-06 | M | Pagos | `SubidaComprobantePago.tsx:403-410,395` | Quitar comprobante ~32px, solo `title`; `truncate` del nombre | `min-h-11 min-w-11`, `aria-label`, `line-clamp-2` |
+| ALU-07 | M | Pagos | `use-reporte-pago.ts:134-206` | Reintento vuelve a subir la imagen; timer sin limpiar; red ambigua | Reutilizar `storageKey`, cleanup, mensaje de verificar historial (API, D8) |
+| ALU-08 | M | Pagos | `PestanaReportePago.tsx:271-278`, `PestanaHistorialPagos.tsx:68-81` | "Volver"/"Nuevo Abono" sin `type` ni 44px; "Paso guiado" relleno | `BotonTactil`; quitar relleno |
+| ALU-09 | M | Pagos | `SelectorAccionesPagos.tsx:542-547,571-575` | `div role="button"` solo con Enter; sin foco visible | `<button>` o Espacio + anillo |
+| ALU-10 | M | Pagos | `FilaTransaccionPago.tsx:404-410,417-424`, `PagosPage.tsx:193` | Botones ~28px; "Corregir" abre formulario vacío | `min-h-11`; prellenar o "Reportar de nuevo" |
+| ALU-12 | M | Pagos | `TarjetaResumenCuota.tsx:464-467` | `toLocaleDateString('es-ES')` a mano sin año | `formatFechaLocal`; confirmar el formato real |
+| ALU-17 | M | Nutrición | `NutricionPage.tsx:189`, `AvisoVentanaReporte.tsx` | El aviso de ventana no enlaza a la zona horaria | Enlace a `rutaAjustes` `?tab=zona-horaria` |
+| ALU-18 | M | Nutrición | `CalendarioUltimos7Dias.tsx:566-596` | Etiquetas truncadas en 7 columnas; estado en `title` | Lista vertical o icono + `sr-only` completo |
+| ALU-19 | M | Nutrición | `FormularioDatosReporte.tsx:342-383,394` | Campos sin error junto al campo; sin `autoComplete="off"` | `aria-invalid` + error; `aria-describedby` |
+| ALU-24 | M | Ajustes | `lib/ajustes.ts:31-38` | Etiquetas largas | Perfil, Acceso, Avisos, Zona horaria (D6) |
+| ALU-25 | M | Ajustes | `PestanasAjustes.tsx:25` | `BellRing` en `zona-horaria`; tres copias de la barra | Una sola `BarraTabsSegmentada` |
+| ALU-26 | M | Ajustes | `AjustesAlumnoPage.tsx:223-251`, `SelectorZonaHoraria.tsx:31` | Título duplicado; no muestra la hora local | "Ahora son las HH:MM en <zona>" con `horaDeZona` |
+
+BAJA: ALU-11 (jerga y Title Case en Pagos), ALU-13 (fallback crudo de `fechaOperacion`), ALU-14 (referencia y tasa sin `break-words`), ALU-15 (saldo y total sin `flex-wrap`), ALU-20 (semáforo sin problema evidente), ALU-21 (emojis y plural manual), ALU-22 (positivo; falta `sin-datos` en Pagos), ALU-27 (`role="alert"` en `CampoAjustes`; "Cambios sin guardar" en Perfil).
+
+## 6. Fuentes
+
+Los cinco reportes viven en `.external-agents/auditoria-ux/` (carpeta en `.gitignore`, se borra al cerrar los lotes; este documento es la referencia permanente):
+
+- `.external-agents/auditoria-ux/00-brief.md` (decisiones y piezas reutilizables)
+- `.external-agents/auditoria-ux/01-cobros-entrenador.md` (COB)
+- `.external-agents/auditoria-ux/02-seguimiento-entrenador.md` (SEG)
+- `.external-agents/auditoria-ux/03-plantillas-ajustes-entrenador.md` (CFG)
+- `.external-agents/auditoria-ux/04-entrenamiento-progreso-alumno.md` (ENT, NAV, PRO, MEN)
+- `.external-agents/auditoria-ux/05-nutricion-pagos-ajustes-alumno.md` (ALU)
+
+Fecha: 2026-10-28. Commit base: `541254e`. Contexto previo: rediseño de la ficha del alumno ([[RF-011-onboarding-alumnos-manual-deeplink]], [[RF-012-ciclo-vida-alumno-soft-delete]]).
