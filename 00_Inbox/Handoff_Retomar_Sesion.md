@@ -105,7 +105,8 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **`components/ui/`:** `BadgeEstado` (`whitespace-nowrap shrink-0`), `BarraTabsSegmentada` (UX-01, `8cc2a89`; seguimientos en la auditoría, sección 3), `BotonTactil`, `ChipFiltro`, `EstadoCarga`, `EstadoError`, `EstadoVacio`.
 - **`components/common/`:** `Paginacion` (+ `lib/use-paginacion-servidor`), `AvisoDatosOffline` (+ `lib/use-frescura-offline`), `DialogoConfirmacion`, `ZonaHorariaPerfil`.
 - **`components/entrenador/alumno-detalle/`:** `PestanasFichaAlumno` (fuente de `BarraTabsSegmentada`), `MenuAccionesAlumno` (Radix DropdownMenu), `ChipSaludAlumno`, `FranjaDatosClaveAlumno` (+ `lib/datos-clave-alumno.ts`), `SeccionZonaHorariaAlumno`, el patrón `<details>` de `PestanaAntropometriaAlumno` y el aviso "Cambios sin guardar" de `PestanaResumenAlumno`.
-- **`lib/`:** `use-tabs-accesibles`, `use-dialogo-accesible`, `etiquetas-dominio`, `date-format`, `alumnos-directorio-actividad` (`describirUltimoEntreno`), `alumno-detalle-metricas` (`resolverUltimoEntrenamiento`, `esSesionRealizada`).
+- **`components/ajustes/CampoAjustes.tsx`:** `CampoAjustes` (sufijo, descripción, `inputMode` decimal) y `SelectAjustes` (UX-03, `e071bf4`).
+- **`lib/`:** `formato-monto` (`formatMonto`, `formatDecimal`; formato venezolano por defecto; las vistas lo consumen vía `useFormatoNumero()`, §6.17), `use-tabs-accesibles`, `use-dialogo-accesible`, `etiquetas-dominio`, `date-format`, `alumnos-directorio-actividad` (`describirUltimoEntreno`), `alumno-detalle-metricas` (`resolverUltimoEntrenamiento`, `esSesionRealizada`).
 
 Empieza revisando la memoria (`mem_search "guachafit auditoría UX"` y `"ficha del alumno"`). Lee 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (secciones 2, 3 y 4) y propón arrancar con UX-01, con sus contratos de tests en fase roja.
 ```

@@ -192,6 +192,14 @@ Reglas transversales del frontend, vinculantes para toda vista nueva (se revisan
    - El desplazamiento suave pedido desde JS no lo cubre la regla: todo `scrollIntoView({ behavior: 'smooth' })` consulta `matchMedia('(prefers-reduced-motion: reduce)')`, como `PestanaEntrenamientoAlumno`.
    - Un spinner no es la única señal de carga: va con texto visible o con `ui/EstadoCarga`, porque con movimiento reducido se queda quieto.
 
+17. **Montos y decimales con formato común (desde 2026-10-28, UX-03):**
+   - Todo monto o decimal visible se formatea con `apps/web/src/lib/formato-monto.ts`: `formatMonto` (`$1.900,00`, `Bs. 36.500,00`, `—` sin dato) y `formatDecimal` (tasas). Prohibido interpolar `$${monto}` o `Bs. ${monto}` crudos y prohibido fijar un locale en un componente.
+   - El formato por defecto es el venezolano (`FORMATO_NUMERO_POR_DEFECTO = 'coma-decimal'`), por decisión del dueño. Se prevé que cada usuario elija coma o punto decimal.
+   - Para que esa preferencia se inyecte en un solo punto, **las vistas no llaman a `formatMonto` directamente**: el primer lote que muestre montos en una vista crea `lib/use-formato-numero.ts` (`useFormatoNumero()`), que hoy devuelve el formato por defecto y mañana leerá la preferencia del usuario. Las funciones puras de `lib/` reciben el formato como parámetro.
+   - Los campos de formulario de Ajustes y de los módulos que adopten el patrón usan `CampoAjustes` o `SelectAjustes` (`components/ajustes/CampoAjustes.tsx`):
+     - la unidad va en `sufijo` y no se repite en la etiqueta ("Precio base" con sufijo "USD", no "Precio base (USD)");
+     - los datos numéricos usan `inputMode`, nunca `type="number"`.
+
 ---
 
 ## 🤝 7. Flujo de Trabajo: Claude Code como orquestador + agentes externos (vigente desde 2026-10-18)

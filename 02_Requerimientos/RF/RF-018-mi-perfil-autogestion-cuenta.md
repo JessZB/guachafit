@@ -176,6 +176,14 @@ Then ve "El enlace no es válido o venció. Pide uno nuevo desde Ajustes."
 - **Pruebas de interacción** (jsdom + Testing Library, solo desarrollo; los specs `*.spec.tsx` declaran `// @vitest-environment jsdom`): Ajustes del alumno, del entrenador y del superadministrador, `/confirmar-correo`, la redirección de `/app/preferencias`, zona horaria y matriz de notificaciones.
 - Evidencia: `apps/web/src/lib/api-client-tiempo-limite.spec.ts`, `components/ajustes/PantallaAjustes.interaccion.spec.tsx`, `pages/entrenador/AjustesPage.interaccion.spec.tsx` y demás `*.interaccion.spec.tsx`; web **1068** aprobados (87 archivos), API **1324** (1 omitida); typecheck y build en verde. Revisado con los 4 enfoques y validado tras las correcciones (14 resueltos, 7 en seguimiento).
 
+- **Campos compartidos (`e071bf4`, 2026-10-28, lote UX-03):**
+  - Los errores de campo de Perfil y Correo y contraseña se anuncian (`role="alert"`).
+  - En el móvil, el texto de los campos mide 16px, para que iOS no amplíe la pantalla al tocarlos.
+  - `CampoAjustes` admite sufijo de unidad en flujo, descripción, `placeholder` e `inputMode` decimal o numérico.
+  - `SelectAjustes` es el selector equivalente, con las mismas reglas de accesibilidad.
+  - Planes y Tasas los adoptan en UX-18 y UX-19.
+  - Evidencia: web **2502/2502**; typecheck y build en verde. La revisión de fiabilidad no dio BLOCKER.
+
 ### Pendiente
 - En Notificaciones, Zona horaria, Planes y Tasas, si se cambia de pestaña con un guardado en vuelo el resultado no se muestra al volver (esas pestañas se desmontan).
 - La carga del perfil (`GET /usuarios/me/perfil`) no tiene tiempo límite: con una red que no responde queda en "Cargando tu perfil…".

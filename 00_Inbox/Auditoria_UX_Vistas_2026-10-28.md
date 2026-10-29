@@ -120,7 +120,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 |---|---|---|---|---|---|---|---|
 | UX-01 ✅ `8cc2a89` | Extraer `ui/BarraTabsSegmentada` | Ficha del alumno (wrapper) | base de CFG-01, ALU-23, ALU-25, COB-22, SEG-20 | `PestanasFichaAlumno`, `use-tabs-accesibles`; spec nuevo | bajo-medio (spec de la ficha) | no | ninguna |
 | UX-02 ✅ `a670b4b` | Regla global `motion-reduce` | Toda la app | ENT-06, SEG-15 (parte) | CSS base | bajo | no | ninguna |
-| UX-03 | Piezas compartidas de formulario y formato | `components/ajustes/CampoAjustes`, `lib/` | ALU-27, base de CFG-07, CFG-14, CFG-18, ALU-02; COB-15, SEG-09 | `CampoAjustes` + `inputMode`/sufijo/`select`/`role="alert"`; helper `formatMonto` | bajo | no | ninguna |
+| UX-03 ✅ `e071bf4` | Piezas compartidas de formulario y formato | `components/ajustes/CampoAjustes`, `lib/` | ALU-27, base de CFG-07, CFG-14, CFG-18, ALU-02; COB-15, SEG-09 | `CampoAjustes` + `inputMode`/sufijo/`select`/`role="alert"`; helper `formatMonto` | bajo | no | ninguna |
 | UX-04 | Cabecera: sincronización táctil y menú "Cuenta" | Header (todos los roles) | ENT-01, SEG-30 | `MenuAccionesAlumno` (Radix), `BotonTactil`, `IndicadorColaOffline` | medio (compartido con alumno) | no | ninguna |
 | UX-05 | Cobros: carga y datos honestos | Conciliación, Cartera | COB-01, COB-04, COB-16, COB-17, COB-24 | `EstadoCarga/Error/Vacio`, `AvisoDatosOffline`, `EsqueletoDirectorio`; borra `ErrorBandejaConciliacion` | bajo | no | ninguna |
 | UX-06 | Cobros: rechazo seguro | Conciliación | COB-02, COB-03, COB-06 | `DialogoConfirmacion` peligro o `ModalAccesible`, `BotonTactil` | medio (specs de interacción) | no | ninguna |
@@ -161,6 +161,13 @@ Cobertura: los hallazgos BAJA no listados se resuelven con el lote de su área a
 - Spinners sin texto ni `role="status"`, quietos con movimiento reducido: `SyncQueuePanel.tsx:182`, `ComparadorFotos.tsx:235`, `ComparadorAntropometrico.tsx:220,289,339`, `PestanaAntropometriaAlumno.tsx:86`. Corrección: texto visible o `ui/EstadoCarga`.
 - `ui/EstadoCarga` (`EstadoCarga.tsx:28`) solo tiene el texto en `sr-only`: con movimiento reducido, quien ve la pantalla solo ve un círculo quieto. Valorar texto visible.
 - Botones cuyo icono gira pero el rótulo no cambia (p. ej. `DialogoConfirmacion.tsx:93`, `SyncQueuePanel.tsx:261,321`, `CabeceraMonitor.tsx:78`): valorar un rótulo en gerundio mientras procesan.
+
+**Seguimientos de UX-03 (revisión de fiabilidad, 2026-10-28):**
+- **Decisión del dueño:** formato venezolano por defecto (`$1.900,00`); en el futuro, preferencia por usuario (coma o punto decimal). El primer lote que use `formatMonto` en una vista (UX-08, UX-10 o UX-13) crea `useFormatoNumero()` y las vistas consumen el hook (regla §6.17).
+- Al adoptar `CampoAjustes` (UX-18, UX-19, UX-21), ampliar según lo necesite cada lote: `required`, `maxLength`, `onBlur`, `name`, `autoFocus`, `ref` y una variante `font-mono` para cifras. `SelectAjustes` solo admite valores `string` (la duración del plan es numérica: convertir en el consumidor).
+- Con `sufijo`, quitar la unidad entre paréntesis de la etiqueta (`ModalPlanComercial.tsx:137`, `FormularioTasa.tsx:149,161`): si no, el lector de pantalla la anuncia dos veces.
+- Límites teóricos de `formatDecimal` (`toFixed`): `1.005` → `1,00`, `decimales` fuera de 0–100 lanza `RangeError` y los enteros por encima de 2^53 pierden precisión. Con los datos del API (`numeric(10,2)` y tasas de 4 decimales) no se dan.
+- Menor: el spec de `CampoAjustes` fija clases de Tailwind (`flex`, `text-base`) por falta de alternativa en jsdom.
 
 ## 4. Decisiones pendientes del dueño
 

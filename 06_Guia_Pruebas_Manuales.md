@@ -306,6 +306,7 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - Abre y cierra el menú "Más acciones" de la ficha y el menú de la cabecera: se abren y **se cierran** con normalidad.
   - Los spinners se quedan quietos. Límite conocido: en la cola offline, el comparador de fotos, el comparador antropométrico y el gráfico de Medidas de la ficha, el spinner no tiene texto, así que no se nota que está cargando.
   - Con la emulación en *No emulation*, las animaciones vuelven como antes.
+- [ ] **Campos de Ajustes en el iPhone (desde 2026-10-28, UX-03):** en Ajustes → Perfil y en Correo y contraseña, toca un campo en un iPhone o en DevTools con un iPhone emulado: la pantalla **no se amplía** al enfocarlo. Deja un campo con error (por ejemplo, un teléfono inválido) y guarda: el error se lee junto al campo y el lector de pantalla lo anuncia.
 - [ ] **Peso de letra moderado (desde 2026-10-10):** en ninguna pantalla hay textos "ultranegros". Títulos, cifras y etiquetas se ven en negrita normal (700 como máximo), tanto en el tema claro como en el oscuro y en el móvil.
 
 ## 9.1. Errores y mensajes (todos los roles)
