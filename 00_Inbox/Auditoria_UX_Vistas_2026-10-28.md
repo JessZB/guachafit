@@ -118,7 +118,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 
 | ID | Lote | Vistas | Resuelve | Reutiliza / crea | Riesgo | API | Dependencia |
 |---|---|---|---|---|---|---|---|
-| UX-01 | Extraer `ui/BarraTabsSegmentada` | Ficha del alumno (wrapper) | base de CFG-01, ALU-23, ALU-25, COB-22, SEG-20 | `PestanasFichaAlumno`, `use-tabs-accesibles`; spec nuevo | bajo-medio (spec de la ficha) | no | ninguna |
+| UX-01 ✅ `8cc2a89` | Extraer `ui/BarraTabsSegmentada` | Ficha del alumno (wrapper) | base de CFG-01, ALU-23, ALU-25, COB-22, SEG-20 | `PestanasFichaAlumno`, `use-tabs-accesibles`; spec nuevo | bajo-medio (spec de la ficha) | no | ninguna |
 | UX-02 | Regla global `motion-reduce` | Toda la app | ENT-06, SEG-15 (parte) | CSS base | bajo | no | ninguna |
 | UX-03 | Piezas compartidas de formulario y formato | `components/ajustes/CampoAjustes`, `lib/` | ALU-27, base de CFG-07, CFG-14, CFG-18, ALU-02; COB-15, SEG-09 | `CampoAjustes` + `inputMode`/sufijo/`select`/`role="alert"`; helper `formatMonto` | bajo | no | ninguna |
 | UX-04 | Cabecera: sincronización táctil y menú "Cuenta" | Header (todos los roles) | ENT-01, SEG-30 | `MenuAccionesAlumno` (Radix), `BotonTactil`, `IndicadorColaOffline` | medio (compartido con alumno) | no | ninguna |
@@ -149,6 +149,13 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-29 | Pulido del alumno: fechas, copy y zona horaria | Pagos, Ajustes alumno | ALU-11, 12, 13, 14, 15, 26 | `formatFechaLocal`, `horaDeZona` | bajo | no | UX-17 |
 
 Cobertura: los hallazgos BAJA no listados se resuelven con el lote de su área al pasar por el archivo.
+
+**Seguimientos de UX-01 (revisión de fiabilidad, 2026-10-28), a resolver al ampliar el átomo en UX-17 / UX-07:**
+- `icono` debe pasar a opcional: `PantallaAjustes` y `PestanasCartera` no usan icono.
+- El slot `indicador` hoy es solo de alerta (`bg-danger-strong`, punto en móvil). "Planes (N)" y los contadores de Cartera necesitan una variante neutra visible también en móvil, con fondo según tab activo o inactivo (`bg-primary-foreground/20` / `bg-background/60`).
+- `ariaLabel: ""` en un item deja el tab sin nombre accesible: usar `aria-label={ariaLabel || undefined}` (`BarraTabsSegmentada.tsx:80`).
+- Con 1 item la barra usa `grid-cols-2` (columna vacía): documentar que el átomo exige 2 o más.
+- Menor: `toBeTruthy()` redundante sobre `getBy*` en `BarraTabsSegmentada.interaccion.spec.tsx:254,256-258,316`.
 
 ## 4. Decisiones pendientes del dueño
 

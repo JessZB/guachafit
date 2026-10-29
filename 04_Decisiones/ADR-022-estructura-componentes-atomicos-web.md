@@ -84,6 +84,11 @@ Se adopta la estructura de capas R1–R8 del ODD como convención permanente del
   B0 no se tocan páginas). `components/ui/` no admite lógica de datos ni providers.
 - **Implementación:** `apps/web/src/components/ui/` (6 átomos + 6 specs, 22 tests),
   reporte `.opencode-prompts/reportes/consolidacion/48-consolidacion-validacion.reporte.md`.
+- **Ampliación (2026-10-28, `8cc2a89`, lote UX-01):** séptimo átomo `BarraTabsSegmentada`,
+  control segmentado de pestañas sin scroll horizontal (2–6 columnas por mapa fijo de
+  clases literales, porque Tailwind v4 no genera clases dinámicas). Recibe las props APG
+  de `lib/use-tabs-accesibles` y no conoce el dominio. Primer consumidor:
+  `PestanasFichaAlumno`. Siguientes: Ajustes (UX-17), Cartera (UX-07) y Antropometría (UX-15).
 
 ---
 

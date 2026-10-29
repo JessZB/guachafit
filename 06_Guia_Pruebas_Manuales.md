@@ -337,6 +337,7 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - La barra es un control segmentado: en el móvil (360px) las 5 pestañas caben en una fila **sin deslizar**, con el icono sobre el nombre; la activa va rellena. Prueba también con el texto del sistema ampliado: "Nutrición" puede cortarse con puntos suspensivos.
   - Con deuda, el tab **Pagos** muestra un **punto rojo** en la esquina en el móvil y el saldo con dos decimales (por ejemplo `$40.00`) desde tablet.
   - Con las flechas del teclado (← →, Inicio, Fin) se mueve entre pestañas y cada una se activa al llegar.
+  - Desde el 2026-10-28 (UX-01) la barra es un componente compartido. Todo lo anterior debe verse **igual que antes**: cualquier diferencia visual en la barra es una regresión.
 - [ ] **Actualización de la ficha tras un cobro (desde 2026-10-28):**
   - Abre un alumno con deuda, ve al tab Pagos y registra un cobro en sala. La ficha **no** debe volver a mostrar "Cargando Expediente…": el tab, el scroll y el saldo se actualizan solos.
   - En Perfil escribe algo en "Nombres" **sin guardar**, ve a Pagos y cobra: al volver a Perfil tu texto sigue ahí.

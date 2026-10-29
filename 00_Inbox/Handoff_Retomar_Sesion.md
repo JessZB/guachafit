@@ -101,7 +101,7 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - Tests base: web **2427/2427**. API ~2015 (1 omitido; e2e con `E2E_DATABASE_URL`).
 
 ## Piezas a reutilizar (de la ficha y de "Mis alumnos")
-- **`components/ui/`:** `BadgeEstado` (`whitespace-nowrap shrink-0`), `BotonTactil`, `ChipFiltro`, `EstadoCarga`, `EstadoError`, `EstadoVacio`.
+- **`components/ui/`:** `BadgeEstado` (`whitespace-nowrap shrink-0`), `BarraTabsSegmentada` (UX-01, `8cc2a89`; seguimientos en la auditoría, sección 3), `BotonTactil`, `ChipFiltro`, `EstadoCarga`, `EstadoError`, `EstadoVacio`.
 - **`components/common/`:** `Paginacion` (+ `lib/use-paginacion-servidor`), `AvisoDatosOffline` (+ `lib/use-frescura-offline`), `DialogoConfirmacion`, `ZonaHorariaPerfil`.
 - **`components/entrenador/alumno-detalle/`:** `PestanasFichaAlumno` (fuente de `BarraTabsSegmentada`), `MenuAccionesAlumno` (Radix DropdownMenu), `ChipSaludAlumno`, `FranjaDatosClaveAlumno` (+ `lib/datos-clave-alumno.ts`), `SeccionZonaHorariaAlumno`, el patrón `<details>` de `PestanaAntropometriaAlumno` y el aviso "Cambios sin guardar" de `PestanaResumenAlumno`.
 - **`lib/`:** `use-tabs-accesibles`, `use-dialogo-accesible`, `etiquetas-dominio`, `date-format`, `alumnos-directorio-actividad` (`describirUltimoEntreno`), `alumno-detalle-metricas` (`resolverUltimoEntrenamiento`, `esSesionRealizada`).
