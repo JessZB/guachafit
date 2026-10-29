@@ -60,7 +60,8 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **jsdom:** no calcula layout ni hace hit-testing, así que las clases se fijan solo donde no hay alternativa. `toContainElement` (jest-dom) no está registrado, usa `contains`. `CSS.escape` puede no existir. Las páginas completas tardan más de 5 s en montar: usa `vi.setConfig({ testTimeout: 20000 })` en el spec. Los timeouts sueltos de la suite completa se repiten aislados.
 - **Specs que leen código como texto:** `?raw` funciona con `.ts`/`.tsx`, pero vitest vacía los `.css` (`""`) salvo los listados en `test.css.include` (`vitest.config.ts`, añadido en UX-02 para `index.css`). Todo spec así empieza con una aserción de cordura (texto no vacío y una marca conocida): sin ella, la fase roja de UX-02 fue un falso rojo. No uses `node:fs` en specs de web: `tsc` revisa `src` entero y `apps/web` no tiene `@types/node`.
 - **Clases de un `svg` en jsdom:** `svg.className` es un `SVGAnimatedString`; lee las clases con `getAttribute('class')`.
-- **Radix DropdownMenu en tests:** ábrelo con teclado (`ArrowDown`).
+- **Radix DropdownMenu en tests:** al activar un `menuitem` el menú se cierra; para probar otro, reábrelo.
+- **Radix DropdownMenu en tests (apertura):** ábrelo con teclado (`ArrowDown`).
 - **Enlace extendido en tarjetas:** todo contenedor o icono decorativo que quede por encima lleva `pointer-events-none`, y los controles reales `pointer-events-auto`.
 - **Datos sensibles:** nunca en `title`. Usa un disclosure plegado sin el texto en el DOM (`ChipSaludAlumno`).
 - **Recargas:**
@@ -75,9 +76,9 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **Fundaciones de la auditoría UX cerradas (2026-10-29):** UX-01 `8cc2a89`, UX-02 `a670b4b`, UX-03 `e071bf4`, UX-04 `d482f4f` (con sus `docs(vault)`).
 - **UX-05 cerrado (2026-10-29, `d777772`):** Conciliación y Cartera con estados honestos.
 - **UX-06 cerrado (2026-10-29, `87fe4df`):** rechazo seguro y `useFormatoNumero()`.
-- **UX-07a cerrado (2026-10-29, `bc64170`):** Conciliación táctil y sin jerga. Web **2594/2594**.
-- **D3 resuelta:** "Registrar cobro" más menú "Más acciones" en el móvil; 36px en escritorio desde `md`.
-- El siguiente lote es **UX-07b** (Cartera: COB-19 a 25 más el lote web P2, el próximo vencimiento). Seguimientos de copy de Conciliación para UX-10 en la auditoría. Los seguimientos de cada lote están en la sección 3 de la auditoría. UX-07 suma el lote web P2 del módulo 5.
+- **UX-07a cerrado (2026-10-29, `bc64170`):** Conciliación táctil y sin jerga.
+- **UX-07b cerrado (2026-10-29, `d1f90b4`):** Cartera en el móvil (D3), pestañas con contador y próximo vencimiento (lote web P2 del módulo 5). Web **2621/2621**.
+- El siguiente lote es **UX-08** (Cobros: modal de cobro y feedback). Depende de la decisión **D1**: qué hacer con el monto al cambiar de USD a Bs. Pregúntala al llegar. Suma los seguimientos de UX-06 (`actionError` viejo, `setTimeout` sin limpiar) y los botones del modal de cobro de COB-19. Los seguimientos de cada lote están en la sección 3 de la auditoría. UX-07 suma el lote web P2 del módulo 5.
 - Rediseño de la ficha del alumno (`/coach/alumnos/:id`) CERRADO:
 
   | Lote | Commit |

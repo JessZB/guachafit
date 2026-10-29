@@ -160,6 +160,12 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - En la tarjeta, un nombre largo ocupa dos líneas, la referencia larga salta de línea, y "Aprobar" y "Rechazar" quedan apilados a todo el ancho. "Rechazar" se ve con borde y texto rojos, en los dos temas.
   - Abre "Ver Comprobante": se titula "Comprobante de pago", "Abrir original" va debajo de la imagen y no hay textos técnicos. En el móvil en horizontal, desplaza dentro del visor hasta "Aprobar" y "Rechazar".
   - Con más de una página de pagos, la paginación está al final. Al pasar de página, la vista sube al inicio de la lista.
+- [ ] **Control de Cobros en el móvil (desde 2026-10-29, UX-07b):** en `/coach/cartera`, a 360px y en escritorio.
+  - Las cuatro pestañas caben en una fila: Mora, Por vencer, Revisión y Al día, cada una con su número. Al entrar con red lenta no aparece ningún "0" mientras carga.
+  - **Móvil:** cada alumno en mora con deuda muestra "Registrar cobro" y el botón ⋮ ("Más acciones") con "Enviar recordatorio" y "Ver ficha". Sin deuda, el botón visible es "Recordatorio". En "Al día" solo se ve "Ver ficha". Un nombre largo ocupa dos líneas.
+  - **Escritorio:** en la tabla se ven las tres acciones, más compactas.
+  - El buscador dice, por ejemplo, "3 registros · En mora".
+  - En "Al día" aparece "Próximo vencimiento" con su fecha, o "Sin próximo corte".
 - [ ] **Rechazo seguro de un pago (desde 2026-10-29, UX-06):** con dos pagos en la bandeja.
   - Pulsa "Rechazar con Motivo" en el primero: el modal dice "Pago de <alumno> · $X,XX USD". Escribe un motivo, pulsa **Cancelar** y abre el rechazo del segundo pago: el campo está **vacío**.
   - Con "Slow 3G", confirma un rechazo y, mientras viaja, intenta pulsar otra vez "Confirmar Rechazo", "Cancelar" o Escape: no pasa nada hasta que responde.

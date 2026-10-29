@@ -153,6 +153,18 @@ Then el sistema debe crear una transacción con estado "Aprobado"
 - Recarga fallida con datos (por ejemplo, tras un cobro): la tabla, los KPI y las pestañas se conservan, con el aviso "No se pudo actualizar la cartera. Los datos mostrados pueden estar desactualizados." Sin conexión, en su lugar se ve el aviso de datos guardados.
 - Evidencia: web **2561/2561**; typecheck y build en verde.
 
+### Control de Cobros en el móvil y próximo vencimiento (`d1f90b4`, 2026-10-29, lote UX-07b)
+- **Acciones por alumno (decisión D3 del dueño):**
+  - **en el móvil** se ve solo la acción principal: "Registrar cobro" si hay saldo, "Recordatorio" si no, "Ver ficha" en "Al día" y "Revisar en bandeja" en revisión. El resto queda en el menú "Más acciones", que no aparece si no tendría ninguna opción utilizable;
+  - **en la tabla de escritorio** siguen las tres acciones, de 36px desde 768px;
+  - todos los botones miden 44px en el móvil y llevan el nombre del alumno en su nombre accesible, empezando por el texto visible ("Registrar cobro de X", "Recordatorio para X", "Ver ficha de X", "Revisar en bandeja el pago de X").
+- **Pestañas:** control segmentado de 4 columnas con etiquetas cortas (Mora, Por vencer, Revisión, Al día) y su contador visible. El lector de pantalla oye "En mora, 3". Mientras carga el resumen no se muestra ningún contador (antes salía "0").
+- **Buscador:** muestra "3 registros · En mora" (antes "Mostrando 3 de 3 registros en En Mora"), anunciado con `aria-live`. El campo mide 44px, con 16px en el móvil.
+- **Filas:** el nombre del alumno ocupa hasta dos líneas en la tarjeta y los badges usan `ui/BadgeEstado`, sin partirse.
+- **Próximo vencimiento (lote web P2 del módulo 5):** la pestaña "Al día" muestra "Próximo vencimiento" con la fecha de `proximoCorte`, en tabla y tarjeta. Sin dato, "Sin próximo corte".
+- "Bandeja de validación" y el KPI "Pagos por Validar" tienen foco visible.
+- Evidencia: web **2621/2621**; typecheck y build en verde. Hubo revisión 4R (diff de más de 400 líneas): 1 BLOCKER (un spec mal escrito) y 5 WARNING del lote, corregidos y validados.
+
 ### Pendiente
-- **Próximo vencimiento en Control de Cobros:** la API ya lo envía; falta mostrarlo en la tabla (lote web P2). Se hará junto con UX-07 (tabla y badges de Cartera).
+- Los KPI "Total en Mora" y "Próximos a Vencer" no llevan a su pestaña: `useCartera` lee `?pestana=` solo al montar. Necesita escuchar los cambios de la URL o recibir una función que cambie de pestaña.
 - PagosPage del alumno sigue pendiente del módulo 5; conciliación (confirmación y reversión) resuelta el 2026-10-11 y anulación de cuotas en la API el 2026-10-12 (`7f46acc`, falta la web; ver [[RF-008-maquina-estados-cuota-recordatorios]]). Las cuotas anuladas no cuentan como mora ni en la meta del dashboard. Saldo a favor: resuelto el 2026-10-11 en la API (`afd3f7c`) y en la web (`b975905`: "A favor: X USD" en la tabla y la ficha; aviso del excedente al aprobar y tras cobrar en sala), ver [[RF-006-motor-bimonetario-liquidacion-abonos]].

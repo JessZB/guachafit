@@ -124,7 +124,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-04 ✅ `d482f4f` | Cabecera: sincronización táctil y menú "Cuenta" | Header (todos los roles) | ENT-01, SEG-30 | `MenuAccionesAlumno` (Radix), `BotonTactil`, `IndicadorColaOffline` | medio (compartido con alumno) | no | ninguna |
 | UX-05 ✅ `d777772` | Cobros: carga y datos honestos | Conciliación, Cartera | COB-01, COB-04, COB-16, COB-17, COB-24 | `EstadoCarga/Error/Vacio`, `AvisoDatosOffline`, `EsqueletoDirectorio`; borra `ErrorBandejaConciliacion` | bajo | no | ninguna |
 | UX-06 ✅ `87fe4df` | Cobros: rechazo seguro | Conciliación | COB-02, COB-03, COB-06 | `DialogoConfirmacion` peligro o `ModalAccesible`, `BotonTactil` | medio (specs de interacción) | no | ninguna |
-| UX-07 (a ✅ `bc64170`; b pendiente) | Cobros: táctil, badges y tabs en móvil | Conciliación, Cartera | COB-05, 07, 08(a,c,d), 09, 10, 12, 19, 20, 21, 22, 23, 25 | `ChipFiltro`, `BotonTactil`, `BadgeEstado`, `BarraTabsSegmentada`, `MenuAccionesAlumno` | medio | no | UX-01; ⛔ D3 (menú "Más" en COB-20) |
+| UX-07 ✅ (a `bc64170`, b `d1f90b4`) | Cobros: táctil, badges y tabs en móvil | Conciliación, Cartera | COB-05, 07, 08(a,c,d), 09, 10, 12, 19, 20, 21, 22, 23, 25 | `ChipFiltro`, `BotonTactil`, `BadgeEstado`, `BarraTabsSegmentada`, `MenuAccionesAlumno` | medio | no | UX-01; ⛔ D3 (menú "Más" en COB-20) |
 | UX-08 | Cobros: modal de cobro y feedback | Cartera | COB-18, COB-26, COB-11 | `useId`, `inputMode`, `role="status"`, línea resumen previa | medio | no (salvo conversión con tasa del servidor) | ⛔ D1; UX-03 |
 | UX-09 | Cobros: recordatorio y enlace a la bandeja | Cartera → Conciliación | COB-27, COB-28 | `?q=` en `useFiltrosConciliacion`, `onError` de miniatura | medio | **sí** para la vista previa del mensaje | ⛔ D2 |
 | UX-10 | Cobros: copy y pulido | Conciliación, Cartera | COB-13, 14, 15, 29, 30, 31, 08b, 16 (resto) | `EstadoVacio`, `formatMonto` | bajo | no | UX-03 |
@@ -198,6 +198,15 @@ Cobertura: los hallazgos BAJA no listados se resuelven con el lote de su área a
 - Modal de rechazo: "Rechazar Transacción" y "Confirmar Rechazo" → "Rechazar pago" y "Confirmar rechazo".
 - Montos de la tarjeta y del visor sin `useFormatoNumero` (`+$${…} USD` crudo): COB-15.
 - Proceso: la verificación editó un spec nuevo del lote sin autorización. Reforzar en los prompts que **cualquier** cambio no autorizado se reporta y no se aplica.
+
+**Seguimientos de UX-07b (revisión 4R, 2026-10-29):**
+- **COB-25 restante:** los KPI "Total en Mora" y "Próximos a Vencer" no enlazan a su pestaña, porque `useCartera` lee `?pestana=` solo al montar. Para UX-13 (KPI accionables) o UX-10.
+- **Modales de cobro y de recordatorio de COB-19** (botones de 36-40px, cierres de unos 28px): van con UX-08 y UX-09, que rehacen esos modales.
+- **UX-10:** los KPI de `ResumenCartera` siguen en Title Case ("Recaudado del Mes", "Total en Mora", "Próximos a Vencer", "Pagos por Validar") frente a las pestañas en *sentence case*.
+- `MenuAccionesFilaCartera` repite la estructura de `MenuAccionesAlumno`. Si aparece un tercer menú de acciones por fila, extraer un `common/MenuAcciones`.
+- La lógica de qué acción se ve (`AccionesFilaCartera.tsx`) vive en el componente. Si crece, pasarla a `lib/acciones-cartera.ts` con su test.
+- `BarraTabsSegmentada` ya tiene la variante `contador` del indicador (seguimiento de UX-01 resuelto). Sigue pendiente el icono opcional (lo necesitan `PantallaAjustes` y UX-17).
+- Proceso: tercer falso rojo (E2 pulsaba dos opciones de un menú Radix que se cierra tras la primera). Al revisar un rojo de interacción, comprobar que el test **podría** pasar con un código correcto.
 - COB-16 parcial: las tarjetas siguen siendo `div` sin `article`/`aria-labelledby` y los `h3` de los estados no tienen jerarquía respecto al `h1`. Va con UX-10.
 - Proceso: en la fase roja de UX-05, C2 falló por un selector equivocado ("Pagos por Validar" en lugar de "Pendiente de Revisión") y el reporte lo dio por bueno. Al revisar un rojo, comprobar el **mensaje** de cada fallo, no solo que falle.
 
