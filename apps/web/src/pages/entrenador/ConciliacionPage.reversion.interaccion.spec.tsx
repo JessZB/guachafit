@@ -233,7 +233,7 @@ describe('ConciliacionPage · RF-007: confirmar antes de aprobar (contratos 4-6)
     montarPagina();
     await esperarTarjeta();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Aprobar y Descontar Saldo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aprobar pago de Carlos Mendoza' }));
 
     // El contrato es explícito: aprobar NO llama al API hasta confirmar en el diálogo.
     expect(llamadasPatch()).toHaveLength(0);
@@ -251,7 +251,7 @@ describe('ConciliacionPage · RF-007: confirmar antes de aprobar (contratos 4-6)
     montarPagina();
     await esperarTarjeta();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Aprobar y Descontar Saldo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aprobar pago de Carlos Mendoza' }));
 
     await waitFor(() => expect(dialogoDeAprobacion()).not.toBeNull());
     expect(dialogoDeAprobacion()!.textContent).toContain(DETALLE_BASE);
@@ -265,7 +265,7 @@ describe('ConciliacionPage · RF-007: confirmar antes de aprobar (contratos 4-6)
 
     fireEvent.click(screen.getByRole('button', { name: 'Ver Comprobante' }));
     const visor = await screen.findByRole('dialog');
-    fireEvent.click(within(visor).getByRole('button', { name: 'Aprobar y Descontar Saldo' }));
+    fireEvent.click(within(visor).getByRole('button', { name: 'Aprobar este pago' }));
 
     expect(llamadasPatch()).toHaveLength(0);
     await waitFor(() => expect(dialogoDeAprobacion()).not.toBeNull());
@@ -276,7 +276,7 @@ describe('ConciliacionPage · RF-007: confirmar antes de aprobar (contratos 4-6)
     montarPagina();
     await esperarTarjeta();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Aprobar y Descontar Saldo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aprobar pago de Carlos Mendoza' }));
     await waitFor(() => expect(dialogoDeAprobacion()).not.toBeNull());
 
     fireEvent.click(within(dialogoDeAprobacion()!).getByRole('button', { name: 'Aprobar pago' }));
@@ -293,7 +293,7 @@ describe('ConciliacionPage · RF-007: confirmar antes de aprobar (contratos 4-6)
     montarPagina();
     await esperarTarjeta();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Aprobar y Descontar Saldo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aprobar pago de Carlos Mendoza' }));
     await waitFor(() => expect(dialogoDeAprobacion()).not.toBeNull());
 
     fireEvent.click(within(dialogoDeAprobacion()!).getByRole('button', { name: 'Cancelar' }));
@@ -310,7 +310,7 @@ describe('ConciliacionPage · RF-007: confirmar antes de aprobar (contratos 4-6)
     montarPagina();
     await esperarTarjeta();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Aprobar y Descontar Saldo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aprobar pago de Carlos Mendoza' }));
     await waitFor(() => expect(dialogoDeAprobacion()).not.toBeNull());
     const dialogo = dialogoDeAprobacion()!;
 
@@ -334,7 +334,7 @@ describe('ConciliacionPage · RF-007: confirmar antes de aprobar (contratos 4-6)
     montarPagina();
     await esperarTarjeta();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Aprobar y Descontar Saldo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aprobar pago de Carlos Mendoza' }));
     await waitFor(() => expect(dialogoDeAprobacion()).not.toBeNull());
     const dialogo = dialogoDeAprobacion()!;
 

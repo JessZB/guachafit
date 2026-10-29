@@ -249,12 +249,12 @@ describe('ConciliacionPage · caracterizacion: filtros, estados honestos y visor
 
     fireEvent.click(screen.getByRole('button', { name: 'Ver Comprobante' }));
     const visor = await screen.findByRole('dialog');
-    expect(visor.textContent).toContain('Auditoría de Comprobante Bancario');
+    expect(visor.textContent).toContain('Comprobante de pago');
     expect(visor.textContent).toContain('Monto Declarado');
     expect(visor.textContent).toContain('445566');
     within(visor).getByRole('link', { name: 'Abrir original' });
-    within(visor).getByRole('button', { name: 'Rechazar Pago' });
-    within(visor).getByRole('button', { name: 'Aprobar y Descontar Saldo' });
+    within(visor).getByRole('button', { name: 'Rechazar este pago' });
+    within(visor).getByRole('button', { name: 'Aprobar este pago' });
   });
 
   it('f8 · sin captura digital el visor es honesto y no inventa imagen', async () => {
@@ -264,14 +264,14 @@ describe('ConciliacionPage · caracterizacion: filtros, estados honestos y visor
     expect(screen.getByText('Sin captura digital')).toBeTruthy();
   });
 
-  it('f9 · "Rechazar Pago" del visor cierra el visor y abre el rechazo', async () => {
+  it('f9 · "Rechazar este pago" del visor cierra el visor y abre el rechazo', async () => {
     itemsActuales = [txPendiente({ comprobanteUrl: 'https://example.com/comprobante.png' })];
     montarPagina();
     await screen.findByText('Carlos Mendoza');
 
     fireEvent.click(screen.getByRole('button', { name: 'Ver Comprobante' }));
     const visor = await screen.findByRole('dialog');
-    fireEvent.click(within(visor).getByRole('button', { name: 'Rechazar Pago' }));
+    fireEvent.click(within(visor).getByRole('button', { name: 'Rechazar este pago' }));
 
     await waitFor(() =>
       expect(
@@ -280,6 +280,6 @@ describe('ConciliacionPage · caracterizacion: filtros, estados honestos y visor
           .find((dialogo) => dialogo.textContent?.includes('Rechazar Transacción'))
       ).not.toBeNull()
     );
-    expect(screen.queryByText('Auditoría de Comprobante Bancario')).toBeNull();
+    expect(screen.queryByText('Comprobante de pago')).toBeNull();
   });
 });

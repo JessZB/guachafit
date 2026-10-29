@@ -50,4 +50,16 @@ describe('BotonTactil', () => {
       'bg-destructive'
     );
   });
+
+  it('la variante peligro-contorno incluye text-destructive, border-destructive/40, min-h-11 y no incluye text-foreground', () => {
+    render(<BotonTactil variante="peligro-contorno">Rechazar</BotonTactil>);
+
+    const boton = screen.getByRole('button', { name: 'Rechazar' });
+    const clases = boton.getAttribute('class') ?? '';
+
+    expect(clases).toContain('text-destructive');
+    expect(clases).toContain('border-destructive/40');
+    expect(clases).toContain('min-h-11');
+    expect(clases).not.toContain('text-foreground');
+  });
 });

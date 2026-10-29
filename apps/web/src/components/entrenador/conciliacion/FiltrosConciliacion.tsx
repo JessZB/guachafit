@@ -11,6 +11,7 @@ import {
   type FiltroMetodoPago,
 } from '../../../lib/conciliacion-filtros';
 import { pluralizar } from '../../../lib/pluralizar';
+import { ChipFiltro } from '../../ui/ChipFiltro';
 
 export interface FiltrosConciliacionProps {
   metodosPresentes: MetodoPago[];
@@ -41,45 +42,30 @@ export function FiltrosConciliacion({
     <div className="p-4 rounded-3xl bg-card border border-border/80 space-y-3">
       <div className="flex flex-col lg:flex-row lg:items-center gap-3">
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => onCambiarMetodo('todos')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              filtroMetodo === 'todos'
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
-            }`}
-          >
+          <ChipFiltro activo={filtroMetodo === 'todos'} onClick={() => onCambiarMetodo('todos')}>
             Todos
-          </button>
-          {metodosPresentes.map((metodo) => {
-            const activo = filtroMetodo === metodo;
-            return (
-              <button
-                key={metodo}
-                type="button"
-                onClick={() => onCambiarMetodo(metodo)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activo
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <span className="capitalize">{etiquetaMetodoPago(metodo)}</span>
-              </button>
-            );
-          })}
+          </ChipFiltro>
+          {metodosPresentes.map((metodo) => (
+            <ChipFiltro
+              key={metodo}
+              activo={filtroMetodo === metodo}
+              onClick={() => onCambiarMetodo(metodo)}
+            >
+              <span className="capitalize">{etiquetaMetodoPago(metodo)}</span>
+            </ChipFiltro>
+          ))}
         </div>
 
         <div className="relative flex-1 lg:max-w-xs lg:ml-auto">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" aria-hidden="true" />
           <input
             type="search"
+            autoComplete="off"
             value={busqueda}
             onChange={(e) => onCambiarBusqueda(e.target.value)}
             placeholder="Buscar por alumno o referencia..."
             aria-label="Buscar pago por alumno o referencia"
-            className="w-full pl-9 pr-3 py-2 rounded-xl bg-background border border-border text-xs font-semibold text-foreground focus:outline-hidden focus:border-primary transition-colors"
+            className="w-full min-h-11 pl-9 pr-3 rounded-xl bg-background border border-border text-base sm:text-sm font-semibold text-foreground focus:outline-hidden focus:border-primary transition-colors"
           />
         </div>
       </div>
@@ -93,7 +79,7 @@ export function FiltrosConciliacion({
           <button
             type="button"
             onClick={onLimpiar}
-            className="text-[11px] font-bold text-primary hover:underline cursor-pointer"
+            className="min-h-11 px-3 inline-flex items-center rounded-xl text-[11px] font-bold text-primary hover:underline cursor-pointer"
           >
             Limpiar filtros
           </button>

@@ -232,7 +232,7 @@ describe('ConciliacionPage · Carga honesta (Contrato B)', () => {
 
     // Provocar recarga fallida tras aprobar pago
     bandejaError = 'Fallo al recargar bandeja';
-    fireEvent.click(screen.getByRole('button', { name: 'Aprobar y Descontar Saldo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aprobar pago de Carlos Mendoza' }));
     const dialogo = await screen.findByRole('dialog');
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Aprobar pago' }));
 
@@ -263,7 +263,7 @@ describe('ConciliacionPage · Carga honesta (Contrato B)', () => {
     window.dispatchEvent(new Event('offline'));
 
     bandejaError = 'Fallo de red';
-    fireEvent.click(screen.getByRole('button', { name: 'Aprobar y Descontar Saldo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aprobar pago de Carlos Mendoza' }));
     const dialogo = await screen.findByRole('dialog');
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Aprobar pago' }));
 

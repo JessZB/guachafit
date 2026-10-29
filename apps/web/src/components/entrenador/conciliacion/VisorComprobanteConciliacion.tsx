@@ -11,6 +11,7 @@ import { etiquetaMetodoPago } from '../../../lib/conciliacion-filtros';
 import { formatFechaCalendario } from '../../../lib/date-format';
 import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
 import { COMPROBANTE_DEMO_URL } from '../../../lib/conciliacion-demo';
+import { BotonTactil } from '../../ui/BotonTactil';
 
 export interface VisorComprobanteConciliacionProps {
   tx: TransaccionPagoDetalleDTO;
@@ -44,32 +45,33 @@ export function VisorComprobanteConciliacion({
         aria-modal="true"
         aria-labelledby="conciliacion-comprobante-titulo"
         tabIndex={-1}
-        className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-2xl space-y-4 max-h-[92vh] flex flex-col"
+        className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-2xl space-y-4 max-h-[92vh] flex flex-col overflow-y-auto"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border/80 pb-3">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-primary/10 text-primary">
-              <Receipt className="h-5 w-5" />
+              <Receipt className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
               <h3
                 id="conciliacion-comprobante-titulo"
                 className="font-bold text-base text-foreground"
               >
-                Auditoría de Comprobante Bancario
+                Comprobante de pago
               </h3>
               <p className="text-xs text-muted-foreground">
-                Alumno: <span className="font-bold text-foreground">{tx.clienteNombre || 'Alumno'}</span> • {etiquetaMetodoPago(tx.metodoPago).toUpperCase()}
+                Alumno: <span className="font-bold text-foreground">{tx.clienteNombre || 'Alumno'}</span> • {etiquetaMetodoPago(tx.metodoPago)}
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onCerrar}
-            aria-label="Cerrar auditoría de comprobante"
-            className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
+            aria-label="Cerrar comprobante de pago"
+            className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 
@@ -103,7 +105,7 @@ export function VisorComprobanteConciliacion({
         </div>
 
         {/* High-Resolution Receipt Image Frame */}
-        <div className="flex-1 overflow-auto rounded-2xl border border-border bg-black/50 flex flex-col items-center justify-center p-3 relative min-h-[280px]">
+        <div className="flex-1 overflow-auto rounded-2xl border border-border bg-secondary/40 flex flex-col items-center justify-center p-3 min-h-[200px]">
           {tx.comprobanteUrl && !imagenFallida ? (
             <img
               src={tx.comprobanteUrl}
@@ -121,7 +123,7 @@ export function VisorComprobanteConciliacion({
           ) : (
             // N2: en sesión real nunca se muestra una imagen ajena como si fuera el comprobante.
             <div className="text-center space-y-2 px-6">
-              <ImageIcon className="h-10 w-10 mx-auto text-muted-foreground/60" />
+              <ImageIcon className="h-10 w-10 mx-auto text-muted-foreground/60" aria-hidden="true" />
               <p className="text-sm font-bold text-foreground">
                 {tx.comprobanteUrl
                   ? 'No se pudo cargar la imagen del comprobante'
@@ -130,43 +132,45 @@ export function VisorComprobanteConciliacion({
               <p className="text-[11px] text-muted-foreground max-w-sm">
                 {tx.comprobanteUrl
                   ? 'El enlace temporal de lectura falló o expiró. Cierra el visor e inténtalo de nuevo.'
-                  : 'El servidor no generó una URL de lectura para este pago (por ejemplo, almacenamiento R2 no configurado).'}
+                  : 'El alumno no adjuntó una captura o no se pudo preparar el enlace.'}
               </p>
             </div>
           )}
-          {tx.comprobanteUrl && (
-            <a
-              href={tx.comprobanteUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="absolute top-4 right-2 p-2 rounded-xl bg-background/80 hover:bg-background text-foreground text-xs font-bold backdrop-blur-md shadow-md flex items-center gap-1.5 transition-all"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              <span>Abrir original</span>
-            </a>
-          )}
         </div>
+        {tx.comprobanteUrl && (
+          <a
+            href={tx.comprobanteUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-11 items-center gap-1.5 self-start px-3 rounded-xl border border-border bg-secondary/60 text-foreground text-xs font-bold hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary"
+          >
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Abrir original</span>
+          </a>
+        )}
 
         {/* Direct Action Footer */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-border/80">
           <span className="text-[11px] text-muted-foreground">
             {tx.comprobanteUrl
-              ? 'Presigned URL segura temporal de lectura (TTL 15 min, ADR-007)'
-              : 'Sin captura digital verificable para este pago'}
+              ? 'El enlace del comprobante caduca en 15 minutos.'
+              : 'Este pago no tiene comprobante disponible.'}
           </span>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <button
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <BotonTactil
+              variante="peligro-contorno"
               onClick={() => onRechazar(tx)}
-              className="flex-1 sm:flex-initial py-2 px-4 rounded-xl border border-destructive/40 text-destructive hover:bg-destructive/10 font-bold text-xs transition-colors cursor-pointer"
+              etiquetaAccesible="Rechazar este pago"
             >
-              Rechazar Pago
-            </button>
-            <button
+              Rechazar
+            </BotonTactil>
+            <BotonTactil
+              variante="primaria"
               onClick={() => onAprobar(tx)}
-              className="flex-1 sm:flex-initial py-2 px-5 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+              etiquetaAccesible="Aprobar este pago"
             >
-              Aprobar y Descontar Saldo
-            </button>
+              Aprobar
+            </BotonTactil>
           </div>
         </div>
       </div>

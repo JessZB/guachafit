@@ -190,7 +190,7 @@ function montarPagina(): void {
 async function abrirRechazo(): Promise<HTMLElement> {
   montarPagina();
   await screen.findByText('Carlos Mendoza');
-  fireEvent.click(screen.getByRole('button', { name: 'Rechazar con Motivo' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Rechazar pago de Carlos Mendoza' }));
   await waitFor(() => expect(dialogoDeRechazo()).not.toBeNull());
   return dialogoDeRechazo()!;
 }

@@ -213,7 +213,7 @@ describe('ConciliacionPage · contrato 6: excedente antes de aprobar y en el éx
     montarPagina();
     await esperarTarjeta();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Aprobar y Descontar Saldo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aprobar pago de Carlos Mendoza' }));
     fireEvent.click(
       within(await screen.findByRole('dialog')).getByRole('button', { name: 'Aprobar pago' })
     );
@@ -232,7 +232,7 @@ describe('ConciliacionPage · contrato 6: excedente antes de aprobar y en el éx
     montarPagina();
     await esperarTarjeta();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Aprobar y Descontar Saldo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aprobar pago de Carlos Mendoza' }));
     fireEvent.click(
       within(await screen.findByRole('dialog')).getByRole('button', { name: 'Aprobar pago' })
     );
@@ -257,7 +257,7 @@ describe('ConciliacionPage · contrato 6: excedente antes de aprobar y en el éx
     montarPagina();
     await esperarTarjeta();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Aprobar y Descontar Saldo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aprobar pago de Carlos Mendoza' }));
     fireEvent.click(
       within(await screen.findByRole('dialog')).getByRole('button', { name: 'Aprobar pago' })
     );
@@ -272,7 +272,7 @@ describe('ConciliacionPage · contrato 6: excedente antes de aprobar y en el éx
     montarPagina();
     await esperarTarjeta();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Aprobar y Descontar Saldo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aprobar pago de Carlos Mendoza' }));
     fireEvent.click(
       within(await screen.findByRole('dialog')).getByRole('button', { name: 'Aprobar pago' })
     );

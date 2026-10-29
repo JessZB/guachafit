@@ -14,16 +14,20 @@
  *   `py-2` quedaban en ~32-40px; ver WARNINGs de los inventarios 43/44/47).
  * - §6.9/§6.12: `text-xs` (12px) y `font-bold` (700) como máximo.
  * - Solo tokens semánticos con variante claro/oscuro (§6.10).
+ * - UX-07a: acción destructiva secundaria con contorno, p. ej. "Rechazar" junto a
+ *   "Aprobar"; evita sobrescribir el color de `secundaria`.
  */
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
-export type VarianteBotonTactil = 'primaria' | 'secundaria' | 'peligro';
+export type VarianteBotonTactil = 'primaria' | 'secundaria' | 'peligro' | 'peligro-contorno';
 
 const CLASES_VARIANTE: Record<VarianteBotonTactil, string> = {
   primaria:
     'bg-primary text-primary-foreground shadow-md shadow-primary/20 hover:brightness-110 active:scale-95',
   secundaria: 'bg-secondary text-foreground hover:bg-secondary/80 active:scale-95',
   peligro: 'bg-destructive text-white hover:brightness-110 active:scale-95',
+  'peligro-contorno':
+    'border border-destructive/40 bg-transparent text-destructive hover:bg-destructive/10 active:scale-95',
 };
 
 export interface BotonTactilProps {

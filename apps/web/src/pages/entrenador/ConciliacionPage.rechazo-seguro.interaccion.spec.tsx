@@ -237,7 +237,7 @@ async function abrirRechazoCarlos(): Promise<HTMLElement> {
   await screen.findByText('Carlos Mendoza');
   await screen.findByText('Ana Pérez');
   const tarjeta = tarjetaDe('Carlos Mendoza');
-  fireEvent.click(within(tarjeta).getByRole('button', { name: 'Rechazar con Motivo' }));
+  fireEvent.click(within(tarjeta).getByRole('button', { name: 'Rechazar pago de Carlos Mendoza' }));
   await waitFor(() => expect(dialogoDeRechazo()).not.toBeNull());
   return dialogoDeRechazo()!;
 }
@@ -265,7 +265,7 @@ describe('ConciliacionPage · rechazo seguro (COB-02, COB-03 y COB-06)', () => {
     await waitFor(() => expect(dialogoDeRechazo()).toBeNull());
 
     const tarjetaAna = tarjetaDe('Ana Pérez');
-    fireEvent.click(within(tarjetaAna).getByRole('button', { name: 'Rechazar con Motivo' }));
+    fireEvent.click(within(tarjetaAna).getByRole('button', { name: 'Rechazar pago de Ana Pérez' }));
     await waitFor(() => expect(dialogoDeRechazo()).not.toBeNull());
     const dialogoAna = dialogoDeRechazo()!;
 
@@ -287,7 +287,7 @@ describe('ConciliacionPage · rechazo seguro (COB-02, COB-03 y COB-06)', () => {
     const tarjetaAna = tarjetaDe('Ana Pérez');
     fireEvent.click(within(tarjetaAna).getByRole('button', { name: 'Ver Comprobante' }));
     await screen.findByRole('dialog');
-    fireEvent.click(screen.getByRole('button', { name: 'Rechazar Pago' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rechazar este pago' }));
 
     // Diálogo de rechazo abierto para Ana
     await waitFor(() => expect(dialogoDeRechazo()).not.toBeNull());

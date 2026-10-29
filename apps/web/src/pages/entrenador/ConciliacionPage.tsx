@@ -41,6 +41,20 @@ export function ConciliacionPage() {
   const filtros = useFiltrosConciliacion(bandeja.transacciones);
   const acciones = useAccionesConciliacion(bandeja.marcarResuelta);
   const { formatMonto } = useFormatoNumero();
+  const refLista = React.useRef<HTMLDivElement>(null);
+
+  // The pagination sits below the list, so after a page change the viewport would stay
+  // at the bottom. Bring the top of the list back into view. Page-size changes do not scroll.
+  const cambiarPagina = (pagina: number) => {
+    bandeja.fijarPagina(pagina);
+    const movimientoReducido =
+      typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    // Optional call: jsdom does not implement scrollIntoView.
+    refLista.current?.scrollIntoView?.({
+      behavior: movimientoReducido ? 'auto' : 'smooth',
+      block: 'start',
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -74,18 +88,7 @@ export function ConciliacionPage() {
       ) : bandeja.total === 0 ? (
         <BandejaVaciaConciliacion />
       ) : (
-        <div className="space-y-4">
-          <div className="px-1">
-            <Paginacion
-              pagina={bandeja.pagina}
-              tamano={bandeja.tamano}
-              total={bandeja.total}
-              onCambiarPagina={bandeja.fijarPagina}
-              onCambiarTamano={bandeja.fijarTamano}
-              cargando={bandeja.cargando}
-            />
-          </div>
-
+        <div ref={refLista} className="space-y-4">
           <FiltrosConciliacion
             metodosPresentes={filtros.metodosPresentes}
             filtroMetodo={filtros.filtroMetodo}
@@ -112,6 +115,17 @@ export function ConciliacionPage() {
               />
             ))
           )}
+
+          <div className="px-1">
+            <Paginacion
+              pagina={bandeja.pagina}
+              tamano={bandeja.tamano}
+              total={bandeja.total}
+              onCambiarPagina={cambiarPagina}
+              onCambiarTamano={bandeja.fijarTamano}
+              cargando={bandeja.cargando}
+            />
+          </div>
         </div>
       )}
 
