@@ -73,8 +73,9 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 
 ## Estado al 2026-10-28
 - **Fundaciones de la auditoría UX cerradas (2026-10-29):** UX-01 `8cc2a89`, UX-02 `a670b4b`, UX-03 `e071bf4`, UX-04 `d482f4f` (con sus `docs(vault)`).
-- **UX-05 cerrado (2026-10-29, `d777772`):** Conciliación y Cartera con estados honestos. Web **2561/2561**.
-- El siguiente lote es **UX-06** (Cobros: rechazo seguro). Los seguimientos de cada lote están en la sección 3 de la auditoría. UX-07 suma el lote web P2 del módulo 5.
+- **UX-05 cerrado (2026-10-29, `d777772`):** Conciliación y Cartera con estados honestos.
+- **UX-06 cerrado (2026-10-29, `87fe4df`):** rechazo seguro y `useFormatoNumero()`. Web **2573/2573**.
+- El siguiente lote es **UX-07** (Cobros: táctil, badges y tabs en móvil; suma el lote web P2 del módulo 5). Depende de la decisión **D3** (menú "Más" en Cartera para el móvil): pregúntala al llegar. Los seguimientos de cada lote están en la sección 3 de la auditoría. UX-07 suma el lote web P2 del módulo 5.
 - Rediseño de la ficha del alumno (`/coach/alumnos/:id`) CERRADO:
 
   | Lote | Commit |
@@ -111,7 +112,7 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **`components/entrenador/alumno-detalle/`:** `PestanasFichaAlumno` (fuente de `BarraTabsSegmentada`), `MenuAccionesAlumno` (Radix DropdownMenu), `ChipSaludAlumno`, `FranjaDatosClaveAlumno` (+ `lib/datos-clave-alumno.ts`), `SeccionZonaHorariaAlumno`, el patrón `<details>` de `PestanaAntropometriaAlumno` y el aviso "Cambios sin guardar" de `PestanaResumenAlumno`.
 - **`components/layout/`:** `MenuCuenta` (Radix, correo y rol con `etiquetaRol`) y `BotonesSincronizacion` (UX-04, `d482f4f`).
 - **`components/ajustes/CampoAjustes.tsx`:** `CampoAjustes` (sufijo, descripción, `inputMode` decimal) y `SelectAjustes` (UX-03, `e071bf4`).
-- **`lib/`:** `formato-monto` (`formatMonto`, `formatDecimal`; formato venezolano por defecto; las vistas lo consumen vía `useFormatoNumero()`, §6.17), `use-tabs-accesibles`, `use-dialogo-accesible`, `etiquetas-dominio`, `date-format`, `alumnos-directorio-actividad` (`describirUltimoEntreno`), `alumno-detalle-metricas` (`resolverUltimoEntrenamiento`, `esSesionRealizada`).
+- **`lib/`:** `formato-monto` (`formatMonto`, `formatDecimal`; formato venezolano por defecto) y `use-formato-numero` (`useFormatoNumero()`, la única vía de las vistas, §6.17), `use-tabs-accesibles`, `use-dialogo-accesible`, `etiquetas-dominio`, `date-format`, `alumnos-directorio-actividad` (`describirUltimoEntreno`), `alumno-detalle-metricas` (`resolverUltimoEntrenamiento`, `esSesionRealizada`).
 
 Empieza revisando la memoria (`mem_search "guachafit auditoría UX"` y `"ficha del alumno"`). Lee 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (secciones 2, 3 y 4) y propón arrancar con UX-01, con sus contratos de tests en fase roja.
 ```

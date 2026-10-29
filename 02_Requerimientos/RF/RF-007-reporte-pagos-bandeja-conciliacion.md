@@ -156,6 +156,14 @@ Then la transacción debe transicionar a estado "Rechazado"
 - Las tarjetas ya no dicen "Acreditación segura con comprobante verificado." (era un texto fijo, sin dato real).
 - Evidencia: web **2561/2561**; typecheck y build en verde. La revisión de resiliencia confirmó que una consulta fallida con clave nueva no muestra datos de otra página, y que aprobar sobre datos viejos está protegido por el bloqueo del API.
 
+### Rechazo seguro (`87fe4df`, 2026-10-29, lote UX-06)
+- El modal de rechazo dice de quién es el pago y cuánto es ("Pago de Carlos Mendoza · $50,00 USD").
+- El motivo se limpia cada vez que se abre o se cierra el modal, también desde el visor del comprobante. Antes, un motivo escrito y cancelado aparecía precargado en el rechazo del siguiente alumno y podía enviarse al alumno equivocado.
+- Mientras el rechazo viaja, "Confirmar Rechazo", "Cancelar", el botón de cerrar y Escape quedan bloqueados: no hay doble envío ni se pierde el resultado.
+- Si el rechazo falla, el error se ve **dentro** del modal (`role="alert"`), que sigue abierto con el motivo escrito para reintentar. Antes quedaba arriba en la página, tapado por el modal.
+- La etiqueta "Motivo del rechazo" está asociada al campo, y los botones miden 44px.
+- Evidencia: web **2573/2573**; typecheck y build en verde. La revisión de fiabilidad no dio BLOCKER ni WARNING.
+
 ### Pendiente
 - El mensaje de éxito de la reversión no se borra solo; las mutaciones de Conciliación y de la reversión no tienen tiempo límite; la demo de Conciliación llama al API.
 - El comprobante sigue siendo opcional.

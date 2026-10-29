@@ -155,6 +155,10 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - **Bandeja de pagos** (`/coach/conciliacion`): al entrar con red lenta ves "Cargando…" y **no** "Bandeja al Día" ni "0 transacciones en cola". Con la bandeja cargada, bloquea `/finanzas/conciliacion/bandeja` y aprueba un pago: los demás pagos **siguen en pantalla** con el aviso "No se pudo actualizar la bandeja…" y "Reintentar". Las tarjetas ya no dicen "comprobante verificado".
   - **Control de Cobros** (`/coach/cartera`): al entrar con red lenta ves cuatro bloques grises de KPI y filas de espera, y **no** el aviso "Sin tasa de cambio configurada". Sin tasa configurada, el aviso aparece en "En Mora" y "Próximos a Vencer", y no en "Pendiente de Revisión" ni en "Al Día".
   - En las dos: entra sin conexión y sin haberlas abierto antes → "Sin conexión y sin datos guardados". Con los datos ya cargados, corta la red y recarga → "Sin conexión · datos guardados", sin aviso de error.
+- [ ] **Rechazo seguro de un pago (desde 2026-10-29, UX-06):** con dos pagos en la bandeja.
+  - Pulsa "Rechazar con Motivo" en el primero: el modal dice "Pago de <alumno> · $X,XX USD". Escribe un motivo, pulsa **Cancelar** y abre el rechazo del segundo pago: el campo está **vacío**.
+  - Con "Slow 3G", confirma un rechazo y, mientras viaja, intenta pulsar otra vez "Confirmar Rechazo", "Cancelar" o Escape: no pasa nada hasta que responde.
+  - Bloquea `/finanzas/transacciones/*/conciliar` en DevTools y confirma: el error aparece **dentro** del modal, que sigue abierto con tu motivo. Desbloquea y vuelve a confirmar: se cierra con "Transacción rechazada…".
 
 - [ ] **Control de Cobros** (menú): 4 indicadores arriba (recaudado del mes, en mora con monto, por vencer, por validar).
 - [ ] **Pestañas**: Mora (ordenada por atraso), Por Vencer, En Revisión, Al Día, con contadores.

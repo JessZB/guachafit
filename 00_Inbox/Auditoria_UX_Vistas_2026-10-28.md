@@ -123,7 +123,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-03 ✅ `e071bf4` | Piezas compartidas de formulario y formato | `components/ajustes/CampoAjustes`, `lib/` | ALU-27, base de CFG-07, CFG-14, CFG-18, ALU-02; COB-15, SEG-09 | `CampoAjustes` + `inputMode`/sufijo/`select`/`role="alert"`; helper `formatMonto` | bajo | no | ninguna |
 | UX-04 ✅ `d482f4f` | Cabecera: sincronización táctil y menú "Cuenta" | Header (todos los roles) | ENT-01, SEG-30 | `MenuAccionesAlumno` (Radix), `BotonTactil`, `IndicadorColaOffline` | medio (compartido con alumno) | no | ninguna |
 | UX-05 ✅ `d777772` | Cobros: carga y datos honestos | Conciliación, Cartera | COB-01, COB-04, COB-16, COB-17, COB-24 | `EstadoCarga/Error/Vacio`, `AvisoDatosOffline`, `EsqueletoDirectorio`; borra `ErrorBandejaConciliacion` | bajo | no | ninguna |
-| UX-06 | Cobros: rechazo seguro | Conciliación | COB-02, COB-03, COB-06 | `DialogoConfirmacion` peligro o `ModalAccesible`, `BotonTactil` | medio (specs de interacción) | no | ninguna |
+| UX-06 ✅ `87fe4df` | Cobros: rechazo seguro | Conciliación | COB-02, COB-03, COB-06 | `DialogoConfirmacion` peligro o `ModalAccesible`, `BotonTactil` | medio (specs de interacción) | no | ninguna |
 | UX-07 | Cobros: táctil, badges y tabs en móvil | Conciliación, Cartera | COB-05, 07, 08(a,c,d), 09, 10, 12, 19, 20, 21, 22, 23, 25 | `ChipFiltro`, `BotonTactil`, `BadgeEstado`, `BarraTabsSegmentada`, `MenuAccionesAlumno` | medio | no | UX-01; ⛔ D3 (menú "Más" en COB-20) |
 | UX-08 | Cobros: modal de cobro y feedback | Cartera | COB-18, COB-26, COB-11 | `useId`, `inputMode`, `role="status"`, línea resumen previa | medio | no (salvo conversión con tasa del servidor) | ⛔ D1; UX-03 |
 | UX-09 | Cobros: recordatorio y enlace a la bandeja | Cartera → Conciliación | COB-27, COB-28 | `?q=` en `useFiltrosConciliacion`, `onError` de miniatura | medio | **sí** para la vista previa del mensaje | ⛔ D2 |
@@ -178,7 +178,13 @@ Cobertura: los hallazgos BAJA no listados se resuelven con el lote de su área a
 **Seguimientos de UX-05 (revisión de resiliencia, 2026-10-29):**
 - **UX-07 suma el lote web P2 del módulo 5:** mostrar el próximo vencimiento en la tabla de Cartera (RF-009, la API ya lo envía).
 - `common/AvisoErrorRecarga` es la pieza común para recargas fallidas con datos visibles. `alumnos/AvisoErrorDirectorio` queda como reexport; migrar sus usos y borrarlo cuando se toque "Mis alumnos".
-- `use-bandeja-conciliacion.ts` sigue exponiendo `enCargaInicial`, que ya no usa la página: retirarlo en el próximo lote de Conciliación (UX-06).
+- ~~`use-bandeja-conciliacion.ts` sigue exponiendo `enCargaInicial`~~: retirado en UX-06.
+
+**Seguimientos de UX-06 (revisión de fiabilidad, 2026-10-29), para UX-08 (feedback de acciones, COB-11):**
+- `actionError` de una aprobación fallida no se limpia al abrir un rechazo ni tras un rechazo correcto: pueden convivir el error viejo y el éxito nuevo (`use-acciones-conciliacion.ts:109-121`).
+- El `setTimeout` del mensaje de éxito no se cancela al desmontar (`use-acciones-conciliacion.ts:113`, preexistente).
+- Menor: el test 5 de `ConciliacionPage.rechazo-seguro.interaccion.spec.tsx:331` no espera la promesa que resuelve al final.
+- `useFormatoNumero()` ya existe (`lib/use-formato-numero.ts`): los lotes que muestren montos (UX-08, UX-10, UX-13) lo usan.
 - COB-16 parcial: las tarjetas siguen siendo `div` sin `article`/`aria-labelledby` y los `h3` de los estados no tienen jerarquía respecto al `h1`. Va con UX-10.
 - Proceso: en la fase roja de UX-05, C2 falló por un selector equivocado ("Pagos por Validar" en lugar de "Pendiente de Revisión") y el reporte lo dio por bueno. Al revisar un rojo, comprobar el **mensaje** de cada fallo, no solo que falle.
 
