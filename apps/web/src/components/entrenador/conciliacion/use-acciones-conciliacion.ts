@@ -15,6 +15,10 @@ export interface ResultadoAccionesConciliacion {
   marcarImagenFallida: () => void;
   motivoRechazo: string;
   fijarMotivoRechazo: (valor: string) => void;
+  /** `true` while the rejection PATCH is in flight: blocks close and double submit. */
+  rechazando: boolean;
+  /** Rejection failure, shown inside the rejection modal (never on the page). */
+  errorRechazo: string | null;
   actionSuccess: string | null;
   actionError: string | null;
   pagoPorAprobar: TransaccionPagoDetalleDTO | null;
@@ -38,7 +42,12 @@ export function useAccionesConciliacion(
   const [viewingComprobanteTx, setViewingComprobanteTx] = useState<TransaccionPagoDetalleDTO | null>(null);
   // The real URL can fail (TTL expiry); it is never replaced with a foreign image.
   const [comprobanteImgError, setComprobanteImgError] = useState(false);
+  // COB-03: a draft reason must never reach another student, so every opening clears it.
   const [motivoRechazo, setMotivoRechazo] = useState('');
+  // Rejection failure stays inside the modal, so the reason draft survives the retry.
+  const [errorRechazo, setErrorRechazo] = useState<string | null>(null);
+  // `rechazando` blocks closing the modal and a second submit while the PATCH travels.
+  const [rechazando, setRechazando] = useState(false);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   // Conciliation failure stays visible; the transaction does not vanish unconfirmed.
   const [actionError, setActionError] = useState<string | null>(null);
@@ -74,8 +83,9 @@ export function useAccionesConciliacion(
   };
 
   const handleConfirmarRechazo = async () => {
-    if (!rejectingTx || !motivoRechazo.trim()) return;
-    setActionError(null);
+    if (!rejectingTx || !motivoRechazo.trim() || rechazando) return;
+    setRechazando(true);
+    setErrorRechazo(null);
 
     try {
       await apiClient(`/finanzas/transacciones/${rejectingTx.id}/conciliar`, {
@@ -86,10 +96,13 @@ export function useAccionesConciliacion(
         }),
       });
     } catch (err: unknown) {
-      setActionError(
+      // The modal stays open with the reason, so the coach can retry without retyping.
+      setErrorRechazo(
         (err as Error)?.message || 'No se pudo rechazar la transacción. Revisa tu conexión e inténtalo de nuevo.'
       );
       return;
+    } finally {
+      setRechazando(false);
     }
 
     // Same rule as approve: real reload, or the demo slice with the resolved id.
@@ -100,6 +113,13 @@ export function useAccionesConciliacion(
     setTimeout(() => setActionSuccess(null), 3000);
   };
 
+  // COB-03 is enforced by abrirRechazo: no draft reason survives into a new rejection.
+  const abrirRechazo = (tx: TransaccionPagoDetalleDTO) => {
+    setMotivoRechazo('');
+    setErrorRechazo(null);
+    setRejectingTx(tx);
+  };
+
   return {
     rejectingTx,
     viewingComprobanteTx,
@@ -107,12 +127,19 @@ export function useAccionesConciliacion(
     marcarImagenFallida: () => setComprobanteImgError(true),
     motivoRechazo,
     fijarMotivoRechazo: setMotivoRechazo,
+    rechazando,
+    errorRechazo,
     actionSuccess,
     actionError,
     pagoPorAprobar,
     aprobando,
-    iniciarRechazo: setRejectingTx,
-    cerrarRechazo: () => setRejectingTx(null),
+    iniciarRechazo: abrirRechazo,
+    cerrarRechazo: () => {
+      if (rechazando) return;
+      setRejectingTx(null);
+      setMotivoRechazo('');
+      setErrorRechazo(null);
+    },
     verComprobante: (tx) => {
       setComprobanteImgError(false);
       setViewingComprobanteTx(tx);
@@ -120,7 +147,7 @@ export function useAccionesConciliacion(
     cerrarVisor: () => setViewingComprobanteTx(null),
     rechazarDesdeVisor: (tx) => {
       setViewingComprobanteTx(null);
-      setRejectingTx(tx);
+      abrirRechazo(tx);
     },
     aprobarDesdeVisor: (tx) => {
       setPagoPorAprobar(tx);

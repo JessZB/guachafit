@@ -23,8 +23,6 @@ export interface ResultadoBandejaConciliacion {
   transacciones: TransaccionPagoDetalleDTO[];
   total: number;
   cargando: boolean;
-  /** First load shows the loading state; page changes keep the list. */
-  enCargaInicial: boolean;
   /** `true` cuando ya hay una respuesta del servidor (aunque la recarga actual falle). */
   tieneDatos: boolean;
   error: string | null;
@@ -83,7 +81,6 @@ export function useBandejaConciliacion(isDemoMode: boolean): ResultadoBandejaCon
     recargar,
     respuesta,
   } = paginacion;
-  const enCargaInicial = cargando && !respuesta;
   const tieneDatos = respuesta !== undefined;
   const error = errorConsulta?.message ?? null;
 
@@ -105,7 +102,6 @@ export function useBandejaConciliacion(isDemoMode: boolean): ResultadoBandejaCon
     transacciones,
     total,
     cargando,
-    enCargaInicial,
     tieneDatos,
     error,
     recargar,

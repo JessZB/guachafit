@@ -20,6 +20,7 @@ import { AvisoErrorRecarga } from '../../components/common/AvisoErrorRecarga';
 import { EstadoCarga } from '../../components/ui/EstadoCarga';
 import { EstadoError } from '../../components/ui/EstadoError';
 import { useFrescuraOffline } from '../../lib/use-frescura-offline';
+import { useFormatoNumero } from '../../lib/use-formato-numero';
 import { EncabezadoConciliacion } from '../../components/entrenador/conciliacion/EncabezadoConciliacion';
 import { AvisosAccionConciliacion } from '../../components/entrenador/conciliacion/AvisosAccionConciliacion';
 import { BandejaVaciaConciliacion } from '../../components/entrenador/conciliacion/BandejaVaciaConciliacion';
@@ -39,6 +40,7 @@ export function ConciliacionPage() {
   const bandeja = useBandejaConciliacion(isDemoMode);
   const filtros = useFiltrosConciliacion(bandeja.transacciones);
   const acciones = useAccionesConciliacion(bandeja.marcarResuelta);
+  const { formatMonto } = useFormatoNumero();
 
   return (
     <div className="space-y-6">
@@ -122,7 +124,11 @@ export function ConciliacionPage() {
 
       {acciones.rejectingTx && (
         <ModalRechazoConciliacion
+          alumno={acciones.rejectingTx.clienteNombre || 'Alumno'}
+          montoTexto={formatMonto(acciones.rejectingTx.montoEquivalenteUsd, 'USD', { conCodigo: true })}
           motivo={acciones.motivoRechazo}
+          procesando={acciones.rechazando}
+          error={acciones.errorRechazo}
           onCambiarMotivo={acciones.fijarMotivoRechazo}
           onCerrar={acciones.cerrarRechazo}
           onConfirmar={acciones.confirmarRechazo}
