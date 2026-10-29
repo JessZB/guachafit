@@ -7,8 +7,8 @@
  * `TablaEntrenadoresAdmin.tsx` y `PlantillasPage.tsx` para nivel; las líneas
  * citadas en la versión anterior ya no corresponden porque las Olas 1–3
  * extrajeron esos mapas a piezas propias —p. ej.
- * `tabla-cartera/BadgeCartera.tsx`, que usa `destructive` en vez de `danger`
- * y por eso sigue ÚNICA—).
+ * `tabla-cartera/BadgeCartera.tsx` (usaba `destructive` en vez de `danger`) fue
+ * reemplazado por este átomo en UX-07b y eliminado; ya no es una copia vigente—).
  *
  * Decisiones de consolidación (ver reporte 48 §2):
  * - Ternario único `bg-{t}/15 text-{t} border-{t}/25` por tono.

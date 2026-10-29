@@ -21,7 +21,7 @@ export function CeldaAlumnoCartera({
   if (contexto === 'tarjeta') {
     return (
       <div className="min-w-0">
-        <p className="font-bold text-sm text-foreground truncate">{fila.alumnoNombre}</p>
+        <p className="font-bold text-sm text-foreground line-clamp-2 break-words">{fila.alumnoNombre}</p>
         {tieneSaldoAFavor(fila.saldoAFavorUsd) && (
           <p className="text-[11px] font-semibold text-success">
             {`A favor: ${fila.saldoAFavorUsd} USD`}

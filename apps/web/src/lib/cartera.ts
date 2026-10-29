@@ -16,7 +16,10 @@ import { pluralizar } from './pluralizar';
 
 export interface DefinicionPestanaCartera {
   clave: PestanaCarteraDTO;
+  /** Nombre completo en sentence case (nombre accesible y texto del buscador). */
   etiqueta: string;
+  /** Texto visible corto del tab, pensado para caber en móvil (UX-07b). */
+  etiquetaCorta: string;
   /** Copy corto del criterio real de la pestaña (RF-009 §4.B). */
   criterio: string;
 }
@@ -25,22 +28,26 @@ export interface DefinicionPestanaCartera {
 export const PESTANAS_CARTERA: DefinicionPestanaCartera[] = [
   {
     clave: 'mora',
-    etiqueta: 'En Mora',
+    etiqueta: 'En mora',
+    etiquetaCorta: 'Mora',
     criterio: 'Corte superado con saldo pendiente',
   },
   {
     clave: 'por_vencer',
-    etiqueta: 'Próximos a Vencer',
+    etiqueta: 'Próximos a vencer',
+    etiquetaCorta: 'Por vencer',
     criterio: 'Vencen en los próximos 5 días',
   },
   {
     clave: 'revision',
-    etiqueta: 'Pendiente de Revisión',
+    etiqueta: 'Pendiente de revisión',
+    etiquetaCorta: 'Revisión',
     criterio: 'Comprobantes esperando validación',
   },
   {
     clave: 'al_dia',
-    etiqueta: 'Al Día',
+    etiqueta: 'Al día',
+    etiquetaCorta: 'Al día',
     criterio: 'Cuota del ciclo cubierta al 100%',
   },
 ];

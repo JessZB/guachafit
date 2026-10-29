@@ -9,6 +9,12 @@
  * los ítems, la pestaña activa y las props APG de `useTabsAccesibles` (roving tabindex, ids,
  * `aria-selected` y teclado), y se limita a pintarlos.
  *
+ * Indicador por ítem (`indicador.variante`):
+ * - `alerta` (por defecto, comportamiento heredado): punto de aviso con `role="img"` que en
+ *   móvil es un punto absoluto y desde `sm` muestra el texto dentro del tab.
+ * - `contador` (UX-07b): número siempre visible en todos los tamaños, sin `role`; el nombre
+ *   accesible lo aporta el `ariaLabel` del propio tab.
+ *
  * Columnas por mapa fijo: Tailwind v4 solo genera las clases que encuentra como literales en el
  * código fuente, así que una clase construida como `grid-cols-${n}` no produciría CSS. El número
  * de ítems se acota al rango [2, 6] y se traduce a una de las cinco clases literales del mapa.
@@ -24,8 +30,15 @@ export interface ItemTab<K extends string> {
   icono: LucideIcon;
   /** Nombre accesible del tab; si no existe, se usa la etiqueta visible. */
   ariaLabel?: string;
-  /** Badge compacto dentro del tab; `texto` se muestra desde `sm` y `ariaLabel` se anuncia. */
-  indicador?: { texto: string; ariaLabel: string } | null;
+  /**
+   * Badge compacto dentro del tab. `texto` es el valor mostrado y `ariaLabel` el nombre que se
+   * anuncia. `variante` por defecto es `alerta`; `contador` muestra el número siempre visible.
+   */
+  indicador?: {
+    texto: string;
+    ariaLabel: string;
+    variante?: 'alerta' | 'contador';
+  } | null;
 }
 
 export interface BarraTabsSegmentadaProps<K extends string> {
@@ -66,35 +79,48 @@ export function BarraTabsSegmentada<K extends string>({
         : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
     }`;
 
+  const claseContador = (activo: boolean) =>
+    `min-w-[1.5rem] text-center px-1.5 py-0.5 rounded-full text-[11px] font-bold ${
+      activo
+        ? 'bg-primary-foreground/20 text-primary-foreground'
+        : 'bg-background/60 text-foreground border border-border/60'
+    }`;
+
   return (
     <div
       {...propsTablist}
       aria-label={ariaLabel}
       className={`grid ${CLASE_COLUMNAS[columnas]} gap-1 p-1 rounded-2xl bg-secondary/60 border border-border/60`}
     >
-      {items.map(({ clave, etiqueta, icono: Icono, ariaLabel: nombreAccesible, indicador }) => (
-        <button
-          key={clave}
-          type="button"
-          {...propsTab(clave)}
-          aria-label={nombreAccesible}
-          className={claseTab(clave)}
-        >
-          <Icono className={claseIcono} aria-hidden="true" />
-          <span className={claseEtiqueta}>{etiqueta}</span>
-          {indicador && (
-            <span
-              role="img"
-              aria-label={indicador.ariaLabel}
-              className="absolute top-1 right-1 sm:static h-2.5 w-2.5 sm:h-auto sm:w-auto rounded-full bg-danger-strong text-white font-bold font-mono sm:px-1.5 sm:py-0.5 sm:text-[11px]"
-            >
-              <span className="hidden sm:inline">
-                <span>{indicador.texto}</span>
-              </span>
-            </span>
-          )}
-        </button>
-      ))}
+      {items.map(({ clave, etiqueta, icono: Icono, ariaLabel: nombreAccesible, indicador }) => {
+        const activo = activa === clave;
+        return (
+          <button
+            key={clave}
+            type="button"
+            {...propsTab(clave)}
+            aria-label={nombreAccesible}
+            className={claseTab(clave)}
+          >
+            <Icono className={claseIcono} aria-hidden="true" />
+            <span className={claseEtiqueta}>{etiqueta}</span>
+            {indicador &&
+              (indicador.variante === 'contador' ? (
+                <span className={claseContador(activo)}>{indicador.texto}</span>
+              ) : (
+                <span
+                  role="img"
+                  aria-label={indicador.ariaLabel}
+                  className="absolute top-1 right-1 sm:static h-2.5 w-2.5 sm:h-auto sm:w-auto rounded-full bg-danger-strong text-white font-bold font-mono sm:px-1.5 sm:py-0.5 sm:text-[11px]"
+                >
+                  <span className="hidden sm:inline">
+                    <span>{indicador.texto}</span>
+                  </span>
+                </span>
+              ))}
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -224,7 +224,7 @@ function botonCobroDe(nombreAlumno: string): HTMLElement {
     .map((nodo) => nodo.closest('tr'))
     .find((candidata): candidata is HTMLTableRowElement => Boolean(candidata));
   if (!fila) throw new Error(`No se encontró la fila de ${nombreAlumno}.`);
-  return within(fila).getByRole('button', { name: 'Registrar cobro' });
+  return within(fila).getByRole('button', { name: `Registrar cobro de ${nombreAlumno}` });
 }
 
 /** Abre el modal de cobro del alumno indicado y lo devuelve (espera a que la tabla cargue). */

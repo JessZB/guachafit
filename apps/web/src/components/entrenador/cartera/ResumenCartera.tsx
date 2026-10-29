@@ -44,7 +44,10 @@ export function ResumenCartera({ resumen }: { resumen: ResumenCarteraDTO }) {
           variant: resumen.proximosAVencer > 0 ? 'warning' : 'success',
         }}
       />
-      <Link to="/coach/conciliacion" className="block">
+      <Link
+        to="/coach/conciliacion"
+        className="block rounded-3xl focus-visible:outline-2 focus-visible:outline-primary"
+      >
         <MetricCard
           title="Pagos por Validar"
           value={resumen.pagosPorValidar}

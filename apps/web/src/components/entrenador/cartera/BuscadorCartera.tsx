@@ -12,6 +12,7 @@ export interface BuscadorCarteraProps {
   busqueda: string;
   onCambiarBusqueda: (valor: string) => void;
   isLoading: boolean;
+  /** Se conserva para no tocar `CarteraPage`; el texto de estado usa solo `total` (UX-07b). */
   visibles: number;
   total: number;
   etiquetaPestana: string;
@@ -22,7 +23,6 @@ export function BuscadorCartera({
   busqueda,
   onCambiarBusqueda,
   isLoading,
-  visibles,
   total,
   etiquetaPestana,
   sinTasa,
@@ -38,13 +38,18 @@ export function BuscadorCartera({
             onChange={(evento) => onCambiarBusqueda(evento.target.value)}
             placeholder="Buscar alumno por nombre..."
             aria-label="Buscar alumno por nombre"
-            className="w-full pl-9 pr-3 py-2 rounded-xl bg-background border border-border text-xs font-semibold text-foreground focus:outline-hidden focus:border-primary transition-colors"
+            autoComplete="off"
+            className="w-full min-h-11 pl-9 pr-3 rounded-xl bg-background border border-border text-base sm:text-sm font-semibold text-foreground focus:outline-hidden focus:border-primary transition-colors"
           />
         </div>
-        <p className="text-[11px] text-muted-foreground font-mono sm:ml-auto">
+        <p
+          role="status"
+          aria-live="polite"
+          className="text-[11px] text-muted-foreground font-mono sm:ml-auto"
+        >
           {isLoading
             ? 'Cargando cartera...'
-            : `Mostrando ${visibles} de ${pluralizar(total, 'registro', 'registros')} en ${etiquetaPestana}`}
+            : `${pluralizar(total, 'registro', 'registros')} · ${etiquetaPestana}`}
         </p>
       </div>
 

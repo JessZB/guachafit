@@ -25,7 +25,7 @@ export function CabeceraCartera() {
         </div>
         <Link
           to="/coach/conciliacion"
-          className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs transition-colors"
+          className="shrink-0 inline-flex min-h-11 items-center gap-2 px-4 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs transition-colors focus-visible:outline-2 focus-visible:outline-primary"
         >
           <Receipt className="h-4 w-4 text-primary" />
           <span>Bandeja de validación</span>

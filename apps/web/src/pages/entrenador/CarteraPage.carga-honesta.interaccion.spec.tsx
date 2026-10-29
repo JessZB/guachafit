@@ -243,19 +243,19 @@ describe('CarteraPage · Carga honesta (Contrato C)', () => {
     expect(screen.getByRole('link', { name: /Ajustes → Tasas/i })).toBeTruthy();
 
     // 2. En por_vencer aparece
-    fireEvent.click(screen.getByRole('tab', { name: /Próximos a Vencer/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /próximos a vencer/i }));
     await waitFor(() => {
       expect(screen.getByText(/Sin tasa de cambio configurada/i)).toBeTruthy();
     });
 
     // 3. En revision no aparece
-    fireEvent.click(screen.getByRole('tab', { name: /Pendiente de Revisión/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /pendiente de revisión/i }));
     await waitFor(() => {
       expect(screen.queryByText(/Sin tasa de cambio configurada/i)).toBeNull();
     });
 
     // 4. En al_dia no aparece
-    fireEvent.click(screen.getByRole('tab', { name: /Al Día/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /al día/i }));
     await waitFor(() => {
       expect(screen.queryByText(/Sin tasa de cambio configurada/i)).toBeNull();
     });
@@ -302,7 +302,9 @@ describe('CarteraPage · Carga honesta (Contrato C)', () => {
     // Provocar recarga fallida mediante cobro en efectivo
     carteraError = 'Fallo de red (500).';
     const fila = filaTablaDe('Carlos Mendoza')!;
-    const botonCobro = within(fila).getByRole('button', { name: 'Registrar cobro' });
+    const botonCobro = within(fila).getByRole('button', {
+      name: 'Registrar cobro de Carlos Mendoza',
+    });
     fireEvent.click(botonCobro);
     const dialogo = await screen.findByRole('dialog');
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Registrar cobro' }));
@@ -335,7 +337,9 @@ describe('CarteraPage · Carga honesta (Contrato C)', () => {
     // Provocar recarga fallida mediante cobro en efectivo
     carteraError = 'Fallo de red (500).';
     const fila = filaTablaDe('Carlos Mendoza')!;
-    const botonCobro = within(fila).getByRole('button', { name: 'Registrar cobro' });
+    const botonCobro = within(fila).getByRole('button', {
+      name: 'Registrar cobro de Carlos Mendoza',
+    });
     fireEvent.click(botonCobro);
     const dialogo = await screen.findByRole('dialog');
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Registrar cobro' }));
@@ -361,7 +365,9 @@ describe('CarteraPage · Carga honesta (Contrato C)', () => {
 
     await waitFor(() => expect(filaTablaDe('Carlos Mendoza')).toBeTruthy());
     const fila = filaTablaDe('Carlos Mendoza')!;
-    const botonCobro = within(fila).getByRole('button', { name: 'Registrar cobro' });
+    const botonCobro = within(fila).getByRole('button', {
+      name: 'Registrar cobro de Carlos Mendoza',
+    });
     fireEvent.click(botonCobro);
 
     const dialogo = await screen.findByRole('dialog');

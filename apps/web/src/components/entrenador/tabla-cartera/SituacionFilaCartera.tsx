@@ -15,7 +15,7 @@ import {
   etiquetaDiasRestantes,
 } from '../../../lib/cartera';
 import { Clock3 } from 'lucide-react';
-import { BadgeCartera } from './BadgeCartera';
+import { BadgeEstado } from '../../ui/BadgeEstado';
 
 export function SituacionFilaCartera({
   fila,
@@ -29,7 +29,7 @@ export function SituacionFilaCartera({
     const dias = etiquetaDiasAtraso(fila.diasAtraso);
     return (
       <div className="flex flex-col gap-1">
-        <BadgeCartera tono={etiqueta.tono}>{etiqueta.texto}</BadgeCartera>
+        <BadgeEstado tono={etiqueta.tono}>{etiqueta.texto}</BadgeEstado>
         {dias && <span className="text-[11px] font-bold text-destructive">{dias}</span>}
       </div>
     );
@@ -41,7 +41,7 @@ export function SituacionFilaCartera({
     const vence = formatFechaHoraLocal(fila.fechaCorteUtc);
     return (
       <div className="flex flex-col gap-1">
-        <BadgeCartera tono={etiqueta.tono}>{etiqueta.texto}</BadgeCartera>
+        <BadgeEstado tono={etiqueta.tono}>{etiqueta.texto}</BadgeEstado>
         {dias && <span className="text-[11px] font-bold text-warning">{dias}</span>}
         {vence && <span className="text-[11px] text-muted-foreground">Corte: {vence}</span>}
       </div>
@@ -53,7 +53,7 @@ export function SituacionFilaCartera({
     const reportado = formatFechaHoraLocal(fila.fechaReporteUtc);
     return (
       <div className="flex flex-col gap-1">
-        <BadgeCartera tono="info">Pago en revisión</BadgeCartera>
+        <BadgeEstado tono="info">Pago en revisión</BadgeEstado>
         {espera && (
           <span className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">
             <Clock3 className="h-3 w-3" /> {espera}
@@ -66,7 +66,7 @@ export function SituacionFilaCartera({
 
   return (
     <div className="flex flex-col gap-1">
-      <BadgeCartera tono="success">Al día</BadgeCartera>
+      <BadgeEstado tono="success">Al día</BadgeEstado>
       <span className="text-[11px] text-muted-foreground">Ciclo {fila.periodo ?? '—'}</span>
     </div>
   );

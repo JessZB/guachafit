@@ -112,9 +112,11 @@ describe('TablaCartera · caracterizacion de interaccion (prompt 85)', () => {
   it('C3 · clic en "Recordatorio" llama a onRecordatorio con la fila (escritorio y movil)', () => {
     const esperada = fila();
     const espias = montar([esperada], 'mora');
-    const botones = screen.getAllByRole('button', { name: 'Recordatorio' });
-    // La tabla de escritorio y la tarjeta movil renderizan el mismo boton.
-    expect(botones).toHaveLength(2);
+    const botones = screen.getAllByRole('button', {
+      name: `Recordatorio para ${esperada.alumnoNombre}`,
+    });
+    // Con saldo en mora, en movil vive en "Más acciones"; solo el escritorio lo tiene en el DOM directo.
+    expect(botones).toHaveLength(1);
     fireEvent.click(botones[0]);
     expect(espias.onRecordatorio).toHaveBeenCalledTimes(1);
     expect(espias.onRecordatorio).toHaveBeenCalledWith(esperada);
@@ -123,7 +125,9 @@ describe('TablaCartera · caracterizacion de interaccion (prompt 85)', () => {
   it('C4 · clic en "Registrar cobro" llama a onCobrar con la fila', () => {
     const esperada = fila();
     const espias = montar([esperada], 'mora');
-    const botones = screen.getAllByRole('button', { name: 'Registrar cobro' });
+    const botones = screen.getAllByRole('button', {
+      name: `Registrar cobro de ${esperada.alumnoNombre}`,
+    });
     expect(botones).toHaveLength(2);
     fireEvent.click(botones[0]);
     expect(espias.onCobrar).toHaveBeenCalledTimes(1);
@@ -133,17 +137,23 @@ describe('TablaCartera · caracterizacion de interaccion (prompt 85)', () => {
   it('C5 · clic en "Ver ficha" llama a onVerFicha con la fila', () => {
     const esperada = fila();
     const espias = montar([esperada], 'mora');
-    const botones = screen.getAllByRole('button', { name: 'Ver ficha' });
-    expect(botones).toHaveLength(2);
+    const botones = screen.getAllByRole('button', {
+      name: `Ver ficha de ${esperada.alumnoNombre}`,
+    });
+    // Con saldo en mora, en movil vive en "Más acciones"; solo el escritorio lo tiene visible directamente.
+    expect(botones).toHaveLength(1);
     fireEvent.click(botones[0]);
     expect(espias.onVerFicha).toHaveBeenCalledTimes(1);
     expect(espias.onVerFicha).toHaveBeenCalledWith(esperada);
   });
 
   it('C6 · sin alumnoPerfilId el boton "Ver ficha" esta deshabilitado', () => {
-    const espias = montar([fila({ alumnoPerfilId: null })], 'mora');
-    const botones = screen.getAllByRole('button', { name: 'Ver ficha' });
-    expect(botones).toHaveLength(2);
+    const esperada = fila({ alumnoPerfilId: null });
+    const espias = montar([esperada], 'mora');
+    const botones = screen.getAllByRole('button', {
+      name: `Ver ficha de ${esperada.alumnoNombre}`,
+    });
+    expect(botones).toHaveLength(1);
     for (const boton of botones) {
       expect((boton as HTMLButtonElement).disabled).toBe(true);
     }
@@ -164,38 +174,58 @@ describe('TablaCartera · caracterizacion de interaccion (prompt 85)', () => {
       diasEspera: 1,
     });
     const espias = montar([esperada], 'revision');
-    const botones = screen.getAllByRole('button', { name: 'Revisar en bandeja' });
+    const botones = screen.getAllByRole('button', {
+      name: `Revisar en bandeja el pago de ${esperada.alumnoNombre}`,
+    });
     expect(botones).toHaveLength(2);
     fireEvent.click(botones[0]);
     expect(espias.onRevisarPago).toHaveBeenCalledTimes(1);
     expect(espias.onRevisarPago).toHaveBeenCalledWith(esperada);
-    expect(screen.queryByRole('button', { name: 'Registrar cobro' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Recordatorio' })).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: `Registrar cobro de ${esperada.alumnoNombre}` }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole('button', {
+        name: `Recordatorio para ${esperada.alumnoNombre}`,
+      }),
+    ).toBeNull();
   });
 
   it('C8 · sin saldo pendiente no hay "Registrar cobro" aunque haya "Recordatorio"', () => {
-    montar([fila({ saldoPendienteUsd: '0.00' })], 'mora');
-    expect(screen.queryByRole('button', { name: 'Registrar cobro' })).toBeNull();
-    expect(screen.getAllByRole('button', { name: 'Recordatorio' })).toHaveLength(2);
+    const esperada = fila({ saldoPendienteUsd: '0.00' });
+    montar([esperada], 'mora');
+    expect(
+      screen.queryByRole('button', { name: `Registrar cobro de ${esperada.alumnoNombre}` }),
+    ).toBeNull();
+    // Sin saldo, en movil la accion principal es Recordatorio, visible tanto en escritorio como en movil.
+    expect(
+      screen.getAllByRole('button', {
+        name: `Recordatorio para ${esperada.alumnoNombre}`,
+      }),
+    ).toHaveLength(2);
   });
 
   it('C9 · en al_dia solo existe "Ver ficha" (sin cobranza)', () => {
-    montar(
-      [
-        fila({
-          estadoCuota: EstadoCuota.AL_DIA,
-          saldoPendienteUsd: '0.00',
-          saldoPendienteBs: '0.00',
-          planNombre: 'Presencial Completo',
-          periodo: '2026-09',
-          diasAtraso: null,
-        }),
-      ],
-      'al_dia',
-    );
-    expect(screen.getAllByRole('button', { name: 'Ver ficha' })).toHaveLength(2);
-    expect(screen.queryByRole('button', { name: 'Registrar cobro' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Recordatorio' })).toBeNull();
+    const esperada = fila({
+      estadoCuota: EstadoCuota.AL_DIA,
+      saldoPendienteUsd: '0.00',
+      saldoPendienteBs: '0.00',
+      planNombre: 'Presencial Completo',
+      periodo: '2026-09',
+      diasAtraso: null,
+    });
+    montar([esperada], 'al_dia');
+    expect(
+      screen.getAllByRole('button', { name: `Ver ficha de ${esperada.alumnoNombre}` }),
+    ).toHaveLength(2);
+    expect(
+      screen.queryByRole('button', { name: `Registrar cobro de ${esperada.alumnoNombre}` }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole('button', {
+        name: `Recordatorio para ${esperada.alumnoNombre}`,
+      }),
+    ).toBeNull();
   });
 
   it('C10 · encabezados de la tabla segun la pestana', () => {

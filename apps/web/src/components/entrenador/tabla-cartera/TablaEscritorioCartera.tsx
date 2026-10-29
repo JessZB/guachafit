@@ -7,7 +7,7 @@
  */
 import type { FilaCarteraDTO, PestanaCarteraDTO } from '@guachafit/shared';
 import { etiquetaMetodoPago } from '../../../lib/conciliacion-filtros';
-import { formatFechaHoraLocal } from '../../../lib/date-format';
+import { formatFechaCalendario, formatFechaHoraLocal } from '../../../lib/date-format';
 import { textoUltimaGestion } from '../../../lib/cartera';
 import { AccionesFilaCartera } from './AccionesFilaCartera';
 import { CeldaAlumnoCartera } from './CeldaAlumnoCartera';
@@ -45,6 +45,8 @@ export function TablaEscritorioCartera({
               <>
                 <th scope="col" className="px-4 py-3 font-bold">Plan</th>
                 <th scope="col" className="px-4 py-3 font-bold">Corte del ciclo</th>
+                {/* Lote web P2 del módulo 5 (RF-009, ADR-020): próximo vencimiento del plan. */}
+                <th scope="col" className="px-4 py-3 font-bold">Próximo vencimiento</th>
               </>
             ) : (
               <>
@@ -103,6 +105,10 @@ export function TablaEscritorioCartera({
                   <td className="px-4 py-3 align-top text-muted-foreground">
                     {formatFechaHoraLocal(fila.fechaCorteUtc) ?? '—'}
                   </td>
+                  {/* Lote web P2 del módulo 5 (RF-009, ADR-020). */}
+                  <td className="px-4 py-3 align-top text-muted-foreground">
+                    {formatFechaCalendario(fila.proximoCorte) ?? 'Sin próximo corte'}
+                  </td>
                 </>
               ) : (
                 <>
@@ -125,6 +131,7 @@ export function TablaEscritorioCartera({
                   <AccionesFilaCartera
                     fila={fila}
                     pestana={pestana}
+                    contexto="tabla"
                     onRecordatorio={onRecordatorio}
                     onCobrar={onCobrar}
                     onVerFicha={onVerFicha}

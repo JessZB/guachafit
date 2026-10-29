@@ -205,7 +205,7 @@ function botonRecordatorioDe(nombreAlumno: string): HTMLElement {
     .map((nodo) => nodo.closest('tr'))
     .find((candidata): candidata is HTMLTableRowElement => Boolean(candidata));
   if (!fila) throw new Error(`No se encontró la fila de ${nombreAlumno}.`);
-  return within(fila).getByRole('button', { name: 'Recordatorio' });
+  return within(fila).getByRole('button', { name: `Recordatorio para ${nombreAlumno}` });
 }
 
 /** Botón "Registrar cobro" de la fila del alumno indicado. */
@@ -215,7 +215,7 @@ function botonCobroDe(nombreAlumno: string): HTMLElement {
     .map((nodo) => nodo.closest('tr'))
     .find((candidata): candidata is HTMLTableRowElement => Boolean(candidata));
   if (!fila) throw new Error(`No se encontró la fila de ${nombreAlumno}.`);
-  return within(fila).getByRole('button', { name: 'Registrar cobro' });
+  return within(fila).getByRole('button', { name: `Registrar cobro de ${nombreAlumno}` });
 }
 
 describe('CarteraPage · caracterización (prompt 73): zonas sin cobertura previa', () => {
@@ -235,8 +235,8 @@ describe('CarteraPage · caracterización (prompt 73): zonas sin cobertura previ
     expect(screen.getByText('Recaudado del Mes')).toBeTruthy();
     expect(screen.getByText('$120.50')).toBeTruthy();
     expect(screen.getByText('Total en Mora')).toBeTruthy();
-    // 'Próximos a Vencer' aparece dos veces: KPI y pestaña (comportamiento actual).
-    expect(screen.getAllByText('Próximos a Vencer')).toHaveLength(2);
+    // 'Próximos a Vencer' aparece en el KPI; la pestaña ahora usa la etiqueta corta 'Por vencer'.
+    expect(screen.getByText('Próximos a Vencer')).toBeTruthy();
     expect(screen.getByText('Pagos por Validar')).toBeTruthy();
   });
 
@@ -247,8 +247,8 @@ describe('CarteraPage · caracterización (prompt 73): zonas sin cobertura previ
     const tablist = screen.getByRole('tablist', { name: 'Estados de cartera' });
     const tabs = within(tablist).getAllByRole('tab');
     expect(tabs).toHaveLength(4);
-    expect(within(tablist).getByRole('tab', { name: /En Mora/ })).toBeTruthy();
-    expect(within(tablist).getByRole('tab', { name: /Próximos a Vencer/ })).toBeTruthy();
+    expect(within(tablist).getByRole('tab', { name: /en mora/i })).toBeTruthy();
+    expect(within(tablist).getByRole('tab', { name: /próximos a vencer/i })).toBeTruthy();
     // Contadores reales del resumen: enMora=2, porVencer=1, revision=1, alDia=3.
     expect(screen.getByText('Corte superado con saldo pendiente')).toBeTruthy();
   });
@@ -257,7 +257,7 @@ describe('CarteraPage · caracterización (prompt 73): zonas sin cobertura previ
     montarPagina();
     await waitFor(() => expect(botonCobroDe(FILA_A.alumnoNombre)).toBeTruthy());
 
-    fireEvent.click(screen.getByRole('tab', { name: /Próximos a Vencer/ }));
+    fireEvent.click(screen.getByRole('tab', { name: /próximos a vencer/i }));
 
     await waitFor(() =>
       expect(getsCartera().some((url) => url.includes('pestana=por_vencer'))).toBe(true)
@@ -284,7 +284,7 @@ describe('CarteraPage · caracterización (prompt 73): zonas sin cobertura previ
     await waitFor(() =>
       expect(getsCartera().some((url) => url.includes('q=Carlos'))).toBe(true)
     );
-    expect(screen.getByText(/Mostrando 2 de 2 registros en En Mora/)).toBeTruthy();
+    expect(screen.getByText('2 registros · En mora')).toBeTruthy();
   });
 
   it('C7 · sin tasa vigente se avisa con el enlace a Ajustes → Tasas', async () => {
@@ -388,7 +388,7 @@ describe('CarteraPage · caracterización (prompt 73): zonas sin cobertura previ
     montarPagina();
     await screen.findAllByText('Roberto Díaz Navarro');
 
-    const botonesCobro = screen.getAllByRole('button', { name: 'Registrar cobro' });
+    const botonesCobro = screen.getAllByRole('button', { name: /Registrar cobro de/ });
     fireEvent.click(botonesCobro[0]);
     const dialogo = await screen.findByRole('dialog');
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Registrar cobro' }));

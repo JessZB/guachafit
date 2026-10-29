@@ -8,7 +8,7 @@
  */
 import type { FilaCarteraDTO, PestanaCarteraDTO } from '@guachafit/shared';
 import { etiquetaMetodoPago } from '../../../lib/conciliacion-filtros';
-import { formatFechaHoraLocal } from '../../../lib/date-format';
+import { formatFechaCalendario, formatFechaHoraLocal } from '../../../lib/date-format';
 import { textoUltimaGestion } from '../../../lib/cartera';
 import { AccionesFilaCartera } from './AccionesFilaCartera';
 import { CeldaAlumnoCartera } from './CeldaAlumnoCartera';
@@ -37,7 +37,7 @@ export function TarjetasMovilCartera({
           key={`${fila.alumnoUsuarioId}-${fila.pagoId ?? fila.cuotaId ?? 'fila'}`}
           className="p-4 space-y-3"
         >
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <CeldaAlumnoCartera fila={fila} contexto="tarjeta" />
             <SituacionFilaCartera fila={fila} pestana={pestana} />
           </div>
@@ -69,6 +69,16 @@ export function TarjetasMovilCartera({
             </div>
           )}
 
+          {pestana === 'al_dia' && (
+            // Lote web P2 del módulo 5 (RF-009, ADR-020): próximo vencimiento del plan.
+            <p className="text-xs text-muted-foreground">
+              Próximo vencimiento:{' '}
+              <span className="font-bold text-foreground">
+                {formatFechaCalendario(fila.proximoCorte) ?? 'Sin próximo corte'}
+              </span>
+            </p>
+          )}
+
           {pestana !== 'al_dia' && pestana !== 'revision' && (
             <p className="text-[11px] text-muted-foreground">
               {textoUltimaGestion(fila.ultimaGestionUtc)}
@@ -78,6 +88,7 @@ export function TarjetasMovilCartera({
           <AccionesFilaCartera
             fila={fila}
             pestana={pestana}
+            contexto="tarjeta"
             onRecordatorio={onRecordatorio}
             onCobrar={onCobrar}
             onVerFicha={onVerFicha}

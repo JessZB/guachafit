@@ -185,7 +185,9 @@ async function abrirCobroDe(nombreAlumno: string): Promise<HTMLElement> {
     .map((nodo) => nodo.closest('tr'))
     .find((candidata): candidata is HTMLTableRowElement => Boolean(candidata));
   if (!fila) throw new Error(`No se encontró la fila de ${nombreAlumno}.`);
-  fireEvent.click(within(fila).getByRole('button', { name: 'Registrar cobro' }));
+  fireEvent.click(
+    within(fila).getByRole('button', { name: `Registrar cobro de ${nombreAlumno}` })
+  );
   return screen.findByRole('dialog');
 }
 

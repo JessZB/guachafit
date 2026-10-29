@@ -6,9 +6,9 @@
  * `AsignacionMasivaPlantilla.tsx`, `AjustesPage.tsx` y la variante
  * secundaria de `PlantillasPage.tsx`; las líneas citadas en la versión
  * anterior ya no corresponden porque las Olas 1–3 extrajeron esos botones
- * a piezas propias —p. ej. `tabla-cartera/BotonAccionCartera.tsx`, con área
- * táctil `py-1.5` en vez de `min-h-11`, y `grafico-evolucion/BotonRango.tsx`,
- * con `aria-pressed` y estilos propios de activo—).
+ * a piezas propias —p. ej. `grafico-evolucion/BotonRango.tsx`, con `aria-pressed` y
+ * estilos propios de activo—. `tabla-cartera/BotonAccionCartera.tsx` (área táctil `py-1.5`
+ * en vez de `min-h-11`) fue reemplazado por este átomo en UX-07b y eliminado.
  *
  * - §6.8: `min-h-11` siempre (las copias de "Reintentar"/"Limpiar filtros" con
  *   `py-2` quedaban en ~32-40px; ver WARNINGs de los inventarios 43/44/47).
