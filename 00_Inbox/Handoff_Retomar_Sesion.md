@@ -59,6 +59,7 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **Fechas de la API:** suelen llegar en ISO con hora (`toISOString`). Para ISO usa `formatFechaLocal`; `formatFechaCalendario` solo acepta `YYYY-MM-DD`. **Los fixtures de los tests deben usar el formato real de la API**: un fixture irreal escondió un BLOCKER en L7.
 - **jsdom:** no calcula layout ni hace hit-testing, así que las clases se fijan solo donde no hay alternativa. `toContainElement` (jest-dom) no está registrado, usa `contains`. `CSS.escape` puede no existir. Las páginas completas tardan más de 5 s en montar: usa `vi.setConfig({ testTimeout: 20000 })` en el spec. Los timeouts sueltos de la suite completa se repiten aislados.
 - **Specs que leen código como texto:** `?raw` funciona con `.ts`/`.tsx`, pero vitest vacía los `.css` (`""`) salvo los listados en `test.css.include` (`vitest.config.ts`, añadido en UX-02 para `index.css`). Todo spec así empieza con una aserción de cordura (texto no vacío y una marca conocida): sin ella, la fase roja de UX-02 fue un falso rojo. No uses `node:fs` en specs de web: `tsc` revisa `src` entero y `apps/web` no tiene `@types/node`.
+- **Clases de un `svg` en jsdom:** `svg.className` es un `SVGAnimatedString`; lee las clases con `getAttribute('class')`.
 - **Radix DropdownMenu en tests:** ábrelo con teclado (`ArrowDown`).
 - **Enlace extendido en tarjetas:** todo contenedor o icono decorativo que quede por encima lleva `pointer-events-none`, y los controles reales `pointer-events-auto`.
 - **Datos sensibles:** nunca en `title`. Usa un disclosure plegado sin el texto en el DOM (`ChipSaludAlumno`).
@@ -71,6 +72,7 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **Engram:** puede fallar con "multiple active runtime sessions". Avisa y sigue.
 
 ## Estado al 2026-10-28
+- **Fundaciones de la auditoría UX cerradas (2026-10-29):** UX-01 `8cc2a89`, UX-02 `a670b4b`, UX-03 `e071bf4`, UX-04 `d482f4f` (con sus `docs(vault)`). Web **2543/2543**. El siguiente lote es UX-05 (Cobros: carga y datos honestos). Los seguimientos de cada lote están en la sección 3 de la auditoría.
 - Rediseño de la ficha del alumno (`/coach/alumnos/:id`) CERRADO:
 
   | Lote | Commit |
@@ -105,6 +107,7 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **`components/ui/`:** `BadgeEstado` (`whitespace-nowrap shrink-0`), `BarraTabsSegmentada` (UX-01, `8cc2a89`; seguimientos en la auditoría, sección 3), `BotonTactil`, `ChipFiltro`, `EstadoCarga`, `EstadoError`, `EstadoVacio`.
 - **`components/common/`:** `Paginacion` (+ `lib/use-paginacion-servidor`), `AvisoDatosOffline` (+ `lib/use-frescura-offline`), `DialogoConfirmacion`, `ZonaHorariaPerfil`.
 - **`components/entrenador/alumno-detalle/`:** `PestanasFichaAlumno` (fuente de `BarraTabsSegmentada`), `MenuAccionesAlumno` (Radix DropdownMenu), `ChipSaludAlumno`, `FranjaDatosClaveAlumno` (+ `lib/datos-clave-alumno.ts`), `SeccionZonaHorariaAlumno`, el patrón `<details>` de `PestanaAntropometriaAlumno` y el aviso "Cambios sin guardar" de `PestanaResumenAlumno`.
+- **`components/layout/`:** `MenuCuenta` (Radix, correo y rol con `etiquetaRol`) y `BotonesSincronizacion` (UX-04, `d482f4f`).
 - **`components/ajustes/CampoAjustes.tsx`:** `CampoAjustes` (sufijo, descripción, `inputMode` decimal) y `SelectAjustes` (UX-03, `e071bf4`).
 - **`lib/`:** `formato-monto` (`formatMonto`, `formatDecimal`; formato venezolano por defecto; las vistas lo consumen vía `useFormatoNumero()`, §6.17), `use-tabs-accesibles`, `use-dialogo-accesible`, `etiquetas-dominio`, `date-format`, `alumnos-directorio-actividad` (`describirUltimoEntreno`), `alumno-detalle-metricas` (`resolverUltimoEntrenamiento`, `esSesionRealizada`).
 

@@ -121,7 +121,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-01 ✅ `8cc2a89` | Extraer `ui/BarraTabsSegmentada` | Ficha del alumno (wrapper) | base de CFG-01, ALU-23, ALU-25, COB-22, SEG-20 | `PestanasFichaAlumno`, `use-tabs-accesibles`; spec nuevo | bajo-medio (spec de la ficha) | no | ninguna |
 | UX-02 ✅ `a670b4b` | Regla global `motion-reduce` | Toda la app | ENT-06, SEG-15 (parte) | CSS base | bajo | no | ninguna |
 | UX-03 ✅ `e071bf4` | Piezas compartidas de formulario y formato | `components/ajustes/CampoAjustes`, `lib/` | ALU-27, base de CFG-07, CFG-14, CFG-18, ALU-02; COB-15, SEG-09 | `CampoAjustes` + `inputMode`/sufijo/`select`/`role="alert"`; helper `formatMonto` | bajo | no | ninguna |
-| UX-04 | Cabecera: sincronización táctil y menú "Cuenta" | Header (todos los roles) | ENT-01, SEG-30 | `MenuAccionesAlumno` (Radix), `BotonTactil`, `IndicadorColaOffline` | medio (compartido con alumno) | no | ninguna |
+| UX-04 ✅ `d482f4f` | Cabecera: sincronización táctil y menú "Cuenta" | Header (todos los roles) | ENT-01, SEG-30 | `MenuAccionesAlumno` (Radix), `BotonTactil`, `IndicadorColaOffline` | medio (compartido con alumno) | no | ninguna |
 | UX-05 | Cobros: carga y datos honestos | Conciliación, Cartera | COB-01, COB-04, COB-16, COB-17, COB-24 | `EstadoCarga/Error/Vacio`, `AvisoDatosOffline`, `EsqueletoDirectorio`; borra `ErrorBandejaConciliacion` | bajo | no | ninguna |
 | UX-06 | Cobros: rechazo seguro | Conciliación | COB-02, COB-03, COB-06 | `DialogoConfirmacion` peligro o `ModalAccesible`, `BotonTactil` | medio (specs de interacción) | no | ninguna |
 | UX-07 | Cobros: táctil, badges y tabs en móvil | Conciliación, Cartera | COB-05, 07, 08(a,c,d), 09, 10, 12, 19, 20, 21, 22, 23, 25 | `ChipFiltro`, `BotonTactil`, `BadgeEstado`, `BarraTabsSegmentada`, `MenuAccionesAlumno` | medio | no | UX-01; ⛔ D3 (menú "Más" en COB-20) |
@@ -168,6 +168,12 @@ Cobertura: los hallazgos BAJA no listados se resuelven con el lote de su área a
 - Con `sufijo`, quitar la unidad entre paréntesis de la etiqueta (`ModalPlanComercial.tsx:137`, `FormularioTasa.tsx:149,161`): si no, el lector de pantalla la anuncia dos veces.
 - Límites teóricos de `formatDecimal` (`toFixed`): `1.005` → `1,00`, `decimales` fuera de 0–100 lanza `RangeError` y los enteros por encima de 2^53 pierden precisión. Con los datos del API (`numeric(10,2)` y tasas de 4 decimales) no se dan.
 - Menor: el spec de `CampoAjustes` fija clases de Tailwind (`flex`, `text-base`) por falta de alternativa en jsdom.
+
+**Seguimientos de UX-04 (revisión de fiabilidad, 2026-10-29):**
+- **Decisión del dueño:** "Instalar app" visible (44px) fuera del menú; tema, Ajustes y cierre de sesión en "Cuenta" en todos los tamaños.
+- `/admin` muestra dos "Cerrar sesión" y monta dos `DialogoLogoutPendientes` (`CabeceraAdmin.tsx:32-41`, `AdminPage.tsx:91,141-149`); preexistente. Retirar los de la página exige ajustar `AdminPage.caracterizacion.interaccion.spec.tsx:297`.
+- `Header.interaccion.spec.tsx` simula `InstalarAppPrompt` con un doble: falta un test de integración con el componente real (eventos `beforeinstallprompt`).
+- El ancho a 360px está calculado (338px en el peor caso) y no medido: confirmarlo en el navegador. Con el texto del sistema ampliado puede desbordar.
 
 ## 4. Decisiones pendientes del dueño
 

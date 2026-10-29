@@ -183,8 +183,15 @@ Then ve "El enlace no es válido o venció. Pide uno nuevo desde Ajustes."
   - `SelectAjustes` es el selector equivalente, con las mismas reglas de accesibilidad.
   - Planes y Tasas los adoptan en UX-18 y UX-19.
   - Evidencia: web **2502/2502**; typecheck y build en verde. La revisión de fiabilidad no dio BLOCKER.
+- **Menú "Cuenta" en la cabecera (`d482f4f`, 2026-10-29, lote UX-04):**
+  - Ajustes, el tema (Claro, Oscuro, Sistema) y "Cerrar sesión" están en un menú "Cuenta", en todos los tamaños de pantalla. El menú muestra el correo completo y el rol legible ("Entrenador", "Alumno", "Administrador"); ya no se deriva un nombre del correo.
+  - "Cerrar sesión" sigue pasando por el cierre seguro: con cambios sin enviar, pregunta antes.
+  - Quedan visibles la campana, la sincronización, el aviso de cambios fallidos e "Instalar app", todos de 44px. La sincronización y los fallidos muestran su número también en el móvil. Sin conexión, el botón lo anuncia primero ("Sin conexión. La sincronización se reanudará al recuperar señal").
+  - Con "Instalar app" disponible o con cambios fallidos, el nombre GUACHAFIT se oculta en el móvil (queda el logo) para que la fila quepa a 360px. Peor caso estimado: 338px.
+  - Evidencia: web **2543/2543**; typecheck y build en verde. La revisión de fiabilidad dio 1 BLOCKER y 2 WARNING, corregidos y validados.
 
 ### Pendiente
+- En `/admin`, la página del superadministrador conserva su propio botón "Cerrar sesión" y su diálogo de pendientes, además de los del menú "Cuenta" (preexistente, `CabeceraAdmin.tsx` y `AdminPage.tsx`). Retirarlos exige ajustar `AdminPage.caracterizacion.interaccion.spec.tsx:297`.
 - En Notificaciones, Zona horaria, Planes y Tasas, si se cambia de pestaña con un guardado en vuelo el resultado no se muestra al volver (esas pestañas se desmontan).
 - La carga del perfil (`GET /usuarios/me/perfil`) no tiene tiempo límite: con una red que no responde queda en "Cargando tu perfil…".
 - Ajustes del entrenador: las pestañas Planes, Tasas y Notificaciones apuntan (`aria-controls`) a un panel que no existe mientras no están activas.

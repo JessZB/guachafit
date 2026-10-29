@@ -306,6 +306,11 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - Abre y cierra el menú "Más acciones" de la ficha y el menú de la cabecera: se abren y **se cierran** con normalidad.
   - Los spinners se quedan quietos. Límite conocido: en la cola offline, el comparador de fotos, el comparador antropométrico y el gráfico de Medidas de la ficha, el spinner no tiene texto, así que no se nota que está cargando.
   - Con la emulación en *No emulation*, las animaciones vuelven como antes.
+- [ ] **Cabecera con menú "Cuenta" (desde 2026-10-29, UX-04):** prueba con el entrenador, con el alumno y con el superadministrador.
+  - A **360px** (DevTools → Galaxy S8 o ancho manual), la cabecera cabe en una fila sin deslizar: logo, campana, sincronización y el botón **"Cuenta"**. Si aparece "Instalar app" o hay cambios fallidos, el nombre GUACHAFIT se oculta y queda solo el logo.
+  - Pulsa **"Cuenta"**: ves tu correo completo y tu rol ("Entrenador", "Alumno" o "Administrador"), **Ajustes**, el **tema** (Claro, Oscuro, Sistema) y **Cerrar sesión**. Cambia el tema desde ahí, en el móvil y en el escritorio (ya no hay botones de tema sueltos).
+  - Con una serie sin enviar (DevTools → Network → Offline, marca una serie), pulsa **Cerrar sesión**: aparece el aviso de cambios pendientes antes de salir.
+  - Sin conexión y con pendientes, el botón de sincronización muestra el número en el móvil y el lector de pantalla dice "Sin conexión…".
 - [ ] **Campos de Ajustes en el iPhone (desde 2026-10-28, UX-03):** en Ajustes → Perfil y en Correo y contraseña, toca un campo en un iPhone o en DevTools con un iPhone emulado: la pantalla **no se amplía** al enfocarlo. Deja un campo con error (por ejemplo, un teléfono inválido) y guarda: el error se lee junto al campo y el lector de pantalla lo anuncia.
 - [ ] **Peso de letra moderado (desde 2026-10-10):** en ninguna pantalla hay textos "ultranegros". Títulos, cifras y etiquetas se ven en negrita normal (700 como máximo), tanto en el tema claro como en el oscuro y en el móvil.
 
