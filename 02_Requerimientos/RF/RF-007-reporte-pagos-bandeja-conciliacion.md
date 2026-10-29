@@ -149,6 +149,13 @@ Then la transacción debe transicionar a estado "Rechazado"
 - **Alumno (Pagos):** estado "Revertido" (antes salía "En Revisión") con chip neutro y su filtro, y "Motivo: …" o "Tu entrenador revirtió este pago.".
 - Evidencia: specs `*.reversion*` de Conciliación, la ficha, Pagos y `pagos-historial-filtros`. Web **1489** aprobados y API **1675** (17 omitidos); typecheck y build en verde. Revisado (fiabilidad) y validado.
 
+### Bandeja con estados honestos (`d777772`, 2026-10-29, lote UX-05)
+- Mientras carga, la bandeja muestra "Cargando la bandeja de pagos" y la cabecera no muestra contador. Antes aparecía "Bandeja al Día" con "0 transacciones en cola" antes de tener respuesta.
+- Error sin datos: bloque de error con "Reintentar" (`ui/EstadoError`). Si la primera carga falla sin conexión, en su lugar se ve "Sin conexión y sin datos guardados".
+- Si una recarga falla con pagos en pantalla (por ejemplo, tras aprobar uno), la lista se conserva y se avisa: "No se pudo actualizar la bandeja. Los pagos mostrados pueden estar desactualizados." Sin conexión, en su lugar aparece el aviso de datos guardados.
+- Las tarjetas ya no dicen "Acreditación segura con comprobante verificado." (era un texto fijo, sin dato real).
+- Evidencia: web **2561/2561**; typecheck y build en verde. La revisión de resiliencia confirmó que una consulta fallida con clave nueva no muestra datos de otra página, y que aprobar sobre datos viejos está protegido por el bloqueo del API.
+
 ### Pendiente
 - El mensaje de éxito de la reversión no se borra solo; las mutaciones de Conciliación y de la reversión no tienen tiempo límite; la demo de Conciliación llama al API.
 - El comprobante sigue siendo opcional.

@@ -146,6 +146,13 @@ Then el sistema debe crear una transacción con estado "Aprobado"
 ### Cobro en sala con fecha anterior (2026-10-12, `cea825b`)
 - El modal de cobro de Control de Cobros y de la ficha pide "Fecha de la operación" (hoy por defecto y como máximo) y, en bolívares, muestra la tasa con la que se convertirá. La API rechaza fechas futuras. Reglas completas en [[RF-007-reporte-pagos-bandeja-conciliacion]] ("Pagos con fecha anterior").
 
+### Cartera con estados honestos (`d777772`, 2026-10-29, lote UX-05)
+- Mientras carga, la cartera muestra el esqueleto de los cuatro KPI y de las filas, sin cifras falsas.
+- El aviso "Sin tasa de cambio configurada" solo aparece con el resumen ya cargado y en las pestañas con bolívares ("En Mora" y "Próximos a Vencer"). Antes aparecía a todos durante la carga.
+- Error sin datos: bloque de error con "Reintentar", sin KPI viejos. Sin conexión: "Sin conexión y sin datos guardados".
+- Recarga fallida con datos (por ejemplo, tras un cobro): la tabla, los KPI y las pestañas se conservan, con el aviso "No se pudo actualizar la cartera. Los datos mostrados pueden estar desactualizados." Sin conexión, en su lugar se ve el aviso de datos guardados.
+- Evidencia: web **2561/2561**; typecheck y build en verde.
+
 ### Pendiente
-- **Próximo vencimiento en Control de Cobros:** la API ya lo envía; falta mostrarlo en la tabla (lote web P2).
+- **Próximo vencimiento en Control de Cobros:** la API ya lo envía; falta mostrarlo en la tabla (lote web P2). Se hará junto con UX-07 (tabla y badges de Cartera).
 - PagosPage del alumno sigue pendiente del módulo 5; conciliación (confirmación y reversión) resuelta el 2026-10-11 y anulación de cuotas en la API el 2026-10-12 (`7f46acc`, falta la web; ver [[RF-008-maquina-estados-cuota-recordatorios]]). Las cuotas anuladas no cuentan como mora ni en la meta del dashboard. Saldo a favor: resuelto el 2026-10-11 en la API (`afd3f7c`) y en la web (`b975905`: "A favor: X USD" en la tabla y la ficha; aviso del excedente al aprobar y tras cobrar en sala), ver [[RF-006-motor-bimonetario-liquidacion-abonos]].

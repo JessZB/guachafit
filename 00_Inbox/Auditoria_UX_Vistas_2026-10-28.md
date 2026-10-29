@@ -122,7 +122,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-02 ✅ `a670b4b` | Regla global `motion-reduce` | Toda la app | ENT-06, SEG-15 (parte) | CSS base | bajo | no | ninguna |
 | UX-03 ✅ `e071bf4` | Piezas compartidas de formulario y formato | `components/ajustes/CampoAjustes`, `lib/` | ALU-27, base de CFG-07, CFG-14, CFG-18, ALU-02; COB-15, SEG-09 | `CampoAjustes` + `inputMode`/sufijo/`select`/`role="alert"`; helper `formatMonto` | bajo | no | ninguna |
 | UX-04 ✅ `d482f4f` | Cabecera: sincronización táctil y menú "Cuenta" | Header (todos los roles) | ENT-01, SEG-30 | `MenuAccionesAlumno` (Radix), `BotonTactil`, `IndicadorColaOffline` | medio (compartido con alumno) | no | ninguna |
-| UX-05 | Cobros: carga y datos honestos | Conciliación, Cartera | COB-01, COB-04, COB-16, COB-17, COB-24 | `EstadoCarga/Error/Vacio`, `AvisoDatosOffline`, `EsqueletoDirectorio`; borra `ErrorBandejaConciliacion` | bajo | no | ninguna |
+| UX-05 ✅ `d777772` | Cobros: carga y datos honestos | Conciliación, Cartera | COB-01, COB-04, COB-16, COB-17, COB-24 | `EstadoCarga/Error/Vacio`, `AvisoDatosOffline`, `EsqueletoDirectorio`; borra `ErrorBandejaConciliacion` | bajo | no | ninguna |
 | UX-06 | Cobros: rechazo seguro | Conciliación | COB-02, COB-03, COB-06 | `DialogoConfirmacion` peligro o `ModalAccesible`, `BotonTactil` | medio (specs de interacción) | no | ninguna |
 | UX-07 | Cobros: táctil, badges y tabs en móvil | Conciliación, Cartera | COB-05, 07, 08(a,c,d), 09, 10, 12, 19, 20, 21, 22, 23, 25 | `ChipFiltro`, `BotonTactil`, `BadgeEstado`, `BarraTabsSegmentada`, `MenuAccionesAlumno` | medio | no | UX-01; ⛔ D3 (menú "Más" en COB-20) |
 | UX-08 | Cobros: modal de cobro y feedback | Cartera | COB-18, COB-26, COB-11 | `useId`, `inputMode`, `role="status"`, línea resumen previa | medio | no (salvo conversión con tasa del servidor) | ⛔ D1; UX-03 |
@@ -174,6 +174,13 @@ Cobertura: los hallazgos BAJA no listados se resuelven con el lote de su área a
 - `/admin` muestra dos "Cerrar sesión" y monta dos `DialogoLogoutPendientes` (`CabeceraAdmin.tsx:32-41`, `AdminPage.tsx:91,141-149`); preexistente. Retirar los de la página exige ajustar `AdminPage.caracterizacion.interaccion.spec.tsx:297`.
 - `Header.interaccion.spec.tsx` simula `InstalarAppPrompt` con un doble: falta un test de integración con el componente real (eventos `beforeinstallprompt`).
 - El ancho a 360px está calculado (338px en el peor caso) y no medido: confirmarlo en el navegador. Con el texto del sistema ampliado puede desbordar.
+
+**Seguimientos de UX-05 (revisión de resiliencia, 2026-10-29):**
+- **UX-07 suma el lote web P2 del módulo 5:** mostrar el próximo vencimiento en la tabla de Cartera (RF-009, la API ya lo envía).
+- `common/AvisoErrorRecarga` es la pieza común para recargas fallidas con datos visibles. `alumnos/AvisoErrorDirectorio` queda como reexport; migrar sus usos y borrarlo cuando se toque "Mis alumnos".
+- `use-bandeja-conciliacion.ts` sigue exponiendo `enCargaInicial`, que ya no usa la página: retirarlo en el próximo lote de Conciliación (UX-06).
+- COB-16 parcial: las tarjetas siguen siendo `div` sin `article`/`aria-labelledby` y los `h3` de los estados no tienen jerarquía respecto al `h1`. Va con UX-10.
+- Proceso: en la fase roja de UX-05, C2 falló por un selector equivocado ("Pagos por Validar" en lugar de "Pendiente de Revisión") y el reporte lo dio por bueno. Al revisar un rojo, comprobar el **mensaje** de cada fallo, no solo que falle.
 
 ## 4. Decisiones pendientes del dueño
 

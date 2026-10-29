@@ -72,7 +72,9 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **Engram:** puede fallar con "multiple active runtime sessions". Avisa y sigue.
 
 ## Estado al 2026-10-28
-- **Fundaciones de la auditoría UX cerradas (2026-10-29):** UX-01 `8cc2a89`, UX-02 `a670b4b`, UX-03 `e071bf4`, UX-04 `d482f4f` (con sus `docs(vault)`). Web **2543/2543**. El siguiente lote es UX-05 (Cobros: carga y datos honestos). Los seguimientos de cada lote están en la sección 3 de la auditoría.
+- **Fundaciones de la auditoría UX cerradas (2026-10-29):** UX-01 `8cc2a89`, UX-02 `a670b4b`, UX-03 `e071bf4`, UX-04 `d482f4f` (con sus `docs(vault)`).
+- **UX-05 cerrado (2026-10-29, `d777772`):** Conciliación y Cartera con estados honestos. Web **2561/2561**.
+- El siguiente lote es **UX-06** (Cobros: rechazo seguro). Los seguimientos de cada lote están en la sección 3 de la auditoría. UX-07 suma el lote web P2 del módulo 5.
 - Rediseño de la ficha del alumno (`/coach/alumnos/:id`) CERRADO:
 
   | Lote | Commit |
@@ -105,7 +107,7 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 
 ## Piezas a reutilizar (de la ficha y de "Mis alumnos")
 - **`components/ui/`:** `BadgeEstado` (`whitespace-nowrap shrink-0`), `BarraTabsSegmentada` (UX-01, `8cc2a89`; seguimientos en la auditoría, sección 3), `BotonTactil`, `ChipFiltro`, `EstadoCarga`, `EstadoError`, `EstadoVacio`.
-- **`components/common/`:** `Paginacion` (+ `lib/use-paginacion-servidor`), `AvisoDatosOffline` (+ `lib/use-frescura-offline`), `DialogoConfirmacion`, `ZonaHorariaPerfil`.
+- **`components/common/`:** `AvisoErrorRecarga` (UX-05: recarga fallida con datos visibles; solo con conexión), `Paginacion` (+ `lib/use-paginacion-servidor`), `AvisoDatosOffline` (+ `lib/use-frescura-offline`), `DialogoConfirmacion`, `ZonaHorariaPerfil`.
 - **`components/entrenador/alumno-detalle/`:** `PestanasFichaAlumno` (fuente de `BarraTabsSegmentada`), `MenuAccionesAlumno` (Radix DropdownMenu), `ChipSaludAlumno`, `FranjaDatosClaveAlumno` (+ `lib/datos-clave-alumno.ts`), `SeccionZonaHorariaAlumno`, el patrón `<details>` de `PestanaAntropometriaAlumno` y el aviso "Cambios sin guardar" de `PestanaResumenAlumno`.
 - **`components/layout/`:** `MenuCuenta` (Radix, correo y rol con `etiquetaRol`) y `BotonesSincronizacion` (UX-04, `d482f4f`).
 - **`components/ajustes/CampoAjustes.tsx`:** `CampoAjustes` (sufijo, descripción, `inputMode` decimal) y `SelectAjustes` (UX-03, `e071bf4`).
