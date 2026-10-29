@@ -1,8 +1,37 @@
 import type { ReactNode } from 'react';
 
+/** Clases comunes de los controles de Ajustes: área táctil de 44px y texto de 16px en móvil. */
+const CLASES_CONTROL =
+  'min-h-11 px-3 rounded-xl bg-background border text-base sm:text-sm text-foreground focus:outline-hidden focus:border-primary';
+
+function clasesControl(error: boolean, deshabilitado: boolean, ancho: string): string {
+  return `${CLASES_CONTROL} ${ancho} ${error ? 'border-destructive' : 'border-border'} ${deshabilitado ? 'opacity-60' : ''}`;
+}
+
 /**
- * Campo de texto de Ajustes con etiqueta asociada, área táctil de 44px y error accesible: el
- * input se marca con `aria-invalid` y apunta a su mensaje con `aria-describedby`.
+ * Ids de las piezas que describen un control, en orden fijo: descripción, sufijo y error. Solo
+ * incluye las que existen; `undefined` si no hay ninguna. Lo comparten CampoAjustes y SelectAjustes.
+ */
+function idsDescripcion(
+  id: string,
+  piezas: { descripcion?: string; sufijo?: string; error?: string }
+): string | undefined {
+  const ids = [
+    piezas.descripcion ? `${id}-descripcion` : null,
+    piezas.sufijo ? `${id}-sufijo` : null,
+    piezas.error ? `${id}-error` : null,
+  ].filter((idPieza): idPieza is string => idPieza !== null);
+  return ids.length > 0 ? ids.join(' ') : undefined;
+}
+
+/**
+ * Campo de texto de Ajustes con etiqueta asociada y área táctil de 44px. Un error se marca con
+ * `aria-invalid` y `role="alert"`. `aria-describedby` apunta, en este orden, a la descripción, al
+ * sufijo y al error cuando existen.
+ *
+ * - `sufijo` (p. ej. `Bs/USD`) va en flujo junto al input, no superpuesto, y sirve como unidad.
+ * - `text-base` en móvil evita el zoom automático de iOS al enfocar; `sm:text-sm` iguala escritorio.
+ * - §6.13: los datos numéricos usan `inputMode` con `type="text"`, nunca `type="number"`.
  */
 export function CampoAjustes({
   id,
@@ -13,6 +42,9 @@ export function CampoAjustes({
   type = 'text',
   autoComplete,
   inputMode,
+  sufijo,
+  descripcion,
+  placeholder,
   deshabilitado = false,
 }: {
   id: string;
@@ -22,32 +54,110 @@ export function CampoAjustes({
   error?: string;
   type?: 'text' | 'tel' | 'email' | 'password';
   autoComplete?: string;
-  inputMode?: 'text' | 'tel' | 'email';
+  inputMode?: 'text' | 'tel' | 'email' | 'decimal' | 'numeric';
+  /** Unidad visible junto al input (p. ej. `Bs/USD`). */
+  sufijo?: string;
+  /** Texto de ayuda bajo la etiqueta; el input lo describe. */
+  descripcion?: string;
+  placeholder?: string;
   /** Mientras se guarda: lo escrito no cambia hasta que llega la respuesta. */
   deshabilitado?: boolean;
 }) {
   const idError = `${id}-error`;
+  const input = (
+    <input
+      id={id}
+      type={type}
+      value={valor}
+      autoComplete={autoComplete}
+      inputMode={inputMode}
+      placeholder={placeholder}
+      onChange={(e) => onCambiar(e.target.value)}
+      disabled={deshabilitado}
+      aria-invalid={error ? true : undefined}
+      aria-describedby={idsDescripcion(id, { descripcion, sufijo, error })}
+      className={clasesControl(Boolean(error), deshabilitado, sufijo ? 'flex-1 min-w-0' : 'w-full')}
+    />
+  );
   return (
     <div className="space-y-1">
       <label htmlFor={id} className="text-xs font-semibold text-muted-foreground">
         {etiqueta}
       </label>
-      <input
+      {descripcion && (
+        <p id={`${id}-descripcion`} className="text-xs text-muted-foreground">
+          {descripcion}
+        </p>
+      )}
+      {sufijo ? (
+        <div className="flex items-center gap-2">
+          {input}
+          <span id={`${id}-sufijo`} className="shrink-0 text-sm font-semibold text-muted-foreground">
+            {sufijo}
+          </span>
+        </div>
+      ) : (
+        input
+      )}
+      {error && (
+        <p id={idError} role="alert" className="text-xs font-semibold text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Selector de Ajustes con etiqueta, descripción y error accesibles. Misma área táctil y reglas de
+ * error que CampoAjustes, sin sufijo.
+ */
+export function SelectAjustes({
+  id,
+  etiqueta,
+  valor,
+  onCambiar,
+  opciones,
+  error,
+  descripcion,
+  deshabilitado = false,
+}: {
+  id: string;
+  etiqueta: string;
+  valor: string;
+  onCambiar: (valor: string) => void;
+  opciones: readonly { valor: string; etiqueta: string }[];
+  error?: string;
+  descripcion?: string;
+  deshabilitado?: boolean;
+}) {
+  return (
+    <div className="space-y-1">
+      <label htmlFor={id} className="text-xs font-semibold text-muted-foreground">
+        {etiqueta}
+      </label>
+      {descripcion && (
+        <p id={`${id}-descripcion`} className="text-xs text-muted-foreground">
+          {descripcion}
+        </p>
+      )}
+      <select
         id={id}
-        type={type}
         value={valor}
-        autoComplete={autoComplete}
-        inputMode={inputMode}
         onChange={(e) => onCambiar(e.target.value)}
         disabled={deshabilitado}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? idError : undefined}
-        className={`w-full min-h-11 px-3 rounded-xl bg-background border text-sm text-foreground focus:outline-hidden focus:border-primary ${
-          error ? 'border-destructive' : 'border-border'
-        } ${deshabilitado ? 'opacity-60' : ''}`}
-      />
+        aria-describedby={idsDescripcion(id, { descripcion, error })}
+        className={clasesControl(Boolean(error), deshabilitado, 'w-full')}
+      >
+        {opciones.map((opcion) => (
+          <option key={opcion.valor} value={opcion.valor}>
+            {opcion.etiqueta}
+          </option>
+        ))}
+      </select>
       {error && (
-        <p id={idError} className="text-xs font-semibold text-destructive">
+        <p id={`${id}-error`} role="alert" className="text-xs font-semibold text-destructive">
           {error}
         </p>
       )}
