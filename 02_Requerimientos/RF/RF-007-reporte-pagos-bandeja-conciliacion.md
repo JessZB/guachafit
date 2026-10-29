@@ -164,6 +164,21 @@ Then la transacción debe transicionar a estado "Rechazado"
 - La etiqueta "Motivo del rechazo" está asociada al campo, y los botones miden 44px.
 - Evidencia: web **2573/2573**; typecheck y build en verde. La revisión de fiabilidad no dio BLOCKER ni WARNING.
 
+### Bandeja táctil y sin jerga (`bc64170`, 2026-10-29, lote UX-07a)
+- Los chips de método indican cuál está activo (`aria-pressed`) y miden 44px. El buscador mide 44px, usa texto de 16px en el móvil (sin zoom en iOS) y no autocompleta.
+- **Tarjeta del pago:**
+  - el nombre del alumno ocupa hasta dos líneas (nunca se corta con puntos suspensivos);
+  - el método va en un badge que no se parte y la referencia bancaria larga salta de línea;
+  - los botones son "Aprobar" y "Rechazar", de 44px, apilados en el móvil. Para el lector de pantalla se anuncian "Aprobar pago de <alumno>" y "Rechazar pago de <alumno>".
+- **Visor del comprobante ("Comprobante de pago"):**
+  - tiene scroll propio en pantallas bajas;
+  - ya no muestra jerga ("Presigned URL… ADR-007", "R2"). Dice "El enlace del comprobante caduca en 15 minutos." o "Este pago no tiene comprobante disponible.";
+  - "Abrir original" va debajo de la imagen sin taparla;
+  - las acciones son "Aprobar este pago" y "Rechazar este pago".
+- La paginación va al pie de la lista y, al cambiar de página, la vista vuelve al inicio de la lista (sin animación si el sistema pide movimiento reducido).
+- `ui/BotonTactil` gana la variante `peligro-contorno` (borde y texto rojos) para la acción destructiva secundaria.
+- Evidencia: web **2594/2594**; typecheck y build en verde. La revisión de legibilidad dio 1 BLOCKER (selector del spec, ver seguimiento de "pago movil") y 3 WARNING; los introducidos por el lote se corrigieron y validaron, y el resto va a UX-10.
+
 ### Pendiente
 - El mensaje de éxito de la reversión no se borra solo; las mutaciones de Conciliación y de la reversión no tienen tiempo límite; la demo de Conciliación llama al API.
 - El comprobante sigue siendo opcional.

@@ -124,7 +124,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-04 ✅ `d482f4f` | Cabecera: sincronización táctil y menú "Cuenta" | Header (todos los roles) | ENT-01, SEG-30 | `MenuAccionesAlumno` (Radix), `BotonTactil`, `IndicadorColaOffline` | medio (compartido con alumno) | no | ninguna |
 | UX-05 ✅ `d777772` | Cobros: carga y datos honestos | Conciliación, Cartera | COB-01, COB-04, COB-16, COB-17, COB-24 | `EstadoCarga/Error/Vacio`, `AvisoDatosOffline`, `EsqueletoDirectorio`; borra `ErrorBandejaConciliacion` | bajo | no | ninguna |
 | UX-06 ✅ `87fe4df` | Cobros: rechazo seguro | Conciliación | COB-02, COB-03, COB-06 | `DialogoConfirmacion` peligro o `ModalAccesible`, `BotonTactil` | medio (specs de interacción) | no | ninguna |
-| UX-07 | Cobros: táctil, badges y tabs en móvil | Conciliación, Cartera | COB-05, 07, 08(a,c,d), 09, 10, 12, 19, 20, 21, 22, 23, 25 | `ChipFiltro`, `BotonTactil`, `BadgeEstado`, `BarraTabsSegmentada`, `MenuAccionesAlumno` | medio | no | UX-01; ⛔ D3 (menú "Más" en COB-20) |
+| UX-07 (a ✅ `bc64170`; b pendiente) | Cobros: táctil, badges y tabs en móvil | Conciliación, Cartera | COB-05, 07, 08(a,c,d), 09, 10, 12, 19, 20, 21, 22, 23, 25 | `ChipFiltro`, `BotonTactil`, `BadgeEstado`, `BarraTabsSegmentada`, `MenuAccionesAlumno` | medio | no | UX-01; ⛔ D3 (menú "Más" en COB-20) |
 | UX-08 | Cobros: modal de cobro y feedback | Cartera | COB-18, COB-26, COB-11 | `useId`, `inputMode`, `role="status"`, línea resumen previa | medio | no (salvo conversión con tasa del servidor) | ⛔ D1; UX-03 |
 | UX-09 | Cobros: recordatorio y enlace a la bandeja | Cartera → Conciliación | COB-27, COB-28 | `?q=` en `useFiltrosConciliacion`, `onError` de miniatura | medio | **sí** para la vista previa del mensaje | ⛔ D2 |
 | UX-10 | Cobros: copy y pulido | Conciliación, Cartera | COB-13, 14, 15, 29, 30, 31, 08b, 16 (resto) | `EstadoVacio`, `formatMonto` | bajo | no | UX-03 |
@@ -185,6 +185,19 @@ Cobertura: los hallazgos BAJA no listados se resuelven con el lote de su área a
 - El `setTimeout` del mensaje de éxito no se cancela al desmontar (`use-acciones-conciliacion.ts:113`, preexistente).
 - Menor: el test 5 de `ConciliacionPage.rechazo-seguro.interaccion.spec.tsx:331` no espera la promesa que resuelve al final.
 - `useFormatoNumero()` ya existe (`lib/use-formato-numero.ts`): los lotes que muestren montos (UX-08, UX-10, UX-13) lo usan.
+
+**Decisión D3 (dueño, 2026-10-29):** en Control de Cobros, en el móvil se ve solo "Registrar cobro" y un menú "Más acciones" con Recordatorio y Ver ficha (patrón `MenuAccionesAlumno`). Los botones miden 44px en el móvil; en la tabla de escritorio pueden compactarse a 36px desde `md` (`md:min-h-9`).
+
+**UX-07 se partió en dos:** UX-07a (Conciliación: COB-05, 07, 08, 09, 10 y 12) ✅ `bc64170`, y UX-07b (Cartera: COB-19, 20, 21, 22, 23 y 25, más el lote web P2 del módulo 5, el próximo vencimiento en la tabla).
+
+**Seguimientos de UX-07a (revisión de legibilidad, 2026-10-29), para UX-10:**
+- **"pago movil" sin tilde:** `etiquetaMetodoPago` (`lib/conciliacion-filtros.ts:24`) solo cambia `_` por espacio. Hacen falta un mapa de etiquetas en español ("Pago móvil", "Transferencia bancaria", "Efectivo"…) y el ajuste de los ~10 specs que esperan "movil". El selector de A1 en `FiltrosConciliacion.interaccion.spec.tsx:52` acepta hoy ambas formas (`/pago m[oó]vil/i`), una excepción aceptada en la verificación.
+- Title Case en tarjeta y visor: "Ver Comprobante", "Fecha Operación", "Abono en Dólares", "Monto Declarado", "Equivalente USD". Al cambiar "Ver Comprobante", darle nombre accesible por alumno.
+- `alt="Comprobante Bancario"` → "Comprobante de pago" (`VisorComprobanteConciliacion.tsx:112,120`).
+- "Abrir original" (`target="_blank"`) no anuncia que abre una pestaña nueva.
+- Modal de rechazo: "Rechazar Transacción" y "Confirmar Rechazo" → "Rechazar pago" y "Confirmar rechazo".
+- Montos de la tarjeta y del visor sin `useFormatoNumero` (`+$${…} USD` crudo): COB-15.
+- Proceso: la verificación editó un spec nuevo del lote sin autorización. Reforzar en los prompts que **cualquier** cambio no autorizado se reporta y no se aplica.
 - COB-16 parcial: las tarjetas siguen siendo `div` sin `article`/`aria-labelledby` y los `h3` de los estados no tienen jerarquía respecto al `h1`. Va con UX-10.
 - Proceso: en la fase roja de UX-05, C2 falló por un selector equivocado ("Pagos por Validar" en lugar de "Pendiente de Revisión") y el reporte lo dio por bueno. Al revisar un rojo, comprobar el **mensaje** de cada fallo, no solo que falle.
 

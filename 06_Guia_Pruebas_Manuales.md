@@ -155,6 +155,11 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - **Bandeja de pagos** (`/coach/conciliacion`): al entrar con red lenta ves "Cargando…" y **no** "Bandeja al Día" ni "0 transacciones en cola". Con la bandeja cargada, bloquea `/finanzas/conciliacion/bandeja` y aprueba un pago: los demás pagos **siguen en pantalla** con el aviso "No se pudo actualizar la bandeja…" y "Reintentar". Las tarjetas ya no dicen "comprobante verificado".
   - **Control de Cobros** (`/coach/cartera`): al entrar con red lenta ves cuatro bloques grises de KPI y filas de espera, y **no** el aviso "Sin tasa de cambio configurada". Sin tasa configurada, el aviso aparece en "En Mora" y "Próximos a Vencer", y no en "Pendiente de Revisión" ni en "Al Día".
   - En las dos: entra sin conexión y sin haberlas abierto antes → "Sin conexión y sin datos guardados". Con los datos ya cargados, corta la red y recarga → "Sin conexión · datos guardados", sin aviso de error.
+- [ ] **Bandeja de pagos en el móvil (desde 2026-10-29, UX-07a):** a 360px de ancho, en `/coach/conciliacion`.
+  - Los chips de método y el buscador son fáciles de tocar. Al tocar el buscador en un iPhone, la pantalla no se amplía.
+  - En la tarjeta, un nombre largo ocupa dos líneas, la referencia larga salta de línea, y "Aprobar" y "Rechazar" quedan apilados a todo el ancho. "Rechazar" se ve con borde y texto rojos, en los dos temas.
+  - Abre "Ver Comprobante": se titula "Comprobante de pago", "Abrir original" va debajo de la imagen y no hay textos técnicos. En el móvil en horizontal, desplaza dentro del visor hasta "Aprobar" y "Rechazar".
+  - Con más de una página de pagos, la paginación está al final. Al pasar de página, la vista sube al inicio de la lista.
 - [ ] **Rechazo seguro de un pago (desde 2026-10-29, UX-06):** con dos pagos en la bandeja.
   - Pulsa "Rechazar con Motivo" en el primero: el modal dice "Pago de <alumno> · $X,XX USD". Escribe un motivo, pulsa **Cancelar** y abre el rechazo del segundo pago: el campo está **vacío**.
   - Con "Slow 3G", confirma un rechazo y, mientras viaja, intenta pulsar otra vez "Confirmar Rechazo", "Cancelar" o Escape: no pasa nada hasta que responde.
