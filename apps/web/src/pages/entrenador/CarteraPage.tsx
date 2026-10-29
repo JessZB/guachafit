@@ -5,15 +5,24 @@ import { useRecordatorioCartera } from '../../components/entrenador/cartera/useR
 import { useCobroCartera } from '../../components/entrenador/cartera/useCobroCartera';
 import { CabeceraCartera } from '../../components/entrenador/cartera/CabeceraCartera';
 import { ResumenCartera } from '../../components/entrenador/cartera/ResumenCartera';
+import { EsqueletoKpisCartera, EsqueletoFilasCartera } from '../../components/entrenador/cartera/EsqueletoCartera';
 import { PestanasCartera } from '../../components/entrenador/cartera/PestanasCartera';
 import { BuscadorCartera } from '../../components/entrenador/cartera/BuscadorCartera';
 import { ModalRecordatorioCartera } from '../../components/entrenador/cartera/ModalRecordatorioCartera';
 import { ModalCobroCartera } from '../../components/entrenador/cartera/ModalCobroCartera';
+import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
+import { AvisoErrorRecarga } from '../../components/common/AvisoErrorRecarga';
+import { EstadoError } from '../../components/ui/EstadoError';
 import { Paginacion } from '../../components/common/Paginacion';
 import { TablaCartera } from '../../components/entrenador/TablaCartera';
 import { PESTANAS_CARTERA, hayTasaProyectable } from '../../lib/cartera';
-import { AlertCircle } from 'lucide-react';
+import { useFrescuraOffline } from '../../lib/use-frescura-offline';
 
+/**
+ * Estados honestos (UX-05, §6.6): con datos, la tabla y los KPI se conservan ante una recarga
+ * fallida (aviso inline con reintento); sin datos y con error, solo el bloque de error con
+ * reintento; mientras carga, esqueletos y no un aviso de tasa que aún no se sabe si aplica.
+ */
 export function CarteraPage() {
   const {
     isDemoMode,
@@ -33,11 +42,13 @@ export function CarteraPage() {
     recargar,
     resumen,
     isLoading,
+    tieneDatos,
     setCobradosDemo,
     recordatoriosDemo,
     setRecordatoriosDemo,
   } = useCartera();
   const navigate = useNavigate();
+  const { isOnline } = useFrescuraOffline(null);
 
   // Recordatorio manual (RN-02)
   const {
@@ -78,82 +89,86 @@ export function CarteraPage() {
   // U3b: el estado de las pestañas vive en la URL (`?pestana=`).
   const pestanaActiva = PESTANAS_CARTERA.find((p) => p.clave === pestana)!;
 
-  const sinTasa = !hayTasaProyectable(resumen);
+  // Mientras carga el resumen no se sabe si hay tasa: el aviso solo aparece con el resumen en mano.
+  const sinTasa = resumen !== null && !hayTasaProyectable(resumen);
+  // Solo esas pestañas muestran bolívares, así que solo ahí tiene sentido el aviso.
+  const avisoSinTasa = sinTasa && (pestana === 'mora' || pestana === 'por_vencer');
 
   return (
     <div className="space-y-6">
       <CabeceraCartera />
 
-      {/* KPIs del RF-009 (cartera completa, no la página) */}
-      {resumen && <ResumenCartera resumen={resumen} />}
+      {/* Sin conexión y sin datos: el error no es definitivo; la consulta se reintenta al reconectar */}
+      {!tieneDatos && error && !isOnline ? (
+        <AvisoDatosOffline variante="sin-datos" />
+      ) : !tieneDatos && error ? (
+        <EstadoError
+          titulo="No pudimos cargar la cartera"
+          mensaje={error}
+          onReintentar={() => recargar()}
+        />
+      ) : (
+        <>
+          {/* Sin conexión con datos guardados: el aviso de frescura de la pantalla */}
+          {tieneDatos && <AvisoDatosOffline />}
 
-      {/* Error honesto con reintento */}
-      {!isLoading && error && (
-        <div className="p-8 rounded-3xl bg-card border border-destructive/30 text-center space-y-3">
-          <AlertCircle className="h-8 w-8 text-destructive mx-auto" />
-          <p className="text-xs text-muted-foreground">{error}</p>
-          <button
-            type="button"
-            onClick={() => recargar()}
-            className="py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
-          >
-            Reintentar
-          </button>
-        </div>
-      )}
-
-      {!error && (
-        <PestanasCartera pestana={pestana} resumen={resumen} onCambiar={cambiarPestana}>
-          {/* Búsqueda server-side + estado de la página */}
-          <BuscadorCartera
-            busqueda={busqueda}
-            onCambiarBusqueda={setBusqueda}
-            isLoading={isLoading}
-            visibles={items.length}
-            total={total}
-            etiquetaPestana={pestanaActiva.etiqueta}
-            sinTasa={sinTasa}
-          />
-
-          {isLoading ? (
-            <div className="p-10 rounded-3xl bg-card border border-border text-center space-y-3">
-              <div className="animate-pulse space-y-3">
-                <div className="h-4 w-40 bg-secondary rounded mx-auto" />
-                <div className="h-3 w-64 bg-secondary/70 rounded mx-auto" />
-              </div>
-              <p className="text-xs text-muted-foreground">Cargando cartera de alumnos...</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {total > 0 && (
-                <div className="px-1">
-                  <Paginacion
-                    pagina={pagina}
-                    tamano={tamano}
-                    total={total}
-                    onCambiarPagina={setPagina}
-                    onCambiarTamano={setTamano}
-                    cargando={cargando}
-                  />
-                </div>
-              )}
-
-              <TablaCartera
-                pestana={pestana}
-                filas={items}
-                buscando={q.trim().length > 0}
-                onRecordatorio={abrirRecordatorio}
-                onCobrar={abrirCobro}
-                onVerFicha={(fila) => {
-                  if (fila.alumnoPerfilId) {
-                    navigate(`/coach/alumnos/${fila.alumnoPerfilId}`);
-                  }
-                }}
-                onRevisarPago={() => navigate('/coach/conciliacion')}
-              />
-            </div>
+          {/* Recarga fallida con la tabla visible: aviso inline (sin alerta de recarga offline) */}
+          {tieneDatos && error && isOnline && (
+            <AvisoErrorRecarga
+              mensaje="No se pudo actualizar la cartera. Los datos mostrados pueden estar desactualizados."
+              onReintentar={() => recargar()}
+            />
           )}
-        </PestanasCartera>
+
+          {/* KPIs del RF-009 (cartera completa, no la página); esqueleto mientras llega el resumen */}
+          {resumen ? <ResumenCartera resumen={resumen} /> : <EsqueletoKpisCartera />}
+
+          <PestanasCartera pestana={pestana} resumen={resumen} onCambiar={cambiarPestana}>
+            {/* Búsqueda server-side + estado de la página */}
+            <BuscadorCartera
+              busqueda={busqueda}
+              onCambiarBusqueda={setBusqueda}
+              isLoading={isLoading}
+              visibles={items.length}
+              total={total}
+              etiquetaPestana={pestanaActiva.etiqueta}
+              sinTasa={avisoSinTasa}
+            />
+
+            {isLoading ? (
+              <EsqueletoFilasCartera />
+            ) : (
+              <div className="space-y-4">
+                {total > 0 && (
+                  <div className="px-1">
+                    <Paginacion
+                      pagina={pagina}
+                      tamano={tamano}
+                      total={total}
+                      onCambiarPagina={setPagina}
+                      onCambiarTamano={setTamano}
+                      cargando={cargando}
+                    />
+                  </div>
+                )}
+
+                <TablaCartera
+                  pestana={pestana}
+                  filas={items}
+                  buscando={q.trim().length > 0}
+                  onRecordatorio={abrirRecordatorio}
+                  onCobrar={abrirCobro}
+                  onVerFicha={(fila) => {
+                    if (fila.alumnoPerfilId) {
+                      navigate(`/coach/alumnos/${fila.alumnoPerfilId}`);
+                    }
+                  }}
+                  onRevisarPago={() => navigate('/coach/conciliacion')}
+                />
+              </div>
+            )}
+          </PestanasCartera>
+        </>
       )}
 
       {/* Modal de recordatorio manual (RN-02) */}

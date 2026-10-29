@@ -84,6 +84,8 @@ export function useCartera() {
   const { items, total, cargando, error: errorConsulta, recargar, respuesta } = paginacion;
   const resumen = respuesta?.resumen ?? null;
   const isLoading = cargando && !respuesta;
+  /** `true` cuando ya hay una respuesta del servidor (aunque la recarga actual falle). */
+  const tieneDatos = respuesta !== undefined;
   const error = errorConsulta?.message ?? null;
 
   // Cambiar pestaña, tamaño o búsqueda vuelve a la página 1.
@@ -116,6 +118,7 @@ export function useCartera() {
     recargar,
     resumen,
     isLoading,
+    tieneDatos,
     cobradosDemo,
     setCobradosDemo,
     recordatoriosDemo,

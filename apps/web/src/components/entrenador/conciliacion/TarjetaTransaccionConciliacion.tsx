@@ -4,7 +4,7 @@
  *
  * Presentational: the transaction and every callback arrive as props.
  */
-import { Eye, FileText, ShieldCheck } from 'lucide-react';
+import { Eye, FileText } from 'lucide-react';
 import type { TransaccionPagoDetalleDTO } from '@guachafit/shared';
 import { etiquetaMetodoPago } from '../../../lib/conciliacion-filtros';
 import { formatFechaCalendario } from '../../../lib/date-format';
@@ -81,12 +81,7 @@ export function TarjetaTransaccionConciliacion({
         </p>
       )}
 
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <ShieldCheck className="h-4 w-4 text-success" />
-          <span>Acreditación segura con comprobante verificado.</span>
-        </div>
-
+      <div className="flex flex-col sm:flex-row items-center sm:justify-end gap-3 pt-1">
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <button
             onClick={() => onRechazar(tx)}

@@ -25,6 +25,8 @@ export interface ResultadoBandejaConciliacion {
   cargando: boolean;
   /** First load shows the loading state; page changes keep the list. */
   enCargaInicial: boolean;
+  /** `true` cuando ya hay una respuesta del servidor (aunque la recarga actual falle). */
+  tieneDatos: boolean;
   error: string | null;
   recargar: () => void;
   /** Marks one transaction resolved: local slice in demo, server reload otherwise. */
@@ -82,6 +84,7 @@ export function useBandejaConciliacion(isDemoMode: boolean): ResultadoBandejaCon
     respuesta,
   } = paginacion;
   const enCargaInicial = cargando && !respuesta;
+  const tieneDatos = respuesta !== undefined;
   const error = errorConsulta?.message ?? null;
 
   // Changing the page size (or entering/leaving demo mode) goes back to page 1.
@@ -103,6 +106,7 @@ export function useBandejaConciliacion(isDemoMode: boolean): ResultadoBandejaCon
     total,
     cargando,
     enCargaInicial,
+    tieneDatos,
     error,
     recargar,
     marcarResuelta,

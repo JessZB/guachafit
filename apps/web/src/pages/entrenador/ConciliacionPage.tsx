@@ -1,6 +1,13 @@
 /**
  * Conciliation tray (orchestrator container).
  *
+ * Estados honestos (UX-05, §6.6):
+ * - carga inicial: `EstadoCarga` anunciado, sin contador ni "Bandeja al Día" falsos;
+ * - vacío real: solo con respuesta del servidor sin transacciones;
+ * - error sin datos: `EstadoError` a pantalla completa con reintento;
+ * - recarga fallida con datos: la lista se conserva y `AvisoErrorRecarga` ofrece reintentar;
+ * - sin conexión con datos: `AvisoDatosOffline` y sin alerta de recarga.
+ *
  * Reads the route context (`isDemoMode`), wires the tray data, filter, and
  * action hooks, and composes the sections. Detail markup lives in
  * `components/entrenador/conciliacion/`; pure logic in `lib/conciliacion-*`.
@@ -8,9 +15,13 @@
 import React from 'react';
 import { useAuth } from '../../context/auth-context';
 import { Paginacion } from '../../components/common/Paginacion';
+import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
+import { AvisoErrorRecarga } from '../../components/common/AvisoErrorRecarga';
+import { EstadoCarga } from '../../components/ui/EstadoCarga';
+import { EstadoError } from '../../components/ui/EstadoError';
+import { useFrescuraOffline } from '../../lib/use-frescura-offline';
 import { EncabezadoConciliacion } from '../../components/entrenador/conciliacion/EncabezadoConciliacion';
 import { AvisosAccionConciliacion } from '../../components/entrenador/conciliacion/AvisosAccionConciliacion';
-import { ErrorBandejaConciliacion } from '../../components/entrenador/conciliacion/ErrorBandejaConciliacion';
 import { BandejaVaciaConciliacion } from '../../components/entrenador/conciliacion/BandejaVaciaConciliacion';
 import { FiltrosConciliacion } from '../../components/entrenador/conciliacion/FiltrosConciliacion';
 import { SinResultadosConciliacion } from '../../components/entrenador/conciliacion/SinResultadosConciliacion';
@@ -24,18 +35,40 @@ import { useAccionesConciliacion } from '../../components/entrenador/conciliacio
 
 export function ConciliacionPage() {
   const { isDemoMode } = useAuth();
+  const { isOnline } = useFrescuraOffline(null);
   const bandeja = useBandejaConciliacion(isDemoMode);
   const filtros = useFiltrosConciliacion(bandeja.transacciones);
   const acciones = useAccionesConciliacion(bandeja.marcarResuelta);
 
   return (
     <div className="space-y-6">
-      <EncabezadoConciliacion total={bandeja.total} />
+      {/* Sin respuesta del servidor el contador no existe: no se pinta un "0" falso */}
+      <EncabezadoConciliacion total={bandeja.tieneDatos ? bandeja.total : null} />
 
       <AvisosAccionConciliacion exito={acciones.actionSuccess} error={acciones.actionError} />
 
-      {!bandeja.enCargaInicial && bandeja.error ? (
-        <ErrorBandejaConciliacion mensaje={bandeja.error} onReintentar={() => bandeja.recargar()} />
+      {/* Sin conexión con datos guardados: el aviso de frescura de la pantalla */}
+      {bandeja.tieneDatos && <AvisoDatosOffline />}
+
+      {/* Recarga fallida con la lista visible: aviso inline (sin alerta de recarga offline) */}
+      {bandeja.tieneDatos && bandeja.error && isOnline && (
+        <AvisoErrorRecarga
+          mensaje="No se pudo actualizar la bandeja. Los pagos mostrados pueden estar desactualizados."
+          onReintentar={() => bandeja.recargar()}
+        />
+      )}
+
+      {/* Sin conexión y sin datos: el error no es definitivo; la consulta se reintenta al reconectar */}
+      {!bandeja.tieneDatos && bandeja.error && !isOnline ? (
+        <AvisoDatosOffline variante="sin-datos" />
+      ) : !bandeja.tieneDatos && bandeja.error ? (
+        <EstadoError
+          titulo="No pudimos cargar la bandeja"
+          mensaje={bandeja.error}
+          onReintentar={() => bandeja.recargar()}
+        />
+      ) : !bandeja.tieneDatos ? (
+        <EstadoCarga texto="Cargando la bandeja de pagos" claseContenedor="min-h-[200px]" />
       ) : bandeja.total === 0 ? (
         <BandejaVaciaConciliacion />
       ) : (

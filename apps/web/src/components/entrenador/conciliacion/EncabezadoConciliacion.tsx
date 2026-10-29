@@ -2,12 +2,14 @@
  * Tray header: section label, title, subtitle, and the live queue count.
  *
  * Presentational: the count arrives as a prop; no data fetching here.
+ * Con `total` en `null` (la bandeja aún no ha respondido) no se pinta el contador: nunca se
+ * muestra un "0 transacciones en cola" falso durante la carga o tras un error sin datos.
  */
 import { DollarSign } from 'lucide-react';
 import { pluralizar } from '../../../lib/pluralizar';
 
 export interface EncabezadoConciliacionProps {
-  total: number;
+  total: number | null;
 }
 
 export function EncabezadoConciliacion({ total }: EncabezadoConciliacionProps) {
@@ -26,9 +28,11 @@ export function EncabezadoConciliacion({ total }: EncabezadoConciliacionProps) {
             Aprueba o rechaza los pagos que reportan tus alumnos.
           </p>
         </div>
-        <span className="text-xs font-bold px-3 py-1 rounded-full bg-warning/15 text-warning border border-warning/20">
-          {pluralizar(total, 'transacción en cola', 'transacciones en cola')}
-        </span>
+        {total !== null && (
+          <span className="text-xs font-bold px-3 py-1 rounded-full bg-warning/15 text-warning border border-warning/20">
+            {pluralizar(total, 'transacción en cola', 'transacciones en cola')}
+          </span>
+        )}
       </div>
     </div>
   );
