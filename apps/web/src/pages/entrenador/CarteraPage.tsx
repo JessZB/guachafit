@@ -61,6 +61,10 @@ export function CarteraPage() {
     resultadoRecordatorio,
     copiado,
     telefonoWhatsApp,
+    vistaPrevia,
+    cargandoVistaPrevia,
+    errorVistaPrevia,
+    reintentarVistaPrevia,
     refModalRecordatorio,
     abrirRecordatorio,
     cerrarModalRecordatorio,
@@ -96,6 +100,15 @@ export function CarteraPage() {
   const sinTasa = resumen !== null && !hayTasaProyectable(resumen);
   // Solo esas pestañas muestran bolívares, así que solo ahí tiene sentido el aviso.
   const avisoSinTasa = sinTasa && (pestana === 'mora' || pestana === 'por_vencer');
+
+  // Modal de recordatorio: saldo en USD y, si la fila lo trae, su equivalente en Bs.
+  const saldoTextoRecordatorio = filaRecordatorio
+    ? `${formatMonto(filaRecordatorio.saldoPendienteUsd, 'USD', { conCodigo: true })}${
+        filaRecordatorio.saldoPendienteBs
+          ? ` · ${formatMonto(filaRecordatorio.saldoPendienteBs, 'VES')}`
+          : ''
+      }`
+    : '';
 
   // Modal de cobro: saldo formateado y resumen de lo que se registrará (D1)
   const saldoTexto = cobro
@@ -179,7 +192,9 @@ export function CarteraPage() {
                       navigate(`/coach/alumnos/${fila.alumnoPerfilId}`);
                     }
                   }}
-                  onRevisarPago={() => navigate('/coach/conciliacion')}
+                  onRevisarPago={(fila) =>
+                    navigate(`/coach/conciliacion?q=${encodeURIComponent(fila.alumnoNombre)}`)
+                  }
                 />
               </div>
             )}
@@ -196,6 +211,11 @@ export function CarteraPage() {
           enviando={enviandoRecordatorio}
           copiado={copiado}
           telefonoWhatsApp={telefonoWhatsApp}
+          vistaPrevia={vistaPrevia}
+          cargandoVistaPrevia={cargandoVistaPrevia}
+          errorVistaPrevia={errorVistaPrevia}
+          onReintentarVistaPrevia={reintentarVistaPrevia}
+          saldoTexto={saldoTextoRecordatorio}
           dialogRef={refModalRecordatorio}
           onCerrar={cerrarModalRecordatorio}
           onEnviar={handleEnviarRecordatorio}

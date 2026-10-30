@@ -163,6 +163,18 @@ beforeEach(() => {
 
   mockApi.mockReset();
   mockApi.mockImplementation((endpoint: string, opciones?: { method?: string }) => {
+    if (typeof endpoint === 'string' && endpoint.includes('/recordatorio/vista-previa')) {
+      return Promise.resolve({
+        puedeEnviar: true,
+        motivo: 'listo',
+        mensaje: 'Listo para enviar.',
+        titulo: 'Recordatorio de pago',
+        cuerpo: 'Hola Carlos, tu mensualidad tiene un saldo pendiente de $35.00 USD.',
+        saldoPendienteUsd: '35.00',
+        saldoPendienteBs: null,
+        proximoPermitidoUtc: null,
+      });
+    }
     if (typeof endpoint === 'string' && endpoint.includes('/recordatorio')) {
       const siguiente = respuestasRecordatorio.shift();
       if (siguiente instanceof Error) return Promise.reject(siguiente);
@@ -325,7 +337,9 @@ describe('CarteraPage · caracterización (prompt 73): zonas sin cobertura previ
     ).toBeTruthy();
     expect(within(dialogo).getByText(FILA_A.alumnoNombre)).toBeTruthy();
 
-    fireEvent.click(within(dialogo).getByRole('button', { name: 'Enviar recordatorio' }));
+    const botonEnviar = within(dialogo).getByRole('button', { name: 'Enviar recordatorio' });
+    await waitFor(() => expect(botonEnviar.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(botonEnviar);
 
     const textarea = (await within(dialogo).findByLabelText(
       'Mensaje enviado (puedes copiarlo o abrir WhatsApp)'
@@ -334,8 +348,8 @@ describe('CarteraPage · caracterización (prompt 73): zonas sin cobertura previ
     expect(within(dialogo).getByRole('button', { name: 'Copiar mensaje' })).toBeTruthy();
     const enlaceWa = within(dialogo).getByRole('link', { name: 'Abrir WhatsApp' });
     expect(enlaceWa.getAttribute('href')).toContain('https://wa.me/584121234567');
-    const posts = mockApi.mock.calls.filter(([url, opciones]) =>
-      String(url).includes('/recordatorio')
+    const posts = mockApi.mock.calls.filter(
+      ([url]) => String(url).includes('/recordatorio') && !String(url).includes('vista-previa')
     );
     expect(posts).toHaveLength(1);
     expect((posts[0][1] as { method?: string } | undefined)?.method ?? 'POST').toBe('POST');
@@ -359,7 +373,9 @@ describe('CarteraPage · caracterización (prompt 73): zonas sin cobertura previ
     fireEvent.click(botonRecordatorioDe(FILA_A.alumnoNombre));
 
     const dialogo = await screen.findByRole('dialog');
-    fireEvent.click(within(dialogo).getByRole('button', { name: 'Enviar recordatorio' }));
+    const botonEnviar = within(dialogo).getByRole('button', { name: 'Enviar recordatorio' });
+    await waitFor(() => expect(botonEnviar.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(botonEnviar);
 
     expect(
       await within(dialogo).findByText('Ya enviaste un recordatorio manual hace poco.')
@@ -379,7 +395,9 @@ describe('CarteraPage · caracterización (prompt 73): zonas sin cobertura previ
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(
-      mockApi.mock.calls.filter(([url]) => String(url).includes('/recordatorio'))
+      mockApi.mock.calls.filter(
+        ([url]) => String(url).includes('/recordatorio') && !String(url).includes('vista-previa')
+      )
     ).toHaveLength(0);
   });
 

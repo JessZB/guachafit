@@ -5,6 +5,7 @@
  * `hidden md:block`). ÚNICO (R3). Presentacional: recibe filas y callbacks
  * por props, no usa `useQuery` ni `api-client` (R1).
  */
+import { useState } from 'react';
 import type { FilaCarteraDTO, PestanaCarteraDTO } from '@guachafit/shared';
 import { etiquetaMetodoPago } from '../../../lib/conciliacion-filtros';
 import { formatFechaCalendario, formatFechaHoraLocal } from '../../../lib/date-format';
@@ -86,11 +87,10 @@ export function TablaEscritorioCartera({
                       {fila.referenciaBancaria || 'Sin referencia'}
                     </div>
                     {fila.comprobanteUrl ? (
-                      <img
-                        src={fila.comprobanteUrl}
-                        alt={`Comprobante de ${fila.alumnoNombre}`}
-                        loading="lazy"
-                        className="mt-1 h-10 w-16 rounded-md object-cover border border-border"
+                      <MiniaturaComprobante
+                        key={fila.comprobanteUrl}
+                        url={fila.comprobanteUrl}
+                        alumnoNombre={fila.alumnoNombre}
                       />
                     ) : (
                       <span className="text-[11px] text-muted-foreground">Sin captura digital</span>
@@ -144,5 +144,27 @@ export function TablaEscritorioCartera({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * Miniatura del comprobante. Si la imagen no carga (URL caducada, red), muestra un aviso en vez
+ * de un icono roto. El `key` por URL en el padre reinicia el fallo cuando llega otro comprobante.
+ */
+function MiniaturaComprobante({ url, alumnoNombre }: { url: string; alumnoNombre: string }) {
+  const [fallo, setFallo] = useState(false);
+
+  if (fallo) {
+    return <span className="text-[11px] text-muted-foreground">Comprobante no disponible</span>;
+  }
+
+  return (
+    <img
+      src={url}
+      alt={`Comprobante de ${alumnoNombre}`}
+      loading="lazy"
+      onError={() => setFallo(true)}
+      className="mt-1 h-10 w-16 rounded-md object-cover border border-border"
+    />
   );
 }

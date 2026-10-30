@@ -1,6 +1,9 @@
 /**
  * Tray filter state: free-text search plus payment-method chip, applied over the
  * loaded page (the endpoint accepts no filters, so the UI declares the scope).
+ *
+ * UX-09b: `busquedaInicial` solo fija el valor de partida (p. ej. `?q=` desde Control de Cobros);
+ * después la búsqueda vuelve a ser libre y `limpiarFiltros` la deja en vacío.
  */
 import { useEffect, useMemo, useState } from 'react';
 import type { TransaccionPagoDetalleDTO } from '@guachafit/shared';
@@ -23,9 +26,10 @@ export interface ResultadoFiltrosConciliacion {
 }
 
 export function useFiltrosConciliacion(
-  transacciones: TransaccionPagoDetalleDTO[]
+  transacciones: TransaccionPagoDetalleDTO[],
+  busquedaInicial = ''
 ): ResultadoFiltrosConciliacion {
-  const [busqueda, setBusqueda] = useState('');
+  const [busqueda, setBusqueda] = useState(busquedaInicial);
   const [filtroMetodo, setFiltroMetodo] = useState<FiltroMetodoPago>('todos');
 
   const visibles = useMemo(

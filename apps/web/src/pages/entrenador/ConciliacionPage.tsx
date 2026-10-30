@@ -13,6 +13,7 @@
  * `components/entrenador/conciliacion/`; pure logic in `lib/conciliacion-*`.
  */
 import React from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/auth-context';
 import { Paginacion } from '../../components/common/Paginacion';
 import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
@@ -38,7 +39,23 @@ export function ConciliacionPage() {
   const { isDemoMode } = useAuth();
   const { isOnline } = useFrescuraOffline(null);
   const bandeja = useBandejaConciliacion(isDemoMode);
-  const filtros = useFiltrosConciliacion(bandeja.transacciones);
+  // `?q=` llega desde Control de Cobros ("Revisar en bandeja"): es un traspaso de un solo uso.
+  // Sirve de búsqueda de partida y se retira de la URL al montar, sin entrada nueva en el historial.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filtros = useFiltrosConciliacion(bandeja.transacciones, searchParams.get('q') ?? '');
+  React.useEffect(() => {
+    if (!searchParams.has('q')) return;
+    setSearchParams(
+      (actuales) => {
+        const siguientes = new URLSearchParams(actuales);
+        siguientes.delete('q');
+        return siguientes;
+      },
+      { replace: true }
+    );
+    // Solo al montar: `q` es la búsqueda de partida, no un estado sincronizado con la URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const acciones = useAccionesConciliacion(bandeja.marcarResuelta);
   const { formatMonto } = useFormatoNumero();
   const refLista = React.useRef<HTMLDivElement>(null);
