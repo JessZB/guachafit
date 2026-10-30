@@ -252,11 +252,14 @@ Cada encargo incluye: el objetivo y la decisión del dueño; los tests o contrat
 - **Comando**, en segundo plano y desde la raíz del repo:
   ```bash
   agy -p "Lee y ejecuta exactamente el prompt .external-agents/<NN>-<lote>-<tipo>.md y deja el reporte en la ruta que indica." \
-    --model gemini-3.8-flash-high --mode accept-edits \
+    --model <modelo> --mode accept-edits \
     --settings .external-agents/<NN>-<lote>-<tipo>.permisos.json --print-timeout 0
   ```
   - `--print-timeout 0` espera a que el agente termine el turno completo.
-  - El modelo `gemini-3.8-flash-high` ya incluye el esfuerzo alto; la lista sale de `agy models`.
+  - Modelo según el tipo de prompt (la lista sale de `agy models`):
+    - `tests`, `verificacion` y `validacion` usan `gemini-3.8-flash-medium`: son tareas mecánicas, respaldadas por el JSON y el diff;
+    - las `review-*` usan `gemini-3.8-flash-high`.
+- **Una sola pasada de la suite completa.** El agente itera con el subconjunto de specs del lote y ejecuta la suite completa **una vez**, al final. En UX-10 la verificación tardó 49 min por repetir la suite completa cuatro veces. Cada prompt lista los dos comandos (subconjunto y suite completa) en `Comandos` y en su `.permisos.json`.
 - **Permisos mínimos.** `accept-edits` aprueba las ediciones de archivos, pero no los comandos de terminal. Cada prompt lleva su `<NN>-<lote>-<tipo>.permisos.json` con la lista exacta de comandos permitidos:
   ```json
   {"permissions":{"allow":["command(git status --short)","command(pnpm --filter @guachafit/web exec vitest run)"]}}
