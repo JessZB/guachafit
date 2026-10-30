@@ -137,4 +137,18 @@ Then el contador del KPI debe actualizarse de "2" a "1" instantáneamente sin re
 - Las dos listas de riesgo usan un solo componente, `ListaRiesgoDashboard` (tope de 5 filas y "Ver todos (N)"), con los mismos textos.
 - El badge de `MetricCard` es `ui/BadgeEstado`: en el Dashboard y en Control de cobros los badges de los KPI se ven en mayúsculas y el tono de peligro usa el token `danger`.
 - Evidencia: web **2754/2754**; typecheck y build en verde. Revisión de fiabilidad sin BLOCKER; su WARNING (datos demo retenidos al salir del modo demo) se corrigió y se cubrió con el test H7.
-- Pendiente: no hay recarga automática al volver la conexión. Faltan tests de los casos borde de `KpisMacroDashboard` (adherencia nula, sin meta) y de `ListasAlertaTemprana` (más de 5 filas y listas vacías, ya cubiertos en `ListaRiesgoDashboard`). `recargar()` llama al API también en modo demo, aunque la UI no lo ofrece en ese modo.
+- Pendiente (tras UX-12): no hay recarga automática al volver la conexión. Faltan tests de los casos borde de `KpisMacroDashboard` (adherencia nula, sin meta) y de `ListasAlertaTemprana` (más de 5 filas y listas vacías, ya cubiertos en `ListaRiesgoDashboard`). `recargar()` llama al API también en modo demo, aunque la UI no lo ofrece en ese modo.
+
+### «Qué atender hoy» (`8a5c6f1`, 2026-10-30, lote UX-13, decisión D4)
+- **Decisión del dueño (D4):** el Dashboard prioriza lo que hay que atender. Arriba va la franja «Requiere tu atención»; después, las listas de riesgo; al final, «Contexto del negocio».
+- La franja (`FranjaAtencionDashboard`) tiene 4 enlaces con su cifra real y se muestra también mientras carga o con error (con "—"):
+  - Pagos por revisar → Pagos por validar;
+  - Evaluaciones por revisar → Antropometría;
+  - En riesgo deportivo → Monitor de adherencia;
+  - En mora → Control de cobros en la pestaña de mora.
+  Sustituye a las tarjetas de bandeja y a los KPI "Alumnos en Riesgo" y "Pagos Vencidos".
+- Cada fila de las listas de riesgo lleva a la ficha del alumno (`rutaExpedienteMonitor`, área de 44px). En mora, la clave es la cuota, porque un alumno puede tener varias. Los vacíos ya no llevan emoji.
+- El contexto (Alumnos activos → Mis alumnos, Cobros del mes → Control de cobros, Cumplimiento semanal → Monitor) usa `MetricCard` con la prop nueva `enlace`. Sin enlace, la tarjeta ya no se resalta al pasar el ratón. Montos con `useFormatoNumero()` (`$1.900,00`, "Meta: $2.500,00 USD (76%)"), sin el badge "Montos en USD".
+- Control de cobros: la tarjeta "Pagos por validar" usa `enlace` en lugar de un `Link` envolvente.
+- Evidencia: web **2772/2772**; typecheck y build en verde. Revisión de fiabilidad sin BLOCKER. Se corrigieron dos hallazgos, validados con P7 y R1: la clave duplicada en mora y el realce perdido en Control de cobros.
+- Pendiente: el cumplimiento semanal se muestra con el decimal crudo (`84.50%`). No hay recarga automática al volver la conexión. Las etiquetas "Panel administrativo" y "Resumen del Negocio" van con SEG-25 (UX-16).

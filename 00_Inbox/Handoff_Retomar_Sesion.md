@@ -96,7 +96,8 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **UX-10 cerrado (2026-10-30, `f078d15`):** copy, formatos y semántica de Cobros. Web **2728/2728**. Desde este lote Claude lanza el agente externo con Antigravity CLI (§7.6 de las reglas).
 - **UX-11 cerrado (2026-10-30, `57606e8`):** Dashboard con carga honesta. Web **2735/2735**. Primer lote entero con la orquestación de Orca, que funcionó: §7.6 de las reglas ya está actualizada. `orca status` no traía `caller` y `run-create` funcionó igual.
 - **UX-12 cerrado (2026-10-30, `97017b8`):** hook `use-dashboard-comando`, fixture demo en `lib/`, `ListaRiesgoDashboard` y `MetricCard` sobre `BadgeEstado`. Web **2754/2754**.
-- El siguiente lote es **UX-13** (Dashboard: KPI y filas accionables; SEG-04, 05, 07, 08, 09 y 11). **Depende de la decisión D4** (sección 4 de la auditoría): ¿"qué atender hoy" o tablero de negocio? Pregúntamela antes de escribir los tests. Los seguimientos de cada lote están en la sección 3 de la auditoría.
+- **UX-13 cerrado (2026-10-30, `8a5c6f1`):** decisión D4 = «qué atender hoy». Franja «Requiere tu atención», filas a la ficha y «Contexto del negocio» con KPI enlazados. Web **2772/2772**.
+- El siguiente lote es **UX-14** (Monitor: táctil y estados; SEG-12 a 19), sin decisiones pendientes. Ojo: el spec C15 caracteriza el defecto actual de la tarjeta del Monitor y habrá que autorizar su ajuste. Los seguimientos de cada lote están en la sección 3 de la auditoría.
 - **Lección del agente externo:** su tabla de resultados no es evidencia (en UX-12 inventó títulos y mensajes). Contrasta con el JSON de Vitest y con los `it(` del spec. Todo spec nuevo de componentes llama a `cleanup` en `afterEach` (`globals: false`).
 - Rediseño de la ficha del alumno (`/coach/alumnos/:id`) CERRADO:
 

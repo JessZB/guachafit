@@ -165,6 +165,12 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - Cambia la moneda a Bs.: el monto **se vacía**. Escribe `1825,50` (con coma): aparece "Se registrarán Bs. 1.825,50 (≈ $…)".
   - Escribe `50.123` y pulsa "Registrar cobro": no se envía y aparece "Escribe el monto con hasta 2 decimales…".
   - En el móvil horizontal, el modal se desplaza hasta los botones.
+- [ ] **Dashboard «qué atender hoy» (desde 2026-10-30, UX-13):** en `/coach/dashboard`, en el móvil (360px).
+  - Lo primero tras la cabecera es "Requiere tu atención", con 4 accesos: pagos por revisar, evaluaciones, en riesgo deportivo y en mora. Cada uno lleva a su pantalla; "En mora" abre Control de cobros en la pestaña de mora.
+  - Mientras carga, los 4 accesos aparecen con "—" y se pueden pulsar.
+  - Pulsa una fila de "Alumnos con Pagos Vencidos" o de "Alumnos sin Entrenar": abre la ficha de ese alumno. Con las listas vacías no hay emoji.
+  - Al final, "Contexto del negocio": Alumnos Activos, Cobros del Mes (`$1.900,00`, "Meta: $2.500,00 USD (76%)") y Cumplimiento Semanal. Cada tarjeta lleva a su pantalla y se resalta al pasar el ratón.
+  - En Control de cobros, "Pagos por validar" sigue llevando a la bandeja y se resalta al pasar el ratón.
 - [ ] **Dashboard partido en piezas (desde 2026-10-30, UX-12):** en `/coach/dashboard`.
   - Se ve igual que antes, salvo los badges de los KPI, que ahora van en mayúsculas ("MONTOS EN USD", "AL DÍA"), igual que en Control de cobros.
   - Las listas "Alumnos con Pagos Vencidos" y "Alumnos sin Entrenar" mantienen sus textos y muestran "Ver todos (N)" solo con más de 5 alumnos.
