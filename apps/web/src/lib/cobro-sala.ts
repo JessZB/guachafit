@@ -5,7 +5,14 @@
  * la moneda y nunca viaja una referencia bancaria. `hoyLocal` es el día LOCAL de la operación
  * (`toISOString()` lo desplazaría al día siguiente por la tarde en zonas como UTC-4).
  */
-import { MENSAJE_FECHA_PAGO_FUTURA, MetodoPago, Moneda } from '@guachafit/shared';
+import {
+  DECIMAL_STRING_REGEX,
+  MENSAJE_FECHA_PAGO_FUTURA,
+  MetodoPago,
+  Moneda,
+  TASA_STRING_REGEX,
+} from '@guachafit/shared';
+import type { FormatoNumeroVista } from './use-formato-numero';
 
 export interface EntradaCobroSala {
   monto: string;
@@ -61,4 +68,51 @@ export function errorTrasCambiarFecha(errorActual: string | null): string | null
 export function textoTasaCobro(tasa?: string | null): string | null {
   if (!tasa || !(Number(tasa) > 0)) return null;
   return `Se convertirá con la tasa vigente al registrar: 1 USD = ${tasa} Bs.`;
+}
+
+/**
+ * UX-08 (D1): la pantalla muestra el monto con formato venezolano (coma), así que el coach escribe
+ * comas; el contrato de la API usa punto. Solo una coma decimal se cambia por punto; el resto del
+ * texto se devuelve sin tocar (sin espacios de los extremos) para que la validación lo rechace.
+ */
+export function normalizarMontoCobro(texto: string): string {
+  const limpio = texto.trim();
+  return /^\d+,\d+$/.test(limpio) ? limpio.replace(',', '.') : limpio;
+}
+
+/**
+ * UX-08 (D1): equivalente en USD de un cobro en efectivo, para el resumen previo al botón. Devuelve
+ * el decimal con dos cifras, sin formato, o `null` si no se puede calcular: monto vacío, cero,
+ * negativo, con coma o con más de 2 decimales, o, en bolívares, tasa ausente, cero o no numérica.
+ * Sin tasa no se inventa una conversión. Es estricta: quien llama normaliza antes con
+ * `normalizarMontoCobro`. La tasa se valida con su contrato de la API (hasta 4 decimales).
+ */
+export function equivalenteUsdCobro(
+  monto: string,
+  moneda: Moneda,
+  tasa: string | null | undefined
+): string | null {
+  if (!DECIMAL_STRING_REGEX.test(monto) || !(Number(monto) > 0)) return null;
+  if (moneda === Moneda.USD) return Number(monto).toFixed(2);
+  if (!tasa || !TASA_STRING_REGEX.test(tasa) || !(Number(tasa) > 0)) return null;
+  return (Number(monto) / Number(tasa)).toFixed(2);
+}
+
+/**
+ * UX-08 (D1): resumen previo al botón de cobro, con lo que se registrará en su moneda y su
+ * equivalente en USD con la tasa vigente. Sin conversión válida no afirma nada (`null`).
+ */
+export function resumenDeCobro(
+  monto: string,
+  moneda: Moneda,
+  tasa: string | null | undefined,
+  formatMonto: FormatoNumeroVista['formatMonto']
+): string | null {
+  const montoNormalizado = normalizarMontoCobro(monto);
+  const usd = equivalenteUsdCobro(montoNormalizado, moneda, tasa);
+  if (usd === null) return null;
+  if (moneda === Moneda.USD) {
+    return `Se registrarán ${formatMonto(montoNormalizado, 'USD', { conCodigo: true })}`;
+  }
+  return `Se registrarán ${formatMonto(montoNormalizado, 'VES')} (≈ ${formatMonto(usd, 'USD', { conCodigo: true })})`;
 }

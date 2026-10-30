@@ -1,22 +1,36 @@
 /**
  * Action feedback banners: success confirmation and honest failure alert.
  *
- * Presentational: both messages arrive as props; no data fetching here.
+ * Presentational: both messages arrive as props; no data fetching here. The success notice
+ * can be closed by the coach (`onCerrarExito`); the page decides how long it lives.
  */
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, X } from 'lucide-react';
+import { BotonTactil } from '../../ui/BotonTactil';
 
 export interface AvisosAccionConciliacionProps {
   exito: string | null;
   error: string | null;
+  onCerrarExito: () => void;
 }
 
-export function AvisosAccionConciliacion({ exito, error }: AvisosAccionConciliacionProps) {
+export function AvisosAccionConciliacion({ exito, error, onCerrarExito }: AvisosAccionConciliacionProps) {
   return (
     <>
       {exito && (
-        <div className="p-4 rounded-2xl bg-success/15 border border-success/30 text-success text-xs font-bold flex items-center gap-2">
+        <div
+          role="status"
+          className="p-4 rounded-2xl bg-success/15 border border-success/30 text-success text-xs font-bold flex items-center gap-2"
+        >
           <CheckCircle2 className="h-4 w-4 shrink-0" />
-          <span>{exito}</span>
+          <span className="flex-1">{exito}</span>
+          <BotonTactil
+            variante="secundaria"
+            etiquetaAccesible="Cerrar aviso"
+            onClick={onCerrarExito}
+            className="shrink-0"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </BotonTactil>
         </div>
       )}
 

@@ -318,6 +318,7 @@ describe('CarteraPage · contrato F: cobro en Control de Cobros', () => {
     const campoFecha = screen.getByLabelText('Fecha de la operación') as HTMLInputElement;
     const fechaDelModal = campoFecha.value;
     fireEvent.change(screen.getByLabelText('Moneda'), { target: { value: Moneda.VES } });
+    fireEvent.change(screen.getByLabelText('Monto'), { target: { value: '35.00' } });
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Registrar cobro' }));
     await waitFor(() => expect(llamadasPostCobro()).toHaveLength(1));
 

@@ -3,10 +3,13 @@
  * a required reason, with honest failure handling (no fake success, the
  * transaction stays in the tray when the server does not confirm).
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { TransaccionPagoDetalleDTO } from '@guachafit/shared';
 import { apiClient } from '../../../lib/api-client';
-import { mensajeConExcedente } from '../../../lib/saldo-a-favor';
+import { mensajeConExcedente, tieneSaldoAFavor } from '../../../lib/saldo-a-favor';
+
+/** Tiempo de vida de un aviso de éxito sin saldo a favor. */
+const VIDA_EXITO_MS = 8000;
 
 export interface ResultadoAccionesConciliacion {
   rejectingTx: TransaccionPagoDetalleDTO | null;
@@ -33,6 +36,8 @@ export interface ResultadoAccionesConciliacion {
   cancelarAprobacion: () => void;
   confirmarAprobacion: () => Promise<void>;
   confirmarRechazo: () => Promise<void>;
+  /** Retira el aviso de éxito de inmediato (botón "Cerrar aviso"). */
+  cerrarExito: () => void;
 }
 
 export function useAccionesConciliacion(
@@ -54,6 +59,35 @@ export function useAccionesConciliacion(
   // The payment approves only after confirmation; `aprobando` blocks double submit.
   const [pagoPorAprobar, setPagoPorAprobar] = useState<TransaccionPagoDetalleDTO | null>(null);
   const [aprobando, setAprobando] = useState(false);
+  // Timer of the success notice: one at a time, cleared on replacement, close and unmount.
+  const temporizadorExitoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (temporizadorExitoRef.current !== null) clearTimeout(temporizadorExitoRef.current);
+    },
+    []
+  );
+
+  const limpiarTemporizadorExito = () => {
+    if (temporizadorExitoRef.current !== null) {
+      clearTimeout(temporizadorExitoRef.current);
+      temporizadorExitoRef.current = null;
+    }
+  };
+
+  // A success retires any earlier error. A notice with surplus credit stays until closed,
+  // because the coach has to read that the student now has a balance in favour.
+  const mostrarExito = (mensaje: string, persistente: boolean) => {
+    limpiarTemporizadorExito();
+    setActionError(null);
+    setActionSuccess(mensaje);
+    if (persistente) return;
+    temporizadorExitoRef.current = setTimeout(() => {
+      temporizadorExitoRef.current = null;
+      setActionSuccess(null);
+    }, VIDA_EXITO_MS);
+  };
 
   const handleAprobar = async (txId: string) => {
     setActionError(null);
@@ -68,6 +102,9 @@ export function useAccionesConciliacion(
       );
       excedenteUsd = respuesta?.transaccion?.excedenteUsd;
     } catch (err: unknown) {
+      // Error and success never coexist: a failed approval retires any visible success notice.
+      limpiarTemporizadorExito();
+      setActionSuccess(null);
       setActionError(
         (err as Error)?.message || 'No se pudo aprobar la transacción. Revisa tu conexión e inténtalo de nuevo.'
       );
@@ -78,8 +115,10 @@ export function useAccionesConciliacion(
     // In demo the resolved id is recorded and the local slice recomputes.
     marcarResuelta(txId);
     // The surplus (API data) stays as credit balance for the student.
-    setActionSuccess(mensajeConExcedente('Pago aprobado y descontado de la cuota.', excedenteUsd));
-    setTimeout(() => setActionSuccess(null), 3000);
+    mostrarExito(
+      mensajeConExcedente('Pago aprobado y descontado de la cuota.', excedenteUsd),
+      tieneSaldoAFavor(excedenteUsd)
+    );
   };
 
   const handleConfirmarRechazo = async () => {
@@ -109,12 +148,15 @@ export function useAccionesConciliacion(
     marcarResuelta(rejectingTx.id);
     setRejectingTx(null);
     setMotivoRechazo('');
-    setActionSuccess('Transacción rechazada con observaciones notificadas al alumno.');
-    setTimeout(() => setActionSuccess(null), 3000);
+    mostrarExito('Transacción rechazada con observaciones notificadas al alumno.', false);
   };
 
   // COB-03 is enforced by abrirRechazo: no draft reason survives into a new rejection.
+  // A rejection opened from the page retires the page-level error and any success notice.
   const abrirRechazo = (tx: TransaccionPagoDetalleDTO) => {
+    limpiarTemporizadorExito();
+    setActionSuccess(null);
+    setActionError(null);
     setMotivoRechazo('');
     setErrorRechazo(null);
     setRejectingTx(tx);
@@ -150,10 +192,20 @@ export function useAccionesConciliacion(
       abrirRechazo(tx);
     },
     aprobarDesdeVisor: (tx) => {
+      // Error and success never coexist: opening an approval retires both notices.
+      limpiarTemporizadorExito();
+      setActionSuccess(null);
+      setActionError(null);
       setPagoPorAprobar(tx);
       setViewingComprobanteTx(null);
     },
-    iniciarAprobacion: setPagoPorAprobar,
+    iniciarAprobacion: (tx) => {
+      // Error and success never coexist: opening an approval retires both notices.
+      limpiarTemporizadorExito();
+      setActionSuccess(null);
+      setActionError(null);
+      setPagoPorAprobar(tx);
+    },
     cancelarAprobacion: () => setPagoPorAprobar(null),
     confirmarAprobacion: async () => {
       if (!pagoPorAprobar || aprobando) return;
@@ -166,5 +218,9 @@ export function useAccionesConciliacion(
       }
     },
     confirmarRechazo: handleConfirmarRechazo,
+    cerrarExito: () => {
+      limpiarTemporizadorExito();
+      setActionSuccess(null);
+    },
   };
 }

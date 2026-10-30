@@ -61,7 +61,11 @@ export function ConciliacionPage() {
       {/* Sin respuesta del servidor el contador no existe: no se pinta un "0" falso */}
       <EncabezadoConciliacion total={bandeja.tieneDatos ? bandeja.total : null} />
 
-      <AvisosAccionConciliacion exito={acciones.actionSuccess} error={acciones.actionError} />
+      <AvisosAccionConciliacion
+        exito={acciones.actionSuccess}
+        error={acciones.actionError}
+        onCerrarExito={acciones.cerrarExito}
+      />
 
       {/* Sin conexión con datos guardados: el aviso de frescura de la pantalla */}
       {bandeja.tieneDatos && <AvisoDatosOffline />}

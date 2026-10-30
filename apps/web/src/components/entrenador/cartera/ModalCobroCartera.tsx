@@ -3,14 +3,19 @@
  *
  * Recorte verbatim de `CarteraPage.tsx` (bloque del modal). Presentacional puro: recibe el
  * estado del hook `useCobroCartera` y callbacks. ÚNICO (R3): flujo propio de la cartera.
+ *
+ * UX-08: el monto y el saldo llegan ya formateados (`saldoTexto`, `resumen`); los ids de los
+ * campos son únicos por instancia (`useId`) para que dos modales no repitan ids.
  */
-import type { RefObject } from 'react';
+import { useId, type RefObject } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, HandCoins, X } from 'lucide-react';
 import { textoTasaCobro } from '../../../lib/cobro-sala';
 import { fechaCalendarioLocal } from '../../../lib/date-format';
 import { Moneda, type ResumenCarteraDTO } from '@guachafit/shared';
 import type { EstadoCobro } from './useCobroCartera';
+import { CampoAjustes } from '../../ajustes/CampoAjustes';
+import { BotonTactil } from '../../ui/BotonTactil';
 
 export interface ModalCobroCarteraProps {
   cobro: EstadoCobro;
@@ -20,6 +25,10 @@ export interface ModalCobroCarteraProps {
   sinPlan: boolean;
   sinTasa: boolean;
   tasaVigente?: ResumenCarteraDTO['tasaVigente'];
+  /** Saldo pendiente ya formateado (p. ej. `$50,00 USD`). */
+  saldoTexto: string;
+  /** Lo que se registrará y su equivalente en USD (D1); `null` si no hay conversión válida. */
+  resumen: string | null;
   dialogRef: RefObject<HTMLDivElement | null>;
   onCerrar: () => void;
   onCambiarMonto: (monto: string) => void;
@@ -27,6 +36,9 @@ export interface ModalCobroCarteraProps {
   onCambiarFecha: (fecha: string) => void;
   onRegistrar: () => void;
 }
+
+const CLASES_CONTROL_NATIVO =
+  'w-full min-h-11 px-3 rounded-xl bg-background border border-border text-base sm:text-sm text-foreground focus:outline-hidden focus:border-primary';
 
 export function ModalCobroCartera({
   cobro,
@@ -36,6 +48,8 @@ export function ModalCobroCartera({
   sinPlan,
   sinTasa,
   tasaVigente,
+  saldoTexto,
+  resumen,
   dialogRef,
   onCerrar,
   onCambiarMonto,
@@ -43,6 +57,11 @@ export function ModalCobroCartera({
   onCambiarFecha,
   onRegistrar,
 }: ModalCobroCarteraProps) {
+  const idMonto = useId();
+  const idMoneda = useId();
+  const idFecha = useId();
+  const sufijoMoneda = cobro.moneda === Moneda.VES ? 'Bs.' : 'USD';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
       <div
@@ -51,7 +70,7 @@ export function ModalCobroCartera({
         aria-modal="true"
         aria-labelledby="cartera-cobro-titulo"
         tabIndex={-1}
-        className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-md space-y-4"
+        className="p-6 rounded-3xl bg-card border border-border shadow-2xl w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto"
       >
         <div className="flex items-center justify-between border-b border-border/80 pb-3">
           <div className="flex items-center gap-2">
@@ -63,10 +82,10 @@ export function ModalCobroCartera({
           <button
             type="button"
             onClick={onCerrar}
-            className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
-            aria-label="Cerrar"
+            className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
+            aria-label="Cerrar registro de cobro"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
 
@@ -74,9 +93,7 @@ export function ModalCobroCartera({
           <p className="text-sm font-bold text-foreground">{cobro.fila.alumnoNombre}</p>
           <p className="text-xs text-muted-foreground">
             Saldo pendiente actual:{' '}
-            <span className="font-mono font-bold text-foreground">
-              ${cobro.fila.saldoPendienteUsd} USD
-            </span>
+            <span className="font-mono font-bold text-foreground">{saldoTexto}</span>
           </p>
         </div>
 
@@ -99,36 +116,33 @@ export function ModalCobroCartera({
         )}
 
         {exito ? (
-          <div className="p-3 rounded-2xl bg-success/15 border border-success/30 text-success text-xs font-bold flex items-start gap-2">
+          <div
+            role="status"
+            className="p-3 rounded-2xl bg-success/15 border border-success/30 text-success text-xs font-bold flex items-start gap-2"
+          >
             <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
             <span>{exito}</span>
           </div>
         ) : (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
+              <CampoAjustes
+                id={idMonto}
+                etiqueta="Monto"
+                valor={cobro.monto}
+                onCambiar={onCambiarMonto}
+                inputMode="decimal"
+                sufijo={sufijoMoneda}
+              />
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-foreground" htmlFor="cobro-monto">
-                  Monto
-                </label>
-                <input
-                  id="cobro-monto"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={cobro.monto}
-                  onChange={(evento) => onCambiarMonto(evento.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-foreground" htmlFor="cobro-moneda">
+                <label className="text-xs font-semibold text-foreground" htmlFor={idMoneda}>
                   Moneda
                 </label>
                 <select
-                  id="cobro-moneda"
+                  id={idMoneda}
                   value={cobro.moneda}
                   onChange={(evento) => onCambiarMoneda(evento.target.value as Moneda)}
-                  className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                  className={CLASES_CONTROL_NATIVO}
                 >
                   <option value="USD">USD (efectivo)</option>
                   <option value="VES" disabled={sinTasa}>
@@ -139,16 +153,16 @@ export function ModalCobroCartera({
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground" htmlFor="cobro-fecha">
+              <label className="text-xs font-semibold text-foreground" htmlFor={idFecha}>
                 Fecha de la operación
               </label>
               <input
-                id="cobro-fecha"
+                id={idFecha}
                 type="date"
                 max={fechaCalendarioLocal()}
                 value={cobro.fechaOperacion}
                 onChange={(evento) => onCambiarFecha(evento.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+                className={CLASES_CONTROL_NATIVO}
               />
             </div>
 
@@ -165,23 +179,25 @@ export function ModalCobroCartera({
           </div>
         )}
 
+        {!exito && resumen && (
+          <p role="status" aria-live="polite" className="text-xs font-semibold text-foreground">
+            {resumen}
+          </p>
+        )}
+
         <div className="flex items-center gap-2 pt-1">
-          <button
-            type="button"
-            onClick={onCerrar}
-            className="flex-1 py-2.5 rounded-xl bg-secondary hover:bg-secondary/80 font-bold text-xs text-foreground cursor-pointer"
-          >
+          <BotonTactil variante="secundaria" onClick={onCerrar} className="flex-1">
             {exito ? 'Cerrar' : 'Cancelar'}
-          </button>
+          </BotonTactil>
           {!exito && (
-            <button
-              type="button"
+            <BotonTactil
+              variante="primaria"
               onClick={onRegistrar}
               disabled={enviando || !cobro.monto}
-              className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+              className="flex-1"
             >
               {enviando ? 'Registrando...' : 'Registrar cobro'}
-            </button>
+            </BotonTactil>
           )}
         </div>
       </div>

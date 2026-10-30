@@ -11,13 +11,15 @@ import { apiClient, generateIdempotencyKey } from '../../../lib/api-client';
 import {
   construirPayloadCobroSala,
   errorTrasCambiarFecha,
+  normalizarMontoCobro,
   validarFechaCobro,
 } from '../../../lib/cobro-sala';
 import { mensajeConExcedente } from '../../../lib/saldo-a-favor';
 import { esErrorSinPlanAsignado } from '../../../lib/suscripcion-alumno';
 import { fechaCalendarioLocal } from '../../../lib/date-format';
 import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
-import { Moneda, type FilaCarteraDTO } from '@guachafit/shared';
+import { useFormatoNumero } from '../../../lib/use-formato-numero';
+import { DECIMAL_STRING_REGEX, Moneda, type FilaCarteraDTO } from '@guachafit/shared';
 
 export interface EstadoCobro {
   fila: FilaCarteraDTO;
@@ -50,6 +52,7 @@ export function useCobroCartera({
   /** Claves pendientes por alumno (`alumnoUsuarioId`); se borran al confirmar el cobro. */
   const clavesCobroPendientesRef = useRef(new Map<string, string>());
   const [exitoCobro, setExitoCobro] = useState<string | null>(null);
+  const { formatMonto } = useFormatoNumero();
 
   const claveCobroPendiente = (alumnoUsuarioId: string): string => {
     const pendientes = clavesCobroPendientesRef.current;
@@ -83,8 +86,15 @@ export function useCobroCartera({
   const cambiarMonto = (monto: string) =>
     setCobro((actual) => (actual ? { ...actual, monto } : actual));
 
-  const cambiarMoneda = (moneda: Moneda) =>
-    setCobro((actual) => (actual ? { ...actual, moneda } : actual));
+  // D1 (2026-10-29): cambiar la moneda borra el monto escrito; nunca se convierte en silencio.
+  // El error de la moneda anterior deja de ser cierto, salvo el de falta de plan (no depende de ella).
+  const cambiarMoneda = (moneda: Moneda) => {
+    if (cobro && cobro.moneda !== moneda && !cobroSinPlan) setErrorCobro(null);
+    setCobro((actual) => {
+      if (!actual || actual.moneda === moneda) return actual;
+      return { ...actual, moneda, monto: '' };
+    });
+  };
 
   const cambiarFecha = (fechaOperacion: string) => {
     setCobro((actual) => (actual ? { ...actual, fechaOperacion } : actual));
@@ -93,8 +103,13 @@ export function useCobroCartera({
 
   const handleRegistrarCobro = async () => {
     if (!cobro) return;
-    const monto = Number(cobro.monto);
-    if (!Number.isFinite(monto) || monto <= 0) {
+    // El coach escribe con coma (35,50); la API recibe punto y hasta 2 decimales.
+    const montoNormalizado = normalizarMontoCobro(cobro.monto);
+    if (!DECIMAL_STRING_REGEX.test(montoNormalizado)) {
+      setErrorCobro('Escribe el monto con hasta 2 decimales, por ejemplo 35,50.');
+      return;
+    }
+    if (!(Number(montoNormalizado) > 0)) {
       setErrorCobro('El monto debe ser mayor a 0.00.');
       return;
     }
@@ -113,8 +128,11 @@ export function useCobroCartera({
           ? actuales
           : [...actuales, cobro.fila.alumnoUsuarioId]
       );
+      const montoDemo = formatMonto(montoNormalizado, cobro.moneda === Moneda.VES ? 'VES' : 'USD', {
+        conCodigo: true,
+      });
       setExitoCobro(
-        `Cobro de $${cobro.monto} registrado para ${cobro.fila.alumnoNombre} (modo demo). El saldo se actualizó.`
+        `Cobro de ${montoDemo} registrado para ${cobro.fila.alumnoNombre} (modo demo). El saldo se actualizó.`
       );
       setEnviandoCobro(false);
       return;
@@ -127,11 +145,12 @@ export function useCobroCartera({
           method: 'POST',
           body: JSON.stringify(
             construirPayloadCobroSala({
-              monto: cobro.monto,
+              monto: montoNormalizado,
               moneda: cobro.moneda,
               hoyLocal: cobro.fechaOperacion,
             })
           ),
+          // Clave estable: una nueva tras una respuesta perdida podría cobrar dos veces; la API devuelve el cobro original.
           idempotencyKey: cobro.claveIdempotencia,
         }
       );

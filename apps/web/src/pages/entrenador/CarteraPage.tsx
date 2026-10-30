@@ -16,7 +16,9 @@ import { EstadoError } from '../../components/ui/EstadoError';
 import { Paginacion } from '../../components/common/Paginacion';
 import { TablaCartera } from '../../components/entrenador/TablaCartera';
 import { PESTANAS_CARTERA, hayTasaProyectable } from '../../lib/cartera';
+import { resumenDeCobro } from '../../lib/cobro-sala';
 import { useFrescuraOffline } from '../../lib/use-frescura-offline';
+import { useFormatoNumero } from '../../lib/use-formato-numero';
 
 /**
  * Estados honestos (UX-05, §6.6): con datos, la tabla y los KPI se conservan ante una recarga
@@ -49,6 +51,7 @@ export function CarteraPage() {
   } = useCartera();
   const navigate = useNavigate();
   const { isOnline } = useFrescuraOffline(null);
+  const { formatMonto } = useFormatoNumero();
 
   // Recordatorio manual (RN-02)
   const {
@@ -93,6 +96,19 @@ export function CarteraPage() {
   const sinTasa = resumen !== null && !hayTasaProyectable(resumen);
   // Solo esas pestañas muestran bolívares, así que solo ahí tiene sentido el aviso.
   const avisoSinTasa = sinTasa && (pestana === 'mora' || pestana === 'por_vencer');
+
+  // Modal de cobro: saldo formateado y resumen de lo que se registrará (D1)
+  const saldoTexto = cobro
+    ? formatMonto(cobro.fila.saldoPendienteUsd, 'USD', { conCodigo: true })
+    : '';
+  const resumenCobro = cobro
+    ? resumenDeCobro(
+        cobro.monto,
+        cobro.moneda,
+        cobro.fila.tasaAplicada ?? resumen?.tasaVigente,
+        formatMonto
+      )
+    : null;
 
   return (
     <div className="space-y-6">
@@ -197,6 +213,8 @@ export function CarteraPage() {
           sinPlan={cobroSinPlan}
           sinTasa={sinTasa}
           tasaVigente={resumen?.tasaVigente}
+          resumen={resumenCobro}
+          saldoTexto={saldoTexto}
           dialogRef={refModalCobro}
           onCerrar={cerrarModalCobro}
           onCambiarMonto={cambiarMonto}
