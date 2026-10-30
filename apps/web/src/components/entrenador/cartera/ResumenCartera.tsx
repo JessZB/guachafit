@@ -4,7 +4,6 @@
  * Recorte verbatim de `CarteraPage.tsx`. Presentacional puro: recibe el resumen y lo muestra
  * con `MetricCard` (common, solo importado). ÚNICO (R3): métricas propias de la cartera.
  */
-import { Link } from 'react-router-dom';
 import { AlertTriangle, CalendarClock, DollarSign, Receipt } from 'lucide-react';
 import { MetricCard } from '../../common/MetricCard';
 import { pluralizar } from '../../../lib/pluralizar';
@@ -42,18 +41,14 @@ export function ResumenCartera({ resumen }: { resumen: ResumenCarteraDTO }) {
         subtitle={`${formatMonto(resumen.totalPorVencerUsd, 'USD', { conCodigo: true })} vencen en los próximos 5 días`}
         icon={CalendarClock}
       />
-      <Link
-        to="/coach/conciliacion"
-        className="block rounded-3xl focus-visible:outline-2 focus-visible:outline-primary"
-      >
-        <MetricCard
-          title="Pagos por validar"
-          value={resumen.pagosPorValidar}
-          subtitle="Comprobantes esperando tu confirmación"
-          icon={Receipt}
-          badge={{ text: 'Ir a la bandeja', variant: 'info' }}
-        />
-      </Link>
+      <MetricCard
+        title="Pagos por validar"
+        value={resumen.pagosPorValidar}
+        subtitle="Comprobantes esperando tu confirmación"
+        icon={Receipt}
+        badge={{ text: 'Ir a la bandeja', variant: 'info' }}
+        enlace={{ to: '/coach/conciliacion' }}
+      />
     </div>
   );
 }

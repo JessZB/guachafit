@@ -9,6 +9,8 @@ export interface FilaRiesgoDashboard {
   nombre: string;
   detalle: string;
   valor: string;
+  /** Ruta de la ficha del alumno. */
+  to: string;
 }
 
 export interface ListaRiesgoDashboardProps {
@@ -35,7 +37,7 @@ export function ListaRiesgoDashboard({
   rutaVerTodos,
 }: ListaRiesgoDashboardProps) {
   return (
-    <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-xs space-y-3">
+    <div className="p-4 sm:p-6 rounded-3xl bg-card border border-border/80 shadow-xs space-y-3">
       <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
         <Icono className={`h-4 w-4 ${CLASES_ICONO_TONO[tono]} shrink-0`} />
         <span>{titulo}</span>
@@ -47,9 +49,10 @@ export function ListaRiesgoDashboard({
 
       <div className="space-y-2">
         {filas.slice(0, TOPE_FILAS_RIESGO).map((fila) => (
-          <div
+          <Link
             key={fila.id}
-            className="p-3 rounded-2xl bg-secondary/40 border border-border flex items-center justify-between gap-3"
+            to={fila.to}
+            className="min-h-11 p-3 rounded-2xl bg-secondary/40 border border-border flex items-center justify-between gap-3 hover:border-primary/40 transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
           >
             <div className="min-w-0">
               <p className="font-bold text-xs text-foreground truncate">{fila.nombre}</p>
@@ -58,7 +61,7 @@ export function ListaRiesgoDashboard({
             <div className="text-right shrink-0">
               <span className="font-mono font-bold text-xs text-foreground">{fila.valor}</span>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
 

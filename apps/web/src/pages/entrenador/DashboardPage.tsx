@@ -2,11 +2,11 @@ import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import { EstadoCarga } from '../../components/ui/EstadoCarga';
 import { EstadoError } from '../../components/ui/EstadoError';
 import { useFrescuraOffline } from '../../lib/use-frescura-offline';
+import { FranjaAtencionDashboard } from '../../components/entrenador/dashboard/FranjaAtencionDashboard';
 import { KpisMacroDashboard } from '../../components/entrenador/dashboard/KpisMacroDashboard';
-import { BandejaRapidaCard } from '../../components/entrenador/dashboard/BandejaRapidaCard';
 import { ListasAlertaTemprana } from '../../components/entrenador/dashboard/ListasAlertaTemprana';
 import { useDashboardComando } from '../../components/entrenador/dashboard/use-dashboard-comando';
-import { LayoutDashboard, Receipt, Camera } from 'lucide-react';
+import { LayoutDashboard } from 'lucide-react';
 
 export function DashboardPage() {
   const { dashboard, isLoading, error, recargar } = useDashboardComando();
@@ -15,7 +15,7 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="p-6 rounded-3xl bg-card border border-border shadow-md space-y-2">
+      <div className="p-4 sm:p-6 rounded-3xl bg-card border border-border shadow-md space-y-2">
         <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
           <LayoutDashboard className="h-4 w-4" />
           <span>Panel administrativo</span>
@@ -47,36 +47,14 @@ export function DashboardPage() {
         />
       ) : null}
 
-      {/* Macro KPIs Grid */}
-      {dashboard && <KpisMacroDashboard kpisMacro={dashboard.kpisMacro} />}
+      {/* D4 (UX-13): lo que hay que atender hoy; visible también sin datos */}
+      <FranjaAtencionDashboard dashboard={dashboard} />
 
-      {/* Quick Action Inboxes */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Payments Inbox Card */}
-        <BandejaRapidaCard
-          icono={Receipt}
-          titulo="Pagos por Revisar"
-          descripcion="Pagos en bolívares o dólares que tus alumnos reportaron y esperan tu confirmación."
-          conteo={dashboard ? dashboard.bandejasRapidas.pagosPorConciliar : null}
-          unidadConteo="pendientes"
-          tono="warning"
-          enlace={{ to: '/coach/conciliacion', texto: 'Revisar pagos' }}
-        />
-
-        {/* Anthropometry Inbox Card */}
-        <BandejaRapidaCard
-          icono={Camera}
-          titulo="Evaluaciones por Revisar"
-          descripcion="Medidas y fotos de progreso que subieron tus alumnos."
-          conteo={dashboard ? dashboard.bandejasRapidas.checkinsAntropometricosPendientes : null}
-          unidadConteo="por validar"
-          tono="primary"
-          enlace={{ to: '/coach/antropometria', texto: 'Revisar evaluaciones' }}
-        />
-      </div>
-
-      {/* Early Risk Monitoring Lists */}
+      {/* Listas de alerta temprana */}
       {dashboard && <ListasAlertaTemprana bandejas={dashboard.bandejasRapidas} />}
+
+      {/* Contexto del negocio */}
+      {dashboard && <KpisMacroDashboard kpisMacro={dashboard.kpisMacro} />}
     </div>
   );
 }

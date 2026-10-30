@@ -1,6 +1,8 @@
 import type { DashboardComandoDTO } from '@guachafit/shared';
 import { AlertTriangle, UserX } from 'lucide-react';
 import { pluralizar } from '../../../lib/pluralizar';
+import { rutaExpedienteMonitor } from '../../../lib/adherencia';
+import { useFormatoNumero } from '../../../lib/use-formato-numero';
 import { ListaRiesgoDashboard, type FilaRiesgoDashboard } from './ListaRiesgoDashboard';
 
 export interface ListasAlertaTempranaProps {
@@ -9,11 +11,15 @@ export interface ListasAlertaTempranaProps {
 
 /** Listas de alerta temprana (pagos vencidos y sin entrenar). Solo presentación, con datos reales. */
 export function ListasAlertaTemprana({ bandejas }: ListasAlertaTempranaProps) {
+  const { formatMonto } = useFormatoNumero();
+
   const filasMora: FilaRiesgoDashboard[] = bandejas.alumnosEnMora.map((mora) => ({
-    id: mora.alumnoId,
+    // La clave es la cuota: un alumno puede tener varias cuotas vencidas.
+    id: mora.cuotaId,
     nombre: mora.nombre,
     detalle: pluralizar(mora.diasVencido, 'día de atraso', 'días de atraso'),
-    valor: `$${mora.saldoPendienteUsd} USD`,
+    valor: formatMonto(mora.saldoPendienteUsd, 'USD'),
+    to: rutaExpedienteMonitor(mora.alumnoId),
   }));
 
   const filasInactivos: FilaRiesgoDashboard[] = bandejas.alumnosInactivosEntrenamiento.map(
@@ -22,6 +28,7 @@ export function ListasAlertaTemprana({ bandejas }: ListasAlertaTempranaProps) {
       nombre: inac.nombre,
       detalle: 'Sin registrar series',
       valor: pluralizar(inac.diasSinEntrenar, 'día sin entrenar', 'días sin entrenar'),
+      to: rutaExpedienteMonitor(inac.alumnoId),
     })
   );
 
@@ -32,7 +39,7 @@ export function ListasAlertaTemprana({ bandejas }: ListasAlertaTempranaProps) {
         icono={AlertTriangle}
         tono="warning"
         filas={filasMora}
-        textoVacio="Sin pagos vencidos por ahora 🎉"
+        textoVacio="Sin pagos vencidos por ahora"
         rutaVerTodos="/coach/cartera?pestana=mora"
       />
       <ListaRiesgoDashboard
@@ -40,7 +47,7 @@ export function ListasAlertaTemprana({ bandejas }: ListasAlertaTempranaProps) {
         icono={UserX}
         tono="destructive"
         filas={filasInactivos}
-        textoVacio="Sin alumnos inactivos por ahora 🎉"
+        textoVacio="Sin alumnos inactivos por ahora"
         rutaVerTodos="/coach/monitor-adherencia"
       />
     </div>
