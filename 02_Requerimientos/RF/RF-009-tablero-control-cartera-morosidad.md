@@ -165,6 +165,16 @@ Then el sistema debe crear una transacción con estado "Aprobado"
 - "Bandeja de validación" y el KPI "Pagos por Validar" tienen foco visible.
 - Evidencia: web **2621/2621**; typecheck y build en verde. Hubo revisión 4R (diff de más de 400 líneas): 1 BLOCKER (un spec mal escrito) y 5 WARNING del lote, corregidos y validados.
 
+### Cobro en efectivo honesto (`feacbed`, 2026-10-30, lote UX-08)
+- **Decisión D1 del dueño:** al cambiar la moneda del cobro (USD ↔ Bs.) el monto escrito **se vacía**. Antes, "50" USD pasaba a "50 Bs." sin convertir.
+- Antes del botón se ve lo que se registrará, con la conversión a la tasa que usará el API (la acordada con el alumno o, si no hay, la vigente): "Se registrarán Bs. 1.825,00 (≈ $50,00 USD)" o "Se registrarán $50,00 USD". Sin un monto válido o sin tasa no se muestra nada.
+- El monto acepta coma decimal ("35,50") y se envía con punto. Con más de 2 decimales, el formulario avisa "Escribe el monto con hasta 2 decimales, por ejemplo 35,50." en lugar de esperar al rechazo del API. Un monto con separador de miles y coma ("1.825,00") se rechaza: se escribe "1825,00".
+- El campo muestra su unidad (USD o Bs.), los campos tienen ids únicos y miden 44px, el éxito y el resumen se anuncian (`role="status"`) y el modal se desplaza en pantallas bajas.
+- La clave de idempotencia se conserva al cambiar de moneda: una clave nueva tras una respuesta perdida podría cobrar dos veces.
+- Evidencia: web **2655/2655**; typecheck y build en verde. La revisión 4R (toca dinero) dio 1 BLOCKER y 4 WARNING del lote, corregidos y validados.
+
 ### Pendiente
+- **API (idempotencia):** si tras una respuesta perdida el entrenador cambia la moneda y reintenta con la misma clave, el API devuelve el cobro original sin registrar el nuevo, y el cliente informa de un éxito. Lo correcto es rechazar con 409 un reintento cuyo payload no coincide con la clave.
+- **Modal de cobro de la ficha del alumno** (`alumno-detalle/ModalCobroSala.tsx`, `use-cobro-sala.ts`): sigue sin la decisión D1 (no vacía el monto al cambiar de moneda ni muestra el resumen) y arranca con un monto fijo `'40.00'`. Debe adoptar `normalizarMontoCobro` y `resumenDeCobro` de `lib/cobro-sala.ts`.
 - Los KPI "Total en Mora" y "Próximos a Vencer" no llevan a su pestaña: `useCartera` lee `?pestana=` solo al montar. Necesita escuchar los cambios de la URL o recibir una función que cambie de pestaña.
 - PagosPage del alumno sigue pendiente del módulo 5; conciliación (confirmación y reversión) resuelta el 2026-10-11 y anulación de cuotas en la API el 2026-10-12 (`7f46acc`, falta la web; ver [[RF-008-maquina-estados-cuota-recordatorios]]). Las cuotas anuladas no cuentan como mora ni en la meta del dashboard. Saldo a favor: resuelto el 2026-10-11 en la API (`afd3f7c`) y en la web (`b975905`: "A favor: X USD" en la tabla y la ficha; aviso del excedente al aprobar y tras cobrar en sala), ver [[RF-006-motor-bimonetario-liquidacion-abonos]].

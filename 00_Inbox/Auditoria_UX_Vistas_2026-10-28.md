@@ -125,7 +125,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-05 ✅ `d777772` | Cobros: carga y datos honestos | Conciliación, Cartera | COB-01, COB-04, COB-16, COB-17, COB-24 | `EstadoCarga/Error/Vacio`, `AvisoDatosOffline`, `EsqueletoDirectorio`; borra `ErrorBandejaConciliacion` | bajo | no | ninguna |
 | UX-06 ✅ `87fe4df` | Cobros: rechazo seguro | Conciliación | COB-02, COB-03, COB-06 | `DialogoConfirmacion` peligro o `ModalAccesible`, `BotonTactil` | medio (specs de interacción) | no | ninguna |
 | UX-07 ✅ (a `bc64170`, b `d1f90b4`) | Cobros: táctil, badges y tabs en móvil | Conciliación, Cartera | COB-05, 07, 08(a,c,d), 09, 10, 12, 19, 20, 21, 22, 23, 25 | `ChipFiltro`, `BotonTactil`, `BadgeEstado`, `BarraTabsSegmentada`, `MenuAccionesAlumno` | medio | no | UX-01; ⛔ D3 (menú "Más" en COB-20) |
-| UX-08 | Cobros: modal de cobro y feedback | Cartera | COB-18, COB-26, COB-11 | `useId`, `inputMode`, `role="status"`, línea resumen previa | medio | no (salvo conversión con tasa del servidor) | ⛔ D1; UX-03 |
+| UX-08 ✅ `feacbed` | Cobros: modal de cobro y feedback | Cartera | COB-18, COB-26, COB-11 | `useId`, `inputMode`, `role="status"`, línea resumen previa | medio | no (salvo conversión con tasa del servidor) | ⛔ D1; UX-03 |
 | UX-09 | Cobros: recordatorio y enlace a la bandeja | Cartera → Conciliación | COB-27, COB-28 | `?q=` en `useFiltrosConciliacion`, `onError` de miniatura | medio | **sí** para la vista previa del mensaje | ⛔ D2 |
 | UX-10 | Cobros: copy y pulido | Conciliación, Cartera | COB-13, 14, 15, 29, 30, 31, 08b, 16 (resto) | `EstadoVacio`, `formatMonto` | bajo | no | UX-03 |
 | UX-11 | Dashboard: carga honesta | Dashboard | SEG-01, SEG-02, SEG-06 | `EstadoCarga/Error`, `AvisoDatosOffline`, `use-frescura-offline` | bajo | no | ninguna |
@@ -207,6 +207,14 @@ Cobertura: los hallazgos BAJA no listados se resuelven con el lote de su área a
 - La lógica de qué acción se ve (`AccionesFilaCartera.tsx`) vive en el componente. Si crece, pasarla a `lib/acciones-cartera.ts` con su test.
 - `BarraTabsSegmentada` ya tiene la variante `contador` del indicador (seguimiento de UX-01 resuelto). Sigue pendiente el icono opcional (lo necesitan `PantallaAjustes` y UX-17).
 - Proceso: tercer falso rojo (E2 pulsaba dos opciones de un menú Radix que se cierra tras la primera). Al revisar un rojo de interacción, comprobar que el test **podría** pasar con un código correcto.
+
+**Decisión D1 (dueño, 2026-10-29):** al cambiar la moneda de un cobro en efectivo, el monto se vacía y antes del botón se muestra "Se registrarán … (≈ $… USD)".
+
+**Seguimientos de UX-08 (revisión 4R, 2026-10-30):**
+- **API:** rechazar con 409 un reintento con la misma clave de idempotencia y un payload distinto (por ejemplo, otra moneda tras una respuesta perdida). Hoy devuelve el cobro original y el cliente informa de un éxito.
+- **Ficha del alumno:** `ModalCobroSala` / `use-cobro-sala.ts` debe adoptar D1 (`normalizarMontoCobro` y `resumenDeCobro` de `lib/cobro-sala.ts`) y quitar el monto inicial fijo `'40.00'` (dato fabricado, T9).
+- **UX-10:** las etiquetas "Moneda" y "Fecha" del modal de cobro (`text-foreground`) no coinciden con "Monto" de `CampoAjustes` (`text-muted-foreground`). `SelectAjustes` no admite deshabilitar una opción. El aviso de saldo a favor de la bandeja no nombra al alumno.
+- Proceso: dos falsos verdes en la fase roja (el temporizador sin vaciar el render de React 19 y el aviso "unmounted" que React 19 ya no emite). Un rojo con tests que **pasan** con el código defectuoso también se revisa.
 - COB-16 parcial: las tarjetas siguen siendo `div` sin `article`/`aria-labelledby` y los `h3` de los estados no tienen jerarquía respecto al `h1`. Va con UX-10.
 - Proceso: en la fase roja de UX-05, C2 falló por un selector equivocado ("Pagos por Validar" en lugar de "Pendiente de Revisión") y el reporte lo dio por bueno. Al revisar un rojo, comprobar el **mensaje** de cada fallo, no solo que falle.
 

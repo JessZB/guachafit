@@ -179,6 +179,12 @@ Then la transacción debe transicionar a estado "Rechazado"
 - `ui/BotonTactil` gana la variante `peligro-contorno` (borde y texto rojos) para la acción destructiva secundaria.
 - Evidencia: web **2594/2594**; typecheck y build en verde. La revisión de legibilidad dio 1 BLOCKER (selector del spec, ver seguimiento de "pago movil") y 3 WARNING; los introducidos por el lote se corrigieron y validaron, y el resto va a UX-10.
 
+### Avisos de la bandeja (`feacbed`, 2026-10-30, lote UX-08)
+- El aviso de éxito se anuncia (`role="status"`) y tiene un botón "Cerrar aviso".
+- Sin saldo a favor desaparece a los 8 s (antes 3 s). Con saldo a favor se queda hasta cerrarlo, porque el entrenador tiene que leer que el alumno tiene saldo.
+- El temporizador se cancela al salir de la página y al mostrar otro aviso.
+- El éxito y el error nunca se muestran a la vez: un error retira el éxito, y abrir otra aprobación o rechazo retira los dos.
+
 ### Pendiente
 - El mensaje de éxito de la reversión no se borra solo; las mutaciones de Conciliación y de la reversión no tienen tiempo límite; la demo de Conciliación llama al API.
 - El comprobante sigue siendo opcional.

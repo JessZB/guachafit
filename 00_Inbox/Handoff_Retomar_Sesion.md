@@ -61,6 +61,7 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **Specs que leen código como texto:** `?raw` funciona con `.ts`/`.tsx`, pero vitest vacía los `.css` (`""`) salvo los listados en `test.css.include` (`vitest.config.ts`, añadido en UX-02 para `index.css`). Todo spec así empieza con una aserción de cordura (texto no vacío y una marca conocida): sin ella, la fase roja de UX-02 fue un falso rojo. No uses `node:fs` en specs de web: `tsc` revisa `src` entero y `apps/web` no tiene `@types/node`.
 - **Clases de un `svg` en jsdom:** `svg.className` es un `SVGAnimatedString`; lee las clases con `getAttribute('class')`.
 - **Radix DropdownMenu en tests:** al activar un `menuitem` el menú se cierra; para probar otro, reábrelo.
+- **Temporizadores con React 19 en tests:** tras `vi.advanceTimersByTimeAsync(n)` hace falta otro `advanceTimersByTimeAsync(0)` para que React vacíe el render. Para comprobar que no quedan temporizadores huérfanos, usa `unmount()` y `vi.getTimerCount()`: React 19 ya no avisa de `setState` en componentes desmontados.
 - **Radix DropdownMenu en tests (apertura):** ábrelo con teclado (`ArrowDown`).
 - **Enlace extendido en tarjetas:** todo contenedor o icono decorativo que quede por encima lleva `pointer-events-none`, y los controles reales `pointer-events-auto`.
 - **Datos sensibles:** nunca en `title`. Usa un disclosure plegado sin el texto en el DOM (`ChipSaludAlumno`).
@@ -78,7 +79,8 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **UX-06 cerrado (2026-10-29, `87fe4df`):** rechazo seguro y `useFormatoNumero()`.
 - **UX-07a cerrado (2026-10-29, `bc64170`):** Conciliación táctil y sin jerga.
 - **UX-07b cerrado (2026-10-29, `d1f90b4`):** Cartera en el móvil (D3), pestañas con contador y próximo vencimiento (lote web P2 del módulo 5). Web **2621/2621**.
-- El siguiente lote es **UX-08** (Cobros: modal de cobro y feedback). Depende de la decisión **D1**: qué hacer con el monto al cambiar de USD a Bs. Pregúntala al llegar. Suma los seguimientos de UX-06 (`actionError` viejo, `setTimeout` sin limpiar) y los botones del modal de cobro de COB-19. Los seguimientos de cada lote están en la sección 3 de la auditoría. UX-07 suma el lote web P2 del módulo 5.
+- **UX-08 cerrado (2026-10-30, `feacbed`):** cobro en efectivo honesto (D1: el monto se vacía al cambiar de moneda y se muestra el resumen con conversión) y avisos de Conciliación. Web **2655/2655**.
+- El siguiente lote es **UX-09** (Cobros: recordatorio y enlace a la bandeja). Depende de la decisión **D2**: ver el texto del recordatorio antes de enviarlo, que exige una consulta previa al API. Pregúntala al llegar. Suma los botones del modal de recordatorio de COB-19 y el `role="status"`/"Copiado" de COB-26. Los seguimientos de cada lote están en la sección 3 de la auditoría. UX-07 suma el lote web P2 del módulo 5.
 - Rediseño de la ficha del alumno (`/coach/alumnos/:id`) CERRADO:
 
   | Lote | Commit |
