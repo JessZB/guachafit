@@ -529,6 +529,14 @@ Permite almacenar la preferencia de visualización en la cuenta del usuario para
 - `PATCH /finanzas/transacciones/{id}/conciliar`: Conciliación bancaria bajo transacción interactiva ACID en PostgreSQL con lock pesimista `SELECT ... FOR UPDATE` (`RNF-002`).
 - `GET /finanzas/clientes/{clienteId}/historial`: Historial financiero y resumen del alumno (Roles `entrenador`, `alumno` titular, `superadmin`). Paginación **opt-in** de transacciones con `txLimit`/`txOffset` (techo 100) y `transaccionesTotal` siempre presente; sin estos parámetros devuelve todas las transacciones (comportamiento histórico).
 - `GET /finanzas/cartera/dashboard`: Tablero analítico de cobranza y morosidad (`RF-009`).
+- `POST /finanzas/cartera/clientes/{clienteId}/recordatorio`: recordatorio manual de un clic (`RF-009` RN-02), con cooldown de 6 h. Devuelve `RecordatorioManualResultadoDTO`.
+- `GET /finanzas/cartera/clientes/{clienteId}/recordatorio/vista-previa` (UX-09a, decisión D2): **solo lectura**, no envía ni escribe nada. Devuelve `VistaPreviaRecordatorioDTO`:
+  - `puedeEnviar` y `motivo` (`listo` | `sin_saldo_pendiente` | `pausa_revision` | `cooldown_activo`);
+  - `mensaje`;
+  - el `titulo` y el `cuerpo` **exactos** que se enviarían (`null` si no se puede enviar);
+  - `saldoPendienteUsd`, `saldoPendienteBs` y `proximoPermitidoUtc`.
+  
+  Comparte la evaluación con el POST (`casos-cartera/evaluar-recordatorio-manual.ts`). Responde `404` si el alumno no pertenece a la cartera del coach y `400` si `clienteId` no es un UUID.
 
 ---
 
@@ -546,6 +554,7 @@ Permite almacenar la preferencia de visualización en la cuenta del usuario para
 | `GET /alumnos` | ✅ | ✅ | ❌ | Directorio paginado y filtrado server-side del tenant activo. |
 | `GET /sesiones/alumno/{alumnoId}/historial` | ✅ | ✅ | ✅ (titular) | Historial paginado; el alumno solo accede a su propio historial. |
 | `GET /finanzas/conciliacion/bandeja` | ❌ | ✅ | ❌ | Bandeja FIFO paginada de su cartera. |
+| `GET /finanzas/cartera/clientes/{clienteId}/recordatorio/vista-previa` | ❌ | ✅ | ❌ | Solo alumnos de su cartera (`404` en otro caso); no envía ni escribe. |
 | `GET /finanzas/clientes/{clienteId}/historial` | ✅ | ✅ | ✅ (titular) | Paginación opt-in de transacciones; `transaccionesTotal` real. |
 | `GET /antropometria/pendientes` | ✅ | ✅ | ❌ | Cola paginada de check-ins pendientes del tenant. |
 | `GET/POST/PATCH/DELETE /plantillas` y `POST /plantillas/{id}/asignar` | ❌ | ✅ | ❌ | Banco de plantillas tenant-scoped; asignación con reporte parcial por alumno. |

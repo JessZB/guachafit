@@ -80,7 +80,8 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **UX-07a cerrado (2026-10-29, `bc64170`):** Conciliación táctil y sin jerga.
 - **UX-07b cerrado (2026-10-29, `d1f90b4`):** Cartera en el móvil (D3), pestañas con contador y próximo vencimiento (lote web P2 del módulo 5). Web **2621/2621**.
 - **UX-08 cerrado (2026-10-30, `feacbed`):** cobro en efectivo honesto (D1: el monto se vacía al cambiar de moneda y se muestra el resumen con conversión) y avisos de Conciliación. Web **2655/2655**.
-- El siguiente lote es **UX-09** (Cobros: recordatorio y enlace a la bandeja). Depende de la decisión **D2**: ver el texto del recordatorio antes de enviarlo, que exige una consulta previa al API. Pregúntala al llegar. Suma los botones del modal de recordatorio de COB-19 y el `role="status"`/"Copiado" de COB-26. Los seguimientos de cada lote están en la sección 3 de la auditoría. UX-07 suma el lote web P2 del módulo 5.
+- **UX-09a cerrado (2026-10-30, `3784301`):** endpoint de solo lectura de vista previa del recordatorio (decisión D2). API **2031** (1 omitido).
+- El siguiente lote es **UX-09b** (web): el modal de recordatorio con la vista previa (pedida solo al abrir el modal), `?q=` a la bandeja, `onError` de la miniatura y los botones, `role="status"` y "Copiado" del modal. Las notas están en la sección 3 de la auditoría. Los seguimientos de cada lote están en la sección 3 de la auditoría. UX-07 suma el lote web P2 del módulo 5.
 - Rediseño de la ficha del alumno (`/coach/alumnos/:id`) CERRADO:
 
   | Lote | Commit |

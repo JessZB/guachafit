@@ -173,7 +173,20 @@ Then el sistema debe crear una transacción con estado "Aprobado"
 - La clave de idempotencia se conserva al cambiar de moneda: una clave nueva tras una respuesta perdida podría cobrar dos veces.
 - Evidencia: web **2655/2655**; typecheck y build en verde. La revisión 4R (toca dinero) dio 1 BLOCKER y 4 WARNING del lote, corregidos y validados.
 
+### Vista previa del recordatorio en el API (`3784301`, 2026-10-30, lote UX-09a)
+- **Decisión D2 del dueño:** el entrenador verá el texto exacto del recordatorio antes de enviarlo. Endpoint nuevo `GET /finanzas/cartera/clientes/{clienteId}/recordatorio/vista-previa` (contrato en `05_Arquitectura/03_Contratos_API_Especificacion.md` §6), de solo lectura.
+- Las reglas de RN-02 se evalúan en un solo caso de uso, `evaluar-recordatorio-manual.ts`, que comparten la vista previa y el envío, así que no pueden contradecirse:
+  - el alumno es de la cartera del coach;
+  - la cuota abierta más urgente tiene saldo;
+  - no hay un pago en revisión;
+  - no hay cooldown de 6 h;
+  - la tasa del alumno o la vigente, y el mensaje.
+- El envío conserva su contrato y su comportamiento.
+- Evidencia: API **2031** (1 e2e omitido sin `E2E_DATABASE_URL`); typecheck y build del API, `shared` y la web en verde. La revisión 4R no dio BLOCKER. El WARNING de tests ciegos a la tenancy se cubrió con dos tests que espían `withTenant`.
+- La web (modal con la vista previa) va en UX-09b.
+
 ### Pendiente
+- **Vista previa frente a envío:** si la tasa o la cuota cambian entre la vista previa y el envío, el mensaje enviado puede diferir del mostrado (el envío devuelve el texto real en `mensajeSugerido`). Una huella del mensaje en el contrato permitiría detectarlo.
 - **API (idempotencia):** si tras una respuesta perdida el entrenador cambia la moneda y reintenta con la misma clave, el API devuelve el cobro original sin registrar el nuevo, y el cliente informa de un éxito. Lo correcto es rechazar con 409 un reintento cuyo payload no coincide con la clave.
 - **Modal de cobro de la ficha del alumno** (`alumno-detalle/ModalCobroSala.tsx`, `use-cobro-sala.ts`): sigue sin la decisión D1 (no vacía el monto al cambiar de moneda ni muestra el resumen) y arranca con un monto fijo `'40.00'`. Debe adoptar `normalizarMontoCobro` y `resumenDeCobro` de `lib/cobro-sala.ts`.
 - Los KPI "Total en Mora" y "Próximos a Vencer" no llevan a su pestaña: `useCartera` lee `?pestana=` solo al montar. Necesita escuchar los cambios de la URL o recibir una función que cambie de pestaña.
