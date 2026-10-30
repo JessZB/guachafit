@@ -213,18 +213,18 @@ Reglas transversales del frontend, vinculantes para toda vista nueva (se revisan
 | **Claude Code** (orquestador y validador) | Audita, aclara requisitos (una pregunta a la vez), diseña y fija los contratos de cada lote, delega la escritura del código al subagente escritor y **valida el código generado** contra el diseño y el `git diff` antes de aceptarlo. Escribe el doc-sync del vault, redacta los prompts de los agentes externos, verifica cada reporte contra el `git diff` y hace los commits. | No escribe código de producción (lo delega), no escribe ni ejecuta tests, no hace push. |
 | **Subagente escritor** (Claude Haiku 5.5, `effort: high`) | Escribe el código de producción (front, API, shared, migraciones) y las correcciones de los hallazgos, a partir de un encargo preciso de Claude: archivos, cambios exactos, decisiones resueltas y prohibiciones. Devuelve la lista de archivos con sus líneas, dónde cumple cada contrato y cualquier desviación con su porqué. | No escribe ni ejecuta tests, no edita specs, no hace commit ni push, no lee `.env`. |
 | **Agentes externos** (otros CLI, fuera del ecosistema de Claude) | Escriben los tests (TDD, fase roja), ejecutan suites, typecheck y build, y hacen las revisiones 4R y las validaciones acotadas. Siempre dejan un reporte `.md`. | No tocan código de producción (salvo que el prompt lo autorice de forma explícita), no hacen commit ni push, no leen `.env`. |
-| **Dueño** | Ejecuta cada prompt en el agente externo que elija, avisa cuando termina y decide producto. | — |
+| **Dueño** | Decide producto. Puede ejecutar él mismo un prompt en el agente externo que elija; por defecto lo lanza Claude (§7.6). | — |
 
 ### 7.2. Carpeta de prompts
 
 - Ruta: `.external-agents/` en la raíz del repo (ignorada por git). Los reportes van en `.external-agents/reportes/`.
 - Nombre: `<NN>-<lote>-<tipo>.md`, con `tipo` ∈ `tests`, `verificacion`, `review-risk`, `review-reliability`, `review-resilience`, `review-readability`, `validacion`. El reporte se llama igual con sufijo `.reporte.md`.
 - Los prompts no dependen de ninguna herramienta concreta: describen la tarea, la superficie y el reporte, y cualquier agente externo debe poder ejecutarlos.
-- El dueño abre el agente externo en modo interactivo, en otra terminal y en la raíz del repo, para ver en vivo lo que hace, y elige el modelo. Claude **no** ejecuta el agente externo ni entrega comandos para lanzarlo; solo indica el archivo y la instrucción a pegar:
+- Desde el 2026-10-30 Claude lanza el agente externo por su cuenta, sin interfaz (§7.6). Si el dueño prefiere ejecutarlo él en modo interactivo, Claude le indica el archivo y la instrucción a pegar:
   ```text
   Lee y ejecuta exactamente el prompt .external-agents/<NN>-<lote>-<tipo>.md y deja el reporte en la ruta que indica.
   ```
-- Si el lote tiene varios prompts independientes de solo lectura (por ejemplo, las 4 revisiones), Claude puede dar una sola instrucción que los lance en paralelo.
+- Si el lote tiene varios prompts independientes de solo lectura (por ejemplo, las 4 revisiones), pueden lanzarse en paralelo.
 
 ### 7.3. Ciclo por lote
 
@@ -246,3 +246,26 @@ El reporte debe incluir: resumen, archivos tocados, comandos ejecutados con resu
 ### 7.5. Encargo al subagente escritor
 
 Cada encargo incluye: el objetivo y la decisión del dueño; los tests o contratos que debe cumplir (y que debe leer primero); el diseño con las decisiones ya resueltas; la superficie (archivos a crear, cambiar o borrar); las restricciones (tamaños de §6.14 y §6.15, sin cambios fuera del alcance); las prohibiciones (no ejecutar tests, no editar specs, no hacer commit ni push, no leer `.env`, no añadir dependencias); y el formato de la respuesta (archivos con sus líneas, dónde cumple cada contrato, desviaciones y `git status --short`).
+
+### 7.6. Ejecución del agente externo por Claude (desde 2026-10-30, Antigravity CLI)
+
+- **Comando**, en segundo plano y desde la raíz del repo:
+  ```bash
+  agy -p "Lee y ejecuta exactamente el prompt .external-agents/<NN>-<lote>-<tipo>.md y deja el reporte en la ruta que indica." \
+    --model gemini-3.8-flash-high --mode accept-edits \
+    --settings .external-agents/<NN>-<lote>-<tipo>.permisos.json --print-timeout 0
+  ```
+  - `--print-timeout 0` espera a que el agente termine el turno completo.
+  - El modelo `gemini-3.8-flash-high` ya incluye el esfuerzo alto; la lista sale de `agy models`.
+- **Permisos mínimos.** `accept-edits` aprueba las ediciones de archivos, pero no los comandos de terminal. Cada prompt lleva su `<NN>-<lote>-<tipo>.permisos.json` con la lista exacta de comandos permitidos:
+  ```json
+  {"permissions":{"allow":["command(git status --short)","command(pnpm --filter @guachafit/web exec vitest run)"]}}
+  ```
+  - La regla solo admite el comando **exacto**: `command(pnpm *)` y `command(pnpm:*)` no funcionan.
+  - Todo comando no listado se deniega y el turno termina sin reporte. Por eso cada prompt dice "ejecuta solo los comandos de `Comandos`, escritos exactamente igual" y pide buscar texto con las herramientas de búsqueda del agente, no con la terminal.
+  - Prohibido `--dangerously-skip-permissions`. `--mode auto` no está disponible en la cuenta.
+- **Evidencia en archivos, no en el resumen.** En el estreno (UX-10), el agente resumió bien los números, pero reescribió las rutas de los archivos en su tabla. Por eso:
+  - toda ejecución de suite que deba clasificarse se lanza con `--reporter=json --outputFile=../../.external-agents/reportes/<NN>-<lote>-vitest.json`, y Claude lee ese JSON directamente;
+  - Claude contrasta cada reporte con `git status`, `git diff` y los archivos de evidencia antes de aceptarlo.
+- **Carga de la máquina.** La suite web completa tarda 2-5 min y, con la máquina cargada, aparecen `Test timed out in 5000ms` ajenos al lote. Un fallo fuera del lote solo cuenta como regresión si no es un tiempo agotado o si se repite al volver a ejecutar.
+- Los `*.permisos.json` viven en `.external-agents/` con su prompt y se borran con él al cerrar el lote (§7.3, paso 8).
