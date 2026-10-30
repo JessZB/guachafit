@@ -1,6 +1,3 @@
-import React, { useState, useEffect } from 'react';
-import { apiClient } from '../../lib/api-client';
-import { useAuth } from '../../context/auth-context';
 import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import { EstadoCarga } from '../../components/ui/EstadoCarga';
 import { EstadoError } from '../../components/ui/EstadoError';
@@ -8,90 +5,12 @@ import { useFrescuraOffline } from '../../lib/use-frescura-offline';
 import { KpisMacroDashboard } from '../../components/entrenador/dashboard/KpisMacroDashboard';
 import { BandejaRapidaCard } from '../../components/entrenador/dashboard/BandejaRapidaCard';
 import { ListasAlertaTemprana } from '../../components/entrenador/dashboard/ListasAlertaTemprana';
-import { DashboardComandoDTO } from '@guachafit/shared';
+import { useDashboardComando } from '../../components/entrenador/dashboard/use-dashboard-comando';
 import { LayoutDashboard, Receipt, Camera } from 'lucide-react';
 
 export function DashboardPage() {
-  const { isDemoMode } = useAuth();
-  const [dashboard, setDashboard] = useState<DashboardComandoDTO | null>(null);
-  // En modo demo no hay petición: arranca sin estado de carga.
-  const [isLoading, setIsLoading] = useState(() => !isDemoMode);
-  const [error, setError] = useState<string | null>(null);
+  const { dashboard, isLoading, error, recargar } = useDashboardComando();
   const { isOnline } = useFrescuraOffline(null);
-
-  const cargarDashboard = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const data = await apiClient<DashboardComandoDTO>('/entrenador/dashboard-comando');
-      setDashboard(data);
-    } catch (err: any) {
-      // D2: sin datos demo fuera del modo demo; estado de error honesto con reintento.
-      setDashboard(null);
-      setError(
-        err?.message || 'No se pudo cargar el dashboard del negocio. Inténtalo de nuevo.'
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    // MODO DEMO EXPLÍCITO (isDemoMode): KPIs de ejemplo solo con la bandera activa y
-    // sin llamadas contra la API real. En sesión real, un fallo es un error visible.
-    if (isDemoMode) {
-      setDashboard({
-        kpisMacro: {
-          alumnosActivos: 38,
-          capacidadMaxima: 50,
-          porcentajeOcupacion: '76.00',
-          cobranzaMesUsd: '1900.00',
-          metaCobranzaMesUsd: '2500.00',
-          porcentajeCobranza: '76.00',
-          tasaAdherenciaSemanal: '84.50',
-          alumnosEnRiesgoDeportivo: 4,
-          alumnosEnMoraFinanciera: 2,
-          alumnosEnRiesgo: 4,
-        },
-        bandejasRapidas: {
-          pagosPorConciliar: 3,
-          checkinsAntropometricosPendientes: 2,
-          alumnosEnMora: [
-            {
-              alumnoId: 'a1',
-              nombre: 'Carlos Mendoza',
-              cuotaId: 'c1',
-              saldoPendienteUsd: '30.00',
-              diasVencido: 5,
-            },
-            {
-              alumnoId: 'a2',
-              nombre: 'Mariana Pérez',
-              cuotaId: 'c2',
-              saldoPendienteUsd: '50.00',
-              diasVencido: 2,
-            },
-          ],
-          alumnosInactivosEntrenamiento: [
-            {
-              alumnoId: 'a3',
-              nombre: 'Andrés Silva',
-              diasSinEntrenar: 6,
-            },
-            {
-              alumnoId: 'a4',
-              nombre: 'Elena Gómez',
-              diasSinEntrenar: 5,
-            },
-          ],
-        },
-      });
-      setIsLoading(false);
-      return;
-    }
-
-    cargarDashboard();
-  }, [isDemoMode]);
 
   return (
     <div className="space-y-6">
@@ -123,7 +42,7 @@ export function DashboardPage() {
         <EstadoError
           titulo="No pudimos cargar el resumen"
           mensaje={error}
-          onReintentar={() => cargarDashboard()}
+          onReintentar={recargar}
           nivelTitulo={2}
         />
       ) : null}

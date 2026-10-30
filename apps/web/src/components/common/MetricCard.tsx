@@ -1,5 +1,5 @@
-import React from 'react';
 import { LucideIcon } from 'lucide-react';
+import { BadgeEstado } from '../ui/BadgeEstado';
 
 interface MetricCardProps {
   title: string;
@@ -21,13 +21,6 @@ export function MetricCard({
   badge,
   className = '',
 }: MetricCardProps) {
-  const badgeStyles = {
-    success: 'bg-success/15 text-success border-success/20',
-    warning: 'bg-warning/15 text-warning border-warning/20',
-    danger: 'bg-destructive/15 text-destructive border-destructive/20',
-    info: 'bg-primary/15 text-primary border-primary/20',
-  };
-
   return (
     <div
       className={`flex flex-col min-w-0 p-5 rounded-2xl bg-card border border-border/80 shadow-xs hover:border-primary/40 transition-all ${className}`}
@@ -48,13 +41,7 @@ export function MetricCard({
           {value}
         </span>
         {badge && (
-          <span
-            className={`min-w-0 max-w-full truncate text-[11px] font-bold px-2 py-0.5 rounded-full border ${
-              badgeStyles[badge.variant || 'info']
-            }`}
-          >
-            {badge.text}
-          </span>
+          <BadgeEstado tono={badge.variant ?? 'info'}>{badge.text}</BadgeEstado>
         )}
       </div>
 
