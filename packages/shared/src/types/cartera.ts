@@ -117,3 +117,24 @@ export interface RecordatorioManualResultadoDTO {
   ultimaGestionUtc: string | null;
   proximoPermitidoUtc: string | null;
 }
+
+/**
+ * UX-09a (RF-009 D2): vista previa de solo lectura del recordatorio manual.
+ *
+ * El coach ve el texto EXACTO que se enviaría antes de confirmar. Se construye con las mismas
+ * reglas de negocio que el envío y nunca emite eventos ni escribe datos.
+ * - `puedeEnviar = true` solo con `motivo = 'listo'`; `titulo` y `cuerpo` vienen completos.
+ * - Con cualquier bloqueo (`sin_saldo_pendiente`, `pausa_revision`, `cooldown_activo`),
+ *   `puedeEnviar = false`, `titulo` y `cuerpo` son `null` y `mensaje` explica el motivo.
+ * - `proximoPermitidoUtc` solo se completa en `cooldown_activo`.
+ */
+export interface VistaPreviaRecordatorioDTO {
+  puedeEnviar: boolean;
+  motivo: 'listo' | 'sin_saldo_pendiente' | 'pausa_revision' | 'cooldown_activo';
+  mensaje: string;
+  titulo: string | null;
+  cuerpo: string | null;
+  saldoPendienteUsd: string | null;
+  saldoPendienteBs: string | null;
+  proximoPermitidoUtc: string | null;
+}

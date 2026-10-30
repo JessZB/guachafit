@@ -43,6 +43,24 @@ export class CarteraController {
   }
 
   /**
+   * UX-09a (RF-009 D2): vista previa de solo lectura del recordatorio manual. Devuelve el texto
+   * exacto que enviaría el POST, con `puedeEnviar` y `motivo`; no envía nada ni emite eventos.
+   * Rol: Entrenador
+   */
+  @Get('clientes/:clienteId/recordatorio/vista-previa')
+  @Roles(Rol.ENTRENADOR)
+  async obtenerVistaPreviaRecordatorio(
+    @Req() req: any,
+    @Param('clienteId') clienteId: string
+  ) {
+    if (!UUID_REGEX.test(clienteId)) {
+      throw new BadRequestException(MENSAJE_ALUMNO_NO_ENCONTRADO);
+    }
+    const entrenadorId = req.user.entrenadorId || req.user.sub;
+    return this.carteraService.obtenerVistaPreviaRecordatorio(entrenadorId, clienteId);
+  }
+
+  /**
    * RN-02: recordatorio manual de un clic al alumno (notificación FINANZAS in-app garantizada,
    * con cooldown anti-spam). `motivo` en la respuesta explica cualquier no-envío de negocio.
    * Rol: Entrenador

@@ -32,6 +32,7 @@ import {
   CarteraDTO,
   FiltroCarteraDTO,
   RecordatorioManualResultadoDTO,
+  VistaPreviaRecordatorioDTO,
 } from '@guachafit/shared';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FinanzasService } from './finanzas.service';
@@ -45,6 +46,7 @@ import {
 import type { ContextoCartera } from './casos-cartera/contexto-cartera';
 import { obtenerCartera as obtenerCarteraCaso } from './casos-cartera/obtener-cartera';
 import { enviarRecordatorioManual as enviarRecordatorioManualCaso } from './casos-cartera/enviar-recordatorio-manual';
+import { obtenerVistaPreviaRecordatorio as obtenerVistaPreviaRecordatorioCaso } from './casos-cartera/obtener-vista-previa-recordatorio';
 
 export type { DatosMensajeRecordatorioManual };
 export {
@@ -107,5 +109,18 @@ export class CarteraService {
     clienteId: string
   ): Promise<RecordatorioManualResultadoDTO> {
     return enviarRecordatorioManualCaso(this.ctx, entrenadorId, clienteId);
+  }
+
+  /**
+   * UX-09a (RF-009 D2): vista previa de solo lectura del recordatorio manual.
+   *
+   * Devuelve el texto exacto que despacharía `enviarRecordatorioManual`, con las mismas reglas
+   * de negocio, sin enviar nada: no emite eventos, no despacha notificaciones y no escribe datos.
+   */
+  async obtenerVistaPreviaRecordatorio(
+    entrenadorId: string,
+    clienteId: string
+  ): Promise<VistaPreviaRecordatorioDTO> {
+    return obtenerVistaPreviaRecordatorioCaso(this.ctx, entrenadorId, clienteId);
   }
 }
