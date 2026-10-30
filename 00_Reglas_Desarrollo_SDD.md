@@ -220,7 +220,7 @@ Reglas transversales del frontend, vinculantes para toda vista nueva (se revisan
 - Ruta: `.external-agents/` en la raíz del repo (ignorada por git). Los reportes van en `.external-agents/reportes/`.
 - Nombre: `<NN>-<lote>-<tipo>.md`, con `tipo` ∈ `tests`, `verificacion`, `review-risk`, `review-reliability`, `review-resilience`, `review-readability`, `validacion`. El reporte se llama igual con sufijo `.reporte.md`.
 - Los prompts no dependen de ninguna herramienta concreta: describen la tarea, la superficie y el reporte, y cualquier agente externo debe poder ejecutarlos.
-- Desde el 2026-10-30 Claude lanza el agente externo por su cuenta, sin interfaz (§7.6). Si el dueño prefiere ejecutarlo él en modo interactivo, Claude le indica el archivo y la instrucción a pegar:
+- Desde el 2026-10-30 Claude lanza el agente externo por su cuenta con la orquestación de Orca (§7.6). Si el dueño prefiere ejecutarlo él en modo interactivo, Claude le indica el archivo y la instrucción a pegar:
   ```text
   Lee y ejecuta exactamente el prompt .external-agents/<NN>-<lote>-<tipo>.md y deja el reporte en la ruta que indica.
   ```
@@ -247,28 +247,30 @@ El reporte debe incluir: resumen, archivos tocados, comandos ejecutados con resu
 
 Cada encargo incluye: el objetivo y la decisión del dueño; los tests o contratos que debe cumplir (y que debe leer primero); el diseño con las decisiones ya resueltas; la superficie (archivos a crear, cambiar o borrar); las restricciones (tamaños de §6.14 y §6.15, sin cambios fuera del alcance); las prohibiciones (no ejecutar tests, no editar specs, no hacer commit ni push, no leer `.env`, no añadir dependencias); y el formato de la respuesta (archivos con sus líneas, dónde cumple cada contrato, desviaciones y `git status --short`).
 
-### 7.6. Ejecución del agente externo por Claude (desde 2026-10-30, Antigravity CLI)
+### 7.6. Ejecución del agente externo por Claude (desde 2026-10-30, orquestación de Orca)
 
-- **Comando**, en segundo plano y desde la raíz del repo:
-  ```bash
-  agy -p "Lee y ejecuta exactamente el prompt .external-agents/<NN>-<lote>-<tipo>.md y deja el reporte en la ruta que indica." \
-    --model <modelo> --mode accept-edits \
-    --settings .external-agents/<NN>-<lote>-<tipo>.permisos.json --print-timeout 0
-  ```
-  - `--print-timeout 0` espera a que el agente termine el turno completo.
-  - Modelo según el tipo de prompt (la lista sale de `agy models`):
-    - `tests`, `verificacion` y `validacion` usan `gemini-3.8-flash-medium`: son tareas mecánicas, respaldadas por el JSON y el diff;
-    - las `review-*` usan `gemini-3.8-flash-high`.
-- **Una sola pasada de la suite completa.** El agente itera con el subconjunto de specs del lote y ejecuta la suite completa **una vez**, al final. En UX-10 la verificación tardó 49 min por repetir la suite completa cuatro veces. Cada prompt lista los dos comandos (subconjunto y suite completa) en `Comandos` y en su `.permisos.json`.
-- **Permisos mínimos.** `accept-edits` aprueba las ediciones de archivos, pero no los comandos de terminal. Cada prompt lleva su `<NN>-<lote>-<tipo>.permisos.json` con la lista exacta de comandos permitidos:
-  ```json
-  {"permissions":{"allow":["command(git status --short)","command(pnpm --filter @guachafit/web exec vitest run)"]}}
-  ```
-  - La regla solo admite el comando **exacto**: `command(pnpm *)` y `command(pnpm:*)` no funcionan.
-  - Todo comando no listado se deniega y el turno termina sin reporte. Por eso cada prompt dice "ejecuta solo los comandos de `Comandos`, escritos exactamente igual" y pide buscar texto con las herramientas de búsqueda del agente, no con la terminal.
-  - Prohibido `--dangerously-skip-permissions`. `--mode auto` no está disponible en la cuenta.
+> Sustituye al lanzamiento sin interfaz con `agy -p` y `.permisos.json`, usado solo en el estreno (UX-10). Desde UX-11 funciona con la orquestación de Orca (skill `orchestration`), con un worker `antigravity` en una terminal visible de Orca.
+
+- **Requisito previo.** Claude debe correr dentro de una terminal de Orca: `ORCA_TERMINAL_HANDLE` debe existir. Si `run-create` falla con `no_active_sender_terminal`, Claude se detiene y avisa al dueño. Nunca usa el handle de otra terminal, porque leería el buzón de otra sesión. En UX-11 `orca status --json` no traía `caller` y aun así `run-create` funcionó con el handle de la propia terminal, así que ese campo ausente no es motivo para detenerse.
+- **Flujo**, desde la raíz del repo y con la guía cargada con `orca skills get orchestration`:
+  1. Un Run por lote: `orca orchestration run-create --objective "<lote>" --json`.
+  2. Un worker por prompt:
+     ```bash
+     orca orchestration worker-start \
+       --spec "Lee y ejecuta exactamente el prompt .external-agents/<NN>-<lote>-<tipo>.md y deja el reporte en la ruta que indica." \
+       --worktree current --agent antigravity --model <modelo> --json
+     ```
+  3. Espera con `orca orchestration check --wait --types "worker_done,escalation,question" --timeout-ms 540000 --json`, en segundo plano. Un `timedOut: true` sin mensajes no indica fallo: se revisa el estado del worker y se vuelve a esperar. Las preguntas se responden con `reply`.
+  4. Tras un `worker_done`, Claude verifica el reporte (ver «Evidencia en archivos») y solo entonces hace `worker-release --dispatch <id>` y `check --ack <deliveryId>`.
+  5. Compara `launch.requested` con `launch.effective` antes de afirmar qué modelo corrió.
+- **Aviso `turn_start_unobserved`.** Si `worker-start` devuelve `state: outcome_unknown` con ese aviso, no reenvíes el prompt: lee la terminal con `orca terminal read --terminal <handle> --json`. En UX-11 el agente solo tardó más de 30 s en arrancar y después trabajó con normalidad.
+- **Modelo según el tipo de prompt:**
+  - `tests`, `verificacion` y `validacion` usan `gemini-3.8-flash-medium`: son tareas mecánicas, respaldadas por el JSON y el diff;
+  - las `review-*` usan `gemini-3.8-flash-high`, y las de un mismo lote pueden ir en paralelo.
+- **Una sola pasada de la suite completa.** El agente itera con el subconjunto de specs del lote y ejecuta la suite completa **una vez**, al final. En UX-10 la verificación tardó 49 min por repetir la suite completa cuatro veces. Cada prompt lista los dos comandos (subconjunto y suite completa) en `Comandos`. Con la máquina cargada, la suite completa se lanza con `--maxWorkers=4`.
+- **Sin lista de permisos.** Con Orca no hay `.permisos.json`: el worker corre en una terminal visible y el dueño puede seguirlo. El control pasa al prompt, que dice "ejecuta solo los comandos de `Comandos`, escritos exactamente igual" y pide buscar texto con las herramientas de búsqueda del agente. Claude contrasta después el `git status` y el diff para detectar cualquier cambio fuera de la superficie permitida.
 - **Evidencia en archivos, no en el resumen.** En el estreno (UX-10), el agente resumió bien los números, pero reescribió las rutas de los archivos en su tabla. Por eso:
   - toda ejecución de suite que deba clasificarse se lanza con `--reporter=json --outputFile=../../.external-agents/reportes/<NN>-<lote>-vitest.json`, y Claude lee ese JSON directamente;
   - Claude contrasta cada reporte con `git status`, `git diff` y los archivos de evidencia antes de aceptarlo.
 - **Carga de la máquina.** La suite web completa tarda 2-5 min y, con la máquina cargada, aparecen `Test timed out in 5000ms` ajenos al lote. Un fallo fuera del lote solo cuenta como regresión si no es un tiempo agotado o si se repite al volver a ejecutar.
-- Los `*.permisos.json` viven en `.external-agents/` con su prompt y se borran con él al cerrar el lote (§7.3, paso 8).
+- Los prompts y reportes del lote se borran al cerrarlo (§7.3, paso 8). Si quedara algún `*.permisos.json` del estreno, se borra con ellos.

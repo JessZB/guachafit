@@ -128,7 +128,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-08 ✅ `feacbed` | Cobros: modal de cobro y feedback | Cartera | COB-18, COB-26, COB-11 | `useId`, `inputMode`, `role="status"`, línea resumen previa | medio | no (salvo conversión con tasa del servidor) | ⛔ D1; UX-03 |
 | UX-09 ✅ (a `3784301` API, b `16577b9` web) | Cobros: recordatorio y enlace a la bandeja | Cartera → Conciliación | COB-27, COB-28 | `?q=` en `useFiltrosConciliacion`, `onError` de miniatura | medio | **sí** para la vista previa del mensaje | ⛔ D2 |
 | UX-10 ✅ `f078d15` | Cobros: copy y pulido | Conciliación, Cartera | COB-13, 14, 15, 29, 30, 31, 08b, 16 (resto) | `EstadoVacio`, `formatMonto` | bajo | no | UX-03 |
-| UX-11 | Dashboard: carga honesta | Dashboard | SEG-01, SEG-02, SEG-06 | `EstadoCarga/Error`, `AvisoDatosOffline`, `use-frescura-offline` | bajo | no | ninguna |
+| UX-11 ✅ `57606e8` | Dashboard: carga honesta | Dashboard | SEG-01, SEG-02, SEG-06 | `EstadoCarga/Error`, `AvisoDatosOffline`, `use-frescura-offline` | bajo | no | ninguna |
 | UX-12 | Dashboard: partir la página (<300) | Dashboard | SEG-03, SEG-10 | `use-dashboard-comando`, `GridKpisDashboard`, `BandejaPagos`, `ListaRiesgoDashboard`, fixture demo | medio (specs) | no | UX-11 |
 | UX-13 | Dashboard: KPI y filas accionables | Dashboard | SEG-04, 05, 07, 08, 09, 11 | enlace extendido, `FranjaDatosClaveAlumno`, `BadgeEstado`, `formatMonto` | medio | no (rutas existentes) | UX-12, UX-03; ⛔ D4 (SEG-05) |
 | UX-14 | Monitor: táctil y estados | Monitor | SEG-12, 13, 14, 15, 16, 17, 18, 19 | `ChipFiltro` con conteo, enlace extendido, `BotonTactil`, `Paginacion` al pie | medio (spec C15 caracteriza el defecto actual) | no | UX-02 |
@@ -236,6 +236,13 @@ Cobertura: los hallazgos BAJA no listados se resuelven con el lote de su área a
 - Los KPI "Total en mora" y "Próximos a vencer" siguen sin enlazar a su pestaña (para UX-13).
 - Proceso: primer lote con el agente externo lanzado por Claude (§7.6). Un reporte reescribió prefijos de rutas; la evidencia pasa a ser el JSON de vitest. Un falso verde (regex sin anclar `/\$25,00/`) lo detectó la revisión de fiabilidad: en los contratos de texto, pedir `getByText` exacto.
 - Proceso: en la fase roja de UX-05, C2 falló por un selector equivocado ("Pagos por Validar" en lugar de "Pendiente de Revisión") y el reporte lo dio por bueno. Al revisar un rojo, comprobar el **mensaje** de cada fallo, no solo que falle.
+
+**UX-11 cerrado (`57606e8`):** `EstadoCarga`, `EstadoError` y `AvisoDatosOffline` en el Dashboard; sin ceros falsos ni badge "Operación Activa"; página de 385 a 163 líneas con tres componentes en `components/entrenador/dashboard/`. Web 2735/2735. Seguimientos (van con UX-12, que parte la página y crea `use-dashboard-comando`):
+- El efecto de carga no tiene limpieza ni contador de generación: una respuesta tardía puede pisar el estado si cambia `isDemoMode` o se desmonta. `setDashboard(null)` del `catch` debe conservar los datos si se añade una recarga (hoy no es alcanzable).
+- No hay recarga automática al volver la conexión: queda el "Reintentar" manual.
+- El spec no cubre adherencia nula (`—` y "Sin dato"), meta de cobranza nula, más de 5 filas con "Ver todos (N)" ni las listas vacías.
+- `MetricCard` sigue duplicando `BadgeEstado` (SEG-03, para UX-12).
+- Proceso: primer lote entero con la orquestación de Orca (`00_Reglas_Desarrollo_SDD.md` §7.6 actualizada). La revisión de fiabilidad declaró un BLOCKER que no era alcanzable: antes de aceptar un BLOCKER, buscar quién llama a la función y si la línea ya estaba en `HEAD`. El resumen del worker dijo "983 archivos" (son 286 archivos y 983 suites): la cifra sale del JSON.
 
 ## 4. Decisiones pendientes del dueño
 

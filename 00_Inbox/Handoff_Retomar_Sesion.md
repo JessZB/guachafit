@@ -38,7 +38,7 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **Tú (Claude)** orquestas y validas. Defines los contratos, revisas cada diff y cada reporte contra `git status`/`git diff`, haces el doc-sync y los commits. No escribes ni ejecutas tests.
 - **El código de producción lo escribe un subagente Haiku** (`model: haiku`, `effort: high`) con un prompt autocontenido. Restricciones del prompt: solo producción, nada de specs, tests ni builds, ni leer `.env`. Pídele el cómputo de líneas del guardián y que liste los specs que se romperán.
 - **Tests y revisiones los hace un agente externo** con prompts en `.external-agents/<NN>-<lote>-<tipo>.md`. El reporte va en `.external-agents/reportes/<mismo>.reporte.md`.
-- **Desde el 2026-10-30 (decisión del dueño), los lanzas TÚ con la orquestación de Orca** (skill `orchestration`). Ya NO se usa `agy -p`, aunque §7.6 de las reglas todavía lo describa: actualízalo cuando el flujo con Orca funcione.
+- **Desde el 2026-10-30 (decisión del dueño), los lanzas TÚ con la orquestación de Orca** (skill `orchestration`). Ya NO se usa `agy -p`; §7.6 de las reglas describe este flujo (actualizada tras UX-11).
   1. Carga la guía con `orca skills get orchestration` y sigue su bucle supervisado.
   2. Comprueba que estás dentro de una terminal de Orca: `ORCA_TERMINAL_HANDLE` debe existir y `orca status --json` debe traer `caller`. Si no, **detente y avísame**: sin buzón propio, `run-create` falla con `no_active_sender_terminal`, y NUNCA uses el handle de otra terminal (leerías el buzón de otra sesión).
   3. Crea un Run por lote: `orca orchestration run-create --objective "<lote>" --json`.
@@ -94,17 +94,9 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **UX-09a cerrado (2026-10-30, `3784301`):** endpoint de solo lectura de vista previa del recordatorio (decisión D2). API **2031** (1 omitido).
 - **UX-09b cerrado (2026-10-30, `16577b9`):** modal de recordatorio con vista previa (solo al abrir), "Revisar en bandeja" con `?q=` de un solo uso y miniatura con "Comprobante no disponible". Web **2686/2686**.
 - **UX-10 cerrado (2026-10-30, `f078d15`):** copy, formatos y semántica de Cobros. Web **2728/2728**. Desde este lote Claude lanza el agente externo con Antigravity CLI (§7.6 de las reglas).
-- El siguiente lote es **UX-11** (Dashboard: carga honesta; SEG-01, 02 y 06), sin decisiones pendientes. Los seguimientos de cada lote están en la sección 3 de la auditoría.
-  - **Ya está escrito el prompt de tests en rojo:** `.external-agents/01-ux11-tests.md`. Tiene los contratos A1–A7 sobre `pages/entrenador/DashboardPage.tsx`:
-    - esqueleto con `Cargando el resumen`;
-    - error `No pudimos cargar el resumen` con `Reintentar`;
-    - sin `0 pendientes` ni `0 por validar` falsos;
-    - sin el badge `Operación Activa`;
-    - `AvisoDatosOffline` con datos y sin ellos;
-    - demo sin llamar al API.
-  - El primer paso es lanzarlo con Orca (worker `antigravity`, `gemini-3.8-flash-medium`).
-  - **Para Haiku:** `DashboardPage.tsx` tiene 385 líneas y el guardián corta en 400 (§6.14). Para no pasarse, extrae a `components/entrenador/dashboard/` lo que haga falta, por ejemplo la tarjeta de bandeja rápida. Partir la página entera es UX-12.
-  - Patrón offline de referencia: `pages/entrenador/ConciliacionPage.tsx:87-104`.
+- **UX-11 cerrado (2026-10-30, `57606e8`):** Dashboard con carga honesta. Web **2735/2735**. Primer lote entero con la orquestación de Orca, que funcionó: §7.6 de las reglas ya está actualizada. `orca status` no traía `caller` y `run-create` funcionó igual.
+- El siguiente lote es **UX-12** (Dashboard: partir la página por debajo de 300 líneas; SEG-03 y SEG-10), sin decisiones pendientes. Los seguimientos de cada lote están en la sección 3 de la auditoría. Los de UX-11 se recogen allí y van con UX-12: limpieza del efecto de carga (contador de generación), `use-dashboard-comando`, `MetricCard` frente a `BadgeEstado` y casos borde sin cubrir.
+  - `DashboardPage.tsx` ya tiene 163 líneas y su lógica de datos sigue dentro de la página; `components/entrenador/dashboard/` ya contiene `KpisMacroDashboard`, `BandejaRapidaCard` y `ListasAlertaTemprana`.
 - Rediseño de la ficha del alumno (`/coach/alumnos/:id`) CERRADO:
 
   | Lote | Commit |

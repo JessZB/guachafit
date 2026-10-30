@@ -123,3 +123,11 @@ Then el contador del KPI debe actualizarse de "2" a "1" instantáneamente sin re
 - Sin empty state para el entrenador nuevo.
 - Resuelto (2026-09-21): la meta de cobranza ya no se inventa; sin cuotas emitidas del periodo la API devuelve `null` y la UI muestra "Sin meta de cobranza configurada" (sin porcentaje).
 - Resuelto (2026-09-21): el KPI financiero de ingresos del mes ya no suma el histórico; se delimita al mes UTC en curso (pagos aprobados por fecha efectiva de cobro, mismo criterio que [[RF-009-tablero-control-cartera-morosidad]]).
+
+### Carga honesta del Dashboard (`57606e8`, 2026-10-30, lote UX-11)
+- Mientras carga, la página muestra `EstadoCarga` ("Cargando el resumen") sin cifras ni listas. Las tarjetas de bandeja no pintan contador (`conteo: null`): ya no aparecen `0 pendientes` ni `0 por validar` falsos. Un cero real sí se muestra.
+- Si falla la carga con conexión, `EstadoError` ("No pudimos cargar el resumen") con "Reintentar". Sin conexión y sin datos, `AvisoDatosOffline` en su variante "sin-datos"; con datos cargados y sin conexión, el aviso de frescura "Sin conexión · datos guardados". Los enlaces "Revisar pagos" y "Revisar evaluaciones" siguen visibles en todos los estados.
+- Se elimina el badge fijo "Operación Activa". Modo demo sin estado de carga ni llamadas al API.
+- La página pasa de 385 a 163 líneas: `KpisMacroDashboard`, `BandejaRapidaCard` y `ListasAlertaTemprana` viven en `components/entrenador/dashboard/`. Los enlaces de acción tienen área táctil de 44px (§6.8).
+- Evidencia: web **2735/2735**; typecheck y build en verde. Revisión de fiabilidad: su BLOCKER (`setDashboard(null)` borra datos en una recarga fallida) no era alcanzable, porque `cargarDashboard` solo se llama al montar y desde "Reintentar", que existe únicamente sin datos, y la línea ya estaba así en `HEAD`; se pasó a seguimiento.
+- Pendiente (UX-12): el efecto no tiene limpieza (una respuesta tardía puede pisar el estado si cambia `isDemoMode` o se desmonta); `setDashboard(null)` en el `catch` debe conservar los datos si se añade una recarga; no hay recarga automática al volver la conexión. El spec no cubre los casos borde de los componentes extraídos (adherencia nula, sin meta, más de 5 filas con "Ver todos", listas vacías).

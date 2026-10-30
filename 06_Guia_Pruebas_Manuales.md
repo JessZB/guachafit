@@ -165,6 +165,11 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - Cambia la moneda a Bs.: el monto **se vacía**. Escribe `1825,50` (con coma): aparece "Se registrarán Bs. 1.825,50 (≈ $…)".
   - Escribe `50.123` y pulsa "Registrar cobro": no se envía y aparece "Escribe el monto con hasta 2 decimales…".
   - En el móvil horizontal, el modal se desplaza hasta los botones.
+- [ ] **Dashboard con carga honesta (desde 2026-10-30, UX-11):** en `/coach/dashboard`.
+  - Al entrar aparece "Cargando el resumen" y no se ve ningún `0 pendientes` ni `0 por validar` antes de tener datos. El badge "Operación Activa" ya no existe.
+  - Con el API detenido: aparece "No pudimos cargar el resumen" con "Reintentar" y los enlaces "Revisar pagos" y "Revisar evaluaciones" siguen ahí. Levanta el API y pulsa "Reintentar": salen las cifras reales.
+  - Con datos cargados, apaga la red del navegador: aparece "Sin conexión · datos guardados". Recarga sin red y sin caché: "Sin conexión y sin datos guardados".
+  - Con una bandeja realmente vacía se ve `0 pendientes`, que ahora es un dato real.
 - [ ] **Cobros con copy y montos unificados (desde 2026-10-30, UX-10):**
   - El menú lateral dice "Control de cobros" y "Pagos por validar"; las dos pantallas llevan la ceja "Cobros".
   - En Pagos por validar, una tarjeta de un pago en Bs. muestra `+$25,00 USD`, `Bs. 912,50` y `Tasa: 36,50 Bs/USD`; el método se lee "Pago móvil". Con la bandeja vacía aparece "No hay pagos por validar" y "Ver quién debe" lleva a Control de cobros.
