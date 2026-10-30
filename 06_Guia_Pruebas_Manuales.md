@@ -165,6 +165,10 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - Cambia la moneda a Bs.: el monto **se vacía**. Escribe `1825,50` (con coma): aparece "Se registrarán Bs. 1.825,50 (≈ $…)".
   - Escribe `50.123` y pulsa "Registrar cobro": no se envía y aparece "Escribe el monto con hasta 2 decimales…".
   - En el móvil horizontal, el modal se desplaza hasta los botones.
+- [ ] **Cobros con copy y montos unificados (desde 2026-10-30, UX-10):**
+  - El menú lateral dice "Control de cobros" y "Pagos por validar"; las dos pantallas llevan la ceja "Cobros".
+  - En Pagos por validar, una tarjeta de un pago en Bs. muestra `+$25,00 USD`, `Bs. 912,50` y `Tasa: 36,50 Bs/USD`; el método se lee "Pago móvil". Con la bandeja vacía aparece "No hay pagos por validar" y "Ver quién debe" lleva a Control de cobros.
+  - En Control de cobros, los KPI muestran `$1.900,00` (formato venezolano) y ya no hay badges "USD" ni "≤ 5 días". En el móvil, "Pendiente de Revisión" muestra la miniatura del comprobante.
 - [ ] **Recordatorio con vista previa (desde 2026-10-30, UX-09b):** en Control de Cobros, "Recordatorio" de un alumno en mora.
   - Al abrir aparece un momento "Preparando el mensaje…" y luego "Mensaje que se enviará" con el texto exacto. "Enviar recordatorio" solo se habilita entonces.
   - Envía y vuelve a abrir el recordatorio del mismo alumno: muestra el motivo (cooldown) y el botón queda deshabilitado.

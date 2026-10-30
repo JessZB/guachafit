@@ -82,7 +82,8 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **UX-08 cerrado (2026-10-30, `feacbed`):** cobro en efectivo honesto (D1: el monto se vacía al cambiar de moneda y se muestra el resumen con conversión) y avisos de Conciliación. Web **2655/2655**.
 - **UX-09a cerrado (2026-10-30, `3784301`):** endpoint de solo lectura de vista previa del recordatorio (decisión D2). API **2031** (1 omitido).
 - **UX-09b cerrado (2026-10-30, `16577b9`):** modal de recordatorio con vista previa (solo al abrir), "Revisar en bandeja" con `?q=` de un solo uso y miniatura con "Comprobante no disponible". Web **2686/2686**.
-- El siguiente lote es **UX-10** (Cobros: copy y pulido; COB-13, 14, 15, 29, 30, 31, 08b y el resto de 16), sin decisiones pendientes. Los seguimientos de cada lote están en la sección 3 de la auditoría.
+- **UX-10 cerrado (2026-10-30, `f078d15`):** copy, formatos y semántica de Cobros. Web **2728/2728**. Desde este lote Claude lanza el agente externo con Antigravity CLI (§7.6 de las reglas).
+- El siguiente lote es **UX-11** (Dashboard: carga honesta; SEG-01, 02 y 06), sin decisiones pendientes. Los seguimientos de cada lote están en la sección 3 de la auditoría.
 - Rediseño de la ficha del alumno (`/coach/alumnos/:id`) CERRADO:
 
   | Lote | Commit |

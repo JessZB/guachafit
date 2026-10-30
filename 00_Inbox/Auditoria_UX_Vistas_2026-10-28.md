@@ -127,7 +127,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-07 ✅ (a `bc64170`, b `d1f90b4`) | Cobros: táctil, badges y tabs en móvil | Conciliación, Cartera | COB-05, 07, 08(a,c,d), 09, 10, 12, 19, 20, 21, 22, 23, 25 | `ChipFiltro`, `BotonTactil`, `BadgeEstado`, `BarraTabsSegmentada`, `MenuAccionesAlumno` | medio | no | UX-01; ⛔ D3 (menú "Más" en COB-20) |
 | UX-08 ✅ `feacbed` | Cobros: modal de cobro y feedback | Cartera | COB-18, COB-26, COB-11 | `useId`, `inputMode`, `role="status"`, línea resumen previa | medio | no (salvo conversión con tasa del servidor) | ⛔ D1; UX-03 |
 | UX-09 ✅ (a `3784301` API, b `16577b9` web) | Cobros: recordatorio y enlace a la bandeja | Cartera → Conciliación | COB-27, COB-28 | `?q=` en `useFiltrosConciliacion`, `onError` de miniatura | medio | **sí** para la vista previa del mensaje | ⛔ D2 |
-| UX-10 | Cobros: copy y pulido | Conciliación, Cartera | COB-13, 14, 15, 29, 30, 31, 08b, 16 (resto) | `EstadoVacio`, `formatMonto` | bajo | no | UX-03 |
+| UX-10 ✅ `f078d15` | Cobros: copy y pulido | Conciliación, Cartera | COB-13, 14, 15, 29, 30, 31, 08b, 16 (resto) | `EstadoVacio`, `formatMonto` | bajo | no | UX-03 |
 | UX-11 | Dashboard: carga honesta | Dashboard | SEG-01, SEG-02, SEG-06 | `EstadoCarga/Error`, `AvisoDatosOffline`, `use-frescura-offline` | bajo | no | ninguna |
 | UX-12 | Dashboard: partir la página (<300) | Dashboard | SEG-03, SEG-10 | `use-dashboard-comando`, `GridKpisDashboard`, `BandejaPagos`, `ListaRiesgoDashboard`, fixture demo | medio (specs) | no | UX-11 |
 | UX-13 | Dashboard: KPI y filas accionables | Dashboard | SEG-04, 05, 07, 08, 09, 11 | enlace extendido, `FranjaDatosClaveAlumno`, `BadgeEstado`, `formatMonto` | medio | no (rutas existentes) | UX-12, UX-03; ⛔ D4 (SEG-05) |
@@ -229,6 +229,12 @@ Cobertura: los hallazgos BAJA no listados se resuelven con el lote de su área a
 - **API:** la búsqueda de la bandeja es local a la página cargada; un `?q=` cuyo pago está en otra página da "Sin resultados". Aceptar `busqueda` en el endpoint de la bandeja lo resolvería.
 - **Tests:** falta cubrir el rechazo de `navigator.clipboard.writeText` (mensaje de copia manual).
 - Proceso: en la fase roja dos specs nuevos rompían `tsc` (props nuevas sin pasar y un enum inexistente) aunque vitest pasaba. La verificación debe incluir siempre el typecheck. Un filtro de mock por `includes('/recordatorio')` capturó también el GET nuevo: al añadir un endpoint con prefijo común, revisar los filtros de los specs existentes.
+**UX-10 cerrado (`f078d15`):** vocabulario "Cobros" / "Control de cobros" / "Pagos por validar", copy en *sentence case*, montos con `useFormatoNumero`, `article` y `caption`, miniatura en el móvil. Seguimientos:
+- `MetricCard` duplica `BadgeEstado` (mapa de variantes propio, `danger` con `destructive`): unificar cuando se toque el Dashboard (UX-11/12).
+- Lado del alumno: "Ver Comprobante Subido", "Captura del Comprobante Bancario" y `alt="Comprobante bancario"` siguen en Title Case (UX de Pagos del alumno). `lib/saldo-a-favor.ts` sigue con montos `toFixed(2)`.
+- `textoSaldoBs` con un dato no numérico pinta `—` sin ayuda accesible.
+- Los KPI "Total en mora" y "Próximos a vencer" siguen sin enlazar a su pestaña (para UX-13).
+- Proceso: primer lote con el agente externo lanzado por Claude (§7.6). Un reporte reescribió prefijos de rutas; la evidencia pasa a ser el JSON de vitest. Un falso verde (regex sin anclar `/\$25,00/`) lo detectó la revisión de fiabilidad: en los contratos de texto, pedir `getByText` exacto.
 - Proceso: en la fase roja de UX-05, C2 falló por un selector equivocado ("Pagos por Validar" en lugar de "Pendiente de Revisión") y el reporte lo dio por bueno. Al revisar un rojo, comprobar el **mensaje** de cada fallo, no solo que falle.
 
 ## 4. Decisiones pendientes del dueño

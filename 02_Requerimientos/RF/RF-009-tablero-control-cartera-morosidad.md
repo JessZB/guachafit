@@ -193,10 +193,19 @@ Then el sistema debe crear una transacción con estado "Aprobado"
 - La miniatura del comprobante que no carga (enlace caducado) muestra "Comprobante no disponible".
 - Evidencia: web **2686/2686**; typecheck y build en verde. Revisión de fiabilidad aprobada con observaciones; su WARNING (`?q=` persistente) se corrigió y validó.
 
+### Copy, formatos y semántica de Cobros (`f078d15`, 2026-10-30, lote UX-10)
+- Vocabulario único: la sección se llama "Cobros" y sus pantallas "Control de cobros" (`/coach/cartera`) y "Pagos por validar" (`/coach/conciliacion`), en cabeceras, menú lateral y menú del coach. Copy en *sentence case*.
+- Montos con `useFormatoNumero()` (§6.17) en la tarjeta y el visor de la bandeja, los KPI, la tabla, las tarjetas móviles y el saldo a favor: `+$25,00 USD`, `Bs. 912,50`, `Tasa: 36,50 Bs/USD` (solo en pagos en Bs.). Sin monto en USD se muestra `—`, nunca `+—`.
+- Métodos de pago con etiqueta en español (`Pago móvil`, `Transferencia bancaria`, `Efectivo en dólares`…). El aviso de excedente nombra al alumno.
+- Tarjetas como `article` con nombre accesible, tabla con `caption`, estados vacíos de la bandeja con `h2` (`EstadoVacio`/`EstadoError` aceptan `nivelTitulo`). La bandeja vacía ofrece "Ver quién debe".
+- La tarjeta móvil de "Pendiente de Revisión" muestra la miniatura del comprobante (`MiniaturaComprobante`, compartida con la tabla).
+- Evidencia: web **2728/2728**; typecheck y build en verde. Revisión 4R sin BLOCKER; sus 2 WARNING (`+—` y un falso verde en B1) se corrigieron y validaron.
+
 ### Pendiente
 - **Vista previa frente a envío:** si la tasa o la cuota cambian entre la vista previa y el envío, el mensaje enviado puede diferir del mostrado (el envío devuelve el texto real en `mensajeSugerido`). Una huella del mensaje en el contrato permitiría detectarlo.
 - **API (idempotencia):** si tras una respuesta perdida el entrenador cambia la moneda y reintenta con la misma clave, el API devuelve el cobro original sin registrar el nuevo, y el cliente informa de un éxito. Lo correcto es rechazar con 409 un reintento cuyo payload no coincide con la clave.
 - **Modal de cobro de la ficha del alumno** (`alumno-detalle/ModalCobroSala.tsx`, `use-cobro-sala.ts`): sigue sin la decisión D1 (no vacía el monto al cambiar de moneda ni muestra el resumen) y arranca con un monto fijo `'40.00'`. Debe adoptar `normalizarMontoCobro` y `resumenDeCobro` de `lib/cobro-sala.ts`.
+- **UX-10:** `MetricCard` duplica los estilos de `BadgeEstado` (variante `danger` con `destructive`). `textoSaldoBs` ante un dato no numérico devuelve `—` sin la ayuda accesible. Los textos de comprobante del lado del alumno ("Ver Comprobante Subido", "Comprobante bancario") siguen en Title Case. Los montos de `lib/saldo-a-favor.ts` siguen con punto decimal.
 - **Bandeja filtrada desde la cartera:** la búsqueda de la bandeja solo filtra la página cargada (el endpoint no acepta filtros); si el pago del alumno está en otra página, la primera muestra "Sin resultados". La tarjeta móvil de "Pendiente de Revisión" no muestra la miniatura del comprobante.
 - Los KPI "Total en Mora" y "Próximos a Vencer" no llevan a su pestaña: `useCartera` lee `?pestana=` solo al montar. Necesita escuchar los cambios de la URL o recibir una función que cambie de pestaña.
 - PagosPage del alumno sigue pendiente del módulo 5; conciliación (confirmación y reversión) resuelta el 2026-10-11 y anulación de cuotas en la API el 2026-10-12 (`7f46acc`, falta la web; ver [[RF-008-maquina-estados-cuota-recordatorios]]). Las cuotas anuladas no cuentan como mora ni en la meta del dashboard. Saldo a favor: resuelto el 2026-10-11 en la API (`afd3f7c`) y en la web (`b975905`: "A favor: X USD" en la tabla y la ficha; aviso del excedente al aprobar y tras cobrar en sala), ver [[RF-006-motor-bimonetario-liquidacion-abonos]].
