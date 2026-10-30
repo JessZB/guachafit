@@ -129,7 +129,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-09 ✅ (a `3784301` API, b `16577b9` web) | Cobros: recordatorio y enlace a la bandeja | Cartera → Conciliación | COB-27, COB-28 | `?q=` en `useFiltrosConciliacion`, `onError` de miniatura | medio | **sí** para la vista previa del mensaje | ⛔ D2 |
 | UX-10 ✅ `f078d15` | Cobros: copy y pulido | Conciliación, Cartera | COB-13, 14, 15, 29, 30, 31, 08b, 16 (resto) | `EstadoVacio`, `formatMonto` | bajo | no | UX-03 |
 | UX-11 ✅ `57606e8` | Dashboard: carga honesta | Dashboard | SEG-01, SEG-02, SEG-06 | `EstadoCarga/Error`, `AvisoDatosOffline`, `use-frescura-offline` | bajo | no | ninguna |
-| UX-12 | Dashboard: partir la página (<300) | Dashboard | SEG-03, SEG-10 | `use-dashboard-comando`, `GridKpisDashboard`, `BandejaPagos`, `ListaRiesgoDashboard`, fixture demo | medio (specs) | no | UX-11 |
+| UX-12 ✅ `97017b8` | Dashboard: partir la página (<300) | Dashboard | SEG-03, SEG-10 | `use-dashboard-comando`, `GridKpisDashboard`, `BandejaPagos`, `ListaRiesgoDashboard`, fixture demo | medio (specs) | no | UX-11 |
 | UX-13 | Dashboard: KPI y filas accionables | Dashboard | SEG-04, 05, 07, 08, 09, 11 | enlace extendido, `FranjaDatosClaveAlumno`, `BadgeEstado`, `formatMonto` | medio | no (rutas existentes) | UX-12, UX-03; ⛔ D4 (SEG-05) |
 | UX-14 | Monitor: táctil y estados | Monitor | SEG-12, 13, 14, 15, 16, 17, 18, 19 | `ChipFiltro` con conteo, enlace extendido, `BotonTactil`, `Paginacion` al pie | medio (spec C15 caracteriza el defecto actual) | no | UX-02 |
 | UX-15 | Antropometría del entrenador en móvil | Antropometría | SEG-20, 21, 22, 23, 24 | `BarraTabsSegmentada` (2 columnas), `BotonTactil`, `BadgeEstado`, `EstadoError` | medio | no (búsqueda en servidor sí: aparte) | UX-01 |
@@ -243,6 +243,13 @@ Cobertura: los hallazgos BAJA no listados se resuelven con el lote de su área a
 - El spec no cubre adherencia nula (`—` y "Sin dato"), meta de cobranza nula, más de 5 filas con "Ver todos (N)" ni las listas vacías.
 - `MetricCard` sigue duplicando `BadgeEstado` (SEG-03, para UX-12).
 - Proceso: primer lote entero con la orquestación de Orca (`00_Reglas_Desarrollo_SDD.md` §7.6 actualizada). La revisión de fiabilidad declaró un BLOCKER que no era alcanzable: antes de aceptar un BLOCKER, buscar quién llama a la función y si la línea ya estaba en `HEAD`. El resumen del worker dijo "983 archivos" (son 286 archivos y 983 suites): la cifra sale del JSON.
+
+**UX-12 cerrado (`97017b8`):** hook `use-dashboard-comando` con contador de generación, conservación de datos en recargas fallidas y sin datos demo al salir del modo demo; fixture en `lib/dashboard-comando-demo.ts`; `ListaRiesgoDashboard` única; `MetricCard` sobre `BadgeEstado` (badges en mayúsculas y token `danger`); página de 163 a 83 líneas. Web 2754/2754. Resuelve los seguimientos de UX-11, salvo estos:
+- Sin recarga automática al volver la conexión (queda el "Reintentar" manual).
+- Sin tests de los casos borde de `KpisMacroDashboard` (adherencia nula, meta nula).
+- `recargar()` llama al API también en modo demo (inalcanzable desde la UI).
+- SEG-10: los nombres "Panel administrativo" y "Resumen del Negocio" siguen distintos del Sidebar; van con las etiquetas únicas (SEG-25).
+- Proceso: el reporte de la fase roja inventó títulos de tests, mensajes con clases inexistentes y una "suite preexistente fallida"; los specs eran correctos. La tabla del reporte no es evidencia: se contrasta con el JSON y con los `it(` del spec. En la verificación, L3 y L4 fallaron por falta de `cleanup` (con `globals: false`, Testing Library no limpia el DOM entre tests): todo spec nuevo de componentes importa `cleanup` y lo llama en `afterEach`.
 
 ## 4. Decisiones pendientes del dueño
 

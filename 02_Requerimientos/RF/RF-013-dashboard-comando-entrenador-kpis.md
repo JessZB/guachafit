@@ -130,4 +130,11 @@ Then el contador del KPI debe actualizarse de "2" a "1" instantáneamente sin re
 - Se elimina el badge fijo "Operación Activa". Modo demo sin estado de carga ni llamadas al API.
 - La página pasa de 385 a 163 líneas: `KpisMacroDashboard`, `BandejaRapidaCard` y `ListasAlertaTemprana` viven en `components/entrenador/dashboard/`. Los enlaces de acción tienen área táctil de 44px (§6.8).
 - Evidencia: web **2735/2735**; typecheck y build en verde. Revisión de fiabilidad: su BLOCKER (`setDashboard(null)` borra datos en una recarga fallida) no era alcanzable, porque `cargarDashboard` solo se llama al montar y desde "Reintentar", que existe únicamente sin datos, y la línea ya estaba así en `HEAD`; se pasó a seguimiento.
-- Pendiente (UX-12): el efecto no tiene limpieza (una respuesta tardía puede pisar el estado si cambia `isDemoMode` o se desmonta); `setDashboard(null)` en el `catch` debe conservar los datos si se añade una recarga; no hay recarga automática al volver la conexión. El spec no cubre los casos borde de los componentes extraídos (adherencia nula, sin meta, más de 5 filas con "Ver todos", listas vacías).
+
+### Dashboard partido en piezas (`97017b8`, 2026-10-30, lote UX-12)
+- La carga vive en `components/entrenador/dashboard/use-dashboard-comando.ts`: contador de generación (descarta respuestas obsoletas y las que llegan tras cambiar de modo o desmontar), un fallo de recarga conserva las cifras ya mostradas y, al salir del modo demo, no quedan datos sintéticos ([[ADR-012-modo-demo-explicito-datos-sinteticos]]).
+- El fixture demo pasa a `lib/dashboard-comando-demo.ts` (`DASHBOARD_COMANDO_DEMO`). La página baja a 83 líneas, sin `useEffect` ni `apiClient`.
+- Las dos listas de riesgo usan un solo componente, `ListaRiesgoDashboard` (tope de 5 filas y "Ver todos (N)"), con los mismos textos.
+- El badge de `MetricCard` es `ui/BadgeEstado`: en el Dashboard y en Control de cobros los badges de los KPI se ven en mayúsculas y el tono de peligro usa el token `danger`.
+- Evidencia: web **2754/2754**; typecheck y build en verde. Revisión de fiabilidad sin BLOCKER; su WARNING (datos demo retenidos al salir del modo demo) se corrigió y se cubrió con el test H7.
+- Pendiente: no hay recarga automática al volver la conexión. Faltan tests de los casos borde de `KpisMacroDashboard` (adherencia nula, sin meta) y de `ListasAlertaTemprana` (más de 5 filas y listas vacías, ya cubiertos en `ListaRiesgoDashboard`). `recargar()` llama al API también en modo demo, aunque la UI no lo ofrece en ese modo.

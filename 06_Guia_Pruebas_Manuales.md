@@ -165,6 +165,10 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - Cambia la moneda a Bs.: el monto **se vacía**. Escribe `1825,50` (con coma): aparece "Se registrarán Bs. 1.825,50 (≈ $…)".
   - Escribe `50.123` y pulsa "Registrar cobro": no se envía y aparece "Escribe el monto con hasta 2 decimales…".
   - En el móvil horizontal, el modal se desplaza hasta los botones.
+- [ ] **Dashboard partido en piezas (desde 2026-10-30, UX-12):** en `/coach/dashboard`.
+  - Se ve igual que antes, salvo los badges de los KPI, que ahora van en mayúsculas ("MONTOS EN USD", "AL DÍA"), igual que en Control de cobros.
+  - Las listas "Alumnos con Pagos Vencidos" y "Alumnos sin Entrenar" mantienen sus textos y muestran "Ver todos (N)" solo con más de 5 alumnos.
+  - En modo demo, cierra sesión y entra con una cuenta real: no queda ningún dato de ejemplo (Carlos Mendoza, etc.) mientras carga.
 - [ ] **Dashboard con carga honesta (desde 2026-10-30, UX-11):** en `/coach/dashboard`.
   - Al entrar aparece "Cargando el resumen" y no se ve ningún `0 pendientes` ni `0 por validar` antes de tener datos. El badge "Operación Activa" ya no existe.
   - Con el API detenido: aparece "No pudimos cargar el resumen" con "Reintentar" y los enlaces "Revisar pagos" y "Revisar evaluaciones" siguen ahí. Levanta el API y pulsa "Reintentar": salen las cifras reales.

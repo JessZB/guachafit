@@ -95,8 +95,9 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **UX-09b cerrado (2026-10-30, `16577b9`):** modal de recordatorio con vista previa (solo al abrir), "Revisar en bandeja" con `?q=` de un solo uso y miniatura con "Comprobante no disponible". Web **2686/2686**.
 - **UX-10 cerrado (2026-10-30, `f078d15`):** copy, formatos y semántica de Cobros. Web **2728/2728**. Desde este lote Claude lanza el agente externo con Antigravity CLI (§7.6 de las reglas).
 - **UX-11 cerrado (2026-10-30, `57606e8`):** Dashboard con carga honesta. Web **2735/2735**. Primer lote entero con la orquestación de Orca, que funcionó: §7.6 de las reglas ya está actualizada. `orca status` no traía `caller` y `run-create` funcionó igual.
-- El siguiente lote es **UX-12** (Dashboard: partir la página por debajo de 300 líneas; SEG-03 y SEG-10), sin decisiones pendientes. Los seguimientos de cada lote están en la sección 3 de la auditoría. Los de UX-11 se recogen allí y van con UX-12: limpieza del efecto de carga (contador de generación), `use-dashboard-comando`, `MetricCard` frente a `BadgeEstado` y casos borde sin cubrir.
-  - `DashboardPage.tsx` ya tiene 163 líneas y su lógica de datos sigue dentro de la página; `components/entrenador/dashboard/` ya contiene `KpisMacroDashboard`, `BandejaRapidaCard` y `ListasAlertaTemprana`.
+- **UX-12 cerrado (2026-10-30, `97017b8`):** hook `use-dashboard-comando`, fixture demo en `lib/`, `ListaRiesgoDashboard` y `MetricCard` sobre `BadgeEstado`. Web **2754/2754**.
+- El siguiente lote es **UX-13** (Dashboard: KPI y filas accionables; SEG-04, 05, 07, 08, 09 y 11). **Depende de la decisión D4** (sección 4 de la auditoría): ¿"qué atender hoy" o tablero de negocio? Pregúntamela antes de escribir los tests. Los seguimientos de cada lote están en la sección 3 de la auditoría.
+- **Lección del agente externo:** su tabla de resultados no es evidencia (en UX-12 inventó títulos y mensajes). Contrasta con el JSON de Vitest y con los `it(` del spec. Todo spec nuevo de componentes llama a `cleanup` en `afterEach` (`globals: false`).
 - Rediseño de la ficha del alumno (`/coach/alumnos/:id`) CERRADO:
 
   | Lote | Commit |
