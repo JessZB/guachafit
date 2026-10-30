@@ -81,7 +81,8 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **UX-07b cerrado (2026-10-29, `d1f90b4`):** Cartera en el móvil (D3), pestañas con contador y próximo vencimiento (lote web P2 del módulo 5). Web **2621/2621**.
 - **UX-08 cerrado (2026-10-30, `feacbed`):** cobro en efectivo honesto (D1: el monto se vacía al cambiar de moneda y se muestra el resumen con conversión) y avisos de Conciliación. Web **2655/2655**.
 - **UX-09a cerrado (2026-10-30, `3784301`):** endpoint de solo lectura de vista previa del recordatorio (decisión D2). API **2031** (1 omitido).
-- El siguiente lote es **UX-09b** (web): el modal de recordatorio con la vista previa (pedida solo al abrir el modal), `?q=` a la bandeja, `onError` de la miniatura y los botones, `role="status"` y "Copiado" del modal. Las notas están en la sección 3 de la auditoría. Los seguimientos de cada lote están en la sección 3 de la auditoría. UX-07 suma el lote web P2 del módulo 5.
+- **UX-09b cerrado (2026-10-30, `16577b9`):** modal de recordatorio con vista previa (solo al abrir), "Revisar en bandeja" con `?q=` de un solo uso y miniatura con "Comprobante no disponible". Web **2686/2686**.
+- El siguiente lote es **UX-10** (Cobros: copy y pulido; COB-13, 14, 15, 29, 30, 31, 08b y el resto de 16), sin decisiones pendientes. Los seguimientos de cada lote están en la sección 3 de la auditoría.
 - Rediseño de la ficha del alumno (`/coach/alumnos/:id`) CERRADO:
 
   | Lote | Commit |

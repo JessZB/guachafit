@@ -165,6 +165,12 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - Cambia la moneda a Bs.: el monto **se vacía**. Escribe `1825,50` (con coma): aparece "Se registrarán Bs. 1.825,50 (≈ $…)".
   - Escribe `50.123` y pulsa "Registrar cobro": no se envía y aparece "Escribe el monto con hasta 2 decimales…".
   - En el móvil horizontal, el modal se desplaza hasta los botones.
+- [ ] **Recordatorio con vista previa (desde 2026-10-30, UX-09b):** en Control de Cobros, "Recordatorio" de un alumno en mora.
+  - Al abrir aparece un momento "Preparando el mensaje…" y luego "Mensaje que se enviará" con el texto exacto. "Enviar recordatorio" solo se habilita entonces.
+  - Envía y vuelve a abrir el recordatorio del mismo alumno: muestra el motivo (cooldown) y el botón queda deshabilitado.
+  - Tras enviar, "Copiar mensaje" cambia a "Copiado ✓"; "Abrir WhatsApp" dice debajo "Se abre en WhatsApp, fuera de la app.".
+  - En "Pendiente de Revisión", "Revisar en bandeja" abre Conciliación con el nombre del alumno en la búsqueda y la URL sin `?q=`. Pulsa "Limpiar filtros" y recarga: la bandeja sale completa.
+  - Con un comprobante caducado (deja la cartera abierta más de 15 min y recarga la miniatura), se ve "Comprobante no disponible" en vez de un icono roto.
 - [ ] **Avisos de la bandeja (desde 2026-10-30, UX-08):** aprueba un pago: el aviso verde tiene "Cerrar aviso" y desaparece solo a los 8 s. Aprueba uno con excedente: el aviso de saldo a favor se queda hasta cerrarlo. Con un error de aprobación visible, abre otro rechazo: el error desaparece.
 - [ ] **Control de Cobros en el móvil (desde 2026-10-29, UX-07b):** en `/coach/cartera`, a 360px y en escritorio.
   - Las cuatro pestañas caben en una fila: Mora, Por vencer, Revisión y Al día, cada una con su número. Al entrar con red lenta no aparece ningún "0" mientras carga.

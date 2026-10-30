@@ -185,9 +185,18 @@ Then el sistema debe crear una transacción con estado "Aprobado"
 - Evidencia: API **2031** (1 e2e omitido sin `E2E_DATABASE_URL`); typecheck y build del API, `shared` y la web en verde. La revisión 4R no dio BLOCKER. El WARNING de tests ciegos a la tenancy se cubrió con dos tests que espían `withTenant`.
 - La web (modal con la vista previa) va en UX-09b.
 
+### Recordatorio con vista previa en la web (`16577b9`, 2026-10-30, lote UX-09b)
+- El modal de recordatorio pide la vista previa **solo al abrirse** (nunca por fila de la tabla) y muestra el texto exacto en "Mensaje que se enviará". Mientras carga dice "Preparando el mensaje…"; si falla, muestra el error con "Reintentar". Si no se puede enviar (cooldown, pago en revisión, sin saldo), muestra el motivo y "Enviar recordatorio" queda deshabilitado.
+- Una respuesta que llega tras cerrar y reabrir el modal se descarta. En modo demo la vista previa se calcula sin red con los mismos textos y el mismo cooldown que el envío simulado.
+- Tras enviar se muestra el texto real devuelto por el API. "Mensaje copiado" se anuncia al lector de pantalla y "Abrir WhatsApp" avisa "Se abre en WhatsApp, fuera de la app.". Botones de 44px, saldo con `formatMonto` y el modal se desplaza en pantallas bajas.
+- "Revisar en bandeja" abre `/coach/conciliacion?q=<alumno>`: la bandeja arranca filtrada por ese alumno y retira `q` de la URL (sin entrada en el historial), así que limpiar y recargar no vuelve a filtrar.
+- La miniatura del comprobante que no carga (enlace caducado) muestra "Comprobante no disponible".
+- Evidencia: web **2686/2686**; typecheck y build en verde. Revisión de fiabilidad aprobada con observaciones; su WARNING (`?q=` persistente) se corrigió y validó.
+
 ### Pendiente
 - **Vista previa frente a envío:** si la tasa o la cuota cambian entre la vista previa y el envío, el mensaje enviado puede diferir del mostrado (el envío devuelve el texto real en `mensajeSugerido`). Una huella del mensaje en el contrato permitiría detectarlo.
 - **API (idempotencia):** si tras una respuesta perdida el entrenador cambia la moneda y reintenta con la misma clave, el API devuelve el cobro original sin registrar el nuevo, y el cliente informa de un éxito. Lo correcto es rechazar con 409 un reintento cuyo payload no coincide con la clave.
 - **Modal de cobro de la ficha del alumno** (`alumno-detalle/ModalCobroSala.tsx`, `use-cobro-sala.ts`): sigue sin la decisión D1 (no vacía el monto al cambiar de moneda ni muestra el resumen) y arranca con un monto fijo `'40.00'`. Debe adoptar `normalizarMontoCobro` y `resumenDeCobro` de `lib/cobro-sala.ts`.
+- **Bandeja filtrada desde la cartera:** la búsqueda de la bandeja solo filtra la página cargada (el endpoint no acepta filtros); si el pago del alumno está en otra página, la primera muestra "Sin resultados". La tarjeta móvil de "Pendiente de Revisión" no muestra la miniatura del comprobante.
 - Los KPI "Total en Mora" y "Próximos a Vencer" no llevan a su pestaña: `useCartera` lee `?pestana=` solo al montar. Necesita escuchar los cambios de la URL o recibir una función que cambie de pestaña.
 - PagosPage del alumno sigue pendiente del módulo 5; conciliación (confirmación y reversión) resuelta el 2026-10-11 y anulación de cuotas en la API el 2026-10-12 (`7f46acc`, falta la web; ver [[RF-008-maquina-estados-cuota-recordatorios]]). Las cuotas anuladas no cuentan como mora ni en la meta del dashboard. Saldo a favor: resuelto el 2026-10-11 en la API (`afd3f7c`) y en la web (`b975905`: "A favor: X USD" en la tabla y la ficha; aviso del excedente al aprobar y tras cobrar en sala), ver [[RF-006-motor-bimonetario-liquidacion-abonos]].
