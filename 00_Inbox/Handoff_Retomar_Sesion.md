@@ -37,9 +37,20 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 ## Flujo de trabajo (reglas en 00_Reglas_Desarrollo_SDD.md §7)
 - **Tú (Claude)** orquestas y validas. Defines los contratos, revisas cada diff y cada reporte contra `git status`/`git diff`, haces el doc-sync y los commits. No escribes ni ejecutas tests.
 - **El código de producción lo escribe un subagente Haiku** (`model: haiku`, `effort: high`) con un prompt autocontenido. Restricciones del prompt: solo producción, nada de specs, tests ni builds, ni leer `.env`. Pídele el cómputo de líneas del guardián y que liste los specs que se romperán.
-- **Tests y revisiones los hace un agente externo** con prompts en `.external-agents/<NN>-<lote>-<tipo>.md`. El reporte va en `.external-agents/reportes/<mismo>.reporte.md`. Yo los ejecuto pegando exactamente:
-  `Lee y ejecuta exactamente el prompt .external-agents/<archivo>.md y deja el reporte en la ruta que indica.`
-  NUNCA ejecutes tú al agente externo.
+- **Tests y revisiones los hace un agente externo** con prompts en `.external-agents/<NN>-<lote>-<tipo>.md`. El reporte va en `.external-agents/reportes/<mismo>.reporte.md`.
+- **Desde el 2026-10-30 (decisión del dueño), los lanzas TÚ con la orquestación de Orca** (skill `orchestration`). Ya NO se usa `agy -p`, aunque §7.6 de las reglas todavía lo describa: actualízalo cuando el flujo con Orca funcione.
+  1. Carga la guía con `orca skills get orchestration` y sigue su bucle supervisado.
+  2. Comprueba que estás dentro de una terminal de Orca: `ORCA_TERMINAL_HANDLE` debe existir y `orca status --json` debe traer `caller`. Si no, **detente y avísame**: sin buzón propio, `run-create` falla con `no_active_sender_terminal`, y NUNCA uses el handle de otra terminal (leerías el buzón de otra sesión).
+  3. Crea un Run por lote: `orca orchestration run-create --objective "<lote>" --json`.
+  4. Por cada prompt, lanza un worker con `orca orchestration worker-start --spec "Lee y ejecuta exactamente el prompt .external-agents/<archivo>.md y deja el reporte en la ruta que indica." --worktree current --agent antigravity --model <modelo> --json`.
+     - Usa `gemini-3.8-flash-medium` para `tests`, `verificacion` y `validacion`.
+     - Usa `gemini-3.8-flash-high` para `review-*`.
+     - Las revisiones de un lote pueden ir en paralelo.
+  5. Espera con `orca orchestration check --wait --types "worker_done,escalation,question" --timeout-ms 900000 --json`. Responde las preguntas con `reply`. Tras cada `worker_done` válido, haz `worker-release` y luego el `--ack`.
+  6. Compara `launch.requested` con `launch.effective` antes de afirmar qué modelo corrió.
+- **Evidencia en archivos, no en el resumen del agente.** Toda ejecución de la suite que haya que clasificar va con `--reporter=json --outputFile=../../.external-agents/reportes/<NN>-<lote>-vitest.json`. Ese JSON lo lees tú. En UX-10, Gemini reescribió los prefijos de las rutas en una tabla.
+- **Una sola pasada de la suite completa:** el agente itera con el subconjunto del lote y ejecuta la suite completa una vez, al final (en UX-10, repetirla 4 veces costó 49 min). Con la máquina cargada salen `Test timed out in 5000ms` ajenos al lote: usa `--maxWorkers=4`.
+- Si el dueño prefiere ejecutar un prompt a mano, le das el archivo y la línea `Lee y ejecuta exactamente el prompt …`.
 - **Ciclo por lote:**
   1. Tests en fase roja, con contratos exactos (el prompt sirve también de especificación para Haiku).
   2. Haiku implementa y tú revisas el diff.
@@ -84,6 +95,16 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **UX-09b cerrado (2026-10-30, `16577b9`):** modal de recordatorio con vista previa (solo al abrir), "Revisar en bandeja" con `?q=` de un solo uso y miniatura con "Comprobante no disponible". Web **2686/2686**.
 - **UX-10 cerrado (2026-10-30, `f078d15`):** copy, formatos y semántica de Cobros. Web **2728/2728**. Desde este lote Claude lanza el agente externo con Antigravity CLI (§7.6 de las reglas).
 - El siguiente lote es **UX-11** (Dashboard: carga honesta; SEG-01, 02 y 06), sin decisiones pendientes. Los seguimientos de cada lote están en la sección 3 de la auditoría.
+  - **Ya está escrito el prompt de tests en rojo:** `.external-agents/01-ux11-tests.md`. Tiene los contratos A1–A7 sobre `pages/entrenador/DashboardPage.tsx`:
+    - esqueleto con `Cargando el resumen`;
+    - error `No pudimos cargar el resumen` con `Reintentar`;
+    - sin `0 pendientes` ni `0 por validar` falsos;
+    - sin el badge `Operación Activa`;
+    - `AvisoDatosOffline` con datos y sin ellos;
+    - demo sin llamar al API.
+  - El primer paso es lanzarlo con Orca (worker `antigravity`, `gemini-3.8-flash-medium`).
+  - **Para Haiku:** `DashboardPage.tsx` tiene 385 líneas y el guardián corta en 400 (§6.14). Para no pasarse, extrae a `components/entrenador/dashboard/` lo que haga falta, por ejemplo la tarjeta de bandeja rápida. Partir la página entera es UX-12.
+  - Patrón offline de referencia: `pages/entrenador/ConciliacionPage.tsx:87-104`.
 - Rediseño de la ficha del alumno (`/coach/alumnos/:id`) CERRADO:
 
   | Lote | Commit |
