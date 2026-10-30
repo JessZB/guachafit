@@ -22,16 +22,20 @@ export function tieneSaldoAFavor(usd: string | null | undefined): boolean {
 
 /**
  * Aviso previo a aprobar un pago de la bandeja: si su contravalor supera lo que debe la cuota, dice
- * cuánto quedará como saldo a favor. Sin el saldo de la cuota no se afirma nada.
+ * cuánto quedará como saldo a favor. Sin el saldo de la cuota no se afirma nada. Con el nombre
+ * del alumno el aviso lo nombra; sin él, dice "del alumno".
  */
 export function avisoExcedenteAprobacion(
   montoEquivalenteUsd: string,
-  saldoPendienteCuotaUsd?: string | null
+  saldoPendienteCuotaUsd?: string | null,
+  nombreAlumno?: string | null
 ): string | null {
   if (saldoPendienteCuotaUsd === null || saldoPendienteCuotaUsd === undefined) return null;
   const excedente = aCentavos(montoEquivalenteUsd) - Math.max(0, aCentavos(saldoPendienteCuotaUsd));
   if (excedente <= 0) return null;
-  return `Este pago excede la deuda de la cuota en ${deCentavos(excedente)} USD; quedarán como saldo a favor del alumno.`;
+  const nombre = nombreAlumno?.trim();
+  const destinatario = nombre ? `de ${nombre}` : 'del alumno';
+  return `Este pago excede la deuda de la cuota en ${deCentavos(excedente)} USD; quedarán como saldo a favor ${destinatario}.`;
 }
 
 /** Mensaje de éxito de una aprobación o un cobro, con la parte que quedó a favor (dato del API). */

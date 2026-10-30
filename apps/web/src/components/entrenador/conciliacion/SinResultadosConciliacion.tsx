@@ -13,7 +13,7 @@ export function SinResultadosConciliacion({ onLimpiar }: SinResultadosConciliaci
   return (
     <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
       <SearchX className="h-9 w-9 text-muted-foreground mx-auto opacity-50" />
-      <h3 className="text-sm font-bold text-foreground">Sin resultados</h3>
+      <h2 className="text-sm font-bold text-foreground">Sin resultados</h2>
       <p className="text-xs text-muted-foreground max-w-md mx-auto">
         Ningún pago en cola coincide con la búsqueda o el método seleccionado.
       </p>

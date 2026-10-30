@@ -71,7 +71,7 @@ describe('WU-I: helpers del tablero de cartera (RF-009)', () => {
   });
 
   it('proyecta Bs solo cuando la fila trae saldo proyectado (nunca inventa)', () => {
-    expect(textoSaldoBs({ saldoPendienteBs: '5200.00' })).toBe('Bs. 5200.00');
+    expect(textoSaldoBs({ saldoPendienteBs: '5200.00' })).toBe('Bs. 5.200,00');
     expect(textoSaldoBs({ saldoPendienteBs: null })).toBeNull();
   });
 

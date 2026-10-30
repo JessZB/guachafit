@@ -10,21 +10,32 @@
  */
 import type { FilaCarteraDTO } from '@guachafit/shared';
 import { tieneSaldoAFavor } from '../../../lib/saldo-a-favor';
+import { useFormatoNumero } from '../../../lib/use-formato-numero';
 
 export function CeldaAlumnoCartera({
   fila,
   contexto,
+  idNombre,
 }: {
   fila: FilaCarteraDTO;
   contexto: 'tabla' | 'tarjeta';
+  /** Id del nombre en la tarjeta móvil, para `aria-labelledby` del `article` padre. */
+  idNombre?: string;
 }) {
+  const { formatMonto } = useFormatoNumero();
+
   if (contexto === 'tarjeta') {
     return (
       <div className="min-w-0">
-        <p className="font-bold text-sm text-foreground line-clamp-2 break-words">{fila.alumnoNombre}</p>
+        <p
+          id={idNombre}
+          className="font-bold text-sm text-foreground line-clamp-2 break-words"
+        >
+          {fila.alumnoNombre}
+        </p>
         {tieneSaldoAFavor(fila.saldoAFavorUsd) && (
           <p className="text-[11px] font-semibold text-success">
-            {`A favor: ${fila.saldoAFavorUsd} USD`}
+            {`A favor: ${formatMonto(fila.saldoAFavorUsd, 'USD', { conCodigo: true })}`}
           </p>
         )}
         {fila.telefonoWhatsapp && (
@@ -41,7 +52,7 @@ export function CeldaAlumnoCartera({
       <div className="font-bold text-foreground">{fila.alumnoNombre}</div>
       {tieneSaldoAFavor(fila.saldoAFavorUsd) && (
         <div className="text-[11px] font-semibold text-success">
-          {`A favor: ${fila.saldoAFavorUsd} USD`}
+          {`A favor: ${formatMonto(fila.saldoAFavorUsd, 'USD', { conCodigo: true })}`}
         </div>
       )}
       {fila.telefonoWhatsapp && (

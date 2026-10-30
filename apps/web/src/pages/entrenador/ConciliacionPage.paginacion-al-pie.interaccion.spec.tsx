@@ -173,7 +173,7 @@ describe('ConciliacionPage · Contrato D (COB-12: paginación al pie)', () => {
     expect(contenedorFiltros).not.toBeNull();
 
     const encabezadoAna = screen.getByText('Ana Pérez');
-    const tarjetaAna = encabezadoAna.closest('div.rounded-3xl');
+    const tarjetaAna = encabezadoAna.closest('article');
     expect(tarjetaAna).not.toBeNull();
 
     // En el orden del DOM, la paginación debe seguir a los filtros

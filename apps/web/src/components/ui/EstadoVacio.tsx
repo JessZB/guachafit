@@ -30,6 +30,8 @@ export interface EstadoVacioProps {
   detalle?: ReactNode;
   icono?: LucideIcon;
   accion?: AccionEstadoVacio;
+  /** Nivel del título según la jerarquía de la página (por defecto 3). */
+  nivelTitulo?: 2 | 3;
 }
 
 export function EstadoVacio({
@@ -37,11 +39,13 @@ export function EstadoVacio({
   detalle,
   icono: Icono = SearchX,
   accion,
+  nivelTitulo = 3,
 }: EstadoVacioProps) {
+  const Titulo = nivelTitulo === 2 ? 'h2' : 'h3';
   return (
     <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
       <Icono aria-hidden="true" className="h-9 w-9 text-muted-foreground mx-auto opacity-50" />
-      <h3 className="text-sm font-bold text-foreground">{titulo}</h3>
+      <Titulo className="text-sm font-bold text-foreground">{titulo}</Titulo>
       {detalle ? (
         <p className="text-xs text-muted-foreground max-w-md mx-auto">{detalle}</p>
       ) : null}

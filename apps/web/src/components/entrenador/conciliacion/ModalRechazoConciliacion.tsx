@@ -56,14 +56,14 @@ export function ModalRechazoConciliacion({
               id="conciliacion-rechazo-titulo"
               className="font-bold text-base text-foreground"
             >
-              Rechazar Transacción
+              Rechazar pago
             </h3>
           </div>
           <button
             type="button"
             onClick={onCerrar}
             disabled={procesando}
-            aria-label="Cerrar rechazo de transacción"
+            aria-label="Cerrar rechazo de pago"
             className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground disabled:opacity-50"
           >
             <X className="h-4 w-4" aria-hidden="true" />
@@ -123,7 +123,7 @@ export function ModalRechazoConciliacion({
             className="min-h-11 flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-xl bg-destructive text-destructive-foreground font-bold text-xs shadow-md disabled:opacity-50"
           >
             {procesando && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
-            Confirmar Rechazo
+            Confirmar rechazo
           </button>
         </div>
       </div>

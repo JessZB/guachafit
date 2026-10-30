@@ -137,7 +137,7 @@ describe('TarjetaTransaccionConciliacion · Contrato B (COB-09, COB-10)', () => 
     const botonRechazar =
       screen.queryByRole('button', { name: `Rechazar pago de ${nombreAlumno}` }) ??
       screen.getByRole('button', { name: /Rechazar/i });
-    const botonVer = screen.getByRole('button', { name: 'Ver Comprobante' });
+    const botonVer = screen.getByRole('button', { name: /^Ver comprobante/ });
 
     for (const boton of [botonAprobar, botonRechazar, botonVer]) {
       expect(boton.getAttribute('type')).toBe('button');

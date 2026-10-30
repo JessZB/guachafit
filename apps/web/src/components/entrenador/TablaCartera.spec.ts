@@ -79,7 +79,7 @@ describe('TablaCartera (WU-I)', () => {
     const html = renderizar([fila()], 'mora');
     expect(html).toContain('Carlos Mendoza');
     expect(html).toContain('12 días de atraso');
-    expect(html).toContain('$45.00 USD');
+    expect(html).toContain('$45,00 USD');
     expect(html).toContain('—');
     expect(html).toContain('Sin recordatorios manuales');
     expect(html).toContain('Recordatorio');
@@ -93,7 +93,7 @@ describe('TablaCartera (WU-I)', () => {
       [fila({ saldoPendienteBs: '5200.00', tasaAplicada: '65.0000' })],
       'mora'
     );
-    expect(html).toContain('Bs. 5200.00');
+    expect(html).toContain('Bs. 5.200,00');
   });
 
   it('fila por vencer: fecha de corte, días restantes y acciones', () => {
@@ -133,8 +133,8 @@ describe('TablaCartera (WU-I)', () => {
       'revision'
     );
     expect(html).toContain('Pago en revisión');
-    expect(html).toContain('1950.00');
-    expect(html).toContain('pago movil');
+    expect(html).toContain('1.950,00');
+    expect(html).toContain('Pago móvil');
     expect(html).toContain('445566');
     expect(html).toContain('Revisar en bandeja');
     expect(html).not.toContain('Registrar cobro');
@@ -165,9 +165,9 @@ describe('TablaCartera (WU-I)', () => {
   // RF-006 RN-05 (lote web, prompt 01): saldo a favor en la celda del alumno.
   // ---------------------------------------------------------------------------
 
-  it('fila con saldo a favor: muestra "A favor: 10.00 USD" en la celda del alumno en cualquier pestaña', () => {
+  it('fila con saldo a favor: muestra "A favor: $10,00 USD" en la celda del alumno en cualquier pestaña', () => {
     expect(renderizar([fila({ saldoAFavorUsd: '10.00' })], 'mora')).toContain(
-      'A favor: 10.00 USD'
+      'A favor: $10,00 USD'
     );
     expect(
       renderizar(
@@ -184,7 +184,7 @@ describe('TablaCartera (WU-I)', () => {
         ],
         'al_dia'
       )
-    ).toContain('A favor: 10.00 USD');
+    ).toContain('A favor: $10,00 USD');
   });
 
   it('fila sin saldo a favor: no muestra el texto "A favor"', () => {

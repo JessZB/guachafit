@@ -12,6 +12,7 @@ import {
   type ResumenCarteraDTO,
 } from '@guachafit/shared';
 import { formatFechaHoraLocal } from './date-format';
+import { FORMATO_NUMERO_POR_DEFECTO, formatMonto, type FormatoNumero } from './formato-monto';
 import { pluralizar } from './pluralizar';
 
 export interface DefinicionPestanaCartera {
@@ -96,8 +97,11 @@ export function etiquetaDiasEspera(dias?: number | null): string | null {
 }
 
 /** Proyección en Bs con la tasa aplicada de la fila; `null` honesto sin tasa. */
-export function textoSaldoBs(fila: Pick<FilaCarteraDTO, 'saldoPendienteBs'>): string | null {
-  return fila.saldoPendienteBs ? `Bs. ${fila.saldoPendienteBs}` : null;
+export function textoSaldoBs(
+  fila: Pick<FilaCarteraDTO, 'saldoPendienteBs'>,
+  formato: FormatoNumero = FORMATO_NUMERO_POR_DEFECTO
+): string | null {
+  return fila.saldoPendienteBs ? formatMonto(fila.saldoPendienteBs, 'VES', { formato }) : null;
 }
 
 /** Último recordatorio manual de la fila, en lenguaje humano. */

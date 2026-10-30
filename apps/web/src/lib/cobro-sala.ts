@@ -1,5 +1,5 @@
 /**
- * M5-L1B (RF-009 RN-01): payload del cobro en sala, compartido por la ficha y Control de Cobros.
+ * M5-L1B (RF-009 RN-01): payload del cobro en sala, compartido por la ficha y Control de cobros.
  *
  * El cobro en sala es siempre en efectivo (la API rechaza otros métodos): el método se deriva de
  * la moneda y nunca viaja una referencia bancaria. `hoyLocal` es el día LOCAL de la operación

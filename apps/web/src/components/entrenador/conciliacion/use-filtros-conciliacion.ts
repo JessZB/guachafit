@@ -2,7 +2,7 @@
  * Tray filter state: free-text search plus payment-method chip, applied over the
  * loaded page (the endpoint accepts no filters, so the UI declares the scope).
  *
- * UX-09b: `busquedaInicial` solo fija el valor de partida (p. ej. `?q=` desde Control de Cobros);
+ * UX-09b: `busquedaInicial` solo fija el valor de partida (p. ej. `?q=` desde Control de cobros);
  * después la búsqueda vuelve a ser libre y `limpiarFiltros` la deja en vacío.
  */
 import { useEffect, useMemo, useState } from 'react';

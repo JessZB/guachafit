@@ -6,10 +6,11 @@
  * the demo flag, the image-error state, and every callback arrive as props.
  */
 import { ExternalLink, Image as ImageIcon, Receipt, X } from 'lucide-react';
-import type { TransaccionPagoDetalleDTO } from '@guachafit/shared';
+import { Moneda, type TransaccionPagoDetalleDTO } from '@guachafit/shared';
 import { etiquetaMetodoPago } from '../../../lib/conciliacion-filtros';
 import { formatFechaCalendario } from '../../../lib/date-format';
 import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
+import { useFormatoNumero } from '../../../lib/use-formato-numero';
 import { COMPROBANTE_DEMO_URL } from '../../../lib/conciliacion-demo';
 import { BotonTactil } from '../../ui/BotonTactil';
 
@@ -36,6 +37,9 @@ export function VisorComprobanteConciliacion({
     abierto: true,
     onCerrar,
   });
+  const { formatMonto } = useFormatoNumero();
+  // Sin monto válido formatMonto devuelve '—': no se antepone el signo.
+  const abonoUsd = formatMonto(tx.montoEquivalenteUsd, 'USD', { conCodigo: true });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/85 backdrop-blur-md">
@@ -78,15 +82,15 @@ export function VisorComprobanteConciliacion({
         {/* Cross-Referenced Transaction Details Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl bg-secondary/30 border border-border text-xs">
           <div>
-            <span className="text-[11px] text-muted-foreground uppercase font-bold">Monto Declarado</span>
+            <span className="text-[11px] text-muted-foreground uppercase font-bold">Monto declarado</span>
             <p className="font-mono font-bold text-foreground mt-0.5">
-              {tx.montoOriginal} {tx.monedaOriginal}
+              {formatMonto(tx.montoOriginal, tx.monedaOriginal === Moneda.VES ? 'VES' : 'USD')}
             </p>
           </div>
           <div>
-            <span className="text-[11px] text-muted-foreground uppercase font-bold">Equivalente USD</span>
+            <span className="text-[11px] text-muted-foreground uppercase font-bold">Equivalente en USD</span>
             <p className="font-mono font-bold text-primary mt-0.5">
-              +${tx.montoEquivalenteUsd}
+              {abonoUsd === '—' ? abonoUsd : `+${abonoUsd}`}
             </p>
           </div>
           <div>
@@ -96,7 +100,7 @@ export function VisorComprobanteConciliacion({
             </p>
           </div>
           <div>
-            <span className="text-[11px] text-muted-foreground uppercase font-bold">Fecha Operación</span>
+            <span className="text-[11px] text-muted-foreground uppercase font-bold">Fecha de operación</span>
             <p className="font-medium text-foreground mt-0.5">
               {formatFechaCalendario(tx.fechaOperacion) ??
                 tx.fechaOperacion}
@@ -109,7 +113,7 @@ export function VisorComprobanteConciliacion({
           {tx.comprobanteUrl && !imagenFallida ? (
             <img
               src={tx.comprobanteUrl}
-              alt="Comprobante Bancario"
+              alt="Comprobante de pago"
               className="max-h-[48vh] max-w-full rounded-xl object-contain shadow-lg"
               onError={onImagenError}
             />
@@ -117,7 +121,7 @@ export function VisorComprobanteConciliacion({
             // N2: la foto stock SOLO vive en modo demo explícito.
             <img
               src={COMPROBANTE_DEMO_URL}
-              alt="Comprobante Bancario (demostración)"
+              alt="Comprobante de pago (demostración)"
               className="max-h-[48vh] max-w-full rounded-xl object-contain shadow-lg opacity-80"
             />
           ) : (
@@ -138,10 +142,12 @@ export function VisorComprobanteConciliacion({
           )}
         </div>
         {tx.comprobanteUrl && (
+          // El aria-label empieza con el texto visible (WCAG 2.5.3) y añade el aviso de pestaña nueva.
           <a
             href={tx.comprobanteUrl}
             target="_blank"
             rel="noopener noreferrer"
+            aria-label="Abrir original (se abre en una pestaña nueva)"
             className="inline-flex min-h-11 items-center gap-1.5 self-start px-3 rounded-xl border border-border bg-secondary/60 text-foreground text-xs font-bold hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary"
           >
             <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />

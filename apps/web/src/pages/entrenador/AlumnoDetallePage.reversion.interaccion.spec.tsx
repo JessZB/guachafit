@@ -393,7 +393,7 @@ describe('AlumnoDetallePage · RF-007: estado y reversión en el historial (cont
     await screen.findByText(/Ref: APROB-01/);
 
     const dialogo = await abrirDialogoReversion();
-    expect(dialogo.textContent).toContain('Pago de 20.00 USD · pago movil · Ref: APROB-01');
+    expect(dialogo.textContent).toContain('Pago de 20.00 USD · Pago móvil · Ref: APROB-01');
   });
 
   it('9d · sin referencia, el diálogo identifica el pago solo con monto y método', async () => {
@@ -415,7 +415,7 @@ describe('AlumnoDetallePage · RF-007: estado y reversión en el historial (cont
 
     fireEvent.click(screen.getByRole('button', { name: 'Revertir pago de 12.50 USD' }));
     const dialogo = await screen.findByRole('dialog');
-    expect(dialogo.textContent).toContain('Pago de 12.50 USD · efectivo usd');
+    expect(dialogo.textContent).toContain('Pago de 12.50 USD · Efectivo en dólares');
     expect(dialogo.textContent).not.toContain('Ref:');
   });
 

@@ -3,15 +3,17 @@
  *
  * Recorte verbatim de `components/entrenador/TablaCartera.tsx` (bloque
  * `hidden md:block`). ÚNICO (R3). Presentacional: recibe filas y callbacks
- * por props, no usa `useQuery` ni `api-client` (R1).
+ * por props, no usa `useQuery` ni `api-client` (R1). Los montos usan
+ * `useFormatoNumero()` (§6.17).
  */
-import { useState } from 'react';
-import type { FilaCarteraDTO, PestanaCarteraDTO } from '@guachafit/shared';
+import { Moneda, type FilaCarteraDTO, type PestanaCarteraDTO } from '@guachafit/shared';
 import { etiquetaMetodoPago } from '../../../lib/conciliacion-filtros';
 import { formatFechaCalendario, formatFechaHoraLocal } from '../../../lib/date-format';
-import { textoUltimaGestion } from '../../../lib/cartera';
+import { PESTANAS_CARTERA, textoUltimaGestion } from '../../../lib/cartera';
+import { useFormatoNumero } from '../../../lib/use-formato-numero';
 import { AccionesFilaCartera } from './AccionesFilaCartera';
 import { CeldaAlumnoCartera } from './CeldaAlumnoCartera';
+import { MiniaturaComprobante } from './MiniaturaComprobante';
 import { SaldoBsCartera } from './SaldoBsCartera';
 import { SituacionFilaCartera } from './SituacionFilaCartera';
 
@@ -30,11 +32,15 @@ export function TablaEscritorioCartera({
   onVerFicha: (fila: FilaCarteraDTO) => void;
   onRevisarPago?: (fila: FilaCarteraDTO) => void;
 }) {
+  const { formatMonto } = useFormatoNumero();
+  const etiquetaPestana = PESTANAS_CARTERA.find((p) => p.clave === pestana)?.etiqueta ?? '';
+
   return (
     <div className="hidden md:block overflow-x-auto">
       <table className="w-full text-left text-xs border-collapse">
+        <caption className="sr-only">Control de cobros: {etiquetaPestana}</caption>
         <thead>
-          <tr className="bg-secondary/40 text-[11px] uppercase tracking-wider text-muted-foreground">
+          <tr className="bg-secondary/40 text-[11px] font-semibold text-muted-foreground">
             <th scope="col" className="px-4 py-3 font-bold">Alumno</th>
             <th scope="col" className="px-4 py-3 font-bold">Situación</th>
             {pestana === 'revision' ? (
@@ -76,7 +82,9 @@ export function TablaEscritorioCartera({
                 <>
                   <td className="px-4 py-3 align-top">
                     <div className="font-mono font-bold text-foreground">
-                      {fila.montoReportado} {fila.monedaOriginal}
+                      {formatMonto(fila.montoReportado, fila.monedaOriginal === Moneda.VES ? 'VES' : 'USD', {
+                        conCodigo: true,
+                      })}
                     </div>
                     <div className="text-[11px] text-muted-foreground">
                       {etiquetaMetodoPago(fila.metodoPago)}
@@ -86,15 +94,11 @@ export function TablaEscritorioCartera({
                     <div className="font-mono text-foreground">
                       {fila.referenciaBancaria || 'Sin referencia'}
                     </div>
-                    {fila.comprobanteUrl ? (
-                      <MiniaturaComprobante
-                        key={fila.comprobanteUrl}
-                        url={fila.comprobanteUrl}
-                        alumnoNombre={fila.alumnoNombre}
-                      />
-                    ) : (
-                      <span className="text-[11px] text-muted-foreground">Sin captura digital</span>
-                    )}
+                    <MiniaturaComprobante
+                      key={fila.comprobanteUrl ?? 'sin-comprobante'}
+                      url={fila.comprobanteUrl}
+                      alumnoNombre={fila.alumnoNombre}
+                    />
                   </td>
                 </>
               ) : pestana === 'al_dia' ? (
@@ -114,7 +118,7 @@ export function TablaEscritorioCartera({
                 <>
                   <td className="px-4 py-3 align-top">
                     <span className="font-mono font-bold text-foreground">
-                      ${fila.saldoPendienteUsd} USD
+                      {formatMonto(fila.saldoPendienteUsd, 'USD', { conCodigo: true })}
                     </span>
                   </td>
                   <td className="px-4 py-3 align-top">
@@ -144,27 +148,5 @@ export function TablaEscritorioCartera({
         </tbody>
       </table>
     </div>
-  );
-}
-
-/**
- * Miniatura del comprobante. Si la imagen no carga (URL caducada, red), muestra un aviso en vez
- * de un icono roto. El `key` por URL en el padre reinicia el fallo cuando llega otro comprobante.
- */
-function MiniaturaComprobante({ url, alumnoNombre }: { url: string; alumnoNombre: string }) {
-  const [fallo, setFallo] = useState(false);
-
-  if (fallo) {
-    return <span className="text-[11px] text-muted-foreground">Comprobante no disponible</span>;
-  }
-
-  return (
-    <img
-      src={url}
-      alt={`Comprobante de ${alumnoNombre}`}
-      loading="lazy"
-      onError={() => setFallo(true)}
-      className="mt-1 h-10 w-16 rounded-md object-cover border border-border"
-    />
   );
 }

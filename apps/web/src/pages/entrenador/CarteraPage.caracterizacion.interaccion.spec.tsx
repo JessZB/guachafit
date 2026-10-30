@@ -235,8 +235,8 @@ describe('CarteraPage · caracterización (prompt 73): zonas sin cobertura previ
     montarPagina();
     await waitFor(() => expect(botonCobroDe(FILA_A.alumnoNombre)).toBeTruthy());
 
-    expect(screen.getByRole('heading', { name: 'Control de Cobros' })).toBeTruthy();
-    const enlace = screen.getByRole('link', { name: /Bandeja de validación/ });
+    expect(screen.getByRole('heading', { name: 'Control de cobros' })).toBeTruthy();
+    const enlace = screen.getByRole('link', { name: 'Pagos por validar' });
     expect(enlace.getAttribute('href')).toBe('/coach/conciliacion');
   });
 
@@ -244,12 +244,17 @@ describe('CarteraPage · caracterización (prompt 73): zonas sin cobertura previ
     montarPagina();
     await waitFor(() => expect(botonCobroDe(FILA_A.alumnoNombre)).toBeTruthy());
 
-    expect(screen.getByText('Recaudado del Mes')).toBeTruthy();
-    expect(screen.getByText('$120.50')).toBeTruthy();
-    expect(screen.getByText('Total en Mora')).toBeTruthy();
+    expect(screen.getByText('Recaudado del mes')).toBeTruthy();
+    expect(screen.getByText('$120,50')).toBeTruthy();
+    expect(screen.getByText('Total en mora')).toBeTruthy();
     // 'Próximos a Vencer' aparece en el KPI; la pestaña ahora usa la etiqueta corta 'Por vencer'.
-    expect(screen.getByText('Próximos a Vencer')).toBeTruthy();
-    expect(screen.getByText('Pagos por Validar')).toBeTruthy();
+    expect(screen.getByText('Próximos a vencer')).toBeTruthy();
+
+    const kpiPagosPorValidar = screen
+      .getByText('Comprobantes esperando tu confirmación')
+      .closest('a')!;
+    expect(within(kpiPagosPorValidar).getByText('Pagos por validar')).toBeTruthy();
+    expect(within(kpiPagosPorValidar).getByText('2')).toBeTruthy();
   });
 
   it('C3 · las 4 pestañas existen con sus contadores reales y el criterio visible', async () => {

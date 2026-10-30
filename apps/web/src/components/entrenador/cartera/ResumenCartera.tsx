@@ -8,21 +8,23 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle, CalendarClock, DollarSign, Receipt } from 'lucide-react';
 import { MetricCard } from '../../common/MetricCard';
 import { pluralizar } from '../../../lib/pluralizar';
+import { useFormatoNumero } from '../../../lib/use-formato-numero';
 import type { ResumenCarteraDTO } from '@guachafit/shared';
 
 export function ResumenCartera({ resumen }: { resumen: ResumenCarteraDTO }) {
+  const { formatMonto } = useFormatoNumero();
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
       <MetricCard
-        title="Recaudado del Mes"
-        value={`$${resumen.recaudadoMesUsd}`}
+        title="Recaudado del mes"
+        value={formatMonto(resumen.recaudadoMesUsd, 'USD')}
         subtitle="Pagos aprobados del mes en curso"
         icon={DollarSign}
-        badge={{ text: 'USD', variant: 'success' }}
       />
       <MetricCard
-        title="Total en Mora"
-        value={`$${resumen.totalEnMoraUsd}`}
+        title="Total en mora"
+        value={formatMonto(resumen.totalEnMoraUsd, 'USD')}
         subtitle={`${pluralizar(
           resumen.alumnosEnMora,
           'alumno con cuota vencida',
@@ -35,21 +37,17 @@ export function ResumenCartera({ resumen }: { resumen: ResumenCarteraDTO }) {
         }}
       />
       <MetricCard
-        title="Próximos a Vencer"
+        title="Próximos a vencer"
         value={resumen.proximosAVencer}
-        subtitle={`$${resumen.totalPorVencerUsd} USD vencen en los próximos 5 días`}
+        subtitle={`${formatMonto(resumen.totalPorVencerUsd, 'USD', { conCodigo: true })} vencen en los próximos 5 días`}
         icon={CalendarClock}
-        badge={{
-          text: '≤ 5 días',
-          variant: resumen.proximosAVencer > 0 ? 'warning' : 'success',
-        }}
       />
       <Link
         to="/coach/conciliacion"
         className="block rounded-3xl focus-visible:outline-2 focus-visible:outline-primary"
       >
         <MetricCard
-          title="Pagos por Validar"
+          title="Pagos por validar"
           value={resumen.pagosPorValidar}
           subtitle="Comprobantes esperando tu confirmación"
           icon={Receipt}

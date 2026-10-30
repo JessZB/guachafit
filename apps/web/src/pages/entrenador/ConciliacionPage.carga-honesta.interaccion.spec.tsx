@@ -186,18 +186,18 @@ describe('ConciliacionPage · Carga honesta (Contrato B)', () => {
     const estadoCarga = estados.find((el) => /Cargando la bandeja de pagos/i.test(el.textContent ?? ''));
     expect(estadoCarga).toBeTruthy();
 
-    // 2. No aparece 'Bandeja al Día'
-    expect(screen.queryByText(/Bandeja al Día/i)).toBeNull();
+    // 2. No aparece 'No hay pagos por validar'
+    expect(screen.queryByText(/No hay pagos por validar/i)).toBeNull();
 
     // 3. No muestra ningún texto "... en cola"
     expect(screen.queryByText(/en cola/i)).toBeNull();
   });
 
-  it('B2 · vacío real: con respuesta vacía aparece "Bandeja al Día" y "0 transacciones en cola"', async () => {
+  it('B2 · vacío real: con respuesta vacía aparece "No hay pagos por validar" y "0 transacciones en cola"', async () => {
     itemsActuales = [];
     montarPagina();
 
-    expect(await screen.findByText('Bandeja al Día')).toBeTruthy();
+    expect(await screen.findByText('No hay pagos por validar')).toBeTruthy();
     expect(await screen.findByText('0 transacciones en cola')).toBeTruthy();
   });
 
@@ -214,7 +214,7 @@ describe('ConciliacionPage · Carga honesta (Contrato B)', () => {
     const clasesBoton = (botonReintentar.getAttribute('class') ?? '').split(/\s+/);
     expect(clasesBoton).toContain('min-h-11');
 
-    expect(screen.queryByText(/Bandeja al Día/i)).toBeNull();
+    expect(screen.queryByText(/No hay pagos por validar/i)).toBeNull();
 
     // Al pulsar Reintentar vuelve a solicitar la bandeja
     bandejaError = null;

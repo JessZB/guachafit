@@ -52,7 +52,7 @@ export function CoachMenuPage() {
 
       {/* Bento Grid de Acciones Operativas */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* TARJETA 1: Validar Pagos (Hero Operativo) */}
+        {/* TARJETA 1: Pagos por validar (Hero Operativo) */}
         <Link
           to="/coach/conciliacion"
           className="sm:col-span-2 lg:col-span-2 group relative block overflow-hidden p-6 rounded-3xl bg-gradient-to-br from-card/90 via-card/60 to-success/10 border-2 border-success/30 hover:border-success/70 transition-all duration-200 shadow-lg hover:shadow-success/5 cursor-pointer active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-primary"
@@ -68,7 +68,7 @@ export function CoachMenuPage() {
 
           <div className="mt-4">
             <h2 className="text-xl font-bold text-foreground group-hover:text-success transition-colors flex items-center gap-2">
-              Validar Pagos Entrantes
+              Pagos por validar
               <ArrowUpRight className="h-5 w-5 text-success opacity-80 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
             </h2>
             <p className="text-sm text-muted-foreground mt-1 max-w-lg">
@@ -86,7 +86,7 @@ export function CoachMenuPage() {
           </div>
         </Link>
 
-        {/* TARJETA 2: Control de Cobros (RF-009) */}
+        {/* TARJETA 2: Control de cobros (RF-009) */}
         <Link
           to="/coach/cartera"
           className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-warning/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
@@ -101,7 +101,7 @@ export function CoachMenuPage() {
               </span>
             </div>
             <h3 className="text-base font-bold text-foreground group-hover:text-warning transition-colors">
-              Control de Cobros
+              Control de cobros
             </h3>
             <p className="text-xs text-muted-foreground mt-1">
               Mira quién te debe y cuánto, quién vence pronto y envía recordatorios con un clic.

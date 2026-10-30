@@ -135,7 +135,7 @@ export function ModalCobroCartera({
                 sufijo={sufijoMoneda}
               />
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-foreground" htmlFor={idMoneda}>
+                <label className="text-xs font-semibold text-muted-foreground" htmlFor={idMoneda}>
                   Moneda
                 </label>
                 <select
@@ -153,7 +153,7 @@ export function ModalCobroCartera({
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground" htmlFor={idFecha}>
+              <label className="text-xs font-semibold text-muted-foreground" htmlFor={idFecha}>
                 Fecha de la operación
               </label>
               <input

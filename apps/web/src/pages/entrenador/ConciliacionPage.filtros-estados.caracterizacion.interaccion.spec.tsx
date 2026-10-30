@@ -169,7 +169,7 @@ function dosMetodos(): TransaccionPagoDetalleDTO[] {
 describe('ConciliacionPage · caracterizacion: filtros, estados honestos y visor', () => {
   it('f1 · el encabezado y la insignia cuentan la cola actual', async () => {
     montarPagina();
-    expect(await screen.findByText('Bandeja de Pagos por Validar')).toBeTruthy();
+    expect(await screen.findByText('Pagos por validar')).toBeTruthy();
     expect(await screen.findByText('Aprueba o rechaza los pagos que reportan tus alumnos.')).toBeTruthy();
     expect((await screen.findAllByText('1 transacción en cola')).length).toBeGreaterThan(0);
   });
@@ -195,7 +195,7 @@ describe('ConciliacionPage · caracterizacion: filtros, estados honestos y visor
     montarPagina();
     await screen.findByText('Carlos Mendoza');
 
-    fireEvent.click(screen.getByRole('button', { name: 'pago movil' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Pago móvil' }));
     await waitFor(() => expect(screen.queryByText('Carlos Mendoza')).toBeNull());
     expect(screen.getByText('Mariana Pérez')).toBeTruthy();
 
@@ -224,9 +224,9 @@ describe('ConciliacionPage · caracterizacion: filtros, estados honestos y visor
   it('f5 · bandeja vacia muestra el estado al dia actual', async () => {
     itemsActuales = [];
     montarPagina();
-    expect(await screen.findByText('Bandeja al Día')).toBeTruthy();
+    expect(await screen.findByText('No hay pagos por validar')).toBeTruthy();
     expect(
-      screen.getByText('No hay transacciones pendientes de revisión. Todos los abonos han sido procesados.')
+      screen.getByText('Cuando un alumno reporte un pago, aparecerá aquí.')
     ).toBeTruthy();
   });
 
@@ -247,12 +247,12 @@ describe('ConciliacionPage · caracterizacion: filtros, estados honestos y visor
     montarPagina();
     await screen.findByText('Carlos Mendoza');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ver Comprobante' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Ver comprobante/ }));
     const visor = await screen.findByRole('dialog');
     expect(visor.textContent).toContain('Comprobante de pago');
-    expect(visor.textContent).toContain('Monto Declarado');
+    expect(visor.textContent).toContain('Monto declarado');
     expect(visor.textContent).toContain('445566');
-    within(visor).getByRole('link', { name: 'Abrir original' });
+    within(visor).getByRole('link', { name: /^Abrir original/ });
     within(visor).getByRole('button', { name: 'Rechazar este pago' });
     within(visor).getByRole('button', { name: 'Aprobar este pago' });
   });
@@ -269,7 +269,7 @@ describe('ConciliacionPage · caracterizacion: filtros, estados honestos y visor
     montarPagina();
     await screen.findByText('Carlos Mendoza');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ver Comprobante' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Ver comprobante/ }));
     const visor = await screen.findByRole('dialog');
     fireEvent.click(within(visor).getByRole('button', { name: 'Rechazar este pago' }));
 
@@ -277,7 +277,7 @@ describe('ConciliacionPage · caracterizacion: filtros, estados honestos y visor
       expect(
         screen
           .queryAllByRole('dialog')
-          .find((dialogo) => dialogo.textContent?.includes('Rechazar Transacción'))
+          .find((dialogo) => dialogo.textContent?.includes('Rechazar pago'))
       ).not.toBeNull()
     );
     expect(screen.queryByText('Comprobante de pago')).toBeNull();

@@ -58,13 +58,13 @@ const COLA = [
 
 describe('etiquetaMetodoPago (WU20)', () => {
   it('reemplaza todos los guiones bajos del enum', () => {
-    expect(etiquetaMetodoPago(MetodoPago.PAGO_MOVIL)).toBe('pago movil');
-    expect(etiquetaMetodoPago(MetodoPago.TRANSFERENCIA_BANCARIA)).toBe('transferencia bancaria');
-    expect(etiquetaMetodoPago(MetodoPago.BINANCE_USDT)).toBe('binance usdt');
+    expect(etiquetaMetodoPago(MetodoPago.PAGO_MOVIL)).toBe('Pago móvil');
+    expect(etiquetaMetodoPago(MetodoPago.TRANSFERENCIA_BANCARIA)).toBe('Transferencia bancaria');
+    expect(etiquetaMetodoPago(MetodoPago.BINANCE_USDT)).toBe('Binance (USDT)');
   });
 
   it('acepta el método como texto crudo del historial (`metodoPago: string`)', () => {
-    expect(etiquetaMetodoPago('transferencia_bancaria')).toBe('transferencia bancaria');
+    expect(etiquetaMetodoPago('transferencia_bancaria')).toBe('Transferencia bancaria');
   });
 
   it('sin método no imprime un string vacío', () => {

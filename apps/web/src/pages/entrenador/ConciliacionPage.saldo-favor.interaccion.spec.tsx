@@ -194,7 +194,7 @@ describe('ConciliacionPage · contrato 6: excedente antes de aprobar y en el éx
 
     expect(
       await screen.findByText(
-        'Este pago excede la deuda de la cuota en 10.00 USD; quedarán como saldo a favor del alumno.'
+        'Este pago excede la deuda de la cuota en 10.00 USD; quedarán como saldo a favor de Carlos Mendoza.'
       )
     ).toBeTruthy();
   });
@@ -247,7 +247,7 @@ describe('ConciliacionPage · contrato 6: excedente antes de aprobar y en el éx
 
     const nota = await screen.findByRole('note');
     expect(nota.textContent).toContain(
-      'Este pago excede la deuda de la cuota en 10.00 USD; quedarán como saldo a favor del alumno.'
+      'Este pago excede la deuda de la cuota en 10.00 USD; quedarán como saldo a favor de Carlos Mendoza.'
     );
   });
 

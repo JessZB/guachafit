@@ -274,14 +274,14 @@ describe('CabeceraYFiltrosCartera · Contratos B, C y D (COB-19, COB-22, COB-23,
   });
 
   describe('Contrato D · CabeceraCartera y ResumenCartera', () => {
-    it('D1 · enlace "Bandeja de validación" incluye min-h-11, focus-visible:outline-2 y focus-visible:outline-primary', () => {
+    it('D1 · enlace "Pagos por validar" incluye min-h-11, focus-visible:outline-2 y focus-visible:outline-primary', () => {
       render(
         <MemoryRouter>
           <CabeceraCartera />
         </MemoryRouter>
       );
 
-      const enlace = screen.getByRole('link', { name: /Bandeja de validación/i });
+      const enlace = screen.getByRole('link', { name: /Pagos por validar/i });
       const clases = enlace.getAttribute('class') ?? '';
 
       expect(clases).toContain('min-h-11');

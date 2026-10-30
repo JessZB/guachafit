@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from 'react';
 import { apiClient } from '../../../lib/api-client';
 import { digitosWhatsApp } from '../../../lib/cartera-whatsapp';
 import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
+import { useFormatoNumero } from '../../../lib/use-formato-numero';
 import type {
   FilaCarteraDTO,
   RecordatorioManualResultadoDTO,
@@ -35,8 +36,8 @@ const textoCooldownDemo = (nombre: string) =>
 
 const textoEnviadoDemo = (nombre: string) => `Recordatorio simulado para ${nombre} (modo demo).`;
 
-const mensajeRecordatorioDemo = (fila: FilaCarteraDTO) =>
-  `Hola ${fila.alumnoNombre.split(' ')[0]}, tu mensualidad tiene un saldo pendiente de $${fila.saldoPendienteUsd} USD. Puedes reportar tu pago desde la app para mantener tu plan al día.`;
+const mensajeRecordatorioDemo = (fila: FilaCarteraDTO, saldoTexto: string) =>
+  `Hola ${fila.alumnoNombre.split(' ')[0]}, tu mensualidad tiene un saldo pendiente de ${saldoTexto}. Puedes reportar tu pago desde la app para mantener tu plan al día.`;
 
 export function useRecordatorioCartera({
   isDemoMode,
@@ -53,6 +54,9 @@ export function useRecordatorioCartera({
   const [vistaPrevia, setVistaPrevia] = useState<VistaPreviaRecordatorioDTO | null>(null);
   const [cargandoVistaPrevia, setCargandoVistaPrevia] = useState(false);
   const [errorVistaPrevia, setErrorVistaPrevia] = useState<string | null>(null);
+  const { formatMonto } = useFormatoNumero();
+  const textoMensajeDemo = (fila: FilaCarteraDTO) =>
+    mensajeRecordatorioDemo(fila, formatMonto(fila.saldoPendienteUsd, 'USD', { conCodigo: true }));
 
   // Cada apertura, reintento o cierre cambia el id: una respuesta con id viejo se descarta
   // (abrir → cerrar → abrir no debe pintar la vista previa de la primera apertura).
@@ -101,7 +105,7 @@ export function useRecordatorioCartera({
               motivo: 'listo',
               mensaje: 'Listo para enviar (modo demo).',
               titulo: 'Recordatorio de pago',
-              cuerpo: mensajeRecordatorioDemo(fila),
+              cuerpo: textoMensajeDemo(fila),
               saldoPendienteUsd: fila.saldoPendienteUsd,
               saldoPendienteBs: null,
               proximoPermitidoUtc: null,
@@ -185,7 +189,7 @@ export function useRecordatorioCartera({
           enviado: true,
           motivo: 'despachado',
           mensaje: textoEnviadoDemo(filaRecordatorio.alumnoNombre),
-          mensajeSugerido: mensajeRecordatorioDemo(filaRecordatorio),
+          mensajeSugerido: textoMensajeDemo(filaRecordatorio),
           saldoPendienteUsd: filaRecordatorio.saldoPendienteUsd,
           saldoPendienteBs: null,
           ultimaGestionUtc: ahoraIso,

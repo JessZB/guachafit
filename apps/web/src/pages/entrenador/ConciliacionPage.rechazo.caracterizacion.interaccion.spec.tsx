@@ -138,7 +138,7 @@ function dialogoDeRechazo(): HTMLElement | null {
   return (
     screen
       .queryAllByRole('dialog')
-      .find((dialogo) => dialogo.textContent?.includes('Rechazar Transacción')) ?? null
+      .find((dialogo) => dialogo.textContent?.includes('Rechazar pago')) ?? null
   );
 }
 
@@ -199,15 +199,15 @@ describe('ConciliacionPage · caracterizacion: rechazo con motivo', () => {
   it('r1 · "Rechazar con Motivo" abre el dialogo sin llamar al API', async () => {
     const dialogo = await abrirRechazo();
     expect(llamadasPatch()).toHaveLength(0);
-    expect(dialogo.textContent).toContain('Rechazar Transacción');
-    within(dialogo).getByRole('button', { name: 'Confirmar Rechazo' });
+    expect(dialogo.textContent).toContain('Rechazar pago');
+    within(dialogo).getByRole('button', { name: 'Confirmar rechazo' });
     within(dialogo).getByRole('button', { name: 'Cancelar' });
   });
 
   it('r2 · "Confirmar Rechazo" empieza deshabilitado y se habilita con motivo', async () => {
     const dialogo = await abrirRechazo();
     const confirmar = within(dialogo).getByRole('button', {
-      name: 'Confirmar Rechazo',
+      name: 'Confirmar rechazo',
     }) as HTMLButtonElement;
     expect(confirmar.disabled).toBe(true);
 
@@ -216,7 +216,7 @@ describe('ConciliacionPage · caracterizacion: rechazo con motivo', () => {
       { target: { value: MOTIVO } }
     );
     expect(
-      (within(dialogo).getByRole('button', { name: 'Confirmar Rechazo' }) as HTMLButtonElement)
+      (within(dialogo).getByRole('button', { name: 'Confirmar rechazo' }) as HTMLButtonElement)
         .disabled
     ).toBe(false);
   });
@@ -227,7 +227,7 @@ describe('ConciliacionPage · caracterizacion: rechazo con motivo', () => {
       within(dialogo).getByPlaceholderText(/La referencia bancaria no coincide/),
       { target: { value: MOTIVO } }
     );
-    fireEvent.click(within(dialogo).getByRole('button', { name: 'Confirmar Rechazo' }));
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Confirmar rechazo' }));
 
     await waitFor(() => expect(llamadasPatch()).toHaveLength(1));
     expect(llamadasPatch()[0]).toEqual({
@@ -254,7 +254,7 @@ describe('ConciliacionPage · caracterizacion: rechazo con motivo', () => {
       within(dialogo).getByPlaceholderText(/La referencia bancaria no coincide/),
       { target: { value: MOTIVO } }
     );
-    fireEvent.click(within(dialogo).getByRole('button', { name: 'Confirmar Rechazo' }));
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Confirmar rechazo' }));
 
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect((await screen.findByRole('alert')).textContent).toContain('Fallo al rechazar');

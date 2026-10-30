@@ -165,13 +165,13 @@ function dialogoDeRechazo(): HTMLElement | null {
   return (
     screen
       .queryAllByRole('dialog')
-      .find((dialogo) => dialogo.textContent?.includes('Rechazar Transacción')) ?? null
+      .find((dialogo) => dialogo.textContent?.includes('Rechazar pago')) ?? null
   );
 }
 
 function tarjetaDe(nombre: string): HTMLElement {
   const elemento = screen.getByText(nombre);
-  const tarjeta = elemento.closest('div.p-5');
+  const tarjeta = elemento.closest('article');
   if (!tarjeta) throw new Error(`No se encontró la tarjeta para ${nombre}`);
   return tarjeta as HTMLElement;
 }
@@ -271,7 +271,7 @@ describe('ConciliacionPage · rechazo seguro (COB-02, COB-03 y COB-06)', () => {
 
     const textareaAna = within(dialogoAna).getByPlaceholderText(/La referencia bancaria no coincide/) as HTMLTextAreaElement;
     expect(textareaAna.value).toBe('');
-    const botonConfirmar = within(dialogoAna).getByRole('button', { name: 'Confirmar Rechazo' }) as HTMLButtonElement;
+    const botonConfirmar = within(dialogoAna).getByRole('button', { name: 'Confirmar rechazo' }) as HTMLButtonElement;
     expect(botonConfirmar.disabled).toBe(true);
   });
 
@@ -285,7 +285,7 @@ describe('ConciliacionPage · rechazo seguro (COB-02, COB-03 y COB-06)', () => {
 
     // Abrir visor de Ana Pérez y pulsar Rechazar Pago en el visor
     const tarjetaAna = tarjetaDe('Ana Pérez');
-    fireEvent.click(within(tarjetaAna).getByRole('button', { name: 'Ver Comprobante' }));
+    fireEvent.click(within(tarjetaAna).getByRole('button', { name: /^Ver comprobante/ }));
     await screen.findByRole('dialog');
     fireEvent.click(screen.getByRole('button', { name: 'Rechazar este pago' }));
 
@@ -295,7 +295,7 @@ describe('ConciliacionPage · rechazo seguro (COB-02, COB-03 y COB-06)', () => {
 
     const textareaAna = within(dialogoAna).getByPlaceholderText(/La referencia bancaria no coincide/) as HTMLTextAreaElement;
     expect(textareaAna.value).toBe('');
-    const botonConfirmar = within(dialogoAna).getByRole('button', { name: 'Confirmar Rechazo' }) as HTMLButtonElement;
+    const botonConfirmar = within(dialogoAna).getByRole('button', { name: 'Confirmar rechazo' }) as HTMLButtonElement;
     expect(botonConfirmar.disabled).toBe(true);
   });
 
@@ -309,9 +309,9 @@ describe('ConciliacionPage · rechazo seguro (COB-02, COB-03 y COB-06)', () => {
     const textarea = within(dialogo).getByPlaceholderText(/La referencia bancaria no coincide/);
     fireEvent.change(textarea, { target: { value: 'Motivo en vuelo' } });
 
-    const botonConfirmar = within(dialogo).getByRole('button', { name: 'Confirmar Rechazo' }) as HTMLButtonElement;
+    const botonConfirmar = within(dialogo).getByRole('button', { name: 'Confirmar rechazo' }) as HTMLButtonElement;
     const botonCancelar = within(dialogo).getByRole('button', { name: 'Cancelar' }) as HTMLButtonElement;
-    const botonCerrar = within(dialogo).getByRole('button', { name: 'Cerrar rechazo de transacción' }) as HTMLButtonElement;
+    const botonCerrar = within(dialogo).getByRole('button', { name: 'Cerrar rechazo de pago' }) as HTMLButtonElement;
 
     fireEvent.click(botonConfirmar);
 
@@ -336,7 +336,7 @@ describe('ConciliacionPage · rechazo seguro (COB-02, COB-03 y COB-06)', () => {
     const dialogo = await abrirRechazoCarlos();
     const textarea = within(dialogo).getByPlaceholderText(/La referencia bancaria no coincide/);
     fireEvent.change(textarea, { target: { value: 'Referencia falsa' } });
-    fireEvent.click(within(dialogo).getByRole('button', { name: 'Confirmar Rechazo' }));
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Confirmar rechazo' }));
 
     await waitFor(() => expect(llamadasPatch()).toHaveLength(1));
 
@@ -350,7 +350,7 @@ describe('ConciliacionPage · rechazo seguro (COB-02, COB-03 y COB-06)', () => {
     expect(screen.getAllByRole('alert')).toHaveLength(1);
 
     // Botón vuelve a estar habilitado y el motivo se conserva
-    const botonConfirmar = within(dialogo).getByRole('button', { name: 'Confirmar Rechazo' }) as HTMLButtonElement;
+    const botonConfirmar = within(dialogo).getByRole('button', { name: 'Confirmar rechazo' }) as HTMLButtonElement;
     expect(botonConfirmar.disabled).toBe(false);
     expect((within(dialogo).getByPlaceholderText(/La referencia bancaria no coincide/) as HTMLTextAreaElement).value).toBe('Referencia falsa');
   });
@@ -360,7 +360,7 @@ describe('ConciliacionPage · rechazo seguro (COB-02, COB-03 y COB-06)', () => {
     const dialogo = await abrirRechazoCarlos();
     const textarea = within(dialogo).getByPlaceholderText(/La referencia bancaria no coincide/);
     fireEvent.change(textarea, { target: { value: 'Motivo para reintentar' } });
-    fireEvent.click(within(dialogo).getByRole('button', { name: 'Confirmar Rechazo' }));
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Confirmar rechazo' }));
 
     await waitFor(() => expect(llamadasPatch()).toHaveLength(1));
 
@@ -370,7 +370,7 @@ describe('ConciliacionPage · rechazo seguro (COB-02, COB-03 y COB-06)', () => {
 
     // Segundo intento exitoso
     fallaPatch = null;
-    fireEvent.click(within(dialogo).getByRole('button', { name: 'Confirmar Rechazo' }));
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Confirmar rechazo' }));
 
     await waitFor(() => expect(llamadasPatch()).toHaveLength(2));
     await waitFor(() => expect(dialogoDeRechazo()).toBeNull());
@@ -383,8 +383,8 @@ describe('ConciliacionPage · rechazo seguro (COB-02, COB-03 y COB-06)', () => {
   it('8 · área táctil y tipos: botones del diálogo tienen type="button", min-h-11 y cerrar tiene min-w-11', async () => {
     const dialogo = await abrirRechazoCarlos();
     const botonCancelar = within(dialogo).getByRole('button', { name: 'Cancelar' });
-    const botonConfirmar = within(dialogo).getByRole('button', { name: 'Confirmar Rechazo' });
-    const botonCerrar = within(dialogo).getByRole('button', { name: 'Cerrar rechazo de transacción' });
+    const botonConfirmar = within(dialogo).getByRole('button', { name: 'Confirmar rechazo' });
+    const botonCerrar = within(dialogo).getByRole('button', { name: 'Cerrar rechazo de pago' });
 
     expect(botonCancelar.getAttribute('type')).toBe('button');
     expect(botonCancelar.className).toContain('min-h-11');

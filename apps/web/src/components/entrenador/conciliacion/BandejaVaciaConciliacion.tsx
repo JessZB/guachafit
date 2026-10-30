@@ -1,16 +1,22 @@
 /**
  * Empty tray state: every reported payment has been processed.
+ *
+ * Usa el átomo `EstadoVacio` con título de nivel 2 y una acción hacia la cartera.
  */
 import { CheckCircle2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { EstadoVacio } from '../../ui/EstadoVacio';
 
 export function BandejaVaciaConciliacion() {
+  const navigate = useNavigate();
+
   return (
-    <div className="p-12 text-center space-y-3 bg-card rounded-3xl border border-border">
-      <CheckCircle2 className="h-12 w-12 text-success mx-auto" />
-      <h3 className="font-bold text-base text-foreground">Bandeja al Día</h3>
-      <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-        No hay transacciones pendientes de revisión. Todos los abonos han sido procesados.
-      </p>
-    </div>
+    <EstadoVacio
+      titulo="No hay pagos por validar"
+      detalle="Cuando un alumno reporte un pago, aparecerá aquí."
+      icono={CheckCircle2}
+      nivelTitulo={2}
+      accion={{ texto: 'Ver quién debe', onAccion: () => navigate('/coach/cartera') }}
+    />
   );
 }

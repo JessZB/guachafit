@@ -25,6 +25,8 @@ export interface EstadoErrorProps {
   mensaje?: ReactNode;
   onReintentar: () => void;
   textoReintentar?: string;
+  /** Nivel del título según la jerarquía de la página (por defecto 3). */
+  nivelTitulo?: 2 | 3;
 }
 
 export function EstadoError({
@@ -32,14 +34,16 @@ export function EstadoError({
   mensaje,
   onReintentar,
   textoReintentar = 'Reintentar',
+  nivelTitulo = 3,
 }: EstadoErrorProps) {
+  const Titulo = nivelTitulo === 2 ? 'h2' : 'h3';
   return (
     <div
       role="alert"
       className="p-5 rounded-3xl bg-card border border-destructive/30 text-center space-y-3"
     >
       <AlertTriangle aria-hidden="true" className="h-7 w-7 text-destructive mx-auto" />
-      <h3 className="text-sm font-bold text-foreground">{titulo}</h3>
+      <Titulo className="text-sm font-bold text-foreground">{titulo}</Titulo>
       {mensaje ? <p className="text-xs text-muted-foreground">{mensaje}</p> : null}
       <BotonTactil onClick={onReintentar}>{textoReintentar}</BotonTactil>
     </div>

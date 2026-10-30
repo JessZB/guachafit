@@ -53,7 +53,7 @@ describe('FilaTransaccion · L2.2 wrap', () => {
   it('método, referencia y estado comparten un contenedor directo con flex-wrap', () => {
     renderFila({ estado: EstadoConciliacion.RECHAZADO });
 
-    const metodo = screen.getByText('pago movil');
+    const metodo = screen.getByText('Pago móvil');
     const contenedor = metodo.parentElement;
 
     expect(contenedor).not.toBeNull();

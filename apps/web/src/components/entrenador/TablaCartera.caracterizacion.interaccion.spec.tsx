@@ -275,12 +275,12 @@ describe('TablaCartera · caracterizacion de interaccion (prompt 85)', () => {
       'revision',
     );
     const imagen = screen.getAllByAltText('Comprobante de Carlos Mendoza');
-    expect(imagen).toHaveLength(1);
+    expect(imagen).toHaveLength(2);
     expect(imagen[0].getAttribute('src')).toBe('https://cdn.example/c-1.jpg');
     cleanup();
 
     montar([fila({ pagoId: 'tx-1', comprobanteUrl: null })], 'revision');
-    expect(screen.getAllByText('Sin captura digital')).toHaveLength(1);
+    expect(screen.getAllByText('Sin captura digital')).toHaveLength(2);
     // Escritorio: celda "Sin referencia" exacta; móvil: combina "método · Sin referencia".
     expect(screen.getAllByText('Sin referencia')).toHaveLength(1);
     expect(screen.getAllByText(/Sin referencia/)).toHaveLength(2);
@@ -289,7 +289,7 @@ describe('TablaCartera · caracterizacion de interaccion (prompt 85)', () => {
   it('C12 · telefono y saldo a favor se muestran en la celda del alumno', () => {
     montar([fila({ saldoAFavorUsd: '10.00' })], 'mora');
     expect(screen.getAllByText('+584121234567')).toHaveLength(2);
-    expect(screen.getAllByText('A favor: 10.00 USD')).toHaveLength(2);
+    expect(screen.getAllByText('A favor: $10,00 USD')).toHaveLength(2);
     cleanup();
 
     montar([fila({ telefonoWhatsapp: null })], 'mora');

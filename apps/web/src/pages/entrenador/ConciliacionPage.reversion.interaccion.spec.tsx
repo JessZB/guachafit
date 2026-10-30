@@ -263,7 +263,7 @@ describe('ConciliacionPage · RF-007: confirmar antes de aprobar (contratos 4-6)
     montarPagina();
     await esperarTarjeta();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ver Comprobante' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Ver comprobante/ }));
     const visor = await screen.findByRole('dialog');
     fireEvent.click(within(visor).getByRole('button', { name: 'Aprobar este pago' }));
 

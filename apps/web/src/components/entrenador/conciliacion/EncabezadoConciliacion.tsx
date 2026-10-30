@@ -17,12 +17,12 @@ export function EncabezadoConciliacion({ total }: EncabezadoConciliacionProps) {
     <div className="p-6 rounded-3xl bg-card border border-border shadow-md space-y-2">
       <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
         <DollarSign className="h-4 w-4" />
-        <span>Pagos y Cobros</span>
+        <span>Cobros</span>
       </div>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-            Bandeja de Pagos por Validar
+            Pagos por validar
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             Aprueba o rechaza los pagos que reportan tus alumnos.

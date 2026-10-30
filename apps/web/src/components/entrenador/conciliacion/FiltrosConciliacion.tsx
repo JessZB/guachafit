@@ -10,7 +10,6 @@ import {
   etiquetaMetodoPago,
   type FiltroMetodoPago,
 } from '../../../lib/conciliacion-filtros';
-import { pluralizar } from '../../../lib/pluralizar';
 import { ChipFiltro } from '../../ui/ChipFiltro';
 
 export interface FiltrosConciliacionProps {
@@ -21,7 +20,6 @@ export interface FiltrosConciliacionProps {
   onCambiarBusqueda: (valor: string) => void;
   visibles: number;
   enPagina: number;
-  total: number;
   hayFiltroActivo: boolean;
   onLimpiar: () => void;
 }
@@ -34,7 +32,6 @@ export function FiltrosConciliacion({
   onCambiarBusqueda,
   visibles,
   enPagina,
-  total,
   hayFiltroActivo,
   onLimpiar,
 }: FiltrosConciliacionProps) {
@@ -51,7 +48,7 @@ export function FiltrosConciliacion({
               activo={filtroMetodo === metodo}
               onClick={() => onCambiarMetodo(metodo)}
             >
-              <span className="capitalize">{etiquetaMetodoPago(metodo)}</span>
+              {etiquetaMetodoPago(metodo)}
             </ChipFiltro>
           ))}
         </div>
@@ -71,9 +68,8 @@ export function FiltrosConciliacion({
       </div>
 
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] text-muted-foreground font-mono">
-          Mostrando {visibles} de {enPagina} en esta página ·{' '}
-          {pluralizar(total, 'transacción en cola', 'transacciones en cola')}
+        <p className="text-[11px] text-muted-foreground">
+          Mostrando {visibles} de {enPagina} en esta página
         </p>
         {hayFiltroActivo && (
           <button

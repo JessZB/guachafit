@@ -49,7 +49,7 @@ export function FilaTransaccion({ tx, demo, onSolicitarReversion }: FilaTransacc
     >
       <div className="space-y-0.5 min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-bold text-foreground capitalize">
+          <span className="font-bold text-foreground">
             {etiquetaMetodoPago(tx.metodoPago)}
           </span>
           {tx.referencia && (

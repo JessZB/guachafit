@@ -30,7 +30,6 @@ function montarFiltros(propsParciales: Partial<FiltrosConciliacionProps> = {}) {
     onCambiarBusqueda,
     visibles: 2,
     enPagina: 2,
-    total: 2,
     hayFiltroActivo: false,
     onLimpiar,
     ...propsParciales,
@@ -49,7 +48,7 @@ describe('FiltrosConciliacion · Contrato A (COB-05, COB-12)', () => {
     expect(botonTodos.getAttribute('aria-pressed')).toBe('true');
     expect(botonTodos.getAttribute('class')).toContain('min-h-11');
 
-    const botonPagoMovil = screen.getByRole('button', { name: /pago m[oó]vil/i });
+    const botonPagoMovil = screen.getByRole('button', { name: 'Pago móvil' });
     expect(botonPagoMovil.getAttribute('aria-pressed')).toBe('false');
     expect(botonPagoMovil.getAttribute('class')).toContain('min-h-11');
 

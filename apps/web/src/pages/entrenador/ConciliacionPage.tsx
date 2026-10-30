@@ -39,7 +39,7 @@ export function ConciliacionPage() {
   const { isDemoMode } = useAuth();
   const { isOnline } = useFrescuraOffline(null);
   const bandeja = useBandejaConciliacion(isDemoMode);
-  // `?q=` llega desde Control de Cobros ("Revisar en bandeja"): es un traspaso de un solo uso.
+  // `?q=` llega desde Control de cobros ("Revisar en bandeja"): es un traspaso de un solo uso.
   // Sirve de búsqueda de partida y se retira de la URL al montar, sin entrada nueva en el historial.
   const [searchParams, setSearchParams] = useSearchParams();
   const filtros = useFiltrosConciliacion(bandeja.transacciones, searchParams.get('q') ?? '');
@@ -118,7 +118,6 @@ export function ConciliacionPage() {
             onCambiarBusqueda={filtros.fijarBusqueda}
             visibles={filtros.visibles.length}
             enPagina={bandeja.transacciones.length}
-            total={bandeja.total}
             hayFiltroActivo={filtros.hayFiltroActivo}
             onLimpiar={filtros.limpiarFiltros}
           />
