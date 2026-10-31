@@ -38,17 +38,20 @@ export function AjustesPage() {
   function abrirModalCrearPlan() {
     triggerHaptic('light');
     planes.limpiarMensajePlan();
+    planes.limpiarErrorGuardado();
     setModalPlan({ abierto: true, plan: null });
   }
 
   function abrirModalEditarPlan(plan: PlanMembresiaDetalleDTO) {
     triggerHaptic('light');
     planes.limpiarMensajePlan();
+    planes.limpiarErrorGuardado();
     setModalPlan({ abierto: true, plan });
   }
 
   function cerrarModalPlan() {
     setModalPlan({ abierto: false });
+    planes.limpiarErrorGuardado();
   }
 
   const contenidoPestana = (pestana: PestanaAjustes) => {
@@ -58,6 +61,9 @@ export function AjustesPage() {
           planes={planes.planes}
           isLoadingPlanes={planes.isLoadingPlanes}
           planesError={planes.planesError}
+          errorToggle={planes.errorToggle}
+          planEnCurso={planes.planEnCurso}
+          onCerrarErrorToggle={planes.limpiarErrorToggle}
           onEditar={abrirModalEditarPlan}
           onToggleActivo={(plan) => void planes.toggleActivoPlan(plan)}
           onCrear={abrirModalCrearPlan}
@@ -126,6 +132,7 @@ export function AjustesPage() {
           plan={modalPlan.plan}
           isSubmitting={planes.isSubmittingPlan}
           successMsg={planes.planSuccessMsg}
+          errorGuardado={planes.errorGuardado}
           onGuardar={(datos, editingId, onCierreExito) =>
             void planes.guardarPlan(datos, editingId, onCierreExito)
           }
