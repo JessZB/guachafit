@@ -1,5 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { CLAVE_PENDIENTES_NAVEGACION } from '../../lib/insignias-pendientes';
 import { useCartera } from '../../components/entrenador/cartera/useCartera';
 import { useRecordatorioCartera } from '../../components/entrenador/cartera/useRecordatorioCartera';
 import { useCobroCartera } from '../../components/entrenador/cartera/useCobroCartera';
@@ -77,7 +79,12 @@ export function CarteraPage() {
     recargar,
   });
 
-  // Cobro directo en efectivo (RN-01)
+  // Cobro directo en efectivo (RN-01). Un cobro real baja la mora: la insignia se invalida con la recarga.
+  const queryClient = useQueryClient();
+  const recargarTrasCobro = () => {
+    recargar();
+    queryClient.invalidateQueries({ queryKey: [CLAVE_PENDIENTES_NAVEGACION] });
+  };
   const {
     cobro,
     enviandoCobro,
@@ -91,7 +98,7 @@ export function CarteraPage() {
     cambiarMoneda,
     cambiarFecha,
     handleRegistrarCobro,
-  } = useCobroCartera({ isDemoMode, setCobradosDemo, recargar });
+  } = useCobroCartera({ isDemoMode, setCobradosDemo, recargar: recargarTrasCobro });
 
   // U3b: el estado de las pestañas vive en la URL (`?pestana=`).
   const pestanaActiva = PESTANAS_CARTERA.find((p) => p.clave === pestana)!;

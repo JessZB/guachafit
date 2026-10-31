@@ -40,8 +40,13 @@ export interface ResultadoAccionesConciliacion {
   cerrarExito: () => void;
 }
 
+/**
+ * `onConciliado` se llama solo tras un éxito confirmado por el servidor (o el cambio local demo),
+ * para que la página invalide lo que la mutación cambia. Es opcional.
+ */
 export function useAccionesConciliacion(
-  marcarResuelta: (txId: string) => void
+  marcarResuelta: (txId: string) => void,
+  onConciliado?: () => void
 ): ResultadoAccionesConciliacion {
   const [rejectingTx, setRejectingTx] = useState<TransaccionPagoDetalleDTO | null>(null);
   const [viewingComprobanteTx, setViewingComprobanteTx] = useState<TransaccionPagoDetalleDTO | null>(null);
@@ -114,6 +119,7 @@ export function useAccionesConciliacion(
     // The server rules: reload the current page (the hook clamps a shrunk total).
     // In demo the resolved id is recorded and the local slice recomputes.
     marcarResuelta(txId);
+    onConciliado?.();
     // The surplus (API data) stays as credit balance for the student.
     mostrarExito(
       mensajeConExcedente('Pago aprobado y descontado de la cuota.', excedenteUsd),
@@ -146,6 +152,7 @@ export function useAccionesConciliacion(
 
     // Same rule as approve: real reload, or the demo slice with the resolved id.
     marcarResuelta(rejectingTx.id);
+    onConciliado?.();
     setRejectingTx(null);
     setMotivoRechazo('');
     mostrarExito('Transacción rechazada con observaciones notificadas al alumno.', false);

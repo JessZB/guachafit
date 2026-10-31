@@ -9,6 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const sesionMock = vi.hoisted(() => ({
   rol: 'alumno' as string,
@@ -21,13 +22,21 @@ vi.mock('../../context/auth-context', () => ({
   }),
 }));
 
+vi.mock('../../lib/api-client', () => ({
+  apiClient: vi.fn(() => new Promise(() => {})),
+}));
+
 import { Sidebar } from './Sidebar';
+
+let queryClient: QueryClient;
 
 function renderSidebar() {
   return render(
-    <MemoryRouter>
-      <Sidebar />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -35,10 +44,18 @@ describe('Sidebar', () => {
   beforeEach(() => {
     sesionMock.rol = 'alumno';
     vi.clearAllMocks();
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+        },
+      },
+    });
   });
 
   afterEach(() => {
     cleanup();
+    queryClient.clear();
   });
 
   it('el aside usa el offset sticky de desktop y coincide con su altura', () => {
@@ -70,7 +87,7 @@ describe('Sidebar', () => {
   it('rol entrenador muestra sus enlaces distintivos', () => {
     sesionMock.rol = 'entrenador';
     renderSidebar();
-    expect(screen.getByRole('link', { name: /Mis Alumnos/ })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Mis alumnos/ })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Plantillas de ejercicios/ })).toBeTruthy();
   });
 

@@ -5,9 +5,10 @@
  * D2: En components/layout/Sidebar.tsx las entradas se llaman "Control de cobros" y "Pagos por validar";
  *     ya no existen "Control de Cobros" ni "Validar Pagos".
  */
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const sesionMock = vi.hoisted(() => ({
   rol: 'entrenador',
@@ -21,18 +22,37 @@ vi.mock('../../context/auth-context', () => ({
   }),
 }));
 
+vi.mock('../../lib/api-client', () => ({
+  apiClient: vi.fn(() => new Promise(() => {})),
+}));
+
 import { Sidebar } from './Sidebar';
+
+let queryClient: QueryClient;
+
+beforeEach(() => {
+  queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+});
 
 afterEach(() => {
   cleanup();
+  queryClient.clear();
 });
 
 describe('Contrato D2 · Sidebar (UX-10)', () => {
   it('D2 · Sidebar tiene enlaces "Control de cobros" y "Pagos por validar" sin textos viejos', () => {
     render(
-      <MemoryRouter>
-        <Sidebar />
-      </MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <Sidebar />
+        </MemoryRouter>
+      </QueryClientProvider>
     );
 
     // Enlaces esperados

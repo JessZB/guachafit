@@ -15,6 +15,7 @@ import {
   pestanasAjustes,
   type PestanaAjustes,
 } from '../../lib/ajustes';
+import { DESTINOS_ENTRENADOR } from '../../lib/etiquetas-dominio';
 import { ConversorTasas } from '../../components/entrenador/ajustes-entrenador/ConversorTasas';
 import { FormularioTasa } from '../../components/entrenador/ajustes-entrenador/FormularioTasa';
 import { ModalPlanComercial } from '../../components/entrenador/ajustes-entrenador/ModalPlanComercial';
@@ -95,12 +96,12 @@ export function AjustesPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-24 lg:pb-12 animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-200">
       {/* Encabezado */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground">
-            Ajustes
+            {DESTINOS_ENTRENADOR.ajustes.etiqueta}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Tu perfil, tu acceso, tus notificaciones, tus planes de membresía y las tasas de cambio.

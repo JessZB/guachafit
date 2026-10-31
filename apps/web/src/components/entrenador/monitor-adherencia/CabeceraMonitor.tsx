@@ -16,6 +16,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { Activity, RefreshCw, Search, X } from 'lucide-react';
 import type { ResumenMonitorAdherenciaDTO } from '@guachafit/shared';
+import { DESTINOS_ENTRENADOR } from '../../../lib/etiquetas-dominio';
 import { triggerHaptic } from '../../../lib/haptics';
 import type { TonoSemaforo } from '../../../lib/adherencia';
 import { CLASES_TONO } from '../../../lib/monitor-adherencia-presentacion';
@@ -80,7 +81,7 @@ export function CabeceraMonitor({
             <span>Cumplimiento semanal</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground mt-1">
-            Seguimiento de Alumnos
+            {DESTINOS_ENTRENADOR.seguimiento.etiqueta}
           </h1>
           <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
             Cumplimiento de la semana por alumno, ordenado por nivel de riesgo.

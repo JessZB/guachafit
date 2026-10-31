@@ -7,6 +7,7 @@
  */
 import { DollarSign } from 'lucide-react';
 import { pluralizar } from '../../../lib/pluralizar';
+import { DESTINOS_ENTRENADOR } from '../../../lib/etiquetas-dominio';
 
 export interface EncabezadoConciliacionProps {
   total: number | null;
@@ -22,7 +23,7 @@ export function EncabezadoConciliacion({ total }: EncabezadoConciliacionProps) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-            Pagos por validar
+            {DESTINOS_ENTRENADOR.pagosPorValidar.etiqueta}
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             Aprueba o rechaza los pagos que reportan tus alumnos.

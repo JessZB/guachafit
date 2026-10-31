@@ -6,6 +6,7 @@
  */
 import { Link } from 'react-router-dom';
 import { Receipt, Wallet } from 'lucide-react';
+import { DESTINOS_ENTRENADOR } from '../../../lib/etiquetas-dominio';
 
 export function CabeceraCartera() {
   return (
@@ -17,7 +18,7 @@ export function CabeceraCartera() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-            Control de cobros
+            {DESTINOS_ENTRENADOR.controlCobros.etiqueta}
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             Quién debe, quién está por vencer y a quién ya le recordaste.

@@ -6,6 +6,7 @@
  * `CLAVES_PESTANAS_ANTROPOMETRIA` e `ID_BASE_PESTANAS_ANTROPOMETRIA` para enlazar sus paneles.
  */
 import { Camera, ClipboardCheck, Columns2 } from "lucide-react";
+import { DESTINOS_ENTRENADOR } from "../../../lib/etiquetas-dominio";
 import { pluralizar } from "../../../lib/pluralizar";
 import { useTabsAccesibles } from "../../../lib/use-tabs-accesibles";
 import { BarraTabsSegmentada, type ItemTab } from "../../ui/BarraTabsSegmentada";
@@ -63,7 +64,7 @@ export function EncabezadoAntropometria({
             <span>Medidas y Fotos</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground mt-1">
-            Evaluaciones Físicas
+            {DESTINOS_ENTRENADOR.evaluaciones.etiqueta}
           </h1>
           <p className="text-xs text-muted-foreground">
             Revisa las medidas y fotos de progreso que subieron tus alumnos.

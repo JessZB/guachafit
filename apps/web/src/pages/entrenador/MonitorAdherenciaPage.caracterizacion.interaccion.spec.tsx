@@ -312,7 +312,7 @@ afterEach(() => {
 describe('MonitorAdherenciaPage · caracterización: cabecera, chips y búsqueda', () => {
   it('C1 · renderiza el título y los 5 chips con los contadores del resumen del servidor', async () => {
     montar();
-    expect(await screen.findByRole('heading', { name: 'Seguimiento de Alumnos' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Seguimiento' })).toBeTruthy();
     expect(screen.getByText('Cumplimiento semanal')).toBeTruthy();
     expect(await screen.findByRole('button', { name: 'Todos 5' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'En riesgo 1' })).toBeTruthy();
@@ -408,7 +408,7 @@ describe('MonitorAdherenciaPage · caracterización: carga, error, vacíos y pag
   it('C7 · mientras carga no muestra ni lista ni error ni vacíos', async () => {
     retenerMonitor = true;
     montar();
-    expect(await screen.findByRole('heading', { name: 'Seguimiento de Alumnos' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Seguimiento' })).toBeTruthy();
     expect(await screen.findByText('Cargando monitor de adherencia…')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Rosa Riesgo' })).toBeNull();
     expect(screen.queryByText('No se pudo cargar el monitor')).toBeNull();
@@ -623,7 +623,7 @@ describe('MonitorAdherenciaPage · caracterización: modo demo', () => {
   it('C23 · en demo no consulta la API y usa el roster local con su resumen', async () => {
     sesionMock.isDemoMode = true;
     montar();
-    expect(await screen.findByRole('heading', { name: 'Seguimiento de Alumnos' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Seguimiento' })).toBeTruthy();
     expect(await screen.findByRole('heading', { name: 'Daniela Ríos Peña' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Todos 15' })).toBeTruthy();
     expect(

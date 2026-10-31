@@ -174,7 +174,7 @@ describe("AntropometriaPage · caracterización: cabecera, cola y estados", () =
   it("C1 · renderiza el título, el subtítulo y las dos pestañas con el conteo del servidor", async () => {
     montar();
     expect(
-      await screen.findByRole("heading", { name: "Evaluaciones Físicas" }),
+      await screen.findByRole("heading", { name: "Evaluaciones" }),
     ).toBeTruthy();
     expect(
       screen.getByText(

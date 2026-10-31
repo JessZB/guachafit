@@ -139,3 +139,19 @@ export function etiquetaRol(rol: string | null | undefined): string {
       return '';
   }
 }
+
+/**
+ * Fuente única de los nombres de destino del entrenador (UX-16, D5): h1, Sidebar, BottomNav y
+ * tarjetas del menú. Cambiar un nombre aquí lo cambia en todas esas superficies.
+ */
+export const DESTINOS_ENTRENADOR = {
+  panel: { ruta: '/coach/dashboard', etiqueta: 'Panel' },
+  seguimiento: { ruta: '/coach/monitor-adherencia', etiqueta: 'Seguimiento' },
+  evaluaciones: { ruta: '/coach/antropometria', etiqueta: 'Evaluaciones' },
+  controlCobros: { ruta: '/coach/cartera', etiqueta: 'Control de cobros' },
+  pagosPorValidar: { ruta: '/coach/conciliacion', etiqueta: 'Pagos por validar' },
+  alumnos: { ruta: '/coach/alumnos', etiqueta: 'Mis alumnos' },
+  plantillas: { ruta: '/coach/plantillas', etiqueta: 'Plantillas de ejercicios' },
+  ajustes: { ruta: '/coach/ajustes', etiqueta: 'Ajustes' },
+  menu: { ruta: '/coach/menu', etiqueta: 'Menú' },
+} as const;

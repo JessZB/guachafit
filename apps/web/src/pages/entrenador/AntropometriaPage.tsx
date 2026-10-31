@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api-client";
 import type { ControlAntropometricoDetalleDTO } from "@guachafit/shared";
 import { etiquetaAlumnoPendiente } from "../../lib/antropometria-filtros";
+import { CLAVE_PENDIENTES_NAVEGACION } from "../../lib/insignias-pendientes";
 import {
   construirCuerpoConciliacionAntropometria,
   mensajeExitoConciliacionAntropometria,
@@ -28,6 +30,7 @@ import { AlertCircle, CheckCircle2, X } from "lucide-react";
 
 export function AntropometriaPage() {
   const cola = useColaAntropometria();
+  const queryClient = useQueryClient();
   const {
     isDemoMode,
     pagina,
@@ -144,7 +147,11 @@ export function AntropometriaPage() {
     // WU25b: el servidor manda; se recarga la página actual (el hook ajusta si el total encogió).
     // En demo se registra el id resuelto y el slice local se recalcula.
     if (isDemoMode) registrarResueltoDemo(id);
-    else recargar();
+    else {
+      recargar();
+      // Las evaluaciones pendientes de la insignia de navegación bajan tras conciliar.
+      queryClient.invalidateQueries({ queryKey: [CLAVE_PENDIENTES_NAVEGACION] });
+    }
     if (accion === "rechazar") cerrarModalRechazo();
     setActionSuccess(mensajeExitoConciliacionAntropometria(accion));
   };

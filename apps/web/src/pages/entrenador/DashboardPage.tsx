@@ -6,7 +6,7 @@ import { FranjaAtencionDashboard } from '../../components/entrenador/dashboard/F
 import { KpisMacroDashboard } from '../../components/entrenador/dashboard/KpisMacroDashboard';
 import { ListasAlertaTemprana } from '../../components/entrenador/dashboard/ListasAlertaTemprana';
 import { useDashboardComando } from '../../components/entrenador/dashboard/use-dashboard-comando';
-import { LayoutDashboard } from 'lucide-react';
+import { DESTINOS_ENTRENADOR } from '../../lib/etiquetas-dominio';
 
 export function DashboardPage() {
   const { dashboard, isLoading, error, recargar } = useDashboardComando();
@@ -16,13 +16,9 @@ export function DashboardPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="p-4 sm:p-6 rounded-3xl bg-card border border-border shadow-md space-y-2">
-        <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
-          <LayoutDashboard className="h-4 w-4" />
-          <span>Panel administrativo</span>
-        </div>
         <div className="min-w-0">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-            Resumen del Negocio
+            {DESTINOS_ENTRENADOR.panel.etiqueta}
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             Cupos, cobros y entrenamiento de tus alumnos, en tiempo real.

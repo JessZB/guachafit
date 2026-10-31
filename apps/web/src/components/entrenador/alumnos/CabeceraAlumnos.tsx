@@ -11,6 +11,7 @@
  */
 
 import { Share2, UserPlus } from 'lucide-react';
+import { DESTINOS_ENTRENADOR } from '../../../lib/etiquetas-dominio';
 
 export interface CabeceraAlumnosProps {
   onInvitar: () => void;
@@ -20,7 +21,7 @@ export interface CabeceraAlumnosProps {
 export function CabeceraAlumnos({ onInvitar, onInscribir }: CabeceraAlumnosProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Mis alumnos</h1>
+      <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">{DESTINOS_ENTRENADOR.alumnos.etiqueta}</h1>
 
       <div className="flex items-center gap-2">
         <button

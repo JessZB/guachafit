@@ -14,7 +14,9 @@
  */
 import React from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/auth-context';
+import { CLAVE_PENDIENTES_NAVEGACION } from '../../lib/insignias-pendientes';
 import { Paginacion } from '../../components/common/Paginacion';
 import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import { AvisoErrorRecarga } from '../../components/common/AvisoErrorRecarga';
@@ -56,7 +58,11 @@ export function ConciliacionPage() {
     // Solo al montar: `q` es la búsqueda de partida, no un estado sincronizado con la URL.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const acciones = useAccionesConciliacion(bandeja.marcarResuelta);
+  const queryClient = useQueryClient();
+  // Tras aprobar o rechazar, la insignia de Pagos por validar baja; en demo no hay consulta real.
+  const acciones = useAccionesConciliacion(bandeja.marcarResuelta, () => {
+    if (!isDemoMode) queryClient.invalidateQueries({ queryKey: [CLAVE_PENDIENTES_NAVEGACION] });
+  });
   const { formatMonto } = useFormatoNumero();
   const refLista = React.useRef<HTMLDivElement>(null);
 

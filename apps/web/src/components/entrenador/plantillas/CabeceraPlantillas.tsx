@@ -11,6 +11,7 @@
  */
 import { ClipboardList, Plus } from 'lucide-react';
 import { BotonTactil } from '../../ui/BotonTactil';
+import { DESTINOS_ENTRENADOR } from '../../../lib/etiquetas-dominio';
 
 export interface CabeceraPlantillasProps {
   onNueva: () => void;
@@ -22,7 +23,7 @@ export function CabeceraPlantillas({ onNueva }: CabeceraPlantillasProps) {
       <div>
         <div className="flex items-center gap-2">
           <ClipboardList className="h-5 w-5 text-primary" />
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Plantillas de ejercicios</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">{DESTINOS_ENTRENADOR.plantillas.etiqueta}</h1>
         </div>
         <p className="text-xs text-muted-foreground mt-1">
           Diseña rutinas reutilizables y asígnalas a tus alumnos en segundos. Cada asignación es una
