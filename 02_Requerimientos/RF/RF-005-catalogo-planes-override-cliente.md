@@ -121,6 +121,21 @@ Then el monto total a pagar debe ser exactamente de $40.00 USD
 ### Sin emisión manual (2026-10-10, `68457a6`)
 - **Decisión del dueño:** se retira `POST /finanzas/cuotas/emitir`. Las cuotas solo se emiten desde la suscripción del alumno, así que la regla de solape y la zona horaria se aplican siempre. RN-03 (override > catálogo) y el becado siguen cubiertos por la emisión por suscripción.
 
+### Formulario y tarjetas de planes (`e7851f3`, 2026-10-31, lote UX-18, decisión D7)
+- **Decisión del dueño (D7):** el precio de un plan es el **total de su duración**, que es lo que ya hace el API: una cuota por ciclo de `duracionMeses` por el precio completo. La tarjeta muestra "$90,00 cada 3 meses" o "al mes" en vez de "USD / mes". El formulario de creación arranca vacío, sin el precio 40.00 ni los beneficios precargados.
+- **Formulario:**
+  - campos con etiqueta asociada;
+  - precio con teclado decimal y validación antes de enviar: número mayor que 0, hasta 7 dígitos enteros y 2 decimales, con coma o punto;
+  - al menos un beneficio;
+  - errores en `role="alert"`, sin `alert()`;
+  - aviso de cambios sin guardar;
+  - quitar un beneficio con nombre accesible;
+  - al editar, el precio se precarga con coma.
+- **Sin doble envío:** una guarda síncrona y el formulario bloqueado mientras se ve el éxito impiden crear un plan duplicado. Antes del lote ya ocurría.
+- **Desactivar un plan** pide confirmación: "No podrás asignarlo a alumnos nuevos. Quienes ya lo tienen siguen con sus cuotas." (`suscripciones.ts:62`; la emisión no mira `plan.activo`). Mientras un plan se activa o desactiva, los botones de todos quedan bloqueados.
+- **Errores separados:** el de carga (`EstadoError` con Reintentar), el de guardado (en el modal, se limpia al abrir) y el de activación (aviso cerrable, se limpia al recargar). El primer arranque muestra `EstadoCarga`.
+- **Evidencia:** web **2857 tests en 314 archivos**; typecheck y build en verde. Revisión 4R (toca dinero) sin BLOCKER. Se corrigieron sus WARNING y sugerencias de datos: doble envío, falsa alarma tras guardar, errores pegados, clic perdido en otro plan, límite de dígitos y precarga con coma.
+
 ### Pendiente
 - **Precio residual tras reconciliar:** si "Quitar plan" se aplicó en el servidor pero su respuesta se perdió, el campo "Precio acordado (USD)" conserva el valor y el siguiente guardado pide "Elige un plan…" hasta vaciarlo. En modo demo, el éxito del guardado sigue con el texto fijo "Expediente, plan y tarifa…".
 - Editor de `beneficiosPersonalizados` en la UI (la API los persiste y los devuelve, pero la ficha no los edita) y selección de "fuente de cambio particular" por cliente (hoy la tasa especial es un valor fijo).

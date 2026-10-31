@@ -165,6 +165,12 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - Cambia la moneda a Bs.: el monto **se vacía**. Escribe `1825,50` (con coma): aparece "Se registrarán Bs. 1.825,50 (≈ $…)".
   - Escribe `50.123` y pulsa "Registrar cobro": no se envía y aparece "Escribe el monto con hasta 2 decimales…".
   - En el móvil horizontal, el modal se desplaza hasta los botones.
+- [ ] **Planes comerciales (desde 2026-10-31, UX-18):** en Ajustes > Planes del entrenador.
+  - "Nuevo plan": el formulario arranca vacío. Sin beneficios o con un precio vacío, 0, `abc` o de 8 cifras, no guarda y muestra el error en el formulario (no hay ventana emergente).
+  - Escribe `90,50` como precio y guarda: la tarjeta muestra `$90,50` con "al mes" (1 mes) o "cada N meses".
+  - Pulsa dos veces seguidas "Crear plan": se crea un solo plan.
+  - Escribe algo y pulsa Escape: pregunta "¿Salir sin guardar?". Justo después de guardar, Escape cierra sin preguntar.
+  - "Desactivar" pide confirmación y explica que los alumnos actuales siguen con sus cuotas.
 - [ ] **Ajustes en una sola pantalla (desde 2026-10-31, UX-17):** en Ajustes del entrenador y del alumno, a 360px.
   - Las pestañas caben sin desplazamiento lateral: Perfil, Acceso, Avisos, Planes y Tasa (entrenador); Perfil, Acceso, Avisos y Zona horaria (alumno).
   - `/coach/ajustes?tab=tasas` abre Tasa. Al volver a Perfil, la URL queda sin `?tab=`.

@@ -107,7 +107,10 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
   orca orchestration worker-start --spec "…" --worktree current --terminal <handle> --json
   ```
   El handle sale de `orca orchestration worker-list --json` (`agentTerminalHandle`).
-- El siguiente lote es **UX-18** (Planes comerciales; CFG-06 a 13). **Depende de la decisión D7** (sección 4 de la auditoría): ¿el precio es por mes o por toda la duración? ¿Se quitan el precio `40.00` y los beneficios precargados? Pregúntamela antes de escribir los tests. Los seguimientos de cada lote están en la sección 3 de la auditoría.
+- **UX-18 cerrado (2026-10-31, `e7851f3`):** planes comerciales.
+  - D7: el precio es el total de la duración y el formulario arranca vacío.
+  - Web **2857 tests en 314 archivos**.
+- El siguiente lote es **UX-19** (Tasa de cambio sin jerga y accesible; CFG-14 a 19). No tiene decisiones pendientes. Los seguimientos de cada lote están en la sección 3 de la auditoría.
 - **Lecciones de UX-14:**
   - Compara el número de archivos de cada suite completa con el de la fase roja: una pasada perdió 6.
   - Copia los textos de la UI del código, no de un reporte.
