@@ -182,10 +182,10 @@ describe("AntropometriaPage · caracterización: cabecera, cola y estados", () =
       ),
     ).toBeTruthy();
     expect(
-      await screen.findByRole("button", { name: "Por revisar (2)" }),
+      await screen.findByRole("tab", { name: "Por revisar: 2 pendientes" }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Comparador Antes / Después" }),
+      screen.getByRole("tab", { name: "Comparar" }),
     ).toBeTruthy();
   });
 
@@ -208,7 +208,7 @@ describe("AntropometriaPage · caracterización: cabecera, cola y estados", () =
     montar();
     expect(
       await screen.findByRole("heading", {
-        name: "Sin Evaluaciones Pendientes",
+        name: "Sin evaluaciones pendientes",
       }),
     ).toBeTruthy();
     expect(
@@ -278,7 +278,7 @@ describe("AntropometriaPage · caracterización: cabecera, cola y estados", () =
     montar();
     await esperarCola();
     fireEvent.click(
-      screen.getByRole("button", { name: "Comparador Antes / Después" }),
+      screen.getByRole("tab", { name: "Comparar" }),
     );
     expect(
       await screen.findByRole("heading", {

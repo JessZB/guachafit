@@ -7,16 +7,24 @@ import {
   mensajeExitoConciliacionAntropometria,
   validarMotivoRechazoAntropometria,
 } from "../../lib/antropometria-conciliacion";
+import { useFrescuraOffline } from "../../lib/use-frescura-offline";
+import { useTabsAccesibles } from "../../lib/use-tabs-accesibles";
 import { VisorFoto } from "../../components/common/VisorFoto";
+import { AvisoDatosOffline } from "../../components/common/AvisoDatosOffline";
+import { AvisoErrorRecarga } from "../../components/common/AvisoErrorRecarga";
+import { EstadoCarga } from "../../components/ui/EstadoCarga";
+import { EstadoError } from "../../components/ui/EstadoError";
 import { ComparadorAntropometrico } from "../../components/entrenador/ComparadorAntropometrico";
 import { ColaPendientesAntropometria } from "../../components/entrenador/antropometria/ColaPendientesAntropometria";
 import {
+  CLAVES_PESTANAS_ANTROPOMETRIA,
   EncabezadoAntropometria,
+  ID_BASE_PESTANAS_ANTROPOMETRIA,
   type PestanaAntropometria,
 } from "../../components/entrenador/antropometria/EncabezadoAntropometria";
 import { ModalRechazoAntropometria } from "../../components/entrenador/antropometria/ModalRechazoAntropometria";
 import { useColaAntropometria } from "../../components/entrenador/antropometria/use-cola-antropometria";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, X } from "lucide-react";
 
 export function AntropometriaPage() {
   const cola = useColaAntropometria();
@@ -30,6 +38,7 @@ export function AntropometriaPage() {
     total,
     cargando,
     isLoading,
+    hayDatos,
     error,
     recargar,
     busqueda,
@@ -39,12 +48,25 @@ export function AntropometriaPage() {
     registrarResueltoDemo,
   } = cola;
 
+  // Sin conexión y sin datos guardados no hay nada que cargar ni que reintentar (patrón del Monitor).
+  const { isOnline } = useFrescuraOffline(null);
+  const sinConexionSinDatos = !isOnline && !hayDatos;
+  // Sin datos previos, el fallo es un bloque con reintento; con datos y en línea, un aviso de recarga.
+  const errorSinDatos = !isLoading && !hayDatos ? error : null;
+  const errorConDatos = hayDatos && isOnline ? error : null;
+
   const [activeTab, setActiveTab] =
     useState<PestanaAntropometria>("pendientes");
+  const { propsPanel } = useTabsAccesibles({
+    claves: CLAVES_PESTANAS_ANTROPOMETRIA,
+    activa: activeTab,
+    onActivar: setActiveTab,
+    idBase: ID_BASE_PESTANAS_ANTROPOMETRIA,
+  });
   // D5: fallo de conciliación visible; la tarjeta no desaparece si el server no confirmó.
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Comparator State
+  // Éxito de conciliación: se anuncia con role="status" y lo cierra el usuario.
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
   // RF-003 RN-04 (WU RF-003b): auditoría de fotos con visor accesible y rechazo con motivo libre.
@@ -67,6 +89,7 @@ export function AntropometriaPage() {
 
   const abrirModalRechazo = (ctrl: ControlAntropometricoDetalleDTO) => {
     setActionError(null);
+    setActionSuccess(null);
     setErrorMotivo(null);
     setMotivoRechazo("");
     setControlARechazar(ctrl);
@@ -84,6 +107,7 @@ export function AntropometriaPage() {
     motivo?: string,
   ) => {
     setActionError(null);
+    setActionSuccess(null);
 
     const cuerpo = construirCuerpoConciliacionAntropometria(accion, motivo);
 
@@ -123,7 +147,6 @@ export function AntropometriaPage() {
     else recargar();
     if (accion === "rechazar") cerrarModalRechazo();
     setActionSuccess(mensajeExitoConciliacionAntropometria(accion));
-    setTimeout(() => setActionSuccess(null), 3000);
   };
 
   return (
@@ -136,9 +159,20 @@ export function AntropometriaPage() {
       />
 
       {actionSuccess && (
-        <div className="p-4 rounded-2xl bg-success/15 border border-success/30 text-success text-xs font-bold flex items-center gap-2">
-          <CheckCircle2 className="h-4 w-4 shrink-0" />
-          <span>{actionSuccess}</span>
+        <div
+          role="status"
+          className="p-4 rounded-2xl bg-success/15 border border-success/30 text-success text-xs font-bold flex items-center gap-2"
+        >
+          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="flex-1 min-w-0">{actionSuccess}</span>
+          <button
+            type="button"
+            aria-label="Cerrar aviso"
+            onClick={() => setActionSuccess(null)}
+            className="min-h-11 min-w-11 -my-2 -mr-2 inline-flex items-center justify-center rounded-xl hover:bg-success/15 cursor-pointer shrink-0"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
         </div>
       )}
 
@@ -152,46 +186,76 @@ export function AntropometriaPage() {
         </div>
       )}
 
-      {!isLoading && error ? (
-        <div className="p-8 rounded-3xl bg-card border border-destructive/30 text-center space-y-3">
-          <AlertCircle className="h-8 w-8 text-destructive mx-auto" />
-          <p className="text-xs text-muted-foreground">{error}</p>
-          <button
-            type="button"
-            onClick={() => recargar()}
-            className="py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
-          >
-            Reintentar
-          </button>
-        </div>
-      ) : activeTab === "pendientes" ? (
-        /* Review Queue */
-        <ColaPendientesAntropometria
-          pagina={pagina}
-          tamano={tamano}
-          total={total}
-          cargando={cargando}
-          busqueda={busqueda}
-          visibles={visibles}
-          totalEnPagina={pendientes.length}
-          fotosConError={fotosConError}
-          onCambiarPagina={setPagina}
-          onCambiarTamano={setTamano}
-          onCambiarBusqueda={setBusqueda}
-          onLimpiarBusqueda={limpiarBusqueda}
-          onFotoError={(fotoId) =>
-            setFotosConError((prev) =>
-              prev.includes(fotoId) ? prev : [...prev, fotoId],
-            )
-          }
-          onVerFoto={(foto, fecha) => setFotoVisor({ foto, fecha })}
-          onRechazar={abrirModalRechazo}
-          onAprobar={(id) => handleConciliar(id, "aprobar")}
-        />
-      ) : (
-        /* RF-004: comparador real A/B contra el endpoint (demo conservada vía fixture local). */
-        <ComparadorAntropometrico />
-      )}
+      {/* Panel "Por revisar": existe siempre (aria-controls válido); solo pinta su contenido activo. */}
+      <div
+        {...propsPanel("pendientes")}
+        hidden={activeTab !== "pendientes"}
+        className="space-y-4"
+      >
+        {activeTab === "pendientes" &&
+          (sinConexionSinDatos ? (
+            <AvisoDatosOffline variante="sin-datos" />
+          ) : (
+            <>
+              {/* Sin conexión con datos guardados: aviso de frescura encima de la cola */}
+              {!isOnline && <AvisoDatosOffline />}
+
+              {/* Recarga fallida con la cola visible: se conserva y se ofrece reintentar */}
+              {errorConDatos && (
+                <AvisoErrorRecarga
+                  mensaje={errorConDatos}
+                  onReintentar={recargar}
+                />
+              )}
+
+              {/* Sin datos previos: el error vive solo en este panel, el comparador sigue disponible */}
+              {errorSinDatos && (
+                <EstadoError
+                  titulo="No pudimos cargar las evaluaciones"
+                  mensaje={errorSinDatos}
+                  onReintentar={recargar}
+                  nivelTitulo={2}
+                />
+              )}
+
+              {/* Primera carga: estado de carga; nunca el vacío (sería un falso "sin pendientes") */}
+              {isLoading && <EstadoCarga texto="Cargando evaluaciones…" />}
+
+              {!isLoading && !errorSinDatos && (
+                <ColaPendientesAntropometria
+                  pagina={pagina}
+                  tamano={tamano}
+                  total={total}
+                  cargando={cargando}
+                  busqueda={busqueda}
+                  visibles={visibles}
+                  totalEnPagina={pendientes.length}
+                  fotosConError={fotosConError}
+                  onCambiarPagina={setPagina}
+                  onCambiarTamano={setTamano}
+                  onCambiarBusqueda={setBusqueda}
+                  onLimpiarBusqueda={limpiarBusqueda}
+                  onFotoError={(fotoId) =>
+                    setFotosConError((prev) =>
+                      prev.includes(fotoId) ? prev : [...prev, fotoId],
+                    )
+                  }
+                  onVerFoto={(foto, fecha) => setFotoVisor({ foto, fecha })}
+                  onRechazar={abrirModalRechazo}
+                  onAprobar={(id) => handleConciliar(id, "aprobar")}
+                />
+              )}
+            </>
+          ))}
+      </div>
+
+      {/* Panel "Comparar" (RF-004): comparador real A/B contra el endpoint (demo vía fixture local). */}
+      <div
+        {...propsPanel("comparador")}
+        hidden={activeTab !== "comparador"}
+      >
+        {activeTab === "comparador" && <ComparadorAntropometrico />}
+      </div>
 
       {/* RN-04 (WU RF-003b): rechazo con motivo libre (antes: textos fijos prefabricados). */}
       {controlARechazar && (

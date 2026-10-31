@@ -91,6 +91,8 @@ export function useColaAntropometria() {
   // Solo la PRIMERA carga muestra el estado de carga; el cambio de página conserva la lista.
   const isLoading = cargando && !respuesta;
   const error = errorConsulta?.message ?? null;
+  // Hay una página servida (red o caché previa): un fallo se muestra como recarga, no como bloque vacío.
+  const hayDatos = respuesta !== undefined;
 
   // WU25b: cambiar el tamaño de página (o entrar/salir del modo demo) vuelve a la página 1.
   useEffect(() => {
@@ -120,6 +122,7 @@ export function useColaAntropometria() {
     total,
     cargando,
     isLoading,
+    hayDatos,
     error,
     recargar,
     busqueda,

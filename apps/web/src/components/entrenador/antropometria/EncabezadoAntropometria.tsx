@@ -1,13 +1,24 @@
 /**
- * Cabecera de `AntropometriaPage` con las pestanas de la vista.
+ * Cabecera de `AntropometriaPage` con las pestañas de la vista.
  *
- * Recorte verbatim (solo props): los tabs conservan sus clases `py-1.5` a proposito
- * (R5: los specs consultan por rol y nombre). Pasar a `ChipFiltro` (44px, §6.8) queda
- * como SUGGESTION para el cierre.
+ * Las pestañas usan `BarraTabsSegmentada` (SEG-20): APG con flechas, Home/End, roving tabindex y
+ * área táctil de 44px. Antes eran dos botones sueltos sin roles ni teclado. La página comparte
+ * `CLAVES_PESTANAS_ANTROPOMETRIA` e `ID_BASE_PESTANAS_ANTROPOMETRIA` para enlazar sus paneles.
  */
-import { Camera } from "lucide-react";
+import { Camera, ClipboardCheck, Columns2 } from "lucide-react";
+import { pluralizar } from "../../../lib/pluralizar";
+import { useTabsAccesibles } from "../../../lib/use-tabs-accesibles";
+import { BarraTabsSegmentada, type ItemTab } from "../../ui/BarraTabsSegmentada";
 
 export type PestanaAntropometria = "pendientes" | "comparador";
+
+export const CLAVES_PESTANAS_ANTROPOMETRIA: readonly PestanaAntropometria[] = [
+  "pendientes",
+  "comparador",
+];
+
+/** Base de los ids de tab/panel: la página la usa para enlazar `aria-labelledby`. */
+export const ID_BASE_PESTANAS_ANTROPOMETRIA = "antropometria";
 
 interface EncabezadoAntropometriaProps {
   pestanaActiva: PestanaAntropometria;
@@ -20,6 +31,29 @@ export function EncabezadoAntropometria({
   totalPendientes,
   onCambiarPestana,
 }: EncabezadoAntropometriaProps) {
+  const { propsTablist, propsTab } = useTabsAccesibles({
+    claves: CLAVES_PESTANAS_ANTROPOMETRIA,
+    activa: pestanaActiva,
+    onActivar: onCambiarPestana,
+    idBase: ID_BASE_PESTANAS_ANTROPOMETRIA,
+  });
+
+  const nombrePendientes = `Por revisar: ${pluralizar(totalPendientes, "pendiente", "pendientes")}`;
+  const items: ItemTab<PestanaAntropometria>[] = [
+    {
+      clave: "pendientes",
+      etiqueta: "Por revisar",
+      icono: ClipboardCheck,
+      ariaLabel: nombrePendientes,
+      indicador: {
+        texto: String(totalPendientes),
+        ariaLabel: nombrePendientes,
+        variante: "contador",
+      },
+    },
+    { clave: "comparador", etiqueta: "Comparar", icono: Columns2 },
+  ];
+
   return (
     <div className="p-6 rounded-3xl bg-card border border-border shadow-md space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -36,27 +70,14 @@ export function EncabezadoAntropometria({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-secondary/60 p-1 rounded-2xl border border-border">
-          <button
-            onClick={() => onCambiarPestana("pendientes")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-              pestanaActiva === "pendientes"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Por revisar ({totalPendientes})
-          </button>
-          <button
-            onClick={() => onCambiarPestana("comparador")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-              pestanaActiva === "comparador"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Comparador Antes / Después
-          </button>
+        <div className="w-full sm:w-80">
+          <BarraTabsSegmentada
+            items={items}
+            activa={pestanaActiva}
+            propsTablist={propsTablist}
+            propsTab={propsTab}
+            ariaLabel="Secciones de evaluaciones"
+          />
         </div>
       </div>
     </div>

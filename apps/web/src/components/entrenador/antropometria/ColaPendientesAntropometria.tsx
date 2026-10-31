@@ -8,7 +8,8 @@
 import type { ControlAntropometricoDetalleDTO } from "@guachafit/shared";
 import { pluralizar } from "../../../lib/pluralizar";
 import { Paginacion } from "../../common/Paginacion";
-import { RotateCcw, Search, SearchX, CheckCircle2 } from "lucide-react";
+import { Search, CheckCircle2 } from "lucide-react";
+import { EstadoVacio } from "../../ui/EstadoVacio";
 import { TarjetaControlPendiente } from "./TarjetaControlPendiente";
 
 interface ColaPendientesAntropometriaProps {
@@ -75,9 +76,9 @@ export function ColaPendientesAntropometria({
               type="search"
               value={busqueda}
               onChange={(e) => onCambiarBusqueda(e.target.value)}
-              placeholder="Buscar por alumno..."
+              placeholder="Buscar en esta página…"
               aria-label="Buscar evaluación pendiente por alumno"
-              className="w-full pl-9 pr-3 py-2 rounded-xl bg-background border border-border text-xs font-semibold text-foreground focus:outline-hidden focus:border-primary transition-colors"
+              className="w-full min-h-11 pl-9 pr-3 py-2.5 rounded-xl bg-background border border-border text-base sm:text-xs font-semibold text-foreground focus:outline-hidden focus:border-primary transition-colors"
             />
           </div>
           <p className="text-[11px] text-muted-foreground font-mono">
@@ -92,31 +93,18 @@ export function ColaPendientesAntropometria({
       )}
 
       {total === 0 ? (
-        <div className="p-12 text-center space-y-3 bg-card rounded-3xl border border-border">
-          <CheckCircle2 className="h-12 w-12 text-success mx-auto" />
-          <h3 className="font-bold text-base text-foreground">
-            Sin Evaluaciones Pendientes
-          </h3>
-          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-            Todos los check-ins antropométricos remotos han sido validados.
-          </p>
-        </div>
+        <EstadoVacio
+          titulo="Sin evaluaciones pendientes"
+          detalle="Todos los check-ins antropométricos remotos han sido validados."
+          icono={CheckCircle2}
+          nivelTitulo={3}
+        />
       ) : visibles.length === 0 ? (
-        <div className="p-10 rounded-3xl bg-card border border-dashed border-border text-center space-y-3">
-          <SearchX className="h-9 w-9 text-muted-foreground mx-auto opacity-50" />
-          <h3 className="text-sm font-bold text-foreground">Sin resultados</h3>
-          <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            Ninguna evaluación pendiente coincide con la búsqueda.
-          </p>
-          <button
-            type="button"
-            onClick={onLimpiarBusqueda}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs cursor-pointer"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            <span>Limpiar búsqueda</span>
-          </button>
-        </div>
+        <EstadoVacio
+          titulo="Sin resultados"
+          detalle="Ninguna evaluación pendiente coincide con la búsqueda."
+          accion={{ texto: "Limpiar búsqueda", onAccion: onLimpiarBusqueda }}
+        />
       ) : (
         visibles.map((ctrl) => (
           <TarjetaControlPendiente
