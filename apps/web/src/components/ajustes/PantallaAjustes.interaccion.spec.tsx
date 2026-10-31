@@ -165,7 +165,7 @@ describe('PantallaAjustes (RF-018 P1-P3)', () => {
     renderPantalla();
     await esperarPerfil();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Correo y contraseña' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Acceso' }));
     fireEvent.change(screen.getByLabelText('Contraseña actual'), { target: { value: 'actual-123' } });
     fireEvent.change(screen.getByLabelText('Contraseña nueva'), { target: { value: 'nueva-1234' } });
     fireEvent.change(screen.getByLabelText('Repite la contraseña nueva'), {
@@ -180,7 +180,7 @@ describe('PantallaAjustes (RF-018 P1-P3)', () => {
     });
 
     // Al volver a la pestaña debe verse el resultado del guardado.
-    fireEvent.click(screen.getByRole('tab', { name: 'Correo y contraseña' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Acceso' }));
 
     expect(await screen.findByText('Tu contraseña se cambió.')).toBeTruthy();
     expect(espiaSetAuthToken).toHaveBeenCalledWith('a');
@@ -191,7 +191,7 @@ describe('PantallaAjustes (RF-018 P1-P3)', () => {
     await esperarPerfil();
 
     const tabPerfil = screen.getByRole('tab', { name: 'Perfil' });
-    const tabSeguridad = screen.getByRole('tab', { name: 'Correo y contraseña' });
+    const tabSeguridad = screen.getByRole('tab', { name: 'Acceso' });
     const panelPerfil = document.querySelector(
       `[role="tabpanel"][aria-labelledby="${tabPerfil.id}"]`
     );
@@ -217,11 +217,11 @@ describe('PantallaAjustes (RF-018 P1-P3)', () => {
     fireEvent.keyDown(tabPerfil, { key: 'ArrowRight' });
 
     expect(
-      screen.getByRole('tab', { name: 'Correo y contraseña' }).getAttribute('aria-selected')
+      screen.getByRole('tab', { name: 'Acceso' }).getAttribute('aria-selected')
     ).toBe('true');
     expect(screen.getByTestId('url').textContent).toBe('/app/ajustes?tab=seguridad');
 
-    fireEvent.keyDown(screen.getByRole('tab', { name: 'Correo y contraseña' }), { key: 'End' });
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Acceso' }), { key: 'End' });
 
     expect(screen.getByRole('tab', { name: 'Zona horaria' }).getAttribute('aria-selected')).toBe(
       'true'
@@ -290,7 +290,7 @@ describe('PantallaAjustes (RF-018 P1-P3)', () => {
 
     renderPantalla();
     await esperarPerfil();
-    fireEvent.click(screen.getByRole('tab', { name: 'Correo y contraseña' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Acceso' }));
     fireEvent.change(screen.getByLabelText('Contraseña actual'), { target: { value: 'actual-123' } });
     fireEvent.change(screen.getByLabelText('Contraseña nueva'), { target: { value: 'nueva-1234' } });
     fireEvent.change(screen.getByLabelText('Repite la contraseña nueva'), {
@@ -316,7 +316,7 @@ describe('PantallaAjustes (RF-018 P1-P3)', () => {
 
     renderPantalla();
     await esperarPerfil();
-    fireEvent.click(screen.getByRole('tab', { name: 'Correo y contraseña' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Acceso' }));
     fireEvent.change(screen.getByLabelText('Correo nuevo'), { target: { value: 'nuevo@example.com' } });
     fireEvent.change(screen.getByLabelText('Tu contraseña actual'), {
       target: { value: 'actual-123' },
@@ -337,7 +337,7 @@ describe('PantallaAjustes (RF-018 P1-P3)', () => {
 
     renderPantalla();
     await esperarPerfil();
-    fireEvent.click(screen.getByRole('tab', { name: 'Correo y contraseña' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Acceso' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar cambio' }));
 
     await waitFor(() => expect(mockApi.delete).toHaveBeenCalledTimes(1));
@@ -352,7 +352,7 @@ describe('PantallaAjustes (RF-018 P1-P3)', () => {
 
     renderPantalla();
     await esperarPerfil();
-    fireEvent.click(screen.getByRole('tab', { name: 'Correo y contraseña' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Acceso' }));
     fireEvent.change(screen.getByLabelText('Contraseña actual'), { target: { value: 'actual-123' } });
     fireEvent.change(screen.getByLabelText('Contraseña nueva'), { target: { value: 'nueva-1234' } });
     fireEvent.change(screen.getByLabelText('Repite la contraseña nueva'), {
@@ -379,7 +379,7 @@ describe('PantallaAjustes (RF-018 P1-P3)', () => {
 
     renderPantalla();
     await esperarPerfil();
-    fireEvent.click(screen.getByRole('tab', { name: 'Correo y contraseña' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Acceso' }));
     fireEvent.change(screen.getByLabelText('Contraseña actual'), { target: { value: 'actual-123' } });
     fireEvent.change(screen.getByLabelText('Contraseña nueva'), { target: { value: 'nueva-1234' } });
     fireEvent.change(screen.getByLabelText('Repite la contraseña nueva'), {
@@ -394,7 +394,7 @@ describe('PantallaAjustes (RF-018 P1-P3)', () => {
 
     // Cambia a Perfil y vuelve: las contraseñas se limpian, el correo nuevo sigue escrito.
     fireEvent.click(screen.getByRole('tab', { name: 'Perfil' }));
-    fireEvent.click(screen.getByRole('tab', { name: 'Correo y contraseña' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Acceso' }));
 
     expect((screen.getByLabelText('Contraseña actual') as HTMLInputElement).value).toBe('');
     expect((screen.getByLabelText('Contraseña nueva') as HTMLInputElement).value).toBe('');
@@ -416,7 +416,7 @@ describe('PantallaAjustes (RF-018 P1-P3)', () => {
       resolverPost({ mensaje: 'Tu contraseña se cambió.', accessToken: 'a', refreshToken: 'r' });
     });
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Correo y contraseña' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Acceso' }));
     expect(await screen.findByText('Tu contraseña se cambió.')).toBeTruthy();
   });
 
@@ -427,7 +427,7 @@ describe('PantallaAjustes (RF-018 P1-P3)', () => {
     expect(screen.getAllByTestId('aviso-offline')).toHaveLength(1);
 
     // Al cambiar de pestaña la pantalla sigue mostrando uno solo, el de la pestaña visible.
-    fireEvent.click(screen.getByRole('tab', { name: 'Correo y contraseña' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Acceso' }));
     expect(screen.getAllByTestId('aviso-offline')).toHaveLength(1);
   });
 

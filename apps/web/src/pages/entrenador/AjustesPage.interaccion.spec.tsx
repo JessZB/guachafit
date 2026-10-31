@@ -123,7 +123,7 @@ describe('AjustesPage del entrenador (RF-018 P1)', () => {
     );
     await screen.findByLabelText('Nombres');
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Correo y contraseña' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Acceso' }));
     fireEvent.change(screen.getByLabelText('Contraseña actual'), { target: { value: 'actual-123' } });
     fireEvent.change(screen.getByLabelText('Contraseña nueva'), { target: { value: 'nueva-1234' } });
     fireEvent.change(screen.getByLabelText('Repite la contraseña nueva'), {
@@ -132,7 +132,7 @@ describe('AjustesPage del entrenador (RF-018 P1)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cambiar contraseña' }));
 
     // El POST queda en vuelo: nos vamos a Notificaciones (matriz sustituida por un marcador).
-    fireEvent.click(screen.getByRole('tab', { name: 'Notificaciones' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Avisos' }));
     expect(await screen.findByText('Matriz de notificaciones (marcador)')).toBeTruthy();
 
     // El panel de seguridad sigue montado, oculto, con su input dentro.
@@ -144,7 +144,7 @@ describe('AjustesPage del entrenador (RF-018 P1)', () => {
       resolverPost({ mensaje: 'Tu contraseña se cambió.', accessToken: 'a', refreshToken: 'r' });
     });
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Correo y contraseña' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Acceso' }));
     expect(await screen.findByText('Tu contraseña se cambió.')).toBeTruthy();
   });
 });

@@ -6,8 +6,10 @@
  * El error con reintento y el vacío usan los átomos `ui/EstadoError` y
  * `ui/EstadoVacio` (filas M7 de la consolidación 48); textos conservados.
  */
-import { CreditCard } from 'lucide-react';
+import { CreditCard, Plus } from 'lucide-react';
 import type { PlanMembresiaDetalleDTO } from '@guachafit/shared';
+import { pluralizar } from '../../../lib/pluralizar';
+import { BotonTactil } from '../../ui/BotonTactil';
 import { EstadoError } from '../../ui/EstadoError';
 import { EstadoVacio } from '../../ui/EstadoVacio';
 import { TarjetaPlanComercial } from './TarjetaPlanComercial';
@@ -33,6 +35,19 @@ export function PanelPlanes({
 }: PanelPlanesProps) {
   return (
     <div className="space-y-4 animate-in fade-in-50 duration-200">
+      {/* Con planes, la acción de alta vive aquí; sin planes la sugiere el EstadoVacio (no se duplica). */}
+      {planes.length > 0 && (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-muted-foreground">
+            {pluralizar(planes.length, 'plan', 'planes')}
+          </p>
+          <BotonTactil onClick={onCrear}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Nuevo plan comercial
+          </BotonTactil>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {planes.map((plan) => (
           <TarjetaPlanComercial

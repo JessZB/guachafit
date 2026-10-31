@@ -1,25 +1,18 @@
 /**
- * RF-015 §B · Ajustes del entrenador: pestaña de preferencias de notificación.
+ * RF-015 §B · Ajustes del entrenador: pestaña de preferencias de notificación (UX-17, CFG-05).
  *
- * Extraído de `pages/entrenador/AjustesPage.tsx:906-926`.
- * Presentacional: solo envuelve la card y la matriz existente. El mock del spec por
- * ruta de módulo sigue interceptando esta importación (mismo archivo destino).
+ * La matriz compartida ya pinta su propia tarjeta y no tiene cabecera, así que no se envuelve en
+ * `TarjetaAjustes` (evitaría una tarjeta doble): solo añade una línea de descripción encima.
+ * El mock del spec por ruta de módulo sigue interceptando esta importación (mismo archivo destino).
  */
 import { MatrizPreferenciasNotificacion } from '../../notificaciones/MatrizPreferenciasNotificacion';
 
 export function PestanaNotificaciones() {
   return (
-    <div className="space-y-4 animate-in fade-in-50 duration-200">
-      <div className="p-5 rounded-3xl bg-card border border-border/80 space-y-1">
-        <h2 className="font-bold text-base text-foreground">
-          Avisos que recibes como entrenador
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          Elige por dónde quieres recibir cada tipo de aviso. Los avisos de seguridad siempre
-          llegan por correo y no pueden desactivarse.
-        </p>
-      </div>
-
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Elige por dónde recibir cada aviso. Los de seguridad siempre llegan por correo.
+      </p>
       <MatrizPreferenciasNotificacion />
     </div>
   );

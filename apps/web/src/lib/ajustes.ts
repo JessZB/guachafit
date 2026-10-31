@@ -46,6 +46,20 @@ export function etiquetaPestanaAjustes(pestana: PestanaAjustes): string {
   return ETIQUETAS[pestana];
 }
 
+/** Etiqueta visible corta de la barra segmentada (UX-17, D6); el nombre accesible es el largo. */
+const ETIQUETAS_CORTAS: Record<PestanaAjustes, string> = {
+  perfil: 'Perfil',
+  seguridad: 'Acceso',
+  notificaciones: 'Avisos',
+  'zona-horaria': 'Zona horaria',
+  planes: 'Planes',
+  tasas: 'Tasa',
+};
+
+export function etiquetaCortaPestanaAjustes(pestana: PestanaAjustes): string {
+  return ETIQUETAS_CORTAS[pestana];
+}
+
 /** Pestaña activa a partir de `?tab=`: si no existe para el rol, la primera del rol. */
 export function pestanaAjustesDesdeUrl(
   rol: Rol | string | null | undefined,

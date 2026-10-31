@@ -1,24 +1,77 @@
-import { useEffect, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Settings } from 'lucide-react';
+import {
+  BellRing,
+  Clock,
+  CreditCard,
+  DollarSign,
+  KeyRound,
+  Settings,
+  UserRound,
+  type LucideIcon,
+} from 'lucide-react';
 import { useAuth } from '../../context/auth-context';
 import { useTabsAccesibles } from '../../lib/use-tabs-accesibles';
 import { useMiPerfil } from '../../lib/use-mi-perfil';
 import {
-  etiquetaPestanaAjustes,
+  etiquetaCortaPestanaAjustes,
   pestanaAjustesDesdeUrl,
   pestanasAjustes,
   type PestanaAjustes,
 } from '../../lib/ajustes';
 import { triggerHaptic } from '../../lib/haptics';
+import { pluralizar } from '../../lib/pluralizar';
+import { BarraTabsSegmentada, type ItemTab } from '../ui/BarraTabsSegmentada';
 import { ContenidoConPerfil } from './ContenidoConPerfil';
 import { SeccionCorreoPassword } from './SeccionCorreoPassword';
 import { SeccionPerfil } from './SeccionPerfil';
 
+const ICONOS: Record<PestanaAjustes, LucideIcon> = {
+  perfil: UserRound,
+  seguridad: KeyRound,
+  notificaciones: BellRing,
+  'zona-horaria': Clock,
+  planes: CreditCard,
+  tasas: DollarSign,
+};
+
+/** Unidad singular y plural de los conteos que muestra la barra (p. ej. "Planes: 2 planes"). */
+const UNIDAD_CONTEO: Partial<Record<PestanaAjustes, readonly [string, string]>> = {
+  planes: ['plan', 'planes'],
+};
+
+/** Ancho máximo: `amplio` para el entrenador, cuya rejilla de tasas necesita más columnas. */
+const CLASE_ANCHO = { normal: 'max-w-3xl', amplio: 'max-w-5xl' } as const;
+
+function itemsAjustes(
+  pestanas: PestanaAjustes[],
+  conteos?: Partial<Record<PestanaAjustes, number>>
+): ItemTab<PestanaAjustes>[] {
+  return pestanas.map((pestana) => {
+    // WCAG 2.5.3: el nombre accesible contiene la etiqueta visible. Sin conteo no se pasa
+    // aria-label, así que el nombre es la propia etiqueta corta.
+    const etiqueta = etiquetaCortaPestanaAjustes(pestana);
+    const base: ItemTab<PestanaAjustes> = {
+      clave: pestana,
+      etiqueta,
+      icono: ICONOS[pestana],
+    };
+    const conteo = conteos?.[pestana];
+    if (conteo === undefined) return base;
+    const unidad = UNIDAD_CONTEO[pestana];
+    const texto = unidad ? pluralizar(conteo, unidad[0], unidad[1]) : String(conteo);
+    return {
+      ...base,
+      ariaLabel: `${etiqueta}: ${texto}`,
+      indicador: { texto: String(conteo), ariaLabel: texto, variante: 'contador' },
+    };
+  });
+}
+
 /**
- * RF-018 RN-09: pantalla "Ajustes" de un rol. Pinta las pestañas del rol (la activa vive en
- * `?tab=`), las secciones comunes (Perfil y Correo y contraseña) y delega el resto en
- * `renderPestana` (notificaciones, zona horaria, planes, tasas).
+ * RF-018 RN-09: pantalla "Ajustes" de un rol. Pinta las pestañas del rol en una barra segmentada
+ * (la activa vive en `?tab=`), las secciones comunes (Perfil y Correo y contraseña) y delega el
+ * resto en `renderPestana` (notificaciones, zona horaria, planes, tasas).
  *
  * Perfil y Correo y contraseña quedan siempre montadas (la inactiva con `hidden`): un guardado en
  * vuelo no pierde su resultado ni lo escrito al cambiar de pestaña.
@@ -26,9 +79,15 @@ import { SeccionPerfil } from './SeccionPerfil';
 export function PantallaAjustes({
   descripcion,
   renderPestana,
+  conteos,
+  ancho = 'normal',
 }: {
   descripcion: string;
   renderPestana?: (pestana: PestanaAjustes) => ReactNode;
+  /** Conteo visible junto a la pestaña (p. ej. planes del entrenador). */
+  conteos?: Partial<Record<PestanaAjustes, number>>;
+  /** Ancho máximo de la pantalla; por defecto `normal`. */
+  ancho?: 'normal' | 'amplio';
 }) {
   const { user, isDemoMode } = useAuth();
   const pestanas = pestanasAjustes(user?.rol);
@@ -47,12 +106,6 @@ export function PantallaAjustes({
     onActivar: activar,
     idBase: 'ajustes-tabs',
   });
-
-  // Al entrar por enlace directo (`?tab=…`) la pestaña activa se trae a la vista en móvil.
-  const idTabActiva = tabs.idTab(activa);
-  useEffect(() => {
-    document.getElementById(idTabActiva)?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
-  }, [idTabActiva]);
 
   const contenidoPestana = (pestana: PestanaAjustes, visible: boolean) => {
     if (pestana !== 'perfil' && pestana !== 'seguridad') {
@@ -84,7 +137,9 @@ export function PantallaAjustes({
   };
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto pb-24 lg:pb-12 animate-in fade-in duration-200">
+    <div
+      className={`space-y-6 mx-auto pb-24 lg:pb-12 animate-in fade-in duration-200 ${CLASE_ANCHO[ancho]}`}
+    >
       <div className="flex items-start gap-3">
         <span className="p-2.5 rounded-2xl bg-primary/15 text-primary shrink-0">
           <Settings className="h-5 w-5" />
@@ -96,25 +151,13 @@ export function PantallaAjustes({
       </div>
 
       {pestanas.length > 1 && (
-        <div
-          {...tabs.propsTablist}
-          aria-label="Secciones de ajustes"
-          className="flex items-center gap-2 border-b border-border/80 pb-3 overflow-x-auto"
-        >
-          {pestanas.map((pestana) => (
-            <button
-              key={pestana}
-              {...tabs.propsTab(pestana)}
-              className={`min-h-11 py-2 px-4 rounded-xl font-bold text-sm whitespace-nowrap transition-all cursor-pointer ${
-                activa === pestana
-                  ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
-                  : 'bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {etiquetaPestanaAjustes(pestana)}
-            </button>
-          ))}
-        </div>
+        <BarraTabsSegmentada
+          items={itemsAjustes(pestanas, conteos)}
+          activa={activa}
+          propsTablist={tabs.propsTablist}
+          propsTab={tabs.propsTab}
+          ariaLabel="Secciones de ajustes"
+        />
       )}
 
       {/* Con una sola pestaña (superadmin) no hay tablist: el panel no se etiqueta con un tab. */}
