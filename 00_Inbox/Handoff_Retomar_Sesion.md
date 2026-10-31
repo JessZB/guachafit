@@ -1,7 +1,7 @@
 ---
 id: HANDOFF-RETOMA
 titulo: "Handoff: retomar el trabajo con los lotes de la auditoría UX de las vistas del entrenador y del alumno"
-fecha: 2026-10-28
+fecha: 2026-10-31
 estado: activo
 tags:
   - handoff
@@ -13,7 +13,7 @@ tags:
 
 # 🔁 Prompt de retoma (copiar y pegar al inicio de la próxima sesión)
 
-> Para usarlo, abre una sesión nueva en la bóveda GUACHAFIT y pega el bloque de abajo tal cual. Los hallazgos y el plan de lotes están en [[Auditoria_UX_Vistas_2026-10-28]].
+> Abre una sesión nueva en la bóveda GUACHAFIT, **dentro de una terminal de Orca**, y pega el bloque de abajo tal cual. Los hallazgos y el plan de lotes están en [[Auditoria_UX_Vistas_2026-10-28]].
 
 ```markdown
 # Retomar: lotes de la auditoría UX/UI de GUACHAFIT, sesión nueva
@@ -23,137 +23,127 @@ Rama `main`, que sigue a `origin/main` en el repo PRIVADO https://github.com/Jes
 Push solo cuando yo lo pida explícitamente.
 
 ## Qué hay que hacer
-Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (141 hallazgos, 41 ALTA; 29 lotes UX-01…UX-29; 10 decisiones D1–D10).
-- Empieza por las fundaciones transversales, en orden:
-  - **UX-01** extraer `ui/BarraTabsSegmentada` desde `components/entrenador/alumno-detalle/PestanasFichaAlumno.tsx` + `lib/use-tabs-accesibles.ts`. `PestanasFichaAlumno` queda como wrapper con el mismo DOM y sus specs no cambian.
-  - **UX-02** regla global `motion-reduce`.
-  - **UX-03** piezas compartidas de formulario y formato.
-  - **UX-04** cabecera: sincronización táctil y menú "Cuenta".
-- Después, por área: Cobros (UX-05…10), Seguimiento (UX-11…16), Ajustes y Plantillas (UX-17…20) y Alumno (UX-21…29).
-- Los lotes marcados ⛔ dependen de una decisión mía (sección 4 del documento). Pregúntamela cuando llegues a ese lote, UNA a la vez, con la recomendación que trae el documento y su porqué.
-- Antes de cada lote, vuelve a leer el código citado (`archivo:línea`): la auditoría fue estática y los anchos a 360px son inferidos.
-- Los reportes originales de cada área están en `.external-agents/auditoria-ux/01…05-*.md` (y el brief en `00-brief.md`). La carpeta está en `.gitignore`; bórrala solo cuando se cierren todos los lotes.
+Seguir, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (29 lotes UX-01…UX-29; decisiones D1–D10 en su sección 4).
+- **Siguiente lote: UX-19** (Tasa de cambio sin jerga y accesible; CFG-14 a 19, en `.external-agents/auditoria-ux/03-plantillas-ajustes-entrenador.md`). No tiene decisiones pendientes.
+- Después: UX-20 (Plantillas) y el área del alumno (UX-21…29).
+- Los lotes con ⛔ dependen de una decisión mía (sección 4). Pregúntamela al llegar, UNA a la vez, con la recomendación del documento y su porqué. **Antes de preguntar, verifica en el código lo que la decisión da por supuesto.** En D7 yo creía que los planes eran solo mensuales y el código tenía duración de 1 a 12 meses.
+- Antes de cada lote, mapea el código con un agente Explore de solo lectura: textos exactos, props, specs que se romperán y cuáles comprueban comportamiento frente a texto. La auditoría fue estática.
+- Los reportes originales de la auditoría están en `.external-agents/auditoria-ux/01…05-*.md`. La carpeta está en `.gitignore`. Bórrala solo al cerrar todos los lotes.
 
-## Flujo de trabajo (reglas en 00_Reglas_Desarrollo_SDD.md §7)
-- **Tú (Claude)** orquestas y validas. Defines los contratos, revisas cada diff y cada reporte contra `git status`/`git diff`, haces el doc-sync y los commits. No escribes ni ejecutas tests.
-- **El código de producción lo escribe un subagente Haiku** (`model: haiku`, `effort: high`) con un prompt autocontenido. Restricciones del prompt: solo producción, nada de specs, tests ni builds, ni leer `.env`. Pídele el cómputo de líneas del guardián y que liste los specs que se romperán.
-- **Tests y revisiones los hace un agente externo** con prompts en `.external-agents/<NN>-<lote>-<tipo>.md`. El reporte va en `.external-agents/reportes/<mismo>.reporte.md`.
-- **Desde el 2026-10-30 (decisión del dueño), los lanzas TÚ con la orquestación de Orca** (skill `orchestration`). Ya NO se usa `agy -p`; §7.6 de las reglas describe este flujo (actualizada tras UX-11).
-  1. Carga la guía con `orca skills get orchestration` y sigue su bucle supervisado.
-  2. Comprueba que estás dentro de una terminal de Orca: `ORCA_TERMINAL_HANDLE` debe existir y `orca status --json` debe traer `caller`. Si no, **detente y avísame**: sin buzón propio, `run-create` falla con `no_active_sender_terminal`, y NUNCA uses el handle de otra terminal (leerías el buzón de otra sesión).
-  3. Crea un Run por lote: `orca orchestration run-create --objective "<lote>" --json`.
-  4. Por cada prompt, lanza un worker con `orca orchestration worker-start --spec "Lee y ejecuta exactamente el prompt .external-agents/<archivo>.md y deja el reporte en la ruta que indica." --worktree current --agent antigravity --model <modelo> --json`.
-     - Usa `gemini-3.8-flash-medium` para `tests`, `verificacion` y `validacion`.
-     - Usa `gemini-3.8-flash-high` para `review-*`.
-     - Las revisiones de un lote pueden ir en paralelo.
-  5. Espera con `orca orchestration check --wait --types "worker_done,escalation,question" --timeout-ms 900000 --json`. Responde las preguntas con `reply`. Tras cada `worker_done` válido, haz `worker-release` y luego el `--ack`.
-  6. Compara `launch.requested` con `launch.effective` antes de afirmar qué modelo corrió.
-- **Evidencia en archivos, no en el resumen del agente.** Toda ejecución de la suite que haya que clasificar va con `--reporter=json --outputFile=../../.external-agents/reportes/<NN>-<lote>-vitest.json`. Ese JSON lo lees tú. En UX-10, Gemini reescribió los prefijos de las rutas en una tabla.
-- **Una sola pasada de la suite completa:** el agente itera con el subconjunto del lote y ejecuta la suite completa una vez, al final (en UX-10, repetirla 4 veces costó 49 min). Con la máquina cargada salen `Test timed out in 5000ms` ajenos al lote: usa `--maxWorkers=4`.
-- Si el dueño prefiere ejecutar un prompt a mano, le das el archivo y la línea `Lee y ejecuta exactamente el prompt …`.
-- **Ciclo por lote:**
-  1. Tests en fase roja, con contratos exactos (el prompt sirve también de especificación para Haiku).
-  2. Haiku implementa y tú revisas el diff.
-  3. Verificación en paralelo con la revisión. Revisión de 1 enfoque si el riesgo es medio. Los 4 enfoques (risk, reliability, resilience, readability) si toca dinero, datos o seguridad, o si el diff de producción pasa de 400 líneas (cuéntalo con `git diff --numstat`, incluidos los archivos nuevos vía `git add -N`).
-  4. Corrección con Haiku.
-  5. Validación.
-  6. Commit de código y commit `docs(vault): …` (RF afectado + `06_Guia_Pruebas_Manuales.md`).
-  7. Borrar los prompts y reportes del lote.
-- **Autorizaciones de specs:** en la fase roja el agente externo no toca specs existentes; solo lista los que se romperán. En la verificación autoriza explícitamente los ajustes de texto, selector u orden, sin debilitar aserciones.
-- **Commits:** convencionales, en español, SIN Co-Authored-By. Usa `git add <archivos del lote>` o `git add -A apps/web/src` cuando el lote borre archivos.
-- **Archivos fuera del trabajo:** `.claude/settings.json` y `Notas del 09-10-2026.md` quedan sin seguimiento.
-- **Pruebas manuales:** yo pruebo con `pnpm dev`. NO me pidas build, preview ni incógnito, salvo cambios que dependan del Service Worker.
-- **Editar textos con comillas o backticks:** usa la herramienta Edit, o un script Python escrito con Write (los heredocs de Bash fallan con comillas).
+## Roles (reglas en 00_Reglas_Desarrollo_SDD.md §7)
+- **Tú (Claude):** orquestas y validas.
+  - Defines contratos exactos y revisas cada diff.
+  - Contrastas cada reporte con el JSON de Vitest, `git status` y `git diff`.
+  - Haces el doc-sync y los commits.
+  - No escribes ni ejecutas tests. No escribes código de producción.
+- **Haiku (subagente):** escribe la producción. Usa la herramienta Agent con `model: haiku` y `effort: high`, con un prompt autocontenido.
+  - Restricciones: solo producción, sin tests, specs, builds ni `.env`.
+  - Pídele archivo:línea de cada contrato, desviaciones con su porqué, specs que se romperán y `git status`.
+  - Para ajustes del mismo lote, reanúdalo con SendMessage. No lances otro.
+- **Agente externo (Antigravity con Gemini vía Orca):** escribe los tests, verifica y revisa.
+  - Los prompts van en `.external-agents/<NN>-<lote>-<tipo>.md`.
+  - Los reportes van en `.external-agents/reportes/<mismo>.reporte.md`.
+- **Mis preferencias:**
+  - **Tests solo de comportamiento.** Nada de specs que solo comprueban textos, copy o estilos. Para nombres usa constantes únicas y ajusta los specs que ya los consultan.
+  - Pruebo con `pnpm dev`. No me pidas build, preview ni incógnito.
+  - Commits convencionales en español, SIN Co-Authored-By. Push solo si lo pido.
 
-## Lecciones que aplicar en cada lote
-- **Guardián de tamaño** (`apps/web/src/tamano-archivos.spec.ts`): cuenta `split(/\r?\n/).length`, que es `wc -l` + 1. El tope es 400 por archivo. Las páginas deben quedar en 300 o menos (regla §6/ADR-022); el guardián solo lo impone a los contenedores ya trabajados. `DashboardPage.tsx` (386) y `AtletaMenuPage.tsx` (365) son deuda frente a esa regla.
-- **Fechas de la API:** suelen llegar en ISO con hora (`toISOString`). Para ISO usa `formatFechaLocal`; `formatFechaCalendario` solo acepta `YYYY-MM-DD`. **Los fixtures de los tests deben usar el formato real de la API**: un fixture irreal escondió un BLOCKER en L7.
-- **jsdom:** no calcula layout ni hace hit-testing, así que las clases se fijan solo donde no hay alternativa. `toContainElement` (jest-dom) no está registrado, usa `contains`. `CSS.escape` puede no existir. Las páginas completas tardan más de 5 s en montar: usa `vi.setConfig({ testTimeout: 20000 })` en el spec. Los timeouts sueltos de la suite completa se repiten aislados.
-- **Specs que leen código como texto:** `?raw` funciona con `.ts`/`.tsx`, pero vitest vacía los `.css` (`""`) salvo los listados en `test.css.include` (`vitest.config.ts`, añadido en UX-02 para `index.css`). Todo spec así empieza con una aserción de cordura (texto no vacío y una marca conocida): sin ella, la fase roja de UX-02 fue un falso rojo. No uses `node:fs` en specs de web: `tsc` revisa `src` entero y `apps/web` no tiene `@types/node`.
-- **Clases de un `svg` en jsdom:** `svg.className` es un `SVGAnimatedString`; lee las clases con `getAttribute('class')`.
-- **Radix DropdownMenu en tests:** al activar un `menuitem` el menú se cierra; para probar otro, reábrelo.
-- **Temporizadores con React 19 en tests:** tras `vi.advanceTimersByTimeAsync(n)` hace falta otro `advanceTimersByTimeAsync(0)` para que React vacíe el render. Para comprobar que no quedan temporizadores huérfanos, usa `unmount()` y `vi.getTimerCount()`: React 19 ya no avisa de `setState` en componentes desmontados.
-- **Radix DropdownMenu en tests (apertura):** ábrelo con teclado (`ArrowDown`).
-- **Enlace extendido en tarjetas:** todo contenedor o icono decorativo que quede por encima lleva `pointer-events-none`, y los controles reales `pointer-events-auto`.
-- **Datos sensibles:** nunca en `title`. Usa un disclosure plegado sin el texto en el DOM (`ChipSaludAlumno`).
-- **Recargas:**
-  - no tapan la pantalla ni pisan lo que se edita (refs + `formularioModificado`);
-  - un contador de generación descarta respuestas antiguas;
-  - los fallos de carga van por su propio canal (`avisoCarga`), separado de los de guardado.
-- **"Sin datos" no es "falló la carga":** una respuesta 204 vacía es "sin datos", y un error ofrece Reintentar.
-- **Reportes del agente externo:** contrasta siempre con `ls` y `wc`. Ya hubo uno que dijo "no modifiqué archivos" y había ampliado un spec, y otro que dio mal el número de líneas.
+## Lanzar el agente externo con Orca
+1. Comprueba que existe `ORCA_TERMINAL_HANDLE`. Aunque `orca status --json` no traiga `caller`, `run-create` funciona con el handle propio. Si `run-create` falla con `no_active_sender_terminal`, detente y avísame. Nunca uses el handle de otra terminal.
+2. Crea un Run por lote: `orca orchestration run-create --objective "<lote>" --json`.
+3. **Antigravity 1.4.12 rompe `worker-start --agent`** (`agent_not_in_foreground`): abre la terminal del agente con su modelo, pero Orca no le entrega el prompt. Usa el script que ya lo resuelve:
+   ```bash
+   bash .external-agents/lanzar.sh <NN>-<lote>-<tipo> <modelo>
+   ```
+   El script intenta `--agent` y, si falla, reutiliza con `--terminal <handle>` la terminal abierta. El modelo es el de esa terminal.
+   - Modelos: `gemini-3.8-flash-medium` para `tests`, `verificacion` y `validacion`; `gemini-3.8-flash-high` para `review-*`.
+   - Las revisiones de un lote van en paralelo. Una terminal liberada se cierra y no se puede reutilizar.
+4. Espera en segundo plano (Bash con `run_in_background: true`), con `--timeout-ms 540000`:
+   ```bash
+   orca orchestration check --run <run> --wait --types "worker_done,escalation,question" --timeout-ms 540000 --json
+   ```
+   Un `timedOut` sin mensajes no es un fallo: mira si ya hay specs, JSON o reporte, y vuelve a esperar.
+5. Los latidos (`heartbeat`) se confirman con `--ack <deliveryId>` y no se informan.
+6. Tras cada `worker_done`, verifica el reporte. Después haz `worker-release --dispatch <id>` y luego `--ack`. Los despachos fallidos cuyas terminales reutilizaste quedan `retained`, y es normal.
+7. Si un worker se cuelga (por ejemplo, Antigravity con "network issue"), usa `worker-stop`, porque `worker-release` solo vale para los que terminaron, y relánzalo. Para corregir un prompt a un worker en curso: `orca orchestration send --to <terminal> --subject … --body …`.
+
+## Ciclo por lote
+1. **Mapeo** con un agente Explore. Escribe cada **decisión** del dueño en la sección 4 de la auditoría.
+2. **Fase roja** (prompt `tests`, con contratos exactos de API, props y textos copiados del código). Acéptala solo si:
+   - cada rojo falla por el motivo esperado;
+   - **cada archivo nuevo ejecuta sus tests** (un import en `vi.hoisted` escondió un spec entero en UX-16);
+   - el número de archivos de la suite = el de antes + los nuevos;
+   - los specs de caracterización solo cambian en lo autorizado.
+3. **Haiku implementa.** Revisa el diff y devuélvele las desviaciones que no aceptes: ceros falsos, estados en blanco, tarjetas dobles…
+4. **Verificación + revisiones en paralelo.** Una revisión (el enfoque del riesgo dominante) si el riesgo es medio. Las cuatro (risk, reliability, resilience y readability) si el lote toca dinero, datos, seguridad o permisos, o si el diff de producción pasa de 400 líneas. Cuéntalo con `git add -N <nuevos>; git diff --numstat -- apps/web/src | grep -v spec`. En el prompt de revisión, nombra todos los consumidores de los componentes compartidos que toque el lote.
+5. **Corrección con Haiku** de los hallazgos válidos. Antes de aceptar un BLOCKER, comprueba que es alcanzable y si ya estaba en `HEAD`.
+6. **Validación.** Añade tests de comportamiento para las correcciones y vuelve a pasar la suite completa, typecheck y build.
+7. **Commit de código** (`git add -A apps/web/src`) y **commit `docs(vault)`**, que actualiza:
+   - el RF afectado;
+   - `06_Guia_Pruebas_Manuales.md`;
+   - la auditoría (fila ✅ con commit, bloque «UX-NN cerrado» con seguimientos y proceso);
+   - este handoff.
+8. Borra los prompts y reportes del lote (`rm -f .external-agents/0*-uxNN-* .external-agents/reportes/0*-uxNN-*`) y guarda un resumen en Engram.
+
+## Lecciones que aplicar siempre
+- **La evidencia es el JSON de Vitest** y los `it(` del spec, nunca la tabla del reporte. Gemini ha inventado títulos, mensajes, suites fallidas y recuentos.
+- **Suite completa una sola vez** por prompt, con `--maxWorkers=4 --reporter=json --outputFile=../../.external-agents/reportes/<NN>-<lote>-vitest.json`. Compara el número de archivos: una pasada perdió 6.
+- **Textos de la UI:** se copian del código, nunca de un reporte. Un contrato con "Mostrando…" (texto inventado) dio un falso rojo.
+- **Specs nuevos:**
+  - `afterEach(() => cleanup())`, porque `globals: false`;
+  - páginas con TanStack: `QueryClient` por test y `onlineManager.setOnline(true)` en `beforeEach` y `afterEach`;
+  - páginas completas: `vi.setConfig({ testTimeout: 20000 })`;
+  - nada de imports dentro de `vi.hoisted`;
+  - sin `toBeDisabled` ni `toContainElement` (jest-dom no está registrado): usa `.disabled` y `contains`.
+- **Accesibilidad:** el nombre accesible **contiene el texto visible** (WCAG 2.5.3). En UX-17 dejar nombres largos con etiquetas cortas fue un error. Botones de 44px, iconos con `aria-hidden` y foco visible.
+- **Estados honestos:**
+  - nunca ceros ni datos falsos mientras carga o tras un error;
+  - carga con `EstadoCarga`;
+  - error sin datos con `EstadoError` + Reintentar;
+  - recarga fallida con datos: `AvisoErrorRecarga`, sin tapar la lista;
+  - sin conexión: `AvisoDatosOffline` (`guardados` o `sin-datos`). Ojo: sin red, TanStack **pausa** la consulta y puede no llegar el error.
+- **Formularios:**
+  - validar antes de enviar, sin `alert()`;
+  - errores de carga, guardado y acción por canales separados;
+  - guarda síncrona contra el doble envío (también durante el mensaje de éxito);
+  - aviso de cambios sin guardar (`DialogoConfirmacion`, patrón `ModalPlantilla`).
+- **Montos:** siempre con `useFormatoNumero()`. Entrada decimal con `inputMode="decimal"`, `type="text"`, coma o punto, normalizada antes de enviar.
+- **Componentes de layout con `useQuery`:** los specs que los montan necesitan `QueryClientProvider`. Las constantes que importan otros módulos no viven en un módulo que los specs mockean.
+- **Guardián de tamaño** (`apps/web/src/tamano-archivos.spec.ts`): 400 líneas por archivo (cuenta `wc -l` + 1). Las páginas quedan en 300 o menos.
+- **Scripts largos** (generar prompts, doc-sync): escríbelos con Write en el scratchpad y ejecútalos con `python -I`. Los heredocs de Bash fallan con las comillas.
 - **Engram:** puede fallar con "multiple active runtime sessions". Avisa y sigue.
 
-## Estado al 2026-10-28
-- **Fundaciones de la auditoría UX cerradas (2026-10-29):** UX-01 `8cc2a89`, UX-02 `a670b4b`, UX-03 `e071bf4`, UX-04 `d482f4f` (con sus `docs(vault)`).
-- **UX-05 cerrado (2026-10-29, `d777772`):** Conciliación y Cartera con estados honestos.
-- **UX-06 cerrado (2026-10-29, `87fe4df`):** rechazo seguro y `useFormatoNumero()`.
-- **UX-07a cerrado (2026-10-29, `bc64170`):** Conciliación táctil y sin jerga.
-- **UX-07b cerrado (2026-10-29, `d1f90b4`):** Cartera en el móvil (D3), pestañas con contador y próximo vencimiento (lote web P2 del módulo 5). Web **2621/2621**.
-- **UX-08 cerrado (2026-10-30, `feacbed`):** cobro en efectivo honesto (D1: el monto se vacía al cambiar de moneda y se muestra el resumen con conversión) y avisos de Conciliación. Web **2655/2655**.
-- **UX-09a cerrado (2026-10-30, `3784301`):** endpoint de solo lectura de vista previa del recordatorio (decisión D2). API **2031** (1 omitido).
-- **UX-09b cerrado (2026-10-30, `16577b9`):** modal de recordatorio con vista previa (solo al abrir), "Revisar en bandeja" con `?q=` de un solo uso y miniatura con "Comprobante no disponible". Web **2686/2686**.
-- **UX-10 cerrado (2026-10-30, `f078d15`):** copy, formatos y semántica de Cobros. Web **2728/2728**. Desde este lote Claude lanza el agente externo con Antigravity CLI (§7.6 de las reglas).
-- **UX-11 cerrado (2026-10-30, `57606e8`):** Dashboard con carga honesta. Web **2735/2735**. Primer lote entero con la orquestación de Orca, que funcionó: §7.6 de las reglas ya está actualizada. `orca status` no traía `caller` y `run-create` funcionó igual.
-- **UX-12 cerrado (2026-10-30, `97017b8`):** hook `use-dashboard-comando`, fixture demo en `lib/`, `ListaRiesgoDashboard` y `MetricCard` sobre `BadgeEstado`. Web **2754/2754**.
-- **UX-13 cerrado (2026-10-30, `8a5c6f1`):** decisión D4 = «qué atender hoy». Franja «Requiere tu atención», filas a la ficha y «Contexto del negocio» con KPI enlazados. Web **2772/2772**.
-- **UX-14 cerrado (2026-10-30, `da5c851`):** Monitor de adherencia táctil y honesto. Web **2793 tests en 299 archivos**.
-- **UX-15 cerrado (2026-10-30, `8cfb73f`):** Antropometría del entrenador en el móvil. Web **2811 tests en 303 archivos**.
-- **UX-16 cerrado (2026-10-31, `cf4bd84`):** navegación del entrenador con nombres únicos (D5), insignias de pendientes y saludo real. Web **2827 tests en 308 archivos**.
-- **Preferencia del dueño (desde UX-16):** no escribas specs que solo comprueban textos (copy o nombres). Usa una constante única y ajusta los specs que ya los consultan. Los tests son para comportamiento real.
-- **UX-17 cerrado (2026-10-31, `14c796e`):** Ajustes en una sola pantalla con barra segmentada (D6). Web **2836 tests en 310 archivos**.
-- **Orca + Antigravity 1.4.12:** `worker-start --agent antigravity --model …` falla con `agent_not_in_foreground`, pero deja abierta la terminal del agente con ese modelo. Reutilízala:
-  ```bash
-  orca orchestration worker-start --spec "…" --worktree current --terminal <handle> --json
-  ```
-  El handle sale de `orca orchestration worker-list --json` (`agentTerminalHandle`).
-- **UX-18 cerrado (2026-10-31, `e7851f3`):** planes comerciales.
-  - D7: el precio es el total de la duración y el formulario arranca vacío.
-  - Web **2857 tests en 314 archivos**.
-- El siguiente lote es **UX-19** (Tasa de cambio sin jerga y accesible; CFG-14 a 19). No tiene decisiones pendientes. Los seguimientos de cada lote están en la sección 3 de la auditoría.
-- **Lecciones de UX-14:**
-  - Compara el número de archivos de cada suite completa con el de la fase roja: una pasada perdió 6.
-  - Copia los textos de la UI del código, no de un reporte.
-  - Si Antigravity se corta ("network issue"), cancela el worker con `orca orchestration worker-stop` y relánzalo.
-  - Puedes corregir a un worker en curso con `orca orchestration send --to <terminal>`.
-- **Lección del agente externo:** su tabla de resultados no es evidencia (en UX-12 inventó títulos y mensajes). Contrasta con el JSON de Vitest y con los `it(` del spec. Todo spec nuevo de componentes llama a `cleanup` en `afterEach` (`globals: false`).
-- Rediseño de la ficha del alumno (`/coach/alumnos/:id`) CERRADO:
+## Estado al 2026-10-31
+- **Cerrados:** UX-01…UX-18, cada uno con su commit `feat`/`refactor` y su `docs(vault)`. Detalle y seguimientos en la sección 3 de la auditoría. Últimos lotes:
+  - UX-11 `57606e8`: Dashboard con carga honesta.
+  - UX-12 `97017b8`: hook `use-dashboard-comando`.
+  - UX-13 `8a5c6f1`: D4 «qué atender hoy».
+  - UX-14 `da5c851`: Monitor táctil.
+  - UX-15 `8cfb73f`: Antropometría del entrenador en el móvil.
+  - UX-16 `cf4bd84`: D5, nombres únicos e insignias de pendientes.
+  - UX-17 `14c796e`: D6, Ajustes en una pantalla con barra segmentada.
+  - UX-18 `e7851f3`: D7, el precio es el total de la duración y el formulario de planes arranca vacío.
+- **Tests:** web **2857 tests en 314 archivos**, typecheck y build en verde (al cierre de UX-18).
+- **Commits locales sin push** desde `6abb291` (UX-11…UX-18).
+- **Pausados o pendientes fuera de la auditoría:** módulo 5 (anulación de cuotas en la web, congelar membresía, condonar, PagosPage, P2 de Control de Cobros, RNF-002) y pendientes de la ficha en RF-011. Al llegar a UX-21/22 (pagos del alumno), revisa si conviene juntarlos.
 
-  | Lote | Commit |
-  |---|---|
-  | L1–L3 | `ad1788f` |
-  | L4 | `8b4504a` |
-  | L5 | `f22ba4c` |
-  | L6 | `3535cde` |
-  | L7 | `b6c2dc2` |
-  | Docs | `541254e` |
+## Piezas a reutilizar
+- **`components/ui/`:** `BotonTactil` (`primaria`, `secundaria`, `peligro`, `peligro-contorno`), `BadgeEstado`, `BarraTabsSegmentada` (con `indicador` `contador`), `ChipFiltro`, `EstadoCarga`, `EstadoError`, `EstadoVacio`, `InsigniaConteo`.
+- **`components/common/`:** `AvisoErrorRecarga`, `AvisoDatosOffline` (+ `lib/use-frescura-offline`), `Paginacion` (props `etiqueta` y `anunciarEstado`), `DialogoConfirmacion`, `MetricCard` (prop `enlace`).
+- **`components/ajustes/`:**
+  - `PantallaAjustes`: props `renderPestana`, `conteos` y `ancho`;
+  - `CampoAjustes`: `CampoAjustes`, `SelectAjustes`, `AvisosAjustes`, `BotonAjustes`, `TarjetaAjustes`.
+- **`lib/`:**
+  - `formato-monto` y `use-formato-numero`;
+  - `use-tabs-accesibles`, `use-dialogo-accesible`, `pluralizar`, `date-format`, `adherencia` (`rutaExpedienteMonitor`);
+  - `etiquetas-dominio` (`DESTINOS_ENTRENADOR`) y `ajustes` (`etiquetaCortaPestanaAjustes`);
+  - `use-pendientes-navegacion` + `insignias-pendientes` (`CLAVE_PENDIENTES_NAVEGACION`, que se invalida tras conciliar o cobrar);
+  - `dashboard-comando-demo`.
+- **Patrones:**
+  - enlace extendido de `TarjetaAlumnoDirectorio` y `TarjetaAlumnoMonitor`;
+  - confirmación inline de `TarjetaPlantilla` y `TarjetaPlanComercial`;
+  - cambios sin guardar de `ModalPlantilla` y `ModalPlanComercial`;
+  - contador de generación de `use-dashboard-comando`.
 
-  Detalle en RF-011, RF-012 y `06_Guia_Pruebas_Manuales.md` §5.
-- "Mis alumnos" (`/coach/alumnos`) cerrado (lotes de octubre, `26917bb` … `fd4cd63`).
-- Pendientes de la ficha anotados en RF-011, no decididos:
-  - el borrador de "Plan y tarifa" se pisa en la recarga;
-  - paralelizar la carga inicial;
-  - fusionar los KPI de Pagos;
-  - unificar las dos zonas horarias: `perfiles_alumno.zonaHoraria` frente a `usuarios.timezone`, decisión de API.
-- Módulo 5 (Pagos y cartera) sigue PAUSADO desde el 2026-10-12. Sus pendientes:
-  - web de la anulación de cuotas;
-  - congelar la membresía;
-  - condonar el resto de una cuota;
-  - zona horaria del alumno al activar la cuenta;
-  - PagosPage;
-  - lote P2 de Control de Cobros;
-  - seguimientos de RNF-002.
-
-  Varios coinciden con los lotes UX de Cobros (UX-05…10) y de Pago del alumno (UX-21/22): al llegar ahí, revisa si conviene juntarlos.
-- Tests base: web **2427/2427**. API ~2015 (1 omitido; e2e con `E2E_DATABASE_URL`).
-
-## Piezas a reutilizar (de la ficha y de "Mis alumnos")
-- **`components/ui/`:** `BotonTactil` (variantes `primaria`, `secundaria`, `peligro`, `peligro-contorno`; no sobrescribas su color con `className`), `BadgeEstado` (`whitespace-nowrap shrink-0`), `BarraTabsSegmentada` (UX-01, `8cc2a89`; seguimientos en la auditoría, sección 3), `BotonTactil`, `ChipFiltro`, `EstadoCarga`, `EstadoError`, `EstadoVacio`.
-- **`components/common/`:** `AvisoErrorRecarga` (UX-05: recarga fallida con datos visibles; solo con conexión), `Paginacion` (+ `lib/use-paginacion-servidor`), `AvisoDatosOffline` (+ `lib/use-frescura-offline`), `DialogoConfirmacion`, `ZonaHorariaPerfil`.
-- **`components/entrenador/alumno-detalle/`:** `PestanasFichaAlumno` (fuente de `BarraTabsSegmentada`), `MenuAccionesAlumno` (Radix DropdownMenu), `ChipSaludAlumno`, `FranjaDatosClaveAlumno` (+ `lib/datos-clave-alumno.ts`), `SeccionZonaHorariaAlumno`, el patrón `<details>` de `PestanaAntropometriaAlumno` y el aviso "Cambios sin guardar" de `PestanaResumenAlumno`.
-- **`components/layout/`:** `MenuCuenta` (Radix, correo y rol con `etiquetaRol`) y `BotonesSincronizacion` (UX-04, `d482f4f`).
-- **`components/ajustes/CampoAjustes.tsx`:** `CampoAjustes` (sufijo, descripción, `inputMode` decimal) y `SelectAjustes` (UX-03, `e071bf4`).
-- **`lib/`:** `formato-monto` (`formatMonto`, `formatDecimal`; formato venezolano por defecto) y `use-formato-numero` (`useFormatoNumero()`, la única vía de las vistas, §6.17), `use-tabs-accesibles`, `use-dialogo-accesible`, `etiquetas-dominio`, `date-format`, `alumnos-directorio-actividad` (`describirUltimoEntreno`), `alumno-detalle-metricas` (`resolverUltimoEntrenamiento`, `esSesionRealizada`).
-
-Empieza revisando la memoria (`mem_search "guachafit auditoría UX"` y `"ficha del alumno"`). Lee 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (secciones 2, 3 y 4) y propón arrancar con UX-01, con sus contratos de tests en fase roja.
+Empieza revisando la memoria (`mem_search "guachafit UX-18"` y `"guachafit auditoría UX"`), lee la auditoría (secciones 2, 3 y 4) y arranca **UX-19**: mapeo con Explore y, después, los contratos de su fase roja.
 ```
