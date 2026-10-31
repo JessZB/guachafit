@@ -246,5 +246,14 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
   - web 2130/2130, typecheck y build sin errores; el test U8, antes inestable, pasa 30/30;
   - revisión con las 4 lentes (riesgo, fiabilidad, resiliencia y legibilidad) APTA, sin bloqueos, y sus avisos corregidos en el mismo commit.
 
+### 7.18. Monitor de adherencia táctil y honesto (2026-10-30, `da5c851`, lote UX-14)
+- La tarjeta ya no es un `article` clicable. El nombre es el botón que abre la actividad reciente, con un enlace extendido que cubre la tarjeta. El chevron a la ficha y "Ver últimas sesiones en detalle" son controles reales de 44px. Los nombres largos ocupan hasta dos líneas.
+- El estado usa `BadgeEstado`. El punto rojo solo parpadea sin movimiento reducido (`motion-safe:`). Se lee "Última sesión:" y la racha solo aparece si es mayor que 0.
+- Los chips del semáforo usan `ChipFiltro` dentro del grupo "Filtrar por estado", con etiquetas cortas y conteo ("Todos 5", "En riesgo 1", "En observación 1", "Al día 1", "Sin plan 1"). "Actualizar" usa `BotonTactil` y el buscador mide 44px, con texto de 16px en el móvil.
+- La paginación también aparece al pie ("Paginación al final de la lista", sin repetir el anuncio para el lector de pantalla gracias a las props nuevas `etiqueta` y `anunciarEstado` de `common/Paginacion`).
+- Una recarga fallida con datos no tapa la lista: muestra `AvisoErrorRecarga` y conserva los filtros. Sin conexión: con datos, "Sin conexión · datos guardados"; sin datos, "Sin conexión y sin datos guardados". Los estados de carga, error y filtros sin resultados usan los átomos de `ui/`.
+- Evidencia: web **2793 tests en 299 archivos**: la suite completa solo falló en MP6, por un contrato mal escrito; tras corregirlo, el lote dio 45/45. Typecheck y build en verde. Revisión de fiabilidad sin BLOCKER; se corrigieron el anuncio duplicado de la paginación, los iconos sin `aria-hidden` y un comentario.
+- Pendiente: con un error, el estado vacío de filtros se oculta (ya ocurría antes). En modo demo y sin conexión se muestra "sin datos", porque TanStack pausa también la consulta demo. Falta un test del clic en la paginación del pie. `ModalActividadAlumno` mantiene un `animate-pulse` sin `motion-safe`.
+
 ### Pendiente
 - Ninguno abierto de §7.10. El uso desde varias pestañas o dispositivos queda como límite documentado (ver §7.17).

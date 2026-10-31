@@ -97,7 +97,13 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **UX-11 cerrado (2026-10-30, `57606e8`):** Dashboard con carga honesta. Web **2735/2735**. Primer lote entero con la orquestación de Orca, que funcionó: §7.6 de las reglas ya está actualizada. `orca status` no traía `caller` y `run-create` funcionó igual.
 - **UX-12 cerrado (2026-10-30, `97017b8`):** hook `use-dashboard-comando`, fixture demo en `lib/`, `ListaRiesgoDashboard` y `MetricCard` sobre `BadgeEstado`. Web **2754/2754**.
 - **UX-13 cerrado (2026-10-30, `8a5c6f1`):** decisión D4 = «qué atender hoy». Franja «Requiere tu atención», filas a la ficha y «Contexto del negocio» con KPI enlazados. Web **2772/2772**.
-- El siguiente lote es **UX-14** (Monitor: táctil y estados; SEG-12 a 19), sin decisiones pendientes. Ojo: el spec C15 caracteriza el defecto actual de la tarjeta del Monitor y habrá que autorizar su ajuste. Los seguimientos de cada lote están en la sección 3 de la auditoría.
+- **UX-14 cerrado (2026-10-30, `da5c851`):** Monitor de adherencia táctil y honesto. Web **2793 tests en 299 archivos**.
+- El siguiente lote es **UX-15** (Antropometría del entrenador en el móvil; SEG-20 a 24), sin decisiones pendientes. Los seguimientos de cada lote están en la sección 3 de la auditoría.
+- **Lecciones de UX-14:**
+  - Compara el número de archivos de cada suite completa con el de la fase roja: una pasada perdió 6.
+  - Copia los textos de la UI del código, no de un reporte.
+  - Si Antigravity se corta ("network issue"), cancela el worker con `orca orchestration worker-stop` y relánzalo.
+  - Puedes corregir a un worker en curso con `orca orchestration send --to <terminal>`.
 - **Lección del agente externo:** su tabla de resultados no es evidencia (en UX-12 inventó títulos y mensajes). Contrasta con el JSON de Vitest y con los `it(` del spec. Todo spec nuevo de componentes llama a `cleanup` en `afterEach` (`globals: false`).
 - Rediseño de la ficha del alumno (`/coach/alumnos/:id`) CERRADO:
 

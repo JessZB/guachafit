@@ -165,6 +165,12 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - Cambia la moneda a Bs.: el monto **se vacía**. Escribe `1825,50` (con coma): aparece "Se registrarán Bs. 1.825,50 (≈ $…)".
   - Escribe `50.123` y pulsa "Registrar cobro": no se envía y aparece "Escribe el monto con hasta 2 decimales…".
   - En el móvil horizontal, el modal se desplaza hasta los botones.
+- [ ] **Monitor de adherencia táctil (desde 2026-10-30, UX-14):** en el Monitor de adherencia, en el móvil (360px).
+  - Pulsa en cualquier hueco de una tarjeta: se abre la actividad del alumno. El chevron (›) abre la ficha sin abrir la actividad. Un nombre largo ocupa dos líneas, sin "…".
+  - Los chips dicen "Todos N", "En riesgo N", "En observación N", "Al día N" y "Sin plan N", sin el color entre paréntesis. Al tocar el buscador en el iPhone, la pantalla no hace zoom.
+  - Se lee "Última sesión:" y no aparece "Racha: 0 días".
+  - Con más de 25 alumnos, hay paginación arriba y al pie de la lista.
+  - Con la lista cargada, detén el API y pulsa "Actualizar": la lista sigue, con un aviso y "Reintentar"; los chips y el buscador siguen visibles. Apaga la red: aparece "Sin conexión · datos guardados".
 - [ ] **Dashboard «qué atender hoy» (desde 2026-10-30, UX-13):** en `/coach/dashboard`, en el móvil (360px).
   - Lo primero tras la cabecera es "Requiere tu atención", con 4 accesos: pagos por revisar, evaluaciones, en riesgo deportivo y en mora. Cada uno lleva a su pantalla; "En mora" abre Control de cobros en la pestaña de mora.
   - Mientras carga, los 4 accesos aparecen con "—" y se pueden pulsar.

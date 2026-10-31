@@ -131,7 +131,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-11 ✅ `57606e8` | Dashboard: carga honesta | Dashboard | SEG-01, SEG-02, SEG-06 | `EstadoCarga/Error`, `AvisoDatosOffline`, `use-frescura-offline` | bajo | no | ninguna |
 | UX-12 ✅ `97017b8` | Dashboard: partir la página (<300) | Dashboard | SEG-03, SEG-10 | `use-dashboard-comando`, `GridKpisDashboard`, `BandejaPagos`, `ListaRiesgoDashboard`, fixture demo | medio (specs) | no | UX-11 |
 | UX-13 ✅ `8a5c6f1` | Dashboard: KPI y filas accionables | Dashboard | SEG-04, 05, 07, 08, 09, 11 | enlace extendido, `FranjaDatosClaveAlumno`, `BadgeEstado`, `formatMonto` | medio | no (rutas existentes) | UX-12, UX-03; ⛔ D4 (SEG-05) |
-| UX-14 | Monitor: táctil y estados | Monitor | SEG-12, 13, 14, 15, 16, 17, 18, 19 | `ChipFiltro` con conteo, enlace extendido, `BotonTactil`, `Paginacion` al pie | medio (spec C15 caracteriza el defecto actual) | no | UX-02 |
+| UX-14 ✅ `da5c851` | Monitor: táctil y estados | Monitor | SEG-12, 13, 14, 15, 16, 17, 18, 19 | `ChipFiltro` con conteo, enlace extendido, `BotonTactil`, `Paginacion` al pie | medio (spec C15 caracteriza el defecto actual) | no | UX-02 |
 | UX-15 | Antropometría del entrenador en móvil | Antropometría | SEG-20, 21, 22, 23, 24 | `BarraTabsSegmentada` (2 columnas), `BotonTactil`, `BadgeEstado`, `EstadoError` | medio | no (búsqueda en servidor sí: aparte) | UX-01 |
 | UX-16 | Navegación y menú del entrenador | Menú, BottomNav, Sidebar | SEG-25, 26, 27, 28, 29, 31, 32 | tabla única en `lib/etiquetas-dominio`, `FranjaDatosClaveAlumno`, insignias con conteo | medio-alto (specs por nombre, p. ej. `Sidebar.spec.tsx`) | no con `dashboard-comando`; endpoint ligero sí | ⛔ D4, D5; UX-04 |
 | UX-17 | Ajustes: una pantalla y tabs segmentadas | Ajustes (entrenador y alumno) | CFG-01, 02, 03, 04, 05; ALU-23, 24, 25 | `BarraTabsSegmentada`, `PantallaAjustes` con `renderPestana`; se elimina `PestanasAjustes` | medio-alto (specs de `AjustesPage` y `PantallaAjustes`) | no | UX-01; ⛔ D6 |
@@ -257,6 +257,12 @@ Cobertura: los hallazgos BAJA no listados se resuelven con el lote de su área a
 - SEG-10 (nombres de la pantalla) va con SEG-25 en UX-16. Las insignias de pendientes en la navegación (SEG-26/27) pueden reutilizar los conteos de la franja.
 - "Ver todos" solo aparece con más de 5 filas (SEG-07 pedía también con 1 a 5): se mantuvo el tope, porque cada fila ya enlaza a la ficha.
 - Proceso: la revisión encontró una regresión visual fuera del Dashboard (Control de cobros perdía el `hover` al condicionarlo en `MetricCard`). Al cambiar un componente de `common/`, el prompt de revisión debe nombrar todos sus usos.
+
+**UX-14 cerrado (`da5c851`):** tarjeta del Monitor con enlace extendido (el nombre abre la actividad; el chevron va a la ficha; 44px), `BadgeEstado` con `motion-safe:`, nombres en dos líneas, "Última sesión:" y racha solo si es mayor que 0. Chips `ChipFiltro` con etiquetas cortas, `BotonTactil`, buscador de 16px en el móvil, paginación al pie (`Paginacion` con `etiqueta` y `anunciarEstado`), recarga fallida sin tapar la lista ni los filtros, avisos sin conexión y estados sobre `ui/`. Web 2793 tests en 299 archivos. Seguimientos:
+- El estado vacío de filtros sigue con la guarda `!error` (ya estaba en `HEAD`): tras una recarga fallida con 0 resultados no se ve el vacío.
+- En modo demo y sin conexión se muestra "sin datos": TanStack pausa también la consulta demo (haría falta `networkMode: 'always'` en demo).
+- Falta un test del clic en la paginación del pie. `ModalActividadAlumno.tsx:166` mantiene `animate-pulse` sin `motion-safe`.
+- Proceso: Antigravity cortó una revisión con "network issue": se canceló con `orca orchestration worker-stop` (un worker sin terminar no se puede liberar) y se relanzó. Una pasada de la suite completa perdió 6 archivos (293 de 299): cada validación debe comparar el número de archivos con el de la fase roja. El contrato MP6 citaba el texto "Mostrando…", tomado de un reporte sin comprobarlo en el código. Los textos de la UI se copian del código, nunca de un reporte. Un mensaje de `orchestration send` al worker en curso corrigió el contrato sin relanzarlo. Los specs de páginas con TanStack restauran `onlineManager.setOnline(true)` en `beforeEach` y `afterEach`.
 
 ## 4. Decisiones pendientes del dueño
 
