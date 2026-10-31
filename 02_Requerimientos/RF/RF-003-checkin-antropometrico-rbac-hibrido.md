@@ -139,6 +139,20 @@ Con los tres criterios pendientes cerrados (Escenario 2, §6 y Escenario 3), el 
 ### Peso corporal filtrado al teclear (2026-10-12, `63369d7`)
 - El peso del check-in del alumno y el de la medición del entrenador solo dejan escribir números de hasta 300 kg con 2 decimales (`filtrarEntradaPesoCorporal`); el mínimo de 30 kg sigue validándose al enviar, como exige `CheckinAntropometricoSchema`. Evidencia: spec `ProgresoPage.peso.interaccion.spec.tsx`; web 1575/1575.
 
+### Cola del entrenador en el móvil (2026-10-30, `8cfb73f`, lote UX-15)
+- Las pestañas usan `BarraTabsSegmentada` (tablist "Secciones de evaluaciones"): "Por revisar" con el número visible (nombre accesible "Por revisar: N pendientes") y "Comparar". Tienen teclado APG y paneles `tabpanel`.
+- Tarjeta del control pendiente:
+  - el nombre del alumno es el título (`h3`), y la fecha y el badge `BadgeEstado` van en una fila que se parte;
+  - el peso ausente se muestra como "—";
+  - "Rechazar" y "Aprobar y Consolidar" son `BotonTactil` de 44px, apilados en el móvil;
+  - el aviso de fotos protegidas va en su propia línea.
+- El aviso de éxito tiene `role="status"` y botón "Cerrar aviso", sin temporizador.
+- El error de carga (`EstadoError` "No pudimos cargar las evaluaciones") solo afecta a "Por revisar": el comparador sigue disponible.
+- Primera carga con `EstadoCarga`. Sin conexión: con datos, "Sin conexión · datos guardados"; sin datos, "Sin conexión y sin datos guardados". Una recarga fallida con datos muestra `AvisoErrorRecarga` sin tapar la cola.
+- Cola: vacíos con `EstadoVacio` ("Sin evaluaciones pendientes", "Sin resultados" + "Limpiar búsqueda"). Buscador de 44px con texto de 16px en el móvil y placeholder "Buscar en esta página…": la búsqueda sigue siendo local a la página cargada.
+- Evidencia: web **2811 tests en 303 archivos**; typecheck y build en verde. Revisión de fiabilidad sin BLOCKER ni WARNING.
+
 ### Pendiente
+- (UX-15) El aviso de éxito sigue visible al pasar a "Comparar" hasta que se cierra. Faltan tests de la recarga fallida con datos y de grasa o cintura ausentes. La búsqueda en servidor necesitaría que el endpoint de pendientes aceptara `q`.
 - **Fotos huérfanas:** una foto subida y luego quitada, o un check-in que no se llega a enviar, deja el objeto en la bóveda (no hay borrado ni barrido). Ver [[RNF-001-almacenamiento-seguridad-fotos-progreso]].
 - **Modo demo:** resuelto el 2026-10-09 (`84643ef`) para el check-in, que ahora se simula en local y lo dice; en la demostración, el título "¡Mediciones Guardadas!" convive con el aviso "En la demostración no se envía nada a tu entrenador." (podría ser más claro). Las pantallas de Nutrición y Pagos del alumno en demo siguen llamando al API.

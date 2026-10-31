@@ -98,7 +98,8 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **UX-12 cerrado (2026-10-30, `97017b8`):** hook `use-dashboard-comando`, fixture demo en `lib/`, `ListaRiesgoDashboard` y `MetricCard` sobre `BadgeEstado`. Web **2754/2754**.
 - **UX-13 cerrado (2026-10-30, `8a5c6f1`):** decisión D4 = «qué atender hoy». Franja «Requiere tu atención», filas a la ficha y «Contexto del negocio» con KPI enlazados. Web **2772/2772**.
 - **UX-14 cerrado (2026-10-30, `da5c851`):** Monitor de adherencia táctil y honesto. Web **2793 tests en 299 archivos**.
-- El siguiente lote es **UX-15** (Antropometría del entrenador en el móvil; SEG-20 a 24), sin decisiones pendientes. Los seguimientos de cada lote están en la sección 3 de la auditoría.
+- **UX-15 cerrado (2026-10-30, `8cfb73f`):** Antropometría del entrenador en el móvil. Web **2811 tests en 303 archivos**.
+- El siguiente lote es **UX-16** (Navegación y menú del entrenador; SEG-25 a 29, 31 y 32). **Depende de la decisión D5** (sección 4 de la auditoría): ¿unificar los nombres de navegación (Panel, Seguimiento, Evaluaciones, Cobros, Pagos), aunque cambien textos que consultan algunos tests? Pregúntamela antes de escribir los tests. D4 ya está decidida ("qué atender hoy"): las insignias de pendientes (SEG-26/27) pueden salir de `dashboard-comando`. Los seguimientos de cada lote están en la sección 3 de la auditoría.
 - **Lecciones de UX-14:**
   - Compara el número de archivos de cada suite completa con el de la fase roja: una pasada perdió 6.
   - Copia los textos de la UI del código, no de un reporte.

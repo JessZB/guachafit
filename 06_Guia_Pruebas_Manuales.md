@@ -165,6 +165,12 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - Cambia la moneda a Bs.: el monto **se vacía**. Escribe `1825,50` (con coma): aparece "Se registrarán Bs. 1.825,50 (≈ $…)".
   - Escribe `50.123` y pulsa "Registrar cobro": no se envía y aparece "Escribe el monto con hasta 2 decimales…".
   - En el móvil horizontal, el modal se desplaza hasta los botones.
+- [ ] **Evaluaciones del entrenador en el móvil (desde 2026-10-30, UX-15):** en "Evaluaciones Físicas", a 360px.
+  - Las pestañas son "Por revisar" (con el número) y "Comparar". Caben en una línea y se cambian también con las flechas del teclado.
+  - En cada tarjeta, el nombre del alumno es lo primero. "Rechazar" y "Aprobar y Consolidar" ocupan el ancho y no se salen de la tarjeta.
+  - Aprueba un control: aparece el aviso verde con una X. No desaparece solo; se cierra con la X.
+  - Con el API detenido, recarga: "No pudimos cargar las evaluaciones" con "Reintentar"; la pestaña "Comparar" sigue funcionando.
+  - Al tocar el buscador en el iPhone, no hay zoom.
 - [ ] **Monitor de adherencia táctil (desde 2026-10-30, UX-14):** en el Monitor de adherencia, en el móvil (360px).
   - Pulsa en cualquier hueco de una tarjeta: se abre la actividad del alumno. El chevron (›) abre la ficha sin abrir la actividad. Un nombre largo ocupa dos líneas, sin "…".
   - Los chips dicen "Todos N", "En riesgo N", "En observación N", "Al día N" y "Sin plan N", sin el color entre paréntesis. Al tocar el buscador en el iPhone, la pantalla no hace zoom.

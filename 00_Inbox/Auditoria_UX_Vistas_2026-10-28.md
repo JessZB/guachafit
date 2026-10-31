@@ -132,7 +132,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-12 ✅ `97017b8` | Dashboard: partir la página (<300) | Dashboard | SEG-03, SEG-10 | `use-dashboard-comando`, `GridKpisDashboard`, `BandejaPagos`, `ListaRiesgoDashboard`, fixture demo | medio (specs) | no | UX-11 |
 | UX-13 ✅ `8a5c6f1` | Dashboard: KPI y filas accionables | Dashboard | SEG-04, 05, 07, 08, 09, 11 | enlace extendido, `FranjaDatosClaveAlumno`, `BadgeEstado`, `formatMonto` | medio | no (rutas existentes) | UX-12, UX-03; ⛔ D4 (SEG-05) |
 | UX-14 ✅ `da5c851` | Monitor: táctil y estados | Monitor | SEG-12, 13, 14, 15, 16, 17, 18, 19 | `ChipFiltro` con conteo, enlace extendido, `BotonTactil`, `Paginacion` al pie | medio (spec C15 caracteriza el defecto actual) | no | UX-02 |
-| UX-15 | Antropometría del entrenador en móvil | Antropometría | SEG-20, 21, 22, 23, 24 | `BarraTabsSegmentada` (2 columnas), `BotonTactil`, `BadgeEstado`, `EstadoError` | medio | no (búsqueda en servidor sí: aparte) | UX-01 |
+| UX-15 ✅ `8cfb73f` | Antropometría del entrenador en móvil | Antropometría | SEG-20, 21, 22, 23, 24 | `BarraTabsSegmentada` (2 columnas), `BotonTactil`, `BadgeEstado`, `EstadoError` | medio | no (búsqueda en servidor sí: aparte) | UX-01 |
 | UX-16 | Navegación y menú del entrenador | Menú, BottomNav, Sidebar | SEG-25, 26, 27, 28, 29, 31, 32 | tabla única en `lib/etiquetas-dominio`, `FranjaDatosClaveAlumno`, insignias con conteo | medio-alto (specs por nombre, p. ej. `Sidebar.spec.tsx`) | no con `dashboard-comando`; endpoint ligero sí | ⛔ D4, D5; UX-04 |
 | UX-17 | Ajustes: una pantalla y tabs segmentadas | Ajustes (entrenador y alumno) | CFG-01, 02, 03, 04, 05; ALU-23, 24, 25 | `BarraTabsSegmentada`, `PantallaAjustes` con `renderPestana`; se elimina `PestanasAjustes` | medio-alto (specs de `AjustesPage` y `PantallaAjustes`) | no | UX-01; ⛔ D6 |
 | UX-18 | Planes comerciales | Ajustes > Planes | CFG-06, 07, 08, 09, 10, 11, 12, 13 | `CampoAjustes`, `DialogoConfirmacion`/confirmación inline de `TarjetaPlantilla`, `BadgeEstado`, `EstadoCarga` | medio | no | UX-03, UX-17; ⛔ D7 (CFG-09, CFG-11) |
@@ -263,6 +263,13 @@ Cobertura: los hallazgos BAJA no listados se resuelven con el lote de su área a
 - En modo demo y sin conexión se muestra "sin datos": TanStack pausa también la consulta demo (haría falta `networkMode: 'always'` en demo).
 - Falta un test del clic en la paginación del pie. `ModalActividadAlumno.tsx:166` mantiene `animate-pulse` sin `motion-safe`.
 - Proceso: Antigravity cortó una revisión con "network issue": se canceló con `orca orchestration worker-stop` (un worker sin terminar no se puede liberar) y se relanzó. Una pasada de la suite completa perdió 6 archivos (293 de 299): cada validación debe comparar el número de archivos con el de la fase roja. El contrato MP6 citaba el texto "Mostrando…", tomado de un reporte sin comprobarlo en el código. Los textos de la UI se copian del código, nunca de un reporte. Un mensaje de `orchestration send` al worker en curso corrigió el contrato sin relanzarlo. Los specs de páginas con TanStack restauran `onlineManager.setOnline(true)` en `beforeEach` y `afterEach`.
+
+**UX-15 cerrado (`8cfb73f`):** pestañas con `BarraTabsSegmentada` ("Por revisar" con contador y "Comparar") y paneles `tabpanel`; tarjeta con el alumno como `h3`, `BadgeEstado`, `BotonTactil` apilados y "—" sin peso; éxito con `role="status"` y cierre manual; `EstadoError` solo en "Por revisar"; `EstadoCarga`, avisos sin conexión y `AvisoErrorRecarga`; vacíos con `EstadoVacio`; buscador táctil "Buscar en esta página…". Web 2811 tests en 303 archivos. Revisión sin BLOCKER ni WARNING. Seguimientos:
+- El aviso de éxito sigue visible al pasar a "Comparar" (se puede limpiar en `onCambiarPestana`).
+- Faltan tests de la recarga fallida con datos y de grasa o cintura ausentes.
+- La búsqueda sigue siendo local a la página (búsqueda en servidor: toca API).
+- `EstadoVacio` no admite icono en su acción: "Limpiar búsqueda" perdió el icono `RotateCcw`.
+- `useTabsAccesibles` se llama en el encabezado y en la página con el mismo `idBase`. Si alguna vez gestiona el foco con estado propio, conviene pasar `propsTab` y `propsPanel` desde una sola llamada.
 
 ## 4. Decisiones pendientes del dueño
 
