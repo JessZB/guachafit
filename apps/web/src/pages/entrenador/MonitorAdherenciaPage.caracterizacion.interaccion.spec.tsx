@@ -16,7 +16,7 @@
  * Selectores solo por rol/label/texto accesible (R5: deben sobrevivir al refactor).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -257,7 +257,7 @@ async function esperarMonitor(): Promise<void> {
 /** Abre el modal de actividad clicando la tarjeta del alumno en rojo. */
 async function abrirModalActividad(): Promise<void> {
   await esperarMonitor();
-  fireEvent.click(screen.getByTitle('Ver la actividad reciente de Rosa Riesgo'));
+  fireEvent.click(screen.getByRole('button', { name: 'Rosa Riesgo' }));
   await screen.findByRole('dialog', undefined, { timeout: 4000 });
 }
 
@@ -314,27 +314,27 @@ describe('MonitorAdherenciaPage · caracterización: cabecera, chips y búsqueda
     montar();
     expect(await screen.findByRole('heading', { name: 'Seguimiento de Alumnos' })).toBeTruthy();
     expect(screen.getByText('Cumplimiento semanal')).toBeTruthy();
-    expect(await screen.findByRole('button', { name: 'Todos5' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'En riesgo (Rojo)1' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'En observación (Amarillo)1' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Al día (Verde)1' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Sin plan activo1' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Todos 5' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'En riesgo 1' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'En observación 1' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Al día 1' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sin plan 1' })).toBeTruthy();
   });
 
   it('C2 · el chip rojo viaja al servidor como semaforo=rojo y el toggle lo limpia', async () => {
     montar();
     await esperarMonitor();
-    fireEvent.click(screen.getByRole('button', { name: 'En riesgo (Rojo)1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'En riesgo 1' }));
     await waitFor(() => expect(ultimaLlamadaMonitor()).toContain('semaforo=rojo'), {
       timeout: 4000,
     });
     expect(
-      screen.getByRole('button', { name: 'En riesgo (Rojo)1' }).getAttribute('aria-pressed'),
+      screen.getByRole('button', { name: 'En riesgo 1' }).getAttribute('aria-pressed'),
     ).toBe('true');
 
     // Toggle: volver a tocar el chip activo limpia el filtro.
     const antes = llamadasMonitor().length;
-    fireEvent.click(screen.getByRole('button', { name: 'En riesgo (Rojo)1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'En riesgo 1' }));
     await waitFor(
       () => {
         expect(llamadasMonitor().length).toBeGreaterThan(antes);
@@ -347,7 +347,7 @@ describe('MonitorAdherenciaPage · caracterización: cabecera, chips y búsqueda
   it('C3 · el chip "Sin plan activo" viaja como semaforo=sinPlan', async () => {
     montar();
     await esperarMonitor();
-    fireEvent.click(screen.getByRole('button', { name: 'Sin plan activo1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sin plan 1' }));
     await waitFor(() => expect(ultimaLlamadaMonitor()).toContain('semaforo=sinPlan'), {
       timeout: 4000,
     });
@@ -465,7 +465,11 @@ describe('MonitorAdherenciaPage · caracterización: carga, error, vacíos y pag
     await esperarMonitor();
     expect(screen.getByRole('navigation', { name: 'Paginación' })).toBeTruthy();
     const antes = llamadasMonitor().length;
-    fireEvent.click(screen.getByRole('button', { name: 'Página siguiente' }));
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Paginación' })).getByRole('button', {
+        name: 'Página siguiente',
+      }),
+    );
     await waitFor(
       () => {
         expect(llamadasMonitor().length).toBeGreaterThan(antes);
@@ -490,8 +494,8 @@ describe('MonitorAdherenciaPage · caracterización: tarjetas del listado', () =
     expect(screen.getByText('25.00%')).toBeTruthy();
     const barra = screen.getByRole('progressbar', { name: 'Adherencia semanal de Rosa Riesgo' });
     expect(barra.getAttribute('aria-valuenow')).toBe('25');
-    const tarjeta = screen.getByTitle('Ver la actividad reciente de Rosa Riesgo');
-    expect(tarjeta.textContent).toMatch(/Últ\. sesión:/);
+    const tarjeta = screen.getByRole('heading', { name: 'Rosa Riesgo' }).closest('article');
+    expect(tarjeta?.textContent).toMatch(/Última sesión:/);
   });
 
   it('C13 · el alumno con más de 4 días inactivo muestra el aviso de inactividad', async () => {
@@ -621,7 +625,7 @@ describe('MonitorAdherenciaPage · caracterización: modo demo', () => {
     montar();
     expect(await screen.findByRole('heading', { name: 'Seguimiento de Alumnos' })).toBeTruthy();
     expect(await screen.findByRole('heading', { name: 'Daniela Ríos Peña' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Todos15' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Todos 15' })).toBeTruthy();
     expect(
       mockApi.mock.calls.some(([endpoint]) =>
         String(endpoint).startsWith('/entrenador/monitor-adherencia'),
@@ -629,7 +633,7 @@ describe('MonitorAdherenciaPage · caracterización: modo demo', () => {
     ).toBe(false);
 
     // Misma semántica de filtros sobre el roster local: el rojo oculta a los al día.
-    fireEvent.click(screen.getByRole('button', { name: 'En riesgo (Rojo)4' }));
+    fireEvent.click(screen.getByRole('button', { name: 'En riesgo 4' }));
     await waitFor(
       () =>
         expect(
@@ -644,7 +648,7 @@ describe('MonitorAdherenciaPage · caracterización: modo demo', () => {
     sesionMock.isDemoMode = true;
     montar();
     expect(await screen.findByRole('heading', { name: 'Daniela Ríos Peña' })).toBeTruthy();
-    fireEvent.click(screen.getByTitle('Ver la actividad reciente de Daniela Ríos Peña'));
+    fireEvent.click(screen.getByRole('button', { name: 'Daniela Ríos Peña' }));
     expect(
       await screen.findByRole('heading', { name: 'Actividad de Daniela Ríos Peña' }),
     ).toBeTruthy();

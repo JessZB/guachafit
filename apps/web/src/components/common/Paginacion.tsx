@@ -38,6 +38,10 @@ export interface PaginacionProps {
   cargando?: boolean;
   /** Deshabilita todo el control (p. ej. error de carga). */
   deshabilitado?: boolean;
+  /** Nombre accesible de la navegación (UX-14). Por defecto "Paginación". */
+  etiqueta?: string;
+  /** Si es `false`, el contador no es región `status` (evita anunciar dos veces la misma paginación). */
+  anunciarEstado?: boolean;
 }
 
 /** Botón base de paginación (anterior/siguiente y números).
@@ -113,6 +117,8 @@ export function Paginacion({
   onCambiarTamano,
   cargando = false,
   deshabilitado = false,
+  etiqueta = 'Paginación',
+  anunciarEstado = true,
 }: PaginacionProps) {
   const totalPaginas = calcularTotalPaginas(total, tamano);
   const paginaActiva = clampPagina(pagina, totalPaginas);
@@ -126,10 +132,14 @@ export function Paginacion({
 
   return (
     <nav
-      aria-label="Paginación"
+      aria-label={etiqueta}
       className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
     >
-      <p className="text-xs text-muted-foreground" role="status" aria-live="polite">
+      <p
+        className="text-xs text-muted-foreground"
+        role={anunciarEstado ? 'status' : undefined}
+        aria-live={anunciarEstado ? 'polite' : undefined}
+      >
         <span className="hidden sm:inline">{textoPaginacion(paginaActiva, totalPaginas, total)}</span>
         <span className="sm:hidden">
           Página <span className="font-mono font-bold text-foreground">{paginaActiva}</span> de{' '}

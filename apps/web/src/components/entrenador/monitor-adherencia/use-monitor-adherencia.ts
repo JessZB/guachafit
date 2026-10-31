@@ -115,6 +115,8 @@ export function useMonitorAdherencia({ isDemoMode }: { isDemoMode: boolean }) {
   // Solo la PRIMERA carga muestra esqueletos; el cambio de página conserva la lista anterior.
   const isLoading = cargando && !respuesta;
   const error = errorCarga?.message ?? null;
+  // Con recarga fallida `respuesta` conserva la última página (keepPreviousData): hay datos que mostrar.
+  const hayDatos = respuesta !== undefined;
 
   // WU25a: búsqueda/filtro/tamaño nuevos vuelven a la página 1 (y el demo reinicia su página).
   useEffect(() => {
@@ -134,6 +136,7 @@ export function useMonitorAdherencia({ isDemoMode }: { isDemoMode: boolean }) {
     resumen,
     cargando,
     isLoading,
+    hayDatos,
     error,
     recargar,
     pagina,

@@ -6,16 +6,13 @@
  * Clasificación: ÚNICO (tarjeta de dominio solo de esta vista; la tarjeta del
  * directorio `TarjetaAlumnoDirectorio` muestra otra entidad visual, R3).
  *
- * R5: conserva idénticos el `article[title]`, badges (con punto `animate-pulse` en danger),
- * "Racha:", aviso de inactividad, "Últ. sesión:", chevrón al expediente
- * (`stopPropagation` en click y keydown), barra `role="progressbar"` y el botón
- * "Ver últimas sesiones en detalle" (`aria-haspopup="dialog"`, `min-h-11`).
- * DEFECTO CONOCIDO PRESERVADO (caracterizado en C15): el chevrón es un `Link` dentro del
- * `article` clicable —con puntero `stopPropagation` evita abrir el modal, pero el `Link`
- * sigue siendo el acceso por teclado/AT—; no se corrige aquí.
- * CANDIDATO: `BadgeEstado` de `ui/` (punto animado y anillo propios, no mecánico).
+ * UX-14 (SEG-12, 15, 16, 19): la acción principal es el nombre (`<button>` con enlace
+ * extendido `after:`, que cubre la tarjeta). El article no lleva `onClick` ni `title`.
+ * El chevrón (enlace a la ficha) y el botón "Ver últimas sesiones en detalle" van por
+ * encima (`z-10`); los contenedores no interactivos dejan pasar el clic (`pointer-events-none`).
+ * El estado usa `BadgeEstado` y la racha solo aparece con días > 0.
  *
- * §6: botón de 44px (`min-h-11`), texto ≥ 11px, pesos ≤ 700, tokens con variante claro/oscuro.
+ * §6: áreas táctiles de 44px (`min-h-11`), texto ≥ 11px, pesos ≤ 700, tokens con variante claro/oscuro.
  * Presentacional: solo props y callbacks, sin `useQuery` ni `api-client` (R1).
  */
 
@@ -31,6 +28,7 @@ import {
   iniciales,
   porcentajeSeguro,
 } from '../../../lib/monitor-adherencia-presentacion';
+import { BadgeEstado } from '../../ui/BadgeEstado';
 
 export interface TarjetaAlumnoMonitorProps {
   alumno: MonitorAdherenciaSemanalDTO;
@@ -46,35 +44,37 @@ export function TarjetaAlumnoMonitor({ alumno, onVerActividad }: TarjetaAlumnoMo
   const inactivo = conPlan && alumno.diasInactivo > 4;
 
   return (
-    <article
-      onClick={() => {
-        triggerHaptic('light');
-        onVerActividad(alumno);
-      }}
-      title={`Ver la actividad reciente de ${alumno.nombreCompleto}`}
-      className="p-5 rounded-3xl bg-card border border-border/80 shadow-xs hover:border-primary/40 transition-colors space-y-4 cursor-pointer"
-    >
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <article className="relative group p-5 rounded-3xl bg-card border border-border/80 shadow-xs hover:border-primary/40 transition-colors space-y-4">
+      <div className="pointer-events-none flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <div className="h-11 w-11 rounded-2xl bg-secondary/80 border border-border/70 flex items-center justify-center text-primary font-bold text-sm shrink-0">
             {iniciales(alumno.nombreCompleto)}
           </div>
           <div className="min-w-0">
-            <h3 className="font-bold text-sm text-foreground truncate">
-              {alumno.nombreCompleto}
+            <h3 className="font-bold text-sm text-foreground line-clamp-2 break-words">
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('light');
+                  onVerActividad(alumno);
+                }}
+                aria-haspopup="dialog"
+                className="pointer-events-auto cursor-pointer text-left max-w-full rounded-md group-hover:text-primary transition-colors focus-visible:outline-2 focus-visible:outline-primary after:absolute after:inset-0 after:rounded-3xl after:content-['']"
+              >
+                {alumno.nombreCompleto}
+              </button>
             </h3>
             <div className="flex items-center gap-2 flex-wrap mt-1">
-              <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide border ${tono.chip}`}
-              >
+              <BadgeEstado tono={etiqueta.tono}>
                 <span
+                  aria-hidden="true"
                   className={`h-1.5 w-1.5 rounded-full ${tono.punto} ${
-                    etiqueta.tono === 'danger' ? 'animate-pulse' : ''
+                    etiqueta.tono === 'danger' ? 'motion-safe:animate-pulse' : ''
                   }`}
                 />
                 {etiqueta.texto}
-              </span>
-              {conPlan && (
+              </BadgeEstado>
+              {conPlan && alumno.rachaDiasConsecutivos > 0 && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-bold text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full border border-border/60">
                   <Flame className="h-3 w-3 text-warning" />
                   Racha: {alumno.rachaDiasConsecutivos}{' '}
@@ -94,17 +94,15 @@ export function TarjetaAlumnoMonitor({ alumno, onVerActividad }: TarjetaAlumnoMo
         <div className="flex items-center gap-2 self-end sm:self-center">
           <span className="text-[11px] font-mono font-bold text-muted-foreground flex items-center gap-1.5">
             <CalendarClock className="h-3.5 w-3.5" />
-            {ultimaSesion ? `Últ. sesión: ${ultimaSesion}` : 'Sin sesiones registradas'}
+            {ultimaSesion ? `Última sesión: ${ultimaSesion}` : 'Sin sesiones registradas'}
           </span>
           <Link
             to={rutaExpedienteMonitor(alumno.alumnoPerfilId)}
-            onClick={(evento) => evento.stopPropagation()}
-            onKeyDown={(evento) => evento.stopPropagation()}
-            className="p-2 rounded-xl bg-secondary/70 hover:bg-secondary text-muted-foreground hover:text-foreground border border-border/60 transition-colors focus-visible:outline-2 focus-visible:outline-primary"
+            className="pointer-events-auto relative z-10 min-h-11 min-w-11 flex items-center justify-center p-2 rounded-xl bg-secondary/70 hover:bg-secondary text-muted-foreground hover:text-foreground border border-border/60 transition-colors focus-visible:outline-2 focus-visible:outline-primary"
             title={`Abrir el expediente de ${alumno.nombreCompleto}`}
             aria-label={`Abrir el expediente de ${alumno.nombreCompleto}`}
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </Link>
         </div>
       </div>
@@ -112,12 +110,12 @@ export function TarjetaAlumnoMonitor({ alumno, onVerActividad }: TarjetaAlumnoMo
       {/* Sesiones completadas vs prescritas */}
       {conPlan ? (
         alumno.sinPendientesSemana ? (
-          <p className="text-xs text-muted-foreground flex items-center gap-2">
+          <p className="pointer-events-none text-xs text-muted-foreground flex items-center gap-2">
             <CalendarClock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             Al día — sin pendientes esta semana: aún no vence ningún bloque de su plan.
           </p>
         ) : (
-          <div className="space-y-2">
+          <div className="pointer-events-none space-y-2">
             <div className="flex items-center justify-between text-xs">
               <span className="font-bold text-foreground">
                 {alumno.sesionesCompletadas}/
@@ -143,27 +141,25 @@ export function TarjetaAlumnoMonitor({ alumno, onVerActividad }: TarjetaAlumnoMo
           </div>
         )
       ) : (
-        <p className="text-xs text-muted-foreground flex items-center gap-2">
+        <p className="pointer-events-none text-xs text-muted-foreground flex items-center gap-2">
           <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />
           Sin rutina activa: asígnale una planificación para calcular su adherencia
           semanal.
         </p>
       )}
 
-      {/* Afordancia del modal: la tarjeta es clicable con puntero y este botón es el
-          acceso real por teclado/AT (el chevron sigue siendo el atajo a la ficha).
-          U2 (Ola 4): fila de lista con área táctil de 44px y fondo al pasar el cursor. */}
+      {/* Acceso por teclado y AT al modal de actividad (además del nombre). Va por encima del
+          enlace extendido para responder a su propio clic. */}
       <button
         type="button"
-        onClick={(evento) => {
-          evento.stopPropagation();
+        onClick={() => {
           triggerHaptic('light');
           onVerActividad(alumno);
         }}
         aria-haspopup="dialog"
-        className="flex min-h-11 w-full items-center gap-1.5 rounded-xl border border-transparent px-2 text-[11px] font-bold text-muted-foreground/90 hover:border-border/60 hover:bg-secondary/40 hover:text-primary transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+        className="relative z-10 pointer-events-auto flex min-h-11 w-full items-center gap-1.5 rounded-xl border border-transparent px-2 text-[11px] font-bold text-muted-foreground/90 hover:border-border/60 hover:bg-secondary/40 hover:text-primary transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
       >
-        <History className="h-3.5 w-3.5" />
+        <History className="h-3.5 w-3.5" aria-hidden="true" />
         Ver últimas sesiones en detalle
       </button>
     </article>
