@@ -165,6 +165,11 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - Cambia la moneda a Bs.: el monto **se vacía**. Escribe `1825,50` (con coma): aparece "Se registrarán Bs. 1.825,50 (≈ $…)".
   - Escribe `50.123` y pulsa "Registrar cobro": no se envía y aparece "Escribe el monto con hasta 2 decimales…".
   - En el móvil horizontal, el modal se desplaza hasta los botones.
+- [ ] **Ajustes en una sola pantalla (desde 2026-10-31, UX-17):** en Ajustes del entrenador y del alumno, a 360px.
+  - Las pestañas caben sin desplazamiento lateral: Perfil, Acceso, Avisos, Planes y Tasa (entrenador); Perfil, Acceso, Avisos y Zona horaria (alumno).
+  - `/coach/ajustes?tab=tasas` abre Tasa. Al volver a Perfil, la URL queda sin `?tab=`.
+  - La pestaña Planes muestra el número de planes cuando terminan de cargar; mientras carga no se ve un "0". "Nuevo plan comercial" está dentro de Planes y abre el formulario.
+  - Avisos ya no tiene una tarjeta dentro de otra. En escritorio, Tasa aprovecha el ancho.
 - [ ] **Navegación del entrenador con nombres únicos e insignias (desde 2026-10-31, UX-16):**
   - Sidebar, barra inferior, menú y títulos dicen lo mismo: "Panel", "Seguimiento", "Evaluaciones", "Mis alumnos", "Control de cobros" y "Pagos por validar".
   - En el Sidebar y en el menú aparecen números junto a Seguimiento, Evaluaciones, Control de cobros y Pagos por validar. En el móvil, "Panel" lleva la suma de pagos y evaluaciones por revisar. Sin pendientes no hay número.

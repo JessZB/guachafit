@@ -190,10 +190,20 @@ Then ve "El enlace no es válido o venció. Pide uno nuevo desde Ajustes."
   - Con "Instalar app" disponible o con cambios fallidos, el nombre GUACHAFIT se oculta en el móvil (queda el logo) para que la fila quepa a 360px. Peor caso estimado: 338px.
   - Evidencia: web **2543/2543**; typecheck y build en verde. La revisión de fiabilidad dio 1 BLOCKER y 2 WARNING, corregidos y validados.
 
+### Ajustes en una sola pantalla con barra segmentada (`14c796e`, 2026-10-31, lote UX-17, decisión D6)
+- **Decisión del dueño (D6):** etiquetas cortas.
+  - Entrenador: Perfil, Acceso, Avisos, Planes y Tasa.
+  - Alumno: Perfil, Acceso, Avisos y Zona horaria.
+  - Perfil sigue siendo la pestaña por defecto y las claves `?tab=` no cambian.
+- Los tres roles usan `PantallaAjustes` con `BarraTabsSegmentada` (columnas iguales, sin scroll horizontal a 360px, 44px). La página del entrenador ya no duplica la lógica de URL y pestañas: pasa planes, tasas y avisos por `renderPestana`. Se borró `PestanasAjustes`.
+- El nombre accesible de cada pestaña es su etiqueta visible (WCAG 2.5.3). La pestaña Planes muestra el número de planes y se anuncia "Planes: N planes", pero solo cuando la lista ya cargó. Mientras carga o con error no muestra cifra.
+- "Nuevo plan comercial" pasa de la cabecera al panel de Planes, junto al contador. El subtítulo del entrenador es "Tu cuenta y tu negocio.". Avisos ya no tiene una tarjeta doble. El entrenador usa un ancho amplio (`max-w-5xl`) para la rejilla de Tasas.
+- Evidencia: web **2836 tests en 310 archivos**; typecheck y build en verde. Revisión de fiabilidad sin BLOCKER. Su WARNING (nombre accesible distinto del visible) se corrigió y se validó.
+
 ### Pendiente
 - En `/admin`, la página del superadministrador conserva su propio botón "Cerrar sesión" y su diálogo de pendientes, además de los del menú "Cuenta" (preexistente, `CabeceraAdmin.tsx` y `AdminPage.tsx`). Retirarlos exige ajustar `AdminPage.caracterizacion.interaccion.spec.tsx:297`.
 - En Notificaciones, Zona horaria, Planes y Tasas, si se cambia de pestaña con un guardado en vuelo el resultado no se muestra al volver (esas pestañas se desmontan).
 - La carga del perfil (`GET /usuarios/me/perfil`) no tiene tiempo límite: con una red que no responde queda en "Cargando tu perfil…".
-- Ajustes del entrenador: las pestañas Planes, Tasas y Notificaciones apuntan (`aria-controls`) a un panel que no existe mientras no están activas.
 - `jsdom` 30 pide Node ≥ 22.22.2 y el repo no declara versión mínima de Node (solo afecta a las pruebas).
-- Mantenibilidad: los paneles Perfil/Correo y contraseña se repiten en `PantallaAjustes` y en el `AjustesPage` del entrenador, y los specs de interacción repiten mocks y datos de prueba.
+- Mantenibilidad: los specs de interacción de Ajustes repiten mocks y datos de prueba. (Resuelto en UX-17: la duplicación de paneles entre `PantallaAjustes` y la página del entrenador, y los paneles inexistentes de `aria-controls`.)
+- (UX-17) `etiquetaPestanaAjustes` (nombres largos) ya no se usa en la UI; solo la exige `lib/ajustes.spec.ts`. Falta un test directo de `etiquetaCortaPestanaAjustes` y de los bordes del conteo de planes (error y 0 planes).

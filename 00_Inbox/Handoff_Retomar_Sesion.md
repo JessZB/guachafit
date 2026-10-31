@@ -101,7 +101,13 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **UX-15 cerrado (2026-10-30, `8cfb73f`):** Antropometría del entrenador en el móvil. Web **2811 tests en 303 archivos**.
 - **UX-16 cerrado (2026-10-31, `cf4bd84`):** navegación del entrenador con nombres únicos (D5), insignias de pendientes y saludo real. Web **2827 tests en 308 archivos**.
 - **Preferencia del dueño (desde UX-16):** no escribas specs que solo comprueban textos (copy o nombres). Usa una constante única y ajusta los specs que ya los consultan. Los tests son para comportamiento real.
-- El siguiente lote es **UX-17** (Ajustes: una pantalla y tabs segmentadas; CFG-01 a 05 y ALU-23 a 25). **Depende de la decisión D6** (sección 4 de la auditoría): etiquetas cortas de las tabs (Acceso, Avisos, Planes, Tasa) y qué tab abre por defecto. Pregúntamela antes de escribir los tests. Los seguimientos de cada lote están en la sección 3 de la auditoría.
+- **UX-17 cerrado (2026-10-31, `14c796e`):** Ajustes en una sola pantalla con barra segmentada (D6). Web **2836 tests en 310 archivos**.
+- **Orca + Antigravity 1.4.12:** `worker-start --agent antigravity --model …` falla con `agent_not_in_foreground`, pero deja abierta la terminal del agente con ese modelo. Reutilízala:
+  ```bash
+  orca orchestration worker-start --spec "…" --worktree current --terminal <handle> --json
+  ```
+  El handle sale de `orca orchestration worker-list --json` (`agentTerminalHandle`).
+- El siguiente lote es **UX-18** (Planes comerciales; CFG-06 a 13). **Depende de la decisión D7** (sección 4 de la auditoría): ¿el precio es por mes o por toda la duración? ¿Se quitan el precio `40.00` y los beneficios precargados? Pregúntamela antes de escribir los tests. Los seguimientos de cada lote están en la sección 3 de la auditoría.
 - **Lecciones de UX-14:**
   - Compara el número de archivos de cada suite completa con el de la fase roja: una pasada perdió 6.
   - Copia los textos de la UI del código, no de un reporte.

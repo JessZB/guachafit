@@ -134,7 +134,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-14 ✅ `da5c851` | Monitor: táctil y estados | Monitor | SEG-12, 13, 14, 15, 16, 17, 18, 19 | `ChipFiltro` con conteo, enlace extendido, `BotonTactil`, `Paginacion` al pie | medio (spec C15 caracteriza el defecto actual) | no | UX-02 |
 | UX-15 ✅ `8cfb73f` | Antropometría del entrenador en móvil | Antropometría | SEG-20, 21, 22, 23, 24 | `BarraTabsSegmentada` (2 columnas), `BotonTactil`, `BadgeEstado`, `EstadoError` | medio | no (búsqueda en servidor sí: aparte) | UX-01 |
 | UX-16 ✅ `cf4bd84` | Navegación y menú del entrenador | Menú, BottomNav, Sidebar | SEG-25, 26, 27, 28, 29, 31, 32 | tabla única en `lib/etiquetas-dominio`, `FranjaDatosClaveAlumno`, insignias con conteo | medio-alto (specs por nombre, p. ej. `Sidebar.spec.tsx`) | no con `dashboard-comando`; endpoint ligero sí | ⛔ D4, D5; UX-04 |
-| UX-17 | Ajustes: una pantalla y tabs segmentadas | Ajustes (entrenador y alumno) | CFG-01, 02, 03, 04, 05; ALU-23, 24, 25 | `BarraTabsSegmentada`, `PantallaAjustes` con `renderPestana`; se elimina `PestanasAjustes` | medio-alto (specs de `AjustesPage` y `PantallaAjustes`) | no | UX-01; ⛔ D6 |
+| UX-17 ✅ `14c796e` | Ajustes: una pantalla y tabs segmentadas | Ajustes (entrenador y alumno) | CFG-01, 02, 03, 04, 05; ALU-23, 24, 25 | `BarraTabsSegmentada`, `PantallaAjustes` con `renderPestana`; se elimina `PestanasAjustes` | medio-alto (specs de `AjustesPage` y `PantallaAjustes`) | no | UX-01; ⛔ D6 |
 | UX-18 | Planes comerciales | Ajustes > Planes | CFG-06, 07, 08, 09, 10, 11, 12, 13 | `CampoAjustes`, `DialogoConfirmacion`/confirmación inline de `TarjetaPlantilla`, `BadgeEstado`, `EstadoCarga` | medio | no | UX-03, UX-17; ⛔ D7 (CFG-09, CFG-11) |
 | UX-19 | Tasa de cambio sin jerga y accesible | Ajustes > Tasa | CFG-14, 15, 16, 17, 18, 19 | `CampoAjustes`, `<details>` con resumen guardado (patrón `PestanaAntropometriaAlumno`), `AvisosAjustes` | bajo-medio (specs de textos de tasa) | no | UX-03, UX-17 |
 | UX-20 | Plantillas: recarga honesta y táctil | Plantillas | CFG-20, 21, 22, 23, 24, 25, 26 | `BadgeEstado`, patrón `AvisoErrorDirectorio` | bajo | no | ninguna |
@@ -289,6 +289,20 @@ Proceso:
 - Un spec usaba un import dentro de `vi.hoisted`. En la fase roja no se vio porque el archivo ya fallaba al importar el módulo inexistente. La verificación debe confirmar que **cada archivo de spec nuevo ejecuta sus tests**, no solo que no hay fallos.
 - Al pasar la navegación a TanStack, los specs que la montan necesitaron un `QueryClientProvider` en el arnés.
 
+**UX-17 cerrado (`14c796e`, decisión D6):**
+- Los tres roles usan `PantallaAjustes` con `BarraTabsSegmentada`. El entrenador pasa sus paneles por `renderPestana` y se borró `PestanasAjustes`.
+- Etiquetas cortas, iguales al nombre accesible (WCAG 2.5.3).
+- Conteo de planes honesto; "Nuevo plan comercial" en su panel; Avisos sin tarjeta doble; ancho amplio en el entrenador.
+- Web 2836 tests en 310 archivos. Revisión de fiabilidad sin BLOCKER.
+
+Seguimientos:
+- `etiquetaPestanaAjustes` (nombres largos) ya no se usa en la UI.
+- Faltan tests de `etiquetaCortaPestanaAjustes` y de los bordes del conteo.
+
+Proceso:
+- Mantener los nombres accesibles largos para no tocar specs fue un error de diseño del coordinador: incumplía WCAG 2.5.3 y lo detectó la revisión. **El nombre accesible siempre contiene el texto visible**, aunque eso obligue a ajustar selectores.
+- Antigravity 1.4.12 falla en `worker-start --agent` con `agent_not_in_foreground`. Se esquiva reutilizando con `--terminal` la terminal que ese intento deja abierta; el modelo es el de esa terminal.
+
 ## 4. Decisiones pendientes del dueño
 
 Deduplicadas de las 15 preguntas de los reportes (cada una con la recomendación del auditor).
@@ -300,7 +314,7 @@ Deduplicadas de las 15 preguntas de los reportes (cada una con la recomendación
 | D3 | En móvil, ¿"Recordatorio" y "Ver ficha" a un menú "Más", dejando visible solo "Registrar cobro"? ¿Se acepta `md:min-h-9` en escritorio? | Sí al menú, igual que la ficha (decisión 7 del brief): hoy son tres botones de 28px que envuelven (COB-19, COB-20). | UX-07 (COB-20) |
 | D4 ✅ | ¿El Dashboard es "qué atender hoy" (franja de pendientes arriba) o un tablero de negocio? ¿Los conteos salen del endpoint `dashboard-comando` o de uno ligero (toca API)? | "Qué atender hoy" con `dashboard-comando`, sin API nueva: el dato `bandejasRapidas` ya existe (SEG-05, SEG-26, SEG-27). **Decidido por el dueño (2026-10-30): "qué atender hoy"**, con la franja arriba, las listas después y las cifras de negocio al final como contexto. | UX-13 (SEG-05), UX-16 |
 | D5 ✅ (2026-10-30: se unifican "Panel", "Seguimiento", "Evaluaciones" y "Mis alumnos" desde una constante única. Las dos pantallas de cobros conservan los nombres de UX-10, "Control de cobros" y "Pagos por validar", porque ya eran coherentes y no existe un destino "Pagos". No se escriben specs nuevos solo para los nombres: se ajustan los que ya los consultan) | ¿Unificar los nombres de navegación (Panel, Seguimiento, Evaluaciones, Cobros, Pagos) aunque cambien textos que algunos tests consultan? ¿Un cuarto destino "Progreso" en la barra del alumno? | Sí a unificar (SEG-25: cinco nombres para un destino). Progreso: mantenerlo en el Menú hasta decidir; el auditor lo considera aceptable para el flujo de gimnasio (NAV-01). | UX-16 (SEG-25), UX-24 (cuarto destino) |
-| D6 | Ajustes del entrenador: etiquetas cortas (Acceso, Avisos, Planes, Tasa) y ¿qué tab abre por defecto? | Etiquetas cortas sí: sin ellas las tabs no caben a 360px (inferido). Dejar Perfil primero para no cambiar `?tab=` por defecto, salvo que se prefiera abrir en Planes o Tasa. | UX-17 |
+| D6 ✅ (2026-10-31: etiquetas cortas Perfil, Acceso, Avisos, Planes y Tasa; Perfil sigue siendo la pestaña inicial) | Ajustes del entrenador: etiquetas cortas (Acceso, Avisos, Planes, Tasa) y ¿qué tab abre por defecto? | Etiquetas cortas sí: sin ellas las tabs no caben a 360px (inferido). Dejar Perfil primero para no cambiar `?tab=` por defecto, salvo que se prefiera abrir en Planes o Tasa. | UX-17 |
 | D7 | Planes: ¿el precio es por mes o por toda la duración? ¿Se quitan el precio `40.00` y los dos beneficios precargados? | Quitar la precarga (CFG-09: datos no elegidos) y aclarar la semántica del precio: hoy dice "USD / mes" aunque el plan dure N meses (CFG-11). | UX-18 |
 | D8 | Reporte de pago: ¿empieza vacío (se actualizan los specs que usan `1300.00` y localizan por `parentElement`)? ¿El API acepta clave de idempotencia o rechaza duplicados por referencia+monto+fecha? | Sí a vaciar (ALU-01 es ALTA). Sin idempotencia en el API solo hay mitigación en el cliente (ALU-07). | UX-21, UX-22 |
 | D9 | Check-in antropométrico con fotos sin conexión: ¿encolar o avisar y bloquear el envío? | Avisar y bloquear: no toca datos. Encolar es riesgo alto y requiere diseño de cola offline (PRO-04). | UX-28 |
