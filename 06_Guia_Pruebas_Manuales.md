@@ -165,6 +165,12 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - Cambia la moneda a Bs.: el monto **se vacía**. Escribe `1825,50` (con coma): aparece "Se registrarán Bs. 1.825,50 (≈ $…)".
   - Escribe `50.123` y pulsa "Registrar cobro": no se envía y aparece "Escribe el monto con hasta 2 decimales…".
   - En el móvil horizontal, el modal se desplaza hasta los botones.
+- [ ] **Navegación del entrenador con nombres únicos e insignias (desde 2026-10-31, UX-16):**
+  - Sidebar, barra inferior, menú y títulos dicen lo mismo: "Panel", "Seguimiento", "Evaluaciones", "Mis alumnos", "Control de cobros" y "Pagos por validar".
+  - En el Sidebar y en el menú aparecen números junto a Seguimiento, Evaluaciones, Control de cobros y Pagos por validar. En el móvil, "Panel" lleva la suma de pagos y evaluaciones por revisar. Sin pendientes no hay número.
+  - Aprueba un pago en "Pagos por validar": el número baja enseguida, sin esperar.
+  - El menú saluda con tu nombre del perfil ("Hola, …"), o solo "Hola". Ya no aparece "Coach" ni la parte del correo, ni los textos "Sesión Segura" o "Por orden de llegada".
+  - Al final del menú y de Ajustes no queda un hueco grande bajo el contenido.
 - [ ] **Evaluaciones del entrenador en el móvil (desde 2026-10-30, UX-15):** en "Evaluaciones Físicas", a 360px.
   - Las pestañas son "Por revisar" (con el número) y "Comparar". Caben en una línea y se cambian también con las flechas del teclado.
   - En cada tarjeta, el nombre del alumno es lo primero. "Rechazar" y "Aprobar y Consolidar" ocupan el ancho y no se salen de la tarjeta.

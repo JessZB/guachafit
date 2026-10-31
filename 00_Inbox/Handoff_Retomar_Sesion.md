@@ -99,7 +99,9 @@ Trabajar, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (14
 - **UX-13 cerrado (2026-10-30, `8a5c6f1`):** decisión D4 = «qué atender hoy». Franja «Requiere tu atención», filas a la ficha y «Contexto del negocio» con KPI enlazados. Web **2772/2772**.
 - **UX-14 cerrado (2026-10-30, `da5c851`):** Monitor de adherencia táctil y honesto. Web **2793 tests en 299 archivos**.
 - **UX-15 cerrado (2026-10-30, `8cfb73f`):** Antropometría del entrenador en el móvil. Web **2811 tests en 303 archivos**.
-- El siguiente lote es **UX-16** (Navegación y menú del entrenador; SEG-25 a 29, 31 y 32). **Depende de la decisión D5** (sección 4 de la auditoría): ¿unificar los nombres de navegación (Panel, Seguimiento, Evaluaciones, Cobros, Pagos), aunque cambien textos que consultan algunos tests? Pregúntamela antes de escribir los tests. D4 ya está decidida ("qué atender hoy"): las insignias de pendientes (SEG-26/27) pueden salir de `dashboard-comando`. Los seguimientos de cada lote están en la sección 3 de la auditoría.
+- **UX-16 cerrado (2026-10-31, `cf4bd84`):** navegación del entrenador con nombres únicos (D5), insignias de pendientes y saludo real. Web **2827 tests en 308 archivos**.
+- **Preferencia del dueño (desde UX-16):** no escribas specs que solo comprueban textos (copy o nombres). Usa una constante única y ajusta los specs que ya los consultan. Los tests son para comportamiento real.
+- El siguiente lote es **UX-17** (Ajustes: una pantalla y tabs segmentadas; CFG-01 a 05 y ALU-23 a 25). **Depende de la decisión D6** (sección 4 de la auditoría): etiquetas cortas de las tabs (Acceso, Avisos, Planes, Tasa) y qué tab abre por defecto. Pregúntamela antes de escribir los tests. Los seguimientos de cada lote están en la sección 3 de la auditoría.
 - **Lecciones de UX-14:**
   - Compara el número de archivos de cada suite completa con el de la fase roja: una pasada perdió 6.
   - Copia los textos de la UI del código, no de un reporte.

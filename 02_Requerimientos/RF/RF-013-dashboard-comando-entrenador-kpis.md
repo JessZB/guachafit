@@ -152,3 +152,23 @@ Then el contador del KPI debe actualizarse de "2" a "1" instantáneamente sin re
 - Control de cobros: la tarjeta "Pagos por validar" usa `enlace` en lugar de un `Link` envolvente.
 - Evidencia: web **2772/2772**; typecheck y build en verde. Revisión de fiabilidad sin BLOCKER. Se corrigieron dos hallazgos, validados con P7 y R1: la clave duplicada en mora y el realce perdido en Control de cobros.
 - Pendiente: el cumplimiento semanal se muestra con el decimal crudo (`84.50%`). No hay recarga automática al volver la conexión. Las etiquetas "Panel administrativo" y "Resumen del Negocio" van con SEG-25 (UX-16).
+
+### Navegación del entrenador con nombres únicos e insignias (`cf4bd84`, 2026-10-31, lote UX-16, decisión D5)
+- **Decisión del dueño (D5):** un nombre por destino, desde la constante `DESTINOS_ENTRENADOR` (`lib/etiquetas-dominio.ts`), que leen el `h1`, el Sidebar, la BottomNav y las tarjetas del menú:
+  - "Panel", "Seguimiento", "Evaluaciones" y "Mis alumnos";
+  - "Control de cobros" y "Pagos por validar" se mantienen (UX-10);
+  - también "Plantillas de ejercicios", "Ajustes" y "Menú".
+- **Insignias de pendientes** (`InsigniaConteo`):
+  - En el Sidebar y en las tarjetas del menú: Seguimiento ("N alumnos en riesgo"), Evaluaciones ("N por revisar"), Control de cobros ("N en mora") y Pagos por validar ("N por validar"). En la BottomNav, "Panel" muestra la suma de pagos y evaluaciones por revisar.
+  - Salen de `usePendientesNavegacion` (TanStack, `/entrenador/dashboard-comando`). Solo las ve el entrenador. En demo usan el fixture. Mientras cargan o si fallan no aparecen, nunca ceros falsos.
+  - Se refrescan al conciliar una evaluación, aprobar o rechazar un pago y registrar un cobro en efectivo (`CLAVE_PENDIENTES_NAVEGACION`).
+- **Menú:**
+  - el saludo usa el nombre real del perfil ("Hola, María"), o "Hola" si no lo hay; ya no se deriva del correo;
+  - se quitaron los badges decorativos "Sesión Segura / Datos Protegidos" y "Por orden de llegada";
+  - foco visible con separación e iconos con `aria-hidden`;
+  - sin doble relleno inferior, también en Ajustes.
+- Evidencia: web **2827 tests en 308 archivos**; typecheck y build en verde. Revisión 4R (diff de más de 400 líneas) sin BLOCKER. Se corrigieron dos WARNING: la insignia desfasada hasta 60 s y los títulos que no leían la constante.
+- Pendiente:
+  - el cobro en sala desde la ficha del alumno no invalida la insignia (tarda como mucho 60 s);
+  - en demo las insignias no cambian al conciliar;
+  - en la tablet (768-1023px) solo hay tres destinos en la BottomNav (SEG-31).

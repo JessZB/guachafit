@@ -133,7 +133,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-13 ✅ `8a5c6f1` | Dashboard: KPI y filas accionables | Dashboard | SEG-04, 05, 07, 08, 09, 11 | enlace extendido, `FranjaDatosClaveAlumno`, `BadgeEstado`, `formatMonto` | medio | no (rutas existentes) | UX-12, UX-03; ⛔ D4 (SEG-05) |
 | UX-14 ✅ `da5c851` | Monitor: táctil y estados | Monitor | SEG-12, 13, 14, 15, 16, 17, 18, 19 | `ChipFiltro` con conteo, enlace extendido, `BotonTactil`, `Paginacion` al pie | medio (spec C15 caracteriza el defecto actual) | no | UX-02 |
 | UX-15 ✅ `8cfb73f` | Antropometría del entrenador en móvil | Antropometría | SEG-20, 21, 22, 23, 24 | `BarraTabsSegmentada` (2 columnas), `BotonTactil`, `BadgeEstado`, `EstadoError` | medio | no (búsqueda en servidor sí: aparte) | UX-01 |
-| UX-16 | Navegación y menú del entrenador | Menú, BottomNav, Sidebar | SEG-25, 26, 27, 28, 29, 31, 32 | tabla única en `lib/etiquetas-dominio`, `FranjaDatosClaveAlumno`, insignias con conteo | medio-alto (specs por nombre, p. ej. `Sidebar.spec.tsx`) | no con `dashboard-comando`; endpoint ligero sí | ⛔ D4, D5; UX-04 |
+| UX-16 ✅ `cf4bd84` | Navegación y menú del entrenador | Menú, BottomNav, Sidebar | SEG-25, 26, 27, 28, 29, 31, 32 | tabla única en `lib/etiquetas-dominio`, `FranjaDatosClaveAlumno`, insignias con conteo | medio-alto (specs por nombre, p. ej. `Sidebar.spec.tsx`) | no con `dashboard-comando`; endpoint ligero sí | ⛔ D4, D5; UX-04 |
 | UX-17 | Ajustes: una pantalla y tabs segmentadas | Ajustes (entrenador y alumno) | CFG-01, 02, 03, 04, 05; ALU-23, 24, 25 | `BarraTabsSegmentada`, `PantallaAjustes` con `renderPestana`; se elimina `PestanasAjustes` | medio-alto (specs de `AjustesPage` y `PantallaAjustes`) | no | UX-01; ⛔ D6 |
 | UX-18 | Planes comerciales | Ajustes > Planes | CFG-06, 07, 08, 09, 10, 11, 12, 13 | `CampoAjustes`, `DialogoConfirmacion`/confirmación inline de `TarjetaPlantilla`, `BadgeEstado`, `EstadoCarga` | medio | no | UX-03, UX-17; ⛔ D7 (CFG-09, CFG-11) |
 | UX-19 | Tasa de cambio sin jerga y accesible | Ajustes > Tasa | CFG-14, 15, 16, 17, 18, 19 | `CampoAjustes`, `<details>` con resumen guardado (patrón `PestanaAntropometriaAlumno`), `AvisosAjustes` | bajo-medio (specs de textos de tasa) | no | UX-03, UX-17 |
@@ -271,6 +271,24 @@ Cobertura: los hallazgos BAJA no listados se resuelven con el lote de su área a
 - `EstadoVacio` no admite icono en su acción: "Limpiar búsqueda" perdió el icono `RotateCcw`.
 - `useTabsAccesibles` se llama en el encabezado y en la página con el mismo `idBase`. Si alguna vez gestiona el foco con estado propio, conviene pasar `propsTab` y `propsPanel` desde una sola llamada.
 
+**UX-16 cerrado (`cf4bd84`, decisión D5):**
+- `DESTINOS_ENTRENADOR` es la fuente única de los nombres. Se aplican "Panel", "Seguimiento", "Evaluaciones" y "Mis alumnos", y se mantienen "Control de cobros" y "Pagos por validar".
+- Insignias de pendientes (`usePendientesNavegacion` + `InsigniaConteo`) en el Sidebar, la BottomNav y el menú. Se invalidan al conciliar una evaluación o un pago y al cobrar en efectivo.
+- Saludo con el nombre real del perfil y sin badges decorativos.
+- Foco visible e iconos `aria-hidden`; sin doble relleno inferior.
+- Web 2827 tests en 308 archivos. Revisión 4R sin BLOCKER.
+
+Seguimientos:
+- SEG-31: tablet (768-1023px) con solo tres destinos en la BottomNav; no se tocó.
+- El cobro en sala de la ficha (`alumno-detalle/use-cobro-sala.ts`) no invalida la insignia de mora. En demo las insignias no cambian al conciliar.
+- Faltan tests de conteo 0 en Sidebar y BottomNav y de las tarjetas secundarias del menú con insignia.
+- `useDashboardComando` (Panel) y `usePendientesNavegacion` piden el mismo endpoint por separado: en el Panel hay dos peticiones. Migrar el hook del Panel a TanStack con la misma clave las unificaría.
+
+Proceso:
+- Por preferencia del dueño, el lote no añadió specs que solo comprueban textos de navegación: la constante única evita la deriva.
+- Un spec usaba un import dentro de `vi.hoisted`. En la fase roja no se vio porque el archivo ya fallaba al importar el módulo inexistente. La verificación debe confirmar que **cada archivo de spec nuevo ejecuta sus tests**, no solo que no hay fallos.
+- Al pasar la navegación a TanStack, los specs que la montan necesitaron un `QueryClientProvider` en el arnés.
+
 ## 4. Decisiones pendientes del dueño
 
 Deduplicadas de las 15 preguntas de los reportes (cada una con la recomendación del auditor).
@@ -281,7 +299,7 @@ Deduplicadas de las 15 preguntas de los reportes (cada una con la recomendación
 | D2 | ¿Ver el texto del recordatorio antes de enviarlo? Obliga al API a entregar el mensaje en una consulta previa. | Sí: hoy el entrenador envía sin ver qué se manda (COB-27). Sin respuesta, se hace solo el `?q=` y el `onError` de la miniatura. | UX-09 (parte) |
 | D3 | En móvil, ¿"Recordatorio" y "Ver ficha" a un menú "Más", dejando visible solo "Registrar cobro"? ¿Se acepta `md:min-h-9` en escritorio? | Sí al menú, igual que la ficha (decisión 7 del brief): hoy son tres botones de 28px que envuelven (COB-19, COB-20). | UX-07 (COB-20) |
 | D4 ✅ | ¿El Dashboard es "qué atender hoy" (franja de pendientes arriba) o un tablero de negocio? ¿Los conteos salen del endpoint `dashboard-comando` o de uno ligero (toca API)? | "Qué atender hoy" con `dashboard-comando`, sin API nueva: el dato `bandejasRapidas` ya existe (SEG-05, SEG-26, SEG-27). **Decidido por el dueño (2026-10-30): "qué atender hoy"**, con la franja arriba, las listas después y las cifras de negocio al final como contexto. | UX-13 (SEG-05), UX-16 |
-| D5 | ¿Unificar los nombres de navegación (Panel, Seguimiento, Evaluaciones, Cobros, Pagos) aunque cambien textos que algunos tests consultan? ¿Un cuarto destino "Progreso" en la barra del alumno? | Sí a unificar (SEG-25: cinco nombres para un destino). Progreso: mantenerlo en el Menú hasta decidir; el auditor lo considera aceptable para el flujo de gimnasio (NAV-01). | UX-16 (SEG-25), UX-24 (cuarto destino) |
+| D5 ✅ (2026-10-30: se unifican "Panel", "Seguimiento", "Evaluaciones" y "Mis alumnos" desde una constante única. Las dos pantallas de cobros conservan los nombres de UX-10, "Control de cobros" y "Pagos por validar", porque ya eran coherentes y no existe un destino "Pagos". No se escriben specs nuevos solo para los nombres: se ajustan los que ya los consultan) | ¿Unificar los nombres de navegación (Panel, Seguimiento, Evaluaciones, Cobros, Pagos) aunque cambien textos que algunos tests consultan? ¿Un cuarto destino "Progreso" en la barra del alumno? | Sí a unificar (SEG-25: cinco nombres para un destino). Progreso: mantenerlo en el Menú hasta decidir; el auditor lo considera aceptable para el flujo de gimnasio (NAV-01). | UX-16 (SEG-25), UX-24 (cuarto destino) |
 | D6 | Ajustes del entrenador: etiquetas cortas (Acceso, Avisos, Planes, Tasa) y ¿qué tab abre por defecto? | Etiquetas cortas sí: sin ellas las tabs no caben a 360px (inferido). Dejar Perfil primero para no cambiar `?tab=` por defecto, salvo que se prefiera abrir en Planes o Tasa. | UX-17 |
 | D7 | Planes: ¿el precio es por mes o por toda la duración? ¿Se quitan el precio `40.00` y los dos beneficios precargados? | Quitar la precarga (CFG-09: datos no elegidos) y aclarar la semántica del precio: hoy dice "USD / mes" aunque el plan dure N meses (CFG-11). | UX-18 |
 | D8 | Reporte de pago: ¿empieza vacío (se actualizan los specs que usan `1300.00` y localizan por `parentElement`)? ¿El API acepta clave de idempotencia o rechaza duplicados por referencia+monto+fecha? | Sí a vaciar (ALU-01 es ALTA). Sin idempotencia en el API solo hay mitigación en el cliente (ALU-07). | UX-21, UX-22 |
