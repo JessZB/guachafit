@@ -1,7 +1,7 @@
 ---
 id: HANDOFF-RETOMA
 titulo: "Handoff: retomar el trabajo con los lotes de la auditoría UX de las vistas del entrenador y del alumno"
-fecha: 2026-10-31
+fecha: 2026-11-01
 estado: activo
 tags:
   - handoff
@@ -24,10 +24,10 @@ Push solo cuando yo lo pida explícitamente.
 
 ## Qué hay que hacer
 Seguir, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (29 lotes UX-01…UX-29; decisiones D1–D10 en su sección 4).
-- **Siguiente lote: UX-19** (Tasa de cambio sin jerga y accesible; CFG-14 a 19, en `.external-agents/auditoria-ux/03-plantillas-ajustes-entrenador.md`). No tiene decisiones pendientes.
-- Después: UX-20 (Plantillas) y el área del alumno (UX-21…29).
+- **Siguiente lote: UX-20** (Plantillas: recarga honesta y táctil; CFG-20 a 26, en `.external-agents/auditoria-ux/03-plantillas-ajustes-entrenador.md`). No tiene decisiones pendientes.
+- Después: el área del alumno (UX-21…29; UX-21 depende de ⛔ D8).
 - Los lotes con ⛔ dependen de una decisión mía (sección 4). Pregúntamela al llegar, UNA a la vez, con la recomendación del documento y su porqué. **Antes de preguntar, verifica en el código lo que la decisión da por supuesto.** En D7 yo creía que los planes eran solo mensuales y el código tenía duración de 1 a 12 meses.
-- Antes de cada lote, mapea el código con un agente Explore de solo lectura: textos exactos, props, specs que se romperán y cuáles comprueban comportamiento frente a texto. La auditoría fue estática.
+- Antes de cada lote, mapea el código con un agente Explore de solo lectura con `model: haiku`: textos exactos, props, specs que se romperán y cuáles comprueban comportamiento frente a texto. La auditoría fue estática.
 - Los reportes originales de la auditoría están en `.external-agents/auditoria-ux/01…05-*.md`. La carpeta está en `.gitignore`. Bórrala solo al cerrar todos los lotes.
 
 ## Roles (reglas en 00_Reglas_Desarrollo_SDD.md §7)
@@ -36,7 +36,7 @@ Seguir, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (29 l
   - Contrastas cada reporte con el JSON de Vitest, `git status` y `git diff`.
   - Haces el doc-sync y los commits.
   - No escribes ni ejecutas tests. No escribes código de producción.
-- **Haiku (subagente):** escribe la producción. Usa la herramienta Agent con `model: haiku` y `effort: high`, con un prompt autocontenido.
+- **Sonnet (subagente escritor, desde 2026-10-31):** escribe la producción. Usa la herramienta Agent con `model: sonnet` y `effort: high`, con un prompt autocontenido.
   - Restricciones: solo producción, sin tests, specs, builds ni `.env`.
   - Pídele archivo:línea de cada contrato, desviaciones con su porqué, specs que se romperán y `git status`.
   - Para ajustes del mismo lote, reanúdalo con SendMessage. No lances otro.
@@ -74,9 +74,9 @@ Seguir, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (29 l
    - **cada archivo nuevo ejecuta sus tests** (un import en `vi.hoisted` escondió un spec entero en UX-16);
    - el número de archivos de la suite = el de antes + los nuevos;
    - los specs de caracterización solo cambian en lo autorizado.
-3. **Haiku implementa.** Revisa el diff y devuélvele las desviaciones que no aceptes: ceros falsos, estados en blanco, tarjetas dobles…
+3. **Sonnet implementa.** Revisa el diff y devuélvele las desviaciones que no aceptes: ceros falsos, estados en blanco, tarjetas dobles…
 4. **Verificación + revisiones en paralelo.** Una revisión (el enfoque del riesgo dominante) si el riesgo es medio. Las cuatro (risk, reliability, resilience y readability) si el lote toca dinero, datos, seguridad o permisos, o si el diff de producción pasa de 400 líneas. Cuéntalo con `git add -N <nuevos>; git diff --numstat -- apps/web/src | grep -v spec`. En el prompt de revisión, nombra todos los consumidores de los componentes compartidos que toque el lote.
-5. **Corrección con Haiku** de los hallazgos válidos. Antes de aceptar un BLOCKER, comprueba que es alcanzable y si ya estaba en `HEAD`.
+5. **Corrección con Sonnet** de los hallazgos válidos. Antes de aceptar un BLOCKER, comprueba que es alcanzable y si ya estaba en `HEAD`.
 6. **Validación.** Añade tests de comportamiento para las correcciones y vuelve a pasar la suite completa, typecheck y build.
 7. **Commit de código** (`git add -A apps/web/src`) y **commit `docs(vault)`**, que actualiza:
    - el RF afectado;
@@ -113,8 +113,8 @@ Seguir, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (29 l
 - **Scripts largos** (generar prompts, doc-sync): escríbelos con Write en el scratchpad y ejecútalos con `python -I`. Los heredocs de Bash fallan con las comillas.
 - **Engram:** puede fallar con "multiple active runtime sessions". Avisa y sigue.
 
-## Estado al 2026-10-31
-- **Cerrados:** UX-01…UX-18, cada uno con su commit `feat`/`refactor` y su `docs(vault)`. Detalle y seguimientos en la sección 3 de la auditoría. Últimos lotes:
+## Estado al 2026-11-01
+- **Cerrados:** UX-01…UX-19, cada uno con su commit `feat`/`refactor` y su `docs(vault)`. Detalle y seguimientos en la sección 3 de la auditoría. Últimos lotes:
   - UX-11 `57606e8`: Dashboard con carga honesta.
   - UX-12 `97017b8`: hook `use-dashboard-comando`.
   - UX-13 `8a5c6f1`: D4 «qué atender hoy».
@@ -123,8 +123,9 @@ Seguir, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (29 l
   - UX-16 `cf4bd84`: D5, nombres únicos e insignias de pendientes.
   - UX-17 `14c796e`: D6, Ajustes en una pantalla con barra segmentada.
   - UX-18 `e7851f3`: D7, el precio es el total de la duración y el formulario de planes arranca vacío.
-- **Tests:** web **2857 tests en 314 archivos**, typecheck y build en verde (al cierre de UX-18).
-- **Commits locales sin push** desde `6abb291` (UX-11…UX-18).
+  - UX-19 `ed28ed6`: Tasa de cambio sin jerga, resumen guardado, edición en `<details>`, validación previa y guarda contra doble envío.
+- **Tests:** web **2908 tests en 316 archivos**, typecheck y build en verde (al cierre de UX-19).
+- **Commits locales sin push** desde `6abb291` (UX-11…UX-19).
 - **Pausados o pendientes fuera de la auditoría:** módulo 5 (anulación de cuotas en la web, congelar membresía, condonar, PagosPage, P2 de Control de Cobros, RNF-002) y pendientes de la ficha en RF-011. Al llegar a UX-21/22 (pagos del alumno), revisa si conviene juntarlos.
 
 ## Piezas a reutilizar
@@ -145,5 +146,5 @@ Seguir, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (29 l
   - cambios sin guardar de `ModalPlantilla` y `ModalPlanComercial`;
   - contador de generación de `use-dashboard-comando`.
 
-Empieza revisando la memoria (`mem_search "guachafit UX-18"` y `"guachafit auditoría UX"`), lee la auditoría (secciones 2, 3 y 4) y arranca **UX-19**: mapeo con Explore y, después, los contratos de su fase roja.
+Empieza revisando la memoria (`mem_search "guachafit UX-19"` y `"guachafit auditoría UX"`), lee la auditoría (secciones 2, 3 y 4) y arranca **UX-20**: mapeo con Explore y, después, los contratos de su fase roja.
 ```

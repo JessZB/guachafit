@@ -165,6 +165,13 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - Cambia la moneda a Bs.: el monto **se vacía**. Escribe `1825,50` (con coma): aparece "Se registrarán Bs. 1.825,50 (≈ $…)".
   - Escribe `50.123` y pulsa "Registrar cobro": no se envía y aparece "Escribe el monto con hasta 2 decimales…".
   - En el móvil horizontal, el modal se desplaza hasta los botones.
+- [ ] **Tasa de cambio sin jerga y accesible (desde 2026-11-01, UX-19):** en Ajustes > Tasa del entrenador (`/coach/ajustes?tab=tasas`).
+  - La pestaña no muestra insignias como "ADR-003 Vigente" ni títulos como "Motor de Tasa Activa". Muestra "Tasa de cambio", el bloque "Tasa guardada" (con la tasa activa, fuente y última actualización) y "Editar tasa" en un `<details>` plegable. Si no hay tasa configurada, muestra "Sin tasa de cambio configurada" y "Editar tasa" arranca abierto.
+  - Abre "Editar tasa": los campos de tasa ("Tasa BCV", "Tasa paralelo (opcional)", "Tasa activa") usan teclado numérico/decimal (`inputMode="decimal"`). Escribe con coma (`38,50`): se acepta sin truncarse.
+  - Elige la fuente "Paralelo" con el campo de tasa paralelo vacío: no guarda y muestra en alerta "Indica la tasa paralelo: es la fuente que elegiste para cobrar.".
+  - Escribe en "Tasa activa": la fuente cambia automáticamente a "Personalizada". Si vuelves a escribir el mismo valor que tenía la fuente base (BCV o Paralelo), la selección de fuente regresa a la original.
+  - Modifica algún valor: aparece el aviso "Cambios sin guardar". Guarda: durante el guardado el botón muestra estado ocupado y los campos se bloquean contra doble clic. Al guardar con éxito se anuncia "Tasa guardada. Se aplicará a los cobros y cuotas de tus alumnos." y el bloque "Tasa guardada" se actualiza.
+  - Si hay tasa guardada, abre la "Calculadora": al escribir un monto en USD o en Bs., el conversor calcula el equivalente usando la tasa guardada (no el borrador en edición).
 - [ ] **Planes comerciales (desde 2026-10-31, UX-18):** en Ajustes > Planes del entrenador.
   - "Nuevo plan": el formulario arranca vacío. Sin beneficios o con un precio vacío, 0, `abc` o de 8 cifras, no guarda y muestra el error en el formulario (no hay ventana emergente).
   - Escribe `90,50` como precio y guarda: la tarjeta muestra `$90,50` con "al mes" (1 mes) o "cada N meses".

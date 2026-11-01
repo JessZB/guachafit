@@ -130,6 +130,22 @@ Then el saldo pendiente del cliente en USD debe permanecer inalterado en $25.00 
 
 - **Reversión (2026-10-11, `4878d7e`):** revertir un pago aprobado retira del saldo a favor el excedente que ese pago generó. Si ya se aplicó a otra cuota, la reversión se bloquea ([[RF-007-reporte-pagos-bandeja-conciliacion]]).
 
+### Pestaña Tasa en Ajustes del entrenador (`ed28ed6`, 2026-11-01, lote UX-19)
+- **Sin jerga técnica:** se eliminan insignias y encabezados de implementación interna ("ADR-003 Vigente", "Motor de Tasa Activa", "VES", "Guardar Tasa Activa Global"). La interfaz presenta "Tasa de cambio", "Tasa guardada", "Editar tasa", "Calculadora" y "Guardar tasa", con sufijos legibles "Bs/USD" y "Bs".
+- **Formulario y validación:**
+  - Estructurado mediante el bloque resumen de tasa guardada (`ResumenTasa`) y formulario plegable en `<details>` ("Editar tasa"). Si no hay tasa guardada, muestra `AvisoSinTasa` y el bloque `<details>` arranca expandido.
+  - Campos accesibles con `CampoAjustes` (`inputMode="decimal"`), etiquetas asociadas y teclado numérico/decimal. Aceptan coma o punto decimal (`38,50` o `38.50`), normalizando a punto decimal sin ceros espurios.
+  - Selector de fuente en `role="radiogroup"` (`aria-label="Fuente de la tasa"`, tarjetas táctiles con `min-h-11` y `role="radio"`): Oficial BCV, Paralelo y Personalizada. Al marcar Paralelo, el campo pasa a ser obligatorio (`MENSAJE_PARALELO_REQUERIDO`); al escribir en Tasa activa, la fuente conmuta automáticamente a Personalizada (`manual`), recordando la fuente original (`fuenteBaseRef`) para restaurarla si el usuario deshace la modificación.
+  - Validación en cliente previa al envío: Oficial BCV y Tasa activa exigen números mayores que 0, hasta 7 dígitos enteros y hasta 4 decimales. Paralelo es opcional, pero si se escribe o se elige como fuente debe ser válido. Errores por campo en `role="alert"`, sin `alert()`.
+  - Detección precisa de cambios (`hayCambiosTasa`): compara valores numéricos y la fuente ignorando discrepancias superficiales de formato; despliega el aviso "Cambios sin guardar".
+- **Sin doble envío:** guarda síncrona `guardandoRef` y formulario deshabilitado (`isSavingTasa`) durante el vuelo del PUT impiden peticiones duplicadas ante pulsaciones repetidas.
+- **Resiliencia y desacoplamiento:**
+  - El hook `useTasasCambio` reside en `AjustesPage`, garantizando que cambiar de pestaña no cancele el guardado en curso ni pierda el borrador editado.
+  - Limpieza reactiva de errores: escribir en los campos limpia mensajes de error previos y avisos de éxito. Si la respuesta es `null` o falla la red, los datos escritos se preservan en pantalla.
+  - Separación de canales de error: `EstadoError` con opción de Reintentar en la carga; `AvisosAjustes` (`role="alert"`) en el guardado.
+  - Desacoplamiento de la calculadora: `ConversorTasas` opera contra la tasa efectivamente guardada (no el borrador en edición) y se oculta si no hay tasa configurada o si su valor es 0.
+- **Evidencia:** web **2908 tests en 316 archivos**; typecheck y build en verde. Revisión 4R (toca dinero: riesgo, fiabilidad, resiliencia, legibilidad) sin BLOCKER; se corrigieron 4 observaciones (paralelo elegido vacío, guarda ante tasa guardada 0, manejo defensivo de respuesta null del API y limpieza de error obsoleto al editar).
+
 ### Pendiente
 - La demo de Conciliación llama al API al aprobar (existía antes; el PATCH se emite antes de la rama demo).
 - Conversión con punto flotante en la proyección a Bs (ver arriba).

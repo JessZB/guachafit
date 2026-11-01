@@ -136,7 +136,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-16 ✅ `cf4bd84` | Navegación y menú del entrenador | Menú, BottomNav, Sidebar | SEG-25, 26, 27, 28, 29, 31, 32 | tabla única en `lib/etiquetas-dominio`, `FranjaDatosClaveAlumno`, insignias con conteo | medio-alto (specs por nombre, p. ej. `Sidebar.spec.tsx`) | no con `dashboard-comando`; endpoint ligero sí | ⛔ D4, D5; UX-04 |
 | UX-17 ✅ `14c796e` | Ajustes: una pantalla y tabs segmentadas | Ajustes (entrenador y alumno) | CFG-01, 02, 03, 04, 05; ALU-23, 24, 25 | `BarraTabsSegmentada`, `PantallaAjustes` con `renderPestana`; se elimina `PestanasAjustes` | medio-alto (specs de `AjustesPage` y `PantallaAjustes`) | no | UX-01; ⛔ D6 |
 | UX-18 ✅ `e7851f3` | Planes comerciales | Ajustes > Planes | CFG-06, 07, 08, 09, 10, 11, 12, 13 | `CampoAjustes`, `DialogoConfirmacion`/confirmación inline de `TarjetaPlantilla`, `BadgeEstado`, `EstadoCarga` | medio | no | UX-03, UX-17; ⛔ D7 (CFG-09, CFG-11) |
-| UX-19 | Tasa de cambio sin jerga y accesible | Ajustes > Tasa | CFG-14, 15, 16, 17, 18, 19 | `CampoAjustes`, `<details>` con resumen guardado (patrón `PestanaAntropometriaAlumno`), `AvisosAjustes` | bajo-medio (specs de textos de tasa) | no | UX-03, UX-17 |
+| UX-19 ✅ `ed28ed6` | Tasa de cambio sin jerga y accesible | Ajustes > Tasa | CFG-14, 15, 16, 17, 18, 19 | `CampoAjustes`, `<details>` con resumen guardado (patrón `PestanaAntropometriaAlumno`), `AvisosAjustes` | bajo-medio (specs de textos de tasa) | no | UX-03, UX-17 |
 | UX-20 | Plantillas: recarga honesta y táctil | Plantillas | CFG-20, 21, 22, 23, 24, 25, 26 | `BadgeEstado`, patrón `AvisoErrorDirectorio` | bajo | no | ninguna |
 | UX-21 | Pago del alumno: formulario honesto y accesible | Pagos > Reportar pago | ALU-01, 02, 03, 04, 05, 06, 08, 09, 10 | `CampoAjustes`, `AvisosAjustes`, modelo `DiarioFotografico`, `BotonTactil` | medio (specs con `1300.00` y localización por `parentElement`) | no | UX-03; ⛔ D8 |
 | UX-22 | Pago del alumno: idempotencia | Pagos | ALU-07 | reutilizar `storageKey` en el reintento; clave de idempotencia | medio | **sí** | UX-21; ⛔ D8 |
@@ -319,6 +319,25 @@ Seguimientos:
 Proceso:
 - El generador de prompts con heredoc de Bash falló por las comillas. Los scripts largos se escriben con Write en el scratchpad y se ejecutan desde ahí.
 - `lanzar.sh` (scratchpad de la sesión) automatiza el arranque con reserva por `--terminal`.
+
+**UX-19 cerrado (`ed28ed6`):**
+- Sin jerga en la UI: fuera "Motor de Tasa", "ADR-003", "VES" y badges falsos. Títulos claros ("Tasa de cambio", "Tasa guardada", "Editar tasa", "Calculadora", "Guardar tasa") y sufijos legibles ("Bs/USD", "Bs").
+- Resumen guardado arriba (`ResumenTasa`) y edición en `<details>` no controlado plegable; si no hay tasa guardada, muestra aviso honesto y el `<details>` arranca abierto.
+- Campos accesibles (`CampoAjustes`, `inputMode="decimal"`) con soporte de coma y punto decimal (`38,50`). Errores en `role="alert"`, sin `alert()`.
+- Selector de fuente en `role="radiogroup"` (Oficial BCV, Paralelo, Personalizada). Si se elige Paralelo, su campo es obligatorio. Al teclear en activa pasa a Personalizada; al restaurar el valor restaura la fuente base recordada (`fuenteBaseRef`).
+- Detección precisa de cambios (`hayCambiosTasa`) comparando valores numéricos y fuente; aviso "Cambios sin guardar".
+- No hay doble envío: guarda síncrona `guardandoRef` y formulario deshabilitado durante el guardado.
+- Calculadora desacoplada que opera contra la tasa guardada (no el borrador) y no se muestra sin tasa configurada o con tasa en 0.
+- Web 2908 tests en 316 archivos, typecheck y build en verde. Revisión 4R (toca dinero: riesgo, fiabilidad, resiliencia, legibilidad) sin BLOCKER; se corrigieron 4 observaciones (paralelo elegido vacío, guarda ante tasa guardada 0, respuesta nula del API y limpieza de error obsoleto al editar).
+
+Seguimientos:
+- Respaldo en `cambiarMontoVes` mediante fallback de string: `calcularUsdDesdeVes` retorna `usdActual` si la tasa no es válida; con coma, `aTextoEntrada` devuelve `''` y `|| usdPrevio` rescata el valor previo (`use-tasas-cambio.ts:251-253`). En una futura iteración distinguir si el cálculo se realizó o se omitió.
+- Redundancia entre etiqueta y sufijo en la calculadora: `etiqueta="Monto en USD"` con `sufijo="USD"` y `etiqueta="Monto en bolívares"` con `sufijo="Bs"` (`ConversorTasas.tsx:33-46`), mantenida por el contrato del spec de interacción (`findByLabelText('Monto en USD')`).
+
+Proceso:
+- 4 revisiones (risk, reliability, resilience, readability) porque toca dinero (conversión monetaria e integridad de saldos). 4 reportes en paralelo.
+- Subconjunto de pruebas de tasas: 58 tests en 3 archivos (`ajustes-entrenador-tasas.spec.ts`, `ajustes-entrenador-tasas.ux19.spec.ts` y `AjustesPage.tasa.ux19.interaccion.spec.tsx`).
+- 2908 tests en 316 archivos, typecheck y build en verde.
 
 ## 4. Decisiones pendientes del dueño
 

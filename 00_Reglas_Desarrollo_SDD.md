@@ -211,7 +211,8 @@ Reglas transversales del frontend, vinculantes para toda vista nueva (se revisan
 | Rol | Hace | No hace |
 |---|---|---|
 | **Claude Code** (orquestador y validador) | Audita, aclara requisitos (una pregunta a la vez), diseña y fija los contratos de cada lote, delega la escritura del código al subagente escritor y **valida el código generado** contra el diseño y el `git diff` antes de aceptarlo. Escribe el doc-sync del vault, redacta los prompts de los agentes externos, verifica cada reporte contra el `git diff` y hace los commits. | No escribe código de producción (lo delega), no escribe ni ejecuta tests, no hace push. |
-| **Subagente escritor** (Claude Haiku 5.5, `effort: high`) | Escribe el código de producción (front, API, shared, migraciones) y las correcciones de los hallazgos, a partir de un encargo preciso de Claude: archivos, cambios exactos, decisiones resueltas y prohibiciones. Devuelve la lista de archivos con sus líneas, dónde cumple cada contrato y cualquier desviación con su porqué. | No escribe ni ejecuta tests, no edita specs, no hace commit ni push, no lee `.env`. |
+| **Subagente explorador** (Claude Haiku 5.5, desde 2026-10-31) | Mapea el código antes de cada lote, en solo lectura: textos exactos, props, consumidores, specs que se romperán y si comprueban comportamiento o texto. | No edita archivos, no ejecuta tests, no lee `.env`. |
+| **Subagente escritor** (Claude Sonnet 5.5, `effort: high`, desde 2026-10-31; antes Haiku 5.5) | Escribe el código de producción (front, API, shared, migraciones) y las correcciones de los hallazgos, a partir de un encargo preciso de Claude: archivos, cambios exactos, decisiones resueltas y prohibiciones. Devuelve la lista de archivos con sus líneas, dónde cumple cada contrato y cualquier desviación con su porqué. | No escribe ni ejecuta tests, no edita specs, no hace commit ni push, no lee `.env`. |
 | **Agentes externos** (otros CLI, fuera del ecosistema de Claude) | Escriben los tests (TDD, fase roja), ejecutan suites, typecheck y build, y hacen las revisiones 4R y las validaciones acotadas. Siempre dejan un reporte `.md`. | No tocan código de producción (salvo que el prompt lo autorice de forma explícita), no hacen commit ni push, no leen `.env`. |
 | **Dueño** | Decide producto. Puede ejecutar él mismo un prompt en el agente externo que elija; por defecto lo lanza Claude (§7.6). | — |
 
@@ -228,9 +229,9 @@ Reglas transversales del frontend, vinculantes para toda vista nueva (se revisan
 
 ### 7.3. Ciclo por lote
 
-1. **Auditoría y decisiones:** Claude audita el módulo y resuelve con el dueño las decisiones de producto.
+1. **Auditoría y decisiones:** Claude audita el módulo (el mapeo del código lo delega al subagente explorador, Haiku 5.5) y resuelve con el dueño las decisiones de producto.
 2. **Tests en rojo:** Claude genera el prompt `tests` con los contratos exactos. El agente externo escribe los tests, los ejecuta, confirma que **fallan por la razón esperada** y lo reporta. Un test rojo afirma solo el comportamiento nuevo: nunca espera el comportamiento viejo para luego afirmar lo contrario.
-3. **Implementación:** Claude encarga el código de producción al subagente escritor (Haiku 5.5, `effort: high`) y **valida el resultado**: revisa el diff, comprueba cada contrato y cada desviación declarada, y devuelve el encargo si algo no cuadra. Los tests no se tocan salvo error evidente, que se reporta.
+3. **Implementación:** Claude encarga el código de producción al subagente escritor (Sonnet 5.5, `effort: high`) y **valida el resultado**: revisa el diff, comprueba cada contrato y cada desviación declarada, y devuelve el encargo si algo no cuadra. Los tests no se tocan salvo error evidente, que se reporta.
 4. **Verificación:** prompt `verificacion`. El agente externo corre la suite completa de los paquetes afectados, typecheck y build, y reporta los números (re-ejecuta una vez los tests HTTP intermitentes del API antes de darlos por fallidos).
 5. **Revisión:** prompts `review-*` de solo lectura. Riesgo medio: un enfoque (el del riesgo dominante). Auth, seguridad, permisos, datos o migraciones, o más de 400 líneas: los cuatro.
 6. **Corrección:** Claude verifica cada hallazgo en el código, resuelve con el dueño los que son de producto y encarga las correcciones al subagente escritor. Si hubo cambios, genera un prompt `validacion` (re-ejecuta las suites y confirma cada hallazgo como resuelto o no).
@@ -274,3 +275,25 @@ Cada encargo incluye: el objetivo y la decisión del dueño; los tests o contrat
   - Claude contrasta cada reporte con `git status`, `git diff` y los archivos de evidencia antes de aceptarlo.
 - **Carga de la máquina.** La suite web completa tarda 2-5 min y, con la máquina cargada, aparecen `Test timed out in 5000ms` ajenos al lote. Un fallo fuera del lote solo cuenta como regresión si no es un tiempo agotado o si se repite al volver a ejecutar.
 - Los prompts y reportes del lote se borran al cerrarlo (§7.3, paso 8). Si quedara algún `*.permisos.json` del estreno, se borra con ellos.
+
+
+---
+
+## 🛟 8. Reglas secundarias (contingencia): trabajo en Antigravity sin Claude Code ni Orca (desde 2026-11-01)
+
+> Se aplican **solo** cuando no están disponibles las herramientas de §7 (Claude Code con subagentes por modelo y la orquestación de Orca). Cuando vuelvan, **prevalece §7**. Los contratos, el ciclo por lote, las lecciones y las convenciones de §6 no cambian.
+
+- **Orquestador y arquitecto:** el agente principal de la sesión. Define contratos, valida cada diff y cada reporte contra el JSON de Vitest, `git status` y `git diff`, hace el doc-sync y los commits (sin push, sin `Co-Authored-By`). No escribe producción ni tests: los delega.
+- **Subagentes** (herramienta `invoke_subagent`, para no acumular contexto en el orquestador):
+
+  | Rol | Modelo | Esfuerzo |
+  |---|---|---|
+  | Exploración (mapeo de solo lectura) | Gemini 3.8 Flash | high |
+  | Implementación (producción y correcciones) | Gemini 3.8 Flash | high |
+  | Testing (fase roja, verificación, validación) | Gemini 3.8 Flash | medium |
+  | Revisiones `review-*` | Gemini 3.8 Flash | high |
+
+  Si la herramienta no permite fijar el esfuerzo, se indica en el prompt del subagente y se anota el modelo realmente usado.
+- **Sin Orca:** no hay `lanzar.sh` ni Runs. Los prompts siguen en `.external-agents/<NN>-<lote>-<tipo>.md` y los reportes en `.external-agents/reportes/`; el subagente recibe «Lee y ejecuta el prompt … y deja el reporte en la ruta que indica».
+- **Engram:** si las herramientas MCP `mem_*` no están disponibles, se usa la CLI (verificada el 2026-11-01): `engram search "<texto>"` y `engram save <título> <contenido> --type <tipo> --project guachafit`.
+- **Mismas prohibiciones** que en §7.1: ningún subagente lee `.env`, hace commit ni push; los escritores no tocan specs ni los testers producción.
