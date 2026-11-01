@@ -18,7 +18,7 @@
  * archivo antes de preparar la subida (vive en el hook), tokens con variante
  * claro/oscuro.
  */
-import type { ChangeEvent, RefObject } from 'react';
+import { useId, type ChangeEvent, type RefObject } from 'react';
 import { Image as ImageIcon, Trash2, Upload } from 'lucide-react';
 
 export interface SubidaComprobantePagoProps {
@@ -27,6 +27,7 @@ export interface SubidaComprobantePagoProps {
   previewUrl: string | null;
   onArchivo: (e: ChangeEvent<HTMLInputElement>) => void;
   onQuitar: () => void;
+  errorArchivo?: string | null;
 }
 
 export function SubidaComprobantePago({
@@ -35,7 +36,10 @@ export function SubidaComprobantePago({
   previewUrl,
   onArchivo,
   onQuitar,
+  errorArchivo,
 }: SubidaComprobantePagoProps) {
+  const idAyuda = useId();
+
   return (
     <div className="space-y-2">
       <label className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
@@ -51,20 +55,22 @@ export function SubidaComprobantePago({
       />
 
       {!selectedFile ? (
-        <div
+        <button
+          type="button"
           onClick={() => inputRef.current?.click()}
-          className="p-5 rounded-2xl border-2 border-dashed border-border/80 hover:border-primary/60 bg-secondary/20 hover:bg-secondary/40 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center"
+          aria-describedby={idAyuda}
+          className="w-full min-h-11 p-5 rounded-2xl border-2 border-dashed border-border/80 hover:border-primary/60 bg-secondary/20 hover:bg-secondary/40 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center"
         >
           <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
-            <Upload className="h-5 w-5" />
+            <Upload className="h-5 w-5" aria-hidden="true" />
           </div>
           <p className="text-xs font-bold text-foreground">
             Toca para adjuntar foto o captura
           </p>
-          <p className="text-[11px] text-muted-foreground">
+          <p id={idAyuda} className="text-[11px] text-muted-foreground">
             Captura de Pago Móvil, Zelle o Transferencia (JPG, PNG, WebP)
           </p>
-        </div>
+        </button>
       ) : (
         <div className="p-3.5 rounded-2xl border border-primary/30 bg-primary/5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 overflow-hidden">
@@ -76,11 +82,11 @@ export function SubidaComprobantePago({
               />
             ) : (
               <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                <ImageIcon className="h-5 w-5 text-primary" />
+                <ImageIcon className="h-5 w-5 text-primary" aria-hidden="true" />
               </div>
             )}
             <div className="min-w-0">
-              <p className="text-xs font-bold text-foreground truncate">
+              <p className="text-xs font-bold text-foreground line-clamp-2 break-words">
                 {selectedFile.name}
               </p>
               <p className="text-[11px] text-muted-foreground">
@@ -91,12 +97,19 @@ export function SubidaComprobantePago({
           <button
             type="button"
             onClick={onQuitar}
-            className="p-2 rounded-xl hover:bg-destructive/15 text-muted-foreground hover:text-destructive transition-colors shrink-0 cursor-pointer"
+            aria-label="Quitar comprobante"
             title="Quitar comprobante"
+            className="min-h-11 min-w-11 p-2 rounded-xl hover:bg-destructive/15 text-muted-foreground hover:text-destructive transition-colors shrink-0 cursor-pointer flex items-center justify-center"
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
+      )}
+
+      {errorArchivo && (
+        <p role="alert" className="text-xs font-semibold text-destructive">
+          {errorArchivo}
+        </p>
       )}
     </div>
   );

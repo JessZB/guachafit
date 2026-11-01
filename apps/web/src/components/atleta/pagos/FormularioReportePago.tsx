@@ -6,14 +6,15 @@
  * `comprobante`): método, moneda + monto, previsualización de conversión,
  * referencia, fecha y submit.
  *
- * R1: componente único de vista (labels sin `htmlFor` acoplados a spec).
- * Presentacional: todo el estado y los handlers llegan por props (vienen de
- * `use-reporte-pago.ts`); sin `useQuery` ni `api-client`.
+ * R1: componente único de vista. Desde UX-21 cada `label` se asocia con su
+ * `input`/`select` mediante `htmlFor`/`id` (`useId`). Presentacional: todo el
+ * estado y los handlers llegan por props (vienen de `use-reporte-pago.ts`);
+ * sin `useQuery` ni `api-client`.
  *
  * R5 (acoplamientos que los specs exigen conservar):
  * - cada `label` y su `input` siguen siendo hermanos en el mismo contenedor
- *   (sin `htmlFor`): los specs localizan los campos por
- *   `label.textContent` + `parentElement.querySelector('input…')`;
+ *   (los specs localizan los campos por `label.textContent` +
+ *   `parentElement.querySelector('input…')`);
  * - `max` = hoy local, validación nativa intacta (`required`, `onInvalid` con
  *   `rangeOverflow` → mensaje propio) y botón "Enviar Comprobante de Pago".
  *
@@ -21,7 +22,7 @@
  * honesta (fecha futura y VES sin tasa bloquean con mensaje claro), `font-bold`
  * (700), tokens con variante claro/oscuro.
  */
-import type { FormEvent, ReactNode } from 'react';
+import { useId, type FormEvent, type ReactNode } from 'react';
 import { MetodoPago, Moneda } from '@guachafit/shared';
 import { fechaCalendarioLocal } from '../../../lib/date-format';
 
@@ -44,6 +45,8 @@ export interface FormularioReportePagoProps {
   onSubmit: (e: FormEvent) => void;
   /** Slot de la subida del comprobante (`SubidaComprobantePago`). */
   comprobante: ReactNode;
+  errorMonto?: string | null;
+  errorFecha?: string | null;
 }
 
 export function FormularioReportePago({
@@ -63,15 +66,28 @@ export function FormularioReportePago({
   contravalorUsd,
   onSubmit,
   comprobante,
+  errorMonto,
+  errorFecha,
 }: FormularioReportePagoProps) {
+  const idMetodo = useId();
+  const idMoneda = useId();
+  const idMonto = useId();
+  const idReferencia = useId();
+  const idFecha = useId();
+  const idErrorMonto = useId();
+  const idErrorFecha = useId();
+
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="space-y-1.5">
-        <label className="text-xs font-semibold text-muted-foreground">Método de Pago</label>
+        <label htmlFor={idMetodo} className="text-xs font-semibold text-muted-foreground">
+          Método de Pago
+        </label>
         <select
+          id={idMetodo}
           value={metodoPago}
           onChange={(e) => onMetodoPago(e.target.value as MetodoPago)}
-          className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+          className="w-full min-h-11 px-3.5 py-2.5 rounded-2xl bg-background border border-border text-base sm:text-sm text-foreground focus:outline-hidden focus:border-primary"
         >
           <option value={MetodoPago.PAGO_MOVIL}>Pago Móvil (VES)</option>
           <option value={MetodoPago.TRANSFERENCIA_BANCARIA}>Transferencia Bancaria (VES)</option>
@@ -84,11 +100,14 @@ export function FormularioReportePago({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-muted-foreground">Moneda</label>
+          <label htmlFor={idMoneda} className="text-xs font-semibold text-muted-foreground">
+            Moneda
+          </label>
           <select
+            id={idMoneda}
             value={moneda}
             onChange={(e) => onMoneda(e.target.value as Moneda)}
-            className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+            className="w-full min-h-11 px-3.5 py-2.5 rounded-2xl bg-background border border-border text-base sm:text-sm text-foreground focus:outline-hidden focus:border-primary"
           >
             <option value={Moneda.VES}>VES (Bolívares)</option>
             <option value={Moneda.USD}>USD (Dólares)</option>
@@ -96,15 +115,25 @@ export function FormularioReportePago({
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-muted-foreground">Monto Pagado</label>
+          <label htmlFor={idMonto} className="text-xs font-semibold text-muted-foreground">
+            Monto Pagado
+          </label>
           <input
+            id={idMonto}
             type="text"
             inputMode="decimal"
-            required
+            placeholder="0.00"
             value={montoOriginal}
             onChange={(e) => onMonto(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
+            aria-invalid={errorMonto ? 'true' : undefined}
+            aria-describedby={errorMonto ? idErrorMonto : undefined}
+            className="w-full min-h-11 px-3.5 py-2.5 rounded-2xl bg-background border border-border text-base sm:text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
           />
+          {errorMonto && (
+            <p id={idErrorMonto} role="alert" className="text-xs font-semibold text-destructive">
+              {errorMonto}
+            </p>
+          )}
         </div>
       </div>
 
@@ -129,26 +158,32 @@ export function FormularioReportePago({
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-xs font-semibold text-muted-foreground">
+        <label htmlFor={idReferencia} className="text-xs font-semibold text-muted-foreground">
           Referencia Bancaria (Últimos 4-6 dígitos)
         </label>
         <input
+          id={idReferencia}
           type="text"
           value={referenciaBancaria}
           onChange={(e) => onReferencia(e.target.value)}
           placeholder="Ej: 987654"
-          className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
+          className="w-full min-h-11 px-3.5 py-2.5 rounded-2xl bg-background border border-border text-base sm:text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
         />
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-xs font-semibold text-muted-foreground">Fecha de Operación</label>
+        <label htmlFor={idFecha} className="text-xs font-semibold text-muted-foreground">
+          Fecha de Operación
+        </label>
         <input
+          id={idFecha}
           type="date"
           required
           max={fechaCalendarioLocal()}
           value={fechaOperacion}
           onChange={(e) => onFecha(e.target.value)}
+          aria-invalid={errorFecha ? 'true' : undefined}
+          aria-describedby={errorFecha ? idErrorFecha : undefined}
           // El navegador bloquea la fecha futura por `max`: se muestra nuestro mensaje
           // en lugar de su burbuja (los demás campos conservan la validación nativa).
           onInvalid={(e) => {
@@ -156,8 +191,13 @@ export function FormularioReportePago({
             e.preventDefault();
             onFechaInvalida();
           }}
-          className="w-full px-3.5 py-2.5 rounded-2xl bg-background border border-border text-sm text-foreground focus:outline-hidden focus:border-primary"
+          className="w-full min-h-11 px-3.5 py-2.5 rounded-2xl bg-background border border-border text-base sm:text-sm text-foreground focus:outline-hidden focus:border-primary"
         />
+        {errorFecha && (
+          <p id={idErrorFecha} role="alert" className="text-xs font-semibold text-destructive">
+            {errorFecha}
+          </p>
+        )}
       </div>
 
       {/* Subida de Comprobante */}
@@ -166,7 +206,7 @@ export function FormularioReportePago({
       <button
         type="submit"
         disabled={isSubmitting || pagoVesSinTasa}
-        className="w-full py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
+        className="w-full min-h-11 py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-bold text-base sm:text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
       >
         {isSubmitting ? 'Enviando al coach...' : 'Enviar Comprobante de Pago'}
       </button>

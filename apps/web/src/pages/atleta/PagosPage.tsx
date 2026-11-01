@@ -64,6 +64,11 @@ export function PagosPage() {
     isSubmitting,
     formSuccess,
     formError,
+    errorMonto,
+    errorFecha,
+    errorArchivo,
+    iniciarNuevoPago,
+    iniciarCorreccionPago,
     fileInputRef,
     selectedFile,
     previewUrl,
@@ -127,7 +132,10 @@ export function PagosPage() {
           {/* Selector de Acciones: 2 Caminos Claros */}
           <SelectorAccionesPagos
             transaccionesTotal={transaccionesTotal}
-            onReportar={() => setVistaActiva('nuevo-pago')}
+            onReportar={() => {
+              iniciarNuevoPago();
+              setVistaActiva('nuevo-pago');
+            }}
             onVerHistorial={() => setVistaActiva('historial')}
           />
         </div>
@@ -158,6 +166,8 @@ export function PagosPage() {
             pagoVesSinTasa={pagoVesSinTasa}
             contravalorUsd={contravalorUsd}
             onSubmit={handleReportarPago}
+            errorMonto={errorMonto}
+            errorFecha={errorFecha}
             comprobante={
               <SubidaComprobantePago
                 inputRef={fileInputRef}
@@ -165,6 +175,7 @@ export function PagosPage() {
                 previewUrl={previewUrl}
                 onArchivo={handleFileChange}
                 onQuitar={handleRemoveFile}
+                errorArchivo={errorArchivo}
               />
             }
           />
@@ -177,7 +188,10 @@ export function PagosPage() {
       {vistaActiva === 'historial' && (
         <PestanaHistorialPagos
           onVolver={() => setVistaActiva('hub')}
-          onNuevoAbono={() => setVistaActiva('nuevo-pago')}
+          onNuevoAbono={() => {
+            iniciarNuevoPago();
+            setVistaActiva('nuevo-pago');
+          }}
           transaccionesTotal={transaccionesTotal}
           transaccionesHistorial={transaccionesHistorial}
           transaccionesFiltradas={transaccionesFiltradas}
@@ -190,7 +204,10 @@ export function PagosPage() {
           onCambiarPagina={cambiarPaginaHistorial}
           onCambiarTamano={cambiarTamanoHistorial}
           onVerComprobante={(url) => setModalComprobante({ url })}
-          onCorregir={() => setVistaActiva('nuevo-pago')}
+          onCorregir={(tx) => {
+            iniciarCorreccionPago(tx);
+            setVistaActiva('nuevo-pago');
+          }}
         />
       )}
 

@@ -1,5 +1,5 @@
 /**
- * Cálculos puros del módulo `pagos` (fase B, prompt 54).
+ * Cálculos puros del módulo `pagos` (fase B, prompt 54; UX-21 ALU-01 D8).
  *
  * Movidos tal cual desde `pages/atleta/PagosPage.tsx` (L379–399): derivados de
  * tasa y montos que la vista mostraba inline. Sin JSX, sin red, sin estado (R1).
@@ -8,6 +8,41 @@
  * que distinguen "sin tasa configurada" de "no disponible").
  */
 import { Moneda } from '@guachafit/shared';
+
+export const MENSAJE_MONTO_PAGO_INVALIDO = 'Ingresa un monto válido mayor a 0.';
+
+/**
+ * C1 (ALU-01, D8): valida montos mayores a 0 con hasta dos decimales (punto o coma).
+ * Devuelve `null` si el monto es válido o `MENSAJE_MONTO_PAGO_INVALIDO` si no lo es.
+ */
+export function validarMontoPago(valor: string): string | null {
+  const limpio = (valor ?? '').trim();
+  if (!/^\d{1,12}([.,]\d{1,2})?$/.test(limpio)) {
+    return MENSAJE_MONTO_PAGO_INVALIDO;
+  }
+  const conPunto = limpio.replace(',', '.');
+  const num = Number(conPunto);
+  if (!Number.isFinite(num) || num <= 0) {
+    return MENSAJE_MONTO_PAGO_INVALIDO;
+  }
+  return null;
+}
+
+/**
+ * C1 (ALU-01, D8): normaliza coma a punto y formatea a 2 decimales si es un número válido > 0.
+ */
+export function normalizarMontoPago(valor: string): string {
+  const limpio = (valor ?? '').trim();
+  if (!/^\d{1,12}([.,]\d{1,2})?$/.test(limpio)) {
+    return limpio;
+  }
+  const conPunto = limpio.replace(',', '.');
+  const num = Number(conPunto);
+  if (!Number.isFinite(num) || num <= 0) {
+    return limpio;
+  }
+  return num.toFixed(2);
+}
 
 /** Tasa efectiva como número (`0` cuando falta o no es numérica; nunca `NaN`). */
 export function tasaEfectivaNumerica(tasaEfectiva?: string | null): number {
@@ -46,7 +81,7 @@ export function contravalorUsd(
   montoOriginal: string,
   tasaEfectivaNum: number
 ): string {
-  const montoNum = Number(montoOriginal) || 0;
+  const montoNum = Number((montoOriginal ?? '').trim().replace(',', '.')) || 0;
   if (moneda === Moneda.VES) {
     return tasaEfectivaNum > 0 ? (montoNum / tasaEfectivaNum).toFixed(2) : '—';
   }

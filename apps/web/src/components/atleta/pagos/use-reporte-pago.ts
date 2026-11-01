@@ -14,7 +14,7 @@
  */
 import { useRef, useState, type ChangeEvent, type FormEvent, type RefObject } from 'react';
 import { MetodoPago, Moneda, MENSAJE_FECHA_PAGO_FUTURA } from '@guachafit/shared';
-import type { CuotaDetalleDTO, TasaCambioVigenteDTO } from '@guachafit/shared';
+import type { CuotaDetalleDTO, TasaCambioVigenteDTO, TransaccionPagoDetalleDTO } from '@guachafit/shared';
 import { useAuth } from '../../../context/auth-context';
 import { apiClient } from '../../../lib/api-client';
 import { errorTrasCambiarFecha, validarFechaCobro } from '../../../lib/cobro-sala';
@@ -22,8 +22,10 @@ import { prepararComprobanteParaSubida, subirComprobantePago } from '../../../li
 import { fechaCalendarioLocal } from '../../../lib/date-format';
 import {
   contravalorUsd as calcularContravalorUsd,
+  normalizarMontoPago,
   pagoVesBloqueadoPorFaltaTasa,
   tasaEfectivaNumerica,
+  validarMontoPago,
 } from '../../../lib/pagos-montos';
 
 export interface OpcionesReportePago {
@@ -49,6 +51,11 @@ export interface EstadoReportePago {
   isSubmitting: boolean;
   formSuccess: string | null;
   formError: string | null;
+  errorMonto: string | null;
+  errorFecha: string | null;
+  errorArchivo: string | null;
+  iniciarNuevoPago: () => void;
+  iniciarCorreccionPago: (tx: TransaccionPagoDetalleDTO) => void;
   fileInputRef: RefObject<HTMLInputElement | null>;
   selectedFile: File | null;
   previewUrl: string | null;
@@ -70,12 +77,17 @@ export function useReportePago({
   // Form State
   const [metodoPago, setMetodoPago] = useState<MetodoPago>(MetodoPago.PAGO_MOVIL);
   const [moneda, setMoneda] = useState<Moneda>(Moneda.VES);
-  const [montoOriginal, setMontoOriginal] = useState('1300.00');
+  const [montoOriginal, setMontoOriginalState] = useState('');
   const [referenciaBancaria, setReferenciaBancaria] = useState('');
   const [fechaOperacion, setFechaOperacion] = useState(fechaCalendarioLocal);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Errores por canal (C1, C3, ALU-01, ALU-04, ALU-10)
+  const [errorMonto, setErrorMonto] = useState<string | null>(null);
+  const [errorFecha, setErrorFecha] = useState<string | null>(null);
+  const [errorArchivo, setErrorArchivo] = useState<string | null>(null);
 
   // File Upload State (RF-007, ADR-007)
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -89,15 +101,22 @@ export function useReportePago({
     tasaEfectivaNumerica(tasa?.tasaEfectiva)
   );
 
+  const setMontoOriginal = (monto: string) => {
+    setMontoOriginalState(monto);
+    setErrorMonto(null);
+    setFormError(null);
+  };
+
   const alCambiarFecha = (valor: string) => {
     setFechaOperacion(valor);
-    setFormError(errorTrasCambiarFecha);
+    setErrorFecha((prev) => errorTrasCambiarFecha(prev));
+    setFormError((prev) => errorTrasCambiarFecha(prev));
   };
 
   // Hallazgo 6 (contrato 9): el navegador bloquea la fecha futura por `max`; se muestra
-  // el mensaje propio en lugar de su burbuja (los demás campos conservan la validación nativa).
+  // el mensaje propio en errorFecha en lugar de su burbuja (no duplicar en formError).
   const mostrarErrorFechaFutura = () => {
-    setFormError(MENSAJE_FECHA_PAGO_FUTURA);
+    setErrorFecha(MENSAJE_FECHA_PAGO_FUTURA);
   };
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -105,16 +124,35 @@ export function useReportePago({
     if (!file) return;
 
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      setFormError('Formato inválido. Por favor selecciona una imagen JPG, PNG o WebP.');
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(null);
+      }
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      setErrorArchivo('Formato inválido. Por favor selecciona una imagen JPG, PNG o WebP.');
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      setFormError('El archivo excede el límite máximo de 5 MB.');
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(null);
+      }
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      setErrorArchivo('El archivo excede el límite máximo de 5 MB.');
       return;
     }
 
-    setFormError(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setErrorArchivo(null);
     setSelectedFile(file);
     const objUrl = URL.createObjectURL(file);
     setPreviewUrl(objUrl);
@@ -122,6 +160,7 @@ export function useReportePago({
 
   const handleRemoveFile = () => {
     setSelectedFile(null);
+    setErrorArchivo(null);
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
@@ -131,16 +170,59 @@ export function useReportePago({
     }
   };
 
+  const iniciarNuevoPago = () => {
+    setMetodoPago(MetodoPago.PAGO_MOVIL);
+    setMoneda(Moneda.VES);
+    setMontoOriginalState('');
+    setReferenciaBancaria('');
+    setFechaOperacion(fechaCalendarioLocal());
+    setFormError(null);
+    setFormSuccess(null);
+    setErrorMonto(null);
+    setErrorFecha(null);
+    setErrorArchivo(null);
+    handleRemoveFile();
+  };
+
+  const iniciarCorreccionPago = (tx: TransaccionPagoDetalleDTO) => {
+    setMetodoPago(tx.metodoPago);
+    setMoneda(tx.monedaOriginal);
+    setMontoOriginalState(tx.montoOriginal);
+    setReferenciaBancaria(tx.referenciaBancaria ?? '');
+    setFechaOperacion((tx.fechaOperacion || '').slice(0, 10));
+    setFormError(null);
+    setFormSuccess(null);
+    setErrorMonto(null);
+    setErrorFecha(null);
+    setErrorArchivo(null);
+    handleRemoveFile();
+  };
+
   const handleReportarPago = async (e: FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
     // RF-007: un pago de días anteriores se puede reportar; uno con fecha futura no.
-    const errorFecha = validarFechaCobro(fechaOperacion, fechaCalendarioLocal());
-    if (errorFecha) {
-      setFormError(errorFecha);
+    const errFecha = validarFechaCobro(fechaOperacion, fechaCalendarioLocal());
+    if (errFecha) {
+      setErrorFecha(errFecha);
       return;
     }
+    setErrorFecha(null);
+
+    // ALU-01: validación honesta del monto pagado > 0
+    const errMonto = validarMontoPago(montoOriginal);
+    if (errMonto) {
+      setErrorMonto(errMonto);
+      return;
+    }
+    setErrorMonto(null);
+
+    if (errorArchivo) {
+      return;
+    }
+
     setIsSubmitting(true);
-    setFormError(null);
 
     let finalStorageKey: string | undefined = undefined;
 
@@ -181,7 +263,7 @@ export function useReportePago({
       await apiClient(`/finanzas/cuotas/${cuota.id}/reportar-pago`, {
         method: 'POST',
         body: JSON.stringify({
-          montoOriginal,
+          montoOriginal: normalizarMontoPago(montoOriginal),
           monedaOriginal: moneda,
           metodoPago,
           referenciaBancaria: referenciaBancaria || undefined,
@@ -191,6 +273,8 @@ export function useReportePago({
       });
 
       setFormSuccess('¡Pago reportado con éxito! Tu coach lo validará en la bandeja.');
+      setMontoOriginalState('');
+      setReferenciaBancaria('');
       handleRemoveFile();
       setTimeout(() => {
         setFormSuccess(null);
@@ -221,6 +305,11 @@ export function useReportePago({
     isSubmitting,
     formSuccess,
     formError,
+    errorMonto,
+    errorFecha,
+    errorArchivo,
+    iniciarNuevoPago,
+    iniciarCorreccionPago,
     fileInputRef,
     selectedFile,
     previewUrl,

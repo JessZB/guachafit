@@ -40,18 +40,25 @@ export function SelectorAccionesPagos({
         onClick={onReportar}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => e.key === 'Enter' && onReportar()}
-        className="group p-5 rounded-3xl bg-gradient-to-br from-card to-primary/10 border-2 border-primary/40 hover:border-primary transition-all duration-200 cursor-pointer shadow-md hover:shadow-primary/5 active:scale-[0.99]"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            onReportar();
+          } else if (e.key === ' ' || e.key === 'Spacebar') {
+            e.preventDefault();
+            onReportar();
+          }
+        }}
+        className="group p-5 rounded-3xl bg-gradient-to-br from-card to-primary/10 border-2 border-primary/40 hover:border-primary transition-all duration-200 cursor-pointer shadow-md hover:shadow-primary/5 active:scale-[0.99] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="p-3.5 rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/25">
-              <Plus className="h-6 w-6" />
+              <Plus className="h-6 w-6" aria-hidden="true" />
             </div>
             <div>
               <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors flex items-center gap-1.5">
                 Reportar un nuevo abono o pago
-                <ArrowUpRight className="h-4 w-4 text-primary opacity-80" />
+                <ArrowUpRight className="h-4 w-4 text-primary opacity-80" aria-hidden="true" />
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">
                 Paga vía Pago Móvil, Zelle o divisas y adjunta tu comprobante en 30 segundos.
@@ -59,7 +66,7 @@ export function SelectorAccionesPagos({
             </div>
           </div>
           <div className="p-2 rounded-xl bg-secondary/80 text-foreground group-hover:text-primary group-hover:bg-primary/15 transition-colors">
-            <ChevronRight className="h-5 w-5 group-hover:translate-x-0.5 transition-transform" />
+            <ChevronRight className="h-5 w-5 group-hover:translate-x-0.5 transition-transform" aria-hidden="true" />
           </div>
         </div>
       </div>
@@ -69,13 +76,20 @@ export function SelectorAccionesPagos({
         onClick={onVerHistorial}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => e.key === 'Enter' && onVerHistorial()}
-        className="group p-5 rounded-3xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer shadow-xs active:scale-[0.99]"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            onVerHistorial();
+          } else if (e.key === ' ' || e.key === 'Spacebar') {
+            e.preventDefault();
+            onVerHistorial();
+          }
+        }}
+        className="group p-5 rounded-3xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer shadow-xs active:scale-[0.99] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="p-3.5 rounded-2xl bg-secondary text-foreground">
-              <Receipt className="h-6 w-6" />
+              <Receipt className="h-6 w-6" aria-hidden="true" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -94,7 +108,7 @@ export function SelectorAccionesPagos({
             </div>
           </div>
           <div className="p-2 rounded-xl bg-secondary/80 text-foreground group-hover:text-primary transition-colors">
-            <ChevronRight className="h-5 w-5 group-hover:translate-x-0.5 transition-transform" />
+            <ChevronRight className="h-5 w-5 group-hover:translate-x-0.5 transition-transform" aria-hidden="true" />
           </div>
         </div>
       </div>

@@ -37,7 +37,7 @@ export interface FilaTransaccionPagoProps {
   /** Abre el visor con la URL del comprobante (`null` = placeholder honesto). */
   onVerComprobante: (url: string | null) => void;
   /** Un rechazo vuelve al formulario para corregir y reenviar. */
-  onCorregir: () => void;
+  onCorregir: (tx: TransaccionPagoDetalleDTO) => void;
 }
 
 export function FilaTransaccionPago({ tx, onVerComprobante, onCorregir }: FilaTransaccionPagoProps) {
@@ -85,7 +85,7 @@ export function FilaTransaccionPago({ tx, onVerComprobante, onCorregir }: FilaTr
       {estado === EstadoConciliacion.RECHAZADO && (
         <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/25 text-xs text-destructive flex flex-col sm:flex-row sm:items-center justify-between gap-2 mt-1">
           <div className="flex items-start gap-2">
-            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
             <div>
               <span className="font-bold">Motivo del Coach: </span>
               <span>
@@ -96,8 +96,8 @@ export function FilaTransaccionPago({ tx, onVerComprobante, onCorregir }: FilaTr
           </div>
           <button
             type="button"
-            onClick={onCorregir}
-            className="self-end sm:self-auto px-3 py-1 rounded-lg bg-destructive text-destructive-foreground font-bold text-[11px] hover:brightness-110 cursor-pointer transition-all shrink-0"
+            onClick={() => onCorregir(tx)}
+            className="self-end sm:self-auto min-h-11 inline-flex items-center justify-center px-3 py-1 rounded-lg bg-destructive text-destructive-foreground font-bold text-[11px] hover:brightness-110 cursor-pointer transition-all shrink-0"
           >
             Corregir y Reenviar
           </button>
@@ -110,9 +110,9 @@ export function FilaTransaccionPago({ tx, onVerComprobante, onCorregir }: FilaTr
           <button
             type="button"
             onClick={() => onVerComprobante(tx.comprobanteUrl ?? null)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-colors cursor-pointer"
+            className="min-h-11 inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-colors cursor-pointer"
           >
-            <Eye className="h-3.5 w-3.5" />
+            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Ver Comprobante Subido</span>
           </button>
         </div>

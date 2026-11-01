@@ -186,14 +186,9 @@ async function abrirFormulario(): Promise<void> {
   await screen.findByText('Reportar Abono o Cuota');
 }
 
-/** Campo "Fecha de Operación" del formulario (la etiqueta no tiene `htmlFor`). */
+/** Campo "Fecha de Operación" del formulario. */
 function campoFechaPago(): HTMLInputElement {
-  const etiqueta = Array.from(document.querySelectorAll('label')).find(
-    (candidata) => candidata.textContent?.trim() === 'Fecha de Operación'
-  );
-  const control = etiqueta?.parentElement?.querySelector('input[type="date"]') ?? null;
-  if (!control) throw new Error('No se encontró el campo de fecha del pago.');
-  return control as HTMLInputElement;
+  return screen.getByLabelText('Fecha de Operación') as HTMLInputElement;
 }
 
 describe('PagosPage · contrato 9: fecha del pago en el reporte del alumno', () => {
@@ -218,6 +213,7 @@ describe('PagosPage · contrato 9: fecha del pago en el reporte del alumno', () 
   it('9c · una fecha anterior viaja en el payload del reporte (regresión del campo actual)', async () => {
     montarPagina();
     await abrirFormulario();
+    fireEvent.change(screen.getByLabelText('Monto Pagado'), { target: { value: '1300.00' } });
     fireEvent.change(campoFechaPago(), { target: { value: '2026-09-21' } });
 
     fireEvent.click(screen.getByRole('button', { name: 'Enviar Comprobante de Pago' }));
@@ -227,15 +223,10 @@ describe('PagosPage · contrato 9: fecha del pago en el reporte del alumno', () 
     expect(cuerpoDeLlamada(llamadasPostReporte()[0]).fechaOperacion).toBe('2026-09-21');
   });
 
-  it('9d · con otro campo obligatorio vacío y fecha válida no se muestra el mensaje de fecha futura', async () => {    montarPagina();
+  it('9d · con otro campo obligatorio vacío y fecha válida no se muestra el mensaje de fecha futura', async () => {
+    montarPagina();
     await abrirFormulario();
-    const etiquetaMonto = Array.from(document.querySelectorAll('label')).find(
-      (candidata) => candidata.textContent?.trim() === 'Monto Pagado'
-    );
-    const campoMonto = etiquetaMonto?.parentElement?.querySelector(
-      'input'
-    ) as HTMLInputElement | null;
-    if (!campoMonto) throw new Error('No se encontró el campo de monto del reporte.');
+    const campoMonto = screen.getByLabelText('Monto Pagado');
     fireEvent.change(campoMonto, { target: { value: '' } });
     fireEvent.change(campoFechaPago(), { target: { value: '2026-09-21' } });
 
@@ -260,6 +251,7 @@ describe('PagosPage · contrato 9: fecha del pago en el reporte del alumno', () 
   it('1b · enviar sin tocar la fecha no muestra el mensaje de fecha futura (hallazgo 1)', async () => {
     montarPagina();
     await abrirFormulario();
+    fireEvent.change(screen.getByLabelText('Monto Pagado'), { target: { value: '1300.00' } });
 
     fireEvent.click(screen.getByRole('button', { name: 'Enviar Comprobante de Pago' }));
     await screen.findByText(/Pago reportado con éxito/);

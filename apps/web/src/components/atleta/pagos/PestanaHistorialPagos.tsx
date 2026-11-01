@@ -42,7 +42,7 @@ export interface PestanaHistorialPagosProps {
   onCambiarPagina: (pagina: number) => void;
   onCambiarTamano: (tamano: number) => void;
   onVerComprobante: (url: string | null) => void;
-  onCorregir: () => void;
+  onCorregir: (tx: TransaccionPagoDetalleDTO) => void;
 }
 
 export function PestanaHistorialPagos({
@@ -66,17 +66,19 @@ export function PestanaHistorialPagos({
     <div className="space-y-5 animate-in fade-in duration-150">
       <div className="flex items-center justify-between border-b border-border/80 pb-3">
         <button
+          type="button"
           onClick={onVolver}
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline cursor-pointer"
+          className="min-h-11 inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline cursor-pointer"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           <span>Volver a opciones de pago</span>
         </button>
         <button
+          type="button"
           onClick={onNuevoAbono}
-          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 text-xs font-bold transition-colors cursor-pointer"
+          className="min-h-11 inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 text-xs font-bold transition-colors cursor-pointer"
         >
-          <Plus className="h-3.5 w-3.5" />
+          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
           <span>Nuevo Abono</span>
         </button>
       </div>
@@ -84,7 +86,7 @@ export function PestanaHistorialPagos({
       <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="font-bold text-base text-foreground flex items-center gap-2">
-            <Receipt className="h-5 w-5 text-primary" />
+            <Receipt className="h-5 w-5 text-primary" aria-hidden="true" />
             <span>Historial de Pagos y Recibos</span>
           </h2>
           <span className="text-xs text-muted-foreground font-mono">
@@ -137,7 +139,7 @@ export function PestanaHistorialPagos({
             role="alert"
             className="p-3 rounded-2xl bg-destructive/10 border border-destructive/25 text-destructive text-xs font-bold flex items-center gap-2"
           >
-            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span>{errorHistorial}</span>
           </div>
         )}

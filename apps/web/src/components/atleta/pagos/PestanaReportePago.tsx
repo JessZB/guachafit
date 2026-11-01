@@ -36,13 +36,13 @@ export function PestanaReportePago({
     <div className="space-y-5 animate-in fade-in duration-150">
       <div className="flex items-center justify-between border-b border-border/80 pb-3">
         <button
+          type="button"
           onClick={onVolver}
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline cursor-pointer"
+          className="min-h-11 inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline cursor-pointer"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           <span>Volver a opciones de pago</span>
         </button>
-        <span className="text-xs font-semibold text-muted-foreground">Paso guiado</span>
       </div>
 
       <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-4">
@@ -54,7 +54,10 @@ export function PestanaReportePago({
         </div>
 
         {formError && (
-          <div className="p-3 rounded-2xl bg-destructive/15 border border-destructive/30 text-destructive text-xs font-semibold">
+          <div
+            role="alert"
+            className="p-3 rounded-2xl bg-destructive/15 border border-destructive/30 text-destructive text-xs font-semibold"
+          >
             {formError}
           </div>
         )}
