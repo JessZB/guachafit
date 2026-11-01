@@ -4,11 +4,10 @@ import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
 import type { PestanaAjustes } from '../../lib/ajustes';
 import { PantallaAjustes } from '../../components/ajustes/PantallaAjustes';
-import { ConversorTasas } from '../../components/entrenador/ajustes-entrenador/ConversorTasas';
-import { FormularioTasa } from '../../components/entrenador/ajustes-entrenador/FormularioTasa';
 import { ModalPlanComercial } from '../../components/entrenador/ajustes-entrenador/ModalPlanComercial';
 import { PanelPlanes } from '../../components/entrenador/ajustes-entrenador/PanelPlanes';
 import { PestanaNotificaciones } from '../../components/entrenador/ajustes-entrenador/PestanaNotificaciones';
+import { PestanaTasa } from '../../components/entrenador/ajustes-entrenador/PestanaTasa';
 import { usePlanesComerciales } from '../../components/entrenador/ajustes-entrenador/use-planes-comerciales';
 import { useTasasCambio } from '../../components/entrenador/ajustes-entrenador/use-tasas-cambio';
 
@@ -71,43 +70,7 @@ export function AjustesPage() {
         />
       );
     }
-    if (pestana === 'tasas') {
-      return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in-50 duration-200">
-          {/* Columna Izquierda: Configuración de Tasas */}
-          <div className="lg:col-span-2 space-y-6">
-            <FormularioTasa
-              tasaVigente={tasas.tasaVigente}
-              isLoadingTasas={tasas.isLoadingTasas}
-              tasasError={tasas.tasasError}
-              tasaSuccessMsg={tasas.tasaSuccessMsg}
-              fuenteSeleccionada={tasas.fuenteSeleccionada}
-              tasaOficialBcvInput={tasas.tasaOficialBcvInput}
-              tasaParaleloInput={tasas.tasaParaleloInput}
-              tasaActivaInput={tasas.tasaActivaInput}
-              isSavingTasa={tasas.isSavingTasa}
-              onSeleccionarFuente={tasas.seleccionarFuente}
-              onCambiarOficial={tasas.cambiarTasaOficial}
-              onCambiarParalelo={tasas.cambiarTasaParalelo}
-              onCambiarActiva={tasas.cambiarTasaActiva}
-              onGuardar={() => void tasas.guardarTasa()}
-              onReintentar={() => void tasas.cargarTasas()}
-            />
-          </div>
-
-          {/* Columna Derecha: Calculadora Instantánea de Conversión */}
-          <div className="space-y-4">
-            <ConversorTasas
-              tasaActivaInput={tasas.tasaActivaInput}
-              calculadoraUsd={tasas.calculadoraUsd}
-              calculadoraVes={tasas.calculadoraVes}
-              onCambiarUsd={tasas.cambiarMontoUsd}
-              onCambiarVes={tasas.cambiarMontoVes}
-            />
-          </div>
-        </div>
-      );
-    }
+    if (pestana === 'tasas') return <PestanaTasa tasas={tasas} />;
     if (pestana === 'notificaciones') return <PestanaNotificaciones />;
     return null;
   };
