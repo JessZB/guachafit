@@ -24,8 +24,8 @@ Push solo cuando yo lo pida explícitamente.
 
 ## Qué hay que hacer
 Seguir, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (29 lotes UX-01…UX-29; decisiones D1–D10 en su sección 4).
-- **Siguiente lote: UX-20** (Plantillas: recarga honesta y táctil; CFG-20 a 26, en `.external-agents/auditoria-ux/03-plantillas-ajustes-entrenador.md`). No tiene decisiones pendientes.
-- Después: el área del alumno (UX-21…29; UX-21 depende de ⛔ D8).
+- **Siguiente lote: UX-21** (Pago del alumno: formulario honesto y accesible; ALU-01 a 10, en `.external-agents/auditoria-ux/04-alumno-pagos-ajustes.md`). Depende de ⛔ **D8**: antes de empezar, pregúntale al dueño verificando antes en el código lo que D8 supone (reporte de pago vacío, specs con `1300.00` y si el API acepta clave de idempotencia).
+- Después: UX-22…29 (UX-22 depende también de D8; UX-23 a 29 completan el área del alumno).
 - Los lotes con ⛔ dependen de una decisión mía (sección 4). Pregúntamela al llegar, UNA a la vez, con la recomendación del documento y su porqué. **Antes de preguntar, verifica en el código lo que la decisión da por supuesto.** En D7 yo creía que los planes eran solo mensuales y el código tenía duración de 1 a 12 meses.
 - Antes de cada lote, mapea el código con un agente Explore de solo lectura con `model: haiku`: textos exactos, props, specs que se romperán y cuáles comprueban comportamiento frente a texto. La auditoría fue estática.
 - Los reportes originales de la auditoría están en `.external-agents/auditoria-ux/01…05-*.md`. La carpeta está en `.gitignore`. Bórrala solo al cerrar todos los lotes.
@@ -114,7 +114,7 @@ Seguir, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (29 l
 - **Engram:** puede fallar con "multiple active runtime sessions". Avisa y sigue.
 
 ## Estado al 2026-11-01
-- **Cerrados:** UX-01…UX-19, cada uno con su commit `feat`/`refactor` y su `docs(vault)`. Detalle y seguimientos en la sección 3 de la auditoría. Últimos lotes:
+- **Cerrados:** UX-01…UX-20, cada uno con su commit `feat`/`refactor` y su `docs(vault)`. Detalle y seguimientos en la sección 3 de la auditoría. Últimos lotes:
   - UX-11 `57606e8`: Dashboard con carga honesta.
   - UX-12 `97017b8`: hook `use-dashboard-comando`.
   - UX-13 `8a5c6f1`: D4 «qué atender hoy».
@@ -124,8 +124,9 @@ Seguir, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (29 l
   - UX-17 `14c796e`: D6, Ajustes en una pantalla con barra segmentada.
   - UX-18 `e7851f3`: D7, el precio es el total de la duración y el formulario de planes arranca vacío.
   - UX-19 `ed28ed6`: Tasa de cambio sin jerga, resumen guardado, edición en `<details>`, validación previa y guarda contra doble envío.
-- **Tests:** web **2908 tests en 316 archivos**, typecheck y build en verde (al cierre de UX-19).
-- **Commits locales sin push** desde `6abb291` (UX-11…UX-19).
+  - UX-20 `1b364c4`: Plantillas con recarga honesta y desacoplamiento de cargandoInicial/recargando en `usePlantillasBanco`; banner `AvisoErrorRecarga` con tarjetas visibles; buscador táctil `min-h-11` (16px); contador "N plantillas" en `aria-live="polite"`; `BadgeEstado` unificado; motivo visible al asignar sin conexión; iconos `aria-hidden`; aclaración de copia independiente en `PasoRevisar` (CFG-26).
+- **Tests:** web **2926 tests en 320 archivos**, typecheck y build en verde (al cierre de UX-20).
+- **Commits locales sin push** desde `6abb291` (UX-11…UX-20, incluyendo UX-19 y UX-20).
 - **Pausados o pendientes fuera de la auditoría:** módulo 5 (anulación de cuotas en la web, congelar membresía, condonar, PagosPage, P2 de Control de Cobros, RNF-002) y pendientes de la ficha en RF-011. Al llegar a UX-21/22 (pagos del alumno), revisa si conviene juntarlos.
 
 ## Piezas a reutilizar
@@ -146,5 +147,5 @@ Seguir, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (29 l
   - cambios sin guardar de `ModalPlantilla` y `ModalPlanComercial`;
   - contador de generación de `use-dashboard-comando`.
 
-Empieza revisando la memoria (`mem_search "guachafit UX-19"` y `"guachafit auditoría UX"`), lee la auditoría (secciones 2, 3 y 4) y arranca **UX-20**: mapeo con Explore y, después, los contratos de su fase roja.
+Empieza revisando la memoria (`mem_search "guachafit UX-20"` y `"guachafit auditoría UX"`), lee la auditoría (secciones 2, 3 y 4) y arranca **UX-21**: verifica primero en el código lo que supone D8, pregúntale al dueño, mapeo con Explore y, después, los contratos de su fase roja.
 ```

@@ -137,7 +137,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-17 ✅ `14c796e` | Ajustes: una pantalla y tabs segmentadas | Ajustes (entrenador y alumno) | CFG-01, 02, 03, 04, 05; ALU-23, 24, 25 | `BarraTabsSegmentada`, `PantallaAjustes` con `renderPestana`; se elimina `PestanasAjustes` | medio-alto (specs de `AjustesPage` y `PantallaAjustes`) | no | UX-01; ⛔ D6 |
 | UX-18 ✅ `e7851f3` | Planes comerciales | Ajustes > Planes | CFG-06, 07, 08, 09, 10, 11, 12, 13 | `CampoAjustes`, `DialogoConfirmacion`/confirmación inline de `TarjetaPlantilla`, `BadgeEstado`, `EstadoCarga` | medio | no | UX-03, UX-17; ⛔ D7 (CFG-09, CFG-11) |
 | UX-19 ✅ `ed28ed6` | Tasa de cambio sin jerga y accesible | Ajustes > Tasa | CFG-14, 15, 16, 17, 18, 19 | `CampoAjustes`, `<details>` con resumen guardado (patrón `PestanaAntropometriaAlumno`), `AvisosAjustes` | bajo-medio (specs de textos de tasa) | no | UX-03, UX-17 |
-| UX-20 | Plantillas: recarga honesta y táctil | Plantillas | CFG-20, 21, 22, 23, 24, 25, 26 | `BadgeEstado`, patrón `AvisoErrorDirectorio` | bajo | no | ninguna |
+| UX-20 ✅ `1b364c4` | Plantillas: recarga honesta y táctil | Plantillas | CFG-20, 21, 22, 23, 24, 25, 26 | `BadgeEstado`, patrón `AvisoErrorDirectorio` | bajo | no | ninguna |
 | UX-21 | Pago del alumno: formulario honesto y accesible | Pagos > Reportar pago | ALU-01, 02, 03, 04, 05, 06, 08, 09, 10 | `CampoAjustes`, `AvisosAjustes`, modelo `DiarioFotografico`, `BotonTactil` | medio (specs con `1300.00` y localización por `parentElement`) | no | UX-03; ⛔ D8 |
 | UX-22 | Pago del alumno: idempotencia | Pagos | ALU-07 | reutilizar `storageKey` en el reintento; clave de idempotencia | medio | **sí** | UX-21; ⛔ D8 |
 | UX-23 | Nutrición: ventana, calendario y campos | Nutrición | ALU-16, 17, 18, 19, 21 | `horaDeZona`, `HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL`, `rutaAjustes`, `CampoAjustes`, `pluralizar` | bajo-medio | no | UX-03 |
@@ -339,6 +339,26 @@ Proceso:
 - Subconjunto de pruebas de tasas: 58 tests en 3 archivos (`ajustes-entrenador-tasas.spec.ts`, `ajustes-entrenador-tasas.ux19.spec.ts` y `AjustesPage.tasa.ux19.interaccion.spec.tsx`).
 - 2908 tests en 316 archivos, typecheck y build en verde.
 
+**UX-20 cerrado (`1b364c4`):**
+- Hook `usePlantillasBanco`: desacopla `cargandoInicial` y `recargando`, erradicando `isLoading`. Preserva la lista en memoria ante fallos de recarga y solo entra en error inicial si no hay datos previos.
+- Recarga honesta en `PlantillasPage`: si la recarga falla con datos en memoria, las tarjetas no desaparecen ni se ocultan; se muestra arriba `AvisoErrorRecarga` (`role="alert"`) con botón "Reintentar".
+- Buscador y selector de nivel táctiles en móvil (`FiltrosPlantillas`): altura accesible `min-h-11` (44px) y tamaño `text-base sm:text-sm` (16px) que evita el zoom involuntario de iOS Safari.
+- Contador accesible (`FiltrosPlantillas`): sustituye el formato técnico por `<p aria-live="polite">` con `{N} plantilla` / `{N} plantillas`. Oculto en carga inicial y error sin datos; visible con datos cargados o filtros activos.
+- Tarjeta de plantilla (`TarjetaPlantilla`): estado unificado con `<BadgeEstado>` ("Activa" / "Desactivada").
+- Asignar sin conexión: al estar offline, el botón "Asignar a alumnos" muestra el motivo de forma visible en el DOM ("Necesitas internet para asignar") enlazado mediante `aria-describedby`, eliminando el `title` inaccesible en táctil.
+- Iconos SVG con `aria-hidden="true"` en todas las acciones de la tarjeta.
+- Decisión CFG-26 del dueño: la aclaración *"Cada asignación es una copia independiente: editar la plantilla no altera lo ya prescrito."* se retiró de `CabeceraPlantillas` y se movió al paso de revisión de la asignación (`PasoRevisar`), donde se toma la decisión de prescripción, apareciendo exactamente una vez en los flujos individual y masivo.
+- Hallazgo arquitectónico: hoy `cargarPlantillas` solo se llama al montar el componente y desde el botón "Reintentar", por lo que la recarga con datos previos no tiene disparador visible en la UI todavía (quedando la arquitectura lista para refresco automático o pull-to-refresh).
+
+Seguimientos:
+- SUGGESTION de la revisión de fiabilidad: carrera preexistente al cambiar `isDemoMode` sin `AbortController` (si una petición previa en curso a `/plantillas` responde tras conmutar dinámicamente a demo). En la práctica la conmutación ocurre casi exclusivamente vía login/logout al desmontar.
+- SUGGESTION menor: comentario JSDoc de cabecera en `FiltrosPlantillas.tsx` hacía referencia a "Mostrando N de M".
+
+Proceso:
+- 1 revisión de fiabilidad por riesgo bajo (`04-ux20-review-reliability.reporte.md`), sin BLOCKER ni WARNING funcional.
+- 18 tests en 4 specs nuevos (`*.ux20.spec.*`), 6 aserciones de contador actualizadas en `PlantillasPage.caracterizacion.interaccion.spec.tsx`.
+- 2926 tests en 320 archivos, typecheck y build en verde.
+
 ## 4. Decisiones pendientes del dueño
 
 Deduplicadas de las 15 preguntas de los reportes (cada una con la recomendación del auditor).
@@ -352,6 +372,7 @@ Deduplicadas de las 15 preguntas de los reportes (cada una con la recomendación
 | D5 ✅ (2026-10-30: se unifican "Panel", "Seguimiento", "Evaluaciones" y "Mis alumnos" desde una constante única. Las dos pantallas de cobros conservan los nombres de UX-10, "Control de cobros" y "Pagos por validar", porque ya eran coherentes y no existe un destino "Pagos". No se escriben specs nuevos solo para los nombres: se ajustan los que ya los consultan) | ¿Unificar los nombres de navegación (Panel, Seguimiento, Evaluaciones, Cobros, Pagos) aunque cambien textos que algunos tests consultan? ¿Un cuarto destino "Progreso" en la barra del alumno? | Sí a unificar (SEG-25: cinco nombres para un destino). Progreso: mantenerlo en el Menú hasta decidir; el auditor lo considera aceptable para el flujo de gimnasio (NAV-01). | UX-16 (SEG-25), UX-24 (cuarto destino) |
 | D6 ✅ (2026-10-31: etiquetas cortas Perfil, Acceso, Avisos, Planes y Tasa; Perfil sigue siendo la pestaña inicial) | Ajustes del entrenador: etiquetas cortas (Acceso, Avisos, Planes, Tasa) y ¿qué tab abre por defecto? | Etiquetas cortas sí: sin ellas las tabs no caben a 360px (inferido). Dejar Perfil primero para no cambiar `?tab=` por defecto, salvo que se prefiera abrir en Planes o Tasa. | UX-17 |
 | D7 ✅ (2026-10-31: el precio es el total de la duración del plan, que es lo que ya hace el API: una cuota por ciclo de `duracionMeses`; la tarjeta deja de decir "USD / mes". El formulario de creación arranca vacío: sin el precio 40.00 ni beneficios precargados) | Planes: ¿el precio es por mes o por toda la duración? ¿Se quitan el precio `40.00` y los dos beneficios precargados? | Quitar la precarga (CFG-09: datos no elegidos) y aclarar la semántica del precio: hoy dice "USD / mes" aunque el plan dure N meses (CFG-11). | UX-18 |
+| CFG-26 ✅ (2026-11-01: la aclaración de copia independiente se movió al paso de revisión de la asignación PasoRevisar en lugar de saturar la cabecera del catálogo) | Plantillas: ¿dónde ubicar la aclaración de que cada asignación es una copia independiente? | Retirar de CabeceraPlantillas y moverla al paso de revisión de la asignación (PasoRevisar), donde se toma la decisión de prescripción, renderizándose una sola vez en flujos individual y masivo (CFG-26). | UX-20 |
 | D8 | Reporte de pago: ¿empieza vacío (se actualizan los specs que usan `1300.00` y localizan por `parentElement`)? ¿El API acepta clave de idempotencia o rechaza duplicados por referencia+monto+fecha? | Sí a vaciar (ALU-01 es ALTA). Sin idempotencia en el API solo hay mitigación en el cliente (ALU-07). | UX-21, UX-22 |
 | D9 | Check-in antropométrico con fotos sin conexión: ¿encolar o avisar y bloquear el envío? | Avisar y bloquear: no toca datos. Encolar es riesgo alto y requiere diseño de cola offline (PRO-04). | UX-28 |
 | D10 | Esfuerzo de la sesión: ¿arrancar sin valor? ¿Separar el valor de "molestia" del texto con emoji dentro de `notas`? | Sí al esfuerzo sin valor inicial (ENT-09b). Separar `notas` va aparte porque cambia el formato de los datos (ENT-09c). | UX-26 (ENT-09c) |
