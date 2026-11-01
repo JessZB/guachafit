@@ -216,6 +216,15 @@ Then el sistema debe persistir los totales numéricos asociados a la fecha
   - Pendientes menores: el error del selector no se borra al elegir otra zona, nombres de ciudades fuera de la lista curada en su forma inglesa ("Hora de Tokyo") y faltan tests de horario de verano en la web.
 - Evidencia: `apps/web/src/lib/zona-horaria.spec.ts`, `apps/web/src/components/common/SelectorZonaHoraria.spec.ts`, `apps/web/src/lib/nutricion-checkin.spec.ts`, `apps/web/src/lib/nutricion-metas.spec.ts`, `apps/api/test/bdd/rf003-wu-rf003a-auth-modalidad.spec.ts` y `apps/api/test/bdd/rf011-wu-e-onboarding.spec.ts`; web **960**, API **1247** aprobados (1 omitida); typecheck y build de web y API en verde. Revisado con los 4 enfoques (riesgo, fiabilidad, resiliencia, legibilidad) y validado tras las correcciones.
 
+### Ventana con enlace a zona horaria, lista de 7 días sin truncar y validación por campo (2026-11-01, UX-23, `6271cce`)
+
+- **ALU-16 (`AccionesGuardarReporte.tsx` + `nutricion-checkin.ts`):** fuera de la ventana RN-02 (`18:00–23:59`), el botón deshabilitado muestra `Disponible a partir de las 18:00 (hora de <Ciudad>)` vía `textoBotonFueraDeVentanaCheckin(zonaPerfil)` en lugar del texto fijo sin zona.
+- **ALU-17 (`AvisoVentanaReporte.tsx`):** el aviso de ventana cerrada incluye el enlace directo **"Cambiar zona horaria"** hacia `/app/ajustes?tab=zona-horaria` (`rutaAjustes(Rol.ALUMNO, 'zona-horaria')`), degradando a `<a>` estándar cuando se renderiza fuera de un `<Router>` (SSR).
+- **ALU-18 (`CalendarioUltimos7Dias.tsx`):** sustituye la grilla de 7 columnas con `title` y `.truncate` por una lista compacta accesible en pantallas táctiles donde cada día muestra la fecha legible (`formatFechaLargaCalendario`, con `first-letter:uppercase`) y el badge de estado completo sin truncar.
+- **ALU-19 (`FormularioDatosReporte.tsx` + `validarCamposOpcionalesCheckin`):** valida reactivamente por separado `aguaLitros`, `calorias` y `proteina`, marcando `aria-invalid="true"` y `aria-describedby="nutricion-<campo>-error"` con su `<p role="alert">` junto al campo correspondiente y limpiando el error al corregirlo; añade `autoComplete="off"`, `enterKeyHint="next"` / `"done"` y vincula el contador `#nutricion-notas-limite` al `<textarea>` mediante `aria-describedby`.
+- **ALU-21 (`AvisosReporteNutricional.tsx`):** reemplaza los emojis de texto `✓` y `⏳` por iconos SVG de Lucide (`Check`, `Clock` con `aria-hidden="true"`) y usa `pluralizar(fotosEncoladas, 'foto', 'fotos')`.
+- Evidencia: `apps/web/src/lib/nutricion-checkin.ux23.spec.ts` y `apps/web/src/pages/atleta/NutricionPage.ux23.interaccion.spec.tsx` (12 tests nuevos); suite web **2998 tests en 329 archivos**, typecheck y build en verde.
+
 ### Límites deliberados y notas honestas
 
 Tres de los cuatro puntos quedaron **resueltos**; el único abierto es de entorno (smoke contra Cloudflare R2 real). Por eso el estado pasa a `implementado`.

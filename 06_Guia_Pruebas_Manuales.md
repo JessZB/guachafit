@@ -521,6 +521,10 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 - [ ] **Ventana correcta recién iniciada la sesión:** con un alumno cuya zona del perfil difiere de la del teléfono, cierra sesión, inicia sesión y entra a Nutrición sin recargar → la ventana y el texto ya usan la zona del perfil.
 - [ ] **Metas del día conservadas (vía API):** registra un reporte, cambia las metas del alumno como coach y consulta los reportes → el reporte anterior conserva en `metasVigentes` las metas de su día (los reportes previos a la migración `0016` traen `null`).
 - [ ] **Modo demo:** con "Modo Alumno" la ventana horaria no bloquea la simulación y el reporte, las metas y la tolerancia usan el fixture local.
+- [ ] **Ventana con zona del perfil, lista de 7 días y errores por campo (desde 2026-11-01, UX-23, `6271cce`):** en `/app/nutricion` como alumno.
+  - Antes de las 18:00 (según la zona de tu perfil), el aviso **"El reporte aún no está abierto"** incluye el enlace **"Cambiar zona horaria"** que abre `/app/ajustes?tab=zona-horaria`, y el botón deshabilitado indica la zona de tu perfil, p. ej. **"Disponible a partir de las 18:00 (hora de Caracas)"** (o `"hora de Madrid"`).
+  - En **"Tus últimos 7 días"**, cada día se muestra en una fila con la fecha completa legible (p. ej. *"Lunes, 21 de septiembre"*) y su estado completo sin puntos suspensivos (*"Seguí mi plan"*, *"No reportado"*, *"Pendiente de sincronizar"*), sin depender de pasar el ratón por encima.
+  - Dentro de la ventana, escribe un dato inválido en **Agua** (`2.555`), **Calorías** (`2000,5` o `16000`) o **Proteína** (`1200`): el mensaje de error (`role="alert"`) aparece inmediatamente debajo de ese campo y desaparece en cuanto lo corriges o vacías. En **Notas**, el contador `N/280` está vinculado al campo y los avisos de guardado usan iconos vectoriales y pluralización correcta (*"con 1 foto"* / *"con 2 fotos"*).
 
 **Coach (ficha del alumno → pestaña Nutrición, `?tab=nutricion`)**
 

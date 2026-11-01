@@ -140,7 +140,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-20 ✅ `1b364c4` | Plantillas: recarga honesta y táctil | Plantillas | CFG-20, 21, 22, 23, 24, 25, 26 | `BadgeEstado`, patrón `AvisoErrorDirectorio` | bajo | no | ninguna |
 | UX-21 ✅ `87c732d` | Pago del alumno: formulario honesto y accesible | Pagos > Reportar pago | ALU-01, 02, 03, 04, 05, 06, 08, 09, 10 | `CampoAjustes`, `AvisosAjustes`, modelo `DiarioFotografico`, `BotonTactil` | medio (specs con `1300.00` y localización por `parentElement`) | no | UX-03; ⛔ D8 |
 | UX-22 ✅ `3bfce29` | Pago del alumno: idempotencia | Pagos | ALU-07 | reutilizar `storageKey` en el reintento; clave de idempotencia | medio | **sí** (ya existía en API) | UX-21; ⛔ D8 |
-| UX-23 | Nutrición: ventana, calendario y campos | Nutrición | ALU-16, 17, 18, 19, 21 | `horaDeZona`, `HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL`, `rutaAjustes`, `CampoAjustes`, `pluralizar` | bajo-medio | no | UX-03 |
+| UX-23 ✅ `6271cce` | Nutrición: ventana, calendario y campos | Nutrición | ALU-16, 17, 18, 19, 21 | `horaDeZona`, `HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL`, `rutaAjustes`, `validarCamposOpcionalesCheckin`, `pluralizar` | bajo-medio | no | UX-03 |
 | UX-24 | Menú y navegación del alumno: honesto y partido | Menú, BottomNav | MEN-01 a MEN-06, NAV-01 | `use-resumen-menu`, `TarjetaEntrenarHoy`, `TarjetaAccesoAlumno`, `ChipRacha`, `BadgeEstado`, `EstadoError`; `aria-label` en la barra | medio (el cuarto destino es aparte) | no | UX-02; ⛔ D5 solo para el cuarto destino |
 | UX-25 | Sesión de entrenamiento: táctil y chips | `/app/hoy` | ENT-04, 05, 07, 08, PRO-02 | `BotonTactil`, `BadgeEstado`, `CampoMedidaCheckin` | bajo | no | UX-02 |
 | UX-26 | Cierre de sesión seguro | `ModalFinalizarSesion` | ENT-02, 03, 09(a,b), 10; ENT-09(c) | `DialogoConfirmacion`/`ModalCierreVacio`, `CtaFinalizarSesion` parametrizable | medio | no; ENT-09(c) toca el formato de `notas` | ⛔ D10 solo para (c) |
@@ -395,6 +395,23 @@ Proceso:
 - 4 revisiones en paralelo por tocar flujos de dinero (`04-ux22-review-risk`, `05-ux22-review-reliability`, `06-ux22-review-resilience`, `07-ux22-review-readability`), de las que se aplicaron y validaron 5 correcciones (`F1..F5`).
 - 21 tests en 2 specs nuevos (`use-reporte-pago.ux22.spec.ts` y `PagosPage.ux22.interaccion.spec.tsx`).
 - 2986 tests en 327 archivos, typecheck y build en verde.
+
+**UX-23 cerrado (`6271cce`):**
+- `nutricion-checkin.ts`: exporta `textoBotonFueraDeVentanaCheckin(zonaHoraria)` (`Disponible a partir de las 18:00 (hora de <Ciudad>)`) y `validarCamposOpcionalesCheckin({ aguaLitros, calorias, proteina })`, compartiendo la validación de enteros sin decimales con `enteroOpcional` (`F3`).
+- `AccionesGuardarReporte.tsx` y `NutricionPage.tsx` (`ALU-16`): recibe `zonaPerfil` y muestra la zona horaria del perfil en el botón deshabilitado fuera de ventana; `NutricionPage.tsx` baja de 298 a **278 líneas** (`<= 300`).
+- `AvisoVentanaReporte.tsx` (`ALU-17`): añade el enlace **"Cambiar zona horaria"** hacia `/app/ajustes?tab=zona-horaria` (`rutaAjustes(Rol.ALUMNO, 'zona-horaria')`), usando `useInRouterContext()` para degradar a `<a href>` cuando se renderiza en SSR sin `<Router>` (`F2`).
+- `CalendarioUltimos7Dias.tsx` (`ALU-18`): reemplaza la grilla de 7 columnas con `title` y `.truncate` por una lista vertical `<ul className="divide-y divide-border/60">` que muestra la fecha larga formateada (`first-letter:uppercase`, sanitizando `dia.fecha.slice(0, 10)`, `F4`) y el chip de estado completo sin truncar.
+- `FormularioDatosReporte.tsx` (`ALU-19`): conserva los IDs exactos (`nutricion-agua`, `nutricion-calorias`, `nutricion-proteina`, `nutricion-notas`), añade `autoComplete="off"`, `enterKeyHint="next"` / `"done"`, enlaza el contador `#nutricion-notas-limite` con `aria-describedby` y expone errores reactivos por campo (`aria-invalid`, `aria-describedby="nutricion-<campo>-error"`, `<p role="alert">`).
+- `AvisosReporteNutricional.tsx` (`ALU-21`): sustituye los emojis de texto `✓` y `⏳` por iconos Lucide `Check` y `Clock` (`aria-hidden="true"`) hermanos anteriores al `<p role="status">` y pluraliza las fotos encoladas con `pluralizar(fotosEncoladas, 'foto', 'fotos')`.
+
+Seguimientos:
+- WARNING preexistente de resiliencia (`use-reporte-hoy.ts` / `nutricion-checkin.ts:470`): al recargar la página sin conexión con un reporte encolado (`queued`), `buscarCheckinNutricionalPendiente` solo devuelve `{ tipo: 'pendiente', fotos }` y no rehidrata los valores del formulario desde el payload en IndexedDB.
+- SUGGESTION de accesibilidad (`FormularioDatosReporte.tsx`): valorar `readOnly` en vez de `disabled:opacity-60` cuando el reporte ya quedó registrado para preservar mayor contraste en modo lectura.
+
+Proceso:
+- 4 revisiones en paralelo (`04-ux23-review-risk`, `05-ux23-review-resilience`, `06-ux23-review-readability`, `07-ux23-review-reliability`), que detectaron un fetch innecesario a `/nutricion/resumen` introducido para el mock inicial, un riesgo de caída en SSR sin `<Router>` en `AvisoVentanaReporte` y fechas `new Date(y, m, d, h)` sensibles a `TZ=UTC`; se corrigieron en `08-ux23-correccion` (`F1..F4`) y `09-ux23-validacion` (`V1..V4`).
+- 12 tests en 2 specs nuevos (`nutricion-checkin.ux23.spec.ts` y `NutricionPage.ux23.interaccion.spec.tsx`).
+- 2998 tests en 329 archivos, typecheck y build en verde.
 
 ## 4. Decisiones pendientes del dueño
 
