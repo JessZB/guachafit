@@ -139,7 +139,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-19 ✅ `ed28ed6` | Tasa de cambio sin jerga y accesible | Ajustes > Tasa | CFG-14, 15, 16, 17, 18, 19 | `CampoAjustes`, `<details>` con resumen guardado (patrón `PestanaAntropometriaAlumno`), `AvisosAjustes` | bajo-medio (specs de textos de tasa) | no | UX-03, UX-17 |
 | UX-20 ✅ `1b364c4` | Plantillas: recarga honesta y táctil | Plantillas | CFG-20, 21, 22, 23, 24, 25, 26 | `BadgeEstado`, patrón `AvisoErrorDirectorio` | bajo | no | ninguna |
 | UX-21 ✅ `87c732d` | Pago del alumno: formulario honesto y accesible | Pagos > Reportar pago | ALU-01, 02, 03, 04, 05, 06, 08, 09, 10 | `CampoAjustes`, `AvisosAjustes`, modelo `DiarioFotografico`, `BotonTactil` | medio (specs con `1300.00` y localización por `parentElement`) | no | UX-03; ⛔ D8 |
-| UX-22 | Pago del alumno: idempotencia | Pagos | ALU-07 | reutilizar `storageKey` en el reintento; clave de idempotencia | medio | **sí** | UX-21; ⛔ D8 |
+| UX-22 ✅ `3bfce29` | Pago del alumno: idempotencia | Pagos | ALU-07 | reutilizar `storageKey` en el reintento; clave de idempotencia | medio | **sí** (ya existía en API) | UX-21; ⛔ D8 |
 | UX-23 | Nutrición: ventana, calendario y campos | Nutrición | ALU-16, 17, 18, 19, 21 | `horaDeZona`, `HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL`, `rutaAjustes`, `CampoAjustes`, `pluralizar` | bajo-medio | no | UX-03 |
 | UX-24 | Menú y navegación del alumno: honesto y partido | Menú, BottomNav | MEN-01 a MEN-06, NAV-01 | `use-resumen-menu`, `TarjetaEntrenarHoy`, `TarjetaAccesoAlumno`, `ChipRacha`, `BadgeEstado`, `EstadoError`; `aria-label` en la barra | medio (el cuarto destino es aparte) | no | UX-02; ⛔ D5 solo para el cuarto destino |
 | UX-25 | Sesión de entrenamiento: táctil y chips | `/app/hoy` | ENT-04, 05, 07, 08, PRO-02 | `BotonTactil`, `BadgeEstado`, `CampoMedidaCheckin` | bajo | no | UX-02 |
@@ -375,6 +375,26 @@ Proceso:
 - 4 revisiones en paralelo por tocar flujos de dinero (`04-ux21-review-risk`, `05-ux21-review-reliability`, `06-ux21-review-resilience`, `07-ux21-review-readability`), de las que se aplicaron y validaron 5 correcciones (`F1..F5`).
 - 39 tests en 5 specs nuevos (`*.ux21.spec.*` / `*.ux21.interaccion.spec.tsx`) y 3 tests actualizados en `PagosPage.fecha-anterior.interaccion.spec.tsx`.
 - 2965 tests en 325 archivos, typecheck y build en verde.
+
+**UX-22 cerrado (`3bfce29`, decisión D8):**
+- `pagos-montos.ts`: exporta `MENSAJE_ERROR_RED_AMBIGUO_PAGO` (*"No se pudo confirmar el envío; revisa tu historial antes de repetirlo."*), `generarClaveIdempotenciaPago()` y `esErrorEnvioPagoAmbiguo(err)` (detecta `TypeError`, `ErrorDeConexion`, `ErrorTiempoAgotado`, `AbortError`, `TimeoutError` y respuestas de pasarela HTTP `502`/`503`/`504`).
+- `use-reporte-pago.ts`:
+  - **C1 (`ALU-07a`):** guarda la clave del recibo subido a R2 en `comprobanteSubidoKeyRef` y la reutiliza si falla el `POST` y el alumno reintenta con el mismo archivo; la invalida al cambiar o quitar el archivo, tras el éxito o al invocar `iniciarNuevoPago` / `iniciarCorreccionPago`. Valida `if (!cuota)` antes de comprimir o subir a R2 (`F4`).
+  - **C2 (`ALU-07` + `D8`):** mantiene `idempotencyKeyRef` estable en reintentos del mismo payload (enviada en `options.idempotencyKey` para `X-Idempotency-Key` y en el JSON `body`) y la renueva al confirmar el pago, al iniciar un flujo nuevo o corrección, o cuando el alumno edita los campos del formulario (`F3`). Añade cerrojo síncrono `enVueloRef` contra doble clic/Enter concurrente (`F1`).
+  - **C3 (`ALU-07b`):** gestiona el `setTimeout` de 1800 ms en `temporizadorExitoRef` con control de montaje (`montadoRef`), limpiándolo al desmontar o al reiniciar el flujo.
+  - **C4 (`ALU-07c`):** distingue errores ambiguos de red/timeout en el `POST` (`MENSAJE_ERROR_RED_AMBIGUO_PAGO`) frente a rechazos HTTP deterministas del servidor y frente a fallos previos en la subida del comprobante.
+- `PagosPage.tsx`: al pulsar `"Volver a opciones de pago"` (`onVolver`), invoca `iniciarNuevoPago()` antes de volver al Hub para cancelar el temporizador de 1800 ms y evitar redirecciones huérfanas al historial (`F2`).
+
+Seguimientos:
+- WARNING preexistente de riesgo en API (`reportar-pago.ts:192`): el backend acepta `dto.comprobanteStorageKey` sin verificar que empiece por `comprobantes/${alumnoUserId}/`.
+- WARNING preexistente de riesgo en API/BD (`registro-idempotencia.ts` / `schema/index.ts:776`): el registro de idempotencia vive en RAM del proceso y el índice único `uq_transaccion_referencia_entrenador` excluye `efectivo_usd` y `efectivo_ves`.
+- SUGGESTION de resiliencia preexistente (`comprobante-pago.ts:98`): el `PUT` directo a la presigned URL de R2 no define `AbortSignal.timeout`.
+- WARNING de legibilidad: `generarClaveIdempotenciaPago` y `esErrorEnvioPagoAmbiguo` viven en `pagos-montos.ts` para no acoplar los mocks unitarios de `api-client.ts`.
+
+Proceso:
+- 4 revisiones en paralelo por tocar flujos de dinero (`04-ux22-review-risk`, `05-ux22-review-reliability`, `06-ux22-review-resilience`, `07-ux22-review-readability`), de las que se aplicaron y validaron 5 correcciones (`F1..F5`).
+- 21 tests en 2 specs nuevos (`use-reporte-pago.ux22.spec.ts` y `PagosPage.ux22.interaccion.spec.tsx`).
+- 2986 tests en 327 archivos, typecheck y build en verde.
 
 ## 4. Decisiones pendientes del dueño
 
