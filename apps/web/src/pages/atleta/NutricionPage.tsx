@@ -41,7 +41,6 @@ import { SemaforoNutricional } from '@guachafit/shared';
 export function NutricionPage() {
   const { user, isDemoMode } = useAuth();
 
-  // Reloj, zona y ventana RN-02.
   const { ahora, zonaPerfil, ventana, hoyLocal, timezoneCliente, puedeReportar } =
     useVentanaCheckin(user?.zonaHoraria, isDemoMode);
 
@@ -63,22 +62,10 @@ export function NutricionPage() {
 
   const reporte = useReporteHoy(hoyLocal, timezoneCliente, isDemoMode, user?.id, rehidratar);
   const {
-    existingCheckin,
-    reporteRegistradoHoy,
-    reporteEncolado,
-    confirmandoEnvio,
-    formularioBloqueado,
-    fotosEncoladas,
-    errorCargaReporte,
-    mostrarErrorCarga,
-    avisoVisible,
-    errorSemaforo,
-    setErrorSemaforo,
-    grupoSemaforoRef,
-    bloqueo,
-    setBloqueo,
-    urlCheckinHoy,
-    cargarReporteHoy,
+    existingCheckin, reporteRegistradoHoy, reporteEncolado, confirmandoEnvio,
+    formularioBloqueado, fotosEncoladas, errorCargaReporte, mostrarErrorCarga,
+    avisoVisible, errorSemaforo, setErrorSemaforo, grupoSemaforoRef,
+    bloqueo, setBloqueo, urlCheckinHoy, cargarReporteHoy,
   } = reporte;
 
   // RN-01: metas del coach para mostrar objetivos y evaluar la tolerancia del día.
@@ -88,20 +75,12 @@ export function NutricionPage() {
     ahora
   );
 
-  // §6: últimos días para el estado `No reportado`.
   const { historial, cargarHistorial } = useHistorialNutricional(isDemoMode, user?.id, hoyLocal, ahora);
   // RN-03: fotos de platos y visor.
   const fotos = useFotosPlatos(user?.id);
   const {
-    fotos: fotosPlatos,
-    isProcesandoFotos,
-    fotosError,
-    fotoVisor,
-    setFotoVisor,
-    inputRef: inputFotosRef,
-    agregarFotos,
-    quitarFoto,
-    cambiarTipoComida,
+    fotos: fotosPlatos, isProcesandoFotos, fotosError, fotoVisor,
+    setFotoVisor, inputRef: inputFotosRef, agregarFotos, quitarFoto, cambiarTipoComida,
   } = fotos;
 
   // RF-002/RN-03: guardado (payload, demo, cola offline, subida y errores).
@@ -257,7 +236,7 @@ export function NutricionPage() {
         reporteEncolado={reporteEncolado}
         confirmandoEnvio={confirmandoEnvio}
         fotosEncoladas={fotosEncoladas}
-        puedeReportar={puedeReportar}
+        puedeReportar={puedeReportar} zonaPerfil={zonaPerfil}
         deshabilitado={formularioDeshabilitado}
         fechaRegistradaTexto={formatFechaLargaCalendario(existingCheckin?.fecha ?? hoyLocal) ?? hoyLocal}
         aviso={avisoVisible}

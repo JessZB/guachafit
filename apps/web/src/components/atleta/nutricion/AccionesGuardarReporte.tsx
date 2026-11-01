@@ -6,6 +6,7 @@
  * §6: botón `min-h-11`, estados honestos (encolado ≠ registrado, RF-002).
  */
 import { Check, Flame, Loader2 } from 'lucide-react';
+import { textoBotonFueraDeVentanaCheckin } from '../../../lib/nutricion-checkin';
 import {
   AvisosReporteNutricional,
   type AvisoReporte,
@@ -23,6 +24,7 @@ export interface AccionesGuardarReporteProps {
   fechaRegistradaTexto: string;
   aviso: AvisoReporte | null;
   isDemoMode: boolean;
+  zonaPerfil?: string;
   onGuardar: () => void;
 }
 
@@ -38,6 +40,7 @@ export function AccionesGuardarReporte({
   fechaRegistradaTexto,
   aviso,
   isDemoMode,
+  zonaPerfil,
   onGuardar,
 }: AccionesGuardarReporteProps) {
   return (
@@ -69,7 +72,7 @@ export function AccionesGuardarReporte({
               ? 'Guardado sin conexión · pendiente de envío (con fotos)'
               : 'Guardado sin conexión · pendiente de envío'
             : !puedeReportar
-            ? 'Disponible a partir de las 18:00'
+            ? textoBotonFueraDeVentanaCheckin(zonaPerfil)
             : 'Guardar reporte nutricional'}
         </span>
       </button>

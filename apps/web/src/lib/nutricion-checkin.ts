@@ -219,6 +219,11 @@ export function textoHorarioCheckin(zonaHoraria?: string | null): string {
   return `Puedes enviar tu reporte de ${HORARIO_VENTANA_CHECKIN} (${horaDeZona(zonaPerfilEfectiva(zonaHoraria))}).`;
 }
 
+/** Etiqueta del botón deshabilitado fuera de la ventana RN-02 con la zona del perfil. */
+export function textoBotonFueraDeVentanaCheckin(zonaHoraria?: string | null): string {
+  return `Disponible a partir de las ${HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL}:00 (${horaDeZona(zonaPerfilEfectiva(zonaHoraria))})`;
+}
+
 // =============================================================================
 // CONTRATO DE ENVÍO DEL CHECK-IN
 // =============================================================================
@@ -266,13 +271,71 @@ const MENSAJES_VALIDACION_CHECKIN: Readonly<Record<string, string>> = {
   fotosPlatos: MENSAJE_RANGO_FOTOS_REPORTE,
 };
 
+export interface ErroresCamposCheckinNutricional {
+  [campo: string]: string | undefined;
+  aguaLitros?: string;
+  calorias?: string;
+  proteina?: string;
+}
+
+function mensajeNoEntero(etiqueta: string): string {
+  return `${etiqueta}: usa solo números enteros (sin decimales).`;
+}
+
+/**
+ * Valida por separado los campos numéricos opcionales del formulario (`aguaLitros`, `calorias`,
+ * `proteina`) cuando tienen contenido no vacío, devolviendo el mensaje traducido de cada campo
+ * inválido para asociarlo con `aria-invalid` y `aria-describedby`.
+ */
+export function validarCamposOpcionalesCheckin(
+  entrada: Pick<EntradaCheckinNutricional, 'aguaLitros' | 'calorias' | 'proteina'>
+): ErroresCamposCheckinNutricional {
+  const errores: ErroresCamposCheckinNutricional = {};
+
+  const agua = entrada.aguaLitros === undefined ? '' : normalizarEntradaDecimal(entrada.aguaLitros);
+  if (agua !== '') {
+    const resAgua = CheckinNutricionalSchema.shape.aguaLitros.safeParse(agua);
+    if (!resAgua.success) {
+      errores.aguaLitros = MENSAJES_VALIDACION_CHECKIN.aguaLitros;
+    }
+  }
+
+  const calTexto = entrada.calorias === undefined ? '' : normalizarEntradaDecimal(entrada.calorias);
+  if (calTexto !== '') {
+    if (!/^\d+$/.test(calTexto)) {
+      errores.calorias = mensajeNoEntero('Calorías inválidas');
+    } else {
+      const resCal = CheckinNutricionalSchema.shape.caloriasReportadas.safeParse(Number(calTexto));
+      if (!resCal.success) {
+        errores.calorias = MENSAJES_VALIDACION_CHECKIN.caloriasReportadas;
+      }
+    }
+  }
+
+  const protTexto = entrada.proteina === undefined ? '' : normalizarEntradaDecimal(entrada.proteina);
+  if (protTexto !== '') {
+    if (!/^\d+$/.test(protTexto)) {
+      errores.proteina = mensajeNoEntero('Proteína inválida');
+    } else {
+      const resProt = CheckinNutricionalSchema.shape.proteinaGramosReportada.safeParse(
+        Number(protTexto)
+      );
+      if (!resProt.success) {
+        errores.proteina = MENSAJES_VALIDACION_CHECKIN.proteinaGramosReportada;
+      }
+    }
+  }
+
+  return errores;
+}
+
 /** Entero opcional del formulario: vacío = sin dato; texto no entero = error visible. */
 function enteroOpcional(texto: string | undefined, etiqueta: string): number | undefined {
   if (texto === undefined) return undefined;
   const normalizado = normalizarEntradaDecimal(texto);
   if (normalizado === '') return undefined;
   if (!/^\d+$/.test(normalizado)) {
-    throw new Error(`${etiqueta}: usa solo números enteros (sin decimales).`);
+    throw new Error(mensajeNoEntero(etiqueta));
   }
   return Number(normalizado);
 }

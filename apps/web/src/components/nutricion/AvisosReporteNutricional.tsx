@@ -5,6 +5,8 @@
  * solo los errores interrumpen (`role="alert"`).
  */
 import React from 'react';
+import { Check, Clock } from 'lucide-react';
+import { pluralizar } from '../../lib/pluralizar';
 
 /** Aviso del guardado: `info` (p. ej. ya existía el reporte) o `error` (rechazo, validación). */
 export interface AvisoReporte {
@@ -34,20 +36,24 @@ export function AvisosReporteNutricional({
   return (
     <>
       {reporteRegistradoHoy && (
-        <p role="status" className="text-center text-xs text-success font-semibold">
-          ✓ Reporte registrado para hoy ({fechaRegistradaTexto}).
-        </p>
+        <div className="flex items-center justify-center gap-1.5 text-success">
+          <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <p role="status" className="text-center text-xs text-success font-semibold">
+            Reporte registrado para hoy ({fechaRegistradaTexto}).
+          </p>
+        </div>
       )}
 
       {reporteEncolado && (
-        <p role="status" className="text-center text-xs text-warning font-semibold">
-          ⏳ Guardado en tu dispositivo
-          {fotosEncoladas > 0
-            ? ` con ${fotosEncoladas} foto${fotosEncoladas === 1 ? '' : 's'}`
-            : ''}
-          . Se enviará automáticamente al recuperar la conexión; el día quedará registrado solo
-          cuando quede confirmado.
-        </p>
+        <div className="flex items-center justify-center gap-1.5 text-warning">
+          <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <p role="status" className="text-center text-xs text-warning font-semibold">
+            Guardado en tu dispositivo
+            {fotosEncoladas > 0 ? ` con ${pluralizar(fotosEncoladas, 'foto', 'fotos')}` : ''}. Se
+            enviará automáticamente al recuperar la conexión; el día quedará registrado solo cuando
+            quede confirmado.
+          </p>
+        </div>
       )}
 
       {confirmando && (

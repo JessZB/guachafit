@@ -5,13 +5,21 @@
  * §6: estado honesto con `role="status"`; se declara ANTES del formulario.
  */
 import { Clock } from 'lucide-react';
+import { Link, useInRouterContext } from 'react-router-dom';
+import { Rol } from '@guachafit/shared';
+import { rutaAjustes } from '../../../lib/ajustes';
 import { textoHorarioCheckin } from '../../../lib/nutricion-checkin';
 
 export interface AvisoVentanaReporteProps {
-  zonaPerfil: string;
+  zonaPerfil?: string | null;
 }
 
 export function AvisoVentanaReporte({ zonaPerfil }: AvisoVentanaReporteProps) {
+  const enRouter = useInRouterContext();
+  const hrefAjustes = rutaAjustes(Rol.ALUMNO, 'zona-horaria') ?? '/app/ajustes?tab=zona-horaria';
+  const claseEnlace =
+    'inline-flex items-center text-xs font-bold text-foreground underline underline-offset-4 hover:text-primary';
+
   return (
     <div
       role="status"
@@ -24,6 +32,15 @@ export function AvisoVentanaReporte({ zonaPerfil }: AvisoVentanaReporteProps) {
           {textoHorarioCheckin(zonaPerfil)} Cuando abra, marca tu semáforo y guarda tu día; fuera
           de ese horario el día queda como &quot;No reportado&quot;.
         </p>
+        {enRouter ? (
+          <Link to={hrefAjustes} className={claseEnlace}>
+            Cambiar zona horaria
+          </Link>
+        ) : (
+          <a href={hrefAjustes} className={claseEnlace}>
+            Cambiar zona horaria
+          </a>
+        )}
       </div>
     </div>
   );
