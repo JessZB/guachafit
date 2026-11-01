@@ -12,7 +12,7 @@
  * §6: validación honesta (fecha futura bloqueada con `MENSAJE_FECHA_PAGO_FUTURA`,
  * sin éxito falso D5) y MIME/size validados antes de preparar la subida.
  */
-import { useRef, useState, type ChangeEvent, type FormEvent, type RefObject } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type RefObject } from 'react';
 import { MetodoPago, Moneda, MENSAJE_FECHA_PAGO_FUTURA } from '@guachafit/shared';
 import type { CuotaDetalleDTO, TasaCambioVigenteDTO, TransaccionPagoDetalleDTO } from '@guachafit/shared';
 import { useAuth } from '../../../context/auth-context';
@@ -22,6 +22,9 @@ import { prepararComprobanteParaSubida, subirComprobantePago } from '../../../li
 import { fechaCalendarioLocal } from '../../../lib/date-format';
 import {
   contravalorUsd as calcularContravalorUsd,
+  esErrorEnvioPagoAmbiguo,
+  generarClaveIdempotenciaPago,
+  MENSAJE_ERROR_RED_AMBIGUO_PAGO,
   normalizarMontoPago,
   pagoVesBloqueadoPorFaltaTasa,
   tasaEfectivaNumerica,
@@ -75,10 +78,10 @@ export function useReportePago({
   const { user } = useAuth();
 
   // Form State
-  const [metodoPago, setMetodoPago] = useState<MetodoPago>(MetodoPago.PAGO_MOVIL);
-  const [moneda, setMoneda] = useState<Moneda>(Moneda.VES);
+  const [metodoPago, setMetodoPagoState] = useState<MetodoPago>(MetodoPago.PAGO_MOVIL);
+  const [moneda, setMonedaState] = useState<Moneda>(Moneda.VES);
   const [montoOriginal, setMontoOriginalState] = useState('');
-  const [referenciaBancaria, setReferenciaBancaria] = useState('');
+  const [referenciaBancaria, setReferenciaBancariaState] = useState('');
   const [fechaOperacion, setFechaOperacion] = useState(fechaCalendarioLocal);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
@@ -94,6 +97,28 @@ export function useReportePago({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
+  // ALU-07 / D8: idempotencia, comprobante en caché y temporizador seguro
+  const comprobanteSubidoKeyRef = useRef<string | null>(null);
+  const idempotencyKeyRef = useRef<string>(generarClaveIdempotenciaPago());
+  const temporizadorExitoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const enVueloRef = useRef(false);
+  const montadoRef = useRef(true);
+
+  const limpiarTemporizadorExito = () => {
+    if (temporizadorExitoRef.current !== null) {
+      clearTimeout(temporizadorExitoRef.current);
+      temporizadorExitoRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    montadoRef.current = true;
+    return () => {
+      montadoRef.current = false;
+      limpiarTemporizadorExito();
+    };
+  }, []);
+
   const pagoVesSinTasa = pagoVesBloqueadoPorFaltaTasa(moneda, tasa?.tasaEfectiva, tasaError);
   const contravalorUsd = calcularContravalorUsd(
     moneda,
@@ -101,13 +126,31 @@ export function useReportePago({
     tasaEfectivaNumerica(tasa?.tasaEfectiva)
   );
 
+  // F3: renovar idempotencyKeyRef cuando el usuario edita datos del pago
+  const setMetodoPago = (metodo: MetodoPago) => {
+    idempotencyKeyRef.current = generarClaveIdempotenciaPago();
+    setMetodoPagoState(metodo);
+  };
+
+  const setMoneda = (nuevaMoneda: Moneda) => {
+    idempotencyKeyRef.current = generarClaveIdempotenciaPago();
+    setMonedaState(nuevaMoneda);
+  };
+
+  const setReferenciaBancaria = (referencia: string) => {
+    idempotencyKeyRef.current = generarClaveIdempotenciaPago();
+    setReferenciaBancariaState(referencia);
+  };
+
   const setMontoOriginal = (monto: string) => {
+    idempotencyKeyRef.current = generarClaveIdempotenciaPago();
     setMontoOriginalState(monto);
     setErrorMonto(null);
     setFormError(null);
   };
 
   const alCambiarFecha = (valor: string) => {
+    idempotencyKeyRef.current = generarClaveIdempotenciaPago();
     setFechaOperacion(valor);
     setErrorFecha((prev) => errorTrasCambiarFecha(prev));
     setFormError((prev) => errorTrasCambiarFecha(prev));
@@ -119,32 +162,33 @@ export function useReportePago({
     setErrorFecha(MENSAJE_FECHA_PAGO_FUTURA);
   };
 
+  const handleRemoveFile = () => {
+    comprobanteSubidoKeyRef.current = null;
+    setSelectedFile(null);
+    setErrorArchivo(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    comprobanteSubidoKeyRef.current = null;
+
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-        setPreviewUrl(null);
-      }
-      setSelectedFile(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      handleRemoveFile();
       setErrorArchivo('Formato inválido. Por favor selecciona una imagen JPG, PNG o WebP.');
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-        setPreviewUrl(null);
-      }
-      setSelectedFile(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      handleRemoveFile();
       setErrorArchivo('El archivo excede el límite máximo de 5 MB.');
       return;
     }
@@ -158,23 +202,13 @@ export function useReportePago({
     setPreviewUrl(objUrl);
   };
 
-  const handleRemoveFile = () => {
-    setSelectedFile(null);
-    setErrorArchivo(null);
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(null);
-    }
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
   const iniciarNuevoPago = () => {
-    setMetodoPago(MetodoPago.PAGO_MOVIL);
-    setMoneda(Moneda.VES);
+    limpiarTemporizadorExito();
+    idempotencyKeyRef.current = generarClaveIdempotenciaPago();
+    setMetodoPagoState(MetodoPago.PAGO_MOVIL);
+    setMonedaState(Moneda.VES);
     setMontoOriginalState('');
-    setReferenciaBancaria('');
+    setReferenciaBancariaState('');
     setFechaOperacion(fechaCalendarioLocal());
     setFormError(null);
     setFormSuccess(null);
@@ -185,10 +219,12 @@ export function useReportePago({
   };
 
   const iniciarCorreccionPago = (tx: TransaccionPagoDetalleDTO) => {
-    setMetodoPago(tx.metodoPago);
-    setMoneda(tx.monedaOriginal);
+    limpiarTemporizadorExito();
+    idempotencyKeyRef.current = generarClaveIdempotenciaPago();
+    setMetodoPagoState(tx.metodoPago);
+    setMonedaState(tx.monedaOriginal);
     setMontoOriginalState(tx.montoOriginal);
-    setReferenciaBancaria(tx.referenciaBancaria ?? '');
+    setReferenciaBancariaState(tx.referenciaBancaria ?? '');
     setFechaOperacion((tx.fechaOperacion || '').slice(0, 10));
     setFormError(null);
     setFormSuccess(null);
@@ -200,6 +236,9 @@ export function useReportePago({
 
   const handleReportarPago = async (e: FormEvent) => {
     e.preventDefault();
+    if (enVueloRef.current || pagoVesSinTasa) {
+      return;
+    }
     setFormError(null);
 
     // RF-007: un pago de días anteriores se puede reportar; uno con fecha futura no.
@@ -222,47 +261,57 @@ export function useReportePago({
       return;
     }
 
+    if (!cuota) {
+      setFormError('No tienes una cuota vigente para reportar el pago. Contacta a tu coach.');
+      return;
+    }
+
+    enVueloRef.current = true;
     setIsSubmitting(true);
 
     let finalStorageKey: string | undefined = undefined;
 
     if (selectedFile) {
-      if (!user?.id) {
-        setFormError(
-          'No se pudo identificar tu sesión. Vuelve a iniciar sesión e inténtalo de nuevo.'
-        );
-        setIsSubmitting(false);
-        return;
+      if (comprobanteSubidoKeyRef.current) {
+        finalStorageKey = comprobanteSubidoKeyRef.current;
+      } else {
+        if (!user?.id) {
+          setFormError(
+            'No se pudo identificar tu sesión. Vuelve a iniciar sesión e inténtalo de nuevo.'
+          );
+          enVueloRef.current = false;
+          setIsSubmitting(false);
+          return;
+        }
+        try {
+          // D2/ADR-007: la imagen se prepara (WebP/JPEG) ANTES de firmar; la presign y el PUT llevan
+          // el MISMO MIME y la subida solo se da por buena con `respuesta.ok`. Sin clave no hay reporte.
+          const archivoPreparado = await prepararComprobanteParaSubida(selectedFile);
+          finalStorageKey = await subirComprobantePago(archivoPreparado, user.id, {
+            apiClient,
+            fetchFn: fetch,
+          });
+          comprobanteSubidoKeyRef.current = finalStorageKey;
+        } catch (err: any) {
+          // D2: sin storageKey fabricado; si el comprobante no se pudo subir, el reporte no se envía.
+          setFormError(
+            err?.message ||
+              'No se pudo subir el comprobante. Revisa tu conexión e inténtalo de nuevo.'
+          );
+          enVueloRef.current = false;
+          setIsSubmitting(false);
+          return;
+        }
       }
-      try {
-        // D2/ADR-007: la imagen se prepara (WebP/JPEG) ANTES de firmar; la presign y el PUT llevan
-        // el MISMO MIME y la subida solo se da por buena con `respuesta.ok`. Sin clave no hay reporte.
-        const archivoPreparado = await prepararComprobanteParaSubida(selectedFile);
-        finalStorageKey = await subirComprobantePago(archivoPreparado, user.id, {
-          apiClient,
-          fetchFn: fetch,
-        });
-      } catch (err: any) {
-        // D2: sin storageKey fabricado; si el comprobante no se pudo subir, el reporte no se envía.
-        setFormError(
-          err?.message ||
-            'No se pudo subir el comprobante. Revisa tu conexión e inténtalo de nuevo.'
-        );
-        setIsSubmitting(false);
-        return;
-      }
-    }
-
-    if (!cuota) {
-      setFormError('No tienes una cuota vigente para reportar el pago. Contacta a tu coach.');
-      setIsSubmitting(false);
-      return;
     }
 
     try {
+      const claveIdempotencia = idempotencyKeyRef.current;
       await apiClient(`/finanzas/cuotas/${cuota.id}/reportar-pago`, {
         method: 'POST',
+        idempotencyKey: claveIdempotencia,
         body: JSON.stringify({
+          idempotencyKey: claveIdempotencia,
           montoOriginal: normalizarMontoPago(montoOriginal),
           monedaOriginal: moneda,
           metodoPago,
@@ -273,19 +322,29 @@ export function useReportePago({
       });
 
       setFormSuccess('¡Pago reportado con éxito! Tu coach lo validará en la bandeja.');
+      idempotencyKeyRef.current = generarClaveIdempotenciaPago();
       setMontoOriginalState('');
-      setReferenciaBancaria('');
+      setReferenciaBancariaState('');
       handleRemoveFile();
-      setTimeout(() => {
-        setFormSuccess(null);
-        alReportarExito();
-      }, 1800);
+      limpiarTemporizadorExito();
+      if (montadoRef.current) {
+        temporizadorExitoRef.current = setTimeout(() => {
+          temporizadorExitoRef.current = null;
+          setFormSuccess(null);
+          alReportarExito();
+        }, 1800);
+      }
     } catch (err: any) {
-      // D5: sin éxito falso; el pago solo queda reportado si el servidor lo aceptó.
-      setFormError(
-        err?.message || 'No se pudo reportar el pago. Revisa los datos e inténtalo de nuevo.'
-      );
+      // D5 / ALU-07c: sin éxito falso; distingue error ambiguo de red de rechazo determinista.
+      if (esErrorEnvioPagoAmbiguo(err)) {
+        setFormError(MENSAJE_ERROR_RED_AMBIGUO_PAGO);
+      } else {
+        setFormError(
+          err?.message || 'No se pudo reportar el pago. Revisa los datos e inténtalo de nuevo.'
+        );
+      }
     } finally {
+      enVueloRef.current = false;
       setIsSubmitting(false);
     }
   };

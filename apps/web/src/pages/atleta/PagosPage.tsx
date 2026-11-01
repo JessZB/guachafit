@@ -146,7 +146,10 @@ export function PagosPage() {
       {/* ========================================================================= */}
       {vistaActiva === 'nuevo-pago' && (
         <PestanaReportePago
-          onVolver={() => setVistaActiva('hub')}
+          onVolver={() => {
+            iniciarNuevoPago();
+            setVistaActiva('hub');
+          }}
           formError={formError}
           formSuccess={formSuccess}
         >

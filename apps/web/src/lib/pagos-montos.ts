@@ -97,3 +97,38 @@ export function saldoVesProyectado(
     ? (Number(saldoPendienteUsd || 0) * tasaEfectivaNum).toFixed(2)
     : '—';
 }
+
+export const MENSAJE_ERROR_RED_AMBIGUO_PAGO =
+  'No se pudo confirmar el envío; revisa tu historial antes de repetirlo.';
+
+/**
+ * Genera una clave de idempotencia única (UUID v4 o fallback pseudo-aleatorio con longitud >= 8)
+ * para identificar un intento de reporte de pago del alumno (D8 / ALU-07).
+ */
+export function generarClaveIdempotenciaPago(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `pago-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+/**
+ * Distingue si el fallo al enviar el POST de reporte de pago dejó el estado en duda
+ * (corte de red, fallo de fetch o tiempo de espera agotado) frente a un rechazo HTTP
+ * determinista del servidor (ALU-07c).
+ */
+export function esErrorEnvioPagoAmbiguo(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  if (err instanceof TypeError) return true;
+  const status = (err as { status?: unknown }).status;
+  if (status === 502 || status === 503 || status === 504) return true;
+  const nombre = (err as { name?: unknown }).name;
+  return (
+    nombre === 'TypeError' ||
+    nombre === 'ErrorDeConexion' ||
+    nombre === 'ErrorTiempoAgotado' ||
+    nombre === 'AbortError' ||
+    nombre === 'TimeoutError'
+  );
+}
+
