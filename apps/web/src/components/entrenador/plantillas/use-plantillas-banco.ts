@@ -6,7 +6,7 @@
  * Único de la vista (R3); consolidable en D con `SelectorPlantillaAsignacion`
  * (fila 33 de la consolidación 48, fuera de superficie en B por R6).
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
   EjercicioCatalogoDetalleDTO,
   PlantillaRutinaDTO,
@@ -24,7 +24,11 @@ import type { DatosEjercicioNuevo } from '../BloquesRutinaEditor';
 
 export function usePlantillasBanco(isDemoMode: boolean) {
   const [plantillas, setPlantillas] = useState<PlantillaRutinaResumenDTO[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const plantillasRef = useRef<PlantillaRutinaResumenDTO[]>([]);
+  plantillasRef.current = plantillas;
+
+  const [cargandoInicial, setCargandoInicial] = useState(true);
+  const [recargando, setRecargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [catalogo, setCatalogo] = useState<EjercicioCatalogoDetalleDTO[]>([]);
   const [catalogoError, setCatalogoError] = useState<string | null>(null);
@@ -42,14 +46,22 @@ export function usePlantillasBanco(isDemoMode: boolean) {
   const [cargandoDetalleId, setCargandoDetalleId] = useState<string | null>(null);
 
   const cargarPlantillas = async () => {
-    setIsLoading(true);
+    const hayDatosPrevios = plantillasRef.current.length > 0;
+    if (hayDatosPrevios) {
+      setRecargando(true);
+      setCargandoInicial(false);
+    } else {
+      setCargandoInicial(true);
+      setRecargando(false);
+    }
     setError(null);
 
     // MODO DEMO EXPLÍCITO (isDemoMode): banco de ejemplo solo con la bandera activa.
     if (isDemoMode) {
       setDetallesDemo(Object.fromEntries(PLANTILLAS_DEMO.map((plantilla) => [plantilla.id, plantilla])));
       setPlantillas(plantillasDemoResumen());
-      setIsLoading(false);
+      setCargandoInicial(false);
+      setRecargando(false);
       return;
     }
 
@@ -60,7 +72,8 @@ export function usePlantillasBanco(isDemoMode: boolean) {
       const mensaje = err instanceof Error ? err.message : null;
       setError(mensaje || 'No se pudieron cargar tus plantillas de ejercicios.');
     } finally {
-      setIsLoading(false);
+      setCargandoInicial(false);
+      setRecargando(false);
     }
   };
 
@@ -208,7 +221,8 @@ export function usePlantillasBanco(isDemoMode: boolean) {
 
   return {
     plantillas,
-    isLoading,
+    cargandoInicial,
+    recargando,
     error,
     catalogo,
     catalogoError,

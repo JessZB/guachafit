@@ -18,6 +18,7 @@ import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
 import { useFrescuraOffline } from '../../lib/use-frescura-offline';
 import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
+import { AvisoErrorRecarga } from '../../components/common/AvisoErrorRecarga';
 import { AsignacionMasivaPlantilla } from '../../components/entrenador/AsignacionMasivaPlantilla';
 import { EstadoCarga } from '../../components/ui/EstadoCarga';
 import { EstadoError } from '../../components/ui/EstadoError';
@@ -98,6 +99,9 @@ export function PlantillasPage() {
         ? 'No tienes plantillas desactivadas'
         : 'Todavía no tienes plantillas de ejercicios';
 
+  const errorSinDatos = Boolean(banco.error && banco.plantillas.length === 0);
+  const hayDatos = banco.plantillas.length > 0;
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-12">
       <CabeceraPlantillas onNueva={formulario.abrirCrear} />
@@ -123,60 +127,74 @@ export function PlantillasPage() {
         filtroNivel={filtroNivel}
         onCambiarNivel={setFiltroNivel}
         visiblesCount={visibles.length}
-        mostrarContador={!banco.isLoading && !banco.error}
+        mostrarContador={!banco.cargandoInicial && !errorSinDatos}
       />
 
       {/* Estados de la lista */}
-      {banco.isLoading ? (
+      {banco.cargandoInicial ? (
         <EstadoCarga texto="Cargando plantillas…" />
-      ) : banco.error ? (
+      ) : errorSinDatos ? (
         <EstadoError
           titulo="No se pudieron cargar las plantillas"
-          mensaje={banco.error}
+          mensaje={banco.error ?? 'No se pudieron cargar tus plantillas de ejercicios.'}
           onReintentar={banco.cargarPlantillas}
         />
-      ) : visibles.length === 0 ? (
-        hayFiltroActivo ? (
-          <EstadoVacio
-            titulo="Sin resultados"
-            detalle="Ninguna plantilla coincide con la búsqueda o el nivel seleccionado."
-            icono={SearchX}
-            accion={{ texto: 'Limpiar filtros', onAccion: limpiarFiltros }}
-          />
-        ) : (
-          <EstadoVacio
-            titulo={tituloVacioPorEstado}
-            detalle={
-              filtro === 'activas'
-                ? 'Crea tu primera plantilla para prescribir una semana completa con un clic a cualquier alumno.'
-                : 'Las plantillas desactivadas se conservan y pueden reactivarse cuando quieras.'
-            }
-            icono={Dumbbell}
-            accion={{ texto: 'Crear plantilla', onAccion: formulario.abrirCrear, variante: 'primaria' }}
-          />
-        )
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {visibles.map((plantilla) => (
-            <TarjetaPlantilla
-              key={plantilla.id}
-              plantilla={plantilla}
-              confirmandoDesactivar={banco.confirmandoId === plantilla.id}
-              accionEnCurso={banco.ocupadaId === plantilla.id}
-              cargandoDetalle={banco.cargandoDetalleId === plantilla.id}
-              puedeAsignar={isOnline || isDemoMode}
-              tituloAsignarBloqueado={
-                !isOnline && !isDemoMode ? 'Necesitas internet para asignar' : undefined
-              }
-              onAsignar={() => asignarPlantilla(plantilla)}
-              onEditar={() => formulario.abrirEditar(plantilla)}
-              onPedirDesactivar={() => pedirDesactivar(plantilla.id)}
-              onConfirmarDesactivar={() => banco.desactivarPlantilla(plantilla.id)}
-              onCancelarDesactivar={() => banco.setConfirmandoId(null)}
-              onReactivar={() => banco.reactivarPlantilla(plantilla.id)}
+        <>
+          {banco.error && hayDatos && (
+            <AvisoErrorRecarga
+              mensaje={banco.error}
+              onReintentar={banco.cargarPlantillas}
             />
-          ))}
-        </div>
+          )}
+
+          {visibles.length === 0 ? (
+            hayFiltroActivo ? (
+              <EstadoVacio
+                titulo="Sin resultados"
+                detalle="Ninguna plantilla coincide con la búsqueda o el nivel seleccionado."
+                icono={SearchX}
+                accion={{ texto: 'Limpiar filtros', onAccion: limpiarFiltros }}
+              />
+            ) : (
+              <EstadoVacio
+                titulo={tituloVacioPorEstado}
+                detalle={
+                  filtro === 'activas'
+                    ? 'Crea tu primera plantilla para prescribir una semana completa con un clic a cualquier alumno.'
+                    : 'Las plantillas desactivadas se conservan y pueden reactivarse cuando quieras.'
+                }
+                icono={Dumbbell}
+                accion={{ texto: 'Crear plantilla', onAccion: formulario.abrirCrear, variante: 'primaria' }}
+              />
+            )
+          ) : (
+            <div
+              className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
+              aria-busy={banco.recargando || undefined}
+            >
+              {visibles.map((plantilla) => (
+                <TarjetaPlantilla
+                  key={plantilla.id}
+                  plantilla={plantilla}
+                  confirmandoDesactivar={banco.confirmandoId === plantilla.id}
+                  accionEnCurso={banco.ocupadaId === plantilla.id}
+                  cargandoDetalle={banco.cargandoDetalleId === plantilla.id}
+                  puedeAsignar={isOnline || isDemoMode}
+                  tituloAsignarBloqueado={
+                    !isOnline && !isDemoMode ? 'Necesitas internet para asignar' : undefined
+                  }
+                  onAsignar={() => asignarPlantilla(plantilla)}
+                  onEditar={() => formulario.abrirEditar(plantilla)}
+                  onPedirDesactivar={() => pedirDesactivar(plantilla.id)}
+                  onConfirmarDesactivar={() => banco.desactivarPlantilla(plantilla.id)}
+                  onCancelarDesactivar={() => banco.setConfirmandoId(null)}
+                  onReactivar={() => banco.reactivarPlantilla(plantilla.id)}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {/* ===================================================================== */}

@@ -76,6 +76,10 @@ export function PasoRevisar({
         )}
       </p>
 
+      <p className="text-xs text-muted-foreground">
+        Cada asignación es una copia independiente: editar la plantilla no altera lo ya prescrito.
+      </p>
+
       {erroresAjustes.length > 0 && (
         <div
           ref={resumenErroresRef}

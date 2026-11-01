@@ -12,10 +12,12 @@
  * §6: español claro, fechas con `formatFechaLocal`, controles 44px
  * (`min-h-11`), 11px mínimo, tokens con variante claro/oscuro, peso ≤ 700.
  */
+import { useId } from 'react';
 import { Loader2, Pencil, RotateCcw, Trash2, Users } from 'lucide-react';
 import type { PlantillaRutinaResumenDTO } from '@guachafit/shared';
 import { formatFechaLocal } from '../../../lib/date-format';
 import { pluralizar } from '../../../lib/pluralizar';
+import { BadgeEstado } from '../../ui/BadgeEstado';
 import { BadgeNivelPlantilla } from './BadgeNivelPlantilla';
 
 export interface TarjetaPlantillaProps {
@@ -47,6 +49,8 @@ export function TarjetaPlantilla({
   onCancelarDesactivar,
   onReactivar,
 }: TarjetaPlantillaProps) {
+  const motivoBloqueoId = useId();
+
   return (
     <div
       className={`p-5 rounded-3xl bg-card border border-border/80 shadow-xs space-y-3.5 flex flex-col justify-between transition-all hover:border-primary/40 ${
@@ -58,15 +62,9 @@ export function TarjetaPlantilla({
           <h3 className="font-bold text-sm text-foreground leading-snug break-words">
             {plantilla.nombre}
           </h3>
-          <span
-            className={`shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide border ${
-              plantilla.activa
-                ? 'bg-success/15 text-success border-success/30'
-                : 'bg-secondary text-muted-foreground border-border'
-            }`}
-          >
+          <BadgeEstado tono={plantilla.activa ? 'success' : 'neutral'}>
             {plantilla.activa ? 'Activa' : 'Desactivada'}
-          </span>
+          </BadgeEstado>
         </div>
 
         <BadgeNivelPlantilla nivel={plantilla.nivelObjetivo} />
@@ -99,9 +97,9 @@ export function TarjetaPlantilla({
               className="min-h-11 px-3 py-1.5 rounded-lg bg-destructive text-destructive-foreground font-bold text-xs disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
             >
               {accionEnCurso ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
+                <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
               ) : (
-                <Trash2 className="h-3 w-3" />
+                <Trash2 className="h-3 w-3" aria-hidden="true" />
               )}
               <span>Sí, desactivar</span>
             </button>
@@ -118,16 +116,23 @@ export function TarjetaPlantilla({
         <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border/60">
           {/* A6: asignación masiva desde la tarjeta (solo plantillas activas) */}
           {plantilla.activa && (
-            <button
-              type="button"
-              onClick={onAsignar}
-              disabled={!puedeAsignar}
-              title={tituloAsignarBloqueado}
-              className="w-full min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
-            >
-              <Users className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>Asignar a alumnos</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={onAsignar}
+                disabled={!puedeAsignar}
+                aria-describedby={!puedeAsignar && tituloAsignarBloqueado ? motivoBloqueoId : undefined}
+                className="w-full min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Users className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Asignar a alumnos</span>
+              </button>
+              {!puedeAsignar && tituloAsignarBloqueado && (
+                <p id={motivoBloqueoId} className="w-full text-[11px] text-muted-foreground text-center">
+                  {tituloAsignarBloqueado}
+                </p>
+              )}
+            </>
           )}
           <button
             type="button"
@@ -136,9 +141,9 @@ export function TarjetaPlantilla({
             className="flex-1 min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
           >
             {cargandoDetalle ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
             ) : (
-              <Pencil className="h-3.5 w-3.5" />
+              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
             )}
             <span>Editar</span>
           </button>
@@ -149,7 +154,7 @@ export function TarjetaPlantilla({
               onClick={onPedirDesactivar}
               className="flex-1 min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-destructive/10 hover:bg-destructive/20 text-destructive font-bold text-xs transition-colors cursor-pointer"
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
               <span>Desactivar</span>
             </button>
           ) : (
@@ -160,9 +165,9 @@ export function TarjetaPlantilla({
               className="flex-1 min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
             >
               {accionEnCurso ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
               ) : (
-                <RotateCcw className="h-3.5 w-3.5" />
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
               )}
               <span>Reactivar</span>
             </button>

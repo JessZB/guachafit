@@ -247,7 +247,9 @@ describe('PlantillasPage caracterización · modo demo (§6.2 puntos 1–9, 11)'
     expect(screen.getByRole('button', { name: /Desactivadas/ }).getAttribute('aria-pressed')).toBe(
       'false'
     );
-    expect(screen.getByText(/Mostrando 3 de 3/)).toBeTruthy();
+    expect(document.querySelector('[aria-live="polite"]')?.textContent?.trim()).toBe(
+      '3 plantillas'
+    );
     expect(mockApi).not.toHaveBeenCalled();
   });
 
@@ -263,7 +265,9 @@ describe('PlantillasPage caracterización · modo demo (§6.2 puntos 1–9, 11)'
     expect(screen.queryByText('Tren Superior Hipertrofia A')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /Todas/ }));
-    expect(screen.getByText(/Mostrando 3 de 3/)).toBeTruthy();
+    expect(document.querySelector('[aria-live="polite"]')?.textContent?.trim()).toBe(
+      '3 plantillas'
+    );
     expect(screen.getByText('Tren Superior Hipertrofia A')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: /Activas/ }));
@@ -302,7 +306,9 @@ describe('PlantillasPage caracterización · modo demo (§6.2 puntos 1–9, 11)'
     expect(screen.getByText('Fullbody 3 Días Principiante')).toBeTruthy();
     expect(screen.queryByText('Tren Superior Hipertrofia A')).toBeNull();
     expect(screen.queryByText('Pierna Énfasis Isquios')).toBeNull();
-    expect(screen.getByText(/Mostrando 1 de 3/)).toBeTruthy();
+    expect(document.querySelector('[aria-live="polite"]')?.textContent?.trim()).toBe(
+      '1 plantilla'
+    );
 
     fireEvent.change(screen.getByLabelText('Filtrar plantillas por nivel objetivo'), {
       target: { value: 'todos' },
@@ -421,10 +427,14 @@ describe('PlantillasPage caracterización · modo demo (§6.2 puntos 1–9, 11)'
     fireEvent.click(screen.getByRole('button', { name: /Desactivadas/ }));
     expect(screen.getByText('Fullbody 3 Días Principiante')).toBeTruthy();
     expect(await screen.findByText('Desactivada')).toBeTruthy();
-    expect(screen.getByText(/Mostrando 1 de 1/)).toBeTruthy();
+    expect(document.querySelector('[aria-live="polite"]')?.textContent?.trim()).toBe(
+      '1 plantilla'
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Reactivar' }));
     fireEvent.click(screen.getByRole('button', { name: /Activas/ }));
-    expect(await screen.findByText(/Mostrando 3 de 3/)).toBeTruthy();
+    expect(document.querySelector('[aria-live="polite"]')?.textContent?.trim()).toBe(
+      '3 plantillas'
+    );
     expect(screen.getByText('Fullbody 3 Días Principiante')).toBeTruthy();
   });
 
@@ -485,7 +495,7 @@ describe('PlantillasPage caracterización · modo real con API simulada (§6.2 p
     montar();
 
     expect(await screen.findByText('Plantillas de ejercicios')).toBeTruthy();
-    expect(screen.queryByText(/Mostrando/)).toBeNull();
+    expect(document.querySelector('p[aria-live="polite"]')).toBeNull();
     expect(screen.queryByText(/No se pudieron cargar/)).toBeNull();
 
     await act(async () => {

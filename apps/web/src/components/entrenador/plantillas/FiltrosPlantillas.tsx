@@ -5,8 +5,8 @@
  * específicos del banco; la lógica ya vive en `lib/plantillas-filtros.ts`).
  * Solo props y callbacks (R1): sin `useQuery` ni `api-client`. Usa
  * `ui/ChipFiltro` (consolidación 48 §M8, fila 5; `aria-pressed` + `min-h-11`
- * adoptados a conciencia). Conserva labels, `aria-pressed` y el texto
- * "Mostrando N de M" que usan los specs (R5).
+ * adoptados a conciencia). Conserva labels y `aria-pressed` que usan los
+ * specs (R5). Desde UX-20 el contador es "N plantilla(s)" con `aria-live`.
  *
  * §6: español claro, controles táctiles 44px (chips `min-h-11`), piso 11px
  * (`text-[11px]` exacto en el contador), tokens con variante claro/oscuro,
@@ -14,6 +14,7 @@
  */
 import { Search } from 'lucide-react';
 import { ChipFiltro } from '../../ui/ChipFiltro';
+import { pluralizar } from '../../../lib/pluralizar';
 import {
   ETIQUETAS_NIVEL_PLANTILLA,
   NIVELES_PLANTILLA_ORDEN,
@@ -83,7 +84,7 @@ export function FiltrosPlantillas({
               onChange={(e) => onCambiarBusqueda(e.target.value)}
               placeholder="Buscar por nombre..."
               aria-label="Buscar plantilla por nombre"
-              className="w-full pl-9 pr-3 py-2 rounded-xl bg-background border border-border text-xs font-semibold text-foreground focus:outline-hidden focus:border-primary transition-colors"
+              className="w-full pl-9 pr-3 py-2 rounded-xl bg-background border border-border min-h-11 text-base sm:text-sm font-semibold text-foreground focus:outline-hidden focus:border-primary transition-colors"
             />
           </div>
 
@@ -91,7 +92,7 @@ export function FiltrosPlantillas({
             value={filtroNivel}
             onChange={(e) => onCambiarNivel(e.target.value as FiltroNivelPlantilla)}
             aria-label="Filtrar plantillas por nivel objetivo"
-            className="px-3 py-2 rounded-xl bg-background border border-border text-xs font-bold text-foreground focus:outline-hidden focus:border-primary transition-colors cursor-pointer"
+            className="px-3 py-2 rounded-xl bg-background border border-border min-h-11 text-base sm:text-sm font-bold text-foreground focus:outline-hidden focus:border-primary transition-colors cursor-pointer"
           >
             <option value="todos">Todos los niveles</option>
             {NIVELES_PLANTILLA_ORDEN.map((nivel) => (
@@ -104,9 +105,8 @@ export function FiltrosPlantillas({
       </div>
 
       {mostrarContador && (
-        <p className="text-[11px] text-muted-foreground font-mono">
-          Mostrando {visiblesCount} de {conteos[filtro]}{' '}
-          {filtro === 'todas' ? 'plantillas' : filtro}
+        <p aria-live="polite" className="text-[11px] text-muted-foreground">
+          {pluralizar(visiblesCount, 'plantilla', 'plantillas')}
         </p>
       )}
     </div>

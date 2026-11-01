@@ -26,8 +26,7 @@ export function CabeceraPlantillas({ onNueva }: CabeceraPlantillasProps) {
           <h1 className="text-2xl font-bold tracking-tight text-foreground">{DESTINOS_ENTRENADOR.plantillas.etiqueta}</h1>
         </div>
         <p className="text-xs text-muted-foreground mt-1">
-          Diseña rutinas reutilizables y asígnalas a tus alumnos en segundos. Cada asignación es una
-          copia independiente: editar la plantilla no altera lo ya prescrito.
+          Diseña rutinas reutilizables y asígnalas a tus alumnos en segundos.
         </p>
       </div>
 
