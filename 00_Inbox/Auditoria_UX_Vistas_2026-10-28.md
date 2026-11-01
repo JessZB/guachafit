@@ -141,7 +141,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-21 ✅ `87c732d` | Pago del alumno: formulario honesto y accesible | Pagos > Reportar pago | ALU-01, 02, 03, 04, 05, 06, 08, 09, 10 | `CampoAjustes`, `AvisosAjustes`, modelo `DiarioFotografico`, `BotonTactil` | medio (specs con `1300.00` y localización por `parentElement`) | no | UX-03; ⛔ D8 |
 | UX-22 ✅ `3bfce29` | Pago del alumno: idempotencia | Pagos | ALU-07 | reutilizar `storageKey` en el reintento; clave de idempotencia | medio | **sí** (ya existía en API) | UX-21; ⛔ D8 |
 | UX-23 ✅ `6271cce` | Nutrición: ventana, calendario y campos | Nutrición | ALU-16, 17, 18, 19, 21 | `horaDeZona`, `HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL`, `rutaAjustes`, `validarCamposOpcionalesCheckin`, `pluralizar` | bajo-medio | no | UX-03 |
-| UX-24 | Menú y navegación del alumno: honesto y partido | Menú, BottomNav | MEN-01 a MEN-06, NAV-01 | `use-resumen-menu`, `TarjetaEntrenarHoy`, `TarjetaAccesoAlumno`, `ChipRacha`, `BadgeEstado`, `EstadoError`; `aria-label` en la barra | medio (el cuarto destino es aparte) | no | UX-02; ⛔ D5 solo para el cuarto destino |
+| UX-24 ✅ `48a3d1e` | Menú y navegación del alumno: honesto y partido | Menú, BottomNav | MEN-01 a MEN-06, NAV-01 | `use-resumen-menu`, `TarjetaEntrenarHoy`, `TarjetaAccesoAlumno`, `ChipRacha`, `BadgeEstado`, `EstadoError`; `aria-label` en la barra | medio (el cuarto destino es aparte) | no | UX-02; ⛔ D5 solo para el cuarto destino |
 | UX-25 | Sesión de entrenamiento: táctil y chips | `/app/hoy` | ENT-04, 05, 07, 08, PRO-02 | `BotonTactil`, `BadgeEstado`, `CampoMedidaCheckin` | bajo | no | UX-02 |
 | UX-26 | Cierre de sesión seguro | `ModalFinalizarSesion` | ENT-02, 03, 09(a,b), 10; ENT-09(c) | `DialogoConfirmacion`/`ModalCierreVacio`, `CtaFinalizarSesion` parametrizable | medio | no; ENT-09(c) toca el formato de `notas` | ⛔ D10 solo para (c) |
 | UX-27 | Progreso: carga y formulario | Progreso | PRO-01, 03, 05, 06, 07 | `EstadoCarga`, `AvisoErrorEvolucion`, `?vista=` en URL, aviso "Cambios sin guardar" | medio | no | UX-05 como referencia de patrón |
@@ -410,6 +410,23 @@ Seguimientos:
 
 Proceso:
 - 4 revisiones en paralelo (`04-ux23-review-risk`, `05-ux23-review-resilience`, `06-ux23-review-readability`, `07-ux23-review-reliability`), que detectaron un fetch innecesario a `/nutricion/resumen` introducido para el mock inicial, un riesgo de caída en SSR sin `<Router>` en `AvisoVentanaReporte` y fechas `new Date(y, m, d, h)` sensibles a `TZ=UTC`; se corrigieron en `08-ux23-correccion` (`F1..F4`) y `09-ux23-validacion` (`V1..V4`).
+
+**UX-24 cerrado (`48a3d1e`):**
+- `AtletaMenuPage.tsx` (`MEN-01`, `MEN-03`, `MEN-05`): baja de 364 a **152 líneas** (`<= 300`); consume `useMiPerfil` y `useResumenMenu`; saluda con `saludoAlumnoDesdePerfil` (`Hola, <primer nombre>` o `Hola`, sin email ni emoji); si falla la semana y no hay bloqueo, muestra `EstadoError` con reintento y `AvisoDatosOffline` cuando no hay conexión.
+- Nuevos `components/atleta/menu/`: `use-resumen-menu.ts` (hook con contador de solicitudes y guarda de desmontaje, más las funciones puras `saludoAlumnoDesdePerfil` y `derivarEstadoEntrenamientoHoy`), `ChipRacha.tsx` (`—` mientras carga o sin datos, `text-xs`), `TarjetaEntrenarHoy.tsx` (`MEN-02`, `MEN-06`: estado honesto sin `animate-pulse`, `role="progressbar"` con `aria-label="Cumplimiento semanal"`, `100% completado` sin emoji) y `TarjetaAccesoAlumno.tsx` (`MEN-04`: `BadgeEstado` canónico con `whitespace-nowrap shrink-0`).
+- `BottomNav.tsx` (`NAV-01`): `aria-label="Navegación principal"`. `AppLayout.tsx`: el `Suspense` usa `EstadoCarga` (`Cargando contenido…`).
+- Correcciones de las 4 revisiones aplicadas desde el hilo principal por cuota agotada de las terminales externas: el resumen financiero se descarta al cambiar de usuario o de modo demo (`RSK-01`/`RES-01`), `bloques` se lee de forma defensiva (`RSK-03`), semana sin bloques da `Sin entrenamiento asignado` (`REL-01`), sesión iniciada da `Entrenamiento en progreso` (`REL-02`), y se eliminan `text-[11px]` y `uppercase` en las tarjetas y la ceja (`REA-01..03`).
+
+Seguimientos:
+- SUGGESTION (`use-mi-perfil.ts:61-76`, `RSK-02`): el hook conserva el perfil del usuario anterior mientras recarga tras un cambio de sesión; valorar `setPerfil(null)` al cambiar `usuarioId` (hook compartido con Ajustes).
+- SUGGESTION (`AtletaMenuPage.tsx:65-69`, `REL-03`): con `semanaProgreso === null` sin error, `ChipRacha` muestra `0 días` mientras la tarjeta dice `Sin datos`; valorar pasar `rachaNoDisponible` también en ese caso.
+- SUGGESTION (`AtletaMenuPage.ux24.interaccion.spec.tsx`, `REL-04`): restablecer `navigator.onLine = true` en `beforeEach`.
+- Preexistentes en layout: `text-[11px]` en las etiquetas de `BottomNav.tsx` y en el banner demo de `AppLayout.tsx` (sin `aria-hidden` en su icono).
+
+Proceso:
+- 4 revisiones en paralelo (`04-ux24-review-risk`, `05-ux24-review-resilience`, `06-ux24-review-readability`, `07-ux24-review-reliability`) y verificación independiente que no llegó a escribir su reporte por cuota agotada (la suite completa quedó verificada con el JSON de Vitest). Durante la implementación se autorizaron dos ajustes de specs: matcher plano en `NavegacionAlumno.ux24.interaccion.spec.tsx:93` y campos obligatorios del DTO en el mock de `AtletaMenuPage.ux24.interaccion.spec.tsx`.
+- 8 tests nuevos en 2 specs (`AtletaMenuPage.ux24.interaccion.spec.tsx` y `NavegacionAlumno.ux24.interaccion.spec.tsx`).
+- 3006 tests en 331 archivos y typecheck en verde.
 - 12 tests en 2 specs nuevos (`nutricion-checkin.ux23.spec.ts` y `NutricionPage.ux23.interaccion.spec.tsx`).
 - 2998 tests en 329 archivos, typecheck y build en verde.
 
