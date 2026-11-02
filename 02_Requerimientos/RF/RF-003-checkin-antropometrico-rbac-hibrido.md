@@ -152,6 +152,13 @@ Con los tres criterios pendientes cerrados (Escenario 2, §6 y Escenario 3), el 
 - Cola: vacíos con `EstadoVacio` ("Sin evaluaciones pendientes", "Sin resultados" + "Limpiar búsqueda"). Buscador de 44px con texto de 16px en el móvil y placeholder "Buscar en esta página…": la búsqueda sigue siendo local a la página cargada.
 - Evidencia: web **2811 tests en 303 archivos**; typecheck y build en verde. Revisión de fiabilidad sin BLOCKER ni WARNING.
 
+### Check-in sin conexión: aviso honesto y bloqueo del envío (2026-11-02, `9c8c039`, lote UX-28)
+- **Decisión D9 del dueño (2026-11-02):** avisar y bloquear el envío sin tocar datos. No se encolan fotos ni mediciones offline por riesgo de pérdida de archivos binarios, expiración de firmas de subida y sesiones.
+- **Formulario de check-in (`FormularioCheckinAntropometrico.tsx`):** ante la falta de conexión (`!isOnline`), se muestra en la cabecera el banner `AvisoDatosOffline` con `variante="sin-datos"` ("Sin conexión y sin datos guardados"), se deshabilita el botón de envío y se despliega la aclaración "Conéctate a internet para enviar tu evaluación".
+- **Guarda síncrona (`use-checkin-antropometrico.ts`):** si el usuario intenta enviar sin conexión (`!navigator.onLine && !isDemoMode`), la guarda detiene el flujo de envío y reporta el error sin lanzar llamadas al API ni intentar subir archivos a R2.
+- **Modo demo:** el entorno de demostración omite la restricción de conectividad y permite simular el registro en local.
+- **Evidencia:** `apps/web/src/components/atleta/progreso/FormularioCheckinAntropometrico.ux28.offline.spec.tsx` (4 tests); web **3044 tests en 342 archivos (1118 suites)**; typecheck y build en verde. Revisión de resiliencia (`review-resilience`) APROBADA (0 blockers, 0 warnings).
+
 ### Pendiente
 - (UX-15) El aviso de éxito sigue visible al pasar a "Comparar" hasta que se cierra. Faltan tests de la recarga fallida con datos y de grasa o cintura ausentes. La búsqueda en servidor necesitaría que el endpoint de pendientes aceptara `q`.
 - **Fotos huérfanas:** una foto subida y luego quitada, o un check-in que no se llega a enviar, deja el objeto en la bóveda (no hay borrado ni barrido). Ver [[RNF-001-almacenamiento-seguridad-fotos-progreso]].

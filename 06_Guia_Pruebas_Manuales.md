@@ -139,6 +139,13 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - La navegación entre el Hub de progreso, el formulario de nuevo check-in y la pantalla de evolución se refleja en la URL (`?vista=nuevo`, `?vista=evolucion` o sin parámetro para el hub). El botón "Atrás" del navegador retrocede limpiamente entre las vistas de progreso sin abandonar la pantalla.
   - Al presionar "Volver" desde un formulario de check-in con datos ingresados o fotos seleccionadas, aparece el diálogo de confirmación `¿Descartar cambios sin guardar?` para prevenir pérdidas accidentales de información.
   - En las tarjetas de evolución y resumen de medidas corporales, el porcentaje de grasa corporal `0%` se muestra fielmente como `0%` (sin interpretarse erróneamente como dato ausente o `—`). Las métricas de peso exhiben formato numérico claro con sus decimales pertinentes.
+- [ ] **Check-in antropométrico sin conexión (desde 2026-11-02, UX-28, `9c8c039`):** en `/app/progreso?vista=nuevo` como alumno.
+  - Al abrir el formulario de check-in sin conexión a internet (o desconectar la red en DevTools Offline), se muestra en la cabecera el banner `AvisoDatosOffline` ("Sin conexión y sin datos guardados").
+  - El botón "Enviar Evaluación al Entrenador" se desactiva (`disabled`) y debajo se muestra la indicación explicativa "Conéctate a internet para enviar tu evaluación".
+  - Los datos ingresados en el formulario y las fotos seleccionadas se preservan intactos en la vista sin perderse.
+  - Si se intenta disparar el submit sin red, la guarda síncrona detiene el envío y presenta el error "Conéctate a internet para enviar tu evaluación." sin invocar a la API ni encolar datos offline (decisión D9).
+  - Al recuperar la conexión a internet, el aviso offline desaparece y el botón de envío se habilita nuevamente sin necesidad de recargar la página.
+  - En modo demo (`isDemoMode: true`), el simulador local permite enviar la evaluación sin bloquearse por la falta de red.
 - [ ] **Cierre de sesión seguro y controles accesibles (desde 2026-11-01, UX-26, `70cfe33`):** en `/app/hoy` (entrenamiento) como alumno.
   - Al abrir el modal de finalización habiendo completado todas las series, el resumen superior anuncia claramente **"Completaste todas las series (N de N)"** con estado visual verde.
   - Si finalizas con series pendientes, el modal muestra con honestidad cuántas hiciste y cuántas quedan (p. ej. *"Hiciste 3 de 8 series. Las otras 5 quedarán sin completar"* o *"1 serie quedará sin completar"*).

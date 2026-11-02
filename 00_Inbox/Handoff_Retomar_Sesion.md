@@ -1,7 +1,7 @@
 ---
 id: HANDOFF-RETOMA
 titulo: "Handoff: retomar el trabajo con los lotes de la auditoría UX de las vistas del entrenador y del alumno"
-fecha: 2026-11-01
+fecha: 2026-11-02
 estado: activo
 tags:
   - handoff
@@ -24,8 +24,8 @@ Push solo cuando yo lo pida explícitamente.
 
 ## Qué hay que hacer
 Seguir, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (29 lotes UX-01…UX-29; decisiones D1–D10 en su sección 4).
-- **Siguiente lote: UX-28** (Check-in sin conexión: PRO-04; `AvisoDatosOffline`, `use-frescura-offline`; ⛔ D9 decisión del dueño requerida: "¿encolar o avisar y bloquear el envío?").
-- Después: UX-29 (completa el área del alumno).
+- **Siguiente lote: UX-29** (Pulido del alumno: fechas, copy y zona horaria; ALU-11, 12, 13, 14, 15, 26 en `.external-agents/auditoria-ux/04-alumno-pagos-ajustes.md`). No tiene decisiones pendientes. ¡Último lote de la auditoría UX!
+- Después: cierre global de la auditoría UX, borrado de `.external-agents/auditoria-ux/` y consolidación.
 - Los lotes con ⛔ dependen de una decisión mía (sección 4). Pregúntamela al llegar, UNA a la vez, con la recomendación del documento y su porqué. **Antes de preguntar, verifica en el código lo que la decisión da por supuesto.** En D7 yo creía que los planes eran solo mensuales y el código tenía duración de 1 a 12 meses.
 - Antes de cada lote, mapea el código con un agente Explore de solo lectura con `model: haiku`: textos exactos, props, specs que se romperán y cuáles comprueban comportamiento frente a texto. La auditoría fue estática.
 - Los reportes originales de la auditoría están en `.external-agents/auditoria-ux/01…05-*.md`. La carpeta está en `.gitignore`. Bórrala solo al cerrar todos los lotes.
@@ -132,8 +132,9 @@ Seguir, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (29 l
   - UX-25 `3d90202`: Chips de bloques de la semana con "Hoy" condicionado a `esSugeridoHoy` y `aria-current="true"` en el bloque consultado, `fechaVisible` visible en pendientes sin `title`, `flex-wrap` táctil y sin `✓` duplicado; steppers de peso y reps `w-11` constante (≥44px) en todos los viewports; Plan: [X] kg con `break-words`; `min-h-11` en `CLASES_INPUT_MEDIDA` del check-in antropométrico.
   - UX-26 `70cfe33`: Cierre de sesión seguro: resumen honesto de series en `ModalFinalizarSesion` (`ENT-02`), rejilla 1-10 sin etiquetas inductoras ("Ideal", "Bajo", "Máximo") y esfuerzo inicial `null` sin forzar RPE 8 (`ENT-09a,b`), CTA repetido al final de `ListaCompletaEjercicios` con variante parametrizable y `aria-label` diferenciado (`ENT-03`), botón con `type="button"` y `text-sm` (`ENT-10`), unificación de "coach" a "entrenador", `testTimeout` a 15s en `vitest.config.ts`.
   - UX-27 `253b69d`: Progreso con carga honesta (`PRO-01`: spinner solo si `!evolucion` y datos previos preservados en error), `aria-describedby` condicional e `id` en alerta de campos de medida (`PRO-03`), navegación sincronizada con searchParams `?vista=` y diálogo accesible de confirmación ante cambios sin guardar (`PRO-05`), unificación a "entrenador", `0%` de grasa fiel y peso con formato decimal (`PRO-06, 07`). `ProgresoPage.tsx` en 294 líneas (<= 300).
-- **Tests:** web **3040 tests en 341 archivos**, typecheck en verde (al cierre de UX-27).
-- **Commits locales sin push** desde `6abb291` (UX-11…UX-27, incluyendo UX-19 a UX-27).
+  - UX-28 `9c8c039`: D9, Check-in sin conexión: `FormularioCheckinAntropometrico` renderiza `AvisoDatosOffline` con variante "sin-datos" en cabecera y desactiva el botón de envío con motivo visible "Conéctate a internet para enviar tu evaluación", `AvisoDatosOffline` ampliado con prop `isOnline`, guarda síncrona en `useCheckinAntropometrico` ante intentos sin red y modo demo simulado localmente (`PRO-04`).
+- **Tests:** web **3044 tests en 342 archivos (1118 suites)**, typecheck y build en verde (al cierre de UX-28).
+- **Commits locales sin push** desde `6abb291` (UX-11…UX-28, incluyendo UX-19 a UX-28).
 - **Pausados o pendientes fuera de la auditoría:** módulo 5 (anulación de cuotas en la web, congelar membresía, condonar, PagosPage, P2 de Control de Cobros, RNF-002) y pendientes de la ficha en RF-011. Al llegar a UX-21/22 (pagos del alumno), revisa si conviene juntarlos.
 
 ## Piezas a reutilizar
@@ -154,5 +155,5 @@ Seguir, lote a lote, el plan de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md (29 l
   - cambios sin guardar de `ModalPlantilla` y `ModalPlanComercial`;
   - contador de generación de `use-dashboard-comando`.
 
-Empieza revisando la memoria (`mem_search "guachafit UX-27"` y `"guachafit auditoría UX"`), lee la auditoría (secciones 2, 3 y 4) y arranca **UX-28**: consulta al dueño sobre la decisión ⛔ D9 (check-in offline: ¿encolar o avisar y bloquear el envío?), mapeo con Explore y, después, los contratos de su fase roja.
+Empieza revisando la memoria (`engram search "guachafit UX-28"`), lee la auditoría (secciones 2, 3 y 4) y arranca **UX-29**: mapeo con Explore y, después, los contratos de su fase roja.
 ```

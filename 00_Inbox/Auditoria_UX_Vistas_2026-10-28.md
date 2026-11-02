@@ -145,7 +145,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-25 ✅ `3d90202` | Sesión de entrenamiento: táctil y chips | `/app/hoy` | ENT-04, 05, 07, 08, PRO-02 | `BotonTactil`, `BadgeEstado`, `CampoMedidaCheckin` | bajo | no | UX-02 |
 | UX-26 ✅ `70cfe33` | Cierre de sesión seguro | `ModalFinalizarSesion` | ENT-02, 03, 09(a,b), 10; ENT-09(c) | `DialogoConfirmacion`/`ModalCierreVacio`, `CtaFinalizarSesion` parametrizable | medio | no; ENT-09(c) toca el formato de `notas` | ⛔ D10 solo para (c) |
 | UX-27 ✅ `253b69d` | Progreso: carga y formulario | Progreso | PRO-01, 03, 05, 06, 07 | `EstadoCarga`, `AvisoErrorEvolucion`, `?vista=` en URL, aviso "Cambios sin guardar" | medio | no | UX-05 como referencia de patrón |
-| UX-28 | Check-in sin conexión | Progreso > Check-in | PRO-04 | `AvisoDatosOffline`, `use-frescura-offline` | alto si se encola (cola offline) | **sí** si se encola | ⛔ D9 |
+| UX-28 | ✅ `9c8c039` | Check-in sin conexión | Progreso > Check-in | PRO-04 | `AvisoDatosOffline` con `isOnline`, `use-frescura-offline`, guarda síncrona en `useCheckinAntropometrico` | bajo (D9: avisar y bloquear) | no | UX-27; ✅ D9 |
 | UX-29 | Pulido del alumno: fechas, copy y zona horaria | Pagos, Ajustes alumno | ALU-11, 12, 13, 14, 15, 26 | `formatFechaLocal`, `horaDeZona` | bajo | no | UX-17 |
 
 Cobertura: los hallazgos BAJA no listados se resuelven con el lote de su área al pasar por el archivo.
@@ -428,6 +428,26 @@ Proceso:
 - 8 tests nuevos en 2 specs (`AtletaMenuPage.ux24.interaccion.spec.tsx` y `NavegacionAlumno.ux24.interaccion.spec.tsx`).
 - 3006 tests en 331 archivos y typecheck en verde.
 
+**UX-28 cerrado (`9c8c039`):**
+- `AvisoDatosOffline.tsx`: añadida la prop opcional `isOnline?: boolean` a `AvisoDatosOfflineProps`; si se provee, tiene precedencia sobre `useFrescuraOffline` sin romper retrocompatibilidad con los consumidores existentes (`ContenidoConPerfil`, `ProgresoPage`, `PantallaAjustes`, etc.); 88 líneas (`<= 400`).
+- `FormularioCheckinAntropometrico.tsx` (`PRO-04`):
+  - Añadida prop `isOnline?: boolean` a `FormularioCheckinAntropometricoProps`.
+  - Cuando `estaOffline` (`!isDemoMode && !isOnlineEfectivo`), renderiza `<AvisoDatosOffline variante="sin-datos" isOnline={...} className="mb-2" />` en la cabecera.
+  - El botón de envío se desactiva (`disabled={... || estaOffline}`) y se muestra el motivo `<p className="text-[11px] text-muted-foreground text-center">Conéctate a internet para enviar tu evaluación</p>`.
+  - En modo demo (`isDemoMode: true`), omite la restricción de red y permite simular el check-in localmente. 205 líneas (`<= 400`).
+- `use-checkin-antropometrico.ts` (`PRO-04`, `D9`):
+  - Guarda síncrona en `handleSubmitCheckin`: si `typeof navigator !== 'undefined' && !navigator.onLine && !isDemoMode`, interrumpe el flujo y setea el error "Conéctate a internet para enviar tu evaluación." sin invocar la API ni encolar offline. 211 líneas (`<= 400`).
+- `ProgresoPage.tsx`: se mantiene intacto en 294 líneas (`<= 300`).
+
+Seguimientos:
+- SUGGESTION (`use-checkin-antropometrico.ts:30-52`): admitir opcionalmente `isOnline?: boolean` en las opciones del hook para simetría con `FormularioCheckinAntropometricoProps`.
+
+Proceso:
+- Decisión D9 confirmada por el dueño: avisar y bloquear el envío sin tocar datos ni encolar offline.
+- Subagente escritor (`ca6d23ef-ee22-42be-8996-bfdc93b74c91`, Gemini 3.8 Flash high): implementó la solución limpia con soporte de `isOnline` en `AvisoDatosOffline`.
+- Verificación independiente (`UX-28 Verifier`, Gemini 3.8 Flash medium): 3044 tests pasados en 342 archivos (1118 suites), typecheck y build en verde.
+- Revisión de resiliencia (`review-resilience`, Gemini 3.8 Flash high): APROBADA (0 blockers, 0 warnings).
+
 **UX-26 cerrado (`70cfe33`):**
 - `ModalFinalizarSesion.tsx` (`ENT-02`, `ENT-09a`, `ENT-09b`, `ENT-10`):
   - `ENT-02`: Resumen honesto de series completadas y pendientes con `role="status"` ("Completaste todas las series (N de N)" o "Hiciste X de Y series. Las otras Z quedarán sin completar" / singular con 1).
@@ -487,7 +507,7 @@ Deduplicadas de las 15 preguntas de los reportes (cada una con la recomendación
 | D7 ✅ (2026-10-31: el precio es el total de la duración del plan, que es lo que ya hace el API: una cuota por ciclo de `duracionMeses`; la tarjeta deja de decir "USD / mes". El formulario de creación arranca vacío: sin el precio 40.00 ni beneficios precargados) | Planes: ¿el precio es por mes o por toda la duración? ¿Se quitan el precio `40.00` y los dos beneficios precargados? | Quitar la precarga (CFG-09: datos no elegidos) y aclarar la semántica del precio: hoy dice "USD / mes" aunque el plan dure N meses (CFG-11). | UX-18 |
 | CFG-26 ✅ (2026-11-01: la aclaración de copia independiente se movió al paso de revisión de la asignación PasoRevisar en lugar de saturar la cabecera del catálogo) | Plantillas: ¿dónde ubicar la aclaración de que cada asignación es una copia independiente? | Retirar de CabeceraPlantillas y moverla al paso de revisión de la asignación (PasoRevisar), donde se toma la decisión de prescripción, renderizándose una sola vez en flujos individual y masivo (CFG-26). | UX-20 |
 | D8 ✅ (2026-11-01: el formulario de pago arranca con monto vacío `''`, valida > 0 antes de enviar, asocia cada `<label>` con `htmlFor`/`id` (`useId`) y se actualizan los 3 tests de `PagosPage.fecha-anterior.interaccion.spec.tsx`; en ALU-10 "Corregir y Reenviar" prellena el formulario con método, moneda, monto, referencia y fecha del pago rechazado. Verificado en código que el API ya soporta `X-Idempotency-Key` / `idempotencyKey` en `ReportarPagoSchema` y el índice `uq_transaccion_referencia_entrenador`, por lo que en UX-22 el cliente enviará `idempotencyKey` y reutilizará `storageKey`) | Reporte de pago: ¿empieza vacío (se actualizan los specs que usan `1300.00` y localizan por `parentElement`)? ¿El API acepta clave de idempotencia o rechaza duplicados por referencia+monto+fecha? | Sí a vaciar (ALU-01 es ALTA). Sin idempotencia en el API solo hay mitigación en el cliente (ALU-07). | UX-21, UX-22 |
-| D9 | Check-in antropométrico con fotos sin conexión: ¿encolar o avisar y bloquear el envío? | Avisar y bloquear: no toca datos. Encolar es riesgo alto y requiere diseño de cola offline (PRO-04). | UX-28 |
+| D9 ✅ (2026-11-02: avisar y bloquear el envío sin tocar datos; se muestra AvisoDatosOffline con variante "sin-datos", botón de envío deshabilitado con indicación visible y guarda síncrona en useCheckinAntropometrico; en demo se simula en local) | Check-in antropométrico con fotos sin conexión: ¿encolar o avisar y bloquear el envío? | Avisar y bloquear: no toca datos. Encolar es riesgo alto y requiere diseño de cola offline (PRO-04). | UX-28 |
 | D10 | Esfuerzo de la sesión: ¿arrancar sin valor? ¿Separar el valor de "molestia" del texto con emoji dentro de `notas`? | Sí al esfuerzo sin valor inicial (ENT-09b). Separar `notas` va aparte porque cambia el formato de los datos (ENT-09c). | UX-26 (ENT-09c) |
 
 ## 5. Hallazgos por área
