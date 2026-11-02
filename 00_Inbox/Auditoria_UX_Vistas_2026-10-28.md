@@ -142,7 +142,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-22 ✅ `3bfce29` | Pago del alumno: idempotencia | Pagos | ALU-07 | reutilizar `storageKey` en el reintento; clave de idempotencia | medio | **sí** (ya existía en API) | UX-21; ⛔ D8 |
 | UX-23 ✅ `6271cce` | Nutrición: ventana, calendario y campos | Nutrición | ALU-16, 17, 18, 19, 21 | `horaDeZona`, `HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL`, `rutaAjustes`, `validarCamposOpcionalesCheckin`, `pluralizar` | bajo-medio | no | UX-03 |
 | UX-24 ✅ `48a3d1e` | Menú y navegación del alumno: honesto y partido | Menú, BottomNav | MEN-01 a MEN-06, NAV-01 | `use-resumen-menu`, `TarjetaEntrenarHoy`, `TarjetaAccesoAlumno`, `ChipRacha`, `BadgeEstado`, `EstadoError`; `aria-label` en la barra | medio (el cuarto destino es aparte) | no | UX-02; ⛔ D5 solo para el cuarto destino |
-| UX-25 | Sesión de entrenamiento: táctil y chips | `/app/hoy` | ENT-04, 05, 07, 08, PRO-02 | `BotonTactil`, `BadgeEstado`, `CampoMedidaCheckin` | bajo | no | UX-02 |
+| UX-25 ✅ `3d90202` | Sesión de entrenamiento: táctil y chips | `/app/hoy` | ENT-04, 05, 07, 08, PRO-02 | `BotonTactil`, `BadgeEstado`, `CampoMedidaCheckin` | bajo | no | UX-02 |
 | UX-26 | Cierre de sesión seguro | `ModalFinalizarSesion` | ENT-02, 03, 09(a,b), 10; ENT-09(c) | `DialogoConfirmacion`/`ModalCierreVacio`, `CtaFinalizarSesion` parametrizable | medio | no; ENT-09(c) toca el formato de `notas` | ⛔ D10 solo para (c) |
 | UX-27 | Progreso: carga y formulario | Progreso | PRO-01, 03, 05, 06, 07 | `EstadoCarga`, `AvisoErrorEvolucion`, `?vista=` en URL, aviso "Cambios sin guardar" | medio | no | UX-05 como referencia de patrón |
 | UX-28 | Check-in sin conexión | Progreso > Check-in | PRO-04 | `AvisoDatosOffline`, `use-frescura-offline` | alto si se encola (cola offline) | **sí** si se encola | ⛔ D9 |
@@ -427,6 +427,20 @@ Proceso:
 - 4 revisiones en paralelo (`04-ux24-review-risk`, `05-ux24-review-resilience`, `06-ux24-review-readability`, `07-ux24-review-reliability`) y verificación independiente que no llegó a escribir su reporte por cuota agotada (la suite completa quedó verificada con el JSON de Vitest). Durante la implementación se autorizaron dos ajustes de specs: matcher plano en `NavegacionAlumno.ux24.interaccion.spec.tsx:93` y campos obligatorios del DTO en el mock de `AtletaMenuPage.ux24.interaccion.spec.tsx`.
 - 8 tests nuevos en 2 specs (`AtletaMenuPage.ux24.interaccion.spec.tsx` y `NavegacionAlumno.ux24.interaccion.spec.tsx`).
 - 3006 tests en 331 archivos y typecheck en verde.
+
+**UX-25 cerrado (`3d90202`):**
+- `ChipsBloquesSemana.tsx` (`ENT-04`, `ENT-05`): "Hoy" restringido al bloque sugerido de hoy (`b.esSugeridoHoy`), el bloque consultado (`bloqueActivoId`) recibe `aria-current="true"` y no dice "Hoy"; eliminación del `✓` duplicado en completados; `fechaVisible` visible para bloques pendientes en lugar de solo en `title`; contenedor con `role="group"`, `aria-label="Entrenamientos de la semana"` y envoltura flexible `flex-wrap gap-2` para pantallas táctiles sin scroll horizontal rígido; baja de 124 a 110 líneas.
+- `FilaSerieEdicion.tsx` (`ENT-07`, `ENT-08`): eliminadas las clases `sm:w-9` (peso) y `sm:w-8` (repeticiones), garantizando ancho táctil `w-11` (≥44px) constante en todos los anchos; sustituido `truncate` por `break-words` en la prescripción planificada "Plan: [X] kg"; baja de 278 a 269 líneas.
+- `CampoMedidaCheckin.tsx` (`PRO-02`): añadida la clase `min-h-11` a `CLASES_INPUT_MEDIDA` para asegurar altura táctil mínima de 44px en los campos de medición antropométrica.
+- `EntrenamientoPage.tsx`: se mantiene intacto en 262 líneas (`<= 300`).
+
+Seguimientos:
+- SUGGESTION (`EntrenamientoPage.tsx:114`, `OBS-01`): actualizar el comentario legacy que menciona `scroll horizontal con degradado + chevron` en una futura pasada de limpieza documental.
+
+Proceso:
+- Revisión enfocada de confiabilidad (`04-ux25-review-reliability`) y verificación independiente (`03-ux25-verificacion`): 0 CRITICAL, 0 WARNING, 0 hallazgos en verificación.
+- 10 tests nuevos en 3 specs (`ChipsBloquesSemana.ux25.interaccion.spec.tsx`, `FilaSerieEdicion.ux25.interaccion.spec.tsx` y `CampoMedidaCheckin.ux25.interaccion.spec.tsx`).
+- 3016 tests en 334 archivos, typecheck y build en verde.
 - 12 tests en 2 specs nuevos (`nutricion-checkin.ux23.spec.ts` y `NutricionPage.ux23.interaccion.spec.tsx`).
 - 2998 tests en 329 archivos, typecheck y build en verde.
 
