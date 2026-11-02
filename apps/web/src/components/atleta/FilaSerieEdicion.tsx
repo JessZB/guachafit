@@ -92,7 +92,7 @@ export function FilaSerieEdicion({
               disabled={soloLectura}
               onClick={() => onPaso('pesoKg', -1)}
               aria-label={`Restar ${pasoVisible} ${unidadPeso}`}
-              className="h-full w-11 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
+              className="h-full w-11 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
             >
               -
             </button>
@@ -127,7 +127,7 @@ export function FilaSerieEdicion({
               disabled={soloLectura}
               onClick={() => onPaso('pesoKg', 1)}
               aria-label={`Sumar ${pasoVisible} ${unidadPeso}`}
-              className="h-full w-11 sm:w-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
+              className="h-full w-11 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
             >
               +
             </button>
@@ -135,7 +135,7 @@ export function FilaSerieEdicion({
           {/* Referencia prescrita por serie: permanece visible mientras el alumno edita */}
           {pesoPrescritoKg && (
             <span
-              className="block text-center text-xs font-medium text-muted-foreground leading-tight mt-1 sm:mt-0.5 truncate"
+              className="block text-center text-xs font-medium text-muted-foreground leading-tight mt-1 sm:mt-0.5 break-words"
               title={`Plan: ${formatearPesoConUnidad(pesoPrescritoKg, unidadPeso)}`}
             >
               Plan: {formatearPesoConUnidad(pesoPrescritoKg, unidadPeso)}
@@ -154,7 +154,7 @@ export function FilaSerieEdicion({
               disabled={soloLectura}
               onClick={() => onPaso('repsLogradas', -1)}
               aria-label="Restar 1 repetición"
-              className="h-full w-11 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
+              className="h-full w-11 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
             >
               -
             </button>
@@ -181,7 +181,7 @@ export function FilaSerieEdicion({
               disabled={soloLectura}
               onClick={() => onPaso('repsLogradas', 1)}
               aria-label="Sumar 1 repetición"
-              className="h-full w-11 sm:w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
+              className="h-full w-11 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary transition-colors cursor-pointer text-base font-bold shrink-0 select-none disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:text-primary"
             >
               +
             </button>

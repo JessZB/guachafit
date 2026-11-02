@@ -1,7 +1,6 @@
 import {
   AlertTriangle,
   CheckCircle2,
-  ChevronRight,
   Clock,
   Coffee,
   Sparkles,
@@ -31,7 +30,7 @@ export function ChipsBloquesSemana({
   return (
     <div className="relative">
       <div
-        className="flex items-center gap-2 overflow-x-auto pb-1 pr-10 sm:pr-2 scrollbar-thin"
+        className="flex items-center gap-2 flex-wrap pb-1 pr-2"
         aria-label="Entrenamientos de la semana"
         role="group"
       >
@@ -74,6 +73,7 @@ export function ChipsBloquesSemana({
               key={b.bloqueId}
               type="button"
               disabled={deshabilitado}
+              aria-current={esActivo ? 'true' : undefined}
               onClick={() => onSelect(b.bloqueId)}
               className={`min-h-11 py-2 px-3.5 rounded-2xl border text-xs whitespace-nowrap transition-all duration-200 flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50 ${badgeStyle}`}
               title={
@@ -96,28 +96,18 @@ export function ChipsBloquesSemana({
                 <Clock className="h-3.5 w-3.5 shrink-0 opacity-60" />
               )}
               <span className="font-semibold">{b.titulo.split(':')[0]}</span>
-              {esCompletado && <span className="text-[11px] font-bold opacity-80">✓</span>}
               {esOmitido && (
                 <span className="text-[11px] font-bold opacity-90">{etiquetaOmision}</span>
               )}
-              {fechaVisible && (esCompletado || esOmitido) && (
+              {fechaVisible && (
                 <span className="text-[11px] font-medium opacity-70">{fechaVisible}</span>
               )}
-              {esActivo && <span className="text-[11px] font-mono uppercase tracking-wider ml-0.5">Hoy</span>}
-              {!esCompletado && !esOmitido && !esActivo && esSugerido && (
-                <span className="text-[11px] uppercase font-mono px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">
-                  Sugerido
-                </span>
+              {b.esSugeridoHoy && (
+                <span className="text-[11px] font-mono uppercase tracking-wider ml-0.5">Hoy</span>
               )}
             </button>
           );
         })}
-      </div>
-      <div
-        className="pointer-events-none absolute inset-y-0 right-0 flex w-10 items-center justify-end pr-0.5 bg-gradient-to-l from-card via-card/70 to-transparent sm:hidden"
-        aria-hidden="true"
-      >
-        <ChevronRight className="h-4 w-4 text-muted-foreground/70" />
       </div>
     </div>
   );

@@ -19,7 +19,7 @@ interface CampoMedidaCheckinProps {
 
 /** Clases base de los inputs de medida (foco y tipografía mono de datos, DESIGN.md). */
 export const CLASES_INPUT_MEDIDA =
-  'w-full px-3.5 py-2.5 rounded-2xl bg-background border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary';
+  'w-full min-h-11 px-3.5 py-2.5 rounded-2xl bg-background border text-sm font-mono text-foreground focus:outline-hidden focus:border-primary';
 
 export function CampoMedidaCheckin({
   id,
