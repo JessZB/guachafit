@@ -144,7 +144,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-24 ✅ `48a3d1e` | Menú y navegación del alumno: honesto y partido | Menú, BottomNav | MEN-01 a MEN-06, NAV-01 | `use-resumen-menu`, `TarjetaEntrenarHoy`, `TarjetaAccesoAlumno`, `ChipRacha`, `BadgeEstado`, `EstadoError`; `aria-label` en la barra | medio (el cuarto destino es aparte) | no | UX-02; ⛔ D5 solo para el cuarto destino |
 | UX-25 ✅ `3d90202` | Sesión de entrenamiento: táctil y chips | `/app/hoy` | ENT-04, 05, 07, 08, PRO-02 | `BotonTactil`, `BadgeEstado`, `CampoMedidaCheckin` | bajo | no | UX-02 |
 | UX-26 ✅ `70cfe33` | Cierre de sesión seguro | `ModalFinalizarSesion` | ENT-02, 03, 09(a,b), 10; ENT-09(c) | `DialogoConfirmacion`/`ModalCierreVacio`, `CtaFinalizarSesion` parametrizable | medio | no; ENT-09(c) toca el formato de `notas` | ⛔ D10 solo para (c) |
-| UX-27 | Progreso: carga y formulario | Progreso | PRO-01, 03, 05, 06, 07 | `EstadoCarga`, `AvisoErrorEvolucion`, `?vista=` en URL, aviso "Cambios sin guardar" | medio | no | UX-05 como referencia de patrón |
+| UX-27 ✅ `253b69d` | Progreso: carga y formulario | Progreso | PRO-01, 03, 05, 06, 07 | `EstadoCarga`, `AvisoErrorEvolucion`, `?vista=` en URL, aviso "Cambios sin guardar" | medio | no | UX-05 como referencia de patrón |
 | UX-28 | Check-in sin conexión | Progreso > Check-in | PRO-04 | `AvisoDatosOffline`, `use-frescura-offline` | alto si se encola (cola offline) | **sí** si se encola | ⛔ D9 |
 | UX-29 | Pulido del alumno: fechas, copy y zona horaria | Pagos, Ajustes alumno | ALU-11, 12, 13, 14, 15, 26 | `formatFechaLocal`, `horaDeZona` | bajo | no | UX-17 |
 
