@@ -143,7 +143,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-23 ✅ `6271cce` | Nutrición: ventana, calendario y campos | Nutrición | ALU-16, 17, 18, 19, 21 | `horaDeZona`, `HORA_INICIO_VENTANA_CHECKIN_NUTRICIONAL`, `rutaAjustes`, `validarCamposOpcionalesCheckin`, `pluralizar` | bajo-medio | no | UX-03 |
 | UX-24 ✅ `48a3d1e` | Menú y navegación del alumno: honesto y partido | Menú, BottomNav | MEN-01 a MEN-06, NAV-01 | `use-resumen-menu`, `TarjetaEntrenarHoy`, `TarjetaAccesoAlumno`, `ChipRacha`, `BadgeEstado`, `EstadoError`; `aria-label` en la barra | medio (el cuarto destino es aparte) | no | UX-02; ⛔ D5 solo para el cuarto destino |
 | UX-25 ✅ `3d90202` | Sesión de entrenamiento: táctil y chips | `/app/hoy` | ENT-04, 05, 07, 08, PRO-02 | `BotonTactil`, `BadgeEstado`, `CampoMedidaCheckin` | bajo | no | UX-02 |
-| UX-26 | Cierre de sesión seguro | `ModalFinalizarSesion` | ENT-02, 03, 09(a,b), 10; ENT-09(c) | `DialogoConfirmacion`/`ModalCierreVacio`, `CtaFinalizarSesion` parametrizable | medio | no; ENT-09(c) toca el formato de `notas` | ⛔ D10 solo para (c) |
+| UX-26 ✅ `70cfe33` | Cierre de sesión seguro | `ModalFinalizarSesion` | ENT-02, 03, 09(a,b), 10; ENT-09(c) | `DialogoConfirmacion`/`ModalCierreVacio`, `CtaFinalizarSesion` parametrizable | medio | no; ENT-09(c) toca el formato de `notas` | ⛔ D10 solo para (c) |
 | UX-27 | Progreso: carga y formulario | Progreso | PRO-01, 03, 05, 06, 07 | `EstadoCarga`, `AvisoErrorEvolucion`, `?vista=` en URL, aviso "Cambios sin guardar" | medio | no | UX-05 como referencia de patrón |
 | UX-28 | Check-in sin conexión | Progreso > Check-in | PRO-04 | `AvisoDatosOffline`, `use-frescura-offline` | alto si se encola (cola offline) | **sí** si se encola | ⛔ D9 |
 | UX-29 | Pulido del alumno: fechas, copy y zona horaria | Pagos, Ajustes alumno | ALU-11, 12, 13, 14, 15, 26 | `formatFechaLocal`, `horaDeZona` | bajo | no | UX-17 |
@@ -427,6 +427,34 @@ Proceso:
 - 4 revisiones en paralelo (`04-ux24-review-risk`, `05-ux24-review-resilience`, `06-ux24-review-readability`, `07-ux24-review-reliability`) y verificación independiente que no llegó a escribir su reporte por cuota agotada (la suite completa quedó verificada con el JSON de Vitest). Durante la implementación se autorizaron dos ajustes de specs: matcher plano en `NavegacionAlumno.ux24.interaccion.spec.tsx:93` y campos obligatorios del DTO en el mock de `AtletaMenuPage.ux24.interaccion.spec.tsx`.
 - 8 tests nuevos en 2 specs (`AtletaMenuPage.ux24.interaccion.spec.tsx` y `NavegacionAlumno.ux24.interaccion.spec.tsx`).
 - 3006 tests en 331 archivos y typecheck en verde.
+
+**UX-26 cerrado (`70cfe33`):**
+- `ModalFinalizarSesion.tsx` (`ENT-02`, `ENT-09a`, `ENT-09b`, `ENT-10`):
+  - `ENT-02`: Resumen honesto de series completadas y pendientes con `role="status"` ("Completaste todas las series (N de N)" o "Hiciste X de Y series. Las otras Z quedarán sin completar" / singular con 1).
+  - `ENT-09a`: Rejilla de esfuerzo (1 a 10) muestra solo números limpios, eliminando etiquetas inductoras dentro de los botones ("1 (Bajo)", "8 (Ideal)", "10 (Máximo)"); la leyenda orienta sin sesgos.
+  - `ENT-09b`: Esfuerzo arranca en `null` ("Sin seleccionar (opcional)"), sin forzar un 8 por defecto; si el alumno no selecciona esfuerzo, no se inventa `[RPE: ...]` en las notas enviadas.
+  - `ENT-10`: Botón de confirmación con `type="button"` y jerarquía `text-sm`; unificación de comentarios y textos a "entrenador".
+  - Componente pasa a 239 líneas (`<= 400`).
+- `CtaFinalizarSesion.tsx` (`ENT-03`, `ENT-06`):
+  - Añadida prop `variante?: 'hero' | 'final-lista'` para reutilización parametrizable.
+  - Variante `'final-lista'` renderiza botón accesible con `aria-label="Finalizar entrenamiento al final de la lista"` sin el reloj informativo superior.
+  - Añadida clase `motion-reduce:animate-none` al pulso del reloj.
+- `ListaCompletaEjercicios.tsx` (`ENT-03`):
+  - Acepta `onFinalizar?: () => void`. Si `enProgreso && onFinalizar`, renderiza `<CtaFinalizarSesion variante="final-lista" />` al pie de la lista para evitar desplazarse arriba tras la última serie. 65 líneas (`<= 400`).
+- `use-cierre-sesion.ts` (`ENT-09b`):
+  - `rpeSesion` inicializa en `null`. En `confirmFinishSession`, `[RPE: ${rpeSesion}/10]` solo se concatena si el usuario seleccionó un valor explícito. 213 líneas (`<= 400`).
+- `EntrenamientoPage.tsx` (`ENT-03`, `OBS-01`):
+  - Pasa `onFinalizar={handleOpenFinishModal}` a `ListaCompletaEjercicios`.
+  - Eliminado comentario legacy sobre scroll horizontal con degradado (OBS-01).
+  - Se mantiene en 262 líneas (`<= 300`).
+- `FormularioCheckinAntropometrico.tsx` (`ENT-10`):
+  - Unificadas menciones visibles "Revisión de tu coach" a "Revisión de tu entrenador".
+- `apps/web/vitest.config.ts`:
+  - Configurado `testTimeout: 15000` para proteger la ejecución en Windows frente a contención de CPU en suites completas con jsdom.
+
+Proceso:
+- Modo rápido aplicado: 14 tests nuevos en 4 specs (`ModalFinalizarSesion.ux26.interaccion.spec.tsx`, `CtaFinalizarSesion.ux26.interaccion.spec.tsx`, `ListaCompletaEjercicios.ux26.interaccion.spec.tsx`, `use-cierre-sesion.ux26.interaccion.spec.tsx`).
+- 3030 tests en 338 archivos, typecheck en verde.
 
 **UX-25 cerrado (`3d90202`):**
 - `ChipsBloquesSemana.tsx` (`ENT-04`, `ENT-05`): "Hoy" restringido al bloque sugerido de hoy (`b.esSugeridoHoy`), el bloque consultado (`bloqueActivoId`) recibe `aria-current="true"` y no dice "Hoy"; eliminación del `✓` duplicado en completados; `fechaVisible` visible para bloques pendientes en lugar de solo en `title`; contenedor con `role="group"`, `aria-label="Entrenamientos de la semana"` y envoltura flexible `flex-wrap gap-2` para pantallas táctiles sin scroll horizontal rígido; baja de 124 a 110 líneas.
