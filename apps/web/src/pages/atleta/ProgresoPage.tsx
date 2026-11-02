@@ -3,12 +3,13 @@
  *
  * Solo compone: lee la sesión, conecta los 3 hooks de datos
  * (`use-contexto-antropometrico`, `use-evolucion-progreso`,
- * `use-checkin-antropometrico`), la navegación `vistaActiva` y el visor de
- * foto. Sin JSX de detalle (R1): hub, formulario, historial y estados viven
- * en `components/atleta/progreso/`. R5: roles, labels y textos idénticos.
- * §6: se conserva vía los componentes extraídos.
+ * `use-checkin-antropometrico`), la navegación `vistaActiva` sincronizada con
+ * URL (`?vista=`, PRO-05) y el visor de foto. Sin JSX de detalle (R1): hub,
+ * formulario, historial y estados viven en `components/atleta/progreso/`.
+ * R5: roles, labels y textos idénticos. §6: se conserva vía los componentes.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { MemoryRouter, useInRouterContext, useSearchParams } from 'react-router-dom';
 import { Scale } from 'lucide-react';
 import { useAuth } from '../../context/auth-context';
 import { resolverUrlApi } from '../../lib/api-client';
@@ -18,10 +19,8 @@ import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import { GraficoEvolucion } from '../../components/common/GraficoEvolucion';
 import { VisorFoto } from '../../components/common/VisorFoto';
 import { EstadoCarga } from '../../components/ui/EstadoCarga';
-import type {
-  EvolucionCorporalDTO,
-  FotoAntropometriaDetalleDTO,
-} from '@guachafit/shared';
+import { DialogoConfirmacion } from '../../components/common/DialogoConfirmacion';
+import type { EvolucionCorporalDTO, FotoAntropometriaDetalleDTO } from '@guachafit/shared';
 import type { EscenarioDemoAntropometria } from '../../lib/demo-antropometria';
 import { useContextoAntropometrico } from '../../components/atleta/progreso/use-contexto-antropometrico';
 import { useEvolucionProgreso } from '../../components/atleta/progreso/use-evolucion-progreso';
@@ -37,38 +36,56 @@ import { EstadoVacioProgreso } from '../../components/atleta/progreso/EstadoVaci
 import { HistorialEvaluacionesProgreso } from '../../components/atleta/progreso/HistorialEvaluacionesProgreso';
 
 export function ProgresoPage() {
+  const enRouter = useInRouterContext();
+  return !enRouter ? (
+    <MemoryRouter>
+      <ProgresoPageContenido />
+    </MemoryRouter>
+  ) : (
+    <ProgresoPageContenido />
+  );
+}
+
+function ProgresoPageContenido() {
   const { user, isDemoMode } = useAuth();
 
-  // Progressive Disclosure: 'hub' (selector) | 'nuevo' | 'evolucion'
-  const [vistaActiva, setVistaActiva] = useState<'hub' | 'nuevo' | 'evolucion'>('hub');
+  // PRO-05: Sincronizado bidireccionalmente con searchParams y estado local inmediato
+  const [searchParams, setSearchParams] = useSearchParams();
+  const vistaParam = searchParams.get('vista');
+  const [vistaActiva, setVistaActivaLocal] = useState<'hub' | 'nuevo' | 'evolucion'>(() =>
+    vistaParam === 'nuevo' || vistaParam === 'evolucion' ? vistaParam : 'hub'
+  );
+
+  useEffect(() => {
+    const derivado: 'hub' | 'nuevo' | 'evolucion' =
+      vistaParam === 'nuevo' || vistaParam === 'evolucion' ? vistaParam : 'hub';
+    setVistaActivaLocal(derivado);
+  }, [vistaParam]);
+
+  const setVistaActiva = (nuevaVista: 'hub' | 'nuevo' | 'evolucion', opciones?: { replace?: boolean }) => {
+    setVistaActivaLocal(nuevaVista);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (nuevaVista === 'hub') next.delete('vista'); else next.set('vista', nuevaVista);
+      return next;
+    }, { replace: opciones?.replace ?? false });
+  };
+
   // RF-012: alumno pausado no puede enviar el check-in remoto; el panel informativo lo declara.
   const [bloqueo, setBloqueo] = useState<BloqueoAlumno | null>(null);
   // RF-004: visor accesible de una foto de progreso (Escape y trampa de foco en `VisorFoto`).
-  const [fotoVisor, setFotoVisor] = useState<{
-    foto: FotoAntropometriaDetalleDTO;
-    fecha: string;
-  } | null>(null);
+  const [fotoVisor, setFotoVisor] = useState<{ foto: FotoAntropometriaDetalleDTO; fecha: string } | null>(null);
+  // PRO-05: diálogo accesible ante cambios sin guardar al salir del formulario
+  const [mostrarDialogoDescarte, setMostrarDialogoDescarte] = useState(false);
 
   // U4: URL del GET de evolución, para datar la copia cacheada cuando no hay conexión.
   const urlEvolucion = user?.id ? resolverUrlApi(`/antropometria/evolucion/${user.id}`) : null;
 
-  const {
-    esSoloLectura,
-    estadoVentana,
-    motivoRegistroBloqueado,
-    escenarioDemo,
-    setEscenarioDemo,
-  } = useContextoAntropometrico(user, isDemoMode);
+  const { esSoloLectura, estadoVentana, motivoRegistroBloqueado, escenarioDemo, setEscenarioDemo } =
+    useContextoAntropometrico(user, isDemoMode);
 
-  const {
-    evolucion,
-    setEvolucion,
-    isLoading,
-    error,
-    fotosConError,
-    setFotosConError,
-    cargarEvolucion,
-  } = useEvolucionProgreso(user, isDemoMode);
+  const { evolucion, setEvolucion, isLoading, error, fotosConError, setFotosConError, cargarEvolucion } =
+    useEvolucionProgreso(user, isDemoMode);
 
   const checkin = useCheckinAntropometrico({
     user,
@@ -79,8 +96,21 @@ export function ProgresoPage() {
     onAbrirFormulario: () => setVistaActiva('nuevo'),
     onEvolucionActualizada: (actualizada: EvolucionCorporalDTO) => setEvolucion(actualizada),
     onBloqueo: (detectado: BloqueoAlumno) => setBloqueo(detectado),
-    onCheckinExitoso: () => setVistaActiva('evolucion'),
+    onCheckinExitoso: () => setVistaActiva('evolucion', { replace: true }),
   });
+
+  const hayCambiosSinGuardar =
+    vistaActiva === 'nuevo' &&
+    ((checkin.medidas && Object.values(checkin.medidas).some((v) => typeof v === 'string' && v.trim() !== '')) ||
+      Boolean(checkin.fotosCheckin?.fotos && checkin.fotosCheckin.fotos.length > 0));
+
+  const handleVolverFormulario = () => {
+    if (hayCambiosSinGuardar) {
+      setMostrarDialogoDescarte(true);
+      return;
+    }
+    setVistaActiva('hub');
+  };
 
   /** Miniatura con enlace temporal fallido: se rotula "Sin imagen" (sin duplicar el id). */
   const marcarFotoConError = (fotoId: string) => {
@@ -94,7 +124,8 @@ export function ProgresoPage() {
     checkin.reiniciarEstadoEnvio();
   };
 
-  if (isLoading) {
+  // PRO-01: solo bloquear con spinner de pantalla completa en primera carga sin datos
+  if (isLoading && !evolucion) {
     return <EstadoCarga />;
   }
 
@@ -171,7 +202,7 @@ export function ProgresoPage() {
         <div className="space-y-5 animate-in fade-in duration-150">
           <EncabezadoSeccionProgreso
             variante="formulario"
-            onVolver={() => setVistaActiva('hub')}
+            onVolver={handleVolverFormulario}
           />
 
           {esSoloLectura || checkin.accesoPresencialServidor ? (
@@ -238,6 +269,24 @@ export function ProgresoPage() {
           foto={fotoVisor.foto}
           fecha={fotoVisor.fecha}
           onCerrar={() => setFotoVisor(null)}
+        />
+      )}
+
+      {/* PRO-05 / T11: diálogo accesible de descarte ante cambios sin guardar */}
+      {mostrarDialogoDescarte && (
+        <DialogoConfirmacion
+          abierto={mostrarDialogoDescarte}
+          idTitulo="dialogo-descartar-cambios-titulo"
+          titulo="¿Descartar cambios sin guardar?"
+          detalle="Tienes datos ingresados en el formulario de check-in. Si sales ahora, se perderán."
+          textoConfirmar="Descartar y salir"
+          textoCancelar="Continuar editando"
+          variante="peligro"
+          onConfirmar={() => {
+            setMostrarDialogoDescarte(false);
+            setVistaActiva('hub');
+          }}
+          onCancelar={() => setMostrarDialogoDescarte(false)}
         />
       )}
     </div>

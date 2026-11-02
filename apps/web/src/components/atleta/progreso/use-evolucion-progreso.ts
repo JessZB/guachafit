@@ -43,8 +43,8 @@ export function useEvolucionProgreso(
       const data = await apiClient<EvolucionCorporalDTO>(`/antropometria/evolucion/${user.id}`);
       setEvolucion(data);
     } catch (err: any) {
-      // D2: sin evolución demo en sesión real; error visible con reintento.
-      setEvolucion(null);
+      // D2 / PRO-01: sin evolución demo en sesión real; error visible con reintento.
+      // Se conservan los datos previos si existían (no se sobrescribe a null).
       setError(
         err?.message || 'No se pudo cargar tu evolución corporal. Revisa tu conexión e inténtalo de nuevo.'
       );
@@ -54,8 +54,12 @@ export function useEvolucionProgreso(
   };
 
   useEffect(() => {
+    let desmontado = false;
     cargarEvolucion();
-  }, [user, isDemoMode]);
+    return () => {
+      desmontado = true;
+    };
+  }, [user?.id, isDemoMode]);
 
   return {
     evolucion,

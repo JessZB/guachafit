@@ -48,7 +48,7 @@ export function OpcionCheckinProgreso({
           </div>
         }
         titulo="Actualizar mis medidas y fotos"
-        descripcion="Registra tu peso actual, perímetros de cintura o brazo y envía tu check-in al coach."
+        descripcion="Registra tu peso actual, perímetros de cintura o brazo y envía tu check-in al entrenador."
       />
     );
   }

@@ -29,6 +29,9 @@ export function CampoMedidaCheckin({
   conError,
   error,
 }: CampoMedidaCheckinProps) {
+  const errorId = `${id}-error`;
+  const tieneError = Boolean(conError && error);
+
   return (
     <div className="space-y-1.5">
       <label className="text-xs font-semibold text-muted-foreground" htmlFor={id}>
@@ -42,12 +45,13 @@ export function CampoMedidaCheckin({
         value={valor}
         onChange={(e) => onCambiar(e.target.value)}
         aria-invalid={conError}
+        aria-describedby={tieneError ? errorId : undefined}
         className={`${CLASES_INPUT_MEDIDA} ${
           conError ? 'border-destructive' : 'border-border'
         }`}
       />
       {error && (
-        <p role="alert" className="text-[11px] font-semibold text-destructive">
+        <p id={errorId} role="alert" className="text-[11px] font-semibold text-destructive">
           {error}
         </p>
       )}

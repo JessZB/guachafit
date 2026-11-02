@@ -41,7 +41,7 @@ export function SeccionPlieguesCheckin({
           Pliegues cutáneos (mm) — opcional
         </span>
         <span className="text-[11px] text-muted-foreground">
-          Si tu coach te los mide, regístralos junto al % de grasa estimado.
+          Si tu entrenador te los mide, regístralos junto al % de grasa estimado.
         </span>
       </div>
       <div className="grid grid-cols-2 gap-3">

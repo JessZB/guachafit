@@ -52,7 +52,7 @@ export function TarjetaEvaluacionAntropometrica({
             Peso
           </span>
           <p className="font-mono font-bold text-sm text-foreground">
-            {item.pesoKg} kg
+            {!isNaN(Number(item.pesoKg)) && item.pesoKg !== '' ? `${Number(item.pesoKg).toFixed(1)} kg` : `${item.pesoKg} kg`}
           </p>
         </div>
         <div className="p-2.5 rounded-xl bg-secondary/30">
@@ -60,7 +60,9 @@ export function TarjetaEvaluacionAntropometrica({
             % Grasa
           </span>
           <p className="font-mono font-bold text-sm text-foreground">
-            {item.porcentajeGrasa ? `${item.porcentajeGrasa}%` : '—'}
+            {item.porcentajeGrasa !== null && item.porcentajeGrasa !== undefined
+              ? `${item.porcentajeGrasa}%`
+              : '—'}
           </p>
         </div>
         <div className="p-2.5 rounded-xl bg-secondary/30">

@@ -25,7 +25,9 @@ export function TarjetaResumenEvolucion({ evolucion }: TarjetaResumenEvolucionPr
             Cambio de Peso
           </span>
           <p className="text-xl font-bold font-mono text-success mt-0.5">
-            {evolucion.cambioNetoPesoKg} kg
+            {evolucion.cambioNetoPesoKg != null && !isNaN(Number(evolucion.cambioNetoPesoKg))
+              ? `${Number(evolucion.cambioNetoPesoKg) > 0 ? '+' : ''}${Number(evolucion.cambioNetoPesoKg).toFixed(1)}`
+              : (evolucion.cambioNetoPesoKg ?? '0')} kg
           </p>
         </div>
         <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border">
@@ -33,7 +35,9 @@ export function TarjetaResumenEvolucion({ evolucion }: TarjetaResumenEvolucionPr
             Grasa Corporal
           </span>
           <p className="text-xl font-bold font-mono text-success mt-0.5">
-            {evolucion.cambioNetoGrasaPorcentaje}%
+            {evolucion.cambioNetoGrasaPorcentaje !== null && evolucion.cambioNetoGrasaPorcentaje !== undefined
+              ? `${evolucion.cambioNetoGrasaPorcentaje}%`
+              : '—'}
           </p>
         </div>
         <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border col-span-2 sm:col-span-1">
