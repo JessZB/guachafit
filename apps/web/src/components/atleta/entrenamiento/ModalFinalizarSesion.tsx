@@ -8,7 +8,7 @@ import { triggerHaptic } from '../../../lib/haptics';
 
 export interface ModalFinalizarSesionProps {
   sesion: SesionEntrenamientoDetalleDTO;
-  rpeSesion: number;
+  rpeSesion: number | null;
   onRpeChange: (valor: number) => void;
   molestia: string;
   onMolestiaChange: (zona: string) => void;
@@ -20,7 +20,7 @@ export interface ModalFinalizarSesionProps {
   dialogRef: RefObject<HTMLDivElement | null>;
 }
 
-/** Modal de finalización y feedback al coach (ÚNICO: RPE 1–10 + molestias + notas). */
+/** Modal de finalización y feedback al entrenador (ÚNICO: RPE 1–10 + molestias + notas). */
 export function ModalFinalizarSesion({
   sesion,
   rpeSesion,
@@ -35,6 +35,16 @@ export function ModalFinalizarSesion({
   dialogRef,
 }: ModalFinalizarSesionProps) {
   const resumenDescansos = resumirDescansos(sesion.ejercicios);
+
+  const totalSeries = sesion.ejercicios.reduce(
+    (acc, ej) => acc + ej.series.length,
+    0
+  );
+  const seriesCompletadas = sesion.ejercicios.reduce(
+    (acc, ej) => acc + ej.series.filter((s) => s.completada).length,
+    0
+  );
+  const seriesPendientes = Math.max(0, totalSeries - seriesCompletadas);
 
   return (
     <div
@@ -74,15 +84,40 @@ export function ModalFinalizarSesion({
           </button>
         </div>
 
+        {/* Resumen honesto de series (ENT-02) */}
+        <div
+          role="status"
+          className={`p-3 rounded-2xl border text-xs flex items-center justify-between gap-2 ${
+            seriesPendientes === 0
+              ? 'bg-success/10 border-success/30 text-success'
+              : 'bg-warning/10 border-warning/30 text-warning-foreground'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>
+              {seriesPendientes === 0
+                ? `Completaste todas las series (${totalSeries} de ${totalSeries}).`
+                : seriesPendientes === 1
+                ? `Hiciste ${seriesCompletadas} de ${totalSeries} series. 1 serie quedará sin completar.`
+                : `Hiciste ${seriesCompletadas} de ${totalSeries} series. Las otras ${seriesPendientes} quedarán sin completar.`}
+            </span>
+          </div>
+        </div>
+
         {/* Esfuerzo global de la sesión (escala completa 1-10) */}
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
             <span id="finalizar-esfuerzo-titulo" className="text-xs font-bold text-foreground">
               ¿Qué tan duro fue? (1 a 10)
             </span>
-            <span className="text-primary font-mono font-bold text-sm text-right">
-              {rpeSesion} / 10 · <span className="text-xs font-semibold text-muted-foreground">{describirEsfuerzo(rpeSesion)}</span>
-            </span>
+            {rpeSesion !== null ? (
+              <span className="text-primary font-mono font-bold text-sm text-right">
+                {rpeSesion} / 10 · <span className="text-xs font-semibold text-muted-foreground">{describirEsfuerzo(rpeSesion)}</span>
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground font-medium">Sin seleccionar (opcional)</span>
+            )}
           </div>
           <div
             role="group"
@@ -94,6 +129,7 @@ export function ModalFinalizarSesion({
                 key={val}
                 type="button"
                 aria-pressed={rpeSesion === val}
+                aria-label={`Esfuerzo ${val} de 10: ${describirEsfuerzo(val)}`}
                 onClick={() => {
                   triggerHaptic('light');
                   onRpeChange(val);
@@ -104,7 +140,7 @@ export function ModalFinalizarSesion({
                     : 'bg-secondary/60 text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {val === 1 ? '1 (Bajo)' : val === 8 ? '8 (Ideal)' : val === 10 ? '10 (Máximo)' : val}
+                {val}
               </button>
             ))}
           </div>
@@ -147,7 +183,7 @@ export function ModalFinalizarSesion({
           </div>
         </div>
 
-        {/* Notas para el coach */}
+        {/* Notas para tu entrenador */}
         <div className="space-y-1.5">
           <label
             htmlFor="finalizar-notas-entrenador"
@@ -199,9 +235,10 @@ export function ModalFinalizarSesion({
 
         {/* Botón de Enviar */}
         <button
+          type="button"
           onClick={onConfirm}
           disabled={isFinishing}
-          className="w-full min-h-11 py-3 px-4 rounded-2xl bg-primary hover:brightness-110 text-primary-foreground font-bold text-xs tracking-wide shadow-md shadow-primary/25 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          className="w-full min-h-11 py-3 px-4 rounded-2xl bg-primary hover:brightness-110 text-primary-foreground font-bold text-sm tracking-wide shadow-md shadow-primary/25 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
         >
           <CheckCircle2 className="h-4 w-4" />
           <span>{isFinishing ? 'Guardando entrenamiento...' : 'Guardar y enviar a mi entrenador'}</span>

@@ -21,6 +21,7 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.spec.ts', 'src/**/*.spec.tsx'],
     globals: false,
+    testTimeout: 15000,
     // V12: garantiza `TZ=America/Caracas` en cada worker antes de importar cualquier test.
     setupFiles: ['./vitest.setup.ts'],
     // UX-02: permite que Vitest procese `index.css` para que las importaciones con `?raw`

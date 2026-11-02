@@ -111,7 +111,6 @@ export function EntrenamientoPage() {
           <BarraProgresoSemanal semanaProgreso={semanaProgreso} />
 
           {/* Chips de Bloques de la Semana */}
-          {/* Móvil: scroll horizontal con degradado + chevron que insinúan que se puede deslizar */}
           <ChipsBloquesSemana
             semanaProgreso={semanaProgreso}
             bloqueActivoId={sesion?.bloqueId}
@@ -226,10 +225,11 @@ export function EntrenamientoPage() {
           onHacerAhora={handleHacerAhora}
           onVerTecnica={handleAbrirVideo}
           renderSerie={renderFilaSerie}
+          onFinalizar={handleOpenFinishModal}
         />
       )}
 
-      {/* Modal de Finalización y Feedback al Coach */}
+      {/* Modal de Finalización y Feedback al Entrenador */}
       {isFinishModalOpen && (
         <ModalFinalizarSesion
           sesion={sesion}

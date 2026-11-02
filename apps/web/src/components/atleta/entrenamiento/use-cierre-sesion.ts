@@ -57,9 +57,9 @@ export function useCierreSesion(opciones: OpcionesCierre) {
     enviarOEncolar,
   } = opciones;
 
-  // Modal de Finalización y Feedback al Coach
+  // Modal de Finalización y Feedback al Entrenador
   const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
-  const [rpeSesion, setRpeSesion] = useState(8);
+  const [rpeSesion, setRpeSesion] = useState<number | null>(null);
   const [molestia, setMolestia] = useState('Ninguna 👍');
   const [notasCoachInput, setNotasCoachInput] = useState('');
   const [isFinishing, setIsFinishing] = useState(false);
@@ -107,7 +107,7 @@ export function useCierreSesion(opciones: OpcionesCierre) {
     const descansoTag = resumen ? construirEtiquetaDescanso(resumen) : null;
 
     const notasCompletas = [
-      `[RPE: ${rpeSesion}/10]`,
+      rpeSesion !== null ? `[RPE: ${rpeSesion}/10]` : null,
       molestia !== 'Ninguna 👍' ? `[Molestia: ${molestia}]` : null,
       descansoTag,
       notasCoachInput.trim() ? notasCoachInput.trim() : null,

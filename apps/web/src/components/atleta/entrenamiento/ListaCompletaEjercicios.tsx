@@ -6,6 +6,7 @@ import type {
 import type { UnidadPeso } from '../../../lib/weight-unit';
 import { resolverRpeSugerido } from '../../../lib/entrenamiento-textos';
 import { TarjetaEjercicioSesion } from './TarjetaEjercicioSesion';
+import { CtaFinalizarSesion } from './CtaFinalizarSesion';
 
 export interface ListaCompletaEjerciciosProps {
   sesion: SesionEntrenamientoDetalleDTO;
@@ -17,9 +18,10 @@ export interface ListaCompletaEjerciciosProps {
   onHacerAhora: (ejercicioIndex: number) => void;
   onVerTecnica: (ejercicioSesion: EjercicioSesionDetalleDTO) => void;
   renderSerie: (ejercicioIndex: number, serieIndex: number) => ReactNode;
+  onFinalizar?: () => void;
 }
 
-/** Lista completa de ejercicios con sus tarjetas (ÚNICO: solo esta vista). */
+/** Lista completa de ejercicios con sus tarjetas y CTA de finalización al final. */
 export function ListaCompletaEjercicios({
   sesion,
   enProgreso,
@@ -30,6 +32,7 @@ export function ListaCompletaEjercicios({
   onHacerAhora,
   onVerTecnica,
   renderSerie,
+  onFinalizar,
 }: ListaCompletaEjerciciosProps) {
   return (
     <div className="space-y-4">
@@ -56,6 +59,9 @@ export function ListaCompletaEjercicios({
           renderSerie={renderSerie}
         />
       ))}
+      {enProgreso && onFinalizar && (
+        <CtaFinalizarSesion onAbrir={onFinalizar} variante="final-lista" />
+      )}
     </div>
   );
 }
