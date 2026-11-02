@@ -200,6 +200,12 @@ Then ve "El enlace no es válido o venció. Pide uno nuevo desde Ajustes."
 - "Nuevo plan comercial" pasa de la cabecera al panel de Planes, junto al contador. El subtítulo del entrenador es "Tu cuenta y tu negocio.". Avisos ya no tiene una tarjeta doble. El entrenador usa un ancho amplio (`max-w-5xl`) para la rejilla de Tasas.
 - Evidencia: web **2836 tests en 310 archivos**; typecheck y build en verde. Revisión de fiabilidad sin BLOCKER. Su WARNING (nombre accesible distinto del visible) se corrigió y se validó.
 
+### Pulido de Zona Horaria en Ajustes del Alumno (`0ebda43`, 2026-11-02, lote UX-29)
+- **ALU-26:**
+  - `SelectorZonaHoraria.tsx`: despliega la hora local actual calculada para la zona seleccionada (`textoHoraActualEnZona(valor)`) con formato en lenguaje natural `"Ahora son las HH:mm en hora de <Ciudad>"` con clase `text-xs text-muted-foreground mt-1` (respetando el piso tipográfico WCAG de 12px).
+  - `AjustesAlumnoPage.tsx`: eliminada la cabecera `<h2>Tu zona horaria</h2>` duplicada frente al nombre de pestaña "Zona horaria", manteniendo `aria-label="Zona horaria"` en la tarjeta para preservar accesibilidad semántica.
+- **Evidencia:** `apps/web/src/lib/zona-horaria.ux29.spec.ts` (4 tests); web **3057 tests en 344 archivos (1127 suites)**; typecheck y build en verde.
+
 ### Pendiente
 - En `/admin`, la página del superadministrador conserva su propio botón "Cerrar sesión" y su diálogo de pendientes, además de los del menú "Cuenta" (preexistente, `CabeceraAdmin.tsx` y `AdminPage.tsx`). Retirarlos exige ajustar `AdminPage.caracterizacion.interaccion.spec.tsx:297`.
 - En Notificaciones, Zona horaria, Planes y Tasas, si se cambia de pestaña con un guardado en vuelo el resultado no se muestra al volver (esas pestañas se desmontan).

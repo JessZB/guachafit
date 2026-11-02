@@ -146,7 +146,7 @@ Orden: fundaciones transversales (UX-01 a UX-04), luego Entrenador, luego Alumno
 | UX-26 ✅ `70cfe33` | Cierre de sesión seguro | `ModalFinalizarSesion` | ENT-02, 03, 09(a,b), 10; ENT-09(c) | `DialogoConfirmacion`/`ModalCierreVacio`, `CtaFinalizarSesion` parametrizable | medio | no; ENT-09(c) toca el formato de `notas` | ⛔ D10 solo para (c) |
 | UX-27 ✅ `253b69d` | Progreso: carga y formulario | Progreso | PRO-01, 03, 05, 06, 07 | `EstadoCarga`, `AvisoErrorEvolucion`, `?vista=` en URL, aviso "Cambios sin guardar" | medio | no | UX-05 como referencia de patrón |
 | UX-28 | ✅ `9c8c039` | Check-in sin conexión | Progreso > Check-in | PRO-04 | `AvisoDatosOffline` con `isOnline`, `use-frescura-offline`, guarda síncrona en `useCheckinAntropometrico` | bajo (D9: avisar y bloquear) | no | UX-27; ✅ D9 |
-| UX-29 | Pulido del alumno: fechas, copy y zona horaria | Pagos, Ajustes alumno | ALU-11, 12, 13, 14, 15, 26 | `formatFechaLocal`, `horaDeZona` | bajo | no | UX-17 |
+| UX-29 | ✅ `0ebda43` | Pulido del alumno: fechas, copy y zona horaria | Pagos, Ajustes alumno | ALU-11, 12, 13, 14, 15, 26 | `formatFechaLocal`, `horaDeZona`, `textoHoraActualEnZona`, `flex-wrap`, unificación a entrenador y Bs. | bajo | no | UX-17 |
 
 Cobertura: los hallazgos BAJA no listados se resuelven con el lote de su área al pasar por el archivo.
 
@@ -427,6 +427,24 @@ Proceso:
 - 4 revisiones en paralelo (`04-ux24-review-risk`, `05-ux24-review-resilience`, `06-ux24-review-readability`, `07-ux24-review-reliability`) y verificación independiente que no llegó a escribir su reporte por cuota agotada (la suite completa quedó verificada con el JSON de Vitest). Durante la implementación se autorizaron dos ajustes de specs: matcher plano en `NavegacionAlumno.ux24.interaccion.spec.tsx:93` y campos obligatorios del DTO en el mock de `AtletaMenuPage.ux24.interaccion.spec.tsx`.
 - 8 tests nuevos en 2 specs (`AtletaMenuPage.ux24.interaccion.spec.tsx` y `NavegacionAlumno.ux24.interaccion.spec.tsx`).
 - 3006 tests en 331 archivos y typecheck en verde.
+
+**UX-29 cerrado (`0ebda43`):**
+- **Pagos del alumno (`ALU-11` a `ALU-15`):**
+  - `TarjetaResumenCuota.tsx` (`ALU-12`, `ALU-15`): `fechaCorteUtc` formateada con `formatFechaLocal` y fallback `'—'`; contenedor de saldo y total cuota con `flex-wrap gap-3` para pantallas estrechas; conserva `"Saldo Pendiente"`. 89 líneas (`<= 400`).
+  - `FilaTransaccionPago.tsx` (`ALU-11`, `ALU-13`, `ALU-14`): referencia bancaria con `min-w-0 break-words`; método de pago sin CSS `capitalize`; fallback seguro `'—'` en fecha de operación; unificación a `"Motivo del entrenador: "` y botón `"Ver comprobante"`. 122 líneas (`<= 400`).
+  - `CabeceraPagos.tsx` (`ALU-11`): título `"Pagos y cuotas"`, ceja `"Pagos"`, `"Tasa del día"` y tasa `"1 USD = ${tasaEfectiva} Bs."` (erradicando "VES"). 48 líneas (`<= 400`).
+  - `FormularioReportePago.tsx`, `ModalComprobantePago.tsx`, `SubidaComprobantePago.tsx`, `PagosPage.tsx` (`ALU-11`): `"Monto en USD acreditado a tu cuota:"` (eliminando "Contravalor"), `"Enviando al entrenador..."`, `"Almacenamiento seguro"` (sin mención a "Cloudflare R2"), `"Captura del comprobante"` y `"Tu entrenador aún no ha emitido una cuota..."`.
+- **Ajustes y Zona Horaria (`ALU-26`):**
+  - `lib/zona-horaria.ts`: exportada función pura `textoHoraActualEnZona(zona, fecha)`. 119 líneas.
+  - `SelectorZonaHoraria.tsx`: muestra `"Ahora son las HH:mm en hora de <Ciudad>"` con clase `text-xs text-muted-foreground mt-1` (respetando piso WCAG de 12px). 79 líneas (`<= 400`).
+  - `AjustesAlumnoPage.tsx`: removido `<h2>Tu zona horaria</h2>` redundante, manteniendo `aria-label="Zona horaria"`. 72 líneas (`<= 300`).
+- **Seguimientos:**
+  - SUGGESTION (`ModalComprobantePago.tsx:108`): actualizar el texto preexistente de fallback que aún menciona `"... almacenamiento R2 no configurado"`.
+- **Proceso:**
+  - 13 tests nuevos en 2 specs (`PagosPage.ux29.pulido.spec.tsx` y `zona-horaria.ux29.spec.ts`).
+  - Subagente escritor (`1360f679-9c37-4305-82d7-017833046e6e`, Gemini 3.8 Flash high) aplicó los cambios y resolvió en verde.
+  - Verificación independiente (`UX-29 Verifier`, Gemini 3.8 Flash medium): 3057 tests pasados en 344 archivos (1127 suites), typecheck y build en verde.
+  - Revisión de legibilidad (`review-readability`, Gemini 3.8 Flash high): APROBADA (0 blockers, 0 warnings de producción).
 
 **UX-28 cerrado (`9c8c039`):**
 - `AvisoDatosOffline.tsx`: añadida la prop opcional `isOnline?: boolean` a `AvisoDatosOfflineProps`; si se provee, tiene precedencia sobre `useFrescuraOffline` sin romper retrocompatibilidad con los consumidores existentes (`ContenidoConPerfil`, `ProgresoPage`, `PantallaAjustes`, etc.); 88 líneas (`<= 400`).

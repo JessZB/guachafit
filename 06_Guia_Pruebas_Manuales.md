@@ -146,6 +146,12 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - Si se intenta disparar el submit sin red, la guarda síncrona detiene el envío y presenta el error "Conéctate a internet para enviar tu evaluación." sin invocar a la API ni encolar datos offline (decisión D9).
   - Al recuperar la conexión a internet, el aviso offline desaparece y el botón de envío se habilita nuevamente sin necesidad de recargar la página.
   - En modo demo (`isDemoMode: true`), el simulador local permite enviar la evaluación sin bloquearse por la falta de red.
+- [ ] **Pulido del alumno: fechas, copy y zona horaria (desde 2026-11-02, UX-29, `0ebda43`):** en `/app/pagos` y `/app/ajustes?tab=zona-horaria` como alumno.
+  - En la vista de pagos (`/app/pagos`), la fecha de corte de la cuota vigente se muestra en formato local legible usando el formateador canónico; si no existe fecha o es inválida, se presenta "—" sin errores de "Invalid Date".
+  - En el historial de pagos, cualquier transacción cuya fecha de operación no pueda formatearse exhibe un fallback seguro "—" en lugar del valor crudo de base de datos.
+  - La fila de transacción previene desbordes en pantallas móviles estrechas (360px): la referencia bancaria ajusta con salto de línea (`break-words`/`min-w-0`), la tarjeta de cuota incluye `flex-wrap gap-3` entre el saldo y el total, y el método de pago no fuerza mayúsculas artificiales con `capitalize`.
+  - Se erradica toda jerga interna en pagos: "Pagos y cuotas" en la cabecera, tasa expresada en "Bs." (no "VES"), "Motivo del entrenador" (no "Coach"), "Ver comprobante", "Monto en USD acreditado a tu cuota" (no "Contravalor") y "Almacenamiento seguro" (sin mención técnica a Cloudflare R2).
+  - En `/app/ajustes?tab=zona-horaria`, el selector de zona horaria indica la hora local actual ("Ahora son las HH:mm en hora de <Ciudad>") con tipografía accesible (≥12px) y la tarjeta elimina la cabecera "Tu zona horaria" duplicada frente al nombre de pestaña.
 - [ ] **Cierre de sesión seguro y controles accesibles (desde 2026-11-01, UX-26, `70cfe33`):** en `/app/hoy` (entrenamiento) como alumno.
   - Al abrir el modal de finalización habiendo completado todas las series, el resumen superior anuncia claramente **"Completaste todas las series (N de N)"** con estado visual verde.
   - Si finalizas con series pendientes, el modal muestra con honestidad cuántas hiciste y cuántas quedan (p. ej. *"Hiciste 3 de 8 series. Las otras 5 quedarán sin completar"* o *"1 serie quedará sin completar"*).

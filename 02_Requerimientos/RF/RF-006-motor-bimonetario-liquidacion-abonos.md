@@ -146,6 +146,20 @@ Then el saldo pendiente del cliente en USD debe permanecer inalterado en $25.00 
   - Desacoplamiento de la calculadora: `ConversorTasas` opera contra la tasa efectivamente guardada (no el borrador en edición) y se oculta si no hay tasa configurada o si su valor es 0.
 - **Evidencia:** web **2908 tests en 316 archivos**; typecheck y build en verde. Revisión 4R (toca dinero: riesgo, fiabilidad, resiliencia, legibilidad) sin BLOCKER; se corrigieron 4 observaciones (paralelo elegido vacío, guarda ante tasa guardada 0, manejo defensivo de respuesta null del API y limpieza de error obsoleto al editar).
 
+### Pulido de la vista de pagos del alumno (`0ebda43`, 2026-11-02, lote UX-29)
+- **Fechas y formatos locales:**
+  - `TarjetaResumenCuota.tsx` (`ALU-12`): adopta el formateador canónico `formatFechaLocal(cuota.fechaCorteUtc)` con fallback seguro `'—'`, eliminando la llamada manual dependiente del locale `toLocaleDateString('es-ES')`.
+  - `FilaTransaccionPago.tsx` (`ALU-13`): muestra `'—'` cuando `tx.fechaOperacion` no puede formatearse con `formatFechaCalendario`, eliminando el fallback crudo del string no procesado.
+- **Copy, jerga y unificación de términos:**
+  - `CabeceraPagos.tsx` (`ALU-11`): título en sentence case "Pagos y cuotas", ceja "Pagos", "Tasa del día", y tasa expresada en "Bs." (`1 USD = ${tasa} Bs.`), erradicando el código ISO "VES".
+  - `FilaTransaccionPago.tsx` (`ALU-11`): unificación a "Motivo del entrenador: " (eliminando "Coach") y botón accesible "Ver comprobante".
+  - `FormularioReportePago.tsx` y `ModalComprobantePago.tsx`: "Monto en USD acreditado a tu cuota:" (erradicando "Contravalor"), "Enviando al entrenador..." y "Almacenamiento seguro" (eliminando la referencia técnica a "Cloudflare R2").
+  - `PagosPage.tsx`: estado vacío unificado a "Tu entrenador aún no ha emitido una cuota...".
+- **Resiliencia de layout en móviles:**
+  - `TarjetaResumenCuota.tsx` (`ALU-15`): el contenedor de saldo pendiente y total cuota incluye `flex-wrap gap-3` para evitar recortes a 360px ante cifras grandes.
+  - `FilaTransaccionPago.tsx` (`ALU-14`): referencia bancaria protegida con `min-w-0 break-words`, y método de pago sin CSS `capitalize`.
+- **Evidencia:** `apps/web/src/pages/atleta/PagosPage.ux29.pulido.spec.tsx` (9 tests); web **3057 tests en 344 archivos (1127 suites)**; typecheck y build en verde. Revisión de legibilidad (`review-readability`) APROBADA.
+
 ### Pendiente
 - La demo de Conciliación llama al API al aprobar (existía antes; el PATCH se emite antes de la rama demo).
 - Conversión con punto flotante en la proyección a Bs (ver arriba).
