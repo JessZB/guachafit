@@ -31,6 +31,11 @@ export interface AvisoDatosOfflineProps {
    */
   mostrarConConexion?: boolean;
   className?: string;
+  /**
+   * Estado de conexión explícito (opcional, para inyección en tests o componentes contenedores).
+   * Si se omite, se usa el estado de `useFrescuraOffline`.
+   */
+  isOnline?: boolean;
 }
 
 export function AvisoDatosOffline({
@@ -39,8 +44,10 @@ export function AvisoDatosOffline({
   actualizadoEn = null,
   mostrarConConexion = false,
   className = '',
+  isOnline: isOnlineProp,
 }: AvisoDatosOfflineProps) {
-  const { isOnline, frescura } = useFrescuraOffline(actualizadoEn !== null ? null : url);
+  const { isOnline: isOnlineHook, frescura } = useFrescuraOffline(actualizadoEn !== null ? null : url);
+  const isOnline = isOnlineProp !== undefined ? isOnlineProp : isOnlineHook;
 
   if (isOnline && !mostrarConConexion) return null;
 

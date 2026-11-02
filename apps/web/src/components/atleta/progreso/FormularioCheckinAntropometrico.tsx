@@ -11,6 +11,8 @@
  */
 import { AlertTriangle, ArrowRight, Lock } from 'lucide-react';
 import type { EstadoVentanaCheckinCalculado } from '../../../lib/antropometria-ventana';
+import { useFrescuraOffline } from '../../../lib/use-frescura-offline';
+import { AvisoDatosOffline } from '../../common/AvisoDatosOffline';
 import { AvisoVentanaCheckin } from './AvisoVentanaCheckin';
 import { SelectorFotosCheckin } from '../../antropometria/SelectorFotosCheckin';
 import type {
@@ -43,6 +45,7 @@ interface FormularioCheckinAntropometricoProps {
   onCambioFotos: (estado: { fotos: FotoAntropometriaInputDTO[]; subiendo: boolean }) => void;
   fotosDeshabilitadas: boolean;
   onSubmit: (e: React.FormEvent) => void;
+  isOnline?: boolean;
 }
 
 const CAMPOS_PRINCIPALES: { campo: ClaveMedidaFormularioCheckin; id: string; etiqueta: string }[] = [
@@ -70,7 +73,10 @@ export function FormularioCheckinAntropometrico({
   onCambioFotos,
   fotosDeshabilitadas,
   onSubmit,
+  isOnline,
 }: FormularioCheckinAntropometricoProps) {
+  const { isOnline: onlineHook } = useFrescuraOffline(null);
+  const estaOffline = !isDemoMode && (isOnline !== undefined ? !isOnline : !onlineHook);
   /**
    * Error inline de un campo: se muestra si el campo ya tiene texto (el usuario está escribiendo)
    * o si ya se intentó enviar. Nunca se pinta un error sobre un campo vacío opcional.
@@ -92,6 +98,14 @@ export function FormularioCheckinAntropometrico({
           Tus datos quedarán guardados y asociados a tu historial de evolución.
         </p>
       </div>
+
+      {estaOffline && (
+        <AvisoDatosOffline
+          variante="sin-datos"
+          isOnline={isOnline !== undefined ? isOnline : onlineHook}
+          className="mb-2"
+        />
+      )}
 
       {submitSuccess ? (
         <PanelExitoCheckin isDemoMode={isDemoMode} />
@@ -168,12 +182,17 @@ export function FormularioCheckinAntropometrico({
           <button
             type="submit"
             aria-label="Enviar Evaluación al Coach / Entrenador"
-            disabled={isSubmitting || fotosSubiendo || !estadoVentana.permiteRegistrar}
+            disabled={isSubmitting || fotosSubiendo || !estadoVentana.permiteRegistrar || estaOffline}
             className="w-full min-h-11 py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
           >
             <span>{isSubmitting ? 'Enviando...' : 'Enviar Evaluación al Entrenador'}</span>
             <ArrowRight className="h-4 w-4" />
           </button>
+          {estaOffline && (
+            <p className="text-[11px] text-muted-foreground text-center">
+              Conéctate a internet para enviar tu evaluación
+            </p>
+          )}
           {!estadoVentana.permiteRegistrar && (
             <p className="text-[11px] text-muted-foreground text-center">
               {estadoVentana.motivoBloqueo}

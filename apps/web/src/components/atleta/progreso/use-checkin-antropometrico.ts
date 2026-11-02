@@ -96,6 +96,11 @@ export function useCheckinAntropometrico({
       setSubmitError('No se pudo identificar tu sesión. Vuelve a iniciar sesión e inténtalo de nuevo.');
       return;
     }
+    // D9: fuera de demo y sin conexión, el envío no se encola ni se procesa.
+    if (typeof navigator !== 'undefined' && !navigator.onLine && !isDemoMode) {
+      setSubmitError('Conéctate a internet para enviar tu evaluación.');
+      return;
+    }
     // Defensa en profundidad: la ventana y el solo lectura se validan antes de llamar a la API.
     if (esSoloLectura) {
       setSubmitError('Tus medidas las registra tu entrenador en sala: no puedes enviar el check-in.');
