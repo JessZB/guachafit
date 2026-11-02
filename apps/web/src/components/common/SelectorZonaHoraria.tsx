@@ -1,4 +1,4 @@
-import { nombreZonaHoraria } from '../../lib/zona-horaria';
+import { nombreZonaHoraria, textoHoraActualEnZona } from '../../lib/zona-horaria';
 
 /**
  * Selector de la zona horaria del perfil (RF-002 RN-02 / ADR-019). Presentacional: el estado y el
@@ -55,6 +55,9 @@ export function SelectorZonaHoraria({
           Guardar zona horaria
         </button>
       </div>
+      <p className="text-xs text-muted-foreground mt-1">
+        {textoHoraActualEnZona(valor)}
+      </p>
       {error && (
         <p
           role="alert"

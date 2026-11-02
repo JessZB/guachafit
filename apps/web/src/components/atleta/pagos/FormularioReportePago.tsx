@@ -148,7 +148,7 @@ export function FormularioReportePago({
         <span className="text-xs text-muted-foreground">
           {pagoVesSinTasa
             ? 'Sin tasa configurada: tu entrenador debe definirla para reportar pagos en bolívares.'
-            : 'Contravalor acreditado a tu cuota:'}
+            : 'Monto en USD acreditado a tu cuota:'}
         </span>
         {!pagoVesSinTasa && (
           <span className="font-mono font-bold text-sm text-primary">
@@ -208,7 +208,7 @@ export function FormularioReportePago({
         disabled={isSubmitting || pagoVesSinTasa}
         className="w-full min-h-11 py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-bold text-base sm:text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
       >
-        {isSubmitting ? 'Enviando al coach...' : 'Enviar Comprobante de Pago'}
+        {isSubmitting ? 'Enviando al entrenador...' : 'Enviar Comprobante de Pago'}
       </button>
     </form>
   );

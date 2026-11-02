@@ -24,10 +24,10 @@ export function CabeceraPagos({ tasaEfectiva, etiquetaSinTasa }: CabeceraPagosPr
       <div>
         <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
           <CreditCard className="h-3.5 w-3.5" />
-          <span>Membresía y Finanzas</span>
+          <span>Pagos</span>
         </div>
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground mt-0.5">
-          Pagos y Cuotas
+          Pagos y cuotas
         </h1>
       </div>
 
@@ -36,10 +36,10 @@ export function CabeceraPagos({ tasaEfectiva, etiquetaSinTasa }: CabeceraPagosPr
         <TrendingUp className="h-3.5 w-3.5 text-primary" />
         <div className="text-right">
           <span className="text-[11px] text-muted-foreground font-semibold uppercase block">
-            Tasa del Día
+            Tasa del día
           </span>
           <span className="text-xs font-bold font-mono text-foreground">
-            {tasaEfectiva ? `1 USD = ${tasaEfectiva} VES` : etiquetaSinTasa}
+            {tasaEfectiva ? `1 USD = ${tasaEfectiva} Bs.` : etiquetaSinTasa}
           </span>
         </div>
       </div>

@@ -43,7 +43,7 @@ export function SubidaComprobantePago({
   return (
     <div className="space-y-2">
       <label className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
-        <span>Captura del Comprobante Bancario</span>
+        <span>Captura del comprobante</span>
         <span className="text-[11px] text-muted-foreground">Recomendado • Max 5MB</span>
       </label>
       <input

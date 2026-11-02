@@ -21,6 +21,7 @@
 import type { CuotaDetalleDTO } from '@guachafit/shared';
 import { BadgeEstado } from '../../ui/BadgeEstado';
 import { etiquetaEstadoCuota } from '../../../lib/etiquetas-dominio';
+import { formatFechaLocal } from '../../../lib/date-format';
 import { tieneSaldoAFavor } from '../../../lib/saldo-a-favor';
 
 export interface TarjetaResumenCuotaProps {
@@ -45,11 +46,7 @@ export function TarjetaResumenCuota({
             {cuota.planNombre}
           </span>
           <div className="text-xs text-muted-foreground mt-0.5">
-            Corte:{' '}
-            {new Date(cuota.fechaCorteUtc).toLocaleDateString('es-ES', {
-              day: '2-digit',
-              month: 'long',
-            })}
+            Corte: {formatFechaLocal(cuota.fechaCorteUtc) ?? '—'}
           </div>
         </div>
 
@@ -57,7 +54,7 @@ export function TarjetaResumenCuota({
       </div>
 
       {/* Saldo Grande */}
-      <div className="my-5 flex items-baseline justify-between">
+      <div className="my-5 flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <span className="text-xs font-semibold text-muted-foreground block">
             Saldo Pendiente

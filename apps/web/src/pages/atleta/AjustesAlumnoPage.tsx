@@ -16,14 +16,14 @@ function SeccionZonaHoraria() {
   const { user, isDemoMode, actualizarZonaHoraria } = useAuth();
   return (
     <section
-      aria-labelledby="titulo-zona-horaria"
+      aria-label="Zona horaria"
       className="p-5 sm:p-6 rounded-3xl bg-card border border-border shadow-xs space-y-3"
     >
       <div className="flex items-center gap-2">
         <Clock className="h-4 w-4 text-primary" />
-        <h2 id="titulo-zona-horaria" className="text-base font-bold text-foreground">
-          Tu zona horaria
-        </h2>
+        <span className="text-base font-bold text-foreground">
+          Zona horaria
+        </span>
       </div>
       <p className="text-sm text-muted-foreground">
         Con ella contamos el horario de tu reporte de nutrición (de {HORARIO_VENTANA_CHECKIN}).

@@ -111,3 +111,9 @@ export function formatearHoraEnZona(isoUtc: string, zona: string | null | undefi
   const { hora, minuto } = partesEnZona(new Date(isoUtc), zona);
   return `${String(hora).padStart(2, '0')}:${String(minuto).padStart(2, '0')}`;
 }
+
+/** Texto informativo con la hora local actual de una zona IANA. */
+export function textoHoraActualEnZona(zona: string, fecha: Date = new Date()): string {
+  const hora = formatearHoraEnZona(fecha.toISOString(), zona);
+  return `Ahora son las ${hora} en ${horaDeZona(zona)}`;
+}

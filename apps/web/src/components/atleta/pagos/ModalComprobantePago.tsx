@@ -66,7 +66,7 @@ export function ModalComprobantePago({
           <div className="flex items-center gap-2">
             <Receipt className="h-5 w-5 text-primary" />
             <h3 id="pagos-comprobante-titulo" className="font-bold text-base text-foreground">
-              Comprobante de Pago
+              Comprobante de pago
             </h3>
           </div>
           <button
@@ -116,7 +116,7 @@ export function ModalComprobantePago({
             {comprobante.url ? (
               <>
                 <ShieldCheck className="h-3.5 w-3.5 text-success" />
-                Almacenamiento seguro en Cloudflare R2
+                Almacenamiento seguro
               </>
             ) : (
               'Sin captura digital verificable'

@@ -47,18 +47,18 @@ export function FilaTransaccionPago({ tx, onVerComprobante, onCorregir }: FilaTr
       className="p-4 rounded-2xl bg-secondary/30 border border-border/80 flex flex-col gap-2.5"
     >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <div>
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-bold text-sm text-foreground capitalize">
+            <span className="font-bold text-sm text-foreground">
               {etiquetaMetodoPago(tx.metodoPago)}
             </span>
             <BadgeEstado tono={tonoEstadoTransaccion(tx.estadoConciliacion)}>
               {etiquetaEstadoTransaccion(tx.estadoConciliacion)}
             </BadgeEstado>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-1 min-w-0 break-words">
             Ref: {tx.referenciaBancaria || 'Sin referencia'} • Fecha:{' '}
-            {formatFechaCalendario(tx.fechaOperacion) ?? tx.fechaOperacion}
+            {formatFechaCalendario(tx.fechaOperacion) ?? '—'}
           </p>
         </div>
 
@@ -87,7 +87,7 @@ export function FilaTransaccionPago({ tx, onVerComprobante, onCorregir }: FilaTr
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
             <div>
-              <span className="font-bold">Motivo del Coach: </span>
+              <span className="font-bold">Motivo del entrenador: </span>
               <span>
                 {tx.motivoRechazo ||
                   'La referencia no coincide con el estado de cuenta bancario.'}
@@ -113,7 +113,7 @@ export function FilaTransaccionPago({ tx, onVerComprobante, onCorregir }: FilaTr
             className="min-h-11 inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-colors cursor-pointer"
           >
             <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Ver Comprobante Subido</span>
+            <span>Ver comprobante</span>
           </button>
         </div>
       )}

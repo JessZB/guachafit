@@ -108,7 +108,7 @@ export function PagosPage() {
         <EstadoVacio
           titulo="Sin cuota vigente"
           icono={Receipt}
-          detalle="Tu coach aún no ha emitido una cuota para este periodo. Si crees que es un error, contáctalo."
+          detalle="Tu entrenador aún no ha emitido una cuota para este periodo. Si crees que es un error, contáctalo."
         />
       )}
 
