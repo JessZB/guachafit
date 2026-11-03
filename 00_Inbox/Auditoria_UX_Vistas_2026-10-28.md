@@ -428,6 +428,21 @@ Proceso:
 - 8 tests nuevos en 2 specs (`AtletaMenuPage.ux24.interaccion.spec.tsx` y `NavegacionAlumno.ux24.interaccion.spec.tsx`).
 - 3006 tests en 331 archivos y typecheck en verde.
 
+**Lote de pagos del alumno cerrado (`4371639`, 2026-11-03; decisiones D11 y D15 y dos seguimientos de la revisión):**
+- **D11:** `monedaSugeridaPorMetodo`, `avisoMonedaMetodo` y el ajuste en `setMetodoPago` (`lib/pagos-montos.ts`, `use-reporte-pago.ts`); aviso enlazado al selector de moneda en `FormularioReportePago.tsx`.
+- **D15 de punta a punta:** `historial-cliente.ts` (API), `packages/shared/src/types/finanzas.ts`, `lib/pagos-adaptadores.ts`, `FilaTransaccionPago.tsx` y `PestanaReportePago.tsx`. Se descubrió que el API nunca enviaba `motivoRechazo` y que la fila mostraba un motivo inventado; ahora, sin texto, dice `TEXTO_RECHAZO_SIN_MOTIVO`.
+- **Seguimientos resueltos:** montos con `useFormatoNumero()` en `TarjetaResumenCuota`, `CabeceraPagos`, `FilaTransaccionPago`, `AvisoSaldoAFavor` y el contravalor; validación de la referencia (`validarReferenciaPago`) antes de la subida; etiqueta de la referencia coherente con el API.
+- **Seguimientos nuevos:**
+  - SUGGESTION (legibilidad): `use-reporte-pago.ts` quedó en 396 de 400 líneas; el siguiente cambio obligará a extraer la orquestación de la subida del comprobante (`lib/comprobante-pago.ts`).
+  - SUGGESTION: `validarArchivoComprobante` vive en `lib/pagos-montos.ts`; por nombre encajaría mejor en `lib/comprobante-pago.ts`.
+  - SUGGESTION: el campo del monto sigue mostrando el valor precargado de una corrección con punto decimal (`75.00`) mientras el resto de la pantalla usa coma.
+- **Proceso:**
+  - Fase roja con 25 tests (P1 a P25) en Antigravity; el test del API se rehízo porque su mock fallaba por una causa ajena. Sonnet implementó, Antigravity actualizó 9 specs existentes y verificó, y cuatro revisiones 4R no dieron BLOCKER ni WARNING.
+  - Se aceptaron dos sugerencias (limpiar el error de referencia al cambiar de método, con su test P26, y `aria-hidden` en dos iconos). El único hallazgo de fiabilidad (que `setMoneda` no renovaba la clave de idempotencia) quedó refutado: sí la renueva desde antes.
+  - Los reportes de fiabilidad y de riesgo citaron líneas inexistentes, por lo que se verificó cada afirmación de seguridad directamente en el código.
+- **Evidencia:** web **3098/3098** en 359 archivos más P26; API **262/262**; typecheck y build en verde.
+
+
 **Revisión de calidad de UX-19 a UX-29 cerrada (`af33433`, 2026-11-03):**
 - **Proceso:**
   - 4 revisiones UX de solo lectura en paralelo (Antigravity, `gemini-3.8-flash-high`; prompts `10` a `13`), una por grupo de lotes: Ajustes y Plantillas, Pagos del alumno, Nutrición/menú/sesión y Cierre/Progreso/pulido.
@@ -440,8 +455,8 @@ Proceso:
   - Menú (`use-resumen-menu.ts`, UX-24): «Completado hoy» falso con la semana completa.
   - Plantillas (`FiltrosPlantillas.tsx`, UX-20): contadores «0» durante la carga; iconos decorativos con `aria-hidden` y `autoComplete="off"` en los campos de tasa.
 - **Seguimientos (fuera de esta tanda):**
-  - Montos de Pagos del alumno sin `useFormatoNumero`/`formatMonto` (`TarjetaResumenCuota.tsx`, `FormularioReportePago.tsx`), contra §6.17 del reglamento.
-  - La referencia bancaria no se valida en el cliente: el error llega del servidor después de subir el comprobante.
+  - ~~Montos de Pagos del alumno sin `useFormatoNumero`/`formatMonto`~~ ✅ resuelto en el lote de pagos del alumno (`4371639`).
+  - ~~La referencia bancaria no se valida en el cliente~~ ✅ resuelto en el lote de pagos del alumno (`4371639`).
   - Tras un check-in exitoso las medidas no se limpian; descartar con una subida de foto en curso puede dejar la subida huérfana.
   - `SelectorZonaHoraria.tsx`: la hora «en vivo» se calcula al renderizar y no se actualiza sola.
   - Tests débiles: R5 pasa por vacío hoy (falla si se reintroduce una etiqueta huérfana), R15 y R16 son guardas de regresión.
@@ -548,11 +563,11 @@ Deduplicadas de las 15 preguntas de los reportes (cada una con la recomendación
 | D8 ✅ (2026-11-01: el formulario de pago arranca con monto vacío `''`, valida > 0 antes de enviar, asocia cada `<label>` con `htmlFor`/`id` (`useId`) y se actualizan los 3 tests de `PagosPage.fecha-anterior.interaccion.spec.tsx`; en ALU-10 "Corregir y Reenviar" prellena el formulario con método, moneda, monto, referencia y fecha del pago rechazado. Verificado en código que el API ya soporta `X-Idempotency-Key` / `idempotencyKey` en `ReportarPagoSchema` y el índice `uq_transaccion_referencia_entrenador`, por lo que en UX-22 el cliente enviará `idempotencyKey` y reutilizará `storageKey`) | Reporte de pago: ¿empieza vacío (se actualizan los specs que usan `1300.00` y localizan por `parentElement`)? ¿El API acepta clave de idempotencia o rechaza duplicados por referencia+monto+fecha? | Sí a vaciar (ALU-01 es ALTA). Sin idempotencia en el API solo hay mitigación en el cliente (ALU-07). | UX-21, UX-22 |
 | D9 ✅ (2026-11-02: avisar y bloquear el envío sin tocar datos; se muestra AvisoDatosOffline con variante "sin-datos", botón de envío deshabilitado con indicación visible y guarda síncrona en useCheckinAntropometrico; en demo se simula en local) | Check-in antropométrico con fotos sin conexión: ¿encolar o avisar y bloquear el envío? | Avisar y bloquear: no toca datos. Encolar es riesgo alto y requiere diseño de cola offline (PRO-04). | UX-28 |
 | D10 | Esfuerzo de la sesión: ¿arrancar sin valor? ¿Separar el valor de "molestia" del texto con emoji dentro de `notas`? | Sí al esfuerzo sin valor inicial (ENT-09b). Separar `notas` va aparte porque cambia el formato de los datos (ENT-09c). | UX-26 (ENT-09c) |
-| D11 | Reporte de pago del alumno: ¿la moneda se elige según el método (Zelle, Binance, Efectivo USD → USD; Pago Móvil, Transferencia, Efectivo VES → VES) y se puede cambiar a mano? | Sí: hoy queda en VES por defecto incluso con «Zelle (USD)» y la API no cruza método y moneda; un alumno puede reportar 30 Bs creyendo que son 30 $. | lote de pagos del alumno |
+| D11 ✅ (2026-11-03: la moneda se propone según el método y se puede cambiar a mano; aviso discreto en combinaciones poco habituales. Implementado en `4371639`) | Reporte de pago del alumno: ¿la moneda se elige según el método (Zelle, Binance, Efectivo USD → USD; Pago Móvil, Transferencia, Efectivo VES → VES) y se puede cambiar a mano? | Sí: hoy queda en VES por defecto incluso con «Zelle (USD)» y la API no cruza método y moneda; un alumno puede reportar 30 Bs creyendo que son 30 $. | lote de pagos del alumno |
 | D12 | ¿Se aprueban los textos nuevos de Progreso y Pagos («Mi progreso», «Tus medidas», «Ver evolución», «Reportar pago», «Historial») y se quitan los restos de Title Case (PRO-06, ALU-11)? | Sí, en un lote de textos con los specs actualizados: rompen specs de Pagos y de Progreso que consultan los nombres actuales. | lote de textos |
 | D13 ✅ (2026-11-03: se precarga la zona del dispositivo una sola vez al primer inicio de sesión o activación y después queda libre; los cálculos usan siempre la zona del perfil; aviso discreto de discrepancia en el pie del layout del alumno, comparado por desfase horario y descartable por sesión. Diseño en [[ADR-025-zona-horaria-alumno-precarga-dispositivo-aviso-discrepancia]]) | ¿La semana de entrenamiento se consulta con la zona horaria del perfil (`zonaPerfilEfectiva`) y no con la del dispositivo? | Sí, en un lote aparte: afecta a `use-resumen-menu.ts` y a `use-entrenamiento.tsx`, que hoy son coherentes entre sí; arreglar uno solo los desalinearía. | lote de zona horaria |
 | D14 | ¿Proteger el botón Atrás del navegador en el check-in con un guard de router? | Aceptarlo por ahora: las medidas sobreviven a Atrás/Adelante y solo se pierden las fotos; antes de UX-27 Atrás sacaba de Progreso y se perdía todo. | — |
-| D15 | ¿Mostrar el motivo del rechazo arriba al corregir un pago rechazado? | Sí: es pequeño, el motivo ya viene en la transacción. | lote de pagos del alumno |
+| D15 ✅ (2026-11-03: el formulario de corrección muestra el motivo; además el historial del API ahora envía `motivoRechazo` y la fila ya no inventa un motivo. Implementado en `4371639`) | ¿Mostrar el motivo del rechazo arriba al corregir un pago rechazado? | Sí: es pequeño, el motivo ya viene en la transacción. | lote de pagos del alumno |
 
 ## 5. Hallazgos por área
 
