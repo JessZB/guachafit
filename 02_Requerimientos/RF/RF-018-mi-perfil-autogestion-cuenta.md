@@ -206,6 +206,13 @@ Then ve "El enlace no es válido o venció. Pide uno nuevo desde Ajustes."
   - `AjustesAlumnoPage.tsx`: eliminada la cabecera `<h2>Tu zona horaria</h2>` duplicada frente al nombre de pestaña "Zona horaria", manteniendo `aria-label="Zona horaria"` en la tarjeta para preservar accesibilidad semántica.
 - **Evidencia:** `apps/web/src/lib/zona-horaria.ux29.spec.ts` (4 tests); web **3057 tests en 344 archivos (1127 suites)**; typecheck y build en verde.
 
+### Zona horaria del alumno: precarga única desde el dispositivo y aviso de discrepancia (`6111326`, 2026-11-03, lote ZH-1, [[ADR-025-zona-horaria-alumno-precarga-dispositivo-aviso-discrepancia]])
+- **Precarga única:** al primer inicio de sesión o activación de cuenta, el cliente envía `zonaDispositivo` y el servidor la guarda solo si el perfil aún no tiene la zona definida (`zona_horaria_definida = false`), con un único `UPDATE` atómico. Desde entonces es libre: el alumno la cambia en Ajustes o el entrenador en la ficha, y ambas acciones la marcan como definida. Nunca se vuelve a cambiar sola, ni aunque el alumno viaje.
+- **Alumnos existentes:** la migración `0024` los deja como definidos, así que conservan su zona (hoy `America/Caracas` salvo cambios explícitos) y ven el aviso si su dispositivo difiere.
+- **Nunca bloquea el acceso:** una zona inválida o ausente se ignora, y un fallo del `UPDATE` se registra como advertencia y el login o la activación continúan.
+- **Aviso discreto:** `AvisoZonaDiscrepante`, al final del contenido del layout del alumno (sobre la barra inferior en móvil), con «Zona de tu dispositivo» y «Zona de tu perfil», un enlace «Cambiar zona horaria» y el botón «Entendido». Compara por desfase UTC y no por nombre (Caracas y La Paz no avisan), se descarta por sesión y reaparece si cambia cualquiera de las dos zonas. No aparece para el entrenador, el administrador ni en el modo demo. Al guardar otra zona en Ajustes la sesión se actualiza y el aviso desaparece sin recargar.
+- **Evidencia:** web **3112/3112** en 364 archivos; API **406/406** en los specs de auth y alumnos relacionados, con 15 tests propios del lote (`zh1-precarga-zona-dispositivo.spec.ts`); typecheck y build en verde.
+
 ### Pendiente
 - En `/admin`, la página del superadministrador conserva su propio botón "Cerrar sesión" y su diálogo de pendientes, además de los del menú "Cuenta" (preexistente, `CabeceraAdmin.tsx` y `AdminPage.tsx`). Retirarlos exige ajustar `AdminPage.caracterizacion.interaccion.spec.tsx:297`.
 - En Notificaciones, Zona horaria, Planes y Tasas, si se cambia de pestaña con un guardado en vuelo el resultado no se muestra al volver (esas pestañas se desmontan).

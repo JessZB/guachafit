@@ -2,7 +2,7 @@
 id: ADR-025
 titulo: "ADR-025: Zona horaria del alumno: precarga única desde el dispositivo, uso exclusivo de la zona del perfil y aviso de discrepancia"
 fecha: 2026-11-03
-estado: propuesto
+estado: implementado
 decisores:
   - "Dueño del producto"
   - "Tech Lead"
@@ -18,7 +18,7 @@ tags:
 # ADR-025: Zona horaria del alumno: precarga única desde el dispositivo, uso exclusivo de la zona del perfil y aviso de discrepancia
 
 ## 1. Estado
-`propuesto` (diseño aprobado por el dueño el 2026-11-03; pendiente de implementación). Refina [[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]] (costo T2: los perfiles existentes quedan en Caracas) y respeta la estrategia UTC/IANA de [[ADR-002-gestion-fechas-utc-zonas-horarias]].
+`implementado` en el lote ZH-1 (`6111326`, 2026-11-03), diseño aprobado por el dueño el 2026-11-03. Queda pendiente ZH-2 (§6). Refina [[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]] (costo T2: los perfiles existentes quedan en Caracas) y respeta la estrategia UTC/IANA de [[ADR-002-gestion-fechas-utc-zonas-horarias]].
 
 ## 2. Contexto
 - La zona del alumno vive en `perfiles_alumno.zona_horaria`, `NOT NULL` con valor por defecto `America/Caracas`. Hoy nadie la rellena con la del dispositivo: un alumno que se registra fuera de Venezuela queda en Caracas hasta que la cambie en Ajustes, algo que quizá no sabe ni le importa.
@@ -72,6 +72,11 @@ tags:
 ## 6. Lotes de implementación
 1. **ZH-1 (datos y aviso):** migración `0024`, contratos, `precargarZonaDispositivo`, las dos escrituras que marcan «definida», el envío desde login y activación, `lib/zona-horaria.ts` y `AvisoZonaDiscrepante`. Riesgo medio por la migración y la autenticación: cuatro revisiones 4R.
 2. **ZH-2 (cálculos con la zona del perfil):** `useZonaPerfil()` y los consumidores del punto 3.3. Riesgo medio; revisión de fiabilidad.
+
+## 6.1. Estado de la implementación (ZH-1, `6111326`)
+- **Hecho:** columna `zona_horaria_definida` y migración `0024` (con el `UPDATE` que deja todas las filas existentes como definidas); `zonaDispositivo` en login y activación; `precargarZonaDispositivo` con el `UPDATE` atómico condicionado; las dos escrituras que marcan la zona como definida (PATCH del alumno y del entrenador); `AvisoZonaDiscrepante` al final del `<main>` del layout del alumno; comparación por desfase UTC en `lib/zona-horaria.ts`.
+- **Decisión añadida en la revisión:** la precarga es una conveniencia y **nunca bloquea** el acceso. Si el `UPDATE` falla se registra una advertencia con `Logger('PrecargarZonaDispositivo')` y el login o la activación siguen con la zona del perfil. Se descartó poner un límite `.max()` a `zonaDispositivo` en el esquema Zod: un valor largo debe ignorarse, no convertirse en un 400 que bloquee un acceso válido.
+- **Pendiente (ZH-2):** que el menú, «Hoy», la fecha de operación del pago y antropometría lean la zona del perfil con `useZonaPerfil()`. Hasta entonces esas pantallas siguen usando la zona del dispositivo y el aviso solo informa de la discrepancia.
 
 ## 7. Trazabilidad
 - Contexto: [[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]], [[ADR-002-gestion-fechas-utc-zonas-horarias]], [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]].

@@ -428,6 +428,23 @@ Proceso:
 - 8 tests nuevos en 2 specs (`AtletaMenuPage.ux24.interaccion.spec.tsx` y `NavegacionAlumno.ux24.interaccion.spec.tsx`).
 - 3006 tests en 331 archivos y typecheck en verde.
 
+**ZH-1 cerrado: zona horaria del alumno (`6111326`, 2026-11-03; decisión D13, [[ADR-025-zona-horaria-alumno-precarga-dispositivo-aviso-discrepancia]]):**
+- **Qué hace:** precarga única de la zona del dispositivo en el primer acceso, libre después, y aviso discreto al final del layout del alumno cuando el desfase UTC del dispositivo y el del perfil difieren. Migración `0024` con los alumnos existentes como definidos. Detalle en RF-018.
+- **Revisión 4R:**
+  - Riesgo y fiabilidad sin hallazgos.
+  - Resiliencia dio un WARNING real, corregido: un fallo del `UPDATE` de la precarga habría devuelto un 500 a un alumno con credenciales correctas. Ahora se registra una advertencia y el acceso continúa.
+  - Legibilidad dio una mejora de copy, aplicada («Zona de tu dispositivo: Hora de Madrid. Zona de tu perfil: Hora de Caracas.»).
+  - Se descartaron tres sugerencias: un `.max()` en el esquema Zod (convertiría un valor largo en un 400 que bloquea un acceso válido), `IF NOT EXISTS` en el `ALTER` y extraer el bloque de precarga repetido dos veces.
+- **Seguimientos:**
+  - ZH-2 pendiente: menú, «Hoy», fecha de operación del pago y antropometría siguen leyendo la zona del dispositivo (`use-resumen-menu.ts`, `use-entrenamiento.tsx`, `use-reporte-pago.ts`, `use-contexto-antropometrico.ts`).
+  - Los endpoints `?timezone=` del entrenamiento siguen aceptando lo que envíe el cliente (costo T3 del ADR).
+  - W5 y W6 pasaban en la fase roja por ser casos negativos: son guardas útiles solo con el componente presente.
+- **Proceso:**
+  - La verificación del lote se quedó sin créditos antes de ejecutar el typecheck y el build, y al correrlos aparecieron dos errores `TS18048` en specs de la fase roja (`auth-context.zh1.spec.tsx:106` y `ActivacionPage.zh1.interaccion.spec.tsx:73`). Se corrigieron con un acceso opcional. Un lote no se cierra sin ver el typecheck y el build con código 0.
+  - Antigravity cae por créditos tras ~350k tokens de un worker; el JSON de Vitest aparece igual al terminar.
+- **Evidencia:** web **3112/3112** en 364 archivos; API **406/406**; 28 tests nuevos (15 del API, 13 de la web); typecheck y build con código 0.
+
+
 **Lote de pagos del alumno cerrado (`4371639`, 2026-11-03; decisiones D11 y D15 y dos seguimientos de la revisión):**
 - **D11:** `monedaSugeridaPorMetodo`, `avisoMonedaMetodo` y el ajuste en `setMetodoPago` (`lib/pagos-montos.ts`, `use-reporte-pago.ts`); aviso enlazado al selector de moneda en `FormularioReportePago.tsx`.
 - **D15 de punta a punta:** `historial-cliente.ts` (API), `packages/shared/src/types/finanzas.ts`, `lib/pagos-adaptadores.ts`, `FilaTransaccionPago.tsx` y `PestanaReportePago.tsx`. Se descubrió que el API nunca enviaba `motivoRechazo` y que la fila mostraba un motivo inventado; ahora, sin texto, dice `TEXTO_RECHAZO_SIN_MOTIVO`.
