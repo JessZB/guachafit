@@ -3,7 +3,7 @@
  *
  * Extraída tal cual desde `pages/atleta/PagosPage.tsx` (L1044–1139): método +
  * badge de estado, referencia y fecha, montos, motivo de reversión (RF-007),
- * motivo de rechazo con "Corregir y Reenviar" y botón "Ver Comprobante Subido".
+ * motivo de rechazo con "Corregir y reenviar" y botón "Ver comprobante".
  *
  * R1: REUTILIZABLE (R3.3: transacción en ≥2 vistas + R3.1: `PagosPage:1044–1139`
  * ↔ `AlumnoDetallePage:3208–3260` ↔ `ConciliacionPage:432–464`; la composición
@@ -108,12 +108,12 @@ export function FilaTransaccionPago({ tx, onVerComprobante, onCorregir }: FilaTr
             onClick={() => onCorregir(tx)}
             className="self-end sm:self-auto min-h-11 inline-flex items-center justify-center px-3 py-1 rounded-lg bg-destructive text-destructive-foreground font-bold text-[11px] hover:brightness-110 cursor-pointer transition-all shrink-0"
           >
-            Corregir y Reenviar
+            Corregir y reenviar
           </button>
         </div>
       )}
 
-      {/* Botón Ver Comprobante */}
+      {/* Botón Ver comprobante */}
       {(tx.comprobanteUrl || tx.comprobanteStorageKey) && (
         <div className="pt-2 border-t border-border/50 flex justify-end">
           <button

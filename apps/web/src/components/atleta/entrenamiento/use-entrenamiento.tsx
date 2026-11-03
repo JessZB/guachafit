@@ -1,5 +1,6 @@
 import { useCallback, useState, type ReactNode } from 'react';
 import { useAuth } from '../../../context/auth-context';
+import { useZonaPerfil } from '../../../lib/use-zona-perfil';
 import { type BloqueoAlumno } from '../../../lib/acceso-alumno';
 import { almacenDeSesion, guardarEjercicioPreferido } from '../../../lib/sesion-estado';
 import {
@@ -34,7 +35,7 @@ export function useEntrenamiento() {
   const [bloqueo, setBloqueo] = useState<BloqueoAlumno | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas';
+  const tz = useZonaPerfil();
 
   const envio = useEnvioSesion({ user, isDemoMode });
   const semana = useSemanaEntrenamiento({

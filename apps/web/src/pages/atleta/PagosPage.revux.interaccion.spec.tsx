@@ -88,6 +88,7 @@ const authDemo = vi.hoisted(() => ({
     email: 'alumno@example.com',
     rol: 'alumno',
     entrenadorId: 'e1111111-1111-4111-8111-111111111111',
+    zonaHoraria: 'America/Caracas',
   },
 }));
 
@@ -187,20 +188,20 @@ describe('PagosPage · REVUX (G1a, G1b)', () => {
     render(<PagosPage />);
 
     // Abrir formulario
-    const botonReportar = await screen.findByRole('button', { name: /Reportar un nuevo abono o pago/i });
+    const botonReportar = await screen.findByRole('button', { name: /Reportar pago/i });
     fireEvent.click(botonReportar);
-    await screen.findByText('Reportar Abono o Cuota');
+    await screen.findByRole('heading', { name: 'Reportar pago' });
 
     // Escribir monto
     const inputMonto = Array.from(document.querySelectorAll('input')).find(
       (i) => i.getAttribute('inputmode') === 'decimal'
     ) as HTMLInputElement;
     fireEvent.change(inputMonto, { target: { value: '40.00' } });
-    fireEvent.change(screen.getByLabelText(/Referencia Bancaria/), { target: { value: '987654' } });
+    fireEvent.change(screen.getByLabelText(/Referencia bancaria/), { target: { value: '987654' } });
 
     // Enviar formulario
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Enviar Comprobante de Pago/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Enviar comprobante de pago/i }));
     });
 
     // Antes de los 1800 ms, la confirmación está en un role="status"
@@ -213,7 +214,7 @@ describe('PagosPage · REVUX (G1a, G1b)', () => {
     render(<PagosPage />);
 
     // Esperar carga inicial
-    const botonReportar = await screen.findByRole('button', { name: /Reportar un nuevo abono o pago/i });
+    const botonReportar = await screen.findByRole('button', { name: /Reportar pago/i });
 
     const contarLlamadasHistorial = () =>
       mockApi.mock.calls.filter(([ep]) => esEndpointHistorial(ep)).length +
@@ -224,21 +225,21 @@ describe('PagosPage · REVUX (G1a, G1b)', () => {
 
     // Abrir formulario
     fireEvent.click(botonReportar);
-    await screen.findByText('Reportar Abono o Cuota');
+    await screen.findByRole('heading', { name: 'Reportar pago' });
 
     // Escribir monto y referencia
     const inputMonto = Array.from(document.querySelectorAll('input')).find(
       (i) => i.getAttribute('inputmode') === 'decimal'
     ) as HTMLInputElement;
     fireEvent.change(inputMonto, { target: { value: '40.00' } });
-    fireEvent.change(screen.getByLabelText(/Referencia Bancaria/), { target: { value: '987654' } });
+    fireEvent.change(screen.getByLabelText(/Referencia bancaria/), { target: { value: '987654' } });
 
     vi.useFakeTimers();
     vi.clearAllTimers();
 
     // Enviar pago
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Enviar Comprobante de Pago/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Enviar comprobante de pago/i }));
     });
 
     expect(screen.getByRole('status')).not.toBeNull();

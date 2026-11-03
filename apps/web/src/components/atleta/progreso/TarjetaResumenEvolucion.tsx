@@ -1,5 +1,5 @@
 /**
- * Tarjeta "Resumen de Evolución" del hub (SL3, fase B).
+ * Tarjeta "Resumen de evolución" del hub (SL3, fase B).
  *
  * De `ProgresoPage.tsx:543-577`: 3 tiles (cambio de peso, grasa, evaluaciones).
  * Copy idéntico, incluido `{totalEvaluaciones} aprobadas` (el WARNING del
@@ -16,13 +16,13 @@ export function TarjetaResumenEvolucion({ evolucion }: TarjetaResumenEvolucionPr
   return (
     <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-3">
       <span className="text-xs font-bold text-primary uppercase tracking-wider block">
-        Resumen de Evolución
+        Resumen de evolución
       </span>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-1">
         <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border">
           <span className="text-[11px] font-semibold uppercase text-muted-foreground">
-            Cambio de Peso
+            Cambio de peso
           </span>
           <p className="text-xl font-bold font-mono text-success mt-0.5">
             {evolucion.cambioNetoPesoKg != null && !isNaN(Number(evolucion.cambioNetoPesoKg))
@@ -32,7 +32,7 @@ export function TarjetaResumenEvolucion({ evolucion }: TarjetaResumenEvolucionPr
         </div>
         <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border">
           <span className="text-[11px] font-semibold uppercase text-muted-foreground">
-            Grasa Corporal
+            Grasa corporal
           </span>
           <p className="text-xl font-bold font-mono text-success mt-0.5">
             {evolucion.cambioNetoGrasaPorcentaje !== null && evolucion.cambioNetoGrasaPorcentaje !== undefined

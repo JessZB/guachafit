@@ -9,8 +9,8 @@
  * R1: componente único de vista (compone Filtro + Fila + `Paginacion`).
  * Presentacional: datos y callbacks por props; sin `useQuery` ni `api-client`.
  *
- * R5: conserva los textos que consultan los specs ("Historial de Pagos y
- * Recibos", "Mostrando 1 de 2 en esta página · 2 registros" vía el Filtro,
+ * R5: conserva los textos que consultan los specs ("Historial",
+ * "Mostrando 1 de 2 en esta página · 2 registros" vía el Filtro,
  * "No hay transacciones registradas para este periodo.").
  *
  * §6: estados honestos (vacío sin simular, error de página con lo ya cargado
@@ -79,7 +79,7 @@ export function PestanaHistorialPagos({
           className="min-h-11 inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 text-xs font-bold transition-colors cursor-pointer"
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-          <span>Nuevo Abono</span>
+          <span>Reportar pago</span>
         </button>
       </div>
 
@@ -87,7 +87,7 @@ export function PestanaHistorialPagos({
         <div className="flex items-center justify-between">
           <h2 className="font-bold text-base text-foreground flex items-center gap-2">
             <Receipt className="h-5 w-5 text-primary" aria-hidden="true" />
-            <span>Historial de Pagos y Recibos</span>
+            <span>Historial</span>
           </h2>
           <span className="text-xs text-muted-foreground font-mono">
             {pluralizar(transaccionesTotal, 'registro', 'registros')}

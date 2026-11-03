@@ -10,7 +10,7 @@ import {
   offlineDb,
 } from '../../../lib/offline-db';
 import { esFalloParaEncolar } from '../../../lib/offline-sync';
-import { fechaCalendarioLocal } from '../../../lib/date-format';
+import { fechaCalendarioEnZona } from '../../../lib/zona-horaria';
 import { triggerHaptic } from '../../../lib/haptics';
 import type {
   SemanaEntrenamientoProgresoDTO,
@@ -71,7 +71,7 @@ export function useCargaSesion({
   const cargarDesdeGuardado = useCallback(async (): Promise<boolean> => {
     const alumnoId = user?.id ?? '';
     const [rutina, semana] = await Promise.all([
-      getCachedRutinaParaHoy(alumnoId, fechaCalendarioLocal()).catch(() => ({
+      getCachedRutinaParaHoy(alumnoId, fechaCalendarioEnZona(tz)).catch(() => ({
         deHoy: null,
         ultimaDeOtroDia: null,
       })),
@@ -83,7 +83,7 @@ export function useCargaSesion({
     const guardadoEn = rutina.deHoy?.updatedAt ?? semana?.updatedAt ?? null;
     setDatosGuardadosEn(guardadoEn);
     return Boolean(rutina.deHoy || semana);
-  }, [user, setSemanaProgreso]);
+  }, [user, tz, setSemanaProgreso]);
 
   // Accesibilidad (U3b): Escape, trampa de foco y restore viven en `useDialogoAccesible`.
 

@@ -44,7 +44,7 @@ export function SubidaComprobantePago({
     <div className="space-y-2">
       <div className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
         <span>Captura del comprobante</span>
-        <span className="text-[11px] text-muted-foreground">Recomendado • Max 5MB</span>
+        <span className="text-[11px] text-muted-foreground">Recomendado · máx. 5 MB</span>
       </div>
       <input
         ref={inputRef}

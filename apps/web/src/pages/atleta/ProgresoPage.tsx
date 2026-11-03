@@ -1,5 +1,5 @@
 /**
- * Mi Progreso Físico — contenedor orquestador (fase B, SL4).
+ * Mi progreso — contenedor orquestador (fase B, SL4).
  *
  * Solo compone: lee la sesión, conecta los 3 hooks de datos
  * (`use-contexto-antropometrico`, `use-evolucion-progreso`,
@@ -81,7 +81,7 @@ function ProgresoPageContenido() {
   // U4: URL del GET de evolución, para datar la copia cacheada cuando no hay conexión.
   const urlEvolucion = user?.id ? resolverUrlApi(`/antropometria/evolucion/${user.id}`) : null;
 
-  const { esSoloLectura, estadoVentana, motivoRegistroBloqueado, escenarioDemo, setEscenarioDemo } =
+  const { esSoloLectura, estadoVentana, motivoRegistroBloqueado, zonaPerfil, escenarioDemo, setEscenarioDemo } =
     useContextoAntropometrico(user, isDemoMode);
 
   const { evolucion, setEvolucion, isLoading, error, fotosConError, setFotosConError, cargarEvolucion } =
@@ -93,6 +93,7 @@ function ProgresoPageContenido() {
     evolucion,
     esSoloLectura,
     estadoVentana,
+    zonaPerfil,
     onAbrirFormulario: () => setVistaActiva('nuevo'),
     onEvolucionActualizada: (actualizada: EvolucionCorporalDTO) => setEvolucion(actualizada),
     onBloqueo: (detectado: BloqueoAlumno) => setBloqueo(detectado),
@@ -138,10 +139,10 @@ function ProgresoPageContenido() {
         <div>
           <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
             <Scale className="h-3.5 w-3.5" />
-            <span>Fisiología y Métricas</span>
+            <span>Fisiología y métricas</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground mt-0.5">
-            Mi Progreso Físico
+            Mi progreso
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             Registro de medidas corporales y evolución física a lo largo del tiempo.

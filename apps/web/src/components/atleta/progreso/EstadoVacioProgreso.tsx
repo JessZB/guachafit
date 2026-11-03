@@ -13,7 +13,7 @@ export function EstadoVacioProgreso() {
     <EstadoVacio
       icono={Images}
       titulo="Aún no tienes fotos de progreso"
-      detalle="Las fotos se adjuntan al registrar tu check-in (frontal, lateral o posterior) y quedan privadas con enlaces temporales."
+      detalle="Las fotos se adjuntan al registrar tu check-in (frontal, lateral o posterior) y solo las ves tú y tu entrenador."
     />
   );
 }

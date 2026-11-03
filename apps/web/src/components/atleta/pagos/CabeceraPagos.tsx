@@ -2,9 +2,9 @@
  * Cabecera de la vista `pagos` (fase B, prompt 54).
  *
  * Extraída tal cual desde `pages/atleta/PagosPage.tsx` (L535–559): título de la
- * vista + chip "Tasa del Día" con etiqueta honesta D6 cuando no hay tasa.
+ * vista + chip "Tasa del día" con etiqueta honesta D6 cuando no hay tasa.
  *
- * R1: componente único de vista (la "Tasa del Día" solo aparece aquí; no cumple
+ * R1: componente único de vista (la "Tasa del día" solo aparece aquí; no cumple
  * R3.1–3). Presentacional: recibe props tipadas, sin `useQuery` ni `api-client`.
  *
  * §6: `text-[11px]` (piso exacto), `font-bold` (700), tokens con variante
@@ -33,7 +33,7 @@ export function CabeceraPagos({ tasaEfectiva, etiquetaSinTasa }: CabeceraPagosPr
         </h1>
       </div>
 
-      {/* Tasa del Día */}
+      {/* Tasa del día */}
       <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-secondary/70 border border-border/80 self-start sm:self-auto">
         <TrendingUp className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
         <div className="text-right">

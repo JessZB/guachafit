@@ -78,6 +78,7 @@ const authDemo = vi.hoisted(() => ({
     email: 'alumno@example.com',
     rol: 'alumno',
     entrenadorId: 'e1111111-1111-4111-8111-111111111111',
+    zonaHoraria: 'America/Caracas',
   },
 }));
 
@@ -169,7 +170,7 @@ describe('PagosPage · contrato 5: saldo a favor del alumno', () => {
     montarPagina();
 
     // Espera a que la cuota real esté en pantalla antes de comprobar la ausencia.
-    await screen.findByText('Saldo Pendiente');
+    await screen.findByText('Saldo pendiente');
     expect(screen.queryByText(/Saldo a favor/)).toBeNull();
     expect(screen.queryByText('Se aplicará automáticamente a tu próxima cuota.')).toBeNull();
   });
@@ -195,7 +196,7 @@ describe('PagosPage · contrato 5: saldo a favor del alumno', () => {
     montarPagina();
 
     // Espera a que la cuota real esté en pantalla antes de comprobar la ausencia.
-    await screen.findByText('Saldo Pendiente');
+    await screen.findByText('Saldo pendiente');
     expect(screen.queryByText(/De esta cuota/)).toBeNull();
   });
 

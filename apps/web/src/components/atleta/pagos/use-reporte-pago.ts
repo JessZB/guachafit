@@ -1,23 +1,25 @@
 /**
- * Hook de estado del reporte de pago del módulo `pagos` (fase B, prompt 54).
- *
- * Movido desde `pages/atleta/PagosPage.tsx`: estado del formulario, validación de archivo
- * (MIME/5MB + preview) y envío del reporte con comprobante (D2/ADR-007).
+ * Hook de estado del reporte de pago del módulo `pagos` (fase B, prompt 54). Movido desde
+ * `pages/atleta/PagosPage.tsx`: estado del formulario y envío del reporte con comprobante
+ * (D2/ADR-007). El archivo (MIME/5MB, preview) y su subida viven en `use-comprobante-pago.ts`.
  *
  * R9: mismo mecanismo (`apiClient` directo, sin TanStack). Tras el éxito se limpia el mensaje
  * y se vuelve al historial a los 1800 ms; el destino lo decide el contenedor (`alReportarExito`).
  *
  * §6: validación honesta (fecha futura bloqueada con `MENSAJE_FECHA_PAGO_FUTURA`, sin éxito falso
- * D5); MIME/size y referencia se validan antes de la subida. D11: moneda según método. D15: motivo.
+ * D5); MIME/size y referencia se validan antes de la subida. D11: moneda según método (sugerida,
+ * editable a mano). D15: al corregir un rechazo se expone el motivo del entrenador. La fecha y
+ * `hoyLocal` usan la zona del perfil (ADR-025).
  */
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type RefObject } from 'react';
+import { useComprobantePago } from './use-comprobante-pago';
 import { MetodoPago, Moneda, MENSAJE_FECHA_PAGO_FUTURA } from '@guachafit/shared';
 import type { CuotaDetalleDTO, TasaCambioVigenteDTO, TransaccionPagoDetalleDTO } from '@guachafit/shared';
 import { useAuth } from '../../../context/auth-context';
 import { apiClient } from '../../../lib/api-client';
 import { errorTrasCambiarFecha, validarFechaCobro } from '../../../lib/cobro-sala';
-import { prepararComprobanteParaSubida, subirComprobantePago } from '../../../lib/comprobante-pago';
-import { fechaCalendarioLocal } from '../../../lib/date-format';
+import { fechaCalendarioEnZona } from '../../../lib/zona-horaria';
+import { useZonaPerfil } from '../../../lib/use-zona-perfil';
 import {
   contravalorUsd as calcularContravalorUsd,
   esErrorEnvioPagoAmbiguo,
@@ -27,7 +29,6 @@ import {
   normalizarMontoPago,
   pagoVesBloqueadoPorFaltaTasa,
   tasaEfectivaNumerica,
-  validarArchivoComprobante,
   validarMontoPago,
   validarReferenciaPago,
 } from '../../../lib/pagos-montos';
@@ -50,6 +51,8 @@ export interface EstadoReportePago {
   referenciaBancaria: string;
   setReferenciaBancaria: (referencia: string) => void;
   fechaOperacion: string;
+  /** Hoy (YYYY-MM-DD) en la zona del perfil: tope del campo fecha. */
+  hoyLocal: string;
   alCambiarFecha: (valor: string) => void;
   mostrarErrorFechaFutura: () => void;
   isSubmitting: boolean;
@@ -79,13 +82,15 @@ export function useReportePago({
   alReportarExito,
 }: OpcionesReportePago): EstadoReportePago {
   const { user } = useAuth();
+  const zonaPerfil = useZonaPerfil();
+  const hoyLocal = fechaCalendarioEnZona(zonaPerfil);
 
   // Form State
   const [metodoPago, setMetodoPagoState] = useState<MetodoPago>(MetodoPago.PAGO_MOVIL);
   const [moneda, setMonedaState] = useState<Moneda>(Moneda.VES);
   const [montoOriginal, setMontoOriginalState] = useState('');
   const [referenciaBancaria, setReferenciaBancariaState] = useState('');
-  const [fechaOperacion, setFechaOperacion] = useState(fechaCalendarioLocal);
+  const [fechaOperacion, setFechaOperacion] = useState(hoyLocal);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -93,21 +98,28 @@ export function useReportePago({
   // Errores por canal (C1, C3, ALU-01, ALU-04, ALU-10)
   const [errorMonto, setErrorMonto] = useState<string | null>(null);
   const [errorFecha, setErrorFecha] = useState<string | null>(null);
-  const [errorArchivo, setErrorArchivo] = useState<string | null>(null);
   const [errorReferencia, setErrorReferencia] = useState<string | null>(null);
   const [motivoRechazoCorreccion, setMotivoRechazoCorreccion] = useState<string | null>(null);
 
-  // File Upload State (RF-007, ADR-007)
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  // ALU-07 / D8: idempotencia, comprobante en caché y temporizador seguro
-  const comprobanteSubidoKeyRef = useRef<string | null>(null);
+  // ALU-07 / D8: idempotencia y temporizador seguro
   const idempotencyKeyRef = useRef<string>(generarClaveIdempotenciaPago());
   const temporizadorExitoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const enVueloRef = useRef(false);
   const montadoRef = useRef(true);
+
+  // Comprobante (RF-007, ADR-007): archivo, preview y subida en caché; al cambiar renueva la clave.
+  const {
+    fileInputRef,
+    selectedFile,
+    previewUrl,
+    errorArchivo,
+    setErrorArchivo,
+    handleFileChange,
+    handleRemoveFile,
+    asegurarComprobanteSubido,
+  } = useComprobantePago(() => {
+    idempotencyKeyRef.current = generarClaveIdempotenciaPago();
+  });
 
   const limpiarTemporizadorExito = () => {
     if (temporizadorExitoRef.current !== null) {
@@ -170,43 +182,6 @@ export function useReportePago({
     setErrorFecha(MENSAJE_FECHA_PAGO_FUTURA);
   };
 
-  const handleRemoveFile = () => {
-    idempotencyKeyRef.current = generarClaveIdempotenciaPago();
-    comprobanteSubidoKeyRef.current = null;
-    setSelectedFile(null);
-    setErrorArchivo(null);
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(null);
-    }
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    comprobanteSubidoKeyRef.current = null;
-
-    const errSeleccion = validarArchivoComprobante(file);
-    if (errSeleccion) {
-      handleRemoveFile();
-      setErrorArchivo(errSeleccion);
-      return;
-    }
-
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-    }
-    setErrorArchivo(null);
-    idempotencyKeyRef.current = generarClaveIdempotenciaPago();
-    setSelectedFile(file);
-    const objUrl = URL.createObjectURL(file);
-    setPreviewUrl(objUrl);
-  };
-
   const limpiarMensajes = () => {
     setFormError(null);
     setFormSuccess(null);
@@ -223,7 +198,7 @@ export function useReportePago({
     setMonedaState(Moneda.VES);
     setMontoOriginalState('');
     setReferenciaBancariaState('');
-    setFechaOperacion(fechaCalendarioLocal());
+    setFechaOperacion(fechaCalendarioEnZona(zonaPerfil));
     setMotivoRechazoCorreccion(null);
     limpiarMensajes();
     handleRemoveFile();
@@ -250,7 +225,7 @@ export function useReportePago({
     setFormError(null);
 
     // RF-007: un pago de días anteriores se puede reportar; uno con fecha futura no.
-    const errFecha = validarFechaCobro(fechaOperacion, fechaCalendarioLocal());
+    const errFecha = validarFechaCobro(fechaOperacion, fechaCalendarioEnZona(zonaPerfil));
     if (errFecha) {
       setErrorFecha(errFecha);
       return;
@@ -284,36 +259,13 @@ export function useReportePago({
     let finalStorageKey: string | undefined = undefined;
 
     if (selectedFile) {
-      if (comprobanteSubidoKeyRef.current) {
-        finalStorageKey = comprobanteSubidoKeyRef.current;
-      } else {
-        if (!user?.id) {
-          setFormError(
-            'No se pudo identificar tu sesión. Vuelve a iniciar sesión e inténtalo de nuevo.'
-          );
-          enVueloRef.current = false;
-          setIsSubmitting(false);
-          return;
-        }
-        try {
-          // D2/ADR-007: la imagen se prepara (WebP/JPEG) ANTES de firmar; la presign y el PUT llevan
-          // el MISMO MIME y la subida solo se da por buena con `respuesta.ok`. Sin clave no hay reporte.
-          const archivoPreparado = await prepararComprobanteParaSubida(selectedFile);
-          finalStorageKey = await subirComprobantePago(archivoPreparado, user.id, {
-            apiClient,
-            fetchFn: fetch,
-          });
-          comprobanteSubidoKeyRef.current = finalStorageKey;
-        } catch (err: any) {
-          // D2: sin storageKey fabricado; si el comprobante no se pudo subir, el reporte no se envía.
-          setFormError(
-            err?.message ||
-              'No se pudo subir el comprobante. Revisa tu conexión e inténtalo de nuevo.'
-          );
-          enVueloRef.current = false;
-          setIsSubmitting(false);
-          return;
-        }
+      try {
+        finalStorageKey = await asegurarComprobanteSubido(user?.id);
+      } catch (err: any) {
+        setFormError(err.message);
+        enVueloRef.current = false;
+        setIsSubmitting(false);
+        return;
       }
     }
 
@@ -372,6 +324,7 @@ export function useReportePago({
     referenciaBancaria,
     setReferenciaBancaria,
     fechaOperacion,
+    hoyLocal,
     alCambiarFecha,
     mostrarErrorFechaFutura,
     isSubmitting,

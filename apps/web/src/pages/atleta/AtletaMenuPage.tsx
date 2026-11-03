@@ -107,7 +107,7 @@ export function AtletaMenuPage() {
           to="/app/progreso"
           icono={Scale}
           claseColorIcono="bg-info/15 text-info"
-          titulo="Mi progreso físico"
+          titulo="Mi progreso"
           descripcion="Compara tus fotos de evolución lado a lado y actualiza tus medidas o peso corporal."
           ceja="Antes y después"
           textoAccion="Ver evolución"
@@ -118,7 +118,7 @@ export function AtletaMenuPage() {
           icono={CreditCard}
           claseColorIcono="bg-warning/15 text-warning"
           titulo="Pagos y cuotas"
-          descripcion="Reporta un nuevo abono (Pago Móvil / Zelle) o consulta tus recibos y fechas de corte."
+          descripcion="Reporta un pago o consulta tu historial y tus fechas de corte."
           badgeCuota={badgeCuota}
           variante="completa"
         />

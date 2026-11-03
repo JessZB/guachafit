@@ -47,7 +47,7 @@ export function PanelSoloLecturaProgreso({
         className="w-full min-h-11 py-3 px-4 rounded-2xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
       >
         <TrendingUp className="h-4 w-4 text-primary" />
-        <span>Ver mi historial y evolución</span>
+        <span>Ver evolución</span>
       </button>
     </div>
   );

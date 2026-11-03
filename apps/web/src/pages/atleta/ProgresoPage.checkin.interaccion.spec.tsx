@@ -20,6 +20,7 @@ const sesionMock = vi.hoisted(() => ({
     modalidad: 'remoto',
     periodicidadAntropometria: null as string | null,
     antropometriaInicio: null as string | null,
+    zonaHoraria: 'America/Caracas',
   },
 }));
 
@@ -81,9 +82,9 @@ describe('ProgresoPage · check-in sin fotos (contrato 17)', () => {
   it('sin fotos, el POST a /antropometria/checkin no incluye la clave fotos', async () => {
     render(<ProgresoPage />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Actualizar mis medidas y fotos/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Tus medidas/ }));
     fireEvent.change(screen.getByLabelText('Peso (kg)'), { target: { value: '74.50' } });
-    fireEvent.click(screen.getByRole('button', { name: /Enviar Evaluación al Entrenador/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Enviar a mi entrenador/ }));
 
     await waitFor(() =>
       expect(

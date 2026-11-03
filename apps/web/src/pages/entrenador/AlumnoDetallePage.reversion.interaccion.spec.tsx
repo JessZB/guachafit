@@ -324,11 +324,11 @@ describe('AlumnoDetallePage · RF-007: estado y reversión en el historial (cont
     expect(within(filaDeTransaccion('RECH-02')).getByText('Rechazado')).toBeTruthy();
   });
 
-  it('7b · las filas pendiente y revertida muestran "En Revisión" y "Revertido"', async () => {
+  it('7b · las filas pendiente y revertida muestran "En revisión" y "Revertido"', async () => {
     montarPagina();
     await screen.findByText(/Ref: PEND-03/);
 
-    expect(within(filaDeTransaccion('PEND-03')).getByText('En Revisión')).toBeTruthy();
+    expect(within(filaDeTransaccion('PEND-03')).getByText('En revisión')).toBeTruthy();
     expect(within(filaDeTransaccion('REV-04')).getByText('Revertido')).toBeTruthy();
   });
 

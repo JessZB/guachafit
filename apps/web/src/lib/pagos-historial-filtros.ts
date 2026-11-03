@@ -2,7 +2,7 @@
  * WU20: filtros del historial de pagos del alumno (chips por estado de conciliación).
  *
  * Espeja EXACTAMENTE lo que cada fila ya renderiza: aprobado → "Verificado",
- * rechazado → "Rechazado", revertido → "Revertido" (RF-007) y cualquier otro valor → "En Revisión"
+ * rechazado → "Rechazado", revertido → "Revertido" (RF-007) y cualquier otro valor → "En revisión"
  * (pendiente).
  *
  * Expone también `tonoEstadoTransaccion` (tono del badge de la fila, con el mismo criterio de
@@ -35,7 +35,7 @@ export function etiquetaEstadoTransaccion(estado: string | null | undefined): st
     case EstadoConciliacion.REVERTIDO:
       return 'Revertido';
     default:
-      return 'En Revisión';
+      return 'En revisión';
   }
 }
 

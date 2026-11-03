@@ -142,7 +142,7 @@ describe('ALU-14 & ALU-15: Flex-wrap y prevención de desbordes en Pagos', () =>
         saldoVesProyectado="2.600,00"
       />
     );
-    const etiquetaSaldo = screen.getByText('Saldo Pendiente');
+    const etiquetaSaldo = screen.getByText('Saldo pendiente');
     const contenedor = etiquetaSaldo.closest('.flex');
     expect(contenedor).not.toBeNull();
     expect(contenedor?.className).toContain('flex-wrap');

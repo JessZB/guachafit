@@ -2,7 +2,7 @@
 /**
  * RF-009/RF-007 (pagos con fecha anterior): contrato 9 — reporte de pago del alumno (`PagosPage`).
  *
- * El formulario tiene el campo "Fecha de Operación" (type=date, obligatorio, con valor por
+ * El formulario tiene el campo "Fecha de operación" (type=date, obligatorio, con valor por
  * defecto del día LOCAL del dispositivo, `max` = hoy) y validación de fechas futuras: una fecha
  * futura no se envía al API.
  *
@@ -65,6 +65,7 @@ const authDemo = vi.hoisted(() => ({
     email: 'alumno@example.com',
     rol: 'alumno',
     entrenadorId: 'e1111111-1111-4111-8111-111111111111',
+    zonaHoraria: 'America/Caracas',
   },
 }));
 
@@ -181,14 +182,14 @@ function montarPagina(): void {
 /** Abre el formulario de reporte desde el hub de la página. */
 async function abrirFormulario(): Promise<void> {
   fireEvent.click(
-    await screen.findByRole('button', { name: /Reportar un nuevo abono o pago/ })
+    await screen.findByRole('button', { name: /Reportar pago/ })
   );
-  await screen.findByText('Reportar Abono o Cuota');
+  await screen.findByRole('heading', { name: 'Reportar pago' });
 }
 
-/** Campo "Fecha de Operación" del formulario. */
+/** Campo "Fecha de operación" del formulario. */
 function campoFechaPago(): HTMLInputElement {
-  return screen.getByLabelText('Fecha de Operación') as HTMLInputElement;
+  return screen.getByLabelText('Fecha de operación') as HTMLInputElement;
 }
 
 describe('PagosPage · contrato 9: fecha del pago en el reporte del alumno', () => {
@@ -204,7 +205,7 @@ describe('PagosPage · contrato 9: fecha del pago en el reporte del alumno', () 
     await abrirFormulario();
     fireEvent.change(campoFechaPago(), { target: { value: '2026-10-12' } });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Enviar Comprobante de Pago' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar comprobante de pago' }));
 
     expect(await screen.findByText(MENSAJE_FECHA_PAGO_FUTURA)).toBeTruthy();
     expect(llamadasPostReporte()).toHaveLength(0);
@@ -213,11 +214,11 @@ describe('PagosPage · contrato 9: fecha del pago en el reporte del alumno', () 
   it('9c · una fecha anterior viaja en el payload del reporte (regresión del campo actual)', async () => {
     montarPagina();
     await abrirFormulario();
-    fireEvent.change(screen.getByLabelText('Monto Pagado'), { target: { value: '1300.00' } });
-    fireEvent.change(screen.getByLabelText(/Referencia Bancaria/), { target: { value: '987654' } });
+    fireEvent.change(screen.getByLabelText('Monto pagado'), { target: { value: '1300.00' } });
+    fireEvent.change(screen.getByLabelText(/Referencia bancaria/), { target: { value: '987654' } });
     fireEvent.change(campoFechaPago(), { target: { value: '2026-09-21' } });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Enviar Comprobante de Pago' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar comprobante de pago' }));
     await screen.findByText(/Pago reportado con éxito/);
 
     expect(llamadasPostReporte()).toHaveLength(1);
@@ -227,11 +228,11 @@ describe('PagosPage · contrato 9: fecha del pago en el reporte del alumno', () 
   it('9d · con otro campo obligatorio vacío y fecha válida no se muestra el mensaje de fecha futura', async () => {
     montarPagina();
     await abrirFormulario();
-    const campoMonto = screen.getByLabelText('Monto Pagado');
+    const campoMonto = screen.getByLabelText('Monto pagado');
     fireEvent.change(campoMonto, { target: { value: '' } });
     fireEvent.change(campoFechaPago(), { target: { value: '2026-09-21' } });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Enviar Comprobante de Pago' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar comprobante de pago' }));
 
     // La validación nativa del monto vacío bloquea el envío; la fecha es válida,
     // así que el mensaje propio de fecha futura no debe aparecer.
@@ -252,10 +253,10 @@ describe('PagosPage · contrato 9: fecha del pago en el reporte del alumno', () 
   it('1b · enviar sin tocar la fecha no muestra el mensaje de fecha futura (hallazgo 1)', async () => {
     montarPagina();
     await abrirFormulario();
-    fireEvent.change(screen.getByLabelText('Monto Pagado'), { target: { value: '1300.00' } });
-    fireEvent.change(screen.getByLabelText(/Referencia Bancaria/), { target: { value: '987654' } });
+    fireEvent.change(screen.getByLabelText('Monto pagado'), { target: { value: '1300.00' } });
+    fireEvent.change(screen.getByLabelText(/Referencia bancaria/), { target: { value: '987654' } });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Enviar Comprobante de Pago' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar comprobante de pago' }));
     await screen.findByText(/Pago reportado con éxito/);
 
     expect(screen.queryByText(MENSAJE_FECHA_PAGO_FUTURA)).toBeNull();
@@ -268,7 +269,7 @@ describe('PagosPage · contrato 9: fecha del pago en el reporte del alumno', () 
     await abrirFormulario();
     fireEvent.change(campoFechaPago(), { target: { value: '2026-10-12' } });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Enviar Comprobante de Pago' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar comprobante de pago' }));
     expect(await screen.findByText(MENSAJE_FECHA_PAGO_FUTURA)).toBeTruthy();
 
     fireEvent.change(campoFechaPago(), { target: { value: '2026-09-21' } });

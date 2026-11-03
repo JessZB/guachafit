@@ -41,6 +41,7 @@ const authDemo = vi.hoisted(() => ({
     email: 'alumno@example.com',
     rol: 'alumno',
     entrenadorId: 'e1111111-1111-4111-8111-111111111111',
+    zonaHoraria: 'America/Caracas',
   },
 }));
 
@@ -157,12 +158,12 @@ describe('pages/atleta/PagosPage · interacción D11, D15, formato común y vali
 
   it('P21: se elige «Zelle (USD)» en «Método de Pago» y la moneda pasa a USD, luego «Pago Móvil (VES)» y pasa a VES', async () => {
     montarPagina();
-    const boton = await screen.findByRole('button', { name: /Reportar un nuevo abono o pago/i });
+    const boton = await screen.findByRole('button', { name: /Reportar pago/i });
     fireEvent.click(boton);
 
-    await screen.findByText('Reportar Abono o Cuota');
+    await screen.findByRole('heading', { name: 'Reportar pago' });
 
-    const selectMetodo = screen.getByLabelText('Método de Pago');
+    const selectMetodo = screen.getByLabelText('Método de pago');
     const selectMoneda = screen.getByLabelText('Moneda') as HTMLSelectElement;
 
     fireEvent.change(selectMetodo, { target: { value: MetodoPago.ZELLE } });
@@ -174,15 +175,15 @@ describe('pages/atleta/PagosPage · interacción D11, D15, formato común y vali
 
   it('P22: reporte con Zelle y referencia vacía bloquea envío, muestra errorReferencia accesible y se limpia al corregir', async () => {
     montarPagina();
-    const boton = await screen.findByRole('button', { name: /Reportar un nuevo abono o pago/i });
+    const boton = await screen.findByRole('button', { name: /Reportar pago/i });
     fireEvent.click(boton);
 
-    await screen.findByText('Reportar Abono o Cuota');
+    await screen.findByRole('heading', { name: 'Reportar pago' });
 
-    const selectMetodo = screen.getByLabelText('Método de Pago');
+    const selectMetodo = screen.getByLabelText('Método de pago');
     fireEvent.change(selectMetodo, { target: { value: MetodoPago.ZELLE } });
 
-    const inputMonto = screen.getByLabelText('Monto Pagado');
+    const inputMonto = screen.getByLabelText('Monto pagado');
     fireEvent.change(inputMonto, { target: { value: '50.00' } });
 
     const inputRef = screen.getByLabelText(/Referencia Bancaria/i) as HTMLInputElement;
@@ -223,13 +224,13 @@ describe('pages/atleta/PagosPage · interacción D11, D15, formato común y vali
     });
 
     montarPagina();
-    const botonHistorial = await screen.findByRole('button', { name: /Ver recibos e historial/i });
+    const botonHistorial = await screen.findByRole('button', { name: /Historial/i });
     fireEvent.click(botonHistorial);
 
-    const botonCorregir = await screen.findByRole('button', { name: /Corregir y Reenviar/i });
+    const botonCorregir = await screen.findByRole('button', { name: /Corregir y reenviar/i });
     fireEvent.click(botonCorregir);
 
-    await screen.findByText('Reportar Abono o Cuota');
+    await screen.findByRole('heading', { name: 'Reportar pago' });
 
     expect(screen.getByText(/Motivo del entrenador:/i)).toBeTruthy();
     expect(document.body.textContent).toContain('Comprobante borroso');
@@ -252,7 +253,7 @@ describe('pages/atleta/PagosPage · interacción D11, D15, formato común y vali
 
     montarPagina();
 
-    await screen.findByText('Saldo Pendiente');
+    await screen.findByText('Saldo pendiente');
 
     const textoCuerpo = document.body.textContent ?? '';
 

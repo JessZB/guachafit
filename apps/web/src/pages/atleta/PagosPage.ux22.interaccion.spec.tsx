@@ -64,6 +64,7 @@ const authDemo = vi.hoisted(() => ({
     email: 'alumno@example.com',
     rol: 'alumno',
     entrenadorId: 'e1111111-1111-4111-8111-111111111111',
+    zonaHoraria: 'America/Caracas',
   },
 }));
 
@@ -184,17 +185,17 @@ describe('PagosPage · UX-22 (ALU-07, D8)', () => {
     render(<PagosPage />);
 
     // Navegar al formulario de reporte
-    fireEvent.click(await screen.findByRole('button', { name: /Reportar un nuevo abono o pago/i }));
-    await screen.findByText('Reportar Abono o Cuota');
+    fireEvent.click(await screen.findByRole('button', { name: /Reportar pago/i }));
+    await screen.findByRole('heading', { name: 'Reportar pago' });
 
     // Ingresar monto válido
     const inputs = document.querySelectorAll('input');
     const inputMonto = Array.from(inputs).find((i) => i.getAttribute('inputmode') === 'decimal') as HTMLInputElement;
     fireEvent.change(inputMonto, { target: { value: '40.00' } });
-    fireEvent.change(screen.getByLabelText(/Referencia Bancaria/), { target: { value: '987654' } });
+    fireEvent.change(screen.getByLabelText(/Referencia bancaria/), { target: { value: '987654' } });
 
     // Primer envío: falla por red ambigua
-    const botonEnviar = screen.getByRole('button', { name: /Enviar Comprobante de Pago|Informar Pago/i });
+    const botonEnviar = screen.getByRole('button', { name: /Enviar comprobante de pago|Informar Pago/i });
     fireEvent.click(botonEnviar);
 
     // Debe mostrar exactamente el mensaje de red ambigua en el alert
@@ -208,8 +209,8 @@ describe('PagosPage · UX-22 (ALU-07, D8)', () => {
     expect(typeof key1).toBe('string');
     expect(key1.length).toBeGreaterThanOrEqual(8);
 
-    // Segundo envío (el usuario pulsa de nuevo "Enviar Comprobante de Pago" / "Informar Pago")
-    fireEvent.click(screen.getByRole('button', { name: /Enviar Comprobante de Pago|Informar Pago/i }));
+    // Segundo envío (el usuario pulsa de nuevo "Enviar comprobante de pago" / "Informar Pago")
+    fireEvent.click(screen.getByRole('button', { name: /Enviar comprobante de pago|Informar Pago/i }));
 
     await screen.findByText(/¡Pago reportado con éxito!/i);
     expect(llamadasPostReporteRegistradas).toHaveLength(2);
@@ -236,21 +237,21 @@ describe('PagosPage · UX-22 (ALU-07, D8)', () => {
 
     render(<PagosPage />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Reportar un nuevo abono o pago/i }));
-    await screen.findByText('Reportar Abono o Cuota');
+    fireEvent.click(await screen.findByRole('button', { name: /Reportar pago/i }));
+    await screen.findByRole('heading', { name: 'Reportar pago' });
 
     // Monto
     const inputs = document.querySelectorAll('input');
     const inputMonto = Array.from(inputs).find((i) => i.getAttribute('inputmode') === 'decimal') as HTMLInputElement;
     fireEvent.change(inputMonto, { target: { value: '40.00' } });
-    fireEvent.change(screen.getByLabelText(/Referencia Bancaria/), { target: { value: '987654' } });
+    fireEvent.change(screen.getByLabelText(/Referencia bancaria/), { target: { value: '987654' } });
 
     // Archivo adjunto
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(fileInput, { target: { files: [archivo] } });
 
     // Primer intento: sube comprobante y falla el POST
-    fireEvent.click(screen.getByRole('button', { name: /Enviar Comprobante de Pago|Informar Pago/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Enviar comprobante de pago|Informar Pago/i }));
 
     const alerta = await screen.findByRole('alert');
     expect(alerta.textContent).toContain('Fallo temporal 503');
@@ -258,7 +259,7 @@ describe('PagosPage · UX-22 (ALU-07, D8)', () => {
     expect(subirComprobantePago).toHaveBeenCalledTimes(1);
 
     // Segundo intento (reintento del usuario): NO debe volver a subir la imagen
-    fireEvent.click(screen.getByRole('button', { name: /Enviar Comprobante de Pago|Informar Pago/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Enviar comprobante de pago|Informar Pago/i }));
 
     await screen.findByText(/¡Pago reportado con éxito!/i);
 
@@ -275,19 +276,19 @@ describe('PagosPage · UX-22 (ALU-07, D8)', () => {
 
     const { unmount } = render(<PagosPage />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Reportar un nuevo abono o pago/i }));
-    await screen.findByText('Reportar Abono o Cuota');
+    fireEvent.click(await screen.findByRole('button', { name: /Reportar pago/i }));
+    await screen.findByRole('heading', { name: 'Reportar pago' });
 
     const inputs = document.querySelectorAll('input');
     const inputMonto = Array.from(inputs).find((i) => i.getAttribute('inputmode') === 'decimal') as HTMLInputElement;
     fireEvent.change(inputMonto, { target: { value: '40.00' } });
-    fireEvent.change(screen.getByLabelText(/Referencia Bancaria/), { target: { value: '987654' } });
+    fireEvent.change(screen.getByLabelText(/Referencia bancaria/), { target: { value: '987654' } });
 
     vi.useFakeTimers();
     vi.clearAllTimers();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Enviar Comprobante de Pago|Informar Pago/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Enviar comprobante de pago|Informar Pago/i }));
     });
 
     expect(screen.queryByText(/¡Pago reportado con éxito!/i)).not.toBeNull();
@@ -318,22 +319,22 @@ describe('PagosPage · UX-22 (ALU-07, D8)', () => {
     render(<PagosPage />);
 
     // 1. Ir a la vista de reporte desde el Hub
-    const botonReportar = await screen.findByRole('button', { name: /Reportar un nuevo abono o pago/i });
+    const botonReportar = await screen.findByRole('button', { name: /Reportar pago/i });
     fireEvent.click(botonReportar);
-    await screen.findByText('Reportar Abono o Cuota');
+    await screen.findByRole('heading', { name: 'Reportar pago' });
 
     // 2. Ingresar monto
     const inputs = document.querySelectorAll('input');
     const inputMonto = Array.from(inputs).find((i) => i.getAttribute('inputmode') === 'decimal') as HTMLInputElement;
     fireEvent.change(inputMonto, { target: { value: '40.00' } });
-    fireEvent.change(screen.getByLabelText(/Referencia Bancaria/), { target: { value: '987654' } });
+    fireEvent.change(screen.getByLabelText(/Referencia bancaria/), { target: { value: '987654' } });
 
     vi.useFakeTimers();
     vi.clearAllTimers();
 
     // 3. Enviar pago exitoso
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Enviar Comprobante de Pago|Informar Pago/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Enviar comprobante de pago|Informar Pago/i }));
     });
 
     expect(screen.queryByText(/¡Pago reportado con éxito!/i)).not.toBeNull();
@@ -357,7 +358,7 @@ describe('PagosPage · UX-22 (ALU-07, D8)', () => {
       vi.advanceTimersByTime(2000);
     });
 
-    expect(screen.getByRole('button', { name: /Reportar un nuevo abono o pago/i })).toBeDefined();
-    expect(screen.queryByText('Historial de Pagos y Recibos')).toBeNull();
+    expect(screen.getByRole('button', { name: /Reportar pago/i })).toBeDefined();
+    expect(screen.queryByRole('heading', { name: 'Historial', level: 2 })).toBeNull();
   });
 });

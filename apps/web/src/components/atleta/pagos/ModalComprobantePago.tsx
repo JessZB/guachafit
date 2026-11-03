@@ -105,7 +105,7 @@ export function ModalComprobantePago({
               <p className="text-[11px] text-muted-foreground max-w-xs">
                 {comprobante.url
                   ? 'El enlace temporal de lectura falló o expiró. Cierra el visor e inténtalo de nuevo.'
-                  : 'El servidor no generó una URL de lectura para este pago (por ejemplo, almacenamiento R2 no configurado).'}
+                  : 'No pudimos mostrar la imagen de este comprobante en este momento.'}
               </p>
             </div>
           )}

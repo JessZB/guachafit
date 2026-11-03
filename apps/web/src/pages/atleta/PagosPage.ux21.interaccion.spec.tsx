@@ -70,6 +70,7 @@ const authDemo = vi.hoisted(() => ({
     email: 'alumno@example.com',
     rol: 'alumno',
     entrenadorId: 'e1111111-1111-4111-8111-111111111111',
+    zonaHoraria: 'America/Caracas',
   },
 }));
 
@@ -172,36 +173,36 @@ describe('PagosPage · UX-21 (C1, C3, C5, C6, C7)', () => {
     vi.restoreAllMocks();
   });
 
-  it('C5 · SelectorAccionesPagos: \'Reportar un nuevo abono o pago\' se activa con la tecla Espacio', async () => {
+  it('C5 · SelectorAccionesPagos: \'Reportar pago\' se activa con la tecla Espacio', async () => {
     montarPagina();
-    const boton = await screen.findByRole('button', { name: /Reportar un nuevo abono o pago/i });
+    const boton = await screen.findByRole('button', { name: /Reportar pago/i });
     fireEvent.keyDown(boton, { key: ' ' });
 
-    expect(await screen.findByText('Reportar Abono o Cuota')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Reportar pago' })).toBeTruthy();
   });
 
-  it('C5 · SelectorAccionesPagos: \'Ver recibos e historial\' se activa con la tecla Espacio', async () => {
+  it('C5 · SelectorAccionesPagos: \'Historial\' se activa con la tecla Espacio', async () => {
     montarPagina();
-    const boton = await screen.findByRole('button', { name: /Ver recibos e historial/i });
+    const boton = await screen.findByRole('button', { name: /Historial/i });
     fireEvent.keyDown(boton, { key: ' ' });
 
-    expect(await screen.findByText('Historial de Pagos y Recibos')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Historial' })).toBeTruthy();
   });
 
   it('C7 · PestanaReportePago: el botón \'Volver a opciones de pago\' tiene type="button"', async () => {
     montarPagina();
-    fireEvent.click(await screen.findByRole('button', { name: /Reportar un nuevo abono o pago/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Reportar pago/i }));
 
     const botonVolver = await screen.findByRole('button', { name: /Volver a opciones de pago/i });
     expect(botonVolver.getAttribute('type')).toBe('button');
   });
 
-  it('C7 · PestanaHistorialPagos: los botones \'Volver a opciones de pago\' y \'Nuevo Abono\' tienen type="button"', async () => {
+  it('C7 · PestanaHistorialPagos: los botones \'Volver a opciones de pago\' y \'Reportar pago\' tienen type="button"', async () => {
     montarPagina();
-    fireEvent.click(await screen.findByRole('button', { name: /Ver recibos e historial/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Historial/i }));
 
     const botonVolver = await screen.findByRole('button', { name: /Volver a opciones de pago/i });
-    const botonNuevoAbono = await screen.findByRole('button', { name: /Nuevo Abono/i });
+    const botonNuevoAbono = await screen.findByRole('button', { name: /Reportar pago/i });
 
     expect(botonVolver.getAttribute('type')).toBe('button');
     expect(botonNuevoAbono.getAttribute('type')).toBe('button');
@@ -210,34 +211,34 @@ describe('PagosPage · UX-21 (C1, C3, C5, C6, C7)', () => {
   it('C3 · PestanaReportePago: cuando hay error de envío/API (formError), el contenedor tiene role="alert"', async () => {
     alHacerPostReporte = () => Promise.reject(new Error('Error de conexión bancaria'));
     montarPagina();
-    fireEvent.click(await screen.findByRole('button', { name: /Reportar un nuevo abono o pago/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Reportar pago/i }));
 
     const inputs = document.querySelectorAll('input');
     const inputMonto = Array.from(inputs).find((i) => i.getAttribute('inputmode') === 'decimal') ?? inputs[0];
     fireEvent.change(inputMonto, { target: { value: '25.00' } });
-    fireEvent.change(screen.getByLabelText(/Referencia Bancaria/), { target: { value: '987654' } });
+    fireEvent.change(screen.getByLabelText(/Referencia bancaria/), { target: { value: '987654' } });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Enviar Comprobante de Pago' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar comprobante de pago' }));
 
     const alerta = await screen.findByRole('alert');
     expect(alerta.textContent).toContain('Error de conexión bancaria');
   });
 
-  it('C6 · FilaTransaccionPago + PagosPage: pulsar \'Corregir y Reenviar\' en un pago rechazado conmuta a \'nuevo-pago\' y prellena el monto', async () => {
+  it('C6 · FilaTransaccionPago + PagosPage: pulsar \'Corregir y reenviar\' en un pago rechazado conmuta a \'nuevo-pago\' y prellena el monto', async () => {
     montarPagina();
-    fireEvent.click(await screen.findByRole('button', { name: /Ver recibos e historial/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Historial/i }));
 
-    const botonCorregir = await screen.findByRole('button', { name: 'Corregir y Reenviar' });
+    const botonCorregir = await screen.findByRole('button', { name: 'Corregir y reenviar' });
     fireEvent.click(botonCorregir);
 
-    expect(await screen.findByText('Reportar Abono o Cuota')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Reportar pago' })).toBeTruthy();
 
     const inputs = document.querySelectorAll('input');
     const inputMonto = Array.from(inputs).find((i) => i.getAttribute('inputmode') === 'decimal') as HTMLInputElement;
     expect(inputMonto.value).toBe('75.00');
   });
 
-  it('C6 · Integración PagosPage: \'Corregir y Reenviar\' prellena método, moneda, monto, referencia y fecha en el formulario', async () => {
+  it('C6 · Integración PagosPage: \'Corregir y reenviar\' prellena método, moneda, monto, referencia y fecha en el formulario', async () => {
     txHistorialPersonalizada = {
       ...txRechazadaBase,
       metodoPago: MetodoPago.BINANCE_USDT,
@@ -247,10 +248,10 @@ describe('PagosPage · UX-21 (C1, C3, C5, C6, C7)', () => {
     };
 
     montarPagina();
-    fireEvent.click(await screen.findByRole('button', { name: /Ver recibos e historial/i }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Corregir y Reenviar' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Historial/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Corregir y reenviar' }));
 
-    await screen.findByText('Reportar Abono o Cuota');
+    await screen.findByRole('heading', { name: 'Reportar pago' });
 
     const selectMetodo = document.querySelectorAll('select')[0] as HTMLSelectElement;
     const selectMoneda = document.querySelectorAll('select')[1] as HTMLSelectElement;
@@ -268,13 +269,13 @@ describe('PagosPage · UX-21 (C1, C3, C5, C6, C7)', () => {
 
   it('C1 · Integración PagosPage: el formulario arranca con monto vacío (\'\') y bloquea el envío sin llamar a la API', async () => {
     montarPagina();
-    fireEvent.click(await screen.findByRole('button', { name: /Reportar un nuevo abono o pago/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Reportar pago/i }));
 
     const inputs = document.querySelectorAll('input');
     const inputMonto = Array.from(inputs).find((i) => i.getAttribute('inputmode') === 'decimal') as HTMLInputElement;
     expect(inputMonto.value).toBe('');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Enviar Comprobante de Pago' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar comprobante de pago' }));
 
     expect(await screen.findByText('Ingresa un monto válido mayor a 0.')).toBeTruthy();
     expect(llamadasPostReporte()).toHaveLength(0);

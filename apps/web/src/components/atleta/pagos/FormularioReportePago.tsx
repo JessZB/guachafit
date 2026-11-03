@@ -16,7 +16,7 @@
  *   (los specs localizan los campos por `label.textContent` +
  *   `parentElement.querySelector('input…')`);
  * - `max` = hoy local, validación nativa intacta (`required`, `onInvalid` con
- *   `rangeOverflow` → mensaje propio) y botón "Enviar Comprobante de Pago".
+ *   `rangeOverflow` → mensaje propio) y botón "Enviar comprobante de pago".
  *
  * §6: `entrada-numerica` (`inputMode="decimal"` en el monto), validación
  * honesta (fecha futura y VES sin tasa bloquean con mensaje claro), `font-bold`
@@ -24,7 +24,6 @@
  */
 import { useId, type FormEvent, type ReactNode } from 'react';
 import { MetodoPago, Moneda } from '@guachafit/shared';
-import { fechaCalendarioLocal } from '../../../lib/date-format';
 import { avisoMonedaMetodo } from '../../../lib/pagos-montos';
 import { useFormatoNumero } from '../../../lib/use-formato-numero';
 
@@ -38,6 +37,8 @@ export interface FormularioReportePagoProps {
   referenciaBancaria: string;
   onReferencia: (referencia: string) => void;
   fechaOperacion: string;
+  /** Hoy (YYYY-MM-DD) en la zona del perfil: tope del campo fecha. */
+  hoyLocal: string;
   onFecha: (valor: string) => void;
   /** El navegador bloquea la fecha futura por `max`: mensaje propio (hallazgo 6). */
   onFechaInvalida: () => void;
@@ -63,6 +64,7 @@ export function FormularioReportePago({
   referenciaBancaria,
   onReferencia,
   fechaOperacion,
+  hoyLocal,
   onFecha,
   onFechaInvalida,
   isSubmitting,
@@ -98,7 +100,7 @@ export function FormularioReportePago({
       <fieldset disabled={isSubmitting} className="space-y-4 min-w-0 border-0 p-0 m-0">
         <div className="space-y-1.5">
           <label htmlFor={idMetodo} className="text-xs font-semibold text-muted-foreground">
-            Método de Pago
+            Método de pago
           </label>
           <select
             id={idMetodo}
@@ -134,7 +136,7 @@ export function FormularioReportePago({
 
           <div className="space-y-1.5">
             <label htmlFor={idMonto} className="text-xs font-semibold text-muted-foreground">
-              Monto Pagado
+              Monto pagado
             </label>
             <input
               id={idMonto}
@@ -183,7 +185,7 @@ export function FormularioReportePago({
 
         <div className="space-y-1.5">
           <label htmlFor={idReferencia} className="text-xs font-semibold text-muted-foreground">
-            Referencia Bancaria (mínimo 4 caracteres)
+            Referencia bancaria (mínimo 4 caracteres)
           </label>
           <input
             id={idReferencia}
@@ -206,13 +208,13 @@ export function FormularioReportePago({
 
         <div className="space-y-1.5">
           <label htmlFor={idFecha} className="text-xs font-semibold text-muted-foreground">
-            Fecha de Operación
+            Fecha de operación
           </label>
           <input
             id={idFecha}
             type="date"
             required
-            max={fechaCalendarioLocal()}
+            max={hoyLocal}
             value={fechaOperacion}
             onChange={(e) => onFecha(e.target.value)}
             aria-invalid={errorFecha ? 'true' : undefined}
@@ -241,7 +243,7 @@ export function FormularioReportePago({
           disabled={isSubmitting || pagoVesSinTasa}
           className="w-full min-h-11 py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-bold text-base sm:text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
         >
-          {isSubmitting ? 'Enviando al entrenador...' : 'Enviar Comprobante de Pago'}
+          {isSubmitting ? 'Enviando al entrenador...' : 'Enviar comprobante de pago'}
         </button>
       </fieldset>
     </form>

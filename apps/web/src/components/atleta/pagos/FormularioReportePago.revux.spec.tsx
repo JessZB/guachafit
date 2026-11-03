@@ -43,6 +43,7 @@ function renderFormulario(
     referenciaBancaria: '123456',
     onReferencia: vi.fn(),
     fechaOperacion: '2026-11-03',
+    hoyLocal: '2026-11-03',
     onFecha: vi.fn(),
     onFechaInvalida: vi.fn(),
     isSubmitting: false,
@@ -64,11 +65,11 @@ describe('FormularioReportePago · REVUX (G1b)', () => {
   it('R3: isSubmitting=true deshabilita selects, inputs y botones de comprobante; isSubmitting=false los mantiene habilitados', () => {
     // 1. Con isSubmitting=true y sin archivo (botón adjuntar)
     const { unmount: unmount1 } = renderFormulario({ isSubmitting: true }, false);
-    const selectMetodo = screen.getByLabelText('Método de Pago');
+    const selectMetodo = screen.getByLabelText('Método de pago');
     const selectMoneda = screen.getByLabelText('Moneda');
-    const inputMonto = screen.getByLabelText('Monto Pagado');
-    const inputRef = screen.getByLabelText(/Referencia Bancaria/);
-    const inputFecha = screen.getByLabelText('Fecha de Operación');
+    const inputMonto = screen.getByLabelText('Monto pagado');
+    const inputRef = screen.getByLabelText(/Referencia bancaria/);
+    const inputFecha = screen.getByLabelText('Fecha de operación');
     const botonAdjuntar = screen.getByRole('button', { name: /Toca para adjuntar foto o captura/i });
     const botonEnviar = screen.getByRole('button', { name: /Enviando al entrenador.../i });
 
@@ -89,10 +90,10 @@ describe('FormularioReportePago · REVUX (G1b)', () => {
 
     // 3. Con isSubmitting=false, todos están habilitados
     renderFormulario({ isSubmitting: false }, true);
-    const selectMetodoHab = screen.getByLabelText('Método de Pago');
-    const inputMontoHab = screen.getByLabelText('Monto Pagado');
+    const selectMetodoHab = screen.getByLabelText('Método de pago');
+    const inputMontoHab = screen.getByLabelText('Monto pagado');
     const botonQuitarHab = screen.getByRole('button', { name: /Quitar comprobante/i });
-    const botonEnviarHab = screen.getByRole('button', { name: /Enviar Comprobante de Pago/i });
+    const botonEnviarHab = screen.getByRole('button', { name: /Enviar comprobante de pago/i });
 
     expect(estaDeshabilitado(selectMetodoHab)).toBe(false);
     expect(estaDeshabilitado(inputMontoHab)).toBe(false);

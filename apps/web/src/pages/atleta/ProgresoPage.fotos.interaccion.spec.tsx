@@ -27,6 +27,7 @@ const sesionMock = vi.hoisted(() => ({
     modalidad: 'remoto',
     periodicidadAntropometria: null as string | null,
     antropometriaInicio: null as string | null,
+    zonaHoraria: 'America/Caracas',
   },
 }));
 
@@ -104,7 +105,7 @@ afterEach(() => {
 
 async function abrirFormularioCheckin(): Promise<void> {
   render(<ProgresoPage />);
-  fireEvent.click(await screen.findByRole('button', { name: /Actualizar mis medidas y fotos/ }));
+  fireEvent.click(await screen.findByRole('button', { name: /Tus medidas/ }));
   await screen.findByLabelText('Peso (kg)');
 }
 
@@ -142,7 +143,7 @@ describe('ProgresoPage · UI de fotos del check-in (contrato 17)', () => {
     await screen.findByAltText('Foto frontal lista');
 
     fireEvent.change(screen.getByLabelText('Peso (kg)'), { target: { value: '74.50' } });
-    fireEvent.click(screen.getByRole('button', { name: /Enviar Evaluación al Entrenador/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Enviar a mi entrenador/ }));
 
     await waitFor(() =>
       expect(
@@ -177,7 +178,7 @@ describe('ProgresoPage · UI de fotos del check-in (contrato 17)', () => {
     const archivo = new File(['foto'], 'progreso.webp', { type: 'image/webp' });
     fireEvent.change(screen.getByLabelText('Foto frontal'), { target: { files: [archivo] } });
 
-    const botonEnviar = screen.getByRole('button', { name: /Enviar Evaluación al Entrenador/ });
+    const botonEnviar = screen.getByRole('button', { name: /Enviar a mi entrenador/ });
     await waitFor(() => expect((botonEnviar as HTMLButtonElement).disabled).toBe(true));
 
     await act(async () => {
@@ -194,7 +195,7 @@ describe('ProgresoPage · UI de fotos del check-in (contrato 17)', () => {
     await screen.findByAltText('Foto frontal lista');
 
     fireEvent.change(screen.getByLabelText('Peso (kg)'), { target: { value: '74.50' } });
-    fireEvent.click(screen.getByRole('button', { name: /Enviar Evaluación al Entrenador/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Enviar a mi entrenador/ }));
 
     await waitFor(() =>
       expect(
@@ -203,13 +204,13 @@ describe('ProgresoPage · UI de fotos del check-in (contrato 17)', () => {
     );
 
     // El panel de éxito desmonta el formulario (y con él, el selector con su foto).
-    expect(await screen.findByText('¡Mediciones Guardadas!')).toBeTruthy();
+    expect(await screen.findByText('¡Medidas guardadas!')).toBeTruthy();
     expect(screen.queryByLabelText('Foto frontal')).toBeNull();
 
     // Al reabrir el formulario, el selector se monta vacío (el padre ya cambió su `key`).
     const reabrir = await screen.findByRole(
       'button',
-      { name: /Nuevo Check-in/ },
+      { name: /Nuevo check-in/ },
       { timeout: 3000 }
     );
     fireEvent.click(reabrir);

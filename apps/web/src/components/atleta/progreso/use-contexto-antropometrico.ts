@@ -14,6 +14,8 @@ import {
   type EscenarioDemoAntropometria,
 } from '../../../lib/demo-antropometria';
 import { fechaCalendarioLocal } from '../../../lib/date-format';
+import { fechaCalendarioEnZona } from '../../../lib/zona-horaria';
+import { zonaPerfilEfectiva } from '../../../lib/nutricion-checkin';
 import { AuthUserDTO, Modalidad } from '@guachafit/shared';
 
 export function useContextoAntropometrico(
@@ -68,15 +70,23 @@ export function useContextoAntropometrico(
   /** RN-03: con modalidad presencial el alumno tiene solo lectura (el servidor responde 403). */
   const esSoloLectura = contextoAntropometrico.modalidad === Modalidad.PRESENCIAL;
 
-  /** RN-04/§6: estado del calendario y de la ventana de check-in en el día local. */
+  /**
+   * ADR-025: el día "hoy" del alumno es el de la zona de su perfil (la de la sesión fresca si
+   * existe), no el del dispositivo. En demo el fixture ancla sus fechas en el día del dispositivo,
+   * así que la ventana usa ese mismo reloj.
+   */
+  const zonaPerfil = zonaPerfilEfectiva(sesionFresca?.zonaHoraria ?? user?.zonaHoraria);
+  const hoyLocal = isDemoMode ? fechaCalendarioLocal() : fechaCalendarioEnZona(zonaPerfil);
+
+  /** RN-04/§6: estado del calendario y de la ventana de check-in en el día de su zona. */
   const estadoVentana = useMemo(
     () =>
       calcularEstadoVentanaCheckinAntropometrico({
         periodicidad: contextoAntropometrico.periodicidadAntropometria,
         antropometriaInicio: contextoAntropometrico.antropometriaInicio,
-        hoyLocal: fechaCalendarioLocal(),
+        hoyLocal,
       }),
-    [contextoAntropometrico]
+    [contextoAntropometrico, hoyLocal]
   );
 
   /** Motivo por el que el registro remoto no está disponible ahora mismo (o null). */
@@ -90,6 +100,8 @@ export function useContextoAntropometrico(
     esSoloLectura,
     estadoVentana,
     motivoRegistroBloqueado,
+    zonaPerfil,
+    hoyLocal,
     escenarioDemo,
     setEscenarioDemo,
   };

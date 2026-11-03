@@ -12,7 +12,7 @@
  * `etiquetaEstadoCuota` (SUGGESTION-3 del inventario; la consolidación 48 §6 M4
  * lo exige en lugar del ternario hardcodeado).
  *
- * R5: conserva los textos que consultan los specs ("Saldo Pendiente",
+ * R5: conserva los textos que consultan los specs ("Saldo pendiente",
  * "De esta cuota, … se cubrieron…" vía literal idéntico).
  *
  * §6: estados honestos (saldo en Bs. no disponible sin tasa), `font-bold`
@@ -59,7 +59,7 @@ export function TarjetaResumenCuota({
       <div className="my-5 flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <span className="text-xs font-semibold text-muted-foreground block">
-            Saldo Pendiente
+            Saldo pendiente
           </span>
           <div className="text-3xl sm:text-4xl font-bold font-mono text-foreground mt-0.5">
             {formatMonto(cuota.saldoPendienteUsd, 'USD', { conCodigo: true })}
@@ -73,7 +73,7 @@ export function TarjetaResumenCuota({
 
         <div className="text-right">
           <span className="text-xs font-semibold text-muted-foreground block">
-            Total Cuota
+            Total de la cuota
           </span>
           <span className="text-lg font-bold font-mono text-muted-foreground">
             {formatMonto(cuota.montoTotalUsd, 'USD', { conCodigo: true })}

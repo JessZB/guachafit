@@ -46,13 +46,13 @@ describe('normalizarEstadoTransaccion / etiquetaEstadoTransaccion (WU20)', () =>
     );
     expect(etiquetaEstadoTransaccion(EstadoConciliacion.APROBADO)).toBe('Verificado');
     expect(etiquetaEstadoTransaccion(EstadoConciliacion.RECHAZADO)).toBe('Rechazado');
-    expect(etiquetaEstadoTransaccion(EstadoConciliacion.PENDIENTE)).toBe('En Revisión');
+    expect(etiquetaEstadoTransaccion(EstadoConciliacion.PENDIENTE)).toBe('En revisión');
   });
 
-  it('un estado ausente o desconocido cae a "En Revisión" (igual que la fila)', () => {
+  it('un estado ausente o desconocido cae a "En revisión" (igual que la fila)', () => {
     expect(normalizarEstadoTransaccion(undefined)).toBe(EstadoConciliacion.PENDIENTE);
-    expect(etiquetaEstadoTransaccion(null)).toBe('En Revisión');
-    expect(etiquetaEstadoTransaccion('estado_raro')).toBe('En Revisión');
+    expect(etiquetaEstadoTransaccion(null)).toBe('En revisión');
+    expect(etiquetaEstadoTransaccion('estado_raro')).toBe('En revisión');
   });
 });
 
@@ -63,7 +63,7 @@ describe('filtrarTransaccionesPorEstado (WU20)', () => {
     expect(resultado).not.toBe(HISTORIAL);
   });
 
-  it('cada chip devuelve solo su estado, incluyendo los desconocidos en En Revisión', () => {
+  it('cada chip devuelve solo su estado, incluyendo los desconocidos en En revisión', () => {
     expect(
       filtrarTransaccionesPorEstado(HISTORIAL, EstadoConciliacion.APROBADO).map((t) => t.id)
     ).toEqual(['1']);

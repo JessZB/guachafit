@@ -12,6 +12,7 @@ const sesionMock = vi.hoisted(() => ({
     modalidad: 'remoto',
     periodicidadAntropometria: null as string | null,
     antropometriaInicio: null as string | null,
+    zonaHoraria: 'America/Caracas',
   },
 }));
 
@@ -84,7 +85,7 @@ const EVOLUCION_CON_DATOS = {
 };
 
 async function abrirFormulario() {
-  const botonAbrir = await screen.findByRole('button', { name: /Actualizar mis medidas y fotos/i });
+  const botonAbrir = await screen.findByRole('button', { name: /Tus medidas/i });
   fireEvent.click(botonAbrir);
   await screen.findByRole('button', { name: /Volver a opciones de progreso/i });
 }
@@ -123,7 +124,7 @@ describe('ProgresoPage · REVUX (G2)', () => {
 
     // Regresa al hub sin diálogo de confirmación de descarte
     expect(screen.queryByText('¿Descartar cambios sin guardar?')).toBeNull();
-    expect(await screen.findByRole('button', { name: /Actualizar mis medidas y fotos/i })).not.toBeNull();
+    expect(await screen.findByRole('button', { name: /Tus medidas/i })).not.toBeNull();
   });
 
   it('R8: al cambiar un campo y pulsar «Volver», aparece el diálogo de descarte y «Continuar editando» conserva lo escrito', async () => {
@@ -163,7 +164,7 @@ describe('ProgresoPage · REVUX (G2)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Descartar y salir/i }));
 
     // Regresó al hub
-    expect(await screen.findByRole('button', { name: /Actualizar mis medidas y fotos/i })).not.toBeNull();
+    expect(await screen.findByRole('button', { name: /Tus medidas/i })).not.toBeNull();
 
     // Reabrir formulario
     await abrirFormulario();
@@ -203,14 +204,14 @@ describe('ProgresoPage · REVUX (G2)', () => {
     expect(screen.queryByAltText('Foto frontal lista')).toBeNull();
   });
 
-  it('R11: el botón de enviar tiene como nombre accesible exactamente su texto visible «Enviar Evaluación al Entrenador»', async () => {
+  it('R11: el botón de enviar tiene como nombre accesible exactamente su texto visible «Enviar a mi entrenador»', async () => {
     render(<ProgresoPage />);
     await abrirFormulario();
 
-    const botonEnviar = screen.getByRole('button', { name: 'Enviar Evaluación al Entrenador' });
+    const botonEnviar = screen.getByRole('button', { name: 'Enviar a mi entrenador' });
     expect(botonEnviar).not.toBeNull();
     expect(botonEnviar.getAttribute('aria-label')).toBeNull();
-    expect(botonEnviar.textContent).toContain('Enviar Evaluación al Entrenador');
+    expect(botonEnviar.textContent).toContain('Enviar a mi entrenador');
   });
 
   it('R12: sin conexión a internet el selector de fotos está deshabilitado; con conexión está habilitado', async () => {

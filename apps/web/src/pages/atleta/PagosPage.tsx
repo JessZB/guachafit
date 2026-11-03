@@ -59,6 +59,7 @@ export function PagosPage() {
     referenciaBancaria,
     setReferenciaBancaria,
     fechaOperacion,
+    hoyLocal,
     alCambiarFecha,
     mostrarErrorFechaFutura,
     isSubmitting,
@@ -169,6 +170,7 @@ export function PagosPage() {
             referenciaBancaria={referenciaBancaria}
             onReferencia={setReferenciaBancaria}
             fechaOperacion={fechaOperacion}
+            hoyLocal={hoyLocal}
             onFecha={alCambiarFecha}
             onFechaInvalida={mostrarErrorFechaFutura}
             isSubmitting={isSubmitting}

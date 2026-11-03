@@ -8,6 +8,7 @@ import { apiClient } from '../../../lib/api-client';
 import { resolverBloqueoAlumno, type BloqueoAlumno } from '../../../lib/acceso-alumno';
 import { buildDemoSemanaProgreso } from '../../../lib/entrenamiento-demo';
 import type { ResumenParaBadge } from '../../../lib/estado-cuota';
+import { useZonaPerfil } from '../../../lib/use-zona-perfil';
 
 /**
  * MEN-05: Saludo honesto con el primer nombre del alumno desde su perfil.
@@ -85,6 +86,7 @@ export function useResumenMenu(
   user: { id?: string } | null | undefined,
   isDemoMode: boolean
 ) {
+  const tz = useZonaPerfil();
   const [semanaProgreso, setSemanaProgreso] = useState<SemanaEntrenamientoProgresoDTO | null>(null);
   const [cargandoSemana, setCargandoSemana] = useState<boolean>(!isDemoMode);
   const [errorSemana, setErrorSemana] = useState<boolean>(false);
@@ -143,7 +145,6 @@ export function useResumenMenu(
     setErrorSemana(false);
     setSinConexionSemana(false);
 
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas';
     apiClient<SemanaEntrenamientoProgresoDTO>(
       `/alumnos/me/rutina/semana-actual?timezone=${encodeURIComponent(tz)}`
     )
@@ -178,7 +179,7 @@ export function useResumenMenu(
           setResumenFinanciero(null);
         });
     }
-  }, [isDemoMode, user?.id]);
+  }, [isDemoMode, user?.id, tz]);
 
   useEffect(() => {
     recargarSemana();

@@ -5,7 +5,7 @@
  * Montaje (patrón de `ProgresoPage.checkin.interaccion.spec.tsx`): `useAuth` sin demo (sesión
  * remota sin calendario, la ventana no aplica) y `apiClient` parcialmente mockeado. El campo
  * arranca vacío (D6: en sesión real los campos no se precargan) y el formulario se abre con
- * "Actualizar mis medidas y fotos".
+ * "Tus medidas".
  *
  * Contrato (CheckinAntropometricoSchema: 30–300 kg con hasta 2 decimales): mientras se escribe
  * se filtra el tope y el formato (hasta 2 decimales), no el mínimo de 30 — hay que poder teclear
@@ -22,6 +22,7 @@ const sesionMock = vi.hoisted(() => ({
     modalidad: 'remoto',
     periodicidadAntropometria: null as string | null,
     antropometriaInicio: null as string | null,
+    zonaHoraria: 'America/Caracas',
   },
 }));
 
@@ -82,7 +83,7 @@ afterEach(() => {
 async function abrirCheckinConPeso(): Promise<HTMLInputElement> {
   render(<ProgresoPage />);
 
-  fireEvent.click(await screen.findByRole('button', { name: /Actualizar mis medidas y fotos/ }));
+  fireEvent.click(await screen.findByRole('button', { name: /Tus medidas/ }));
   return screen.getByLabelText('Peso (kg)') as HTMLInputElement;
 }
 

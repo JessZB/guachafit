@@ -68,10 +68,10 @@ describe('RF-007 · contrato 1: normalización y etiqueta de "revertido"', () =>
     expect(normalizarEstadoTransaccion(EstadoConciliacion.PENDIENTE)).toBe(
       EstadoConciliacion.PENDIENTE
     );
-    expect(etiquetaEstadoTransaccion(EstadoConciliacion.PENDIENTE)).toBe('En Revisión');
+    expect(etiquetaEstadoTransaccion(EstadoConciliacion.PENDIENTE)).toBe('En revisión');
     expect(normalizarEstadoTransaccion(undefined)).toBe(EstadoConciliacion.PENDIENTE);
-    expect(etiquetaEstadoTransaccion(null)).toBe('En Revisión');
-    expect(etiquetaEstadoTransaccion('estado_raro')).toBe('En Revisión');
+    expect(etiquetaEstadoTransaccion(null)).toBe('En revisión');
+    expect(etiquetaEstadoTransaccion('estado_raro')).toBe('En revisión');
   });
 });
 

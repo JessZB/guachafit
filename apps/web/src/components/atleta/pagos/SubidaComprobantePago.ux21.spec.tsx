@@ -53,7 +53,7 @@ describe('SubidaComprobantePago · UX-21 (C3, C4)', () => {
 
     const ayudaEl = document.getElementById(describedById!);
     expect(ayudaEl).not.toBeNull();
-    expect(ayudaEl?.textContent).toMatch(/Max 5MB|JPG, PNG, WebP/i);
+    expect(ayudaEl?.textContent).toMatch(/máx\. 5 MB|JPG, PNG, WebP/i);
   });
 
   it('C4 · con archivo seleccionado, el botón de eliminar tiene aria-label="Quitar comprobante" y al hacer clic ejecuta onQuitar', () => {

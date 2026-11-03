@@ -45,8 +45,8 @@ export function Sidebar() {
     { to: '/app/menu', label: 'Menú de Acciones', icon: LayoutGrid, description: 'Todos tus accesos' },
     { to: '/app/hoy', label: '¡A entrenar!', icon: Dumbbell, description: 'Sesión activa del día' },
     { to: '/app/nutricion', label: 'Mi Comida', icon: Utensils, description: 'Cómo vas hoy' },
-    { to: '/app/progreso', label: 'Mi Progreso', icon: TrendingUp, description: 'Fotos y medidas' },
-    { to: '/app/pagos', label: 'Pagos y Cuotas', icon: CreditCard, description: 'Saldo y comprobantes' },
+    { to: '/app/progreso', label: 'Mi progreso', icon: TrendingUp, description: 'Fotos y medidas' },
+    { to: '/app/pagos', label: 'Pagos y cuotas', icon: CreditCard, description: 'Saldo y comprobantes' },
     { to: '/app/ajustes', label: 'Ajustes', icon: Settings, description: 'Perfil, acceso y avisos' },
   ];
 

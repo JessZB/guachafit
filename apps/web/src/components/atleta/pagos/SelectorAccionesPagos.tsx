@@ -9,7 +9,7 @@
  * duda, único — R3). Presentacional: contador y callbacks por props.
  *
  * R5: conserva `role="button"` en `div` y los textos exactos que consultan los
- * specs ("Reportar un nuevo abono o pago", "Ver recibos e historial"); los
+ * specs ("Reportar pago", "Historial"); los
  * specs consultan por rol y nombre, no por tag.
  *
  * §6: `font-bold` (700), tokens con variante claro/oscuro, `pluralizar` para el
@@ -32,10 +32,10 @@ export function SelectorAccionesPagos({
   return (
     <div className="space-y-3">
       <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider px-1">
-        Selecciona qué deseas hacer:
+        Selecciona qué deseas hacer
       </h2>
 
-      {/* Opción A: Realizar Abono */}
+      {/* Opción A: Reportar pago */}
       <div
         onClick={onReportar}
         role="button"
@@ -57,7 +57,7 @@ export function SelectorAccionesPagos({
             </div>
             <div>
               <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors flex items-center gap-1.5">
-                Reportar un nuevo abono o pago
+                Reportar pago
                 <ArrowUpRight className="h-4 w-4 text-primary opacity-80" aria-hidden="true" />
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">
@@ -94,7 +94,7 @@ export function SelectorAccionesPagos({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">
-                  Ver recibos e historial
+                  Historial
                 </h3>
                 {transaccionesTotal > 0 && (
                   <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">

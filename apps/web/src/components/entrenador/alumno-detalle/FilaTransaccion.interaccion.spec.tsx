@@ -109,7 +109,7 @@ describe('FilaTransaccion · L2.3 estado y monto', () => {
   it('conserva la etiqueta de estado de cada conciliación', () => {
     const casos = [
       [EstadoConciliacion.APROBADO, 'Verificado'],
-      [EstadoConciliacion.PENDIENTE, 'En Revisión'],
+      [EstadoConciliacion.PENDIENTE, 'En revisión'],
       [EstadoConciliacion.RECHAZADO, 'Rechazado'],
       [EstadoConciliacion.REVERTIDO, 'Revertido'],
     ] as const;

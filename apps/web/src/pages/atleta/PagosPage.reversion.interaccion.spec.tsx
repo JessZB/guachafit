@@ -85,6 +85,7 @@ const authDemo = vi.hoisted(() => ({
     email: 'alumno@example.com',
     rol: 'alumno',
     entrenadorId: 'e1111111-1111-4111-8111-111111111111',
+    zonaHoraria: 'America/Caracas',
   },
 }));
 
@@ -165,9 +166,9 @@ function montarPagina(): void {
 /** Abre la vista del historial desde el hub de la página. */
 async function abrirHistorial(): Promise<void> {
   fireEvent.click(
-    await screen.findByRole('button', { name: /Ver recibos e historial/ })
+    await screen.findByRole('button', { name: /Historial/ })
   );
-  await screen.findByText('Historial de Pagos y Recibos');
+  await screen.findByRole('heading', { name: 'Historial' });
 }
 
 /** Fila del historial que contiene la referencia indicada (la más cercana con `rounded-2xl`). */
@@ -179,13 +180,13 @@ function filaDeTransaccion(referencia: string): HTMLElement {
 }
 
 describe('PagosPage · RF-007: pago revertido en el historial del alumno (contrato 12)', () => {
-  it('12a · la transacción revertida muestra "Revertido" y no "En Revisión"', async () => {
+  it('12a · la transacción revertida muestra "Revertido" y no "En revisión"', async () => {
     montarPagina();
     await abrirHistorial();
 
     const fila = filaDeTransaccion('REV-001');
     expect(within(fila).getByText('Revertido')).toBeTruthy();
-    expect(within(fila).queryByText('En Revisión')).toBeNull();
+    expect(within(fila).queryByText('En revisión')).toBeNull();
   });
 
   it('12b · si la transacción trae motivo, muestra "Motivo: <motivoReversion>"', async () => {

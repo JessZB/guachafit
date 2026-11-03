@@ -1,5 +1,5 @@
 /**
- * Opción "Actualizar mis medidas y fotos" del hub (SL3, fase B).
+ * Opción "Tus medidas" del hub (SL3, fase B).
  *
  * De `ProgresoPage.tsx:585-641`: solo lectura → `PanelSoloLecturaProgreso`;
  * ventana abierta → tarjeta destacada (`role="button"`, h3 y copy idénticos,
@@ -47,7 +47,7 @@ export function OpcionCheckinProgreso({
             <Camera className="h-6 w-6" />
           </div>
         }
-        titulo="Actualizar mis medidas y fotos"
+        titulo="Tus medidas"
         descripcion="Registra tu peso actual, perímetros de cintura o brazo y envía tu check-in al entrenador."
       />
     );
@@ -65,7 +65,7 @@ export function OpcionCheckinProgreso({
           </div>
           <div>
             <h3 className="text-base font-bold text-foreground">
-              Actualizar mis medidas y fotos
+              Tus medidas
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">
               {motivoBloqueo ??

@@ -17,6 +17,7 @@ const sesionMock = vi.hoisted(() => ({
     modalidad: 'remoto',
     periodicidadAntropometria: null as string | null,
     antropometriaInicio: null as string | null,
+    zonaHoraria: 'America/Caracas',
   },
 }));
 
@@ -80,15 +81,15 @@ afterEach(() => {
 async function enviarCheckinDemo(): Promise<void> {
   render(<ProgresoPage />);
 
-  fireEvent.click(await screen.findByRole('button', { name: /Actualizar mis medidas y fotos/ }));
+  fireEvent.click(await screen.findByRole('button', { name: /Tus medidas/ }));
   fireEvent.change(screen.getByLabelText('Peso (kg)'), { target: { value: '74.50' } });
-  fireEvent.click(screen.getByRole('button', { name: /Enviar Evaluación al Entrenador/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Enviar a mi entrenador/ }));
 
-  await screen.findByText('¡Mediciones Guardadas!', undefined, { timeout: 3000 });
+  await screen.findByText('¡Medidas guardadas!', undefined, { timeout: 3000 });
 }
 
 describe('ProgresoPage · check-in en modo demo (contrato 9)', () => {
-  it('envía sin llamar a apiClient con /antropometria/checkin y muestra ¡Mediciones Guardadas!', async () => {
+  it('envía sin llamar a apiClient con /antropometria/checkin y muestra ¡Medidas guardadas!', async () => {
     await enviarCheckinDemo();
 
     expect(

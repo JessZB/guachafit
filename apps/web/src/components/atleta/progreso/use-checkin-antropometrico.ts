@@ -10,10 +10,9 @@
 import { useState } from 'react';
 import { apiClient } from '../../../lib/api-client';
 import { resolverBloqueoAlumno, type BloqueoAlumno } from '../../../lib/acceso-alumno';
-import {
-  construirPayloadCheckinAntropometrico,
-  fechaLocalHoy,
-} from '../../../lib/antropometria-checkin';
+import { construirPayloadCheckinAntropometrico } from '../../../lib/antropometria-checkin';
+import { zonaPerfilEfectiva } from '../../../lib/nutricion-checkin';
+import { fechaCalendarioEnZona } from '../../../lib/zona-horaria';
 import type { EstadoVentanaCheckinCalculado } from '../../../lib/antropometria-ventana';
 import {
   AuthUserDTO,
@@ -33,6 +32,8 @@ export interface OpcionesCheckinAntropometrico {
   evolucion: EvolucionCorporalDTO | null;
   esSoloLectura: boolean;
   estadoVentana: EstadoVentanaCheckinCalculado;
+  /** Zona efectiva del contexto (sesión fresca); sin ella se usa la del usuario del login. */
+  zonaPerfil?: string | null;
   onAbrirFormulario: () => void;
   onEvolucionActualizada: (evolucion: EvolucionCorporalDTO) => void;
   onBloqueo: (bloqueo: BloqueoAlumno) => void;
@@ -45,6 +46,7 @@ export function useCheckinAntropometrico({
   evolucion,
   esSoloLectura,
   estadoVentana,
+  zonaPerfil,
   onAbrirFormulario,
   onEvolucionActualizada,
   onBloqueo,
@@ -151,7 +153,7 @@ export function useCheckinAntropometrico({
         subescapularMm: medidas.subescapularMm,
         suprailiacoMm: medidas.suprailiacoMm,
         abdominalMm: medidas.abdominalMm,
-      }, fechaLocalHoy(), fotosCheckin.fotos);
+      }, fechaCalendarioEnZona(zonaPerfilEfectiva(zonaPerfil ?? user.zonaHoraria)), fotosCheckin.fotos);
       // En la demostración el envío se simula en local (el payload igual se valida arriba).
       if (!isDemoMode) {
         await apiClient<ControlAntropometricoDetalleDTO>('/antropometria/checkin', {

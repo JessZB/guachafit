@@ -101,6 +101,14 @@ export function partesEnZona(instante: Date, zona: string | null | undefined): P
   };
 }
 
+/** Día calendario 'YYYY-MM-DD' del instante en la zona indicada; nula o inválida -> America/Caracas. */
+export function fechaCalendarioEnZona(
+  zona: string | null | undefined,
+  ahora: Date = new Date()
+): string {
+  return partesEnZona(ahora, zona).fecha;
+}
+
 /** `true` si el texto es un instante que `Date` puede interpretar. */
 export function esInstanteValido(iso: string | null | undefined): iso is string {
   return !!iso && !Number.isNaN(new Date(iso).getTime());

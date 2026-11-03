@@ -29,6 +29,7 @@ function propsBase(): FormularioReportePagoProps {
     referenciaBancaria: '',
     onReferencia: vi.fn(),
     fechaOperacion: '2026-10-10',
+    hoyLocal: '2026-11-03',
     onFecha: vi.fn(),
     onFechaInvalida: vi.fn(),
     isSubmitting: false,

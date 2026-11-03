@@ -39,10 +39,10 @@ export function HubProgreso({
       {/* Selector de Acciones */}
       <div className="space-y-3">
         <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider px-1">
-          Selecciona qué deseas hacer:
+          Selecciona qué deseas hacer
         </h2>
 
-        {/* Opción A: Actualizar Medidas — solo lectura (presencial) o ventana cerrada */}
+        {/* Opción A: Tus medidas — solo lectura (presencial) o ventana cerrada */}
         <OpcionCheckinProgreso
           esSoloLectura={esSoloLectura}
           accesoPresencialServidor={accesoPresencialServidor}
@@ -52,7 +52,7 @@ export function HubProgreso({
           onVerHistorial={onVerEvolucion}
         />
 
-        {/* Opción B: Ver Evolución e Historial */}
+        {/* Opción B: Ver evolución */}
         <TarjetaOpcionHubProgreso
           onActivar={onVerEvolucion}
           icono={
@@ -60,7 +60,7 @@ export function HubProgreso({
               <TrendingUp className="h-6 w-6" />
             </div>
           }
-          titulo="Ver mi antes y después"
+          titulo="Ver evolución"
           descripcion="Consulta tu registro cronológico de mediciones corporales y evolución en el tiempo."
         />
       </div>

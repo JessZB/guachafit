@@ -11,7 +11,7 @@
  * props tipadas y callbacks; sin `useQuery` ni `api-client`.
  *
  * R5: conserva los textos que consultan los specs ("Volver a opciones de pago",
- * "Reportar Abono o Cuota", "Pago reportado con éxito…").
+ * "Reportar pago", "Pago reportado con éxito…").
  *
  * §6: estados honestos (error visible, éxito con redirección declarada),
  * `font-bold` (700), tokens con variante claro/oscuro.
@@ -61,7 +61,7 @@ export function PestanaReportePago({
         )}
 
         <div>
-          <h2 className="text-lg font-bold text-foreground">Reportar Abono o Cuota</h2>
+          <h2 className="text-lg font-bold text-foreground">Reportar pago</h2>
           <p className="text-xs text-muted-foreground">
             Introduce los datos de la transferencia o pago móvil para que tu entrenador lo verifique.
           </p>

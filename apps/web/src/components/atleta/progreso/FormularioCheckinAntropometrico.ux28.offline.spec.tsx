@@ -111,7 +111,7 @@ describe('FormularioCheckinAntropometrico — UX-28 (PRO-04: check-in sin conexi
       />
     );
 
-    const boton = screen.getByRole('button', { name: /Enviar Evaluación/i }) as HTMLButtonElement;
+    const boton = screen.getByRole('button', { name: /Enviar a mi entrenador/i }) as HTMLButtonElement;
     expect(boton.disabled).toBe(true);
 
     const textoMotivo = screen.getByText(/Conéctate a internet para enviar tu evaluación/i);
@@ -140,7 +140,7 @@ describe('FormularioCheckinAntropometrico — UX-28 (PRO-04: check-in sin conexi
       />
     );
 
-    const boton = screen.getByRole('button', { name: /Enviar Evaluación/i }) as HTMLButtonElement;
+    const boton = screen.getByRole('button', { name: /Enviar a mi entrenador/i }) as HTMLButtonElement;
     expect(boton.disabled).toBe(false);
     expect(screen.queryByText(/Sin conexión/i)).toBeNull();
   });
@@ -167,7 +167,7 @@ describe('FormularioCheckinAntropometrico — UX-28 (PRO-04: check-in sin conexi
       />
     );
 
-    const boton = screen.getByRole('button', { name: /Enviar Evaluación/i }) as HTMLButtonElement;
+    const boton = screen.getByRole('button', { name: /Enviar a mi entrenador/i }) as HTMLButtonElement;
     expect(boton.disabled).toBe(false);
   });
 });

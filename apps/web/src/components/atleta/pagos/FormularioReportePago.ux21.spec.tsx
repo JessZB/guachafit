@@ -19,6 +19,7 @@ function propsBase(): FormularioReportePagoProps {
     referenciaBancaria: '',
     onReferencia: vi.fn(),
     fechaOperacion: '2026-10-11',
+    hoyLocal: '2026-11-03',
     onFecha: vi.fn(),
     onFechaInvalida: vi.fn(),
     isSubmitting: false,
@@ -34,9 +35,9 @@ describe('FormularioReportePago · UX-21 (C2, C3)', () => {
     cleanup();
   });
 
-  it('C2 · control Método de Pago se localiza por su etiqueta accesible screen.getByLabelText(\'Método de Pago\')', () => {
+  it('C2 · control Método de pago se localiza por su etiqueta accesible screen.getByLabelText(\'Método de pago\')', () => {
     render(<FormularioReportePago {...propsBase()} />);
-    const control = screen.getByLabelText('Método de Pago');
+    const control = screen.getByLabelText('Método de pago');
     expect(control.tagName.toLowerCase()).toBe('select');
   });
 
@@ -46,26 +47,26 @@ describe('FormularioReportePago · UX-21 (C2, C3)', () => {
     expect(control.tagName.toLowerCase()).toBe('select');
   });
 
-  it('C2 · control Monto Pagado se localiza por su etiqueta accesible screen.getByLabelText(\'Monto Pagado\')', () => {
+  it('C2 · control Monto pagado se localiza por su etiqueta accesible screen.getByLabelText(\'Monto pagado\')', () => {
     render(<FormularioReportePago {...propsBase()} />);
-    const control = screen.getByLabelText('Monto Pagado');
+    const control = screen.getByLabelText('Monto pagado');
     expect(control.tagName.toLowerCase()).toBe('input');
   });
 
-  it('C2 · control Referencia Bancaria se localiza por su etiqueta accesible screen.getByLabelText(/Referencia Bancaria/)', () => {
+  it('C2 · control Referencia bancaria se localiza por su etiqueta accesible screen.getByLabelText(/Referencia bancaria/)', () => {
     render(<FormularioReportePago {...propsBase()} />);
-    const control = screen.getByLabelText(/Referencia Bancaria/);
+    const control = screen.getByLabelText(/Referencia bancaria/);
     expect(control.tagName.toLowerCase()).toBe('input');
   });
 
-  it('C2 · control Fecha de Operación se localiza por su etiqueta accesible screen.getByLabelText(\'Fecha de Operación\')', () => {
+  it('C2 · control Fecha de operación se localiza por su etiqueta accesible screen.getByLabelText(\'Fecha de operación\')', () => {
     render(<FormularioReportePago {...propsBase()} />);
-    const control = screen.getByLabelText('Fecha de Operación');
+    const control = screen.getByLabelText('Fecha de operación');
     expect(control.tagName.toLowerCase()).toBe('input');
     expect((control as HTMLInputElement).type).toBe('date');
   });
 
-  it('C3 · cuando hay errorMonto, el input Monto Pagado tiene aria-invalid="true" y aria-describedby enlazado al role="alert"', () => {
+  it('C3 · cuando hay errorMonto, el input Monto pagado tiene aria-invalid="true" y aria-describedby enlazado al role="alert"', () => {
     render(
       <FormularioReportePago
         {...propsBase()}

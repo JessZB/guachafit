@@ -1,7 +1,7 @@
 /**
  * Vista 2 · Formulario de check-in antropométrico (SL3, fase B).
  *
- * De `ProgresoPage.tsx:690-1001`: tarjeta "Registro de Medición Corporal"
+ * De `ProgresoPage.tsx:690-1001`: tarjeta "Registro de medidas corporales"
  * con éxito (`PanelExitoCheckin`) o formulario (6 campos + pliegues +
  * fotos + nota de revisión + error + submit). Ids, labels, roles y copy
  * idénticos (exigidos por los 4 specs). El `key={claveFotos}` que remonta
@@ -93,7 +93,7 @@ export function FormularioCheckinAntropometrico({
   return (
     <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-4">
       <div>
-        <h2 className="text-lg font-bold text-foreground">Registro de Medición Corporal</h2>
+        <h2 className="text-lg font-bold text-foreground">Registro de medidas corporales</h2>
         <p className="text-xs text-muted-foreground">
           Tus datos quedarán guardados y asociados a tu historial de evolución.
         </p>
@@ -184,7 +184,7 @@ export function FormularioCheckinAntropometrico({
             disabled={isSubmitting || fotosSubiendo || !estadoVentana.permiteRegistrar || estaOffline}
             className="w-full min-h-11 py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
           >
-            <span>{isSubmitting ? 'Enviando...' : 'Enviar Evaluación al Entrenador'}</span>
+            <span>{isSubmitting ? 'Enviando...' : 'Enviar a mi entrenador'}</span>
             <ArrowRight className="h-4 w-4" />
           </button>
           {estaOffline && (

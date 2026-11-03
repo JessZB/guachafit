@@ -1,5 +1,5 @@
 /**
- * Vista 3 · Registro histórico cronológico (SL4, fase B).
+ * Vista 3 · Historial de medidas (SL4, fase B).
  *
  * De `ProgresoPage.tsx:1050-1174`: título + lista de
  * `TarjetaEvaluacionAntropometrica` o vacío honesto "No hay evaluaciones
@@ -29,7 +29,7 @@ export function HistorialEvaluacionesProgreso({
   return (
     <div className="space-y-3">
       <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground px-1">
-        Registro Histórico Cronológico
+        Historial de medidas
       </h3>
 
       {evaluaciones.length > 0 ? (
