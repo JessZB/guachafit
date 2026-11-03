@@ -6,7 +6,7 @@
  * (C3.4), validación `erroresMedidas` y precarga sin pisar lo escrito.
  * Sin JSX ni estilos. §6: sin UI.
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   obtenerUltimaMedicionReal,
   validarMedidasCheckinAntropometrico,
@@ -57,6 +57,8 @@ export function useMedidasCheckin(
   );
   // Validación inline: los mensajes por campo se muestran al escribir o tras intentar enviar.
   const [intentoEnvio, setIntentoEnvio] = useState(false);
+  // Referencia de "sin cambios": valores con los que se abrió el formulario (precarga o vacío).
+  const baseRef = useRef<MedidasFormularioCheckin>(medidasIniciales(isDemoMode));
 
   /** Escribe una medida; solo el peso filtra al teclear (C3.4, tope 300 en vivo). */
   const actualizarMedida = (campo: ClaveMedidaFormularioCheckin, valor: string) => {
@@ -96,18 +98,33 @@ export function useMedidasCheckin(
     if (isDemoMode) return;
     const ultima = obtenerUltimaMedicionReal(evolucion);
     if (!ultima) return;
-    setMedidas((prev) => ({
-      pesoKg: prev.pesoKg || ultima.pesoKg,
-      porcentajeGrasa: prev.porcentajeGrasa || ultima.porcentajeGrasa,
-      cinturaCm: prev.cinturaCm || ultima.cinturaCm,
-      brazoRelajadoCm: prev.brazoRelajadoCm || ultima.brazoRelajadoCm,
-      brazoContraidoCm: prev.brazoContraidoCm || ultima.brazoContraidoCm,
-      musloMedioCm: prev.musloMedioCm || ultima.musloMedioCm,
-      tricepsMm: prev.tricepsMm || ultima.tricepsMm,
-      subescapularMm: prev.subescapularMm || ultima.subescapularMm,
-      suprailiacoMm: prev.suprailiacoMm || ultima.suprailiacoMm,
-      abdominalMm: prev.abdominalMm || ultima.abdominalMm,
-    }));
+    // La precarga no cuenta como cambio del alumno: la nueva base es lo precargado.
+    const next: MedidasFormularioCheckin = {
+      pesoKg: medidas.pesoKg || ultima.pesoKg,
+      porcentajeGrasa: medidas.porcentajeGrasa || ultima.porcentajeGrasa,
+      cinturaCm: medidas.cinturaCm || ultima.cinturaCm,
+      brazoRelajadoCm: medidas.brazoRelajadoCm || ultima.brazoRelajadoCm,
+      brazoContraidoCm: medidas.brazoContraidoCm || ultima.brazoContraidoCm,
+      musloMedioCm: medidas.musloMedioCm || ultima.musloMedioCm,
+      tricepsMm: medidas.tricepsMm || ultima.tricepsMm,
+      subescapularMm: medidas.subescapularMm || ultima.subescapularMm,
+      suprailiacoMm: medidas.suprailiacoMm || ultima.suprailiacoMm,
+      abdominalMm: medidas.abdominalMm || ultima.abdominalMm,
+    };
+    baseRef.current = next;
+    setMedidas(next);
+  };
+
+  /** Hay cambios si algún campo (sin espacios) difiere de la base con la que se abrió. */
+  const hayCambiosMedidas = (Object.keys(medidas) as ClaveMedidaFormularioCheckin[]).some(
+    (campo) => medidas[campo].trim() !== baseRef.current[campo].trim()
+  );
+
+  /** Descarta lo escrito: vuelve a los valores iniciales y los fija como nueva base. */
+  const descartarMedidas = () => {
+    const iniciales = medidasIniciales(isDemoMode);
+    baseRef.current = iniciales;
+    setMedidas(iniciales);
   };
 
   return {
@@ -117,5 +134,7 @@ export function useMedidasCheckin(
     intentoEnvio,
     setIntentoEnvio,
     precargarUltimaMedicion,
+    hayCambiosMedidas,
+    descartarMedidas,
   };
 }

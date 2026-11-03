@@ -67,9 +67,11 @@ export function FiltrosPlantillas({
                 className="gap-1.5 px-3 py-1.5"
               >
                 <span>{opcion.label}</span>
-                <span className={`font-mono text-xs ${activo ? 'opacity-80' : 'opacity-60'}`}>
-                  {conteos[opcion.valor]}
-                </span>
+                {mostrarContador && (
+                  <span className={`font-mono text-xs ${activo ? 'opacity-80' : 'opacity-60'}`}>
+                    {conteos[opcion.valor]}
+                  </span>
+                )}
               </ChipFiltro>
             );
           })}
@@ -77,7 +79,10 @@ export function FiltrosPlantillas({
 
         <div className="flex flex-1 flex-col sm:flex-row gap-2 lg:justify-end">
           <div className="relative flex-1 sm:max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Search
+              aria-hidden="true"
+              className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none"
+            />
             <input
               type="search"
               value={busqueda}

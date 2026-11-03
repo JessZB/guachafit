@@ -155,7 +155,7 @@ export function FormularioCheckinAntropometrico({
               key={claveFotos}
               alumnoId={alumnoId}
               onCambio={onCambioFotos}
-              deshabilitado={fotosDeshabilitadas}
+              deshabilitado={fotosDeshabilitadas || estaOffline}
             />
           </div>
 
@@ -181,7 +181,6 @@ export function FormularioCheckinAntropometrico({
 
           <button
             type="submit"
-            aria-label="Enviar Evaluación al Coach / Entrenador"
             disabled={isSubmitting || fotosSubiendo || !estadoVentana.permiteRegistrar || estaOffline}
             className="w-full min-h-11 py-3.5 px-4 rounded-2xl bg-primary text-primary-foreground font-bold text-sm tracking-wide shadow-md shadow-primary/20 hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
           >

@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import { Award, CheckCircle2, Timer, X } from 'lucide-react';
+import { AlertTriangle, Award, CheckCircle2, Timer, X } from 'lucide-react';
 import type { SesionEntrenamientoDetalleDTO } from '@guachafit/shared';
 import { describirEsfuerzo } from '../../../lib/entrenamiento-textos';
 import { formatearSegundos } from '../../../lib/sesion-tiempos';
@@ -90,11 +90,15 @@ export function ModalFinalizarSesion({
           className={`p-3 rounded-2xl border text-xs flex items-center justify-between gap-2 ${
             seriesPendientes === 0
               ? 'bg-success/10 border-success/30 text-success'
-              : 'bg-warning/10 border-warning/30 text-warning-foreground'
+              : 'bg-warning/10 border-warning/30 text-warning'
           }`}
         >
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            {seriesPendientes === 0 ? (
+              <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+            ) : (
+              <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+            )}
             <span>
               {seriesPendientes === 0
                 ? `Completaste todas las series (${totalSeries} de ${totalSeries}).`

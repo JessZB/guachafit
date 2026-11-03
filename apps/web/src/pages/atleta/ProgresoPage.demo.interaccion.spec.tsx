@@ -82,7 +82,7 @@ async function enviarCheckinDemo(): Promise<void> {
 
   fireEvent.click(await screen.findByRole('button', { name: /Actualizar mis medidas y fotos/ }));
   fireEvent.change(screen.getByLabelText('Peso (kg)'), { target: { value: '74.50' } });
-  fireEvent.click(screen.getByRole('button', { name: /Enviar Evaluación al Coach/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Enviar Evaluación al Entrenador/ }));
 
   await screen.findByText('¡Mediciones Guardadas!', undefined, { timeout: 3000 });
 }

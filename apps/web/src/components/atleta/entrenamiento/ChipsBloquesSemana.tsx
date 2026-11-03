@@ -84,14 +84,14 @@ export function ChipsBloquesSemana({
                 <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
               ) : esOmitido ? (
                 b.motivoOmision === MotivoOmision.DESCANSO ? (
-                  <Coffee className="h-3.5 w-3.5 shrink-0" />
+                  <Coffee className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 ) : (
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 )
               ) : esActivo ? (
                 <Zap className="h-3.5 w-3.5 shrink-0 fill-current" />
               ) : esSugerido ? (
-                <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
+                <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
               ) : (
                 <Clock className="h-3.5 w-3.5 shrink-0 opacity-60" />
               )}

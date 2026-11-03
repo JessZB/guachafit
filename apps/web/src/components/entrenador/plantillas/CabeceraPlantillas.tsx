@@ -22,7 +22,7 @@ export function CabeceraPlantillas({ onNueva }: CabeceraPlantillasProps) {
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div>
         <div className="flex items-center gap-2">
-          <ClipboardList className="h-5 w-5 text-primary" />
+          <ClipboardList className="h-5 w-5 text-primary" aria-hidden="true" />
           <h1 className="text-2xl font-bold tracking-tight text-foreground">{DESTINOS_ENTRENADOR.plantillas.etiqueta}</h1>
         </div>
         <p className="text-xs text-muted-foreground mt-1">

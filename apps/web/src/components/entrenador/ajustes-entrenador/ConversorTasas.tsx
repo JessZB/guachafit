@@ -33,6 +33,7 @@ export function ConversorTasas({
           etiqueta="Monto en USD"
           valor={calculadoraUsd}
           onCambiar={onCambiarUsd}
+          autoComplete="off"
           inputMode="decimal"
           sufijo="USD"
         />
@@ -41,6 +42,7 @@ export function ConversorTasas({
           etiqueta="Monto en bolívares"
           valor={calculadoraVes}
           onCambiar={onCambiarVes}
+          autoComplete="off"
           inputMode="decimal"
           sufijo="Bs"
         />

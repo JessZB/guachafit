@@ -63,8 +63,8 @@ export function PestanaReportePago({
         )}
 
         {formSuccess ? (
-          <div className="p-8 text-center space-y-3">
-            <CheckCircle2 className="h-12 w-12 text-success mx-auto" />
+          <div role="status" className="p-8 text-center space-y-3">
+            <CheckCircle2 className="h-12 w-12 text-success mx-auto" aria-hidden="true" />
             <p className="text-sm font-bold text-foreground">{formSuccess}</p>
             <p className="text-xs text-muted-foreground">Redirigiendo a tu historial...</p>
           </div>

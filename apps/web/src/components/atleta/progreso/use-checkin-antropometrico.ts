@@ -57,6 +57,8 @@ export function useCheckinAntropometrico({
     intentoEnvio,
     setIntentoEnvio,
     precargarUltimaMedicion,
+    hayCambiosMedidas,
+    descartarMedidas,
   } = useMedidasCheckin(user?.id, isDemoMode);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -66,6 +68,8 @@ export function useCheckinAntropometrico({
     subiendo: boolean;
   }>({ fotos: [], subiendo: false });
   const [claveFotos, setClaveFotos] = useState(0);
+  // Hay datos sin guardar si el alumno cambió alguna medida o adjuntó fotos.
+  const hayCambiosSinGuardar = hayCambiosMedidas || fotosCheckin.fotos.length > 0;
   const [submitSuccess, setSubmitSuccess] = useState(false);
   // D5: fallo de envío visible; el check-in no se declara exitoso si el server no lo aceptó.
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -82,6 +86,13 @@ export function useCheckinAntropometrico({
     precargarUltimaMedicion(evolucion);
     setIntentoEnvio(false);
     onAbrirFormulario();
+  };
+
+  /** Descarta medidas y fotos no guardadas, y remonta el selector de fotos vacío. */
+  const descartarCheckin = () => {
+    descartarMedidas();
+    setFotosCheckin({ fotos: [], subiendo: false });
+    setClaveFotos((clave) => clave + 1);
   };
 
   /** Limpia los errores de envío (al cambiar de escenario demo). */
@@ -205,6 +216,8 @@ export function useCheckinAntropometrico({
     abrirFormularioCheckin,
     handleSubmitCheckin,
     reiniciarEstadoEnvio,
+    hayCambiosSinGuardar,
+    descartarCheckin,
   };
 }
 

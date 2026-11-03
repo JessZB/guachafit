@@ -83,7 +83,7 @@ describe('ProgresoPage · check-in sin fotos (contrato 17)', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Actualizar mis medidas y fotos/ }));
     fireEvent.change(screen.getByLabelText('Peso (kg)'), { target: { value: '74.50' } });
-    fireEvent.click(screen.getByRole('button', { name: /Enviar Evaluación al Coach/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Enviar Evaluación al Entrenador/ }));
 
     await waitFor(() =>
       expect(

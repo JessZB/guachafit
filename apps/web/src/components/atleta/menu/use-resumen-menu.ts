@@ -49,16 +49,22 @@ export function derivarEstadoEntrenamientoHoy(args: {
     return { texto: 'Sin entrenamiento asignado', tono: 'neutral' };
   }
   const bloques = semanaProgreso.bloques ?? [];
-  const completadoHoy =
-    bloques.some(
-      (b) =>
-        b.esSugeridoHoy &&
-        (b.completado ||
-          (typeof b.estadoSesion === 'string' && b.estadoSesion.toLowerCase() === 'completada'))
-    ) ||
-    semanaProgreso.bloquesCompletados >= semanaProgreso.totalBloques;
-  if (completadoHoy) {
+  // Solo "Completado hoy" si el bloque sugerido para hoy está completado.
+  const bloqueHoyCompletado = bloques.some(
+    (b) =>
+      b.esSugeridoHoy &&
+      (b.completado ||
+        (typeof b.estadoSesion === 'string' && b.estadoSesion.toLowerCase() === 'completada'))
+  );
+  if (bloqueHoyCompletado) {
     return { texto: 'Completado hoy', tono: 'success' };
+  }
+  // Semana entera completa sin bloque de hoy completado: no se afirma "Completado hoy".
+  if (
+    semanaProgreso.totalBloques > 0 &&
+    semanaProgreso.bloquesCompletados >= semanaProgreso.totalBloques
+  ) {
+    return { texto: 'Semana completada', tono: 'success' };
   }
   const enProgreso = bloques.some(
     (b) =>

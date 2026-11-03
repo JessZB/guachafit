@@ -163,6 +163,7 @@ export function useReportePago({
   };
 
   const handleRemoveFile = () => {
+    idempotencyKeyRef.current = generarClaveIdempotenciaPago();
     comprobanteSubidoKeyRef.current = null;
     setSelectedFile(null);
     setErrorArchivo(null);
@@ -197,6 +198,7 @@ export function useReportePago({
       URL.revokeObjectURL(previewUrl);
     }
     setErrorArchivo(null);
+    idempotencyKeyRef.current = generarClaveIdempotenciaPago();
     setSelectedFile(file);
     const objUrl = URL.createObjectURL(file);
     setPreviewUrl(objUrl);
@@ -262,7 +264,7 @@ export function useReportePago({
     }
 
     if (!cuota) {
-      setFormError('No tienes una cuota vigente para reportar el pago. Contacta a tu coach.');
+      setFormError('No tienes una cuota vigente para reportar el pago. Contacta a tu entrenador.');
       return;
     }
 
@@ -321,7 +323,7 @@ export function useReportePago({
         }),
       });
 
-      setFormSuccess('¡Pago reportado con éxito! Tu coach lo validará en la bandeja.');
+      setFormSuccess('¡Pago reportado con éxito! Tu entrenador lo revisará pronto.');
       idempotencyKeyRef.current = generarClaveIdempotenciaPago();
       setMontoOriginalState('');
       setReferenciaBancariaState('');

@@ -342,7 +342,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     });
 
     expect(result.current.formSuccess).toBe(
-      '¡Pago reportado con éxito! Tu coach lo validará en la bandeja.'
+      '¡Pago reportado con éxito! Tu entrenador lo revisará pronto.'
     );
     expect(alReportarExito).not.toHaveBeenCalled();
 
@@ -676,7 +676,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     });
 
     expect(result.current.formError).toBe(
-      'No tienes una cuota vigente para reportar el pago. Contacta a tu coach.'
+      'No tienes una cuota vigente para reportar el pago. Contacta a tu entrenador.'
     );
     expect(prepararComprobanteParaSubida).not.toHaveBeenCalled();
     expect(subirComprobantePago).not.toHaveBeenCalled();

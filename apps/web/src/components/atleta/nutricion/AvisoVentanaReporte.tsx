@@ -25,7 +25,7 @@ export function AvisoVentanaReporte({ zonaPerfil }: AvisoVentanaReporteProps) {
       role="status"
       className="flex items-start gap-3 p-4 rounded-3xl bg-warning/10 border border-warning/30 text-warning"
     >
-      <Clock className="h-5 w-5 shrink-0 mt-0.5" />
+      <Clock className="h-5 w-5 shrink-0 mt-0.5" aria-hidden="true" />
       <div className="space-y-1">
         <p className="text-sm font-bold text-foreground">El reporte aún no está abierto</p>
         <p className="text-xs text-muted-foreground">

@@ -81,7 +81,10 @@ export function PagosPage() {
     cuota,
     tasa,
     tasaError,
-    alReportarExito: () => setVistaActiva('historial'),
+    alReportarExito: () => {
+      setVistaActiva('historial');
+      void cargarDatos();
+    },
   });
 
   // N2: visor de comprobante (diálogo accesible en `ModalComprobantePago`).

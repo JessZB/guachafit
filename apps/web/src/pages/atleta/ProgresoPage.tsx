@@ -99,10 +99,7 @@ function ProgresoPageContenido() {
     onCheckinExitoso: () => setVistaActiva('evolucion', { replace: true }),
   });
 
-  const hayCambiosSinGuardar =
-    vistaActiva === 'nuevo' &&
-    ((checkin.medidas && Object.values(checkin.medidas).some((v) => typeof v === 'string' && v.trim() !== '')) ||
-      Boolean(checkin.fotosCheckin?.fotos && checkin.fotosCheckin.fotos.length > 0));
+  const hayCambiosSinGuardar = vistaActiva === 'nuevo' && checkin.hayCambiosSinGuardar;
 
   const handleVolverFormulario = () => {
     if (hayCambiosSinGuardar) {
@@ -284,6 +281,7 @@ function ProgresoPageContenido() {
           variante="peligro"
           onConfirmar={() => {
             setMostrarDialogoDescarte(false);
+            checkin.descartarCheckin();
             setVistaActiva('hub');
           }}
           onCancelar={() => setMostrarDialogoDescarte(false)}

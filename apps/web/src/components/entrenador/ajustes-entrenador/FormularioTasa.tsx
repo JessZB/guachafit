@@ -128,6 +128,7 @@ export function FormularioTasa({
           etiqueta="Tasa BCV"
           valor={tasaOficialBcvInput}
           onCambiar={onCambiarOficial}
+          autoComplete="off"
           inputMode="decimal"
           sufijo="Bs/USD"
           error={errores.tasaOficialBcv}
@@ -138,6 +139,7 @@ export function FormularioTasa({
           etiqueta="Tasa paralelo (opcional)"
           valor={tasaParaleloInput}
           onCambiar={onCambiarParalelo}
+          autoComplete="off"
           inputMode="decimal"
           sufijo="Bs/USD"
           error={errores.tasaParalelo}
@@ -149,6 +151,7 @@ export function FormularioTasa({
           descripcion="La que se usa en tus cobros."
           valor={tasaActivaInput}
           onCambiar={onCambiarActiva}
+          autoComplete="off"
           inputMode="decimal"
           sufijo="Bs/USD"
           error={errores.tasaActiva}

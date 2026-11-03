@@ -142,7 +142,7 @@ describe('ProgresoPage · UI de fotos del check-in (contrato 17)', () => {
     await screen.findByAltText('Foto frontal lista');
 
     fireEvent.change(screen.getByLabelText('Peso (kg)'), { target: { value: '74.50' } });
-    fireEvent.click(screen.getByRole('button', { name: /Enviar Evaluación al Coach/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Enviar Evaluación al Entrenador/ }));
 
     await waitFor(() =>
       expect(
@@ -177,7 +177,7 @@ describe('ProgresoPage · UI de fotos del check-in (contrato 17)', () => {
     const archivo = new File(['foto'], 'progreso.webp', { type: 'image/webp' });
     fireEvent.change(screen.getByLabelText('Foto frontal'), { target: { files: [archivo] } });
 
-    const botonEnviar = screen.getByRole('button', { name: /Enviar Evaluación al Coach/ });
+    const botonEnviar = screen.getByRole('button', { name: /Enviar Evaluación al Entrenador/ });
     await waitFor(() => expect((botonEnviar as HTMLButtonElement).disabled).toBe(true));
 
     await act(async () => {
@@ -194,7 +194,7 @@ describe('ProgresoPage · UI de fotos del check-in (contrato 17)', () => {
     await screen.findByAltText('Foto frontal lista');
 
     fireEvent.change(screen.getByLabelText('Peso (kg)'), { target: { value: '74.50' } });
-    fireEvent.click(screen.getByRole('button', { name: /Enviar Evaluación al Coach/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Enviar Evaluación al Entrenador/ }));
 
     await waitFor(() =>
       expect(

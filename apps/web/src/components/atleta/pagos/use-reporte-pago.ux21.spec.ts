@@ -230,7 +230,7 @@ describe('useReportePago · UX-21 (C1, C6)', () => {
 
     expect(result.current.montoOriginal).toBe('');
     expect(result.current.referenciaBancaria).toBe('');
-    expect(result.current.formSuccess).toBe('¡Pago reportado con éxito! Tu coach lo validará en la bandeja.');
+    expect(result.current.formSuccess).toBe('¡Pago reportado con éxito! Tu entrenador lo revisará pronto.');
   });
 
   it('V3 · iniciarNuevoPago() restablece un formulario previamente cargado con iniciarCorreccionPago(tx)', () => {
