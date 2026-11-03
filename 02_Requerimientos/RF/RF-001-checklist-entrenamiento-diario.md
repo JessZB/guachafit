@@ -255,5 +255,11 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
 - Evidencia: web **2793 tests en 299 archivos**: la suite completa solo falló en MP6, por un contrato mal escrito; tras corregirlo, el lote dio 45/45. Typecheck y build en verde. Revisión de fiabilidad sin BLOCKER; se corrigieron el anuncio duplicado de la paginación, los iconos sin `aria-hidden` y un comentario.
 - Pendiente: con un error, el estado vacío de filtros se oculta (ya ocurría antes). En modo demo y sin conexión se muestra "sin datos", porque TanStack pausa también la consulta demo. Falta un test del clic en la paginación del pie. `ModalActividadAlumno` mantiene un `animate-pulse` sin `motion-safe`.
 
+### 7.19. Revisión UX: aviso legible al cerrar la sesión y menú honesto (`af33433`, 2026-11-03, revisión de UX-19 a UX-29)
+- **Aviso de series pendientes legible (`ModalFinalizarSesion`):** usaba `text-warning-foreground` sobre `bg-warning/10`, casi blanco en tema claro y azul marino en oscuro, así que la advertencia central del cierre no se leía. Ahora usa `text-warning` con el icono de alerta; el guardián `estilo-contraste-advertencia.spec.ts` impide volver a combinar ambos tokens.
+- **Menú del alumno:** `derivarEstadoEntrenamientoHoy` dice «Completado hoy» solo si el bloque sugerido de hoy está completado; con la semana completa y hoy sin entrenar dice «Semana completada».
+- **Iconos de estado de los chips de la semana:** los que acompañan un texto visible llevan `aria-hidden`; el completado y el activo se dejan expuestos porque son la única señal de su estado.
+- **Evidencia:** 3 tests nuevos en `use-resumen-menu.revux.spec.ts` y 1 guardián; web **3074/3074** en 351 archivos.
+
 ### Pendiente
 - Ninguno abierto de §7.10. El uso desde varias pestañas o dispositivos queda como límite documentado (ver §7.17).

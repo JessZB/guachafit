@@ -25,6 +25,7 @@ Push solo cuando yo lo pida explícitamente.
 ## Qué hay que hacer
 Todos los 29 lotes de la auditoría UX (UX-01…UX-29) están **completados y cerrados con éxito**:
 - **Todos los lotes cerrados (UX-01 a UX-29):** Auditoría UX completada al 100%.
+- **Revisión de calidad de UX-19 a UX-29 cerrada (`af33433`, 2026-11-03):** corregidos los defectos confirmados (pagos del alumno, check-in, aviso del cierre de sesión, menú, Plantillas). Quedan **5 decisiones del dueño (D11 a D15)** en la sección 4 de la auditoría y los seguimientos del bloque «Revisión de calidad». La suite web está en **3074 tests en 351 archivos**, con typecheck y build en verde.
 - Siguiente paso: Consolidación final del ciclo de auditoría UX, borrado de `.external-agents/auditoria-ux/` y planificación de temas pendientes fuera de la auditoría (módulo 5: anulación de cuotas en la web, congelar membresía, condonar, PagosPage, P2 de Control de Cobros, RNF-002; y pendientes de la ficha en RF-011).
 
 ## Roles (reglas en 00_Reglas_Desarrollo_SDD.md §7)

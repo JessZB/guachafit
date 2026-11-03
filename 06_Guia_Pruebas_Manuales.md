@@ -110,6 +110,8 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 - [x] **Iniciar:** pulsar "Comenzar a entrenar" pasa la sesión a "En Progreso" y guarda la hora (UTC) + tu zona horaria.
 - [x] **Descanso real:** al marcar una serie arranca el temporizador; al marcar la siguiente aparece **"Descanso real: X"** (medido de verdad). Si no marcaste inicio, muestra "—" (nunca un número inventado).
 - [x] **Cierre con sesión vacía:** pulsar "Finalizar" sin haber marcado nada pregunta **"¿descansado o incompleto?"**; en ninguno de los dos casos sube la racha.
+- [ ] **Aviso de series pendientes legible (revisión UX, 2026-11-03, `af33433`):** deja series sin marcar y pulsa "Finalizar": el aviso de series pendientes se lee con claridad **en tema claro y en oscuro** (texto de color de advertencia, icono de alerta, no un texto casi blanco).
+- [ ] **Menú sin "Completado hoy" falso (revisión UX, 2026-11-03, `af33433`):** con toda la semana completa pero sin haber entrenado hoy, la tarjeta de entrenamiento dice **"Semana completada"**; "Completado hoy" solo aparece si el bloque de hoy está completado.
 - [ ] **Finalizar bien:** muestra duración y horas **en tu hora local**; si superaste el 70% del plan dice la racha real; si no, un mensaje honesto (no miente).
 - [x] **kg / lb:** cambia la unidad en el checklist; se recuerda aunque recargues.
 - [ ] **Video de técnica:** si el ejercicio tiene enlace, aparece "Ver técnica" con reproductor (Escape cierra).
@@ -300,6 +302,11 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - Adjunta un comprobante válido, escribe un monto válido y bloquea en DevTools (`Network` → `Block request URL`) solo `*/reportar-pago` dejando libre la subida a R2. Pulsa **"Enviar Comprobante de Pago"**: el recibo se sube una vez y el POST falla mostrando **"No se pudo confirmar el envío; revisa tu historial antes de repetirlo."**.
   - Desbloquea `*/reportar-pago` y vuelve a pulsar **"Enviar Comprobante de Pago"** sin cambiar el archivo: el cliente **no** vuelve a pedir presign ni a subir la imagen a R2, reutiliza el `comprobanteStorageKey` ya subido y envía exactamente la misma `X-Idempotency-Key` / `idempotencyKey`.
   - Tras ver el aviso de éxito (`"¡Pago reportado con éxito!..."`), pulsa enseguida **"Volver a opciones de pago"** (antes de 1,8 s): vuelves al Hub y, pasados los 2 s, **no** te redirige solo al Historial.
+- [ ] **Pago reportado visible al instante y bloqueo durante el envío (revisión UX, 2026-11-03, `af33433`):**
+  - Reporta un pago desde `/app/pagos`: tras el mensaje de éxito pasas al historial y el **pago nuevo aparece sin recargar**, con el saldo de la cuota ya actualizado.
+  - Mientras se envía, no puedes editar ningún campo ni adjuntar o quitar el comprobante.
+  - Con el monto vacío, el contravalor muestra **"—"**, no "$0.00 USD".
+  - Con un error de red ambiguo, cambia la foto del comprobante y reenvía: se manda un envío nuevo (el sistema no devuelve el pago anterior) y la foto nueva es la que queda.
 - [ ] **Anular una cuota (API, 2026-10-12, `7f46acc`):** con una cuota sin pagos, llama `POST /finanzas/cuotas/:id/anular` con `{"motivo": "Emitida por error"}` como entrenador dueño → "Cuota anulada."; la cuota queda `anulada` sin deuda, sale de Control de Cobros y del saldo pendiente del alumno, y al alumno le llega "Tu entrenador anuló una cuota". Si la cuota nació con saldo a favor aplicado (p. ej. 10.00), el mensaje dice "10.00 USD volvieron al saldo a favor del alumno." y el saldo a favor sube. Repetir → 409 "Esta cuota ya está anulada.". Con un pago en revisión → 409 "Primero aprueba o rechaza el pago en revisión de esta cuota."; con un pago aprobado → 409 "No se puede anular una cuota con pagos aprobados.". Sin motivo → 400. Cuota de otro entrenador → 404. **Corregir una cuota mal emitida:** anula la cuota, quita el plan y reasígnalo (mismo plan) con la fecha correcta del mismo mes → se emite una cuota nueva de ese mes. La web aún no tiene el botón.
 - [ ] **Doble cobro:** con DevTools → Network en "Offline" justo al pulsar "Registrar…", vuelve a "Online", cierra y reabre el modal y repite: en el historial hay **un solo** cobro (misma clave `X-Idempotency-Key` en las dos peticiones).
 - [ ] **Dos cobros en efectivo el mismo día:** registra dos cobros en efectivo (a dos alumnos) el mismo día: ambos se guardan (antes el segundo fallaba).
@@ -332,6 +339,7 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 
 ## 6. Plantillas de ejercicios
 
+- [ ] **Filtros sin ceros falsos (revisión UX, 2026-11-03, `af33433`):** en Plantillas, con red lenta o con la API caída, los chips "Activas", "Desactivadas" y "Todas" muestran solo su etiqueta; los números aparecen cuando la lista ya cargó.
 - [ ] **Plantillas: recarga honesta y táctil (desde 2026-11-01, UX-20):** en Banco de Plantillas (`/coach/plantillas`).
   - **Buscador táctil en móvil:** a 360px de ancho (o en móvil), el buscador y el selector de nivel tienen altura táctil cómoda (`min-h-11`) y tamaño de fuente legible (16px) que previene el zoom involuntario en iPhone / iOS Safari.
   - **Contador accesible:** arriba de la lista se indica `{N} plantilla` o `{N} plantillas` mediante `<p aria-live="polite">` (se actualiza de forma accesible al filtrar o buscar). No se muestra durante la carga inicial ni si la página falla sin datos previos.
@@ -476,6 +484,11 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 
 **Check-in antropométrico (RF-003)**
 
+- [ ] **Check-in: descarte honesto y fotos sin conexión (revisión UX, 2026-11-03, `af33433`):**
+  - Abre un check-in nuevo (se precarga tu última medición) y pulsa "Volver" sin tocar nada: vuelves al hub **sin** el diálogo "¿Descartar cambios sin guardar?".
+  - Cambia el peso y pulsa "Volver": aparece el diálogo; "Descartar y salir" y al reabrir el formulario ves la última medición real, no lo que escribiste, y sin fotos.
+  - Adjunta una foto y pulsa "Volver": aparece el diálogo aunque no hayas tocado las medidas.
+  - Sin conexión (modo avión) los botones de fotos están deshabilitados, igual que el envío.
 - [ ] **Alumno — campos nuevos (RN-02):** en `/app/progreso` el formulario incluye brazo relajado, brazo contraído, muslo medio y los 4 pliegues cutáneos (tríceps, subescapular, suprailíaco, abdominal), opcionales y con validación de rango; los controles viejos siguen viéndose (alias de brazo relajado y muslo medio).
 - [ ] **Alumno — banner de ventana:** con calendario configurado, el alumno remoto ve si la ventana está **abierta** ("puedes registrar tu check-in hasta el …"), **próxima** ("tu ventana abre …") o **cerrada** (con la próxima fecha); con la ventana cerrada el botón de registro queda deshabilitado y el motivo visible. Sin calendario no hay banner ni bloqueo (registro libre).
 - [ ] **Alumno — presencial en solo lectura:** con modalidad presencial, el formulario se muestra en modo lectura (sin edición); si se fuerza la mutación, el servidor responde 403 y la vista lo explica (nunca un error genérico). En modo demo, el selector "Escenario demo" permite alternar **Remoto en ventana / Remoto fuera de ventana / Presencial (solo lectura)**.

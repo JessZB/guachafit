@@ -428,6 +428,27 @@ Proceso:
 - 8 tests nuevos en 2 specs (`AtletaMenuPage.ux24.interaccion.spec.tsx` y `NavegacionAlumno.ux24.interaccion.spec.tsx`).
 - 3006 tests en 331 archivos y typecheck en verde.
 
+**Revisión de calidad de UX-19 a UX-29 cerrada (`af33433`, 2026-11-03):**
+- **Proceso:**
+  - 4 revisiones UX de solo lectura en paralelo (Antigravity, `gemini-3.8-flash-high`; prompts `10` a `13`), una por grupo de lotes: Ajustes y Plantillas, Pagos del alumno, Nutrición/menú/sesión y Cierre/Progreso/pulido.
+  - Un advisor (Opus) contrastó cada hallazgo con el código y el contrato del API: confirmó casi todos, bajó la gravedad de varios (el «BLOCKER» de pagos es real pero no bloqueante) y encontró dos defectos que los revisores no vieron.
+  - 7 correcciones (G1a a G6) con agentes Haiku; tests y verificación en Antigravity (`14` y `15`). El primer intento de validación se quedó sin créditos y se repitió con un prompt reducido.
+- **Corregido:**
+  - Pagos del alumno (`PagosPage.tsx`, `use-reporte-pago.ts`, formulario y comprobante): refresco de historial y saldo tras reportar, clave de idempotencia por comprobante, formulario bloqueado durante el envío, contravalor vacío con «—», `role="status"` en el éxito, textos con «entrenador».
+  - Check-in (`use-medidas-checkin.ts`, `use-checkin-antropometrico.ts`, `ProgresoPage.tsx`): la medición precargada no cuenta como cambio y «Descartar» vacía medidas y fotos (defecto de UX-27 que ningún revisor vio); el botón de enviar usa su texto visible como nombre; fotos deshabilitadas sin conexión.
+  - Cierre de sesión (`ModalFinalizarSesion.tsx`, UX-26): el aviso de series pendientes era ilegible en ambos temas (`text-warning-foreground`); guardián `estilo-contraste-advertencia.spec.ts`.
+  - Menú (`use-resumen-menu.ts`, UX-24): «Completado hoy» falso con la semana completa.
+  - Plantillas (`FiltrosPlantillas.tsx`, UX-20): contadores «0» durante la carga; iconos decorativos con `aria-hidden` y `autoComplete="off"` en los campos de tasa.
+- **Seguimientos (fuera de esta tanda):**
+  - Montos de Pagos del alumno sin `useFormatoNumero`/`formatMonto` (`TarjetaResumenCuota.tsx`, `FormularioReportePago.tsx`), contra §6.17 del reglamento.
+  - La referencia bancaria no se valida en el cliente: el error llega del servidor después de subir el comprobante.
+  - Tras un check-in exitoso las medidas no se limpian; descartar con una subida de foto en curso puede dejar la subida huérfana.
+  - `SelectorZonaHoraria.tsx`: la hora «en vivo» se calcula al renderizar y no se actualiza sola.
+  - Tests débiles: R5 pasa por vacío hoy (falla si se reintroduce una etiqueta huérfana), R15 y R16 son guardas de regresión.
+  - Pendiente de decisión: D11 a D15 (sección 4).
+- **Evidencia:** 17 tests nuevos en 7 specs (`*.revux.spec.*` y el guardián de contraste); web **3074/3074** en 351 archivos; typecheck y build en verde.
+
+
 **UX-29 cerrado (`0ebda43`):**
 - **Pagos del alumno (`ALU-11` a `ALU-15`):**
   - `TarjetaResumenCuota.tsx` (`ALU-12`, `ALU-15`): `fechaCorteUtc` formateada con `formatFechaLocal` y fallback `'—'`; contenedor de saldo y total cuota con `flex-wrap gap-3` para pantallas estrechas; conserva `"Saldo Pendiente"`. 89 líneas (`<= 400`).
@@ -527,6 +548,11 @@ Deduplicadas de las 15 preguntas de los reportes (cada una con la recomendación
 | D8 ✅ (2026-11-01: el formulario de pago arranca con monto vacío `''`, valida > 0 antes de enviar, asocia cada `<label>` con `htmlFor`/`id` (`useId`) y se actualizan los 3 tests de `PagosPage.fecha-anterior.interaccion.spec.tsx`; en ALU-10 "Corregir y Reenviar" prellena el formulario con método, moneda, monto, referencia y fecha del pago rechazado. Verificado en código que el API ya soporta `X-Idempotency-Key` / `idempotencyKey` en `ReportarPagoSchema` y el índice `uq_transaccion_referencia_entrenador`, por lo que en UX-22 el cliente enviará `idempotencyKey` y reutilizará `storageKey`) | Reporte de pago: ¿empieza vacío (se actualizan los specs que usan `1300.00` y localizan por `parentElement`)? ¿El API acepta clave de idempotencia o rechaza duplicados por referencia+monto+fecha? | Sí a vaciar (ALU-01 es ALTA). Sin idempotencia en el API solo hay mitigación en el cliente (ALU-07). | UX-21, UX-22 |
 | D9 ✅ (2026-11-02: avisar y bloquear el envío sin tocar datos; se muestra AvisoDatosOffline con variante "sin-datos", botón de envío deshabilitado con indicación visible y guarda síncrona en useCheckinAntropometrico; en demo se simula en local) | Check-in antropométrico con fotos sin conexión: ¿encolar o avisar y bloquear el envío? | Avisar y bloquear: no toca datos. Encolar es riesgo alto y requiere diseño de cola offline (PRO-04). | UX-28 |
 | D10 | Esfuerzo de la sesión: ¿arrancar sin valor? ¿Separar el valor de "molestia" del texto con emoji dentro de `notas`? | Sí al esfuerzo sin valor inicial (ENT-09b). Separar `notas` va aparte porque cambia el formato de los datos (ENT-09c). | UX-26 (ENT-09c) |
+| D11 | Reporte de pago del alumno: ¿la moneda se elige según el método (Zelle, Binance, Efectivo USD → USD; Pago Móvil, Transferencia, Efectivo VES → VES) y se puede cambiar a mano? | Sí: hoy queda en VES por defecto incluso con «Zelle (USD)» y la API no cruza método y moneda; un alumno puede reportar 30 Bs creyendo que son 30 $. | lote de pagos del alumno |
+| D12 | ¿Se aprueban los textos nuevos de Progreso y Pagos («Mi progreso», «Tus medidas», «Ver evolución», «Reportar pago», «Historial») y se quitan los restos de Title Case (PRO-06, ALU-11)? | Sí, en un lote de textos con los specs actualizados: rompen specs de Pagos y de Progreso que consultan los nombres actuales. | lote de textos |
+| D13 | ¿La semana de entrenamiento se consulta con la zona horaria del perfil (`zonaPerfilEfectiva`) y no con la del dispositivo? | Sí, en un lote aparte: afecta a `use-resumen-menu.ts` y a `use-entrenamiento.tsx`, que hoy son coherentes entre sí; arreglar uno solo los desalinearía. | lote de zona horaria |
+| D14 | ¿Proteger el botón Atrás del navegador en el check-in con un guard de router? | Aceptarlo por ahora: las medidas sobreviven a Atrás/Adelante y solo se pierden las fotos; antes de UX-27 Atrás sacaba de Progreso y se perdía todo. | — |
+| D15 | ¿Mostrar el motivo del rechazo arriba al corregir un pago rechazado? | Sí: es pequeño, el motivo ya viene en la transacción. | lote de pagos del alumno |
 
 ## 5. Hallazgos por área
 

@@ -199,6 +199,12 @@ Then la transacción debe transicionar a estado "Rechazado"
 - **Mensaje honesto en fallo ambiguo de red (`ALU-07c`):** cuando el `POST` del reporte falla por corte de red, timeout o pasarela (`TypeError`, `ErrorDeConexion`, `ErrorTiempoAgotado`, `AbortError`, `TimeoutError` o HTTP `502`/`503`/`504`), muestra `MENSAJE_ERROR_RED_AMBIGUO_PAGO` (*"No se pudo confirmar el envío; revisa tu historial antes de repetirlo."*), diferenciándolo de rechazos HTTP deterministas del servidor (como `409` por referencia duplicada) y de errores previos al subir el comprobante.
 - **Evidencia:** web **2986/2986** en 327 archivos (21 tests nuevos en `use-reporte-pago.ux22.spec.ts` y `PagosPage.ux22.interaccion.spec.tsx`); typecheck y build en verde.
 
+### Revisión UX del reporte de pago del alumno (`af33433`, 2026-11-03, revisión de UX-19 a UX-29)
+- **Historial y saldo al día tras reportar:** `PagosPage` vuelve a cargar los datos (`cargarDatos`) cuando el reporte termina bien; el pago nuevo aparece en el historial sin recargar la página y el alumno ya no ve un saldo viejo que invite a reportarlo dos veces.
+- **Clave de idempotencia por comprobante:** `useReportePago` renueva la clave al adjuntar o quitar el comprobante. Un reintento idéntico sigue reutilizando la misma clave; si el alumno cambia la foto, el servidor no devuelve la transacción anterior y la foto nueva no se pierde sin aviso.
+- **Formulario bloqueado durante el envío:** todo el contenido del formulario va en un `<fieldset disabled>` mientras `isSubmitting`, incluido el comprobante; el contravalor en USD muestra «—» con el monto vacío o sin tasa; el `<label>` huérfano del comprobante pasa a `<div>`; la confirmación se anuncia con `role="status"`; los mensajes dicen «entrenador».
+- **Evidencia:** web **3074/3074** en 351 archivos (6 tests nuevos en `use-reporte-pago.revux.spec.ts`, `PagosPage.revux.interaccion.spec.tsx` y `FormularioReportePago.revux.spec.tsx`); typecheck y build en verde.
+
 ### Pendiente
 - El mensaje de éxito de la reversión no se borra solo; las mutaciones de Conciliación y de la reversión no tienen tiempo límite; la demo de Conciliación llama al API.
 - El comprobante sigue siendo opcional.

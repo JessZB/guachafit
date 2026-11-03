@@ -159,6 +159,13 @@ Con los tres criterios pendientes cerrados (Escenario 2, §6 y Escenario 3), el 
 - **Modo demo:** el entorno de demostración omite la restricción de conectividad y permite simular el registro en local.
 - **Evidencia:** `apps/web/src/components/atleta/progreso/FormularioCheckinAntropometrico.ux28.offline.spec.tsx` (4 tests); web **3044 tests en 342 archivos (1118 suites)**; typecheck y build en verde. Revisión de resiliencia (`review-resilience`) APROBADA (0 blockers, 0 warnings).
 
+### Revisión UX del check-in: descarte honesto y fotos sin conexión (`af33433`, 2026-11-03, revisión de UX-19 a UX-29)
+- **La medición precargada no es un cambio:** `useMedidasCheckin` guarda la base (`baseRef`) con la que se abrió el formulario; «Volver» sin editar nada vuelve al hub sin el diálogo «¿Descartar cambios sin guardar?». El diálogo sale solo si el alumno cambió una medida o adjuntó fotos (`hayCambiosSinGuardar`).
+- **Descartar descarta:** `descartarCheckin()` vacía medidas y fotos y remonta el selector; al reabrir, el formulario muestra la última medición real y no lo escrito.
+- **Nombre accesible = texto visible:** el botón de enviar ya no lleva un `aria-label` distinto del texto que se ve.
+- **Fotos sin conexión (D9):** el selector de fotos se deshabilita sin conexión, igual que el envío.
+- **Evidencia:** 6 tests nuevos en `ProgresoPage.revux.interaccion.spec.tsx`; web **3074/3074** en 351 archivos.
+
 ### Pendiente
 - (UX-15) El aviso de éxito sigue visible al pasar a "Comparar" hasta que se cierra. Faltan tests de la recarga fallida con datos y de grasa o cintura ausentes. La búsqueda en servidor necesitaría que el endpoint de pendientes aceptara `q`.
 - **Fotos huérfanas:** una foto subida y luego quitada, o un check-in que no se llega a enviar, deja el objeto en la bóveda (no hay borrado ni barrido). Ver [[RNF-001-almacenamiento-seguridad-fotos-progreso]].
