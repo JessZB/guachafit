@@ -261,5 +261,11 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
 - **Iconos de estado de los chips de la semana:** los que acompañan un texto visible llevan `aria-hidden`; el completado y el activo se dejan expuestos porque son la única señal de su estado.
 - **Evidencia:** 3 tests nuevos en `use-resumen-menu.revux.spec.ts` y 1 guardián; web **3074/3074** en 351 archivos.
 
+### 7.20. El día del alumno se calcula con la zona del perfil (`6da5794`, 2026-11-03, lote ZH-2, [[ADR-025-zona-horaria-alumno-precarga-dispositivo-aviso-discrepancia]])
+- El menú del alumno (`use-resumen-menu.ts`) y el «Hoy» del entrenamiento (`use-entrenamiento.tsx`) toman el día de la zona horaria del perfil (`useZonaPerfil()` y `fechaCalendarioEnZona`) y no de la del dispositivo. De ahí lo heredan la semana, la carga de la sesión, las acciones y la lectura de la caché offline de la rutina de hoy, así que todos coinciden en qué día es.
+- Si la zona del perfil es nula o inválida se usa `America/Caracas`. En el modo demo el «hoy» sigue siendo el reloj del dispositivo. El entrenador no cambia: usa la zona de su dispositivo.
+- Siguen con la zona del dispositivo la agrupación «Hoy/Ayer» de las notificaciones y los endpoints `?timezone=` del entrenamiento, que aceptan lo que envía el cliente.
+- **Evidencia:** web **3152/3152** en 376 archivos; typecheck y build con código 0.
+
 ### Pendiente
 - Ninguno abierto de §7.10. El uso desde varias pestañas o dispositivos queda como límite documentado (ver §7.17).

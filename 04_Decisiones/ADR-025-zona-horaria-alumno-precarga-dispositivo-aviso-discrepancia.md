@@ -18,7 +18,7 @@ tags:
 # ADR-025: Zona horaria del alumno: precarga única desde el dispositivo, uso exclusivo de la zona del perfil y aviso de discrepancia
 
 ## 1. Estado
-`implementado` en el lote ZH-1 (`6111326`, 2026-11-03), diseño aprobado por el dueño el 2026-11-03. Queda pendiente ZH-2 (§6). Refina [[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]] (costo T2: los perfiles existentes quedan en Caracas) y respeta la estrategia UTC/IANA de [[ADR-002-gestion-fechas-utc-zonas-horarias]].
+`implementado` en los lotes ZH-1 (`6111326`) y ZH-2 (`6da5794`), ambos del 2026-11-03, con el diseño aprobado por el dueño el 2026-11-03. Refina [[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]] (costo T2: los perfiles existentes quedan en Caracas) y respeta la estrategia UTC/IANA de [[ADR-002-gestion-fechas-utc-zonas-horarias]].
 
 ## 2. Contexto
 - La zona del alumno vive en `perfiles_alumno.zona_horaria`, `NOT NULL` con valor por defecto `America/Caracas`. Hoy nadie la rellena con la del dispositivo: un alumno que se registra fuera de Venezuela queda en Caracas hasta que la cambie en Ajustes, algo que quizá no sabe ni le importa.
@@ -71,12 +71,14 @@ tags:
 
 ## 6. Lotes de implementación
 1. **ZH-1 (datos y aviso):** migración `0024`, contratos, `precargarZonaDispositivo`, las dos escrituras que marcan «definida», el envío desde login y activación, `lib/zona-horaria.ts` y `AvisoZonaDiscrepante`. Riesgo medio por la migración y la autenticación: cuatro revisiones 4R.
-2. **ZH-2 (cálculos con la zona del perfil):** `useZonaPerfil()` y los consumidores del punto 3.3. Riesgo medio; revisión de fiabilidad.
+2. **ZH-2 (cálculos con la zona del perfil):** `useZonaPerfil()` y los consumidores del punto 3.3. Riesgo medio; revisión de fiabilidad. Implementado en `6da5794`.
 
-## 6.1. Estado de la implementación (ZH-1, `6111326`)
+## 6.1. Estado de la implementación (ZH-1, `6111326`, y ZH-2, `6da5794`)
 - **Hecho:** columna `zona_horaria_definida` y migración `0024` (con el `UPDATE` que deja todas las filas existentes como definidas); `zonaDispositivo` en login y activación; `precargarZonaDispositivo` con el `UPDATE` atómico condicionado; las dos escrituras que marcan la zona como definida (PATCH del alumno y del entrenador); `AvisoZonaDiscrepante` al final del `<main>` del layout del alumno; comparación por desfase UTC en `lib/zona-horaria.ts`.
 - **Decisión añadida en la revisión:** la precarga es una conveniencia y **nunca bloquea** el acceso. Si el `UPDATE` falla se registra una advertencia con `Logger('PrecargarZonaDispositivo')` y el login o la activación siguen con la zona del perfil. Se descartó poner un límite `.max()` a `zonaDispositivo` en el esquema Zod: un valor largo debe ignorarse, no convertirse en un 400 que bloquee un acceso válido.
-- **Pendiente (ZH-2):** que el menú, «Hoy», la fecha de operación del pago y antropometría lean la zona del perfil con `useZonaPerfil()`. Hasta entonces esas pantallas siguen usando la zona del dispositivo y el aviso solo informa de la discrepancia.
+- **Hecho (ZH-2, `6da5794`):** `useZonaPerfil()` (`lib/use-zona-perfil.ts`) y `fechaCalendarioEnZona(zona, ahora?)` (`lib/zona-horaria.ts`; una zona nula o inválida cae en `America/Caracas`). Ahora calculan el día con la zona del perfil: el menú (`use-resumen-menu.ts`), el «Hoy» del entrenamiento (`use-entrenamiento.tsx` y, de ahí, la semana, la carga de la sesión, las acciones y la lectura de la caché offline de la rutina de hoy), la fecha de operación del pago (estado inicial, reinicio con `iniciarNuevoPago`, validación de la fecha de cobro y el `max` del campo; `FormularioReportePago` recibe la prop `hoyLocal`) y la antropometría (ventana del check-in y fecha enviada al guardar). El lado del entrenador no cambia.
+- **Decisión añadida en la implementación:** la antropometría usa la zona fresca de `/auth/me` si existe y, si no, la del login, por si la zona cambió después de iniciar sesión. En el modo demo el «hoy» sigue siendo el reloj del dispositivo, porque no hay perfil real que consultar.
+- **Límites que quedan:** la agrupación «Hoy/Ayer» de las notificaciones (`lib/notificaciones-in-app.ts`), los gráficos de evolución (`lib/evolucion-graficos.ts`) y `timezoneCliente` de nutrición siguen con la zona del dispositivo; los endpoints `?timezone=` del entrenamiento todavía aceptan lo que envía el cliente (costo T3).
 
 ## 7. Trazabilidad
 - Contexto: [[ADR-019-zona-horaria-perfil-captura-relativa-nutricion]], [[ADR-002-gestion-fechas-utc-zonas-horarias]], [[ADR-011-aislamiento-multitenant-rls-progresivo-withtenant]].

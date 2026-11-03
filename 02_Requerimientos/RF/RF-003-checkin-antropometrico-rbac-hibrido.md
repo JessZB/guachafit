@@ -166,6 +166,11 @@ Con los tres criterios pendientes cerrados (Escenario 2, §6 y Escenario 3), el 
 - **Fotos sin conexión (D9):** el selector de fotos se deshabilita sin conexión, igual que el envío.
 - **Evidencia:** 6 tests nuevos en `ProgresoPage.revux.interaccion.spec.tsx`; web **3074/3074** en 351 archivos.
 
+### Check-in con el día de la zona del perfil y textos unificados (`6da5794`, 2026-11-03, lotes ZH-2 y D12, [[ADR-025-zona-horaria-alumno-precarga-dispositivo-aviso-discrepancia]])
+- **Zona del perfil:** la ventana del check-in y la fecha que se envía al guardar se calculan con la zona del perfil del alumno (`use-contexto-antropometrico.ts`). Usa la zona fresca de `/auth/me` si existe y, si no, la del login. En el modo demo el «hoy» sigue siendo el reloj del dispositivo.
+- **Textos (D12):** «Mi progreso», «Tus medidas», «Ver evolución», «Enviar a mi entrenador», «Historial de medidas» y «¡Medidas guardadas!», con mayúscula solo en la primera palabra y un único nombre para la evolución.
+- **Evidencia:** web **3152/3152** en 376 archivos; typecheck y build con código 0.
+
 ### Pendiente
 - (UX-15) El aviso de éxito sigue visible al pasar a "Comparar" hasta que se cierra. Faltan tests de la recarga fallida con datos y de grasa o cintura ausentes. La búsqueda en servidor necesitaría que el endpoint de pendientes aceptara `q`.
 - **Fotos huérfanas:** una foto subida y luego quitada, o un check-in que no se llega a enviar, deja el objeto en la bóveda (no hay borrado ni barrido). Ver [[RNF-001-almacenamiento-seguridad-fotos-progreso]].

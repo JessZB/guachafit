@@ -428,6 +428,26 @@ Proceso:
 - 8 tests nuevos en 2 specs (`AtletaMenuPage.ux24.interaccion.spec.tsx` y `NavegacionAlumno.ux24.interaccion.spec.tsx`).
 - 3006 tests en 331 archivos y typecheck en verde.
 
+**Lote ZH-2 + D12 cerrado (`6da5794`, 2026-11-03; decisiones D13 y D12, [[ADR-025-zona-horaria-alumno-precarga-dispositivo-aviso-discrepancia]]):**
+- **Qué hace:**
+  - ZH-2: `useZonaPerfil()` y `fechaCalendarioEnZona(zona, ahora?)` (zona nula o inválida → `America/Caracas`). El menú, el «Hoy» del entrenamiento (y de ahí la semana, la carga de sesión, las acciones y la caché offline de la rutina de hoy), la fecha de operación del pago (estado inicial, `iniciarNuevoPago`, validación y `max` del campo; `FormularioReportePago` recibe `hoyLocal`) y la antropometría (ventana del check-in y fecha enviada) usan la zona del perfil. La antropometría prefiere la zona fresca de `/auth/me` y, si no, la del login; en el modo demo el «hoy» sigue siendo el reloj del dispositivo. El lado del entrenador no cambia.
+  - D12: textos de Progreso y Pagos del alumno con mayúscula solo en la primera palabra y un único nombre por acción («Mi progreso», «Reportar pago», «Historial», «Tus medidas», «Ver evolución», «Enviar a mi entrenador», «Pagos y cuotas», «Saldo pendiente», «Corregir y reenviar», «Método de pago», «Monto pagado», «Fecha de operación», «Referencia bancaria», «Enviar comprobante de pago», «Historial de medidas», «¡Medidas guardadas!»). La etiqueta «En revisión» (`etiquetaEstadoTransaccion`) pasa a sentence case y también la ve el entrenador. Se retiraron textos con jerga (enlaces temporales, almacenamiento R2, auditoría).
+  - Refactor: `use-comprobante-pago.ts` se extrae de `use-reporte-pago.ts` (de 401 a 349 líneas).
+- **Revisión:** fiabilidad (ZH-2) y legibilidad (D12) sin BLOCKER.
+  - Se aceptaron 2 WARNING de fiabilidad (zona fresca de `/auth/me` en antropometría; modo demo con el reloj del dispositivo) y 1 SUGGESTION (recalcular la fecha en `iniciarNuevoPago`).
+  - De legibilidad se aceptaron el Title Case residual, dos textos con jerga y comentarios desactualizados.
+  - Se rechazaron, como seguimiento: la guarda de `asegurarComprobanteSubido`, renombrar `onNuevoAbono` a `onReportarPago` y reemplazar `querySelectorAll` por `getByLabelText` en specs antiguos.
+- **Seguimientos:**
+  - La agrupación «Hoy/Ayer» de las notificaciones (`lib/notificaciones-in-app.ts`), los gráficos de evolución (`lib/evolucion-graficos.ts`) y `timezoneCliente` de nutrición siguen con la zona del dispositivo.
+  - Los endpoints `?timezone=` del entrenamiento aún aceptan lo que envía el cliente (costo T3 del ADR).
+  - Fuera de D12 quedaron el Sidebar («Menú de Acciones», «Mi Comida», «Rendimiento Personal»), la `BottomNav` («Ir a entrenar», «Pagos») y `ComparadorFotos`, con Title Case e inconsistencias.
+  - La opción «(VES)» del selector de método; `validarArchivoComprobante` (valida por nombre) encajaría en `lib/comprobante-pago.ts`.
+- **Proceso:**
+  - Al lanzar workers de Antigravity hay que pasar el id completo del modelo (`gemini-3.8-flash-medium` o `gemini-3.8-flash-high`): pasar solo `medium` o `high` cae al modelo por defecto, que puede no tener créditos.
+  - Un lote no se cierra sin ver el typecheck y el build con código 0 sobre el código final: en este lote el build web no se había visto en 0 hasta el cierre, y las correcciones de la revisión llegaron después de la primera pasada verde.
+  - El hook del pago superó el tope de 400 líneas del guardián de tamaño y se extrajo `use-comprobante-pago.ts`.
+- **Evidencia:** web **3152/3152** en 376 archivos; typecheck de shared, database, api y web y build web con código 0.
+
 **ZH-1 cerrado: zona horaria del alumno (`6111326`, 2026-11-03; decisión D13, [[ADR-025-zona-horaria-alumno-precarga-dispositivo-aviso-discrepancia]]):**
 - **Qué hace:** precarga única de la zona del dispositivo en el primer acceso, libre después, y aviso discreto al final del layout del alumno cuando el desfase UTC del dispositivo y el del perfil difieren. Migración `0024` con los alumnos existentes como definidos. Detalle en RF-018.
 - **Revisión 4R:**
@@ -436,7 +456,7 @@ Proceso:
   - Legibilidad dio una mejora de copy, aplicada («Zona de tu dispositivo: Hora de Madrid. Zona de tu perfil: Hora de Caracas.»).
   - Se descartaron tres sugerencias: un `.max()` en el esquema Zod (convertiría un valor largo en un 400 que bloquea un acceso válido), `IF NOT EXISTS` en el `ALTER` y extraer el bloque de precarga repetido dos veces.
 - **Seguimientos:**
-  - ZH-2 pendiente: menú, «Hoy», fecha de operación del pago y antropometría siguen leyendo la zona del dispositivo (`use-resumen-menu.ts`, `use-entrenamiento.tsx`, `use-reporte-pago.ts`, `use-contexto-antropometrico.ts`).
+  - ZH-2 resuelto en `6da5794`: menú, «Hoy», fecha de operación del pago y antropometría leen la zona del perfil (ver el bloque anterior).
   - Los endpoints `?timezone=` del entrenamiento siguen aceptando lo que envíe el cliente (costo T3 del ADR).
   - W5 y W6 pasaban en la fase roja por ser casos negativos: son guardas útiles solo con el componente presente.
 - **Proceso:**
@@ -581,7 +601,7 @@ Deduplicadas de las 15 preguntas de los reportes (cada una con la recomendación
 | D9 ✅ (2026-11-02: avisar y bloquear el envío sin tocar datos; se muestra AvisoDatosOffline con variante "sin-datos", botón de envío deshabilitado con indicación visible y guarda síncrona en useCheckinAntropometrico; en demo se simula en local) | Check-in antropométrico con fotos sin conexión: ¿encolar o avisar y bloquear el envío? | Avisar y bloquear: no toca datos. Encolar es riesgo alto y requiere diseño de cola offline (PRO-04). | UX-28 |
 | D10 | Esfuerzo de la sesión: ¿arrancar sin valor? ¿Separar el valor de "molestia" del texto con emoji dentro de `notas`? | Sí al esfuerzo sin valor inicial (ENT-09b). Separar `notas` va aparte porque cambia el formato de los datos (ENT-09c). | UX-26 (ENT-09c) |
 | D11 ✅ (2026-11-03: la moneda se propone según el método y se puede cambiar a mano; aviso discreto en combinaciones poco habituales. Implementado en `4371639`) | Reporte de pago del alumno: ¿la moneda se elige según el método (Zelle, Binance, Efectivo USD → USD; Pago Móvil, Transferencia, Efectivo VES → VES) y se puede cambiar a mano? | Sí: hoy queda en VES por defecto incluso con «Zelle (USD)» y la API no cruza método y moneda; un alumno puede reportar 30 Bs creyendo que son 30 $. | lote de pagos del alumno |
-| D12 | ¿Se aprueban los textos nuevos de Progreso y Pagos («Mi progreso», «Tus medidas», «Ver evolución», «Reportar pago», «Historial») y se quitan los restos de Title Case (PRO-06, ALU-11)? | Sí, en un lote de textos con los specs actualizados: rompen specs de Pagos y de Progreso que consultan los nombres actuales. | lote de textos |
+| D12 ✅ (2026-11-03: textos de Progreso y Pagos del alumno con mayúscula solo en la primera palabra y un único nombre por acción; sin jerga. Implementado en `6da5794`, junto con ZH-2) | ¿Se aprueban los textos nuevos de Progreso y Pagos («Mi progreso», «Tus medidas», «Ver evolución», «Reportar pago», «Historial») y se quitan los restos de Title Case (PRO-06, ALU-11)? | Sí, en un lote de textos con los specs actualizados: rompen specs de Pagos y de Progreso que consultan los nombres actuales. | lote de textos |
 | D13 ✅ (2026-11-03: se precarga la zona del dispositivo una sola vez al primer inicio de sesión o activación y después queda libre; los cálculos usan siempre la zona del perfil; aviso discreto de discrepancia en el pie del layout del alumno, comparado por desfase horario y descartable por sesión. Diseño en [[ADR-025-zona-horaria-alumno-precarga-dispositivo-aviso-discrepancia]]) | ¿La semana de entrenamiento se consulta con la zona horaria del perfil (`zonaPerfilEfectiva`) y no con la del dispositivo? | Sí, en un lote aparte: afecta a `use-resumen-menu.ts` y a `use-entrenamiento.tsx`, que hoy son coherentes entre sí; arreglar uno solo los desalinearía. | lote de zona horaria |
 | D14 | ¿Proteger el botón Atrás del navegador en el check-in con un guard de router? | Aceptarlo por ahora: las medidas sobreviven a Atrás/Adelante y solo se pierden las fotos; antes de UX-27 Atrás sacaba de Progreso y se perdía todo. | — |
 | D15 ✅ (2026-11-03: el formulario de corrección muestra el motivo; además el historial del API ahora envía `motivoRechazo` y la fila ya no inventa un motivo. Implementado en `4371639`) | ¿Mostrar el motivo del rechazo arriba al corregir un pago rechazado? | Sí: es pequeño, el motivo ya viene en la transacción. | lote de pagos del alumno |

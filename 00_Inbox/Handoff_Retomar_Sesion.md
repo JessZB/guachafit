@@ -25,13 +25,17 @@ Push solo cuando yo lo pida explícitamente.
 ## Qué hay que hacer
 Todos los 29 lotes de la auditoría UX (UX-01…UX-29) están **completados y cerrados con éxito**:
 - **Todos los lotes cerrados (UX-01 a UX-29):** Auditoría UX completada al 100%.
-- **Revisión de calidad de UX-19 a UX-29 cerrada (`af33433`, 2026-11-03):** corregidos los defectos confirmados (pagos del alumno, check-in, aviso del cierre de sesión, menú, Plantillas). Las decisiones D11 y D15 ya están resueltas (ver el bloque siguiente). Quedan D12 (textos de Progreso y Pagos) y D14 (botón Atrás en el check-in, recomendado no hacerlo ahora) en la sección 4 de la auditoría.
+- **Revisión de calidad de UX-19 a UX-29 cerrada (`af33433`, 2026-11-03):** corregidos los defectos confirmados (pagos del alumno, check-in, aviso del cierre de sesión, menú, Plantillas). Las decisiones D11 y D15 ya están resueltas (ver el bloque siguiente). Queda D14 (botón Atrás en el check-in, recomendado no hacerlo ahora) en la sección 4 de la auditoría.
 - **Lote de pagos del alumno cerrado (`4371639`, 2026-11-03):** D11 (moneda según método), D15 (motivo real del rechazo, con cambio de API), montos con formato común y referencia validada en el cliente. Web **3098 tests en 359 archivos** más P26, API 262/262, typecheck y build en verde.
 - **ZH-1 (zona horaria) cerrado (`6111326`, 2026-11-03):** precarga única de la zona del dispositivo, aviso de discrepancia en el pie del layout del alumno y migración `0024`. Web **3112 tests en 364 archivos**, API 406/406, typecheck y build con código 0.
-- **Siguiente trabajo acordado:**
-  1. **ZH-2** (siguiente): el menú, «Hoy», la fecha de operación del pago y antropometría pasan a leer la zona del perfil con `useZonaPerfil()`; hasta entonces siguen usando la del dispositivo. Diseño en el ADR-025 (§3.3 y §6).
-  2. **D12**: lote de textos de Progreso y Pagos, al final.
-- **Antigravity se queda sin créditos** hacia los 350k tokens de un worker y suele caer justo después de lanzar la suite completa: el JSON de Vitest aparece igual al terminar. Pedirle el reporte **antes** de lanzar la suite y repartir el trabajo en prompts cortos.
+- **ZH-2 + D12 cerrados (`6da5794`, 2026-11-03):** el menú, «Hoy», la fecha de operación del pago y antropometría leen la zona del perfil con `useZonaPerfil()` (la antropometría prefiere la zona fresca de `/auth/me`; el modo demo conserva el reloj del dispositivo) y los textos de Progreso y Pagos del alumno quedan unificados (mayúscula solo en la primera palabra, «En revisión» incluido, sin jerga). Web **3152 tests en 376 archivos**, typecheck de shared, database, api y web y build web con código 0. Revisión de fiabilidad (ZH-2) y de legibilidad (D12) sin BLOCKER.
+- **Siguiente trabajo acordado:** solo queda **D14** (botón Atrás del check-in; recomendado no hacerlo ahora) y estos seguimientos:
+  1. La agrupación «Hoy/Ayer» de las notificaciones (`lib/notificaciones-in-app.ts`), los gráficos de evolución (`lib/evolucion-graficos.ts`) y `timezoneCliente` de nutrición siguen con la zona del dispositivo.
+  2. Los endpoints `?timezone=` del entrenamiento aún aceptan lo que envía el cliente (costo T3 del ADR-025).
+  3. Sidebar («Menú de Acciones», «Mi Comida», «Rendimiento Personal»), `BottomNav` («Ir a entrenar», «Pagos») y `ComparadorFotos` conservan Title Case e inconsistencias: quedaron fuera de D12.
+  4. La opción «(VES)» del selector de método de pago; `validarArchivoComprobante` (valida por nombre) encajaría en `lib/comprobante-pago.ts`.
+  5. Rechazados en la revisión: guarda de `asegurarComprobanteSubido`, renombrar `onNuevoAbono` a `onReportarPago` y reemplazar `querySelectorAll` por `getByLabelText` en specs antiguos.
+- **Antigravity se queda sin créditos** hacia los 350k tokens de un worker y suele caer justo después de lanzar la suite completa: el JSON de Vitest aparece igual al terminar. Pedirle el reporte **antes** de lanzar la suite y repartir el trabajo en prompts cortos. Al lanzarlo, pasar el id completo del modelo (`gemini-3.8-flash-medium` o `-high`): solo `medium` o `high` cae al modelo por defecto, que puede no tener créditos.
 - Siguiente paso: Consolidación final del ciclo de auditoría UX, borrado de `.external-agents/auditoria-ux/` y planificación de temas pendientes fuera de la auditoría (módulo 5: anulación de cuotas en la web, congelar membresía, condonar, PagosPage, P2 de Control de Cobros, RNF-002; y pendientes de la ficha en RF-011).
 
 ## Roles (reglas en 00_Reglas_Desarrollo_SDD.md §7)

@@ -212,9 +212,18 @@ Then la transacción debe transicionar a estado "Rechazado"
 - **Montos con el formato común (regla 6.17):** cuota, cabecera, fila del historial, aviso de saldo a favor y contravalor usan `useFormatoNumero()` (coma decimal y miles con punto, `Bs.` para bolívares, tasa con 4 decimales). `textoSaldoAFavor` admite un formateador opcional y sin él conserva la salida de las pantallas del entrenador. El campo del monto sigue aceptando coma o punto y se normaliza igual que antes.
 - **Evidencia:** web **3098/3098** en 359 archivos más P26 (subconjunto de pagos 66/66); API **262/262** (P25: `rf007-historial-alumno-motivo-rechazo.spec.ts`); typecheck de los cuatro paquetes y build en verde. 26 tests nuevos y 9 specs existentes ajustados (referencia válida y formato común). Las cuatro revisiones 4R no dieron BLOCKER ni WARNING.
 
+### Fecha de operación en la zona del perfil y textos unificados de Pagos (`6da5794`, 2026-11-03, lotes ZH-2 y D12, [[ADR-025-zona-horaria-alumno-precarga-dispositivo-aviso-discrepancia]])
+- **Fecha de operación en la zona del perfil (ZH-2):** el estado inicial del formulario, el reinicio con `iniciarNuevoPago`, la validación de la fecha de cobro y el `max` del campo usan el «hoy» de la zona del perfil del alumno (`useZonaPerfil()` y `fechaCalendarioEnZona`) y no el del dispositivo. `FormularioReportePago` recibe ese día por la prop `hoyLocal`. Solo cambia la web: la regla provisional de la API (día de `Pacific/Kiritimati`) sigue igual.
+- **Textos unificados (D12):** mayúscula solo en la primera palabra y un único nombre por acción: «Reportar pago», «Historial», «Pagos y cuotas», «Saldo pendiente», «Corregir y reenviar», «Método de pago», «Monto pagado», «Fecha de operación», «Referencia bancaria» y «Enviar comprobante de pago». La etiqueta de estado «En revisión» (`etiquetaEstadoTransaccion`) pasa a sentence case y también la ve el entrenador en la bandeja.
+- **Sin jerga:** se retiraron los textos con enlaces temporales, almacenamiento R2 y auditoría.
+- **Refactor:** `use-comprobante-pago.ts` se extrae de `use-reporte-pago.ts` (de 401 a 349 líneas) para respetar el tope de 400 líneas por archivo.
+- **Revisión:** fiabilidad (ZH-2) y legibilidad (D12) sin BLOCKER. Se rechazaron como seguimiento la guarda de `asegurarComprobanteSubido`, el renombrado de `onNuevoAbono` a `onReportarPago` y reemplazar `querySelectorAll` por `getByLabelText` en specs antiguos.
+- **Evidencia:** web **3152/3152** en 376 archivos; typecheck de shared, database, api y web y build web con código 0.
+
 ### Pendiente
 - El mensaje de éxito de la reversión no se borra solo; las mutaciones de Conciliación y de la reversión no tienen tiempo límite; la demo de Conciliación llama al API.
 - El comprobante sigue siendo opcional.
-- **Zona horaria del alumno (lote propio):** guardar la zona del dispositivo al activar la cuenta (hoy todos quedan en `America/Caracas` y solo se cambia a mano en Ajustes), avisar cuando la zona del dispositivo difiera de la configurada ("tu dispositivo va X h por delante/detrás") y, con eso, validar la fecha del pago con la zona del alumno en la API y en la web, en lugar de la regla provisional.
+- **Zona horaria del alumno, lo que falta:** la zona del dispositivo ya se precarga con aviso de discrepancia (ZH-1) y la web calcula la fecha del pago con la zona del perfil (ZH-2); falta validar la fecha del pago con la zona del alumno en la API, en lugar de la regla provisional.
+- Textos: la opción «(VES)» del selector de método sigue pendiente de revisar, y `validarArchivoComprobante` (valida por nombre) encajaría mejor en `lib/comprobante-pago.ts`.
 - `fechaOperacion` solo valida el formato: una llamada directa con `2026-02-30` se acepta.
 - Dos ventanas de "recaudado del mes": KPI-01 usa el mes UTC y `totalPagadoMesActualUsd` el mes en la hora local del servidor (solo discrepan si el servidor no corre en UTC).

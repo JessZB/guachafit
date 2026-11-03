@@ -213,6 +213,11 @@ Then ve "El enlace no es válido o venció. Pide uno nuevo desde Ajustes."
 - **Aviso discreto:** `AvisoZonaDiscrepante`, al final del contenido del layout del alumno (sobre la barra inferior en móvil), con «Zona de tu dispositivo» y «Zona de tu perfil», un enlace «Cambiar zona horaria» y el botón «Entendido». Compara por desfase UTC y no por nombre (Caracas y La Paz no avisan), se descarta por sesión y reaparece si cambia cualquiera de las dos zonas. No aparece para el entrenador, el administrador ni en el modo demo. Al guardar otra zona en Ajustes la sesión se actualiza y el aviso desaparece sin recargar.
 - **Evidencia:** web **3112/3112** en 364 archivos; API **406/406** en los specs de auth y alumnos relacionados, con 15 tests propios del lote (`zh1-precarga-zona-dispositivo.spec.ts`); typecheck y build en verde.
 
+### La zona del perfil gobierna los cálculos de fecha del alumno (`6da5794`, 2026-11-03, lote ZH-2, [[ADR-025-zona-horaria-alumno-precarga-dispositivo-aviso-discrepancia]])
+- Con ZH-2 la zona que el alumno elige en Ajustes (o la precargada) es la que usan el menú, el «Hoy» del entrenamiento, la fecha de operación del pago y el check-in antropométrico (`useZonaPerfil()`). Si el alumno viaja y no la cambia, esas pantallas siguen en la hora de su perfil y el aviso de discrepancia se lo recuerda.
+- Siguen con la zona del dispositivo la agrupación «Hoy/Ayer» de las notificaciones, los gráficos de evolución y `timezoneCliente` de nutrición.
+- **Evidencia:** web **3152/3152** en 376 archivos; typecheck y build con código 0.
+
 ### Pendiente
 - En `/admin`, la página del superadministrador conserva su propio botón "Cerrar sesión" y su diálogo de pendientes, además de los del menú "Cuenta" (preexistente, `CabeceraAdmin.tsx` y `AdminPage.tsx`). Retirarlos exige ajustar `AdminPage.caracterizacion.interaccion.spec.tsx:297`.
 - En Notificaciones, Zona horaria, Planes y Tasas, si se cambia de pestaña con un guardado en vuelo el resultado no se muestra al volver (esas pestañas se desmontan).
