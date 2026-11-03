@@ -10,6 +10,7 @@ import {
   setRefreshToken,
 } from '../lib/api-client';
 import { queryClient } from '../lib/query-client';
+import { obtenerTimezoneDispositivo } from '../lib/date-format';
 import { clearOfflineData } from '../lib/offline-db';
 import { processOutboxQueue } from '../lib/offline-sync';
 import { limpiarCachesRuntime } from '../lib/cache-runtime';
@@ -227,7 +228,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await apiClient<AuthTokensResponseDTO>('/auth/login', {
         method: 'POST',
-        body: JSON.stringify(credentials),
+        // ZH-1: el servidor precarga la zona del alumno una sola vez con la del dispositivo.
+        body: JSON.stringify({ ...credentials, zonaDispositivo: obtenerTimezoneDispositivo() }),
         skipAuth: true,
       });
 

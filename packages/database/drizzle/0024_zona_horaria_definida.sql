@@ -1,0 +1,21 @@
+-- =============================================================================
+-- ZH-1 (ADR-025): precarga única de la zona horaria del dispositivo del alumno.
+--
+--   * perfiles_alumno.zona_horaria_definida: `true` cuando la zona del perfil ya es una decisión
+--     (precarga del dispositivo en el primer acceso, o cambio explícito del alumno o su entrenador).
+--     Los alumnos NUEVOS nacen en `false` (DEFAULT) y el primer login/canje de invitación con una
+--     zona IANA válida la fija una sola vez.
+--   * El UPDATE marca TODAS las filas existentes como definidas: los alumnos actuales conservan su
+--     zona sin tocarla (hoy 'America/Caracas' salvo cambios explícitos) y ningún dispositivo las
+--     reescribe. Sin WHERE a propósito: toda fila previa cuenta como configurada.
+--
+-- Seguridad (RNF-003 / rol `guachafit_app`):
+--   * Las políticas RLS de `perfiles_alumno` son por FILA y los GRANT de `crear-rol-app.sql` por
+--     TABLA: la columna nueva queda cubierta sin cambios (la precarga usa la política self-update).
+-- =============================================================================
+ALTER TABLE "perfiles_alumno" ADD COLUMN "zona_horaria_definida" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+UPDATE "perfiles_alumno" SET "zona_horaria_definida" = true;
+-- =============================================================================
+-- ROLLBACK (manual):
+--   ALTER TABLE "perfiles_alumno" DROP COLUMN "zona_horaria_definida";
+-- =============================================================================

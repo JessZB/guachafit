@@ -169,6 +169,13 @@
       "when": 1792435957092,
       "tag": "0023_sesiones_indice_ultima_sesion",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793715579157,
+      "tag": "0024_zona_horaria_definida",
+      "breakpoints": true
     }
   ]
 }

@@ -9,6 +9,7 @@ import {
   VIGENCIA_ACTIVACION_TEXTO,
 } from '../../lib/onboarding-links';
 import { MENSAJE_ERROR_GENERICO } from '../../lib/mensajes-error';
+import { obtenerTimezoneDispositivo } from '../../lib/date-format';
 import { Dumbbell, ArrowLeft, CheckCircle2, KeyRound, Lock, ShieldAlert } from 'lucide-react';
 
 /**
@@ -55,7 +56,8 @@ export function ActivacionPage() {
     try {
       await apiClient('/auth/invitacion/establecer-password', {
         method: 'POST',
-        body: JSON.stringify({ token, password }),
+        // ZH-1: el servidor precarga la zona del alumno una sola vez con la del dispositivo.
+        body: JSON.stringify({ token, password, zonaDispositivo: obtenerTimezoneDispositivo() }),
         skipAuth: true,
       });
       setSuccess(true);

@@ -6,6 +6,7 @@ import { BottomNav } from './BottomNav';
 import { Sidebar } from './Sidebar';
 import { ActualizacionDisponible } from '../common/ActualizacionDisponible';
 import { EstadoCarga } from '../ui/EstadoCarga';
+import { AvisoZonaDiscrepante } from './AvisoZonaDiscrepante';
 import { useAuth } from '../../context/auth-context';
 
 export function AppLayout() {
@@ -35,6 +36,8 @@ export function AppLayout() {
           >
             <Outlet />
           </Suspense>
+          {/* ZH-1 (ADR-025): aviso de zona del dispositivo; decide por sí solo si se muestra. */}
+          <AvisoZonaDiscrepante />
         </main>
       </div>
       <BottomNav />

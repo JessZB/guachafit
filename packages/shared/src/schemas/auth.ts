@@ -13,6 +13,11 @@ export const COACH_CODE_REGEX = /^[A-Za-z0-9_-]{4,15}$/;
 export const LoginUsuarioSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).max(100),
+  /**
+   * ADR-025 (ZH-1): zona IANA del dispositivo para la precarga única del alumno. Cualquier texto
+   * se acepta aquí; el servidor decide si es una zona válida y, si no, la ignora sin bloquear.
+   */
+  zonaDispositivo: z.string().optional(),
 });
 
 export const RefreshTokenSchema = z.object({
@@ -34,6 +39,8 @@ export const CrearEntrenadorSchema = z.object({
 export const EstablecerPasswordConTokenSchema = z.object({
   token: z.string().min(32).max(128),
   password: z.string().min(8).max(100),
+  /** ADR-025 (ZH-1): igual que en el inicio de sesión; el servidor valida y puede ignorarla. */
+  zonaDispositivo: z.string().optional(),
 });
 
 /**

@@ -245,6 +245,12 @@ export const perfilesAlumno = pgTable(
       .default(ZONA_HORARIA_ALUMNO_POR_DEFECTO)
       .notNull(),
     /**
+     * ADR-025 (ZH-1): `true` cuando la zona del perfil ya es una decisión (precarga única del
+     * dispositivo en el primer acceso, o cambio explícito del alumno/entrenador). Los alumnos
+     * existentes nacen en `true` por la migración; solo los nuevos arrancan en `false`.
+     */
+    zonaHorariaDefinida: boolean('zona_horaria_definida').default(false).notNull(),
+    /**
      * M5-L1 (RF-005 / RF-008): suscripción del alumno. Las cuotas se emiten solas a partir de ella.
      * - `plan_suscrito_id`: plan asignado (NULL = sin plan, no se emiten cuotas).
      * - `ciclo_ancla`: día local de inicio; fija el día de vencimiento de cada ciclo.

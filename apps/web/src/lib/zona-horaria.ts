@@ -117,3 +117,66 @@ export function textoHoraActualEnZona(zona: string, fecha: Date = new Date()): s
   const hora = formatearHoraEnZona(fecha.toISOString(), zona);
   return `Ahora son las ${hora} en ${horaDeZona(zona)}`;
 }
+
+/**
+ * Desfase UTC (en minutos) de una zona IANA en un instante: America/Caracas -> -240. Devuelve
+ * `null` si la zona es inválida o está vacía. Reconstruye la hora local de la zona como si fuera
+ * UTC y la compara con el instante (sin depender de `timeZoneName: 'longOffset'`).
+ */
+export function desfaseMinutosEnZona(
+  zona: string | null | undefined,
+  instante: Date = new Date()
+): number | null {
+  if (!esZonaHorariaValida(zona)) return null;
+  try {
+    const partes = new Intl.DateTimeFormat('en-US', {
+      timeZone: zona,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+    }).formatToParts(instante);
+    const valor = (tipo: Intl.DateTimeFormatPartTypes) =>
+      Number(partes.find((parte) => parte.type === tipo)?.value);
+    const comoUtc = Date.UTC(
+      valor('year'),
+      valor('month') - 1,
+      valor('day'),
+      valor('hour'),
+      valor('minute'),
+      valor('second')
+    );
+    if (Number.isNaN(comoUtc)) return null;
+    // El instante se trunca al segundo: las partes locales no incluyen milisegundos.
+    const instanteEnSegundos = Math.floor(instante.getTime() / 1000) * 1000;
+    return Math.round((comoUtc - instanteEnSegundos) / 60000);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `true` solo si ambas zonas son válidas y tienen un desfase UTC distinto en este instante.
+ * Se compara el desfase y no el nombre: America/Caracas y America/La_Paz (ambas -240) no difieren.
+ */
+export function hayDiscrepanciaZona(
+  zonaPerfil: string | null | undefined,
+  zonaDispositivo: string | null | undefined,
+  instante: Date = new Date()
+): boolean {
+  const desfasePerfil = desfaseMinutosEnZona(zonaPerfil, instante);
+  const desfaseDispositivo = desfaseMinutosEnZona(zonaDispositivo, instante);
+  return desfasePerfil !== null && desfaseDispositivo !== null && desfasePerfil !== desfaseDispositivo;
+}
+
+/** Clave de `sessionStorage` con la que se recuerda que el aviso de esta pareja de zonas se descartó. */
+export function claveAvisoZona(
+  usuarioId: string,
+  zonaPerfil: string,
+  zonaDispositivo: string
+): string {
+  return `guachafit:aviso-zona:${usuarioId}:${zonaPerfil}|${zonaDispositivo}`;
+}

@@ -18,6 +18,7 @@ import {
   verificarEntrenadorOperable,
   verificarLicenciaEntrenadorActiva,
 } from './acceso-comun';
+import { precargarZonaDispositivo } from '../../alumnos/casos-alumnos/precargar-zona-dispositivo';
 import type { ContextoAuth } from './contexto-auth';
 
 /**
@@ -86,6 +87,14 @@ export async function iniciarSesion(ctx: ContextoAuth, dto: LoginUsuarioDTO) {
     // operable. Filas legacy sin coach no pagan el chequeo ni cambian de comportamiento.
     if (entrenadorId) {
       await verificarEntrenadorOperable(ctx, entrenadorId);
+    }
+
+    // ADR-025 (ZH-1): precarga única de la zona del dispositivo. Va después de la cascada del
+    // entrenador para que un acceso bloqueado no escriba nada. Solo actúa si el perfil aún no
+    // tiene la zona definida y llega una zona válida; si no, se conserva la del perfil.
+    if (perfil && !perfil.zonaHorariaDefinida && dto.zonaDispositivo !== undefined) {
+      const zonaPrecargada = await precargarZonaDispositivo(ctx, usuario.id, dto.zonaDispositivo);
+      zonaHoraria = zonaPrecargada ?? zonaHoraria;
     }
   }
 

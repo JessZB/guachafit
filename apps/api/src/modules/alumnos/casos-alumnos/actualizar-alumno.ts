@@ -122,6 +122,8 @@ export async function actualizarAlumno(
     }
     if (dto.zonaHoraria !== undefined) {
       valoresAActualizar.zonaHoraria = dto.zonaHoraria;
+      // ADR-025: la zona fijada por el entrenador ya es una decisión; apaga la precarga del dispositivo.
+      valoresAActualizar.zonaHorariaDefinida = true;
     }
     if (dto.fichaSaludPrivada !== undefined) {
       valoresAActualizar.fichaSaludPrivada =

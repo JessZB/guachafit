@@ -1,0 +1,3027 @@
+{
+  "id": "2aa96239-62e3-490f-8220-369913a734c9",
+  "prevId": "e6bfff50-844e-49df-b76f-9ad98fd83978",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.auditoria_accesos_denegados": {
+      "name": "auditoria_accesos_denegados",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "usuario_id": {
+          "name": "usuario_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rol": {
+          "name": "rol",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ruta": {
+          "name": "ruta",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metodo": {
+          "name": "metodo",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "motivo": {
+          "name": "motivo",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fecha_utc": {
+          "name": "fecha_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "auditoria_accesos_denegados_usuario_id_usuarios_id_fk": {
+          "name": "auditoria_accesos_denegados_usuario_id_usuarios_id_fk",
+          "tableFrom": "auditoria_accesos_denegados",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "usuario_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.checkins_nutricionales": {
+      "name": "checkins_nutricionales",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "alumno_id": {
+          "name": "alumno_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fecha": {
+          "name": "fecha",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "semaforo": {
+          "name": "semaforo",
+          "type": "enum_semaforo_nutricional",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "calorias_reportadas": {
+          "name": "calorias_reportadas",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "proteina_gramos_reportada": {
+          "name": "proteina_gramos_reportada",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "agua_litros": {
+          "name": "agua_litros",
+          "type": "numeric(4, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notas_alumno": {
+          "name": "notas_alumno",
+          "type": "varchar(280)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "capturado_en_utc": {
+          "name": "capturado_en_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metas_vigentes": {
+          "name": "metas_vigentes",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at_utc": {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at_utc": {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "uq_checkin_nutricional_diario": {
+          "name": "uq_checkin_nutricional_diario",
+          "columns": [
+            {
+              "expression": "alumno_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "fecha",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "checkins_nutricionales_alumno_id_usuarios_id_fk": {
+          "name": "checkins_nutricionales_alumno_id_usuarios_id_fk",
+          "tableFrom": "checkins_nutricionales",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "alumno_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.controles_antropometricos": {
+      "name": "controles_antropometricos",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "alumno_id": {
+          "name": "alumno_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fecha_evaluacion": {
+          "name": "fecha_evaluacion",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "peso_kg": {
+          "name": "peso_kg",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "altura_cm": {
+          "name": "altura_cm",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "porcentaje_grasa": {
+          "name": "porcentaje_grasa",
+          "type": "numeric(4, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cuello_cm": {
+          "name": "cuello_cm",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pecho_cm": {
+          "name": "pecho_cm",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cintura_cm": {
+          "name": "cintura_cm",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cadera_cm": {
+          "name": "cadera_cm",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "brazo_cm": {
+          "name": "brazo_cm",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "muslo_cm": {
+          "name": "muslo_cm",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "brazo_relajado_cm": {
+          "name": "brazo_relajado_cm",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "brazo_contraido_cm": {
+          "name": "brazo_contraido_cm",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "muslo_medio_cm": {
+          "name": "muslo_medio_cm",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pliegue_triceps_mm": {
+          "name": "pliegue_triceps_mm",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pliegue_subescapular_mm": {
+          "name": "pliegue_subescapular_mm",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pliegue_suprailiaco_mm": {
+          "name": "pliegue_suprailiaco_mm",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pliegue_abdominal_mm": {
+          "name": "pliegue_abdominal_mm",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "modalidad": {
+          "name": "modalidad",
+          "type": "enum_modalidad",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "origen": {
+          "name": "origen",
+          "type": "enum_origen_antropometria",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "registrado_por": {
+          "name": "registrado_por",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estado": {
+          "name": "estado",
+          "type": "enum_estado_medicion",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pendiente_aprobacion'"
+        },
+        "observaciones_coach": {
+          "name": "observaciones_coach",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "motivo_rechazo": {
+          "name": "motivo_rechazo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fecha_aprobacion_utc": {
+          "name": "fecha_aprobacion_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at_utc": {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at_utc": {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "controles_antropometricos_alumno_id_usuarios_id_fk": {
+          "name": "controles_antropometricos_alumno_id_usuarios_id_fk",
+          "tableFrom": "controles_antropometricos",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "alumno_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "controles_antropometricos_registrado_por_usuarios_id_fk": {
+          "name": "controles_antropometricos_registrado_por_usuarios_id_fk",
+          "tableFrom": "controles_antropometricos",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "registrado_por"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.cuotas_membresia": {
+      "name": "cuotas_membresia",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "cliente_id": {
+          "name": "cliente_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entrenador_id": {
+          "name": "entrenador_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "plan_id": {
+          "name": "plan_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "periodo": {
+          "name": "periodo",
+          "type": "varchar(7)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "monto_total_usd": {
+          "name": "monto_total_usd",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "monto_abonado_usd": {
+          "name": "monto_abonado_usd",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0.00'"
+        },
+        "saldo_pendiente_usd": {
+          "name": "saldo_pendiente_usd",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "saldo_a_favor_aplicado_usd": {
+          "name": "saldo_a_favor_aplicado_usd",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0.00'"
+        },
+        "fecha_emision_utc": {
+          "name": "fecha_emision_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fecha_corte_utc": {
+          "name": "fecha_corte_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estado": {
+          "name": "estado",
+          "type": "enum_estado_cuota",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'emitida'"
+        },
+        "notas": {
+          "name": "notas",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "motivo_anulacion": {
+          "name": "motivo_anulacion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fecha_anulacion_utc": {
+          "name": "fecha_anulacion_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "anulada_por": {
+          "name": "anulada_por",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at_utc": {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at_utc": {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "uq_cuota_cliente_plan_periodo": {
+          "name": "uq_cuota_cliente_plan_periodo",
+          "columns": [
+            {
+              "expression": "cliente_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "plan_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "periodo",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"cuotas_membresia\".\"estado\" <> 'anulada'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "cuotas_membresia_cliente_id_usuarios_id_fk": {
+          "name": "cuotas_membresia_cliente_id_usuarios_id_fk",
+          "tableFrom": "cuotas_membresia",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "cliente_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "cuotas_membresia_entrenador_id_usuarios_id_fk": {
+          "name": "cuotas_membresia_entrenador_id_usuarios_id_fk",
+          "tableFrom": "cuotas_membresia",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "entrenador_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "cuotas_membresia_plan_id_planes_membresia_id_fk": {
+          "name": "cuotas_membresia_plan_id_planes_membresia_id_fk",
+          "tableFrom": "cuotas_membresia",
+          "tableTo": "planes_membresia",
+          "columnsFrom": [
+            "plan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "cuotas_membresia_anulada_por_usuarios_id_fk": {
+          "name": "cuotas_membresia_anulada_por_usuarios_id_fk",
+          "tableFrom": "cuotas_membresia",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "anulada_por"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.dispositivos_usuario": {
+      "name": "dispositivos_usuario",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "usuario_id": {
+          "name": "usuario_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "device_token": {
+          "name": "device_token",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "platform": {
+          "name": "platform",
+          "type": "enum_plataforma_dispositivo",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "updated_at_utc": {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "dispositivos_usuario_usuario_id_usuarios_id_fk": {
+          "name": "dispositivos_usuario_usuario_id_usuarios_id_fk",
+          "tableFrom": "dispositivos_usuario",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "usuario_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "dispositivos_usuario_device_token_unique": {
+          "name": "dispositivos_usuario_device_token_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "device_token"
+          ]
+        }
+      }
+    },
+    "public.ejercicios_catalogo": {
+      "name": "ejercicios_catalogo",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "entrenador_id": {
+          "name": "entrenador_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nombre": {
+          "name": "nombre",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "grupo_muscular": {
+          "name": "grupo_muscular",
+          "type": "varchar(60)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "patron_movimiento": {
+          "name": "patron_movimiento",
+          "type": "varchar(60)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "video_url": {
+          "name": "video_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "activo": {
+          "name": "activo",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at_utc": {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "ejercicios_catalogo_entrenador_id_usuarios_id_fk": {
+          "name": "ejercicios_catalogo_entrenador_id_usuarios_id_fk",
+          "tableFrom": "ejercicios_catalogo",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "entrenador_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.ejercicios_sesion": {
+      "name": "ejercicios_sesion",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "sesion_id": {
+          "name": "sesion_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ejercicio_id": {
+          "name": "ejercicio_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "orden": {
+          "name": "orden",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "notas_coach": {
+          "name": "notas_coach",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notas_tecnicas": {
+          "name": "notas_tecnicas",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rpe_prescrito": {
+          "name": "rpe_prescrito",
+          "type": "numeric(3, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "descanso_prescrito_segundos": {
+          "name": "descanso_prescrito_segundos",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 90
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "ejercicios_sesion_sesion_id_sesiones_entrenamiento_id_fk": {
+          "name": "ejercicios_sesion_sesion_id_sesiones_entrenamiento_id_fk",
+          "tableFrom": "ejercicios_sesion",
+          "tableTo": "sesiones_entrenamiento",
+          "columnsFrom": [
+            "sesion_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ejercicios_sesion_ejercicio_id_ejercicios_catalogo_id_fk": {
+          "name": "ejercicios_sesion_ejercicio_id_ejercicios_catalogo_id_fk",
+          "tableFrom": "ejercicios_sesion",
+          "tableTo": "ejercicios_catalogo",
+          "columnsFrom": [
+            "ejercicio_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.fotos_antropometria": {
+      "name": "fotos_antropometria",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "control_id": {
+          "name": "control_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "angulo": {
+          "name": "angulo",
+          "type": "enum_angulo_foto",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "storage_key": {
+          "name": "storage_key",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at_utc": {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "uq_control_angulo": {
+          "name": "uq_control_angulo",
+          "columns": [
+            {
+              "expression": "control_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "angulo",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "fotos_antropometria_control_id_controles_antropometricos_id_fk": {
+          "name": "fotos_antropometria_control_id_controles_antropometricos_id_fk",
+          "tableFrom": "fotos_antropometria",
+          "tableTo": "controles_antropometricos",
+          "columnsFrom": [
+            "control_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.fotos_comida": {
+      "name": "fotos_comida",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "checkin_id": {
+          "name": "checkin_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tipo_comida": {
+          "name": "tipo_comida",
+          "type": "enum_tipo_comida",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "storage_key": {
+          "name": "storage_key",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at_utc": {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "fotos_comida_checkin_id_checkins_nutricionales_id_fk": {
+          "name": "fotos_comida_checkin_id_checkins_nutricionales_id_fk",
+          "tableFrom": "fotos_comida",
+          "tableTo": "checkins_nutricionales",
+          "columnsFrom": [
+            "checkin_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.metas_nutricionales": {
+      "name": "metas_nutricionales",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "alumno_id": {
+          "name": "alumno_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "calorias_objetivo": {
+          "name": "calorias_objetivo",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "proteina_gramos_objetivo": {
+          "name": "proteina_gramos_objetivo",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "carbohidratos_gramos_objetivo": {
+          "name": "carbohidratos_gramos_objetivo",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "grasas_gramos_objetivo": {
+          "name": "grasas_gramos_objetivo",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "agua_litros_objetivo": {
+          "name": "agua_litros_objetivo",
+          "type": "numeric(4, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recursos": {
+          "name": "recursos",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "created_at_utc": {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at_utc": {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "uq_meta_nutricional_alumno": {
+          "name": "uq_meta_nutricional_alumno",
+          "columns": [
+            {
+              "expression": "alumno_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "metas_nutricionales_alumno_id_usuarios_id_fk": {
+          "name": "metas_nutricionales_alumno_id_usuarios_id_fk",
+          "tableFrom": "metas_nutricionales",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "alumno_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.notificaciones_in_app": {
+      "name": "notificaciones_in_app",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "usuario_id": {
+          "name": "usuario_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "titulo": {
+          "name": "titulo",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cuerpo": {
+          "name": "cuerpo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tipo_evento": {
+          "name": "tipo_evento",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "leida": {
+          "name": "leida",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "link_accion": {
+          "name": "link_accion",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "referencia_id": {
+          "name": "referencia_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at_utc": {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "notificaciones_in_app_usuario_id_usuarios_id_fk": {
+          "name": "notificaciones_in_app_usuario_id_usuarios_id_fk",
+          "tableFrom": "notificaciones_in_app",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "usuario_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.overrides_cliente_plan": {
+      "name": "overrides_cliente_plan",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "plan_id": {
+          "name": "plan_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cliente_id": {
+          "name": "cliente_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "precio_acordado_usd": {
+          "name": "precio_acordado_usd",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tasa_fijada_override": {
+          "name": "tasa_fijada_override",
+          "type": "numeric(12, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "beneficios_personalizados": {
+          "name": "beneficios_personalizados",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "motivo_override": {
+          "name": "motivo_override",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at_utc": {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at_utc": {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "uq_override_plan_cliente": {
+          "name": "uq_override_plan_cliente",
+          "columns": [
+            {
+              "expression": "plan_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "cliente_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "overrides_cliente_plan_plan_id_planes_membresia_id_fk": {
+          "name": "overrides_cliente_plan_plan_id_planes_membresia_id_fk",
+          "tableFrom": "overrides_cliente_plan",
+          "tableTo": "planes_membresia",
+          "columnsFrom": [
+            "plan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "overrides_cliente_plan_cliente_id_usuarios_id_fk": {
+          "name": "overrides_cliente_plan_cliente_id_usuarios_id_fk",
+          "tableFrom": "overrides_cliente_plan",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "cliente_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.perfiles_alumno": {
+      "name": "perfiles_alumno",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "usuario_id": {
+          "name": "usuario_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entrenador_id": {
+          "name": "entrenador_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tipo_documento": {
+          "name": "tipo_documento",
+          "type": "enum_tipo_documento",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'V_'"
+        },
+        "numero_documento": {
+          "name": "numero_documento",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nombres": {
+          "name": "nombres",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "apellidos": {
+          "name": "apellidos",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fecha_nacimiento": {
+          "name": "fecha_nacimiento",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "telefono_whatsapp": {
+          "name": "telefono_whatsapp",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ficha_salud_privada": {
+          "name": "ficha_salud_privada",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "estado_activacion": {
+          "name": "estado_activacion",
+          "type": "enum_estado_alumno",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'activo'"
+        },
+        "modalidad": {
+          "name": "modalidad",
+          "type": "enum_modalidad",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'presencial'"
+        },
+        "periodicidad_antropometria": {
+          "name": "periodicidad_antropometria",
+          "type": "enum_periodicidad_antropometria",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "antropometria_inicio": {
+          "name": "antropometria_inicio",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tasa_fijada_override": {
+          "name": "tasa_fijada_override",
+          "type": "numeric(12, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "racha_dias": {
+          "name": "racha_dias",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "racha_ultima_fecha": {
+          "name": "racha_ultima_fecha",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "zona_horaria": {
+          "name": "zona_horaria",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'America/Caracas'"
+        },
+        "zona_horaria_definida": {
+          "name": "zona_horaria_definida",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "plan_suscrito_id": {
+          "name": "plan_suscrito_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ciclo_ancla": {
+          "name": "ciclo_ancla",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "proximo_corte": {
+          "name": "proximo_corte",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "saldo_a_favor_usd": {
+          "name": "saldo_a_favor_usd",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0.00'"
+        },
+        "deleted_at_utc": {
+          "name": "deleted_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at_utc": {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at_utc": {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "uq_alumno_documento_entrenador": {
+          "name": "uq_alumno_documento_entrenador",
+          "columns": [
+            {
+              "expression": "tipo_documento",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "numero_documento",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "entrenador_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_alumnos_activos": {
+          "name": "idx_alumnos_activos",
+          "columns": [
+            {
+              "expression": "entrenador_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "estado_activacion",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "perfiles_alumno_usuario_id_usuarios_id_fk": {
+          "name": "perfiles_alumno_usuario_id_usuarios_id_fk",
+          "tableFrom": "perfiles_alumno",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "usuario_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "perfiles_alumno_entrenador_id_usuarios_id_fk": {
+          "name": "perfiles_alumno_entrenador_id_usuarios_id_fk",
+          "tableFrom": "perfiles_alumno",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "entrenador_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "perfiles_alumno_plan_suscrito_id_planes_membresia_id_fk": {
+          "name": "perfiles_alumno_plan_suscrito_id_planes_membresia_id_fk",
+          "tableFrom": "perfiles_alumno",
+          "tableTo": "planes_membresia",
+          "columnsFrom": [
+            "plan_suscrito_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "perfiles_alumno_usuario_id_unique": {
+          "name": "perfiles_alumno_usuario_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "usuario_id"
+          ]
+        }
+      }
+    },
+    "public.perfiles_entrenador": {
+      "name": "perfiles_entrenador",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "usuario_id": {
+          "name": "usuario_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nombres": {
+          "name": "nombres",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "apellidos": {
+          "name": "apellidos",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nombre_comercial": {
+          "name": "nombre_comercial",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "coach_code": {
+          "name": "coach_code",
+          "type": "varchar(15)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "capacidad_maxima": {
+          "name": "capacidad_maxima",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 50
+        },
+        "tasa_cambio_global": {
+          "name": "tasa_cambio_global",
+          "type": "numeric(12, 4)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'65.0000'"
+        },
+        "telefono_contacto": {
+          "name": "telefono_contacto",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estado_licencia": {
+          "name": "estado_licencia",
+          "type": "enum_estado_licencia",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'activa'"
+        },
+        "created_at_utc": {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at_utc": {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "perfiles_entrenador_usuario_id_usuarios_id_fk": {
+          "name": "perfiles_entrenador_usuario_id_usuarios_id_fk",
+          "tableFrom": "perfiles_entrenador",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "usuario_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "perfiles_entrenador_usuario_id_unique": {
+          "name": "perfiles_entrenador_usuario_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "usuario_id"
+          ]
+        },
+        "perfiles_entrenador_coach_code_unique": {
+          "name": "perfiles_entrenador_coach_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "coach_code"
+          ]
+        }
+      }
+    },
+    "public.planes_membresia": {
+      "name": "planes_membresia",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "entrenador_id": {
+          "name": "entrenador_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nombre": {
+          "name": "nombre",
+          "type": "varchar(60)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "descripcion": {
+          "name": "descripcion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "beneficios": {
+          "name": "beneficios",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "precio_base_usd": {
+          "name": "precio_base_usd",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "duracion_meses": {
+          "name": "duracion_meses",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "activo": {
+          "name": "activo",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at_utc": {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at_utc": {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "planes_membresia_entrenador_id_usuarios_id_fk": {
+          "name": "planes_membresia_entrenador_id_usuarios_id_fk",
+          "tableFrom": "planes_membresia",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "entrenador_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.plantillas_rutina": {
+      "name": "plantillas_rutina",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "entrenador_id": {
+          "name": "entrenador_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nombre": {
+          "name": "nombre",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nivel_objetivo": {
+          "name": "nivel_objetivo",
+          "type": "enum_nivel_objetivo_plantilla",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bloques": {
+          "name": "bloques",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "activa": {
+          "name": "activa",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at_utc": {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at_utc": {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_plantillas_entrenador_activa": {
+          "name": "idx_plantillas_entrenador_activa",
+          "columns": [
+            {
+              "expression": "entrenador_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "activa",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "plantillas_rutina_entrenador_id_usuarios_id_fk": {
+          "name": "plantillas_rutina_entrenador_id_usuarios_id_fk",
+          "tableFrom": "plantillas_rutina",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "entrenador_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.preferencias_notificacion": {
+      "name": "preferencias_notificacion",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "usuario_id": {
+          "name": "usuario_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "notify_payments_push": {
+          "name": "notify_payments_push",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "notify_payments_email": {
+          "name": "notify_payments_email",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "notify_workouts_push": {
+          "name": "notify_workouts_push",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "notify_workouts_email": {
+          "name": "notify_workouts_email",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "notify_checkins_push": {
+          "name": "notify_checkins_push",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "notify_checkins_email": {
+          "name": "notify_checkins_email",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "notify_seguridad_push": {
+          "name": "notify_seguridad_push",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "notify_seguridad_email": {
+          "name": "notify_seguridad_email",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "notify_cobranzas_push": {
+          "name": "notify_cobranzas_push",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "notify_cobranzas_email": {
+          "name": "notify_cobranzas_email",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "notify_nuevos_registros_push": {
+          "name": "notify_nuevos_registros_push",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "notify_nuevos_registros_email": {
+          "name": "notify_nuevos_registros_email",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "notify_reportes_progreso_push": {
+          "name": "notify_reportes_progreso_push",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "notify_reportes_progreso_email": {
+          "name": "notify_reportes_progreso_email",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "digest_weekly_push": {
+          "name": "digest_weekly_push",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "digest_weekly_email": {
+          "name": "digest_weekly_email",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "updated_at_utc": {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "preferencias_notificacion_usuario_id_usuarios_id_fk": {
+          "name": "preferencias_notificacion_usuario_id_usuarios_id_fk",
+          "tableFrom": "preferencias_notificacion",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "usuario_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "preferencias_notificacion_usuario_id_unique": {
+          "name": "preferencias_notificacion_usuario_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "usuario_id"
+          ]
+        }
+      }
+    },
+    "public.rutinas": {
+      "name": "rutinas",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "alumno_id": {
+          "name": "alumno_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entrenador_id": {
+          "name": "entrenador_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nombre": {
+          "name": "nombre",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Planificación Semanal'"
+        },
+        "bloques": {
+          "name": "bloques",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "activa": {
+          "name": "activa",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at_utc": {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at_utc": {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "rutinas_alumno_id_usuarios_id_fk": {
+          "name": "rutinas_alumno_id_usuarios_id_fk",
+          "tableFrom": "rutinas",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "alumno_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "rutinas_entrenador_id_usuarios_id_fk": {
+          "name": "rutinas_entrenador_id_usuarios_id_fk",
+          "tableFrom": "rutinas",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "entrenador_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.series_registro": {
+      "name": "series_registro",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ejercicio_sesion_id": {
+          "name": "ejercicio_sesion_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "numero_serie": {
+          "name": "numero_serie",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reps_objetivo": {
+          "name": "reps_objetivo",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reps_logradas": {
+          "name": "reps_logradas",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "peso_kg": {
+          "name": "peso_kg",
+          "type": "numeric(6, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "peso_prescrito_kg": {
+          "name": "peso_prescrito_kg",
+          "type": "numeric(6, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rpe": {
+          "name": "rpe",
+          "type": "numeric(3, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "descanso_segundos": {
+          "name": "descanso_segundos",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "completada": {
+          "name": "completada",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "timestamp_inicio_utc": {
+          "name": "timestamp_inicio_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "timestamp_completada_utc": {
+          "name": "timestamp_completada_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "series_registro_ejercicio_sesion_id_ejercicios_sesion_id_fk": {
+          "name": "series_registro_ejercicio_sesion_id_ejercicios_sesion_id_fk",
+          "tableFrom": "series_registro",
+          "tableTo": "ejercicios_sesion",
+          "columnsFrom": [
+            "ejercicio_sesion_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.sesiones_entrenamiento": {
+      "name": "sesiones_entrenamiento",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "alumno_id": {
+          "name": "alumno_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rutina_id": {
+          "name": "rutina_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fecha_programada": {
+          "name": "fecha_programada",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fecha_inicio_utc": {
+          "name": "fecha_inicio_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fecha_fin_utc": {
+          "name": "fecha_fin_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "timezone_cliente": {
+          "name": "timezone_cliente",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'America/Caracas'"
+        },
+        "estado": {
+          "name": "estado",
+          "type": "enum_estado_sesion",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'planificada'"
+        },
+        "motivo_omision": {
+          "name": "motivo_omision",
+          "type": "enum_motivo_omision",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "porcentaje_cumplimiento": {
+          "name": "porcentaje_cumplimiento",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0.00'"
+        },
+        "volumen_total_kg": {
+          "name": "volumen_total_kg",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0.00'"
+        },
+        "bloque_id": {
+          "name": "bloque_id",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "es_dia_descanso_original": {
+          "name": "es_dia_descanso_original",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "notas_alumno": {
+          "name": "notas_alumno",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at_utc": {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at_utc": {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_sesiones_alumno_estado_fin": {
+          "name": "idx_sesiones_alumno_estado_fin",
+          "columns": [
+            {
+              "expression": "alumno_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "estado",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "fecha_fin_utc",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "sesiones_entrenamiento_alumno_id_usuarios_id_fk": {
+          "name": "sesiones_entrenamiento_alumno_id_usuarios_id_fk",
+          "tableFrom": "sesiones_entrenamiento",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "alumno_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.tasas_cambio_referencia": {
+      "name": "tasas_cambio_referencia",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "entrenador_id": {
+          "name": "entrenador_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tasa_oficial_bcv": {
+          "name": "tasa_oficial_bcv",
+          "type": "numeric(12, 4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tasa_paralelo": {
+          "name": "tasa_paralelo",
+          "type": "numeric(12, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tasa_activa_entrenador": {
+          "name": "tasa_activa_entrenador",
+          "type": "numeric(12, 4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fuente": {
+          "name": "fuente",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'manual'"
+        },
+        "fecha_actualizacion_utc": {
+          "name": "fecha_actualizacion_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "tasas_cambio_referencia_entrenador_id_usuarios_id_fk": {
+          "name": "tasas_cambio_referencia_entrenador_id_usuarios_id_fk",
+          "tableFrom": "tasas_cambio_referencia",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "entrenador_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.transacciones_pago": {
+      "name": "transacciones_pago",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "cuota_id": {
+          "name": "cuota_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cliente_id": {
+          "name": "cliente_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entrenador_id": {
+          "name": "entrenador_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "registrado_por": {
+          "name": "registrado_por",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "monto_original": {
+          "name": "monto_original",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "moneda_original": {
+          "name": "moneda_original",
+          "type": "enum_moneda",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tasa_cambio_fijada": {
+          "name": "tasa_cambio_fijada",
+          "type": "numeric(12, 4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "monto_equivalente_usd": {
+          "name": "monto_equivalente_usd",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "excedente_usd": {
+          "name": "excedente_usd",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0.00'"
+        },
+        "metodo_pago": {
+          "name": "metodo_pago",
+          "type": "enum_metodo_pago",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "referencia_bancaria": {
+          "name": "referencia_bancaria",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fecha_operacion": {
+          "name": "fecha_operacion",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "comprobante_storage_key": {
+          "name": "comprobante_storage_key",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "estado_conciliacion": {
+          "name": "estado_conciliacion",
+          "type": "enum_estado_conciliacion",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pendiente'"
+        },
+        "motivo_rechazo": {
+          "name": "motivo_rechazo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "motivo_reversion": {
+          "name": "motivo_reversion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fecha_reversion_utc": {
+          "name": "fecha_reversion_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fecha_reporte_utc": {
+          "name": "fecha_reporte_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "fecha_conciliacion_utc": {
+          "name": "fecha_conciliacion_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at_utc": {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at_utc": {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "uq_transaccion_referencia_entrenador": {
+          "name": "uq_transaccion_referencia_entrenador",
+          "columns": [
+            {
+              "expression": "entrenador_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "metodo_pago",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "referencia_bancaria",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "fecha_operacion",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"transacciones_pago\".\"referencia_bancaria\" IS NOT NULL AND \"transacciones_pago\".\"metodo_pago\" NOT IN ('efectivo_usd', 'efectivo_ves') AND \"transacciones_pago\".\"estado_conciliacion\" IN ('pendiente', 'aprobado')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "transacciones_pago_cuota_id_cuotas_membresia_id_fk": {
+          "name": "transacciones_pago_cuota_id_cuotas_membresia_id_fk",
+          "tableFrom": "transacciones_pago",
+          "tableTo": "cuotas_membresia",
+          "columnsFrom": [
+            "cuota_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transacciones_pago_cliente_id_usuarios_id_fk": {
+          "name": "transacciones_pago_cliente_id_usuarios_id_fk",
+          "tableFrom": "transacciones_pago",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "cliente_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transacciones_pago_entrenador_id_usuarios_id_fk": {
+          "name": "transacciones_pago_entrenador_id_usuarios_id_fk",
+          "tableFrom": "transacciones_pago",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "entrenador_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transacciones_pago_registrado_por_usuarios_id_fk": {
+          "name": "transacciones_pago_registrado_por_usuarios_id_fk",
+          "tableFrom": "transacciones_pago",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "registrado_por"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.usuarios": {
+      "name": "usuarios",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rol": {
+          "name": "rol",
+          "type": "enum_rol",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estado": {
+          "name": "estado",
+          "type": "enum_estado_usuario",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'activo'"
+        },
+        "token_invitacion_hash": {
+          "name": "token_invitacion_hash",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "token_invitacion_expira": {
+          "name": "token_invitacion_expira",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "token_recuperacion_hash": {
+          "name": "token_recuperacion_hash",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "token_recuperacion_expira": {
+          "name": "token_recuperacion_expira",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "password_cambiada_en": {
+          "name": "password_cambiada_en",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "correo_pendiente": {
+          "name": "correo_pendiente",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "token_cambio_correo_hash": {
+          "name": "token_cambio_correo_hash",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "token_cambio_correo_expira": {
+          "name": "token_cambio_correo_expira",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ultimo_acceso_utc": {
+          "name": "ultimo_acceso_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'America/Caracas'"
+        },
+        "tema_ui": {
+          "name": "tema_ui",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'system'"
+        },
+        "activo": {
+          "name": "activo",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at_utc": {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at_utc": {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "usuarios_email_unique": {
+          "name": "usuarios_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      }
+    }
+  },
+  "enums": {
+    "public.enum_angulo_foto": {
+      "name": "enum_angulo_foto",
+      "schema": "public",
+      "values": [
+        "frontal",
+        "lateral",
+        "posterior"
+      ]
+    },
+    "public.enum_estado_alumno": {
+      "name": "enum_estado_alumno",
+      "schema": "public",
+      "values": [
+        "activo",
+        "inactivo_pausado",
+        "suspendido_pago"
+      ]
+    },
+    "public.enum_estado_conciliacion": {
+      "name": "enum_estado_conciliacion",
+      "schema": "public",
+      "values": [
+        "pendiente",
+        "aprobado",
+        "rechazado",
+        "revertido"
+      ]
+    },
+    "public.enum_estado_cuota": {
+      "name": "enum_estado_cuota",
+      "schema": "public",
+      "values": [
+        "emitida",
+        "abonada_parcial",
+        "por_vencer",
+        "al_dia",
+        "pendiente_revision",
+        "vencida",
+        "anulada"
+      ]
+    },
+    "public.enum_estado_licencia": {
+      "name": "enum_estado_licencia",
+      "schema": "public",
+      "values": [
+        "activa",
+        "suspendida_superadmin"
+      ]
+    },
+    "public.enum_estado_medicion": {
+      "name": "enum_estado_medicion",
+      "schema": "public",
+      "values": [
+        "pendiente_aprobacion",
+        "aprobado",
+        "rechazado"
+      ]
+    },
+    "public.enum_estado_sesion": {
+      "name": "enum_estado_sesion",
+      "schema": "public",
+      "values": [
+        "planificada",
+        "en_progreso",
+        "completada",
+        "omitida"
+      ]
+    },
+    "public.enum_estado_usuario": {
+      "name": "enum_estado_usuario",
+      "schema": "public",
+      "values": [
+        "activo",
+        "inactivo",
+        "bloqueado"
+      ]
+    },
+    "public.enum_metodo_pago": {
+      "name": "enum_metodo_pago",
+      "schema": "public",
+      "values": [
+        "pago_movil",
+        "transferencia_bancaria",
+        "efectivo_usd",
+        "efectivo_ves",
+        "zelle",
+        "binance_usdt",
+        "otro"
+      ]
+    },
+    "public.enum_modalidad": {
+      "name": "enum_modalidad",
+      "schema": "public",
+      "values": [
+        "presencial",
+        "remoto"
+      ]
+    },
+    "public.enum_moneda": {
+      "name": "enum_moneda",
+      "schema": "public",
+      "values": [
+        "USD",
+        "VES"
+      ]
+    },
+    "public.enum_motivo_omision": {
+      "name": "enum_motivo_omision",
+      "schema": "public",
+      "values": [
+        "DESCANSO",
+        "INCOMPLETO"
+      ]
+    },
+    "public.enum_nivel_objetivo_plantilla": {
+      "name": "enum_nivel_objetivo_plantilla",
+      "schema": "public",
+      "values": [
+        "principiante",
+        "intermedio",
+        "avanzado"
+      ]
+    },
+    "public.enum_origen_antropometria": {
+      "name": "enum_origen_antropometria",
+      "schema": "public",
+      "values": [
+        "presencial_verificado",
+        "remoto_autoreporte"
+      ]
+    },
+    "public.enum_periodicidad_antropometria": {
+      "name": "enum_periodicidad_antropometria",
+      "schema": "public",
+      "values": [
+        "semanal",
+        "quincenal",
+        "mensual"
+      ]
+    },
+    "public.enum_plataforma_dispositivo": {
+      "name": "enum_plataforma_dispositivo",
+      "schema": "public",
+      "values": [
+        "ios",
+        "android",
+        "web"
+      ]
+    },
+    "public.enum_rol": {
+      "name": "enum_rol",
+      "schema": "public",
+      "values": [
+        "superadmin",
+        "entrenador",
+        "alumno"
+      ]
+    },
+    "public.enum_semaforo_nutricional": {
+      "name": "enum_semaforo_nutricional",
+      "schema": "public",
+      "values": [
+        "cumplido",
+        "parcial",
+        "no_cumplido"
+      ]
+    },
+    "public.enum_tipo_comida": {
+      "name": "enum_tipo_comida",
+      "schema": "public",
+      "values": [
+        "desayuno",
+        "almuerzo",
+        "cena",
+        "snack"
+      ]
+    },
+    "public.enum_tipo_documento": {
+      "name": "enum_tipo_documento",
+      "schema": "public",
+      "values": [
+        "V_",
+        "E_",
+        "PASAPORTE"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
