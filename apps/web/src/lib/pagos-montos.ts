@@ -7,9 +7,56 @@
  * §6: D2/D6 — sin tasa real no se inventa conversión (`'—'` y etiquetas honestas
  * que distinguen "sin tasa configurada" de "no disponible").
  */
-import { Moneda } from '@guachafit/shared';
+import { MetodoPago, Moneda } from '@guachafit/shared';
 
 export const MENSAJE_MONTO_PAGO_INVALIDO = 'Ingresa un monto válido mayor a 0.';
+
+export const MENSAJE_REFERENCIA_PAGO_REQUERIDA =
+  'Indica la referencia bancaria de tu pago (mínimo 4 caracteres).';
+export const MENSAJE_REFERENCIA_PAGO_INVALIDA = 'La referencia debe tener entre 4 y 64 caracteres.';
+/** Motivo de respaldo honesto: el entrenador rechazó el pago pero no dejó texto (no se inventa uno). */
+export const TEXTO_RECHAZO_SIN_MOTIVO = 'Tu entrenador rechazó este pago.';
+
+/** Comprobante del pago: imagen JPG, PNG o WebP de hasta 5 MB. `null` si es válida, o el mensaje. */
+export function validarArchivoComprobante(archivo: { type: string; size: number }): string | null {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(archivo.type)) {
+    return 'Formato inválido. Por favor selecciona una imagen JPG, PNG o WebP.';
+  }
+  return archivo.size > 5 * 1024 * 1024 ? 'El archivo excede el límite máximo de 5 MB.' : null;
+}
+
+/** D11: moneda en la que se paga habitualmente con cada método (el alumno puede cambiarla a mano). */
+export function monedaSugeridaPorMetodo(metodo: MetodoPago): Moneda {
+  switch (metodo) {
+    case MetodoPago.ZELLE:
+    case MetodoPago.BINANCE_USDT:
+    case MetodoPago.EFECTIVO_USD:
+      return Moneda.USD;
+    default:
+      return Moneda.VES;
+  }
+}
+
+/** D11: aviso discreto (no bloquea) cuando la moneda elegida no es la habitual del método. */
+export function avisoMonedaMetodo(metodo: MetodoPago, moneda: Moneda): string | null {
+  const sugerida = monedaSugeridaPorMetodo(metodo);
+  if (moneda === sugerida) return null;
+  const habitual = sugerida === Moneda.USD ? 'dólares' : 'bolívares';
+  return `Este método suele pagarse en ${habitual}. Revisa que la moneda y el monto sean los de tu comprobante.`;
+}
+
+/**
+ * Referencia bancaria del reporte (misma regla que la API: 4 a 64 caracteres). En efectivo es
+ * opcional, pero si se escribe debe cumplir el largo. Devuelve el mensaje de error o `null`.
+ */
+export function validarReferenciaPago(metodo: MetodoPago, referencia: string): string | null {
+  const limpia = (referencia ?? '').trim();
+  if (limpia === '') {
+    const esEfectivo = metodo === MetodoPago.EFECTIVO_USD || metodo === MetodoPago.EFECTIVO_VES;
+    return esEfectivo ? null : MENSAJE_REFERENCIA_PAGO_REQUERIDA;
+  }
+  return limpia.length < 4 || limpia.length > 64 ? MENSAJE_REFERENCIA_PAGO_INVALIDA : null;
+}
 
 /**
  * C1 (ALU-01, D8): valida montos mayores a 0 con hasta dos decimales (punto o coma).

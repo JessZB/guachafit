@@ -6,6 +6,8 @@
  * no arrastrar errores de coma flotante.
  */
 
+import type { FormatoNumeroVista } from './use-formato-numero';
+
 function aCentavos(valor: string | null | undefined): number {
   const numero = Number(valor ?? '0');
   return Number.isFinite(numero) ? Math.round(numero * 100) : 0;
@@ -44,10 +46,20 @@ export function mensajeConExcedente(base: string, excedenteUsd?: string | null):
   return `${base} ${deCentavos(aCentavos(excedenteUsd))} USD quedaron como saldo a favor del alumno.`;
 }
 
-/** Saldo a favor en USD y, con tasa vigente, su equivalente aproximado en bolívares. */
-export function textoSaldoAFavor(usd: string, tasaEfectiva?: string | null): string {
-  const base = `Saldo a favor: ${deCentavos(aCentavos(usd))} USD`;
+/**
+ * Saldo a favor en USD y, con tasa vigente, su equivalente aproximado en bolívares. Sin
+ * `formatMonto` conserva el texto técnico (pantallas del entrenador); con él, usa el formato común.
+ */
+export function textoSaldoAFavor(
+  usd: string,
+  tasaEfectiva?: string | null,
+  formatMonto?: FormatoNumeroVista['formatMonto']
+): string {
+  const base = formatMonto
+    ? `Saldo a favor: ${formatMonto(usd, 'USD', { conCodigo: true })}`
+    : `Saldo a favor: ${deCentavos(aCentavos(usd))} USD`;
   const tasa = Number(tasaEfectiva ?? '0');
   if (!Number.isFinite(tasa) || tasa <= 0) return base;
-  return `${base} (≈ Bs. ${((aCentavos(usd) * tasa) / 100).toFixed(2)})`;
+  const bs = ((aCentavos(usd) * tasa) / 100).toFixed(2);
+  return `${base} (≈ ${formatMonto ? formatMonto(bs, 'VES') : `Bs. ${bs}`})`;
 }

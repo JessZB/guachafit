@@ -14,6 +14,7 @@
  * textos exactos vía `textoSaldoAFavor`, tokens `success` con variante oscura.
  */
 import { tieneSaldoAFavor, textoSaldoAFavor } from '../../../lib/saldo-a-favor';
+import { useFormatoNumero } from '../../../lib/use-formato-numero';
 
 export interface AvisoSaldoAFavorProps {
   saldoAFavorUsd: string;
@@ -21,12 +22,13 @@ export interface AvisoSaldoAFavorProps {
 }
 
 export function AvisoSaldoAFavor({ saldoAFavorUsd, tasaEfectiva }: AvisoSaldoAFavorProps) {
+  const { formatMonto } = useFormatoNumero();
   // RF-006 RN-05: sin saldo no hay banner (nunca se simula saldo).
   if (!tieneSaldoAFavor(saldoAFavorUsd)) return null;
   return (
     <div role="status" className="p-4 rounded-3xl bg-success/10 border border-success/30 space-y-0.5">
       <p className="text-sm font-bold text-foreground">
-        {textoSaldoAFavor(saldoAFavorUsd, tasaEfectiva)}
+        {textoSaldoAFavor(saldoAFavorUsd, tasaEfectiva, formatMonto)}
       </p>
       <p className="text-xs text-muted-foreground">
         Se aplicará automáticamente a tu próxima cuota.

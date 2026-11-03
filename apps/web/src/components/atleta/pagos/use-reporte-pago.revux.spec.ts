@@ -97,6 +97,7 @@ describe('useReportePago · REVUX (G1a)', () => {
 
     act(() => {
       result.current.handleFileChange({ target: { files: [archivo1] } } as any);
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('40.00');
     });
 

@@ -215,6 +215,7 @@ describe('PagosPage · UX-21 (C1, C3, C5, C6, C7)', () => {
     const inputs = document.querySelectorAll('input');
     const inputMonto = Array.from(inputs).find((i) => i.getAttribute('inputmode') === 'decimal') ?? inputs[0];
     fireEvent.change(inputMonto, { target: { value: '25.00' } });
+    fireEvent.change(screen.getByLabelText(/Referencia Bancaria/), { target: { value: '987654' } });
 
     fireEvent.click(screen.getByRole('button', { name: 'Enviar Comprobante de Pago' }));
 

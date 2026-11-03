@@ -11,6 +11,7 @@
  * claro/oscuro, sin pesos > 700.
  */
 import { CreditCard, TrendingUp } from 'lucide-react';
+import { useFormatoNumero } from '../../../lib/use-formato-numero';
 
 export interface CabeceraPagosProps {
   tasaEfectiva?: string | null;
@@ -19,11 +20,12 @@ export interface CabeceraPagosProps {
 }
 
 export function CabeceraPagos({ tasaEfectiva, etiquetaSinTasa }: CabeceraPagosProps) {
+  const { formatDecimal } = useFormatoNumero();
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div>
         <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
-          <CreditCard className="h-3.5 w-3.5" />
+          <CreditCard className="h-3.5 w-3.5" aria-hidden="true" />
           <span>Pagos</span>
         </div>
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground mt-0.5">
@@ -33,13 +35,15 @@ export function CabeceraPagos({ tasaEfectiva, etiquetaSinTasa }: CabeceraPagosPr
 
       {/* Tasa del Día */}
       <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-secondary/70 border border-border/80 self-start sm:self-auto">
-        <TrendingUp className="h-3.5 w-3.5 text-primary" />
+        <TrendingUp className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
         <div className="text-right">
           <span className="text-[11px] text-muted-foreground font-semibold uppercase block">
             Tasa del día
           </span>
           <span className="text-xs font-bold font-mono text-foreground">
-            {tasaEfectiva ? `1 USD = ${tasaEfectiva} Bs.` : etiquetaSinTasa}
+            {tasaEfectiva
+              ? `1 USD = ${formatDecimal(tasaEfectiva, { decimales: 4 })} Bs.`
+              : etiquetaSinTasa}
           </span>
         </div>
       </div>

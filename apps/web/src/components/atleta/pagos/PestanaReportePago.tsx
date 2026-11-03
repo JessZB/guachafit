@@ -17,12 +17,14 @@
  * `font-bold` (700), tokens con variante claro/oscuro.
  */
 import type { ReactNode } from 'react';
-import { ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2 } from 'lucide-react';
 
 export interface PestanaReportePagoProps {
   onVolver: () => void;
   formError: string | null;
   formSuccess: string | null;
+  /** D15: motivo escrito por el entrenador al rechazar el pago que se está corrigiendo. */
+  motivoRechazo?: string | null;
   children: ReactNode;
 }
 
@@ -30,8 +32,10 @@ export function PestanaReportePago({
   onVolver,
   formError,
   formSuccess,
+  motivoRechazo,
   children,
 }: PestanaReportePagoProps) {
+  const motivo = motivoRechazo?.trim();
   return (
     <div className="space-y-5 animate-in fade-in duration-150">
       <div className="flex items-center justify-between border-b border-border/80 pb-3">
@@ -46,6 +50,16 @@ export function PestanaReportePago({
       </div>
 
       <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-4">
+        {motivo && (
+          <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/25 text-xs text-destructive flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="min-w-0 break-words">
+              <span className="font-bold">Motivo del entrenador: </span>
+              <span>{motivo}</span>
+            </div>
+          </div>
+        )}
+
         <div>
           <h2 className="text-lg font-bold text-foreground">Reportar Abono o Cuota</h2>
           <p className="text-xs text-muted-foreground">

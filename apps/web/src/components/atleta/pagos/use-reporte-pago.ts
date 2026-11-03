@@ -1,16 +1,14 @@
 /**
  * Hook de estado del reporte de pago del módulo `pagos` (fase B, prompt 54).
  *
- * Movido tal cual desde `pages/atleta/PagosPage.tsx` (form state L204–228,
- * archivo L419–448, submit L450–523): estado del formulario, validación de
- * archivo (MIME/5MB + preview) y envío del reporte con comprobante (D2/ADR-007).
+ * Movido desde `pages/atleta/PagosPage.tsx`: estado del formulario, validación de archivo
+ * (MIME/5MB + preview) y envío del reporte con comprobante (D2/ADR-007).
  *
- * R9: mismo mecanismo (`apiClient` directo, sin TanStack). La transición
- * post-éxito (limpiar éxito + volver al historial a los 1800 ms) se conserva;
- * el destino lo decide el contenedor vía `alReportarExito`.
+ * R9: mismo mecanismo (`apiClient` directo, sin TanStack). Tras el éxito se limpia el mensaje
+ * y se vuelve al historial a los 1800 ms; el destino lo decide el contenedor (`alReportarExito`).
  *
- * §6: validación honesta (fecha futura bloqueada con `MENSAJE_FECHA_PAGO_FUTURA`,
- * sin éxito falso D5) y MIME/size validados antes de preparar la subida.
+ * §6: validación honesta (fecha futura bloqueada con `MENSAJE_FECHA_PAGO_FUTURA`, sin éxito falso
+ * D5); MIME/size y referencia se validan antes de la subida. D11: moneda según método. D15: motivo.
  */
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type RefObject } from 'react';
 import { MetodoPago, Moneda, MENSAJE_FECHA_PAGO_FUTURA } from '@guachafit/shared';
@@ -25,10 +23,13 @@ import {
   esErrorEnvioPagoAmbiguo,
   generarClaveIdempotenciaPago,
   MENSAJE_ERROR_RED_AMBIGUO_PAGO,
+  monedaSugeridaPorMetodo,
   normalizarMontoPago,
   pagoVesBloqueadoPorFaltaTasa,
   tasaEfectivaNumerica,
+  validarArchivoComprobante,
   validarMontoPago,
+  validarReferenciaPago,
 } from '../../../lib/pagos-montos';
 
 export interface OpcionesReportePago {
@@ -57,6 +58,8 @@ export interface EstadoReportePago {
   errorMonto: string | null;
   errorFecha: string | null;
   errorArchivo: string | null;
+  errorReferencia: string | null;
+  motivoRechazoCorreccion: string | null; // D15: motivo del entrenador al corregir un rechazo
   iniciarNuevoPago: () => void;
   iniciarCorreccionPago: (tx: TransaccionPagoDetalleDTO) => void;
   fileInputRef: RefObject<HTMLInputElement | null>;
@@ -91,6 +94,8 @@ export function useReportePago({
   const [errorMonto, setErrorMonto] = useState<string | null>(null);
   const [errorFecha, setErrorFecha] = useState<string | null>(null);
   const [errorArchivo, setErrorArchivo] = useState<string | null>(null);
+  const [errorReferencia, setErrorReferencia] = useState<string | null>(null);
+  const [motivoRechazoCorreccion, setMotivoRechazoCorreccion] = useState<string | null>(null);
 
   // File Upload State (RF-007, ADR-007)
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -130,6 +135,8 @@ export function useReportePago({
   const setMetodoPago = (metodo: MetodoPago) => {
     idempotencyKeyRef.current = generarClaveIdempotenciaPago();
     setMetodoPagoState(metodo);
+    setMonedaState(monedaSugeridaPorMetodo(metodo)); // D11: sugerida, aún editable a mano
+    setErrorReferencia(null);
   };
 
   const setMoneda = (nuevaMoneda: Moneda) => {
@@ -140,6 +147,7 @@ export function useReportePago({
   const setReferenciaBancaria = (referencia: string) => {
     idempotencyKeyRef.current = generarClaveIdempotenciaPago();
     setReferenciaBancariaState(referencia);
+    setErrorReferencia(null);
   };
 
   const setMontoOriginal = (monto: string) => {
@@ -182,15 +190,10 @@ export function useReportePago({
 
     comprobanteSubidoKeyRef.current = null;
 
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    const errSeleccion = validarArchivoComprobante(file);
+    if (errSeleccion) {
       handleRemoveFile();
-      setErrorArchivo('Formato inválido. Por favor selecciona una imagen JPG, PNG o WebP.');
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      handleRemoveFile();
-      setErrorArchivo('El archivo excede el límite máximo de 5 MB.');
+      setErrorArchivo(errSeleccion);
       return;
     }
 
@@ -204,6 +207,15 @@ export function useReportePago({
     setPreviewUrl(objUrl);
   };
 
+  const limpiarMensajes = () => {
+    setFormError(null);
+    setFormSuccess(null);
+    setErrorMonto(null);
+    setErrorFecha(null);
+    setErrorArchivo(null);
+    setErrorReferencia(null);
+  };
+
   const iniciarNuevoPago = () => {
     limpiarTemporizadorExito();
     idempotencyKeyRef.current = generarClaveIdempotenciaPago();
@@ -212,11 +224,8 @@ export function useReportePago({
     setMontoOriginalState('');
     setReferenciaBancariaState('');
     setFechaOperacion(fechaCalendarioLocal());
-    setFormError(null);
-    setFormSuccess(null);
-    setErrorMonto(null);
-    setErrorFecha(null);
-    setErrorArchivo(null);
+    setMotivoRechazoCorreccion(null);
+    limpiarMensajes();
     handleRemoveFile();
   };
 
@@ -228,11 +237,8 @@ export function useReportePago({
     setMontoOriginalState(tx.montoOriginal);
     setReferenciaBancariaState(tx.referenciaBancaria ?? '');
     setFechaOperacion((tx.fechaOperacion || '').slice(0, 10));
-    setFormError(null);
-    setFormSuccess(null);
-    setErrorMonto(null);
-    setErrorFecha(null);
-    setErrorArchivo(null);
+    setMotivoRechazoCorreccion(tx.motivoRechazo?.trim() || null);
+    limpiarMensajes();
     handleRemoveFile();
   };
 
@@ -258,6 +264,10 @@ export function useReportePago({
       return;
     }
     setErrorMonto(null);
+
+    const errReferencia = validarReferenciaPago(metodoPago, referenciaBancaria);
+    setErrorReferencia(errReferencia);
+    if (errReferencia) return;
 
     if (errorArchivo) {
       return;
@@ -317,7 +327,7 @@ export function useReportePago({
           montoOriginal: normalizarMontoPago(montoOriginal),
           monedaOriginal: moneda,
           metodoPago,
-          referenciaBancaria: referenciaBancaria || undefined,
+          referenciaBancaria: referenciaBancaria.trim() || undefined,
           fechaOperacion,
           comprobanteStorageKey: finalStorageKey,
         }),
@@ -327,6 +337,7 @@ export function useReportePago({
       idempotencyKeyRef.current = generarClaveIdempotenciaPago();
       setMontoOriginalState('');
       setReferenciaBancariaState('');
+      setMotivoRechazoCorreccion(null);
       handleRemoveFile();
       limpiarTemporizadorExito();
       if (montadoRef.current) {
@@ -369,6 +380,8 @@ export function useReportePago({
     errorMonto,
     errorFecha,
     errorArchivo,
+    errorReferencia,
+    motivoRechazoCorreccion,
     iniciarNuevoPago,
     iniciarCorreccionPago,
     fileInputRef,

@@ -112,6 +112,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
 
     act(() => {
       result.current.handleFileChange({ target: { files: [archivo] } } as any);
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('40.00');
     });
 
@@ -158,6 +159,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
 
     act(() => {
       result.current.handleFileChange({ target: { files: [archivo1] } } as any);
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('40.00');
     });
 
@@ -196,6 +198,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     const { result } = renderHook(() => useReportePago(opciones));
 
     act(() => {
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('40.00');
     });
 
@@ -223,6 +226,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     );
 
     act(() => {
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('40.00');
     });
 
@@ -256,6 +260,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     const { result } = renderHook(() => useReportePago(opciones));
 
     act(() => {
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('40.00');
     });
 
@@ -269,6 +274,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
 
     // Siguiente reporte de pago
     act(() => {
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('20.00');
     });
 
@@ -293,6 +299,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     );
 
     act(() => {
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('40.00');
     });
 
@@ -309,6 +316,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     });
 
     act(() => {
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('15.00');
     });
 
@@ -334,6 +342,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     const { result, unmount } = renderHook(() => useReportePago(opciones));
 
     act(() => {
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('40.00');
     });
 
@@ -367,6 +376,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     const { result } = renderHook(() => useReportePago(opciones));
 
     act(() => {
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('40.00');
     });
 
@@ -409,6 +419,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     );
 
     act(() => {
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('40.00');
     });
 
@@ -452,6 +463,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     );
 
     act(() => {
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('40.00');
     });
 
@@ -475,6 +487,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
 
     act(() => {
       result.current.handleFileChange({ target: { files: [archivo] } } as any);
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('40.00');
     });
 
@@ -496,6 +509,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     const { result } = renderHook(() => useReportePago(opciones));
 
     act(() => {
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('40.00');
     });
 
@@ -589,6 +603,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
 
     act(() => {
       result.current.handleFileChange({ target: { files: [archivo1] } } as any);
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('40.00');
     });
 
@@ -668,6 +683,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     const archivo = new File(['bytes-dummy'], 'recibo.png', { type: 'image/png' });
     act(() => {
       result.current.handleFileChange({ target: { files: [archivo] } } as any);
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('40.00');
     });
 
@@ -694,6 +710,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     (apiClient as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(error504);
 
     act(() => {
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('40.00');
     });
 

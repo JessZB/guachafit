@@ -23,6 +23,7 @@ import { BadgeEstado } from '../../ui/BadgeEstado';
 import { etiquetaEstadoCuota } from '../../../lib/etiquetas-dominio';
 import { formatFechaLocal } from '../../../lib/date-format';
 import { tieneSaldoAFavor } from '../../../lib/saldo-a-favor';
+import { useFormatoNumero } from '../../../lib/use-formato-numero';
 
 export interface TarjetaResumenCuotaProps {
   /** `null` = sin cuota (no renderiza nada; el vacío honesto lo da el contenedor). */
@@ -36,6 +37,7 @@ export function TarjetaResumenCuota({
   tasaEfectivaNum,
   saldoVesProyectado,
 }: TarjetaResumenCuotaProps) {
+  const { formatMonto } = useFormatoNumero();
   if (!cuota) return null;
   const etiqueta = etiquetaEstadoCuota(cuota.estado);
   return (
@@ -60,12 +62,11 @@ export function TarjetaResumenCuota({
             Saldo Pendiente
           </span>
           <div className="text-3xl sm:text-4xl font-bold font-mono text-foreground mt-0.5">
-            ${cuota.saldoPendienteUsd}{' '}
-            <span className="text-sm font-semibold text-primary">USD</span>
+            {formatMonto(cuota.saldoPendienteUsd, 'USD', { conCodigo: true })}
           </div>
           <div className="text-xs font-mono text-muted-foreground mt-0.5">
             {tasaEfectivaNum > 0
-              ? `≈ ${saldoVesProyectado} Bolívares`
+              ? `≈ ${formatMonto(saldoVesProyectado, 'VES')}`
               : 'Saldo en Bs. no disponible sin tasa vigente'}
           </div>
         </div>
@@ -75,13 +76,13 @@ export function TarjetaResumenCuota({
             Total Cuota
           </span>
           <span className="text-lg font-bold font-mono text-muted-foreground">
-            ${cuota.montoTotalUsd} USD
+            {formatMonto(cuota.montoTotalUsd, 'USD', { conCodigo: true })}
           </span>
         </div>
       </div>
       {tieneSaldoAFavor(cuota.saldoAFavorAplicadoUsd) && (
         <p className="text-xs font-semibold text-success">
-          {`De esta cuota, ${cuota.saldoAFavorAplicadoUsd} USD se cubrieron con tu saldo a favor.`}
+          {`De esta cuota, ${formatMonto(cuota.saldoAFavorAplicadoUsd, 'USD', { conCodigo: true })} se cubrieron con tu saldo a favor.`}
         </p>
       )}
     </div>

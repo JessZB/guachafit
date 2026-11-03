@@ -192,6 +192,7 @@ export async function obtenerHistorialClienteCaso(
           referencia: t.referenciaBancaria || undefined,
           estado: t.estadoConciliacion,
           motivoReversion: t.motivoReversion ?? null,
+          motivoRechazo: t.motivoRechazo ?? null,
           createdAtUtc: toIsoSafe(t.createdAtUtc),
         })),
       };

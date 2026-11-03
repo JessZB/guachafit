@@ -67,6 +67,8 @@ export function PagosPage() {
     errorMonto,
     errorFecha,
     errorArchivo,
+    errorReferencia,
+    motivoRechazoCorreccion,
     iniciarNuevoPago,
     iniciarCorreccionPago,
     fileInputRef,
@@ -155,6 +157,7 @@ export function PagosPage() {
           }}
           formError={formError}
           formSuccess={formSuccess}
+          motivoRechazo={motivoRechazoCorreccion}
         >
           <FormularioReportePago
             metodoPago={metodoPago}
@@ -174,6 +177,7 @@ export function PagosPage() {
             onSubmit={handleReportarPago}
             errorMonto={errorMonto}
             errorFecha={errorFecha}
+            errorReferencia={errorReferencia}
             comprobante={
               <SubidaComprobantePago
                 inputRef={fileInputRef}

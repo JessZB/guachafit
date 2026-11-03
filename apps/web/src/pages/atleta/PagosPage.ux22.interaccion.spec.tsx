@@ -191,6 +191,7 @@ describe('PagosPage · UX-22 (ALU-07, D8)', () => {
     const inputs = document.querySelectorAll('input');
     const inputMonto = Array.from(inputs).find((i) => i.getAttribute('inputmode') === 'decimal') as HTMLInputElement;
     fireEvent.change(inputMonto, { target: { value: '40.00' } });
+    fireEvent.change(screen.getByLabelText(/Referencia Bancaria/), { target: { value: '987654' } });
 
     // Primer envío: falla por red ambigua
     const botonEnviar = screen.getByRole('button', { name: /Enviar Comprobante de Pago|Informar Pago/i });
@@ -242,6 +243,7 @@ describe('PagosPage · UX-22 (ALU-07, D8)', () => {
     const inputs = document.querySelectorAll('input');
     const inputMonto = Array.from(inputs).find((i) => i.getAttribute('inputmode') === 'decimal') as HTMLInputElement;
     fireEvent.change(inputMonto, { target: { value: '40.00' } });
+    fireEvent.change(screen.getByLabelText(/Referencia Bancaria/), { target: { value: '987654' } });
 
     // Archivo adjunto
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -279,6 +281,7 @@ describe('PagosPage · UX-22 (ALU-07, D8)', () => {
     const inputs = document.querySelectorAll('input');
     const inputMonto = Array.from(inputs).find((i) => i.getAttribute('inputmode') === 'decimal') as HTMLInputElement;
     fireEvent.change(inputMonto, { target: { value: '40.00' } });
+    fireEvent.change(screen.getByLabelText(/Referencia Bancaria/), { target: { value: '987654' } });
 
     vi.useFakeTimers();
     vi.clearAllTimers();
@@ -323,6 +326,7 @@ describe('PagosPage · UX-22 (ALU-07, D8)', () => {
     const inputs = document.querySelectorAll('input');
     const inputMonto = Array.from(inputs).find((i) => i.getAttribute('inputmode') === 'decimal') as HTMLInputElement;
     fireEvent.change(inputMonto, { target: { value: '40.00' } });
+    fireEvent.change(screen.getByLabelText(/Referencia Bancaria/), { target: { value: '987654' } });
 
     vi.useFakeTimers();
     vi.clearAllTimers();

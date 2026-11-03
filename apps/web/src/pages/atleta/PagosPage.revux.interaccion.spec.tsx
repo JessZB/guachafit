@@ -196,6 +196,7 @@ describe('PagosPage · REVUX (G1a, G1b)', () => {
       (i) => i.getAttribute('inputmode') === 'decimal'
     ) as HTMLInputElement;
     fireEvent.change(inputMonto, { target: { value: '40.00' } });
+    fireEvent.change(screen.getByLabelText(/Referencia Bancaria/), { target: { value: '987654' } });
 
     // Enviar formulario
     await act(async () => {
@@ -230,6 +231,7 @@ describe('PagosPage · REVUX (G1a, G1b)', () => {
       (i) => i.getAttribute('inputmode') === 'decimal'
     ) as HTMLInputElement;
     fireEvent.change(inputMonto, { target: { value: '40.00' } });
+    fireEvent.change(screen.getByLabelText(/Referencia Bancaria/), { target: { value: '987654' } });
 
     vi.useFakeTimers();
     vi.clearAllTimers();

@@ -21,11 +21,13 @@
  * §6: `text-[11px]` (piso exacto), `font-bold` (700), tokens con variante
  * claro/oscuro, motivo de rechazo visible (UX transparente).
  */
-import { EstadoConciliacion, type TransaccionPagoDetalleDTO } from '@guachafit/shared';
+import { EstadoConciliacion, Moneda, type TransaccionPagoDetalleDTO } from '@guachafit/shared';
 import { AlertTriangle, Eye } from 'lucide-react';
 import { BadgeEstado } from '../../ui/BadgeEstado';
 import { etiquetaMetodoPago } from '../../../lib/conciliacion-filtros';
 import { formatFechaCalendario } from '../../../lib/date-format';
+import { TEXTO_RECHAZO_SIN_MOTIVO } from '../../../lib/pagos-montos';
+import { useFormatoNumero } from '../../../lib/use-formato-numero';
 import {
   etiquetaEstadoTransaccion,
   normalizarEstadoTransaccion,
@@ -42,6 +44,9 @@ export interface FilaTransaccionPagoProps {
 
 export function FilaTransaccionPago({ tx, onVerComprobante, onCorregir }: FilaTransaccionPagoProps) {
   const estado = normalizarEstadoTransaccion(tx.estadoConciliacion);
+  const { formatMonto, formatDecimal } = useFormatoNumero();
+  const motivoRechazo = tx.motivoRechazo?.trim();
+  const esUsd = tx.monedaOriginal === Moneda.USD;
   return (
     <div
       className="p-4 rounded-2xl bg-secondary/30 border border-border/80 flex flex-col gap-2.5"
@@ -64,10 +69,11 @@ export function FilaTransaccionPago({ tx, onVerComprobante, onCorregir }: FilaTr
 
         <div className="text-left sm:text-right">
           <p className="font-mono font-bold text-base text-foreground">
-            +${tx.montoEquivalenteUsd} USD
+            +{formatMonto(tx.montoEquivalenteUsd, 'USD', { conCodigo: true })}
           </p>
           <p className="text-[11px] font-mono text-muted-foreground">
-            {tx.montoOriginal} {tx.monedaOriginal} (Tasa: {tx.tasaCambioFijada})
+            {formatMonto(tx.montoOriginal, esUsd ? 'USD' : 'VES', esUsd ? { conCodigo: true } : undefined)}{' '}
+            (Tasa: {formatDecimal(tx.tasaCambioFijada, { decimales: 4 })})
           </p>
         </div>
       </div>
@@ -87,11 +93,14 @@ export function FilaTransaccionPago({ tx, onVerComprobante, onCorregir }: FilaTr
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
             <div>
-              <span className="font-bold">Motivo del entrenador: </span>
-              <span>
-                {tx.motivoRechazo ||
-                  'La referencia no coincide con el estado de cuenta bancario.'}
-              </span>
+              {motivoRechazo ? (
+                <>
+                  <span className="font-bold">Motivo del entrenador: </span>
+                  <span>{motivoRechazo}</span>
+                </>
+              ) : (
+                <span>{TEXTO_RECHAZO_SIN_MOTIVO}</span>
+              )}
             </div>
           </div>
           <button

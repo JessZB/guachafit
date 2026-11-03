@@ -160,7 +160,7 @@ describe('PagosPage · contrato 5: saldo a favor del alumno', () => {
     resumenActual = resumenBase({ saldoAFavorUsd: '10.00' });
     montarPagina();
 
-    expect(await screen.findByText('Saldo a favor: 10.00 USD (≈ Bs. 650.00)')).toBeTruthy();
+    expect(await screen.findByText('Saldo a favor: $10,00 USD (≈ Bs. 650,00)')).toBeTruthy();
     expect(screen.getByText('Se aplicará automáticamente a tu próxima cuota.')).toBeTruthy();
   });
 
@@ -182,10 +182,10 @@ describe('PagosPage · contrato 5: saldo a favor del alumno', () => {
     montarPagina();
 
     expect(
-      await screen.findByText('De esta cuota, 10.00 USD se cubrieron con tu saldo a favor.')
+      await screen.findByText('De esta cuota, $10,00 USD se cubrieron con tu saldo a favor.')
     ).toBeTruthy();
     const region = screen.getByRole('status');
-    expect(within(region).getByText('Saldo a favor: 10.00 USD (≈ Bs. 650.00)')).toBeTruthy();
+    expect(within(region).getByText('Saldo a favor: $10,00 USD (≈ Bs. 650,00)')).toBeTruthy();
   });
 
   it('5d · cuota sin saldoAFavorAplicadoUsd no muestra la línea de la cuota', async () => {

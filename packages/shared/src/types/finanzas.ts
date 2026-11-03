@@ -76,6 +76,8 @@ export interface ResumenFinancieroAlumnoDTO {
     estado: string;
     /** RF-007: motivo de la reversión; `null` si el pago no fue revertido. */
     motivoReversion?: string | null;
+    /** RF-007: motivo escrito por el entrenador al rechazar el pago; `null` si no fue rechazado. */
+    motivoRechazo?: string | null;
     createdAtUtc: string;
   }>;
 }

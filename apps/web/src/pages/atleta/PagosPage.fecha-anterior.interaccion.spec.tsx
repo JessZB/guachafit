@@ -214,6 +214,7 @@ describe('PagosPage · contrato 9: fecha del pago en el reporte del alumno', () 
     montarPagina();
     await abrirFormulario();
     fireEvent.change(screen.getByLabelText('Monto Pagado'), { target: { value: '1300.00' } });
+    fireEvent.change(screen.getByLabelText(/Referencia Bancaria/), { target: { value: '987654' } });
     fireEvent.change(campoFechaPago(), { target: { value: '2026-09-21' } });
 
     fireEvent.click(screen.getByRole('button', { name: 'Enviar Comprobante de Pago' }));
@@ -252,6 +253,7 @@ describe('PagosPage · contrato 9: fecha del pago en el reporte del alumno', () 
     montarPagina();
     await abrirFormulario();
     fireEvent.change(screen.getByLabelText('Monto Pagado'), { target: { value: '1300.00' } });
+    fireEvent.change(screen.getByLabelText(/Referencia Bancaria/), { target: { value: '987654' } });
 
     fireEvent.click(screen.getByRole('button', { name: 'Enviar Comprobante de Pago' }));
     await screen.findByText(/Pago reportado con éxito/);

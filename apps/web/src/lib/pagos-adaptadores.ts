@@ -92,6 +92,7 @@ export function adaptarTransaccionesHistorial(
       fechaOperacion: tx.createdAtUtc ? tx.createdAtUtc.slice(0, 10) : '',
       estadoConciliacion: (tx.estado as EstadoConciliacion) ?? EstadoConciliacion.PENDIENTE,
       motivoReversion: tx.motivoReversion ?? null,
+      motivoRechazo: tx.motivoRechazo ?? null,
       fechaReporteUtc: tx.createdAtUtc,
       createdAtUtc: tx.createdAtUtc,
       updatedAtUtc: tx.createdAtUtc,

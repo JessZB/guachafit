@@ -131,6 +131,7 @@ describe('useReportePago · UX-21 (C1, C6)', () => {
     const { result } = renderHook(() => useReportePago(opcionesBase()));
 
     act(() => {
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('35,5');
     });
 
@@ -290,6 +291,7 @@ describe('useReportePago · UX-21 (C1, C6)', () => {
     const { result } = renderHook(() => useReportePago(opcionesBase()));
 
     act(() => {
+      result.current.setReferenciaBancaria('987654');
       result.current.setMontoOriginal('15.00');
     });
 

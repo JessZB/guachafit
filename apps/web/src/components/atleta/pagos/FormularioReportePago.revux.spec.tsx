@@ -125,7 +125,7 @@ describe('FormularioReportePago · REVUX (G1b)', () => {
       montoOriginal: '1950.00',
       contravalorUsd: '30.00',
     });
-    expect(containerValido.textContent).toContain('$30.00 USD');
+    expect(containerValido.textContent).toContain('$30,00 USD');
   });
 
   it('R5: toda etiqueta label en la zona de comprobante tiene htmlFor o contiene un control', () => {

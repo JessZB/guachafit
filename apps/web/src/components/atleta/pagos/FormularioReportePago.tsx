@@ -25,6 +25,8 @@
 import { useId, type FormEvent, type ReactNode } from 'react';
 import { MetodoPago, Moneda } from '@guachafit/shared';
 import { fechaCalendarioLocal } from '../../../lib/date-format';
+import { avisoMonedaMetodo } from '../../../lib/pagos-montos';
+import { useFormatoNumero } from '../../../lib/use-formato-numero';
 
 export interface FormularioReportePagoProps {
   metodoPago: MetodoPago;
@@ -47,6 +49,8 @@ export interface FormularioReportePagoProps {
   comprobante: ReactNode;
   errorMonto?: string | null;
   errorFecha?: string | null;
+  /** Referencia bancaria inválida o ausente (se valida en el cliente antes de enviar). */
+  errorReferencia?: string | null;
 }
 
 export function FormularioReportePago({
@@ -68,6 +72,7 @@ export function FormularioReportePago({
   comprobante,
   errorMonto,
   errorFecha,
+  errorReferencia,
 }: FormularioReportePagoProps) {
   const idMetodo = useId();
   const idMoneda = useId();
@@ -76,6 +81,12 @@ export function FormularioReportePago({
   const idFecha = useId();
   const idErrorMonto = useId();
   const idErrorFecha = useId();
+  const idErrorReferencia = useId();
+  const idAvisoMoneda = useId();
+  const { formatMonto, formatDecimal } = useFormatoNumero();
+
+  // D11: aviso discreto (no bloquea) si la moneda no es la habitual del método elegido.
+  const avisoMoneda = avisoMonedaMetodo(metodoPago, moneda);
 
   // Sin contravalor válido (tasa fallida, monto vacío o no numérico) no se muestra "$0.00 USD".
   const valorUsdNumerico = Number(contravalorUsd);
@@ -113,6 +124,7 @@ export function FormularioReportePago({
               id={idMoneda}
               value={moneda}
               onChange={(e) => onMoneda(e.target.value as Moneda)}
+              aria-describedby={avisoMoneda ? idAvisoMoneda : undefined}
               className="w-full min-h-11 px-3.5 py-2.5 rounded-2xl bg-background border border-border text-base sm:text-sm text-foreground focus:outline-hidden focus:border-primary"
             >
               <option value={Moneda.VES}>VES (Bolívares)</option>
@@ -128,7 +140,7 @@ export function FormularioReportePago({
               id={idMonto}
               type="text"
               inputMode="decimal"
-              placeholder="0.00"
+              placeholder={formatDecimal(0)}
               value={montoOriginal}
               onChange={(e) => onMonto(e.target.value)}
               aria-invalid={errorMonto ? 'true' : undefined}
@@ -141,6 +153,12 @@ export function FormularioReportePago({
               </p>
             )}
           </div>
+
+          {avisoMoneda && (
+            <p id={idAvisoMoneda} className="col-span-2 text-xs text-warning">
+              {avisoMoneda}
+            </p>
+          )}
         </div>
 
         {/* Previsualización de conversión */}
@@ -158,14 +176,14 @@ export function FormularioReportePago({
           </span>
           {!pagoVesSinTasa && (
             <span className="font-mono font-bold text-sm text-primary">
-              {contravalorVisible ? `$${contravalorUsd} USD` : '—'}
+              {contravalorVisible ? formatMonto(contravalorUsd, 'USD', { conCodigo: true }) : '—'}
             </span>
           )}
         </div>
 
         <div className="space-y-1.5">
           <label htmlFor={idReferencia} className="text-xs font-semibold text-muted-foreground">
-            Referencia Bancaria (Últimos 4-6 dígitos)
+            Referencia Bancaria (mínimo 4 caracteres)
           </label>
           <input
             id={idReferencia}
@@ -173,8 +191,17 @@ export function FormularioReportePago({
             value={referenciaBancaria}
             onChange={(e) => onReferencia(e.target.value)}
             placeholder="Ej: 987654"
+            maxLength={64}
+            autoComplete="off"
+            aria-invalid={errorReferencia ? 'true' : undefined}
+            aria-describedby={errorReferencia ? idErrorReferencia : undefined}
             className="w-full min-h-11 px-3.5 py-2.5 rounded-2xl bg-background border border-border text-base sm:text-sm font-mono text-foreground focus:outline-hidden focus:border-primary"
           />
+          {errorReferencia && (
+            <p id={idErrorReferencia} role="alert" className="text-xs font-semibold text-destructive">
+              {errorReferencia}
+            </p>
+          )}
         </div>
 
         <div className="space-y-1.5">
