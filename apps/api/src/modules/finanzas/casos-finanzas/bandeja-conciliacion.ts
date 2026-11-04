@@ -76,7 +76,11 @@ export async function listarBandejaConciliacionCaso(
       referenciaBancaria: tx.referenciaBancaria,
       fechaOperacion: tx.fechaOperacion,
       comprobanteStorageKey: tx.comprobanteStorageKey,
-      comprobanteUrl: await resolverComprobanteUrlCaso(ctx, tx.comprobanteStorageKey),
+      comprobanteUrl: await resolverComprobanteUrlCaso(
+        ctx,
+        tx.comprobanteStorageKey,
+        tx.clienteId
+      ),
       estadoConciliacion: tx.estadoConciliacion,
       motivoRechazo: tx.motivoRechazo,
       fechaReporteUtc: tx.fechaReporteUtc.toISOString(),

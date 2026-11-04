@@ -235,7 +235,7 @@ describe('PagosPage · UX-21 (C1, C3, C5, C6, C7)', () => {
 
     const inputs = document.querySelectorAll('input');
     const inputMonto = Array.from(inputs).find((i) => i.getAttribute('inputmode') === 'decimal') as HTMLInputElement;
-    expect(inputMonto.value).toBe('75.00');
+    expect(inputMonto.value).toBe('75,00');
   });
 
   it('C6 · Integración PagosPage: \'Corregir y reenviar\' prellena método, moneda, monto, referencia y fecha en el formulario', async () => {
@@ -262,7 +262,7 @@ describe('PagosPage · UX-21 (C1, C3, C5, C6, C7)', () => {
 
     expect(selectMetodo.value).toBe(MetodoPago.BINANCE_USDT);
     expect(selectMoneda.value).toBe(Moneda.USD);
-    expect(inputMonto.value).toBe('120.50');
+    expect(inputMonto.value).toBe('120,50');
     expect(inputRef.value).toBe('BINANCE-998877');
     expect(inputFecha.value).toBe('2026-10-08');
   });

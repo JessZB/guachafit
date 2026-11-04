@@ -29,7 +29,8 @@ vi.mock('../../../lib/api-client', () => ({
   apiClient: vi.fn(),
 }));
 
-vi.mock('../../../lib/comprobante-pago', () => ({
+vi.mock('../../../lib/comprobante-pago', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../lib/comprobante-pago')>()),
   prepararComprobanteParaSubida: vi.fn(),
   subirComprobantePago: vi.fn(),
 }));
@@ -104,7 +105,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     const archivo = new File(['dummy-bytes'], 'recibo-1.png', { type: 'image/png' });
     (prepararComprobanteParaSubida as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(archivo);
     (subirComprobantePago as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
-      'comprobantes/alumno-1/recibo-1.webp'
+      'comprobantes/11111111-1111-4111-8111-111111111111/2026/22222222-2222-4222-8222-222222222222.webp'
     );
     (apiClient as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
       new Error('Fallo transitorio en base de datos')
@@ -139,7 +140,9 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
 
     const llamada2 = (apiClient as unknown as ReturnType<typeof vi.fn>).mock.calls[1];
     const body2 = JSON.parse(llamada2[1].body);
-    expect(body2.comprobanteStorageKey).toBe('comprobantes/alumno-1/recibo-1.webp');
+    expect(body2.comprobanteStorageKey).toBe(
+      'comprobantes/11111111-1111-4111-8111-111111111111/2026/22222222-2222-4222-8222-222222222222.webp'
+    );
   });
 
   it('C1 · al cambiar o quitar el archivo, o invocar iniciarNuevoPago / iniciarCorreccionPago, la clave en caché se descarta y vuelve a subir', async () => {
@@ -151,7 +154,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
 
     (prepararComprobanteParaSubida as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(archivo1);
     (subirComprobantePago as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
-      'comprobantes/alumno-1/recibo-1.webp'
+      'comprobantes/11111111-1111-4111-8111-111111111111/2026/22222222-2222-4222-8222-222222222222.webp'
     );
     (apiClient as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
       new Error('Fallo transitorio')
@@ -172,7 +175,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     // Cambiar a archivo 2
     (prepararComprobanteParaSubida as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(archivo2);
     (subirComprobantePago as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
-      'comprobantes/alumno-1/recibo-2.webp'
+      'comprobantes/11111111-1111-4111-8111-111111111111/2026/33333333-3333-4333-8333-333333333333.webp'
     );
     act(() => {
       result.current.handleFileChange({ target: { files: [archivo2] } } as any);
@@ -187,7 +190,9 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     expect(subirComprobantePago).toHaveBeenCalledTimes(2);
     const llamada2 = (apiClient as unknown as ReturnType<typeof vi.fn>).mock.calls[1];
     const body2 = JSON.parse(llamada2[1].body);
-    expect(body2.comprobanteStorageKey).toBe('comprobantes/alumno-1/recibo-2.webp');
+    expect(body2.comprobanteStorageKey).toBe(
+      'comprobantes/11111111-1111-4111-8111-111111111111/2026/33333333-3333-4333-8333-333333333333.webp'
+    );
   });
 
   // =========================================================================
@@ -598,7 +603,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     const archivo1 = new File(['archivo-previo'], 'previo.png', { type: 'image/png' });
     (prepararComprobanteParaSubida as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(archivo1);
     (subirComprobantePago as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
-      'comprobantes/alumno-1/previo.webp'
+      'comprobantes/11111111-1111-4111-8111-111111111111/2026/22222222-2222-4222-8222-222222222222.webp'
     );
 
     act(() => {
@@ -653,7 +658,7 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     const archivo2 = new File(['archivo-nuevo'], 'nuevo.png', { type: 'image/png' });
     (prepararComprobanteParaSubida as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(archivo2);
     (subirComprobantePago as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
-      'comprobantes/alumno-1/nuevo.webp'
+      'comprobantes/11111111-1111-4111-8111-111111111111/2026/33333333-3333-4333-8333-333333333333.webp'
     );
 
     act(() => {
@@ -671,7 +676,9 @@ describe('useReportePago · UX-22 (ALU-07, D8)', () => {
     const key2 = (opts2 as any)?.idempotencyKey;
     const body2 = JSON.parse((opts2 as any).body);
 
-    expect(body2.comprobanteStorageKey).toBe('comprobantes/alumno-1/nuevo.webp');
+    expect(body2.comprobanteStorageKey).toBe(
+      'comprobantes/11111111-1111-4111-8111-111111111111/2026/33333333-3333-4333-8333-333333333333.webp'
+    );
     expect(key2).toBeDefined();
     expect(key2).not.toBe(key1);
   });

@@ -93,7 +93,11 @@ export async function obtenerCuotaPorIdCaso(
         referenciaBancaria: t.referenciaBancaria,
         fechaOperacion: t.fechaOperacion,
         comprobanteStorageKey: t.comprobanteStorageKey,
-        comprobanteUrl: await resolverComprobanteUrlCaso(ctx, t.comprobanteStorageKey),
+        comprobanteUrl: await resolverComprobanteUrlCaso(
+          ctx,
+          t.comprobanteStorageKey,
+          t.clienteId
+        ),
         estadoConciliacion: t.estadoConciliacion,
         motivoRechazo: t.motivoRechazo,
         fechaReporteUtc: t.fechaReporteUtc.toISOString(),

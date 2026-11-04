@@ -604,7 +604,8 @@ async function seed() {
         metodoPago: MetodoPago.TRANSFERENCIA_BANCARIA,
         referenciaBancaria: 'TRANSF-BANESCO-771239',
         fechaOperacion: nowUtc.toISOString().split('T')[0],
-        comprobanteStorageKey: 'comprobantes/2026-09/transferencia-1295-ves.jpg',
+        // ADR-007 / D16: `comprobantes/{alumnoId}/{año}/{uuid}.{ext}` con UUID fijo (seed determinista).
+        comprobanteStorageKey: `comprobantes/${user2.id}/2026/6f1c2a9e-3b7d-4e58-9a41-2d8c5b7e0f13.jpg`,
         estadoConciliacion: EstadoConciliacion.PENDIENTE,
         fechaReporteUtc: nowUtc,
         createdAtUtc: nowUtc,

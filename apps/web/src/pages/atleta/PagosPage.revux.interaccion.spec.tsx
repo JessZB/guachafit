@@ -99,7 +99,8 @@ vi.mock('../../context/auth-context', () => ({
   }),
 }));
 
-vi.mock('../../lib/comprobante-pago', () => ({
+vi.mock('../../lib/comprobante-pago', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../lib/comprobante-pago')>()),
   prepararComprobanteParaSubida: vi.fn(),
   subirComprobantePago: vi.fn(),
 }));

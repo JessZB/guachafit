@@ -31,7 +31,11 @@ import {
   obtenerTasaVigenteCaso,
 } from './tasas-conversion';
 import { obtenerCuotaPorIdCaso } from './cuotas-lectura';
-import { resolverComprobanteUrlCaso } from './comprobantes';
+import {
+  esClaveComprobanteDe,
+  MENSAJE_COMPROBANTE_INVALIDO,
+  resolverComprobanteUrlCaso,
+} from './comprobantes';
 import { PagoReportadoEvent } from '../../notificaciones/events/eventos-notificacion';
 import type { ContextoFinanzas } from './contexto-finanzas';
 
@@ -94,6 +98,12 @@ async function registrarReportePagoCaso(
   alumnoUserId: string,
   dto: ReportarPagoDTO
 ): Promise<{ transaccion: TransaccionPagoDetalleDTO; cuota: CuotaDetalleDTO }> {
+  // D16 (RNF-001): la clave del comprobante debe ser del propio alumno; se rechaza ANTES de abrir
+  // el contexto de tenant, sin lecturas ni escrituras en BD.
+  if (dto.comprobanteStorageKey && !esClaveComprobanteDe(dto.comprobanteStorageKey, alumnoUserId)) {
+    throw new BadRequestException(MENSAJE_COMPROBANTE_INVALIDO);
+  }
+
   // 2-5. RNF-003/ADR-011 (etapa 2): el alumno reporta con contexto self (`current_usuario_id`).
   // Validación de titularidad, transacción y transición de la cuota en UNA transacción; las
   // políticas `self_select`/`self_insert`/`self_update` de 0012 cubren exactamente este flujo.
@@ -238,7 +248,11 @@ async function registrarReportePagoCaso(
     referenciaBancaria: nuevaTx.referenciaBancaria,
     fechaOperacion: nuevaTx.fechaOperacion,
     comprobanteStorageKey: nuevaTx.comprobanteStorageKey,
-    comprobanteUrl: await resolverComprobanteUrlCaso(ctx, nuevaTx.comprobanteStorageKey),
+    comprobanteUrl: await resolverComprobanteUrlCaso(
+      ctx,
+      nuevaTx.comprobanteStorageKey,
+      nuevaTx.clienteId
+    ),
     estadoConciliacion: nuevaTx.estadoConciliacion,
     motivoRechazo: nuevaTx.motivoRechazo,
     fechaReporteUtc: nuevaTx.fechaReporteUtc.toISOString(),

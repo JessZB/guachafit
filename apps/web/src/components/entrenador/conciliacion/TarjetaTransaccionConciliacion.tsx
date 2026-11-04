@@ -62,7 +62,7 @@ export function TarjetaTransaccionConciliacion({
               Fecha de operación:{' '}
               {formatFechaCalendario(tx.fechaOperacion) ?? tx.fechaOperacion}
             </p>
-            {tx.comprobanteUrl || tx.comprobanteStorageKey ? (
+            {tx.comprobanteUrl ? (
               <button
                 type="button"
                 onClick={() => onVerComprobante(tx)}
@@ -75,7 +75,11 @@ export function TarjetaTransaccionConciliacion({
             ) : (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-secondary text-muted-foreground text-[11px] font-medium">
                 <FileText className="h-3 w-3" aria-hidden="true" />
-                <span>Sin captura digital</span>
+                <span>
+                  {tx.comprobanteStorageKey
+                    ? 'Comprobante no disponible por ahora'
+                    : 'Sin captura digital'}
+                </span>
               </span>
             )}
           </div>

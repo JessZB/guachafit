@@ -17,14 +17,6 @@ export const MENSAJE_REFERENCIA_PAGO_INVALIDA = 'La referencia debe tener entre 
 /** Motivo de respaldo honesto: el entrenador rechazó el pago pero no dejó texto (no se inventa uno). */
 export const TEXTO_RECHAZO_SIN_MOTIVO = 'Tu entrenador rechazó este pago.';
 
-/** Comprobante del pago: imagen JPG, PNG o WebP de hasta 5 MB. `null` si es válida, o el mensaje. */
-export function validarArchivoComprobante(archivo: { type: string; size: number }): string | null {
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(archivo.type)) {
-    return 'Formato inválido. Por favor selecciona una imagen JPG, PNG o WebP.';
-  }
-  return archivo.size > 5 * 1024 * 1024 ? 'El archivo excede el límite máximo de 5 MB.' : null;
-}
-
 /** D11: moneda en la que se paga habitualmente con cada método (el alumno puede cambiarla a mano). */
 export function monedaSugeridaPorMetodo(metodo: MetodoPago): Moneda {
   switch (metodo) {
@@ -89,6 +81,24 @@ export function normalizarMontoPago(valor: string): string {
     return limpio;
   }
   return num.toFixed(2);
+}
+
+/**
+ * D16 (Ítem 26): texto del monto para precargar al corregir un pago rechazado. Convierte el
+ * decimal de la API (`'75.00'`) al formato editable con coma (`'75,00'`), sin separador de miles.
+ * Si el texto no es un monto válido (o es <= 0) se devuelve tal cual. Hace round trip con
+ * `validarMontoPago` y `normalizarMontoPago`.
+ */
+export function montoParaEditarPago(montoOriginal: string): string {
+  const limpio = (montoOriginal ?? '').trim();
+  if (!/^\d{1,12}([.,]\d{1,2})?$/.test(limpio)) {
+    return montoOriginal;
+  }
+  const num = Number(limpio.replace(',', '.'));
+  if (!Number.isFinite(num) || num <= 0) {
+    return montoOriginal;
+  }
+  return num.toFixed(2).replace('.', ',');
 }
 
 /** Tasa efectiva como número (`0` cuando falta o no es numérica; nunca `NaN`). */

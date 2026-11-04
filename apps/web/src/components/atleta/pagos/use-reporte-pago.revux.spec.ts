@@ -24,7 +24,8 @@ vi.mock('../../../lib/api-client', () => ({
   apiClient: vi.fn(),
 }));
 
-vi.mock('../../../lib/comprobante-pago', () => ({
+vi.mock('../../../lib/comprobante-pago', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../lib/comprobante-pago')>()),
   prepararComprobanteParaSubida: vi.fn(),
   subirComprobantePago: vi.fn(),
 }));
@@ -92,7 +93,7 @@ describe('useReportePago · REVUX (G1a)', () => {
     const archivo2 = new File(['dummy-2'], 'recibo-2.png', { type: 'image/png' });
     (prepararComprobanteParaSubida as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(archivo1);
     (subirComprobantePago as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
-      'comprobantes/alumno-1/recibo-1.webp'
+      'comprobantes/11111111-1111-4111-8111-111111111111/2026/22222222-2222-4222-8222-222222222222.webp'
     );
 
     act(() => {
@@ -132,7 +133,7 @@ describe('useReportePago · REVUX (G1a)', () => {
     // 3. Cambiar el archivo adjunto genera una clave X-Idempotency-Key DISTINTA
     (prepararComprobanteParaSubida as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(archivo2);
     (subirComprobantePago as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
-      'comprobantes/alumno-1/recibo-2.webp'
+      'comprobantes/11111111-1111-4111-8111-111111111111/2026/33333333-3333-4333-8333-333333333333.webp'
     );
 
     act(() => {

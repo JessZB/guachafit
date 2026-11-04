@@ -6,8 +6,11 @@
  */
 import { useRef, useState, type ChangeEvent, type RefObject } from 'react';
 import { apiClient } from '../../../lib/api-client';
-import { prepararComprobanteParaSubida, subirComprobantePago } from '../../../lib/comprobante-pago';
-import { validarArchivoComprobante } from '../../../lib/pagos-montos';
+import {
+  prepararComprobanteParaSubida,
+  subirComprobantePago,
+  validarArchivoComprobante,
+} from '../../../lib/comprobante-pago';
 
 const MENSAJE_SESION_NO_IDENTIFICADA =
   'No se pudo identificar tu sesión. Vuelve a iniciar sesión e inténtalo de nuevo.';

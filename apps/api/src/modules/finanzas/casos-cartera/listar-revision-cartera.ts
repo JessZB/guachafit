@@ -94,7 +94,8 @@ export async function listarRevisionCartera(
       const { tx, perfilId, proximoCorte, saldoAFavorUsd, nombres, apellidos, telefonoWhatsapp } =
         registro;
       const comprobanteUrl = await ctx.finanzasService.resolverComprobanteUrl(
-        tx.comprobanteStorageKey
+        tx.comprobanteStorageKey,
+        tx.clienteId
       );
       const fila: FilaCarteraDTO = {
         alumnoUsuarioId: tx.clienteId,

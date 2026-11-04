@@ -710,16 +710,18 @@ describe('Módulo 2: Finanzas & Deuda Maestra Bimonetaria (FinanzasService & Fin
     });
 
     it('debe registrar el reporte, congelar tasa y transicionar la cuota a PENDIENTE_REVISION', async () => {
+      const alumnoIdValido = '11111111-1111-4111-8111-111111111111';
+      mockCuotasMembresia[0].clienteId = alumnoIdValido;
       const res = await finanzasService.reportarPago(
         'cuota-test-1',
-        'alumno-uuid-1',
+        alumnoIdValido,
         {
           montoOriginal: '1500.00',
           monedaOriginal: Moneda.VES,
           metodoPago: MetodoPago.PAGO_MOVIL,
           referenciaBancaria: '984521',
           fechaOperacion: '2026-09-06',
-          comprobanteStorageKey: 'comprobantes/recibo.jpg',
+          comprobanteStorageKey: `comprobantes/${alumnoIdValido}/2026/22222222-2222-4222-8222-222222222222.jpg`,
         },
         'idemp-key-test-1'
       );

@@ -6,6 +6,7 @@ import {
   MENSAJE_COMPROBANTE_SIN_URL,
   prepararComprobanteParaSubida,
   subirComprobantePago,
+  validarArchivoComprobante,
   type DepsSubirComprobante,
   type RespuestaSubidaComprobante,
 } from './comprobante-pago';
@@ -174,5 +175,39 @@ describe('prepararComprobanteParaSubida: deja la imagen en un MIME firmable', ()
     await expect(
       prepararComprobanteParaSubida(new File(['x'], 'x.png', { type: 'image/png' }), comprimir)
     ).rejects.toThrow('No se pudo leer la imagen seleccionada. Prueba con otra foto.');
+  });
+});
+
+describe('validarArchivoComprobante (Ítem 25)', () => {
+  it('acepta formatos image/jpeg, image/png e image/webp', () => {
+    expect(validarArchivoComprobante({ type: 'image/jpeg', size: 1024 })).toBeNull();
+    expect(validarArchivoComprobante({ type: 'image/png', size: 1024 })).toBeNull();
+    expect(validarArchivoComprobante({ type: 'image/webp', size: 1024 })).toBeNull();
+  });
+
+  it('rechaza application/pdf e image/gif con el mensaje de formato', () => {
+    const esperado = 'Formato inválido. Por favor selecciona una imagen JPG, PNG o WebP.';
+    expect(validarArchivoComprobante({ type: 'application/pdf', size: 1024 })).toBe(esperado);
+    expect(validarArchivoComprobante({ type: 'image/gif', size: 1024 })).toBe(esperado);
+  });
+
+  it('acepta un archivo de exactamente 5 MB (5 * 1024 * 1024 bytes)', () => {
+    expect(validarArchivoComprobante({ type: 'image/jpeg', size: 5 * 1024 * 1024 })).toBeNull();
+  });
+
+  it('rechaza un archivo que excede 5 MB (5 * 1024 * 1024 + 1 bytes)', () => {
+    expect(
+      validarArchivoComprobante({ type: 'image/jpeg', size: 5 * 1024 * 1024 + 1 })
+    ).toBe('El archivo excede el límite máximo de 5 MB.');
+  });
+
+  it('rechaza un archivo vacío (size === 0) con el mensaje exacto', () => {
+    expect(validarArchivoComprobante({ type: 'image/png', size: 0 })).toBe('El archivo está vacío.');
+  });
+
+  it('un PDF de 0 bytes devuelve el mensaje de formato (el tipo se evalúa primero)', () => {
+    expect(validarArchivoComprobante({ type: 'application/pdf', size: 0 })).toBe(
+      'Formato inválido. Por favor selecciona una imagen JPG, PNG o WebP.'
+    );
   });
 });

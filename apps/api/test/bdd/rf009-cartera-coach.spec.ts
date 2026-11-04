@@ -421,6 +421,8 @@ describe('RF-009 WU-I: Tablero de control de cartera del coach', () => {
   describe('Pestaña Pendiente de Revisión', () => {
     it('lista los comprobantes en verificación con su referencia, método y comprobante', async () => {
       const ahora = Date.now();
+      const ALUMNO_ID = 'a1111111-1111-4111-8111-111111111111';
+      const CLAVE_COMPROBANTE = `comprobantes/${ALUMNO_ID}/2026/b2222222-2222-4222-8222-222222222222.webp`;
       const { db } = crearMockDb({
         ...respuestasResumen(),
         transacciones_pago: (n: number) => {
@@ -433,12 +435,12 @@ describe('RF-009 WU-I: Tablero de control de cartera del coach', () => {
                 tx: {
                   id: 'tx-1',
                   cuotaId: 'cuota-a',
-                  clienteId: 'user-a',
+                  clienteId: ALUMNO_ID,
                   montoOriginal: '1950.00',
                   monedaOriginal: Moneda.VES,
                   metodoPago: MetodoPago.PAGO_MOVIL,
                   referenciaBancaria: '445566',
-                  comprobanteStorageKey: 'comprobantes/user-a/recibo.webp',
+                  comprobanteStorageKey: CLAVE_COMPROBANTE,
                   estadoConciliacion: EstadoConciliacion.PENDIENTE,
                   fechaReporteUtc: new Date(ahora - 2 * DIA_MS),
                 },
@@ -470,7 +472,7 @@ describe('RF-009 WU-I: Tablero de control de cartera del coach', () => {
       expect(fila.monedaOriginal).toBe(Moneda.VES);
       expect(fila.diasEspera).toBe(2);
       expect(fila.comprobanteUrl).toBe('https://r2.example/comprobante.webp');
-      expect(resolverComprobanteUrl).toHaveBeenCalledWith('comprobantes/user-a/recibo.webp');
+      expect(resolverComprobanteUrl).toHaveBeenCalledWith(CLAVE_COMPROBANTE, ALUMNO_ID);
     });
   });
 

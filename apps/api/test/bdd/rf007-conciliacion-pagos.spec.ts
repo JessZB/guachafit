@@ -17,12 +17,13 @@ describe('RF-007: Reporte de Pagos por el Cliente y Bandeja de Conciliación par
   let bandejaEngine: BandejaConciliacionEngine;
   let cuotaInicial: CuotaState;
   const tasaCoach = '60.0000';
+  const ALUMNO_ID = '11111111-1111-4111-8111-111111111111';
 
   beforeEach(() => {
     bandejaEngine = new BandejaConciliacionEngine();
     cuotaInicial = {
       id: 'cuota-40-usd',
-      clienteId: 'cliente-alumno-1',
+      clienteId: ALUMNO_ID,
       entrenadorId: 'coach-1',
       planId: 'plan-online-1',
       periodo: '2026-09',
@@ -49,7 +50,7 @@ describe('RF-007: Reporte de Pagos por el Cliente y Bandeja de Conciliación par
         metodoPago: MetodoPago.PAGO_MOVIL,
         referenciaBancaria: '984521',
         fechaOperacion: '2026-09-06',
-        comprobanteStorageKey: 'comprobantes/captura_banco.jpg',
+        comprobanteStorageKey: `comprobantes/${ALUMNO_ID}/2026/22222222-2222-4222-8222-222222222222.webp`,
         idempotencyKey: 'idemp-key-1',
       };
 
@@ -88,7 +89,7 @@ describe('RF-007: Reporte de Pagos por el Cliente y Bandeja de Conciliación par
           metodoPago: MetodoPago.PAGO_MOVIL,
           referenciaBancaria: '984521',
           fechaOperacion: '2026-09-06',
-          comprobanteStorageKey: 'comprobantes/recibo.jpg',
+          comprobanteStorageKey: `comprobantes/${ALUMNO_ID}/2026/33333333-3333-4333-8333-333333333333.webp`,
         },
         tasaGlobalCoach: tasaCoach,
         registradoPor: cuotaInicial.clienteId,

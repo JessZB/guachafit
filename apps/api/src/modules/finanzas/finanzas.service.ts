@@ -152,8 +152,11 @@ export class FinanzasService {
 
   // WU-I: público para que el servicio de cartera reutilice la MISMA resolución de
   // comprobantes (presigned URL con TTL, `null` honesto si R2 no está configurado o falla).
-  async resolverComprobanteUrl(storageKey?: string | null): Promise<string | null> {
-    return resolverComprobanteUrlCaso(this.ctx, storageKey);
+  async resolverComprobanteUrl(
+    storageKey: string | null | undefined,
+    clienteId: string
+  ): Promise<string | null> {
+    return resolverComprobanteUrlCaso(this.ctx, storageKey, clienteId);
   }
 
   // 1. Motor bimonetario (RF-006, ADR-003, RNF-002). Detalle en `tasas-conversion.caso.ts`.

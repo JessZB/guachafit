@@ -8,9 +8,12 @@ import { Moneda } from '@guachafit/shared';
 import {
   contravalorUsd,
   etiquetaFaltaTasa,
+  montoParaEditarPago,
+  normalizarMontoPago,
   pagoVesBloqueadoPorFaltaTasa,
   saldoVesProyectado,
   tasaEfectivaNumerica,
+  validarMontoPago,
 } from './pagos-montos';
 
 describe('pagos-montos', () => {
@@ -30,6 +33,8 @@ describe('pagos-montos', () => {
 
   it('pagoVesBloqueadoPorFaltaTasa: solo VES con ausencia confirmada', () => {
     expect(pagoVesBloqueadoPorFaltaTasa(Moneda.VES, null, false)).toBe(true);
+    expect(pagoVesBloqueadoPorFaltaTasa(Moneda.VES, '', false)).toBe(true);
+    expect(pagoVesBloqueadoPorFaltaTasa(Moneda.VES, undefined, false)).toBe(true);
     expect(pagoVesBloqueadoPorFaltaTasa(Moneda.VES, null, true)).toBe(false);
     expect(pagoVesBloqueadoPorFaltaTasa(Moneda.VES, '65.0000', false)).toBe(false);
     expect(pagoVesBloqueadoPorFaltaTasa(Moneda.USD, null, false)).toBe(false);
@@ -46,5 +51,38 @@ describe('pagos-montos', () => {
     expect(saldoVesProyectado('30.00', 65)).toBe((30 * 65).toFixed(2));
     expect(saldoVesProyectado('30.00', 0)).toBe('—');
     expect(saldoVesProyectado(null, 65)).toBe((0).toFixed(2));
+  });
+
+  describe('montoParaEditarPago (Ítem 26)', () => {
+    it('convierte un monto de la API en texto editable con dos decimales y coma decimal', () => {
+      expect(montoParaEditarPago('75.00')).toBe('75,00');
+      expect(montoParaEditarPago('1900.50')).toBe('1900,50');
+      expect(montoParaEditarPago('75.5')).toBe('75,50');
+      expect(montoParaEditarPago(' 75 ')).toBe('75,00');
+      expect(montoParaEditarPago('75,5')).toBe('75,50');
+      expect(montoParaEditarPago('75')).toBe('75,00');
+      expect(montoParaEditarPago('1234567.89')).toBe('1234567,89');
+    });
+
+    it('devuelve tal cual entradas vacías, no numéricas o <= 0', () => {
+      expect(montoParaEditarPago('')).toBe('');
+      expect(montoParaEditarPago('abc')).toBe('abc');
+      expect(montoParaEditarPago('0')).toBe('0');
+      expect(montoParaEditarPago('-10')).toBe('-10');
+    });
+
+    it('garantiza round trip para montos válidos de la API (validarMontoPago es null y normalizarMontoPago restaura con punto)', () => {
+      const editado1900 = montoParaEditarPago('1900.50');
+      expect(editado1900).toBe('1900,50');
+      expect(validarMontoPago(editado1900)).toBeNull();
+      expect(normalizarMontoPago(editado1900)).toBe('1900.50');
+
+      const casos = ['75.00', '75.5', '75', '1234567.89'];
+      for (const m of casos) {
+        const editado = montoParaEditarPago(m);
+        expect(validarMontoPago(editado)).toBeNull();
+        expect(normalizarMontoPago(editado)).toBe(normalizarMontoPago(m));
+      }
+    });
   });
 });

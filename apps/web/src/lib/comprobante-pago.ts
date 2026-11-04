@@ -25,6 +25,20 @@ export const MENSAJE_COMPROBANTE_SIN_URL =
 export const MENSAJE_COMPROBANTE_SIN_CLAVE =
   'No se pudo registrar el comprobante: el servidor no devolvió la clave de la bóveda. Inténtalo de nuevo en unos minutos.';
 
+/**
+ * Comprobante del pago: imagen JPG, PNG o WebP, no vacía y de hasta 5 MB. Devuelve `null` si es
+ * válida o el mensaje del primer incumplimiento (orden: formato, archivo vacío, tamaño).
+ */
+export function validarArchivoComprobante(archivo: { type: string; size: number }): string | null {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(archivo.type)) {
+    return 'Formato inválido. Por favor selecciona una imagen JPG, PNG o WebP.';
+  }
+  if (archivo.size === 0) {
+    return 'El archivo está vacío.';
+  }
+  return archivo.size > 5 * 1024 * 1024 ? 'El archivo excede el límite máximo de 5 MB.' : null;
+}
+
 /** Mensaje honesto del PUT rechazado: incluye el status real (403 firma no coincide, 500 bóveda). */
 export function mensajeComprobantePutFallido(status: number): string {
   return `No se pudo subir el comprobante (${status}). Revisa tu conexión e inténtalo de nuevo.`;

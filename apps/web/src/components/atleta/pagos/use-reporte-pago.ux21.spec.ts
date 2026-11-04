@@ -177,7 +177,7 @@ describe('useReportePago · UX-21 (C1, C6)', () => {
 
     expect(result.current.metodoPago).toBe(MetodoPago.ZELLE);
     expect(result.current.moneda).toBe(Moneda.USD);
-    expect(result.current.montoOriginal).toBe('45.00');
+    expect(result.current.montoOriginal).toBe('45,00');
     expect(result.current.referenciaBancaria).toBe('ZELLE-987654');
     expect(result.current.fechaOperacion).toBe('2026-10-05');
   });
@@ -266,7 +266,7 @@ describe('useReportePago · UX-21 (C1, C6)', () => {
 
     expect(result.current.metodoPago).toBe(MetodoPago.ZELLE);
     expect(result.current.moneda).toBe(Moneda.USD);
-    expect(result.current.montoOriginal).toBe('75.00');
+    expect(result.current.montoOriginal).toBe('75,00');
     expect(result.current.referenciaBancaria).toBe('ZELLE-112233');
 
     act(() => {
@@ -281,6 +281,50 @@ describe('useReportePago · UX-21 (C1, C6)', () => {
     expect(result.current.errorFecha).toBeNull();
     expect(result.current.errorArchivo).toBeNull();
     expect(result.current.formError).toBeNull();
+  });
+
+  it('D16 / Ítem 26 · corregir un pago de 1900.50 precarga "1900,50" y reenviar manda montoOriginal: "1900.50"', async () => {
+    const { result } = renderHook(() => useReportePago(opcionesBase()));
+    const txRechazada: TransaccionPagoDetalleDTO = {
+      id: 'tx-rechazada-1900',
+      cuotaId: 'cuota-1',
+      entrenadorId: 'coach-1',
+      montoOriginal: '1900.50',
+      monedaOriginal: Moneda.VES,
+      montoEquivalenteUsd: '31.67',
+      tasaCambioFijada: '60.0000',
+      metodoPago: MetodoPago.PAGO_MOVIL,
+      referenciaBancaria: 'REF-1900',
+      fechaOperacion: '2026-10-01T12:00:00.000Z',
+      comprobanteUrl: null,
+      comprobanteStorageKey: null,
+      estadoConciliacion: EstadoConciliacion.RECHAZADO,
+      motivoRechazo: 'Referencia errónea',
+      motivoReversion: null,
+      clienteId: 'alumno-1',
+      registradoPor: 'alumno-1',
+      excedenteUsd: '0.00',
+      fechaReporteUtc: '2026-10-01T12:05:00.000Z',
+      createdAtUtc: '2026-10-01T12:05:00.000Z',
+      updatedAtUtc: '2026-10-01T12:05:00.000Z',
+    };
+
+    act(() => {
+      result.current.iniciarCorreccionPago(txRechazada);
+    });
+
+    expect(result.current.montoOriginal).toBe('1900,50');
+
+    await act(async () => {
+      await result.current.handleReportarPago({ preventDefault: vi.fn() } as any);
+    });
+
+    expect(apiClient).toHaveBeenCalled();
+    const calls = (apiClient as unknown as ReturnType<typeof vi.fn>).mock.calls;
+    const llamada = calls[calls.length - 1];
+    expect(llamada).toBeDefined();
+    const bodyEnviado = JSON.parse(llamada![1].body);
+    expect(bodyEnviado.montoOriginal).toBe('1900.50');
   });
 
   it('V4 · cuando formError tiene un mensaje tras un fallo del POST, tanto escribir en setMontoOriginal como reintentar handleReportarPago con un monto inválido limpian formError a null', async () => {
@@ -375,6 +419,16 @@ describe('useReportePago · UX-21 (C1, C6)', () => {
     expect(result.current.selectedFile).toBeNull();
     expect(result.current.previewUrl).toBeNull();
     expect(result.current.errorArchivo).toBe('El archivo excede el límite máximo de 5 MB.');
+
+    // Archivo vacío (size === 0)
+    const archivoVacio = new File([], 'vacio.png', { type: 'image/png' });
+    act(() => {
+      result.current.handleFileChange({ target: { files: [archivoVacio] } } as any);
+    });
+
+    expect(result.current.selectedFile).toBeNull();
+    expect(result.current.previewUrl).toBeNull();
+    expect(result.current.errorArchivo).toBe('El archivo está vacío.');
 
     await act(async () => {
       await result.current.handleReportarPago({ preventDefault: vi.fn() } as any);

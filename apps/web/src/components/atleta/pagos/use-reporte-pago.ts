@@ -26,6 +26,7 @@ import {
   generarClaveIdempotenciaPago,
   MENSAJE_ERROR_RED_AMBIGUO_PAGO,
   monedaSugeridaPorMetodo,
+  montoParaEditarPago,
   normalizarMontoPago,
   pagoVesBloqueadoPorFaltaTasa,
   tasaEfectivaNumerica,
@@ -209,7 +210,7 @@ export function useReportePago({
     idempotencyKeyRef.current = generarClaveIdempotenciaPago();
     setMetodoPagoState(tx.metodoPago);
     setMonedaState(tx.monedaOriginal);
-    setMontoOriginalState(tx.montoOriginal);
+    setMontoOriginalState(montoParaEditarPago(tx.montoOriginal));
     setReferenciaBancariaState(tx.referenciaBancaria ?? '');
     setFechaOperacion((tx.fechaOperacion || '').slice(0, 10));
     setMotivoRechazoCorreccion(tx.motivoRechazo?.trim() || null);

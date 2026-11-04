@@ -114,7 +114,7 @@ export function FilaTransaccionPago({ tx, onVerComprobante, onCorregir }: FilaTr
       )}
 
       {/* Botón Ver comprobante */}
-      {(tx.comprobanteUrl || tx.comprobanteStorageKey) && (
+      {tx.comprobanteUrl && (
         <div className="pt-2 border-t border-border/50 flex justify-end">
           <button
             type="button"
@@ -124,6 +124,11 @@ export function FilaTransaccionPago({ tx, onVerComprobante, onCorregir }: FilaTr
             <Eye className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Ver comprobante</span>
           </button>
+        </div>
+      )}
+      {!tx.comprobanteUrl && tx.comprobanteStorageKey && (
+        <div className="pt-2 border-t border-border/50 flex justify-end">
+          <span className="text-xs text-muted-foreground">Comprobante no disponible por ahora</span>
         </div>
       )}
     </div>
