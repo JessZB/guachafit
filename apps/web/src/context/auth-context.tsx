@@ -22,6 +22,7 @@ import {
   debeValidarSesion,
   leerUltimoUsuarioId,
   leerUsuarioGuardado,
+  limpiarClavesEntrenamientoLocal,
 } from '../lib/sesion-local';
 
 interface AuthContextType {
@@ -93,6 +94,12 @@ async function limpiarDatosLocalesDeSesion(): Promise<void> {
     await limpiarCachesRuntime();
   } catch (error) {
     console.warn('No se pudieron limpiar las cachés de API al cerrar sesión:', error);
+  }
+  // RF-001: el cronómetro de descanso del entrenamiento no debe sobrevivir al cierre de sesión.
+  try {
+    limpiarClavesEntrenamientoLocal(localStorage);
+  } catch (error) {
+    console.warn('No se pudo limpiar el cronómetro de descanso al cerrar sesión:', error);
   }
 }
 
@@ -172,6 +179,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       queryClient.clear();
       // El último usuario se asegura ANTES de borrar `guachafit_user` (D2 en el próximo login).
       asegurarUltimoUsuarioId(localStorage);
+      // RF-001: el cronómetro de descanso (localStorage) tampoco sobrevive al vencimiento. Se limpia
+      // SOLO esa clave: IndexedDB y la cola offline se conservan (decisión A1/D2, ver arriba).
+      try {
+        limpiarClavesEntrenamientoLocal(localStorage);
+      } catch (error) {
+        console.warn('No se pudo limpiar el cronómetro de descanso al vencer la sesión:', error);
+      }
       setAvisoSesion(mensaje);
       borrarSesion();
     } finally {

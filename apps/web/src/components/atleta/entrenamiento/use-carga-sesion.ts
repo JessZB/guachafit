@@ -17,6 +17,7 @@ import type {
   SesionEntrenamientoDetalleDTO,
 } from '@guachafit/shared';
 import { buildDemoSemanaProgreso, buildDemoSesion } from '../../../lib/entrenamiento-demo';
+import { combinarSeriesPendientesLocales } from '../../../lib/sesion-borrador';
 import type { FeedbackCierre } from './use-cierre-sesion';
 
 interface OpcionesCarga {
@@ -153,7 +154,21 @@ export function useCargaSesion({
             hayMutacionesSinEnviarDeGrupo(`sesion:${data.id}`).catch(() => false),
             offlineDb.rutinaHoy.get(data.id).catch(() => undefined),
           ]);
-          data = elegirSesionParaMostrar(data, local?.sesion ?? null, pendientes);
+          // Borrador de series: lo tecleado en series aún pendientes se vuelca sobre la copia
+          // del servidor antes de mostrarla y de guardarla en caché (sin un segundo almacén).
+          // Una copia local corrupta jamás debe convertirse en el estado de error de carga: ante
+          // cualquier excepción al combinar o elegir se muestran los datos del servidor.
+          const delServidor = data;
+          try {
+            const servidorConBorrador = combinarSeriesPendientesLocales(
+              delServidor,
+              local?.sesion ?? null
+            );
+            data = elegirSesionParaMostrar(servidorConBorrador, local?.sesion ?? null, pendientes);
+          } catch (errorCopiaLocal) {
+            console.warn('Copia local de la sesión ilegible; se usan los datos del servidor:', errorCopiaLocal);
+            data = delServidor;
+          }
         }
         setSesion(data);
         if (data?.bloqueId) setSelectedBloqueId(data.bloqueId);

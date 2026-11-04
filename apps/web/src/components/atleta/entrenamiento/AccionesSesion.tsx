@@ -21,8 +21,8 @@ export function AccionesSesion({
       <button
         type="button"
         onClick={onAlternarCronometro}
-        aria-label={cronometroAbierto ? 'Cerrar cronómetro de descanso' : 'Abrir cronómetro de descanso'}
-        className="min-h-11 min-w-11 p-3 rounded-2xl bg-secondary/60 border border-border hover:border-primary/50 text-foreground transition-colors flex items-center gap-2 cursor-pointer"
+        aria-label={cronometroAbierto ? 'Detener cronómetro de descanso' : 'Abrir cronómetro de descanso'}
+        className="min-h-11 min-w-11 p-3 rounded-2xl bg-secondary/60 border border-border hover:border-primary/50 text-foreground transition-colors flex items-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         title="Cronómetro de descanso"
       >
         <Timer className="h-6 w-6 text-primary" />

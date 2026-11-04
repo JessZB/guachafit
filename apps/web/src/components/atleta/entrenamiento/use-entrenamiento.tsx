@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useAuth } from '../../../context/auth-context';
 import { useZonaPerfil } from '../../../lib/use-zona-perfil';
 import { type BloqueoAlumno } from '../../../lib/acceso-alumno';
@@ -97,12 +97,8 @@ export function useEntrenamiento() {
     setBloqueo,
     enviarOEncolar: envio.enviarOEncolar,
   });
-  const { setIsRestTimerOpen } = temporizador;
-  const cerrarCronometroAlPlanificar = useCallback(
-    () => setIsRestTimerOpen(false),
-    [setIsRestTimerOpen]
-  );
-  const vista = useVistaSesion({ sesion, onSesionPlanificada: cerrarCronometroAlPlanificar });
+  // Con la sesión planificada no hay descanso que medir: se cierra por `cerrar()` (serieId → null).
+  const vista = useVistaSesion({ sesion, onSesionPlanificada: temporizador.cerrarCronometro });
   const marcado = useMarcadoSerie({
     sesion,
     setSesion,
@@ -112,9 +108,8 @@ export function useEntrenamiento() {
     limpiarErrorInline: edicion.limpiarErrorInline,
     limpiarBorrador: edicion.limpiarBorrador,
     cerrarCorreccionSerie: vista.cerrarCorreccionSerie,
-    setTimerSeconds: temporizador.setTimerSeconds,
-    setActiveSerieKey: temporizador.setActiveSerieKey,
-    setIsRestTimerOpen,
+    abrirCronometroParaSerie: temporizador.abrirCronometroParaSerie,
+    cerrarCronometro: temporizador.cerrarCronometro,
     setActionError,
     setBloqueo,
     cacheSesion: envio.cacheSesion,
@@ -208,9 +203,8 @@ export function useEntrenamiento() {
     handleRepetirBloque: acciones.handleRepetirBloque,
     handleStartSession: acciones.handleStartSession,
     isRestTimerOpen: temporizador.isRestTimerOpen,
-    setIsRestTimerOpen, timerSeconds: temporizador.timerSeconds,
-    setActiveSerieKey: temporizador.setActiveSerieKey,
-    handleRestDurationChange: temporizador.handleRestDurationChange,
+    cronometro: temporizador.cronometro,
+    alternarCronometro: temporizador.alternarCronometro,
     vistaEnCurso: vista.vistaEnCurso, setVistaEnCurso: vista.setVistaEnCurso,
     videoModal: video.videoModal, setVideoModal: video.setVideoModal,
     handleAbrirVideo: video.handleAbrirVideo, refModalVideo: video.refModalVideo,

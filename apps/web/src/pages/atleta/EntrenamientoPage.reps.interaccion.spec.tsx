@@ -52,6 +52,7 @@ vi.mock('../../lib/api-client', async (importOriginal) => {
 });
 
 import { apiClient } from '../../lib/api-client';
+import { offlineDb } from '../../lib/offline-db';
 import { EntrenamientoPage } from './EntrenamientoPage';
 import { clonar, tarjetaDe } from './entrenamiento.spec-helper';
 
@@ -148,7 +149,8 @@ const SESION_HOY: SesionEntrenamientoDetalleDTO = {
 /** Cuerpos enviados al PUT de series, en orden de llegada. */
 let putsRecibidos: Array<{ series: Array<{ serieId: string; repsLogradas: number }> }>;
 
-beforeEach(() => {
+beforeEach(async () => {
+  await offlineDb.rutinaHoy.clear();
   putsRecibidos = [];
   mockApi.mockReset();
   mockApi.mockImplementation((endpoint: string, opciones?: { method?: string; body?: string }) => {
@@ -167,9 +169,10 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   vi.restoreAllMocks();
+  await offlineDb.rutinaHoy.clear();
 });
 
 function campoRepsEn(contenedor: HTMLElement, numeroSerie: number): HTMLInputElement {

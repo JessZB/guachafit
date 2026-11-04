@@ -45,7 +45,7 @@ export function EntrenamientoPage() {
     handleSelectBloque, ultimoGuardadoOtroDia } = entrenamiento;
   // Sesión en curso.
   const { isCompleted, isInProgress, isOmitted, rangoHorarioSesion, unidadPeso,
-    isRestTimerOpen, setIsRestTimerOpen, handleCambiarUnidad, vistaEnCurso, setVistaEnCurso,
+    cronometro, alternarCronometro, handleCambiarUnidad, vistaEnCurso, setVistaEnCurso,
     posicionFocoVigente, renderFilaSerie, handleHacerAhora } = entrenamiento;
   // Cierre y modales.
   const { handleOpenFinishModal, pendienteSync, finishFeedback, handleRepetirBloque,
@@ -56,7 +56,7 @@ export function EntrenamientoPage() {
   // Acciones, cola offline y mapas.
   const { handleEntrenarBloqueHoy, handleStartSession, isStarting, handleAbrirVideo,
     syncSummaryLabel, syncRejected, syncState, setIsSyncPanelOpen, isSyncPanelOpen,
-    timerSeconds, handleRestDurationChange, setActiveSerieKey, rpePorEjercicio } = entrenamiento;
+    rpePorEjercicio } = entrenamiento;
 
   if (isLoading && !sesion && !semanaProgreso) {
     // §M2 de la consolidación: el spinner vive en `ui/EstadoCarga` (con `role="status"`, H-8).
@@ -73,7 +73,7 @@ export function EntrenamientoPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${cronometro.abierto ? 'pb-20' : ''}`}>
       {/* Lote E4 (H7): anuncia el cambio de estado al iniciar, cuando la vista previa desaparece. */}
       <p className="sr-only" role="status" aria-live="polite">
         {sesion && isInProgress ? 'Entrenamiento en curso' : ''}
@@ -168,8 +168,8 @@ export function EntrenamientoPage() {
             <ResumenMetricasSesion sesion={sesion} unidadPeso={unidadPeso} omitida={isOmitted} />
 
             <AccionesSesion
-              cronometroAbierto={isRestTimerOpen}
-              onAlternarCronometro={() => setIsRestTimerOpen(!isRestTimerOpen)}
+              cronometroAbierto={cronometro.abierto}
+              onAlternarCronometro={alternarCronometro}
               unidadPeso={unidadPeso}
               onCambiarUnidad={handleCambiarUnidad}
             />
@@ -270,16 +270,8 @@ export function EntrenamientoPage() {
       {/* WU4: panel compartido de la cola offline (reintentar / descartar rechazadas) */}
       <SyncQueuePanel open={isSyncPanelOpen} onClose={() => setIsSyncPanelOpen(false)} />
 
-      {/* Floating Rest Timer */}
-      <RestTimer
-        isOpen={isRestTimerOpen}
-        initialSeconds={timerSeconds}
-        onDurationChange={handleRestDurationChange}
-        onClose={() => {
-          setIsRestTimerOpen(false);
-          setActiveSerieKey(null);
-        }}
-      />
+      {/* Cronómetro de descanso flotante (presentacional; el estado vive en `cronometro`) */}
+      <RestTimer cronometro={cronometro} />
     </div>
   );
 }

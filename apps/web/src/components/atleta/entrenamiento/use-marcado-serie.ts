@@ -32,9 +32,9 @@ interface OpcionesMarcado {
   limpiarErrorInline: (clave: string) => void;
   limpiarBorrador: (clave: string) => void;
   cerrarCorreccionSerie: (serieId: string) => void;
-  setTimerSeconds: (segundos: number) => void;
-  setActiveSerieKey: (clave: { ejercicioIndex: number; serieIndex: number } | null) => void;
-  setIsRestTimerOpen: (abierto: boolean) => void;
+  /** Abre el cronómetro con el descanso de la serie (por `id`, nunca por índices). */
+  abrirCronometroParaSerie: (serieId: string, segundos: number) => void;
+  cerrarCronometro: () => void;
   setActionError: (mensaje: string | null) => void;
   setBloqueo: (bloqueo: BloqueoAlumno | null) => void;
   cacheSesion: (data: SesionEntrenamientoDetalleDTO) => Promise<void>;
@@ -54,9 +54,8 @@ export function useMarcadoSerie(opciones: OpcionesMarcado) {
     limpiarErrorInline,
     limpiarBorrador,
     cerrarCorreccionSerie,
-    setTimerSeconds,
-    setActiveSerieKey,
-    setIsRestTimerOpen,
+    abrirCronometroParaSerie,
+    cerrarCronometro,
     setActionError,
     setBloqueo,
     cacheSesion,
@@ -121,9 +120,7 @@ export function useMarcadoSerie(opciones: OpcionesMarcado) {
         serie.descansoSegundos = serie.descansoSegundos ?? prescrito;
 
         // Iniciar el temporizador con el tiempo del ejercicio
-        setTimerSeconds(serie.descansoSegundos);
-        setActiveSerieKey({ ejercicioIndex, serieIndex });
-        setIsRestTimerOpen(true);
+        abrirCronometroParaSerie(serie.id, serie.descansoSegundos);
       } else {
         triggerHaptic('light');
       }
@@ -207,8 +204,7 @@ export function useMarcadoSerie(opciones: OpcionesMarcado) {
         cronometro?.ejercicioIndex === ejercicioIndex &&
         cronometro?.serieIndex === serieIndex
       ) {
-        setIsRestTimerOpen(false);
-        setActiveSerieKey(null);
+        cerrarCronometro();
       }
       // E9 (decisión del dueño, opción A): el rechazo de un toque ya superado por otro posterior
       // no se avisa; lo que el alumno quiere es el último toque, que sigue su curso.
@@ -235,9 +231,8 @@ export function useMarcadoSerie(opciones: OpcionesMarcado) {
       limpiarErrorInline,
       limpiarBorrador,
       cerrarCorreccionSerie,
-      setTimerSeconds,
-      setActiveSerieKey,
-      setIsRestTimerOpen,
+      abrirCronometroParaSerie,
+      cerrarCronometro,
       setActionError,
       setBloqueo,
       cacheSesion,

@@ -8,6 +8,7 @@
  * - A1: la sesión se valida contra `/auth/me` solo con red, con la app visible y fuera del modo demo.
  */
 import type { AuthUserDTO } from '@guachafit/shared';
+import { prefijoClaveCronometro } from './cronometro-descanso';
 
 export const CLAVES_SESION_LOCAL = {
   usuario: 'guachafit_user',
@@ -18,6 +19,8 @@ export const CLAVES_SESION_LOCAL = {
 } as const;
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+/** Almacén con enumeración de claves (solo lo necesita la limpieza por prefijo). */
+type StorageEnumerable = StorageLike & Pick<Storage, 'key' | 'length'>;
 
 function limpiarClavesDeSesion(storage: StorageLike): void {
   for (const clave of [
@@ -30,6 +33,31 @@ function limpiarClavesDeSesion(storage: StorageLike): void {
       storage.removeItem(clave);
     } catch {
       // Almacenamiento bloqueado: no hay nada más que hacer.
+    }
+  }
+}
+
+/**
+ * Higiene al cerrar sesión: borra los cronómetros de descanso guardados (`guachafit_cronometro_*`)
+ * y no toca ninguna otra clave. Primero junta las claves y luego las borra una a una, cada una con
+ * su propio try/catch, para que un fallo no deje las demás ni mueva los índices mientras se recorre.
+ */
+export function limpiarClavesEntrenamientoLocal(storage: StorageEnumerable): void {
+  const claves: string[] = [];
+  try {
+    for (let i = 0; i < storage.length; i += 1) {
+      const clave = storage.key(i);
+      if (clave && clave.startsWith(prefijoClaveCronometro)) claves.push(clave);
+    }
+  } catch {
+    // Almacenamiento bloqueado: no hay nada más que hacer.
+    return;
+  }
+  for (const clave of claves) {
+    try {
+      storage.removeItem(clave);
+    } catch {
+      // Una clave que no se pudo borrar no impide borrar las demás.
     }
   }
 }
