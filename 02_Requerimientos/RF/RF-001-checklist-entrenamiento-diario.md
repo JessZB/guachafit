@@ -4,7 +4,7 @@ modulo: Entrenamiento
 prioridad: alta
 estado: implementado
 version_implementada: v1.3.0
-fecha_verificacion: 2026-10-12
+fecha_verificacion: 2026-11-04
 problema_origen: "[[PROB-001-adherencia-trazabilidad]]"
 fecha_creacion: 2026-09-05
 version: 1.0
@@ -49,6 +49,14 @@ Reemplaza la entrega pasiva de rutinas estáticas (PDF/WhatsApp) por una experie
 - **RN-05 (Persistencia en UTC y Presentación en Timezone del Cliente):** 
   - Todo timestamp operativo (`fecha_inicio_utc`, `fecha_fin_utc`, marcas de tiempo de series) se almacena y procesa en el backend estrictamente en **UTC** (ISO 8601 con sufijo `Z`).
   - La aplicación cliente (móvil/PWA/web) detecta la zona horaria del dispositivo (ej. `Intl.DateTimeFormat().resolvedOptions().timeZone`) y es la responsable de convertir y mostrar las horas en el horario local del alumno o del entrenador.
+- **RN-06 (Cronómetro de descanso con tiempo absoluto):** Al marcar una serie arranca un cronómetro de descanso cuyo estado guarda el **instante de fin absoluto** y no una cuenta regresiva. Por eso sobrevive a una recarga y a la pantalla bloqueada: al volver, el tiempo restante se recalcula contra el reloj.
+  - **Persistencia:** una entrada por sesión en el `localStorage` del dispositivo (`guachafit_cronometro_<sesionId>`). La duración se acota entre 10 s y 10 min y el estado caduca a las 6 h.
+  - **Controles:** pausar, reanudar, reiniciar, sumar o restar 15 s y elegir un preset de 60, 90, 120 o 180 s. Se ve como una píldora y se expande a un panel.
+  - **Aviso de fin:** suena **una sola vez**. Cerrar el cronómetro lo detiene y borra su estado. No suena al recargar con el descanso ya vencido ni si el alumno vuelve más de 30 s después del fin: queda «terminado» en silencio.
+  - **Fin de la sesión:** el cronómetro se cierra solo al finalizar u omitir la sesión.
+  - **Honestidad con la pantalla bloqueada:** el panel dice «Con la pantalla bloqueada no podemos avisarte». La web no promete un aviso que el navegador no garantiza.
+- **RN-07 (`descansoSegundos` es un objetivo, no una medición):** Solo cambia por una acción del alumno (±15 s o un preset) sobre un cronómetro que tiene una serie vigente. Pausar, reanudar y reiniciar nunca lo envían. El cronómetro «libre» de la cabecera nunca lo envía. Los cambios de una ráfaga se agrupan en **una sola petición** con el valor final (espera de 1 s). Si la serie ya no existe, no se envía nada. La medición del descanso real sigue siendo la de §7.7.
+- **RN-08 (Lo tecleado en una serie pendiente sobrevive a una recarga):** El peso, las repeticiones y el esfuerzo que el alumno escribe en una serie sin marcar se conservan en la copia local de la sesión y se vuelven a mostrar al recargar. Aplica solo a series pendientes en ambas copias, de la misma sesión y del mismo alumno, y cada valor se valida con los límites de §7.11. Un valor inválido o vacío conserva el del servidor. En una serie completada gana siempre el servidor.
 
 ---
 
@@ -105,11 +113,48 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
   And no debe incrementar la racha de cumplimiento positivo
 ```
 
+### Escenario 6: El Cronómetro de Descanso Sobrevive a la Recarga y a la Pantalla Bloqueada
+```gherkin
+Given que el alumno marcó una serie y el cronómetro de descanso corre con 90 s por delante
+When recarga la página, o bloquea la pantalla y vuelve 40 s después
+Then el cronómetro muestra el tiempo restante real calculado contra el reloj, no el valor de antes de recargar
+  And si el descanso ya venció, queda "terminado" sin sonar cuando pasaron más de 30 s desde el fin
+  And si el descanso no ha vencido, sigue corriendo y suena una sola vez al terminar
+```
+
+### Escenario 7: Ajustar el Descanso Envía Solo el Valor Final
+```gherkin
+Given que el cronómetro tiene una serie vigente y un descanso objetivo de 90 s
+When el alumno pulsa "Sumar 15 segundos" tres veces seguidas
+Then el objetivo pasa a 135 s
+  And el cliente envía una única petición con descansoSegundos = 135 tras 1 s sin más cambios
+  And pausar, reanudar o reiniciar el cronómetro no envían nada
+```
+
+### Escenario 8: Recuperar lo Tecleado en una Serie Pendiente
+```gherkin
+Given que el alumno escribió peso 62,5 y repeticiones 8 en una serie sin marcar
+  And recargó la página antes de pulsar "Listo"
+When la sesión se carga de nuevo desde el servidor
+Then la serie pendiente muestra peso 62,5 y repeticiones 8
+  And una serie ya completada conserva los valores del servidor
+```
+
 ---
 
 ## 6. Casos Borde y Excepciones
 - **Uso sin conexión (Offline-first):** Si el alumno entrena en un sótano o gimnasio sin señal de datos, el cliente móvil/PWA debe cachear localmente las series y sincronizarlas al detectar conexión.
 - **Entrenamientos fuera de día planificado:** Permitir al alumno ejecutar una sesión aplazada o adelantar un día sin romper la integridad del historial.
+- **Cronómetro (RN-06 y RN-07):**
+  - Un estado caducado (más de 6 h) se descarta.
+  - Cerrar el cronómetro lo detiene y borra; no vuelve a sonar al recargar.
+  - En el modo demo funciona en memoria: no escribe en el `localStorage` ni envía nada al servidor.
+  - Al cargar una sesión ya `COMPLETADA` u `OMITIDA` con una clave vigente, la clave se borra.
+  - El audio del aviso se desbloquea con un gesto del alumno (marcar una serie, reanudar, reiniciar, elegir un preset o ±15 s) y se reutiliza un único `AudioContext`. El fin del descanso también se anuncia en una región `aria-live`. Un fallo del aviso (`alTerminar`) queda aislado y no rompe el cronómetro.
+  - Si el alumno cambia de sesión con un ajuste de descanso pendiente de envío, el ajuste se entrega a la sesión original.
+- **Cierre de sesión (logout), cambio de usuario y sesión vencida:** las claves `guachafit_cronometro_*` se borran por prefijo para que otra persona en el mismo dispositivo no herede el descanso. El cierre por vencimiento **no** toca IndexedDB ni la cola offline (regla vigente de conservar la cola, §7.10).
+- **Borrador de series (RN-08):** una copia local corrupta no impide cargar la sesión: se usan los datos del servidor. «Sumar» y «Restar» de repeticiones parten del valor restaurado.
+- **Varios dispositivos y borrador:** en una serie pendiente prevalece lo tecleado en **este dispositivo**, porque lo tecleado en una serie sin marcar no se envía al servidor hasta pulsar «Listo». Se descartó comparar marcas de tiempo (ver [[ADR-027-cronometro-descanso-tiempo-absoluto-borrador-series]]).
 
 ---
 
@@ -151,7 +196,7 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
 ### 7.7. Medición del descanso real (WU17)
 - **Fórmula:** `descanso_real = timestamp_inicio_utc(serie siguiente) − timestamp_completada_utc(serie anterior)` (misma fórmula entre ejercicios: inicio de la primera serie del siguiente − completada de la última del anterior). `series_registro.timestamp_inicio_utc` se captura sin fricción al interactuar con la serie (peso/reps/RPE) o con el botón "Iniciar serie", una sola vez y solo en series pendientes de una sesión `EnProgreso`; las series ya completadas nunca se retro-marcan y el prefill programático no la dispara.
 - **UI:** con marcas se muestra "Descanso real" y "Ejecución" (fin − inicio); sin marcas se conserva el Δ entre marcas de WU15 (cota superior) o "—". Nunca se muestran valores negativos.
-- **Límite honesto:** la precisión depende de que el alumno marque el inicio; sin marca no se inventa la medición y `descansoSegundos` sigue siendo el valor del temporizador (objetivo), no el descanso efectivo.
+- **Límite honesto:** la precisión depende de que el alumno marque el inicio; sin marca no se inventa la medición y `descansoSegundos` sigue siendo el valor del temporizador (objetivo), no el descanso efectivo. Las reglas de cuándo cambia ese objetivo están en RN-07 y en §7.21.
 
 ### 7.8. Listados server-side (WU24–WU26)
 - Monitor de adherencia con búsqueda (`q`), semáforo y orden (`riesgo | nombre`) server-side y paginación `{ items, total, limit, offset, resumen }` (`limit` default 25, techo 100); historial de sesiones del alumno paginado en `GET /sesiones/alumno/{alumnoId}/historial` (`limit` default 30, techo 100). El `total` del historial y el `resumen` del monitor son siempre reales (nunca del slice de página); el detalle de contrato vive en [[03_Contratos_API_Especificacion]] §1.1 y §4.1.
@@ -267,5 +312,29 @@ Then el sistema debe solicitar confirmación: "¿Deseas registrar este día como
 - Siguen con la zona del dispositivo la agrupación «Hoy/Ayer» de las notificaciones y los endpoints `?timezone=` del entrenamiento, que aceptan lo que envía el cliente.
 - **Evidencia:** web **3152/3152** en 376 archivos; typecheck y build con código 0.
 
+### 7.21. Cronómetro de descanso con tiempo absoluto y borrador de series (`8bcfa95`, 2026-11-04, [[ADR-027-cronometro-descanso-tiempo-absoluto-borrador-series]])
+- **Cronómetro como widget** (RN-06):
+  - Estado con `finEnMs` (instante de fin absoluto) persistido por sesión en `localStorage` (`guachafit_cronometro_<sesionId>`). Al volver a la pestaña (`visibilitychange` y `pageshow`) recalcula el tiempo restante.
+  - Píldora y panel expandido, con anillo o barra de progreso; `role="timer"`, aviso de fin en región `aria-live`, área segura (safe-area), áreas táctiles de 44 px y foco visible. Código en `lib/cronometro-descanso.ts`, `use-cronometro-descanso.ts`, `lib/aviso-descanso.ts` y `components/common/RestTimer*.tsx`.
+  - Duración acotada a 10 s–10 min; el estado caduca a las 6 h.
+- **Defectos corregidos:**
+  1. El cronómetro cerrado seguía sonando.
+  2. El botón «Descanso» de la cabecera abría un cronómetro «libre» y «+30» reescribía el `descansoSegundos` de la última serie marcada.
+- **Cuándo se envía `descansoSegundos`** (RN-07): solo por ±15 s o un preset sobre un cronómetro con serie vigente, con espera de 1 s y el valor final. El cronómetro «libre» de la cabecera nunca envía; pausar, reanudar y reiniciar tampoco. El ajuste pendiente al cambiar de sesión se entrega a la sesión original. Si la serie ya no existe, no se envía nada. En modo demo no se escribe ni se envía.
+- **Higiene del almacenamiento:** `limpiarClavesEntrenamientoLocal` borra por prefijo `guachafit_cronometro_*` en el logout, en el cambio de usuario y en `cerrarSesionPorVencimiento`. La sesión vencida no toca IndexedDB ni la cola offline (§7.10).
+- **Borrador de series** (RN-08): sin segundo almacén. Lo tecleado ya se guardaba en la copia local (`offlineDb.rutinaHoy`); ahora `combinarSeriesPendientesLocales(servidor, local)` lo vuelca sobre la sesión del servidor al cargar, antes de `cacheSesion`.
+  - Solo series con `completada === false` en ambas copias, con el mismo `id` de sesión y el mismo `alumnoId`.
+  - Cada valor se valida con el contrato compartido (§7.11: peso hasta 999,99 kg con 2 decimales como máximo, repeticiones enteras dentro del tope, esfuerzo dentro de su rango). Un valor inválido o vacío conserva el del servidor.
+  - Una copia local corrupta no impide cargar: se usan los datos del servidor. En series completadas gana el servidor.
+  - «Sumar» y «Restar» de repeticiones parten del valor restaurado.
+- **Límite entre dispositivos:** en una serie pendiente prevalece lo tecleado en el dispositivo actual, porque no se envía al servidor hasta pulsar «Listo». Se descartó comparar marcas de tiempo: enfrentaría el reloj del móvil con el del servidor y, con un móvil atrasado, el borrador se perdería sin aviso.
+- **Evidencia:** 111 tests del lote; suite web completa **3329/3329**; typecheck y build sin errores. Revisiones con las 4 lentes (riesgo, fiabilidad, resiliencia y legibilidad): hallazgos aceptados y corregidos; se rechazó, con razón, la regla de marcas de tiempo para el borrador. Un spec existente (`EntrenamientoPage.reps.interaccion.spec.tsx`) limpia `offlineDb.rutinaHoy` entre tests porque el borrador ahora se lee al cargar.
+- **No verificado y fuera de alcance:**
+  - El comportamiento real en **iOS Safari** no se probó en dispositivo: no hay vibración, el audio depende de un gesto del usuario y del interruptor de silencio, y el JavaScript se congela con la pantalla bloqueada. El recálculo del temporizador no usa Wake Lock.
+  - La auditoría de contraste de los controles nuevos no se midió.
+  - Seguimientos abiertos (ver [[Handoff_Entrenamiento_Pendientes]]): precarga del peso con el plan; repeticiones prellenadas con el objetivo (se envía `repsLogradas ?? repsObjetivo`, un dato que parece real); desmarcar una serie sin confirmación ni deshacer; `enterKeyHint` y seleccionar el contenido al enfocar los inputs; campo de notas del modal de cierre con `text-xs` (zoom en iOS) y etiquetas de 11 px; `aria-pressed` en «Listo»; deshabilitar «Restar 15 segundos» con el descanso ya terminado; avisar también en la píldora (no solo en el panel) que con la pantalla bloqueada no suena.
+  - Sincronizar el cronómetro entre pestañas se descartó por YAGNI.
+
 ### Pendiente
-- Ninguno abierto de §7.10. El uso desde varias pestañas o dispositivos queda como límite documentado (ver §7.17).
+- Ninguno abierto de §7.10. El uso desde varias pestañas o dispositivos queda como límite documentado (ver §7.17 y §7.21).
+- Seguimientos de §7.21: los listados arriba en «No verificado y fuera de alcance» y la prueba en un iPhone real.
