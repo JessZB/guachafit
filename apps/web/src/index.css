@@ -1,4 +1,40 @@
 @import "tailwindcss";
+/* Utilidades de entrada y salida (animate-in, fade-in, zoom-in-95, slide-in-from-*): sin este
+   paquete esas clases existen en el código pero no producen ninguna animación (ADR-027). */
+@import "tw-animate-css";
+
+/* Entrada de cada pantalla (`animate-fade-in` en AppLayout). Solo opacidad, sin transform:
+   un transform en <main> rompería el posicionamiento de todo lo `fixed` que haya dentro. */
+@theme {
+  --animate-fade-in: aparecer 300ms ease-out both;
+
+  /* Fin del descanso (píldora del cronómetro): dos destellos breves en lugar de un pulso
+     infinito. Solo `box-shadow`, `opacity` y `transform`, sin tocar el layout. */
+  --animate-destello-fin: destello-fin 700ms ease-out 2;
+
+  @keyframes aparecer {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes destello-fin {
+    from {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 60%, transparent);
+      transform: scale(1);
+    }
+    60% {
+      transform: scale(1.04);
+    }
+    to {
+      box-shadow: 0 0 0 14px color-mix(in srgb, var(--color-success) 0%, transparent);
+      transform: scale(1);
+    }
+  }
+}
 
 @theme {
   --color-background: hsl(var(--background));
