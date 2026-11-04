@@ -57,7 +57,7 @@ tags:
 - Quien comparta el enlace antiguo después de rotar provocará un «enlace no válido» a sus prospectos; el texto les indica pedir uno nuevo al entrenador.
 
 ## 5. Costos y límites honestos
-- **La migración no se aplicó contra un PostgreSQL real** durante el lote (no hay base local); la suite e2e que la ejercitaría no se pudo ejecutar. Debe aplicarse la `0025` antes de arrancar el API nuevo; el verificador de migraciones del arranque lo detecta.
+- **Migración `0025` verificada en una base real desechable** (2026-11-04): las 26 migraciones se aplican sin errores sobre una base vacía y dejan las tres columnas con sus valores por defecto y el `CHECK`. El e2e `apps/api/test/bdd/d17-captacion-concurrencia.e2e.spec.ts` (`28ed17f`, 8 tests) comprueba contra PostgreSQL real la rotación con corte inmediato, la pausa, el cupo con 5 registros simultáneos sobre 1 plaza y 8 sobre 3 (entra exactamente el número de plazas), el origen del registro, el `CHECK` y la unicidad del código. La base de desarrollo local sigue en la migración 0023 y hay que llevarla a la `0025` antes de probar a mano; el verificador de arranque del API lo detecta.
 - **El contador subcuenta el pasado:** los alumnos registrados por enlace antes del lote quedaron como `manual`, así que no se cuentan.
 - **`CrearEntrenadorSchema.coachCode` sigue siendo opcional y aceptado por la API:** un superadmin que llame al API a mano puede fijar un código corto. La web ya no lo pide. Es un riesgo acotado (rol de máxima confianza) y queda como seguimiento.
 - **Sin auditoría ni métrica de los 404 públicos:** un escaneo lento por debajo del límite por IP no deja rastro agregado.
