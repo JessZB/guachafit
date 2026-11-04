@@ -189,6 +189,16 @@ export function useEntrenamiento() {
     enviarOEncolar: envio.enviarOEncolar,
   });
 
+  // El botón flotante del cronómetro solo existe con la sesión en curso y sin un modal encima.
+  // Ocultarlo NO cierra el cronómetro: el hook sigue contando y al volver se retoma.
+  const cronometroVisible =
+    !!sesion &&
+    estado.isInProgress &&
+    !cierre.isFinishModalOpen &&
+    !cierre.isEmptyCloseModalOpen &&
+    !video.videoModal &&
+    !cola.isSyncPanelOpen;
+
   return {
     sesion, bloqueo, actionError, isDemoMode,
     semanaProgreso, selectedBloqueId: carga.selectedBloqueId,
@@ -204,7 +214,8 @@ export function useEntrenamiento() {
     handleStartSession: acciones.handleStartSession,
     isRestTimerOpen: temporizador.isRestTimerOpen,
     cronometro: temporizador.cronometro,
-    alternarCronometro: temporizador.alternarCronometro,
+    abrirCronometroEnPausa: temporizador.abrirCronometroEnPausa,
+    cronometroVisible,
     vistaEnCurso: vista.vistaEnCurso, setVistaEnCurso: vista.setVistaEnCurso,
     videoModal: video.videoModal, setVideoModal: video.setVideoModal,
     handleAbrirVideo: video.handleAbrirVideo, refModalVideo: video.refModalVideo,

@@ -210,10 +210,12 @@ describe('EntrenamientoPage · Cierre de cronómetro, audio y robustez de carga'
 
       render(<EntrenamientoPage />);
 
-      await screen.findByRole('heading', { level: 1 });
+      await screen.findByText('¡Sesión de entrenamiento finalizada con éxito!');
 
+      await waitFor(() => {
+        expect(localStorage.getItem(claveStorage)).toBeNull();
+      });
       expect(screen.queryByRole('timer')).toBeNull();
-      expect(localStorage.getItem(claveStorage)).toBeNull();
     });
 
     it('5a (OMITIDA): con sesión del servidor OMITIDA y cronómetro en localStorage, role="timer" no aparece y se elimina la clave', async () => {
@@ -241,10 +243,12 @@ describe('EntrenamientoPage · Cierre de cronómetro, audio y robustez de carga'
 
       render(<EntrenamientoPage />);
 
-      await screen.findByRole('heading', { level: 1 });
+      await screen.findByText('Día registrado como incompleto');
 
+      await waitFor(() => {
+        expect(localStorage.getItem(claveStorage)).toBeNull();
+      });
       expect(screen.queryByRole('timer')).toBeNull();
-      expect(localStorage.getItem(claveStorage)).toBeNull();
     });
 
     it('5b: con sesión en progreso, marcar última serie abre cronómetro; confirmar finalizar elimina widget y clave', async () => {
@@ -293,15 +297,11 @@ describe('EntrenamientoPage · Cierre de cronómetro, audio y robustez de carga'
 
       render(<EntrenamientoPage />);
 
-      // Abrir cronómetro desde la cabecera
-      const botonCabecera = await screen.findByRole('button', {
+      // Abrir cronómetro desde el FAB (abre directamente el panel expandido)
+      const botonFab = await screen.findByRole('button', {
         name: 'Abrir cronómetro de descanso',
       });
-      fireEvent.click(botonCabecera);
-
-      // Expandir el cronómetro para ver los botones de ajuste
-      const botonExpandir = await screen.findByRole('button', { name: 'Expandir cronómetro' });
-      fireEvent.click(botonExpandir);
+      fireEvent.click(botonFab);
 
       mockDesbloquearAudio.mockClear();
 

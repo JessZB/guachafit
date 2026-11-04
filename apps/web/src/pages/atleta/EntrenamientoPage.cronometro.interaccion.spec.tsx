@@ -214,27 +214,19 @@ describe('EntrenamientoPage · Cronómetro de descanso y borrador (interacción)
     ).toBeTruthy();
   });
 
-  it('Escenario 2: defecto 2 (regresión): cronómetro libre desde cabecera no envía peticiones de descanso al pulsar "Sumar 15 segundos"', async () => {
+  it('Escenario 2: defecto 2 (regresión): cronómetro libre desde FAB no envía peticiones de descanso al pulsar "Sumar 15 segundos"', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     render(<EntrenamientoPage />);
 
     await screen.findByRole('region', { name: 'Entrenamiento en foco' }, { timeout: 5000 });
 
-    // Abrir desde botón de cabecera
-    const botonCabecera = screen.getByRole('button', {
-      name: /Abrir cronómetro de descanso/i,
+    // Abrir desde el FAB (abre directamente el panel expandido)
+    const botonFab = screen.getByRole('button', {
+      name: 'Abrir cronómetro de descanso',
     });
-    fireEvent.click(botonCabecera);
+    fireEvent.click(botonFab);
 
-    // Expandir controles si está en píldora
-    const botonExpandir = await screen.findByRole(
-      'button',
-      { name: 'Expandir cronómetro' },
-      { timeout: 5000 }
-    );
-    fireEvent.click(botonExpandir);
-
-    // Pulsar "Sumar 15 segundos" varias veces
+    // Pulsar "Sumar 15 segundos" varias veces directamente en el panel
     const botonSumar = await screen.findByRole(
       'button',
       { name: 'Sumar 15 segundos' },
@@ -256,7 +248,7 @@ describe('EntrenamientoPage · Cronómetro de descanso y borrador (interacción)
     );
     expect(llamadasDescanso).toHaveLength(0);
 
-    // Repetir tras marcar una serie, cerrar con la cabecera y reabrir
+    // Repetir tras marcar una serie, cerrar el cronómetro y reabrir
     const seccion = screen.getByRole('region', { name: 'Entrenamiento en foco' });
     fireEvent.click(
       within(seccion).getByRole('button', { name: 'Marcar serie 1 como completada' })
@@ -266,22 +258,19 @@ describe('EntrenamientoPage · Cronómetro de descanso y borrador (interacción)
       expect(llamadasPutSeries.length).toBeGreaterThanOrEqual(1);
     });
 
-    // Cerrar desde la cabecera
-    const botonCerrarCabecera = screen.getByRole('button', {
-      name: /Detener cronómetro de descanso/i,
+    // Cerrar el cronómetro (en píldora) con su botón accesible de cierre
+    const botonCerrarPildora = screen.getByRole('button', {
+      name: 'Cerrar cronómetro de descanso',
     });
-    fireEvent.click(botonCerrarCabecera);
+    fireEvent.click(botonCerrarPildora);
 
     llamadasPutSeries = [];
 
-    // Reabrir desde la cabecera (cronómetro libre)
-    const botonReabrirCabecera = screen.getByRole('button', {
-      name: /Abrir cronómetro de descanso/i,
+    // Reabrir desde el FAB (cronómetro libre, abre panel directamente)
+    const botonReabrirFab = screen.getByRole('button', {
+      name: 'Abrir cronómetro de descanso',
     });
-    fireEvent.click(botonReabrirCabecera);
-
-    const botonExpandir2 = await screen.findByRole('button', { name: 'Expandir cronómetro' });
-    fireEvent.click(botonExpandir2);
+    fireEvent.click(botonReabrirFab);
 
     const botonSumar2 = await screen.findByRole('button', { name: 'Sumar 15 segundos' });
     fireEvent.click(botonSumar2);

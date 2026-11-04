@@ -17,7 +17,7 @@ export function RestTimerPildora({ cronometro, onExpandir }: RestTimerPildoraPro
   return (
     <div
       className={`flex items-center gap-1 pl-1.5 pr-1 rounded-full border shadow-2xl backdrop-blur-xl select-none bg-card/95 ${
-        terminado ? 'border-success text-success animate-pulse' : 'border-primary/40 text-foreground'
+        terminado ? 'border-success text-success animate-destello-fin' : 'border-primary/40 text-foreground'
       }`}
     >
       <button

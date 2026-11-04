@@ -1,34 +1,14 @@
-import { Timer } from 'lucide-react';
 import type { UnidadPeso } from '../../../lib/weight-unit';
 
 export interface AccionesSesionProps {
-  cronometroAbierto: boolean;
-  onAlternarCronometro: () => void;
   unidadPeso: UnidadPeso;
   onCambiarUnidad: (unidad: UnidadPeso) => void;
 }
 
-/** Cronómetro rápido + selector kg/lb (ÚNICO: solo esta vista). */
-export function AccionesSesion({
-  cronometroAbierto,
-  onAlternarCronometro,
-  unidadPeso,
-  onCambiarUnidad,
-}: AccionesSesionProps) {
+/** Selector kg/lb (ÚNICO: solo esta vista). El cronómetro vive en su botón flotante (`RestTimer`). */
+export function AccionesSesion({ unidadPeso, onCambiarUnidad }: AccionesSesionProps) {
   return (
     <>
-      {/* Quick Rest Timer Trigger */}
-      <button
-        type="button"
-        onClick={onAlternarCronometro}
-        aria-label={cronometroAbierto ? 'Detener cronómetro de descanso' : 'Abrir cronómetro de descanso'}
-        className="min-h-11 min-w-11 p-3 rounded-2xl bg-secondary/60 border border-border hover:border-primary/50 text-foreground transition-colors flex items-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-        title="Cronómetro de descanso"
-      >
-        <Timer className="h-6 w-6 text-primary" />
-        <span className="text-xs font-bold hidden sm:inline">Descanso</span>
-      </button>
-
       {/* RN-01: preferencia de unidad de peso (kg/lb) persistida en el dispositivo */}
       <div
         role="group"

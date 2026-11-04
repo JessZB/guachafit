@@ -50,7 +50,7 @@ function posicionDeSerie(
 
 /**
  * Cronómetro de descanso (`useCronometroDescanso`) conectado a la sesión: abre el descanso de una
- * serie o uno libre desde la cabecera, avisa al terminar y guarda el cambio de duración que el
+ * serie o uno libre desde el botón flotante, avisa al terminar y guarda el cambio de duración que el
  * alumno hace sobre el descanso de una serie (viaja como batch de la serie).
  */
 export function useTemporizadorDescanso(opciones: OpcionesTemporizador) {
@@ -134,7 +134,7 @@ export function useTemporizadorDescanso(opciones: OpcionesTemporizador) {
     alTerminar: avisarFinDescanso,
     alCambiarDuracion: guardarDescansoSerie,
   });
-  const { abierto, serieId, abrirParaSerie, abrirLibre, cerrar } = cronometro;
+  const { abierto, serieId, abrirParaSerie, abrirLibre, pausar, cerrar } = cronometro;
 
   // Con la sesión terminada (COMPLETADA u OMITIDA) no hay descanso que medir. Se cierra por
   // `cerrar()`, que además borra la clave: así cubre tanto el cierre en esta pantalla como la carga
@@ -154,15 +154,14 @@ export function useTemporizadorDescanso(opciones: OpcionesTemporizador) {
     },
     [abrirParaSerie]
   );
-  // Botón de la cabecera: abre el cronómetro libre (sin serie, nunca envía) o lo cierra.
-  const alternarCronometro = useCallback(() => {
-    if (abierto) {
-      cerrar();
-      return;
-    }
+  // Botón flotante: abre el cronómetro libre (sin serie, nunca envía) y lo deja EN PAUSA para que
+  // el alumno elija el tiempo; los presets arrancan al elegirse. Cerrarlo es la X del widget. La
+  // composición es síncrona porque `pausar` lee el estado recién creado de `estadoRef`.
+  const abrirCronometroEnPausa = useCallback(() => {
     desbloquearAudio();
     abrirLibre();
-  }, [abierto, abrirLibre, cerrar]);
+    pausar();
+  }, [abrirLibre, pausar]);
   // Serie vigente del cronómetro, derivada de su `serieId` (la rama "no cerrar" del rechazo la lee).
   const activeSerieKey = useMemo(
     () => (abierto ? posicionDeSerie(sesion, serieId) : null),
@@ -195,7 +194,7 @@ export function useTemporizadorDescanso(opciones: OpcionesTemporizador) {
     isRestTimerOpen: abierto,
     activeSerieKey,
     abrirCronometroParaSerie,
-    alternarCronometro,
+    abrirCronometroEnPausa,
     cerrarCronometro: cerrar,
   };
 }

@@ -10,7 +10,7 @@
 export interface EstadoCronometro {
   v: 1;
   sesionId: string;
-  /** `null` = cronómetro libre (abierto desde la cabecera, sin serie asociada). */
+  /** `null` = cronómetro libre (abierto desde el botón flotante, sin serie asociada). */
   serieId: string | null;
   /** Objetivo del temporizador (no una medición, RF-001 §7.7). */
   duracionMs: number;

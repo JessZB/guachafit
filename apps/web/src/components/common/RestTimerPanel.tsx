@@ -7,6 +7,8 @@ import type { CronometroDescanso } from '../atleta/entrenamiento/use-cronometro-
 interface RestTimerPanelProps {
   cronometro: CronometroDescanso;
   onMinimizar: () => void;
+  /** Lleva el foco a pausar/reanudar al montarse: solo si el alumno abrió el panel con el botón flotante. */
+  enfocarAccionPrincipal?: boolean;
 }
 
 const PRESETS_SEGUNDOS = [60, 90, 120, 180];
@@ -16,7 +18,11 @@ const BOTON_ICONO =
   'min-h-11 min-w-11 flex items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
 
 /** Modo expandido: tiempo grande, progreso, presets y ajuste fino de ±15 s. */
-export function RestTimerPanel({ cronometro, onMinimizar }: RestTimerPanelProps) {
+export function RestTimerPanel({
+  cronometro,
+  onMinimizar,
+  enfocarAccionPrincipal = false,
+}: RestTimerPanelProps) {
   const { restanteMs, duracionMs, pausado, terminado } = cronometro;
   const { pausar, reanudar, ajustar, elegirPreset, reiniciar, cerrar } = cronometro;
   const porcentaje =
@@ -138,6 +144,7 @@ export function RestTimerPanel({ cronometro, onMinimizar }: RestTimerPanelProps)
           {!terminado && (
             <button
               type="button"
+              autoFocus={enfocarAccionPrincipal}
               onClick={() => {
                 triggerHaptic('selection');
                 if (pausado) reanudar();

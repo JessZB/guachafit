@@ -45,7 +45,7 @@ export function EntrenamientoPage() {
     handleSelectBloque, ultimoGuardadoOtroDia } = entrenamiento;
   // Sesión en curso.
   const { isCompleted, isInProgress, isOmitted, rangoHorarioSesion, unidadPeso,
-    cronometro, alternarCronometro, handleCambiarUnidad, vistaEnCurso, setVistaEnCurso,
+    cronometro, cronometroVisible, abrirCronometroEnPausa, handleCambiarUnidad, vistaEnCurso, setVistaEnCurso,
     posicionFocoVigente, renderFilaSerie, handleHacerAhora } = entrenamiento;
   // Cierre y modales.
   const { handleOpenFinishModal, pendienteSync, finishFeedback, handleRepetirBloque,
@@ -73,7 +73,7 @@ export function EntrenamientoPage() {
   }
 
   return (
-    <div className={`space-y-6 ${cronometro.abierto ? 'pb-20' : ''}`}>
+    <div className={`space-y-6 ${cronometroVisible ? 'pb-20' : ''}`}>
       {/* Lote E4 (H7): anuncia el cambio de estado al iniciar, cuando la vista previa desaparece. */}
       <p className="sr-only" role="status" aria-live="polite">
         {sesion && isInProgress ? 'Entrenamiento en curso' : ''}
@@ -167,12 +167,7 @@ export function EntrenamientoPage() {
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <ResumenMetricasSesion sesion={sesion} unidadPeso={unidadPeso} omitida={isOmitted} />
 
-            <AccionesSesion
-              cronometroAbierto={cronometro.abierto}
-              onAlternarCronometro={alternarCronometro}
-              unidadPeso={unidadPeso}
-              onCambiarUnidad={handleCambiarUnidad}
-            />
+            <AccionesSesion unidadPeso={unidadPeso} onCambiarUnidad={handleCambiarUnidad} />
           </div>
         </div>
 
@@ -270,8 +265,13 @@ export function EntrenamientoPage() {
       {/* WU4: panel compartido de la cola offline (reintentar / descartar rechazadas) */}
       <SyncQueuePanel open={isSyncPanelOpen} onClose={() => setIsSyncPanelOpen(false)} />
 
-      {/* Cronómetro de descanso flotante (presentacional; el estado vive en `cronometro`) */}
-      <RestTimer cronometro={cronometro} />
+      {/* Cronómetro de descanso: botón flotante, píldora y panel (presentacional; el estado vive en
+          `cronometro`). Se oculta con un modal abierto, sin cerrar el cronómetro. */}
+      <RestTimer
+        cronometro={cronometro}
+        visible={cronometroVisible}
+        onAbrirEnPausa={abrirCronometroEnPausa}
+      />
     </div>
   );
 }
