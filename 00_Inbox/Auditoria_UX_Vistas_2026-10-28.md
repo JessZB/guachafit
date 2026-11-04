@@ -396,6 +396,12 @@ Proceso:
 - 21 tests en 2 specs nuevos (`use-reporte-pago.ux22.spec.ts` y `PagosPage.ux22.interaccion.spec.tsx`).
 - 2986 tests en 327 archivos, typecheck y build en verde.
 
+**D16 cerrado (`26153aa`, seguimientos de UX-21 y UX-22):**
+- Cierra el WARNING de UX-22 sobre `comprobanteStorageKey` sin verificar el prefijo del alumno (escritura y lectura), la precarga del monto con punto de UX-21 y el movimiento de `validarArchivoComprobante` a `lib/comprobante-pago.ts`. Detalle en [[RF-007-reporte-pagos-bandeja-conciliacion]].
+- El WARNING de UX-21 sobre `pagoVesBloqueadoPorFaltaTasa` queda como **comportamiento deliberado** (D6): la API decide y rechaza con 400; el «$— USD» que describía no existe en el código. Se añadió cobertura.
+- Seguimientos nuevos: «Corregir y reenviar» descarta el comprobante previo; doble firma de la misma URL en `reportar-pago`; contar las filas con claves heredadas antes de desplegar.
+- Proceso: 6 prompts (tests de escritura, tests de lectura, verificación, 4 revisiones, correcciones y validación); 5 correcciones aplicadas tras la revisión 4R; web 3177/3177 y API 2070/2081 (10 fallos ajenos al lote).
+
 **UX-23 cerrado (`6271cce`):**
 - `nutricion-checkin.ts`: exporta `textoBotonFueraDeVentanaCheckin(zonaHoraria)` (`Disponible a partir de las 18:00 (hora de <Ciudad>)`) y `validarCamposOpcionalesCheckin({ aguaLitros, calorias, proteina })`, compartiendo la validación de enteros sin decimales con `enteroOpcional` (`F3`).
 - `AccionesGuardarReporte.tsx` y `NutricionPage.tsx` (`ALU-16`): recibe `zonaPerfil` y muestra la zona horaria del perfil en el botón deshabilitado fuera de ventana; `NutricionPage.tsx` baja de 298 a **278 líneas** (`<= 300`).

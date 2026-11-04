@@ -4,7 +4,7 @@ modulo: Finanzas
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-10-12
+fecha_verificacion: 2026-11-03
 problema_origen: "[[PROB-002-cobranza-bimonetaria-fraccionada]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -220,10 +220,20 @@ Then la transacción debe transicionar a estado "Rechazado"
 - **Revisión:** fiabilidad (ZH-2) y legibilidad (D12) sin BLOCKER. Se rechazaron como seguimiento la guarda de `asegurarComprobanteSubido`, el renombrado de `onNuevoAbono` a `onReportarPago` y reemplazar `querySelectorAll` por `getByLabelText` en specs antiguos.
 - **Evidencia:** web **3152/3152** en 376 archivos; typecheck de shared, database, api y web y build web con código 0.
 
+### Endurecimiento del reporte de pago del alumno (`26153aa`, 2026-11-03, lote D16)
+- **Comprobante del propio alumno, al escribir:** `esClaveComprobanteDe(clave, alumnoId)` (`casos-finanzas/comprobantes.ts`) exige la estructura de ADR-007, el prefijo exacto `comprobantes/<alumno>/` y extensión `webp`, `jpeg` o `jpg`. `reportar-pago` responde 400 «El comprobante adjunto no es válido.» **antes de abrir la transacción**, sin lecturas ni escrituras. Sin clave, el comprobante sigue siendo opcional.
+- **Al leer:** `resolverComprobanteUrlCaso(ctx, clave, clienteId)` solo firma la URL si la clave pertenece al titular de la fila; si no, devuelve `null`, avisa en el log con texto fijo (sin la clave ni el id) y no lanza. Aplica a la bandeja de conciliación, el detalle de cuota, el reporte y la revisión de la cartera. El fallo de R2 también deja un aviso con texto fijo.
+- **Web:** `montoParaEditarPago` precarga el monto de «Corregir y reenviar» con coma y sin separador de miles (`75,00`), compatible con `validarMontoPago`; el cuerpo enviado sigue con punto. `validarArchivoComprobante` pasa a `lib/comprobante-pago.ts` y rechaza archivos vacíos. «Ver comprobante» solo aparece con URL; con clave y sin URL (R2 caído o clave heredada) se lee «Comprobante no disponible por ahora».
+- **Seed:** la clave de ejemplo cumple ADR-007.
+- **Decisión sobre `pagoVesBloqueadoPorFaltaTasa`:** no cambia. Devuelve `false` cuando falla la consulta de la tasa de forma deliberada (D6) y la API decide con un 400 si no hay tasa. El «$— USD» del handoff no existe en el código. Se añadió cobertura del aviso «Sin tasa configurada…» y del botón deshabilitado.
+- **Revisión 4R:** risk y readability sin BLOCKER ni WARNING. Se rechazaron con evidencia el BLOCKER de reliability (el prefijo se construye con el mismo `alumnoId` que `solicitar-presigned` exige idéntico al del JWT) y que el botón desaparezca tras conciliar (la web solo usa `excedenteUsd` de esa respuesta y la reversión recarga la lista). Se aplicaron el texto honesto, el aviso del fallo de R2, `clienteId` obligatorio en la fachada y cinco mejoras de tests.
+- **Evidencia:** web **3177/3177** en 380 archivos; API **2070/2081**, con 10 fallos ajenos al lote (1 spec que espera la migración 0023 cuando existe la 0024 y 9 e2e de concurrencia que necesitan PostgreSQL local con la 0024); typecheck de shared, database, api y web y build de api y web con código 0.
+
 ### Pendiente
 - El mensaje de éxito de la reversión no se borra solo; las mutaciones de Conciliación y de la reversión no tienen tiempo límite; la demo de Conciliación llama al API.
 - El comprobante sigue siendo opcional.
 - **Zona horaria del alumno, lo que falta:** la zona del dispositivo ya se precarga con aviso de discrepancia (ZH-1) y la web calcula la fecha del pago con la zona del perfil (ZH-2); falta validar la fecha del pago con la zona del alumno en la API, en lugar de la regla provisional.
-- Textos: la opción «(VES)» del selector de método sigue pendiente de revisar, y `validarArchivoComprobante` (valida por nombre) encajaría mejor en `lib/comprobante-pago.ts`.
+- Textos: la opción «(VES)» del selector de método sigue pendiente de revisar.
+- **Seguimientos de D16:** «Corregir y reenviar» descarta el comprobante previo (el alumno debe volver a adjuntarlo); `reportar-pago` firma dos veces la misma URL; la estructura de la clave admite también un tercer segmento con fecha completa (no abre acceso ajeno); antes de desplegar conviene contar las filas con claves que no cumplen ADR-007 (cada una deja un aviso por listado y su comprobante deja de verse); las respuestas de conciliar y revertir traen la clave sin URL (la web no la usa hoy).
 - `fechaOperacion` solo valida el formato: una llamada directa con `2026-02-30` se acepta.
 - Dos ventanas de "recaudado del mes": KPI-01 usa el mes UTC y `totalPagadoMesActualUsd` el mes en la hora local del servidor (solo discrepan si el servidor no corre en UTC).
