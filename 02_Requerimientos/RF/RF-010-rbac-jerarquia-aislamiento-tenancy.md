@@ -68,7 +68,7 @@ Establece la jerarquía de control de acceso basada en roles (RBAC) y el aislami
 Given que el Superadmin se encuentra autenticado en el panel maestro
 When registra un nuevo entrenador con nombre "Marcos Fitness", email "marcos@gym.com" y licencia "Plan Pro"
 Then el sistema debe crear la cuenta en estado "Activo"
-  And generar un código único de entrenador (ej. "coach_code: MARCOS-921")
+  And generar un código único de entrenador (ej. "coach_code: K7M2QX4P")
   And enviar un email de bienvenida a Marcos con su enlace de activación maestro
 ```
 
@@ -108,6 +108,7 @@ Then solo debe poder visualizar sus rutinas asignadas, sus medidas y sus cuotas 
 - Implementado (2026-09-24, unidad CASCADA-COACH): la cascada del §6 a los alumnos se evalúa **derivada en runtime durante la autenticación** (decisión del usuario, opción A; ver [[ADR-016-cascada-acceso-coach-alumnos-autenticacion]]), sin migración y sin verificación en cada petición:
   - Coach operable = cuenta habilitada (`usuarios.activo`) Y licencia vigente (`perfiles_entrenador.estado_licencia = 'activa'`). Se aplica en los 4 emisores/ciclos de sesión del alumno: login, `GET /auth/me`, refresh y canje de credenciales (`POST /auth/invitacion/establecer-password`; si bloquea, el token no se consume). El mensaje es único y no revela cuál de los dos interruptores falló: *"Tu entrenador no está disponible en este momento. Inténtalo de nuevo más tarde."* (401).
   - La resolución pública del `coach_code` y el registro público (RF-011) ahora exigen coach operable (mismo 404 uniforme que un código inexistente). Los guards no cambian: no hay costo por petición.
+  - D17 (2026-11-04, `db2d68f`): el alta de entrenador por el superadmin ya no pide el `coach_code`: lo genera el servidor (8 caracteres aleatorios sin ambiguos) y la respuesta lo devuelve. La API aún acepta uno manual si viene en el cuerpo. El entrenador puede rotar su código y pausar su captación (RF-011 RN-08, [[ADR-026-ciclo-de-vida-enlace-captacion-coach]]).
   - Límites honestos: un access token ya emitido sigue vigente hasta ~15 min en endpoints que no pasan por login/me/refresh/canje; las filas legacy de alumno sin coach quedan exentas (hoy 0 filas); el canje está cubierto por tests unitarios, no por un E2E con token real.
   - Evidencia (2026-09-24): API 832 passed / 1 skipped y web 624; typechecks OK; E2E real contra Postgres (cuenta `activo=false` y licencia `suspendida_superadmin`: el alumno recibe 401 con el mensaje exacto en login/me/refresh, el link público responde 404 y el coach su propio 401; al restaurar, todo vuelve a 200 con restauración verificada por SELECT). Validación independiente: PASA CON SALVEDADES.
 - Implementado (2026-10-04, LOTE API-1 `5bd50df` + LOTE API-2 `eeec4e0`) — endurecimiento de la autenticación:

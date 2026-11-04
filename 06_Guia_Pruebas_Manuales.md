@@ -376,7 +376,16 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
 ## 7. Altas, enlaces y accesos
 
 - [ ] **Alta manual**: al crear un alumno, la app te muestra un **enlace de activación copiable** (válido 48 horas). Ábrelo en una ventana de incógnito: crea la contraseña y entra. El enlace **sirve una sola vez**. (Los casos con y sin correo están en la sección 7.1.)
-- [ ] **Link de inscripción del coach**: la web te muestra tu enlace real (`/onboarding?coach=TU-CODIGO`). Pruébalo con un código inventado (dice "no válido") y con el real (muestra tu nombre y permite registrarse). Al registrarse alguien, te llega una notificación.
+- [ ] **Link de inscripción del coach**: la web te muestra tu enlace real (`/onboarding?coach=TU-CODIGO`). Pruébalo con un código inventado (muestra la página «Este enlace de registro no es válido», sin formulario) y con el real (muestra tu nombre y permite registrarse). Al registrarse alguien, te llega una notificación.
+- [ ] **Ciclo de vida del enlace de captación (2026-11-04, `db2d68f`, lote D17):**
+  - Como entrenador, en **Mis alumnos → Invitar**, el diálogo muestra «N alumnos se registraron con este enlace» (o «Aún nadie se registró con este enlace.»), «Generar nuevo enlace» y «Pausar captación».
+  - Pulsa **«Generar nuevo enlace»**: pide confirmar («Tu enlace anterior dejará de funcionar de inmediato…»); «Cancelar» no cambia nada. Confirma: el enlace y el código cambian y el contador vuelve a 0. Abre en otra ventana el enlace **anterior**: muestra «Este enlace de registro no es válido».
+  - Pulsa **«Pausar captación»**: aparece el aviso de pausa y el enlace vigente también muestra «Este enlace de registro no es válido». «Reanudar captación» lo restablece.
+  - Abre `/onboarding` **sin código** → «Este enlace de registro no es válido» (dice que falta el código), sin formulario ni campo para escribir el código. Con un código inventado: la misma página con otro texto. Con tu enlace vigente: el formulario con «Te vincularás con: tu nombre», sin campo de código.
+  - Con DevTools en «Offline» al abrir un enlace válido: «No pudimos verificar tu enlace…» con «Reintentar». Al volver a «Online» y pulsarlo, aparece el formulario.
+  - Con dos pestañas: rota el enlace en una y abre «Invitar» en la otra → muestra el enlace nuevo.
+  - Si el número de alumnos activos iguala tu **capacidad máxima**, tu enlace también muestra «Este enlace de registro no es válido» (no revela el motivo).
+  - Como superadmin, en **/admin → crear entrenador** ya no hay campo de código: al crearlo, el resultado muestra el código generado (8 caracteres, sin 0/O/1/I). Antes de probarlo contra una base real, aplica la migración `0025`.
 - [ ] **Alumno suspendido/pausado**: al entrar, ve la pantalla de bloqueo con el mensaje correspondiente y botón **"Reportar pago"** (sus pagos y cuenta siguen accesibles).
 - [ ] **Alumno dado de baja**: ya **no puede iniciar sesión**; con su contraseña correcta ve **"Tu cuenta está archivada. Contacta a tu entrenador."** (con una contraseña errónea solo ve "Correo o contraseña incorrectos.", que no revela si la cuenta existe).
 - [ ] **Admin** (`/admin`, solo superadmin): crear entrenador y ver el enlace de activación; abajo verás la **lista de entrenadores** con su cuenta (activa/deshabilitada), su licencia (activa/suspendida), su `coach_code` y su fecha de alta.

@@ -4,7 +4,7 @@ modulo: Onboarding
 prioridad: alta
 estado: parcial
 version_implementada: v1.0.0
-fecha_verificacion: 2026-10-26
+fecha_verificacion: 2026-11-04
 problema_origen: "[[PROB-003-acceso-onboarding-dashboard-central]]"
 fecha_creacion: 2026-09-06
 version: 1.0
@@ -62,11 +62,20 @@ Permite al entrenador captar e incorporar alumnos tanto en el entorno físico de
 ### Vía B: Registro Autónomo mediante Enlace Único (Deep Link)
 - **RN-06 (Estructura del Enlace):** Cada entrenador dispone de una URL personalizable:
   $$\text{https://app.guachafit.com/registro?coach\_code=XYZ}$$
+  La web arma el enlace como `/onboarding?coach=CODIGO`; `/registro?coach_code=CODIGO` es un alias que redirige. El código lo genera el servidor (RN-08); ya no lo escribe nadie a mano.
 - **RN-07 (Vinculación Automática al Tenant):** Cuando un usuario completa el formulario público a través de ese enlace, el backend:
-  1. Valida que el `coach_code` exista y que su entrenador esté operativo (cuenta habilitada y licencia vigente); un código inexistente, una cuenta deshabilitada o una licencia suspendida responden con el mismo 404 uniforme.
+  1. Valida que el `coach_code` exista y que su entrenador esté operativo (cuenta habilitada y licencia vigente); un código inexistente, una cuenta deshabilitada o una licencia suspendida responden con el mismo 404 uniforme. (D17) También responden ese 404 la captación pausada y el cupo lleno (RN-08).
   2. Crea la cuenta del alumno vinculada automáticamente al `entrenador_id` correspondiente.
   3. Establece la contraseña definida por el usuario en el formulario.
   4. Envía una notificación push y correo al coach: *"Nuevo alumno registrado: [Nombre Completo]"*.
+
+- **RN-08 (Ciclo de vida del enlace, D17):** El autorregistro por enlace sigue siendo «entrar directo» (sin aprobación del entrenador); la seguridad está en el control del enlace:
+  1. El `coach_code` lo genera el servidor: 8 caracteres aleatorios de un alfabeto sin ambiguos (sin O, 0, I ni 1). El superadmin ya no lo escribe al crear al entrenador (la API aún acepta uno manual si viene en el cuerpo; ver §7).
+  2. **Generar nuevo enlace:** el entrenador rota su código con confirmación. El corte es inmediato: el código anterior deja de resolver en el acto, sin periodo de gracia.
+  3. **Pausar captación:** mientras está pausada, el enlace responde como un código inexistente. Reanudar la restablece.
+  4. **Cupo:** si los alumnos activos (sin baja lógica) alcanzan `capacidad_maxima`, el enlace responde igual que un código inexistente. El conteo y el alta ocurren en la misma transacción con la fila del entrenador bloqueada, así que dos registros simultáneos no superan el cupo.
+  5. **Contador:** «N alumnos se registraron con este enlace» cuenta los alumnos con `origen_registro = 'enlace'` creados desde la última rotación.
+  6. Ninguna negativa pública revela el motivo (código inexistente, rotado, cuenta o licencia inoperables, pausa o cupo lleno): todas devuelven el mismo 404 y el mismo texto.
 
 ### Vía C: Gestión Centralizada y Expediente Deportivo 360°
 - **RN-08 (Directorio Dinámico con Toggle Cards / Tabla):** El listado principal de alumnos cuenta con un selector de visualización:
@@ -107,6 +116,25 @@ Then el sistema debe crear la cuenta en estado "Activo"
   And disparar una notificación al entrenador: "Nuevo alumno registrado: [Nombre]"
 ```
 
+### Escenario 5: Rotación del enlace con corte inmediato
+```gherkin
+Given que el entrenador "ALEXFIT" compartió su enlace y un prospecto lo tiene abierto
+When el entrenador pulsa "Generar nuevo enlace" y confirma
+Then el sistema asigna un código nuevo generado por el servidor
+  And el código anterior deja de resolver de inmediato
+  And el prospecto que envía su registro con el código anterior recibe el 404 uniforme
+  And el contador de registros del enlace vuelve a 0
+```
+
+### Escenario 6: Enlace sin código, inválido, pausado o con cupo lleno
+```gherkin
+Given que un prospecto abre "/onboarding" sin código, con un código inexistente, con el enlace pausado o con el cupo del entrenador lleno
+When la página valida el enlace
+Then ve la página "Este enlace de registro no es válido" con el enlace "Ya tengo cuenta · Iniciar sesión"
+  And no se muestra ningún formulario ni campo para escribir el código
+  And el texto no distingue el motivo (salvo "sin código", que solo indica que el enlace está incompleto)
+```
+
 ### Escenario 3: Confidencialidad de la Ficha de Salud Privada
 ```gherkin
 Given que el entrenador registró en la ficha de salud: "Hernia discal L4-L5, evitar sentadilla libre pesada"
@@ -128,6 +156,9 @@ Then la aplicación debe navegar a "/coach/alumnos/al-001"
 
 ## 6. Casos Borde y Excepciones
 - **Enlace con Coach Code Inválido, Desactivado o Suspendido:** Si un usuario intenta registrarse con un `coach_code` que no existe, o cuyo entrenador tiene la cuenta deshabilitada o la licencia suspendida, el backend responde el mismo 404 uniforme que ante un código inexistente y el sistema muestra el mensaje amigable: *"El código de entrenador no es válido o no está disponible. Por favor contacta a tu coach."*
+- **Enlace sin código o con código inválido (D17):** `/onboarding` sin `?coach=` muestra la página «Este enlace de registro no es válido» (el texto dice que falta el código del entrenador). Con un código de formato incorrecto, inexistente, rotado, pausado o con el cupo lleno muestra la misma página con el texto «El enlace venció, se reemplazó por uno nuevo o no está disponible». No hay campo manual de código.
+- **Fallo de red al validar el enlace (D17):** un error de red, un 5xx o un 429 no se presenta como enlace inválido: la página dice «No pudimos verificar tu enlace. Revisa tu conexión e inténtalo de nuevo.» con el botón «Reintentar».
+- **Enlace rotado desde otra pestaña (D17):** el modal «Invitar» vuelve a consultar el perfil cada vez que se abre, así que muestra el enlace vigente.
 - **Correo Electrónico Duplicado:** Si el email ya existe en la base de datos de la plataforma, el sistema debe indicar: *"Este correo ya se encuentra registrado. Si eres tú, inicia sesión o recupera tu contraseña."* (Nota 2026-10-04: el texto sigue vigente y la web añade un enlace "Ir a iniciar sesión". Resuelto (2026-10-04, API-4 `79ba082`): la recuperación de contraseña que menciona **ya existe**: "¿Olvidaste tu contraseña?" en el login → `/recuperar` (pide el enlace) → `/restablecer?token=…` (nueva contraseña); detalle en [[RF-010-rbac-jerarquia-aislamiento-tenancy]] §7.)
 - **Alumno Sin Cuotas Emitidas en el Semáforo:** Si un alumno recién registrado no posee aún ninguna cuota emitida, el semáforo se mostrará en gris neutro con etiqueta "Sin Cuota Emitida".
 
@@ -235,3 +266,11 @@ Then la aplicación debe navegar a "/coach/alumnos/al-001"
 
 ### Zona horaria del alumno nuevo (`6111326`, 2026-11-03, lote ZH-1)
 - El alta manual y el autorregistro siguen sin pedir la zona. El alumno nace con `zona_horaria_definida = false` y su zona se precarga con la del dispositivo en el primer inicio de sesión o en la activación de la cuenta; si el entrenador la fija antes desde la ficha, esa gana. Detalle en RF-018 y en [[ADR-025-zona-horaria-alumno-precarga-dispositivo-aviso-discrepancia]].
+
+### Ciclo de vida del enlace de captación (`db2d68f`, 2026-11-04, lote D17)
+- Decisión del dueño ([[ADR-026-ciclo-de-vida-enlace-captacion-coach]]): el autorregistro sigue siendo «entrar directo» y la seguridad pasa al control del enlace (RN-08).
+- **Base de datos (migración `0025_captacion_enlace_coach`):** `perfiles_entrenador.captacion_activa` y `enlace_rotado_en_utc`; `perfiles_alumno.origen_registro` (`manual` o `enlace`, con `CHECK`).
+- **API:** el código lo genera el servidor (`generarCoachCodeUnico`); `POST /entrenador/captacion/rotar` y `PATCH /entrenador/captacion`; `GET /entrenador/perfil` añade `captacionActiva`, `enlaceRotadoEnUtc` y `registrosPorEnlace`; la resolución pública y el registro responden el mismo 404 ante pausa y cupo lleno; el cupo se cuenta y el alumno se crea en la misma transacción con la fila del entrenador bloqueada; el hash de la contraseña se calcula antes de esa transacción.
+- **Web:** página `EnlaceRegistroNoValido` (sin formulario ni campo de código), estado `error` con «Reintentar» al validar el enlace, panel del modal «Invitar» con «Generar nuevo enlace» (confirmación inline), «Pausar/Reanudar captación» y el contador; el modal refresca el enlace al abrirse; el formulario del superadmin ya no pide el código.
+- Evidencia: API **2087** tests pasan (5 suites e2e de concurrencia, 53 tests, no cargan sin PostgreSQL local: ajenas al lote); web **3225/3225**; typecheck y build con código 0. Revisión de los cuatro enfoques sin BLOCKER: se aceptaron el hash fuera de la transacción, el debounce sobrante, el refresco al abrir el modal y la limpieza de los specs; se rechazaron con evidencia el `count(*)` (la consulta ya está acotada por la capacidad), unificar el 400 con el 404 del formato (ya existía y el formato es público) y el defensivo `new Date(...)`.
+- **Límites honestos:** la migración `0025` no se probó contra un PostgreSQL real; los alumnos registrados por enlace antes del lote quedaron como `manual`, así que el contador no los cuenta; `CrearEntrenadorSchema.coachCode` sigue siendo opcional y la API acepta un código manual (la web ya no lo pide); no hay métrica ni log agregado de los 404 públicos; no hay caducidad ni tope de usos por enlace.

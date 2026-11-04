@@ -1,7 +1,7 @@
 ---
 id: HANDOFF-RETOMA
 titulo: "Handoff: seguimientos abiertos tras la auditoría UX de las vistas del entrenador y del alumno"
-fecha: 2026-11-03
+fecha: 2026-11-04
 estado: activo
 tags:
   - handoff
@@ -10,9 +10,9 @@ tags:
   - seguimientos
 ---
 
-# 🔁 Seguimientos abiertos (UX-01 a UX-29, ZH-1, ZH-2, D11 a D16)
+# 🔁 Seguimientos abiertos (UX-01 a UX-29, ZH-1, ZH-2, D11 a D17)
 
-Los 29 lotes de la auditoría UX, la zona horaria del alumno (ZH-1 y ZH-2), el lote de pagos y los textos D12 están **cerrados y en `origin/main`**. El lote D16 (endurecimiento del reporte de pago: comprobante validado al escribir y al leer, monto con coma, `validarArchivoComprobante` en `lib/comprobante-pago.ts`) está **cerrado en local (`26153aa`), pendiente de push**. Suite web al último cierre: **3177 tests en 380 archivos**; API 2070 de 2081, con 10 fallos ajenos (un spec que espera la migración 0023 cuando existe la 0024 y 9 e2e de concurrencia que necesitan PostgreSQL local con la 0024); typecheck y build con código 0. Detalle de cada lote en [[Auditoria_UX_Vistas_2026-10-28]]; decisiones en [[ADR-025-zona-horaria-alumno-precarga-dispositivo-aviso-discrepancia]].
+Los 29 lotes de la auditoría UX, la zona horaria del alumno (ZH-1 y ZH-2), el lote de pagos y los textos D12 están **cerrados y en `origin/main`**. El lote D16 (endurecimiento del reporte de pago: comprobante validado al escribir y al leer, monto con coma, `validarArchivoComprobante` en `lib/comprobante-pago.ts`) está **cerrado en local (`26153aa`), pendiente de push**. El lote D17 (ciclo de vida del enlace de captación del entrenador: código del servidor, rotación con corte inmediato, pausa, cupo, contador y página de enlace no válido) está **cerrado en local (`db2d68f`), pendiente de push**. Suite web al último cierre: **3225 tests en 387 archivos**; API **2087 tests pasan** y 5 suites e2e de concurrencia (53 tests) no cargan sin PostgreSQL local con la migración 0025 (ajenas al lote); typecheck y build con código 0. Detalle de cada lote en [[Auditoria_UX_Vistas_2026-10-28]]; decisiones en [[ADR-025-zona-horaria-alumno-precarga-dispositivo-aviso-discrepancia]].
 
 Cómo trabajar: reglas en `00_Reglas_Desarrollo_SDD.md` §7 (Claude orquesta y valida; Haiku explora; Sonnet escribe producción; Antigravity escribe tests, verifica y revisa, lanzado con el id completo del modelo `gemini-3.8-flash-medium` o `-high`). El procedimiento detallado con Orca y las lecciones de cada lote están en la versión anterior de este archivo: `git show 7a612e0:00_Inbox/Handoff_Retomar_Sesion.md`.
 
@@ -66,3 +66,7 @@ Los ítems marcados **[verificar]** salen de la lectura de la auditoría y no se
 33. Módulo 5: anulación de cuotas en la web, congelar membresía, condonar, `PagosPage`, P2 de Control de Cobros y RNF-002.
 34. Pendientes de la ficha del alumno en RF-011.
 35. Cierre del ciclo: consolidar la auditoría y borrar `.external-agents/auditoria-ux/`.
+
+## Captación por enlace (D17)
+36. **Antes de desplegar D17:** aplicar la migración `0025_captacion_enlace_coach` y probarla contra una base real (no se pudo en el lote, no hay PostgreSQL local). Los alumnos registrados por enlace antes del lote quedaron como `manual`: el contador no los cuenta.
+37. Seguimientos de seguridad de D17 (ver [[ADR-026-ciclo-de-vida-enlace-captacion-coach]] §5): `CrearEntrenadorSchema.coachCode` sigue aceptando un código manual por API (quitarlo del schema o exigir 8 o más caracteres); no hay métrica ni log agregado de los 404 públicos; no hay caducidad ni tope de usos por enlace; la lectura del cupo trae las filas en lugar de `count(*)`.
