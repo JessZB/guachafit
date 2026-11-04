@@ -43,7 +43,14 @@ Repo/vault: C:\Users\jesus\OneDrive\Documentos\Obsidian Vault\Trabajo\GUACHAFIT 
 4. ✅ **Carrera de orden de los envíos** (RF-001 §7.17, lote E9): hecha en `a4371fe`, con [[ADR-024-orden-envios-sesion-entrenamiento]]. Un envío directo en vuelo retiene lo posterior de su sesión; todo lo encolado lleva la hora de la acción; plazo de 15 s para el directo; un rechazo tardío de un toque ya superado no revierte ni avisa (opción A del dueño, 2026-10-15). Límite: orden garantizado dentro de la misma pestaña. La rama `wip/e9-orden-envios-rojo` ya no hace falta.
 5. ✅ **Unificar `SelectorPlantillaAsignacion` y `AsignacionMasivaPlantilla`** (RF-017 RN-03, lote E10): hecho en `7817765`. Decisión del dueño, opción B: la masiva pasa a 3 pasos (elegir alumnos, revisar y ajustar, confirmar), con ajustes comunes a todos los alumnos y el paso de revisión compartido. Tras un fallo ambiguo el intento queda congelado (opción A). **No quedan pendientes en este handoff.**
 6. ✅ **Cronómetro de descanso con tiempo absoluto y borrador de series** (RF-001 RN-06 a RN-08 y §7.21, [[ADR-027-cronometro-descanso-tiempo-absoluto-borrador-series]]): hecho en `8bcfa95` (2026-11-04). Estado del fin absoluto en `localStorage` por sesión, widget accesible, aviso que suena una vez, claves purgadas en logout y cambio de usuario, y lo tecleado en series pendientes se recupera al recargar.
-7. **Seguimientos del lote anterior (sin empezar, a decidir con el dueño):**
+7. ✅ **Botón flotante del cronómetro y animaciones de entrada** (RF-001 RN-06, escenario 9 y §7.21, [[ADR-027-cronometro-descanso-tiempo-absoluto-borrador-series]] §8): hecho en `24d506f` (dependencia `tw-animate-css@1.4.0` e `index.css`) y `4a84375` (botón flotante), 2026-11-04, local y pendiente de push. El acceso al cronómetro deja de ser el botón «Descanso» de la cabecera: es un botón flotante con tres estados (reposo, píldora y panel), visible solo con la sesión en curso y sin modal propio abierto. Efecto global: todos los modales y vistas con `animate-in` ahora se animan al entrar. Evidencia: lote 88/88, web **3.372/3.372**, typecheck y build sin errores; revisión de fiabilidad con 0 BLOCKER.
+8. **Pendientes del botón flotante y las animaciones (sin empezar, a decidir con el dueño):**
+   - **Probar en un móvil real** lo no verificado: (1) modales `fixed inset-0` sin portal confinados por el `transform` de `animate-in` si se abren dentro de ~300 ms tras cargar `AlumnoDetallePage`, `AlumnosPage`, `PagosPage` o `ModalPlanComercial`; (2) el panel expandido (~300 px) tapando el input que se edita con el teclado abierto; (3) el aspecto real del movimiento, iOS, la vibración y el audio. Pasos en la guía de pruebas, sección 1.
+   - Plegar el panel al enfocar un input, o declarar `interactive-widget` en `index.html`.
+   - Portalizar esos modales o evitar el `transform` en las páginas con `animate-in`.
+   - `animate-out` y salida animada de los modales (hoy se desmontan de golpe al cerrar).
+   - Deshabilitar «Restar 15 segundos» con el descanso terminado y avisar de la pantalla bloqueada también en la píldora (ya figuraban en el punto 9).
+9. **Seguimientos del lote del cronómetro con tiempo absoluto (sin empezar, a decidir con el dueño):**
    - Precarga del peso con el plan; repeticiones prellenadas con el objetivo (se envía `repsLogradas ?? repsObjetivo`, un dato que parece real).
    - Desmarcar una serie sin confirmación ni deshacer.
    - `enterKeyHint` y seleccionar el contenido al enfocar los inputs de peso, repeticiones y esfuerzo.
@@ -59,6 +66,6 @@ Repo/vault: C:\Users\jesus\OneDrive\Documentos\Obsidian Vault\Trabajo\GUACHAFIT 
 - Lotes E1–E7 cerrados:
   - E1 `77c1990`; E2 `c6a0e34`/`05d42bd`; E3 `8af2673`/`c194caa`; E4 `e440587`/`bb42b55`;
   - E5 `dfc3e51`/`0194fcb` (ADR-021); E6 `9192fef`/`3c68eed`; E7 `63369d7`.
-- Web 1575/1575, typecheck y build limpios (2026-10-12). Tras el cronómetro (`8bcfa95`, 2026-11-04): web **3329/3329**, typecheck y build sin errores.
+- Web 1575/1575, typecheck y build limpios (2026-10-12). Tras el cronómetro (`8bcfa95`, 2026-11-04): web **3329/3329**, typecheck y build sin errores. Tras el botón flotante (`24d506f` y `4a84375`, 2026-11-04): web **3.372/3.372**, typecheck y build sin errores.
 - Convenciones nuevas en 00_Reglas_Desarrollo_SDD.md: §6.12 (peso máximo 700) y §6.13 (entrada numérica filtrada).
 ```

@@ -52,10 +52,13 @@ Reemplaza la entrega pasiva de rutinas estáticas (PDF/WhatsApp) por una experie
 - **RN-06 (Cronómetro de descanso con tiempo absoluto):** Al marcar una serie arranca un cronómetro de descanso cuyo estado guarda el **instante de fin absoluto** y no una cuenta regresiva. Por eso sobrevive a una recarga y a la pantalla bloqueada: al volver, el tiempo restante se recalcula contra el reloj.
   - **Persistencia:** una entrada por sesión en el `localStorage` del dispositivo (`guachafit_cronometro_<sesionId>`). La duración se acota entre 10 s y 10 min y el estado caduca a las 6 h.
   - **Controles:** pausar, reanudar, reiniciar, sumar o restar 15 s y elegir un preset de 60, 90, 120 o 180 s. Se ve como una píldora y se expande a un panel.
+  - **Acceso por botón flotante:** el cronómetro se abre con un botón flotante abajo a la derecha, por encima de la barra inferior y en la zona del pulgar (nombre accesible «Abrir cronómetro de descanso»). Es un único widget con tres estados: botón en reposo, píldora con la cuenta atrás y panel expandido. La cabecera ya no tiene botón «Descanso»: conserva solo el selector kg/lb.
+  - **Toque en el botón flotante:** abre el panel con el descanso **libre en pausa a 90 s** y el foco en «Reanudar descanso». Elegir un preset (60, 90, 120 o 180 s) o «Reanudar descanso» lo arranca. Marcar una serie sigue abriendo la píldora **en marcha** con el descanso de esa serie, sin robar el foco.
+  - **Visibilidad del botón flotante:** solo aparece con la sesión **en curso** y sin un modal propio abierto (finalizar, cierre vacío, video de técnica, panel de la cola offline). No aparece en la vista previa de una sesión planificada, en carga, en error, sin conexión y sin caché, sin sesión, con la sesión completada u omitida ni con el acceso bloqueado. **Ocultarlo no cierra el cronómetro:** sigue contando y el aviso suena; la región `aria-live` «Descanso terminado» está siempre montada. Al cerrar con la X, el foco vuelve al botón flotante.
   - **Aviso de fin:** suena **una sola vez**. Cerrar el cronómetro lo detiene y borra su estado. No suena al recargar con el descanso ya vencido ni si el alumno vuelve más de 30 s después del fin: queda «terminado» en silencio.
   - **Fin de la sesión:** el cronómetro se cierra solo al finalizar u omitir la sesión.
   - **Honestidad con la pantalla bloqueada:** el panel dice «Con la pantalla bloqueada no podemos avisarte». La web no promete un aviso que el navegador no garantiza.
-- **RN-07 (`descansoSegundos` es un objetivo, no una medición):** Solo cambia por una acción del alumno (±15 s o un preset) sobre un cronómetro que tiene una serie vigente. Pausar, reanudar y reiniciar nunca lo envían. El cronómetro «libre» de la cabecera nunca lo envía. Los cambios de una ráfaga se agrupan en **una sola petición** con el valor final (espera de 1 s). Si la serie ya no existe, no se envía nada. La medición del descanso real sigue siendo la de §7.7.
+- **RN-07 (`descansoSegundos` es un objetivo, no una medición):** Solo cambia por una acción del alumno (±15 s o un preset) sobre un cronómetro que tiene una serie vigente. Pausar, reanudar y reiniciar nunca lo envían. El cronómetro «libre» (el que abre el botón flotante sin serie vigente, en pausa a 90 s) nunca lo envía. Los cambios de una ráfaga se agrupan en **una sola petición** con el valor final (espera de 1 s). Si la serie ya no existe, no se envía nada. La medición del descanso real sigue siendo la de §7.7.
 - **RN-08 (Lo tecleado en una serie pendiente sobrevive a una recarga):** El peso, las repeticiones y el esfuerzo que el alumno escribe en una serie sin marcar se conservan en la copia local de la sesión y se vuelven a mostrar al recargar. Aplica solo a series pendientes en ambas copias, de la misma sesión y del mismo alumno, y cada valor se valida con los límites de §7.11. Un valor inválido o vacío conserva el del servidor. En una serie completada gana siempre el servidor.
 
 ---
@@ -140,6 +143,28 @@ Then la serie pendiente muestra peso 62,5 y repeticiones 8
   And una serie ya completada conserva los valores del servidor
 ```
 
+### Escenario 9: Abrir el Cronómetro con el Botón Flotante
+```gherkin
+Given que el alumno tiene una sesión "EnProgreso" y ningún modal abierto
+  And el botón flotante "Abrir cronómetro de descanso" está visible abajo a la derecha
+When toca el botón flotante
+Then se abre el panel del cronómetro con el descanso libre en pausa a 90 s
+  And el foco queda en "Reanudar descanso"
+  And no se envía ningún descansoSegundos al servidor
+When elige el preset de 120 s
+Then el descanso arranca en 120 s y sigue sin enviarse nada al servidor
+When cierra el panel con la X
+Then el widget sale con una animación de 150 ms y el foco vuelve al botón flotante
+
+Given que el cronómetro corre
+When el alumno abre el modal de finalizar el entrenamiento
+Then el botón flotante se oculta sin cerrar el cronómetro
+  And el descanso sigue contando y el aviso suena al terminar
+
+Given que la sesión está "Planificada" (vista previa), "Completada" u "Omitida", o la pantalla está cargando, en error, sin conexión y sin caché, o con el acceso bloqueado
+Then el botón flotante no aparece
+```
+
 ---
 
 ## 6. Casos Borde y Excepciones
@@ -152,6 +177,7 @@ Then la serie pendiente muestra peso 62,5 y repeticiones 8
   - Al cargar una sesión ya `COMPLETADA` u `OMITIDA` con una clave vigente, la clave se borra.
   - El audio del aviso se desbloquea con un gesto del alumno (marcar una serie, reanudar, reiniciar, elegir un preset o ±15 s) y se reutiliza un único `AudioContext`. El fin del descanso también se anuncia en una región `aria-live`. Un fallo del aviso (`alTerminar`) queda aislado y no rompe el cronómetro.
   - Si el alumno cambia de sesión con un ajuste de descanso pendiente de envío, el ajuste se entrega a la sesión original.
+  - **Botón flotante:** el toque abre el descanso libre en pausa (nunca envía `descansoSegundos`); marcar una serie abre la píldora en marcha sin robar el foco. Si el toque no abre el cronómetro, la intención «abierto por el botón» caduca y la siguiente apertura automática no sale como panel con foco. Ocultar el botón por un modal no cierra el cronómetro ni silencia el aviso. La salida (150 ms) deja la última vista congelada, con `aria-hidden` e `inert`, sin mostrar «0:00»; píldora ↔ panel y ocultar por un modal son instantáneos. Al terminar el descanso, la píldora hace un destello breve de 2 repeticiones y no un pulso infinito. Con `prefers-reduced-motion` rige la regla global de [[00_Reglas_Desarrollo_SDD]] §6.16.
 - **Cierre de sesión (logout), cambio de usuario y sesión vencida:** las claves `guachafit_cronometro_*` se borran por prefijo para que otra persona en el mismo dispositivo no herede el descanso. El cierre por vencimiento **no** toca IndexedDB ni la cola offline (regla vigente de conservar la cola, §7.10).
 - **Borrador de series (RN-08):** una copia local corrupta no impide cargar la sesión: se usan los datos del servidor. «Sumar» y «Restar» de repeticiones parten del valor restaurado.
 - **Varios dispositivos y borrador:** en una serie pendiente prevalece lo tecleado en **este dispositivo**, porque lo tecleado en una serie sin marcar no se envía al servidor hasta pulsar «Listo». Se descartó comparar marcas de tiempo (ver [[ADR-027-cronometro-descanso-tiempo-absoluto-borrador-series]]).
@@ -313,14 +339,15 @@ Then la serie pendiente muestra peso 62,5 y repeticiones 8
 - **Evidencia:** web **3152/3152** en 376 archivos; typecheck y build con código 0.
 
 ### 7.21. Cronómetro de descanso con tiempo absoluto y borrador de series (`8bcfa95`, 2026-11-04, [[ADR-027-cronometro-descanso-tiempo-absoluto-borrador-series]])
+- **Acceso con botón flotante y animaciones** (`24d506f` y `4a84375`, 2026-11-04, [[ADR-027-cronometro-descanso-tiempo-absoluto-borrador-series]] §8): ver el último bloque de esta sección.
 - **Cronómetro como widget** (RN-06):
   - Estado con `finEnMs` (instante de fin absoluto) persistido por sesión en `localStorage` (`guachafit_cronometro_<sesionId>`). Al volver a la pestaña (`visibilitychange` y `pageshow`) recalcula el tiempo restante.
   - Píldora y panel expandido, con anillo o barra de progreso; `role="timer"`, aviso de fin en región `aria-live`, área segura (safe-area), áreas táctiles de 44 px y foco visible. Código en `lib/cronometro-descanso.ts`, `use-cronometro-descanso.ts`, `lib/aviso-descanso.ts` y `components/common/RestTimer*.tsx`.
   - Duración acotada a 10 s–10 min; el estado caduca a las 6 h.
 - **Defectos corregidos:**
   1. El cronómetro cerrado seguía sonando.
-  2. El botón «Descanso» de la cabecera abría un cronómetro «libre» y «+30» reescribía el `descansoSegundos` de la última serie marcada.
-- **Cuándo se envía `descansoSegundos`** (RN-07): solo por ±15 s o un preset sobre un cronómetro con serie vigente, con espera de 1 s y el valor final. El cronómetro «libre» de la cabecera nunca envía; pausar, reanudar y reiniciar tampoco. El ajuste pendiente al cambiar de sesión se entrega a la sesión original. Si la serie ya no existe, no se envía nada. En modo demo no se escribe ni se envía.
+  2. El botón «Descanso» de la cabecera (el acceso de entonces, sustituido después por el botón flotante) abría un cronómetro «libre» y «+30» reescribía el `descansoSegundos` de la última serie marcada.
+- **Cuándo se envía `descansoSegundos`** (RN-07): solo por ±15 s o un preset sobre un cronómetro con serie vigente, con espera de 1 s y el valor final. El cronómetro «libre» (el del botón flotante sin serie vigente; antes, el de la cabecera) nunca envía; pausar, reanudar y reiniciar tampoco. El ajuste pendiente al cambiar de sesión se entrega a la sesión original. Si la serie ya no existe, no se envía nada. En modo demo no se escribe ni se envía.
 - **Higiene del almacenamiento:** `limpiarClavesEntrenamientoLocal` borra por prefijo `guachafit_cronometro_*` en el logout, en el cambio de usuario y en `cerrarSesionPorVencimiento`. La sesión vencida no toca IndexedDB ni la cola offline (§7.10).
 - **Borrador de series** (RN-08): sin segundo almacén. Lo tecleado ya se guardaba en la copia local (`offlineDb.rutinaHoy`); ahora `combinarSeriesPendientesLocales(servidor, local)` lo vuelca sobre la sesión del servidor al cargar, antes de `cacheSesion`.
   - Solo series con `completada === false` en ambas copias, con el mismo `id` de sesión y el mismo `alumnoId`.
@@ -334,7 +361,17 @@ Then la serie pendiente muestra peso 62,5 y repeticiones 8
   - La auditoría de contraste de los controles nuevos no se midió.
   - Seguimientos abiertos (ver [[Handoff_Entrenamiento_Pendientes]]): precarga del peso con el plan; repeticiones prellenadas con el objetivo (se envía `repsLogradas ?? repsObjetivo`, un dato que parece real); desmarcar una serie sin confirmación ni deshacer; `enterKeyHint` y seleccionar el contenido al enfocar los inputs; campo de notas del modal de cierre con `text-xs` (zoom en iOS) y etiquetas de 11 px; `aria-pressed` en «Listo»; deshabilitar «Restar 15 segundos» con el descanso ya terminado; avisar también en la píldora (no solo en el panel) que con la pantalla bloqueada no suena.
   - Sincronizar el cronómetro entre pestañas se descartó por YAGNI.
+- **Botón flotante del cronómetro y animaciones** (`24d506f` y `4a84375`, 2026-11-04; escenario 9, RN-06 y ADR-027 §8):
+  - **Mecanismo:** `RestTimerFab` y `RestTimer` montan un único widget con tres estados (reposo, píldora y panel) en un portal sobre `document.body`, con `z-[45]` y área segura; la página reserva margen inferior mientras el botón es visible. La cabecera conserva solo el selector kg/lb. El toque abre el descanso libre en pausa a 90 s con el foco en «Reanudar descanso» y no envía `descansoSegundos`; marcar una serie abre la píldora en marcha sin robar el foco. Solo es visible con la sesión en curso y sin modal propio abierto; ocultarlo no cierra el cronómetro.
+  - **Movimiento:** entrada con las variantes `starting:` de Tailwind v4; salida de 150 ms (`ease-in`) solo al cerrar, con la última vista congelada (`use-capa-saliente-cronometro.ts`), `aria-hidden`, `inert` y sin «0:00»; píldora ↔ panel y ocultar por modal, instantáneos; fin del descanso con `animate-destello-fin` (2 repeticiones) en lugar de `animate-pulse`. La regla global de §6.16 sigue siendo única y lo último de `index.css`.
+  - **Dependencia nueva `tw-animate-css@1.4.0`** (MIT, sin dependencias ni scripts; importada en `index.css`). El código ya usaba 60 veces `animate-in`, `fade-in`, `zoom-in-95` y `slide-in-from-*` (todos los modales y paneles, 49 archivos), pero Tailwind v4 no las trae y no producían ninguna animación. `animate-fade-in` (`AppLayout`, en el `<main>` de todas las pantallas) no la definía nadie: ahora vive en `index.css` y anima solo la opacidad, porque con `transform` rompería lo `fixed` dentro del `<main>`. **Efecto global:** ahora todos los modales y vistas con esas clases se animan al entrar. No hay `animate-out`, `fade-out` ni `zoom-out` en el código: los modales siguen desmontándose de golpe al cerrar.
+  - **Evidencia:** lote 88/88; suite web completa **3.372/3.372**; typecheck y build sin errores. Revisión de fiabilidad: 0 BLOCKER, 4 WARNING (2 corregidos y 2 rechazados con razón) y 3 SUGGESTION (2 anotadas como seguimiento y 1 aceptada). Corregidos: la instantánea de la capa saliente solo se refresca cuando cambia algo visible, y la intención «abierto por el botón» caduca si el toque no abre el cronómetro.
+  - **No verificado en dispositivo:**
+    1. `animate-in` aplica un `transform` durante la entrada (unos 300 ms) y eso crea un bloque contenedor para descendientes `fixed`: un modal `fixed inset-0` sin portal, colgado de una página con `animate-in fade-in duration-300` (el revisor citó `AlumnoDetallePage`, `AlumnosPage`, `PagosPage` y `ModalPlanComercial`), quedaría confinado si se abre dentro de esa ventana.
+    2. El panel expandido (unos 300 px) puede tapar el input que se edita cuando sube el teclado móvil (`index.html` no declara `interactive-widget`).
+    3. El aspecto real del movimiento, iOS, la vibración y el audio no se probaron en un iPhone.
+  - **Seguimientos:** plegar el panel al enfocar un input o declarar `interactive-widget`; portalizar esos modales o evitar el `transform` de la entrada; `animate-out` y salida de los modales; y los de la lista anterior (deshabilitar «Restar 15 segundos» con el descanso terminado y avisar en la píldora de la pantalla bloqueada).
 
 ### Pendiente
 - Ninguno abierto de §7.10. El uso desde varias pestañas o dispositivos queda como límite documentado (ver §7.17 y §7.21).
-- Seguimientos de §7.21: los listados arriba en «No verificado y fuera de alcance» y la prueba en un iPhone real.
+- Seguimientos de §7.21: los listados arriba en «No verificado y fuera de alcance», los del botón flotante (plegar el panel con el teclado, modales dentro de páginas con `animate-in`, `animate-out` en los modales) y la prueba en un iPhone real.
