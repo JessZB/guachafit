@@ -1,3 +1,4 @@
+import type { Logger } from '@nestjs/common';
 import type { Database, WithTenantFn } from '@guachafit/database';
 
 /**
@@ -9,4 +10,6 @@ import type { Database, WithTenantFn } from '@guachafit/database';
 export interface ContextoEntrenador {
   db: Database;
   withTenant: WithTenantFn;
+  /** D17: bitácora de los cambios de captación (nunca debe imprimir un coach_code). */
+  logger: Logger;
 }

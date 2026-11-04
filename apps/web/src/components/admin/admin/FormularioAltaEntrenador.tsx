@@ -1,7 +1,7 @@
 /**
  * RF-010 Escenario 1 (WU Admin): formulario de alta de entrenadores.
  *
- * Componente presentacional puro (sin datos): los 6 campos con validación nativa y el envío con
+ * Componente presentacional puro (sin datos): los 5 campos con validación nativa y el envío con
  * estado de progreso. Recibe el formulario, el flag de envío y los callbacks. Recorte verbatim
  * de `AdminPage`.
  */
@@ -89,27 +89,6 @@ export function FormularioAltaEntrenador({
           placeholder="+58 412 000 0000"
           className="w-full min-h-11 px-3.5 py-2.5 rounded-xl bg-background border border-border text-foreground text-sm focus:outline-hidden focus:border-primary transition-colors"
         />
-      </div>
-
-      <div className="space-y-1.5">
-        <label htmlFor="admin-coach-code" className="text-xs font-semibold text-foreground">
-          Código de entrenador
-        </label>
-        <input
-          id="admin-coach-code"
-          required
-          minLength={4}
-          maxLength={15}
-          pattern="[A-Za-z0-9_\-]+"
-          title="Solo letras, números, guion y guion bajo (4 a 15 caracteres)"
-          value={formulario.coachCode}
-          onChange={onCambiarCampo('coachCode')}
-          placeholder="MARCOS-921"
-          className="w-full min-h-11 px-3.5 py-2.5 rounded-xl bg-background border border-border text-foreground text-sm font-mono focus:outline-hidden focus:border-primary transition-colors"
-        />
-        <p className="text-xs text-muted-foreground">
-          Será el código del enlace de captación de sus alumnos.
-        </p>
       </div>
 
       <div className="space-y-1.5">

@@ -1,6 +1,11 @@
 import {
+  Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
+  Patch,
+  Post,
   UseGuards,
   Req,
 } from '@nestjs/common';
@@ -8,7 +13,14 @@ import { EntrenadorService } from './entrenador.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { Rol, DashboardComandoDTO, PerfilEntrenadorDTO } from '@guachafit/shared';
+import {
+  ActualizarCaptacionSchema,
+  CaptacionEntrenadorResultadoDTO,
+  DashboardComandoDTO,
+  PerfilEntrenadorDTO,
+  Rol,
+} from '@guachafit/shared';
+import { parsearContrato } from '../../common/errores/parsear-contrato';
 
 @Controller('entrenador')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -25,6 +37,31 @@ export class EntrenadorController {
   async obtenerPerfil(@Req() req: any): Promise<PerfilEntrenadorDTO> {
     const coachId = req.user.entrenadorId || req.user.sub;
     return this.entrenadorService.obtenerPerfil(coachId);
+  }
+
+  /**
+   * D17: rota el enlace de captación. El código anterior deja de resolver de inmediato.
+   */
+  @Post('captacion/rotar')
+  @HttpCode(HttpStatus.OK)
+  @Roles(Rol.ENTRENADOR)
+  async rotarEnlaceCaptacion(@Req() req: any): Promise<CaptacionEntrenadorResultadoDTO> {
+    const coachId = req.user.entrenadorId || req.user.sub;
+    return this.entrenadorService.rotarEnlaceCaptacion(coachId);
+  }
+
+  /**
+   * D17: pausa o reanuda la captación por enlace (cuerpo `{ activa: boolean }`).
+   */
+  @Patch('captacion')
+  @Roles(Rol.ENTRENADOR)
+  async actualizarCaptacion(
+    @Req() req: any,
+    @Body() body: unknown
+  ): Promise<CaptacionEntrenadorResultadoDTO> {
+    const dto = parsearContrato(ActualizarCaptacionSchema, body);
+    const coachId = req.user.entrenadorId || req.user.sub;
+    return this.entrenadorService.actualizarCaptacion(coachId, dto);
   }
 
   /**

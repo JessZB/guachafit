@@ -21,7 +21,7 @@ vi.mock('../../../lib/api-client', async (importOriginal) => {
   };
 });
 
-import { apiClient } from '../../../lib/api-client';
+import { apiClient, ApiError } from '../../../lib/api-client';
 import { useValidacionCoach } from './use-validacion-coach';
 
 type MockFn = ReturnType<typeof vi.fn>;
@@ -84,8 +84,16 @@ describe('useValidacionCoach', () => {
     expect(mockApi).toHaveBeenCalledWith('/alumnos/coach/COACH1', { skipAuth: true });
   });
 
-  it('si el GET falla queda invalido', async () => {
-    mockApi.mockRejectedValue(new Error('no existe'));
+  it('si el GET falla con 404 queda invalido', async () => {
+    mockApi.mockRejectedValue(
+      new ApiError(404, {
+        type: 'about:blank',
+        status: 404,
+        title: 'Not Found',
+        detail: 'no existe',
+        timestampUtc: '2026-11-04T00:00:00.000Z',
+      })
+    );
     renderTestigo('XXXX');
 
     await waitFor(() => expect(screen.getByTestId('estado').textContent).toBe('invalido'));
@@ -93,7 +101,15 @@ describe('useValidacionCoach', () => {
   });
 
   it('revalida cuando el codigo cambia', async () => {
-    mockApi.mockRejectedValue(new Error('no existe'));
+    mockApi.mockRejectedValue(
+      new ApiError(404, {
+        type: 'about:blank',
+        status: 404,
+        title: 'Not Found',
+        detail: 'no existe',
+        timestampUtc: '2026-11-04T00:00:00.000Z',
+      })
+    );
     renderTestigo('XXXX');
     await waitFor(() => expect(screen.getByTestId('estado').textContent).toBe('invalido'));
 

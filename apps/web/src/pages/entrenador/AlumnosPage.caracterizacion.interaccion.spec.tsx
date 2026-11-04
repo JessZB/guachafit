@@ -191,6 +191,9 @@ const PERFIL_COACH: PerfilEntrenadorDTO = {
   estadoLicencia: 'vigente' as unknown as PerfilEntrenadorDTO['estadoLicencia'],
   capacidadMaxima: 50,
   telefonoContacto: '+584149990000',
+  captacionActiva: true,
+  enlaceRotadoEnUtc: null,
+  registrosPorEnlace: 0,
 };
 
 const ALTA_OK: AltaManualAlumnoResultadoDTO = {

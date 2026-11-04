@@ -9,7 +9,9 @@ import {
 } from '@guachafit/shared';
 import { BienvenidaEntrenadorEvent } from '../../notificaciones/events/eventos-correo-cuenta';
 import { publicarCorreoCuentaCaso } from './acceso-comun';
+import { coachCodeEnUso } from './coach-code-en-uso';
 import type { ContextoAuth } from './contexto-auth';
+import { generarCoachCodeUnico } from './generar-coach-code';
 
 /**
  * Creación de cuenta de Entrenador por SuperAdmin (RF-010, Escenario 1).
@@ -29,14 +31,16 @@ export async function crearEntrenador(
     throw new ConflictException('Este correo ya se encuentra registrado.');
   }
 
-  // 2. Validar coachCode único
-  const [existenteCode] = await ctx.db
-    .select()
-    .from(perfilesEntrenador)
-    .where(eq(perfilesEntrenador.coachCode, dto.coachCode.toUpperCase().trim()));
-
-  if (existenteCode) {
-    throw new ConflictException('Ese código de entrenador ya está en uso.');
+  // 2. coachCode: el indicado por el superadmin (único) o, si no viene (D17), uno aleatorio
+  //    generado por el servidor que no choque con ninguno existente.
+  let coachCode: string;
+  if (dto.coachCode) {
+    coachCode = dto.coachCode.toUpperCase().trim();
+    if (await coachCodeEnUso(ctx.db, coachCode)) {
+      throw new ConflictException('Ese código de entrenador ya está en uso.');
+    }
+  } else {
+    coachCode = await generarCoachCodeUnico((codigo) => coachCodeEnUso(ctx.db, codigo));
   }
 
   // 3. Generar token de bienvenida o hashear contraseña directa
@@ -76,7 +80,7 @@ export async function crearEntrenador(
       nombres: dto.nombres.trim(),
       apellidos: dto.apellidos.trim(),
       nombreComercial: dto.nombreComercial?.trim() || null,
-      coachCode: dto.coachCode.toUpperCase().trim(),
+      coachCode,
       capacidadMaxima: dto.capacidadMaxima,
       tasaCambioGlobal: dto.tasaCambioGlobal,
       telefonoContacto: dto.telefonoContacto.trim(),

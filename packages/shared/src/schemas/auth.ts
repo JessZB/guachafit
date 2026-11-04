@@ -30,7 +30,13 @@ export const CrearEntrenadorSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).max(100).optional(),
   nombreComercial: z.string().min(2).max(150).optional(),
-  coachCode: z.string().min(4).max(15).regex(/^[A-Za-z0-9_-]+$/, 'El código del entrenador solo puede tener letras, números y guiones'),
+  // D17: opcional. Sin código, el servidor genera uno aleatorio (misma validación si viene).
+  coachCode: z
+    .string()
+    .min(4)
+    .max(15)
+    .regex(/^[A-Za-z0-9_-]+$/, 'El código del entrenador solo puede tener letras, números y guiones')
+    .optional(),
   capacidadMaxima: z.number().int().min(1).default(50),
   tasaCambioGlobal: z.string().regex(TASA_STRING_REGEX).default('65.0000'),
   telefonoContacto: z.string().min(8).max(30),

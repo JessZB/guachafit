@@ -77,6 +77,8 @@ const coachOperable = {
   nombreComercial: 'AlexFit Gym',
   estadoLicencia: EstadoLicencia.ACTIVA,
   activo: true,
+  captacionActiva: true,
+  capacidadMaxima: 50,
 };
 
 /**
@@ -94,6 +96,7 @@ function crearBdTransaccional() {
         const nombre = getTableName(tabla);
         const consulta: any = {
           innerJoin: () => consulta,
+          for: () => consulta,
           where: () =>
             Promise.resolve(nombre === 'perfiles_entrenador' ? [coachOperable] : [...(tablas[nombre] ?? [])]),
         };

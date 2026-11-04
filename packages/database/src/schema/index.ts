@@ -196,6 +196,16 @@ export const perfilesEntrenador = pgTable('perfiles_entrenador', {
     .notNull(),
   telefonoContacto: varchar('telefono_contacto', { length: 30 }).notNull(),
   estadoLicencia: estadoLicenciaEnum('estado_licencia').default(EstadoLicencia.ACTIVA).notNull(),
+  /**
+   * D17: interruptor de captación por enlace. `false` = el enlace deja de admitir registros nuevos
+   * (la web y la API responden como si el código no existiera). No afecta al alta manual.
+   */
+  captacionActiva: boolean('captacion_activa').default(true).notNull(),
+  /**
+   * D17: instante de la última rotación del `coach_code`. `null` = nunca rotado. Delimita el
+   * contador de registros del enlace vigente (`registrosPorEnlace`).
+   */
+  enlaceRotadoEnUtc: timestamp('enlace_rotado_en_utc', { withTimezone: true }),
   createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
   updatedAtUtc: timestamp('updated_at_utc', { withTimezone: true }).defaultNow().notNull(),
 });
@@ -269,6 +279,11 @@ export const perfilesAlumno = pgTable(
     saldoAFavorUsd: numeric('saldo_a_favor_usd', { precision: 14, scale: 2 })
       .default('0.00')
       .notNull(),
+    /**
+     * D17: cómo nació el perfil. `manual` = alta por el entrenador; `enlace` = autorregistro por el
+     * enlace de captación. El CHECK `ck_perfiles_alumno_origen_registro` vive en la migración 0025.
+     */
+    origenRegistro: varchar('origen_registro', { length: 16 }).default('manual').notNull(),
     deletedAtUtc: timestamp('deleted_at_utc', { withTimezone: true }),
     createdAtUtc: timestamp('created_at_utc', { withTimezone: true }).defaultNow().notNull(),
     updatedAtUtc: timestamp('updated_at_utc', { withTimezone: true }).defaultNow().notNull(),

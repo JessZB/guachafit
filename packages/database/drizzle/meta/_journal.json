@@ -176,6 +176,13 @@
       "when": 1793715579157,
       "tag": "0024_zona_horaria_definida",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793805697869,
+      "tag": "0025_captacion_enlace_coach",
+      "breakpoints": true
     }
   ]
 }

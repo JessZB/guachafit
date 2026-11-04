@@ -29,6 +29,12 @@ export interface PerfilEntrenadorDTO {
   estadoLicencia: EstadoLicencia;
   capacidadMaxima: number;
   telefonoContacto: string;
+  /** D17: `false` = el enlace de captación está pausado. */
+  captacionActiva: boolean;
+  /** D17: ISO 8601 UTC de la última rotación del enlace; `null` si nunca se rotó. */
+  enlaceRotadoEnUtc: string | null;
+  /** D17: alumnos registrados por el enlace vigente. */
+  registrosPorEnlace: number;
 }
 
 /**

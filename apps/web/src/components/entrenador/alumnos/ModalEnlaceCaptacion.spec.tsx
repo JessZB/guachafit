@@ -32,6 +32,14 @@ function montar(parcial: Partial<Parameters<typeof ModalEnlaceCaptacion>[0]> = {
     copiado: false,
     errorCopia: null as string | null,
     onCopiar: vi.fn(),
+    captacionActiva: true,
+    registrosPorEnlace: 0,
+    rotando: false,
+    cambiandoCaptacion: false,
+    errorCaptacion: null as string | null,
+    mensajeCaptacion: null as string | null,
+    onRotarEnlace: vi.fn(),
+    onAlternarCaptacion: vi.fn(),
     ...parcial,
   };
   render(<ModalEnlaceCaptacion {...props} />);

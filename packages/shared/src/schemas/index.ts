@@ -9,3 +9,4 @@ export * from './nutricion';
 export * from './antropometria';
 export * from './finanzas';
 export * from './notificaciones';
+export * from './captacion';

@@ -43,6 +43,7 @@ const coachBase = {
   estadoLicencia: EstadoLicencia.ACTIVA,
   // RF-010 §6 (CASCADA-COACH): la cuenta del coach también forma parte de su operabilidad.
   activo: true,
+  captacionActiva: true,
   capacidadMaxima: 50,
   telefonoContacto: '+584121234567',
 };
@@ -174,19 +175,30 @@ describe('WU-E (RF-011 RN-05): Alta manual entrega el enlace de activación', ()
 // =============================================================================
 describe('WU-E (RF-011 RN-06/RN-07.1): resolución pública del coach_code', () => {
   function crearDbResolucion(coach: any | null) {
-    return {
+    const db: any = {
       select: () => ({
-        from: () => {
+        from: (table?: any) => {
           // RF-010 §6 (CASCADA-COACH): el resolver une `perfiles_entrenador` con `usuarios`
           // para evaluar la operabilidad completa (licencia vigente + cuenta habilitada).
           const consulta: any = {
             innerJoin: () => consulta,
-            where: () => Promise.resolve(coach ? [coach] : []),
+            for: () => consulta,
+            where: () =>
+              Promise.resolve(
+                table && getTableName(table) === 'perfiles_alumno'
+                  ? []
+                  : coach
+                  ? [coach]
+                  : []
+              ),
           };
           return consulta;
         },
       }),
-    } as any;
+      execute: async () => undefined,
+    };
+    db.transaction = async (cb: any) => cb(db);
+    return db;
   }
 
   it('resuelve un coach con licencia ACTIVA sin exponer datos sensibles', async () => {
@@ -288,12 +300,15 @@ describe('WU-E (RF-011 RN-07): registro público valida licencia y notifica al c
           // `usuarios` para exigir licencia vigente Y cuenta habilitada.
           const consulta: any = {
             innerJoin: () => consulta,
+            for: () => consulta,
             where: () =>
               Promise.resolve(
                 getTableName(table) === 'perfiles_entrenador'
                   ? coach
                     ? [coach]
                     : []
+                  : getTableName(table) === 'perfiles_alumno'
+                  ? []
                   : usuarioExistente
                   ? [usuarioExistente]
                   : []

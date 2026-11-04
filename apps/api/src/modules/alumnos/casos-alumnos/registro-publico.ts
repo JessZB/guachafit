@@ -1,13 +1,19 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
-import { eq, perfilesAlumno, perfilesEntrenador, usuarios } from '@guachafit/database';
+import { ConflictException } from '@nestjs/common';
+import { eq, perfilesAlumno, usuarios } from '@guachafit/database';
 import {
   EstadoAlumno,
-  EstadoLicencia,
   EstadoUsuario,
+  OrigenRegistro,
   RegistroPublicoAlumnoDTO,
   Rol,
 } from '@guachafit/shared';
 import { AlumnoRegistradoEvent } from '../../notificaciones/events/eventos-notificacion';
+import {
+  buscarCoachPublico,
+  coachAdmiteCaptacion,
+  enlaceNoDisponible,
+  leerCupoOcupado,
+} from './captacion-publica';
 import type { ContextoAlumnos } from './contexto-alumnos';
 
 /**
@@ -67,54 +73,63 @@ function notificarCoachNuevoAlumno(
  *
  * RN-07: valida el código y la operabilidad del coach (cuenta habilitada y licencia vigente),
  * crea la cuenta vinculada al tenant y notifica al coach del nuevo registro.
- * Movido sin cambios desde `AlumnosService.registroPublico` (P3).
+ *
+ * D17: el ciclo de vida del enlace gobierna el acceso. Orden de comprobaciones: código → cuenta y
+ * licencia → captación activa → cupo → correo no repetido. Las cuatro primeras negativas responden
+ * el MISMO 404 uniforme (no se revela el motivo). El conteo del cupo y el INSERT ocurren dentro de
+ * la misma transacción con la fila del entrenador bloqueada (`FOR UPDATE`), así que dos registros
+ * simultáneos no superan la capacidad. El hash de la contraseña se calcula antes de la transacción
+ * para no retener ese bloqueo. El alumno queda con `origen_registro = 'enlace'`.
  */
 export async function registroPublico(
   ctx: ContextoAlumnos,
   dto: RegistroPublicoAlumnoDTO
 ) {
-  const [coach] = await ctx.db
-    .select({
-      usuarioId: perfilesEntrenador.usuarioId,
-      coachCode: perfilesEntrenador.coachCode,
-      nombres: perfilesEntrenador.nombres,
-      apellidos: perfilesEntrenador.apellidos,
-      nombreComercial: perfilesEntrenador.nombreComercial,
-      estadoLicencia: perfilesEntrenador.estadoLicencia,
-      activo: usuarios.activo,
-    })
-    .from(perfilesEntrenador)
-    .innerJoin(usuarios, eq(usuarios.id, perfilesEntrenador.usuarioId))
-    .where(eq(perfilesEntrenador.coachCode, dto.coachCode.trim().toUpperCase()));
+  const codigo = dto.coachCode.trim().toUpperCase();
 
-  if (!coach) {
-    throw new NotFoundException(
-      'El código de entrenador no es válido o no está disponible. Por favor contacta a tu coach.'
-    );
+  // Filtro barato y sin bloqueo: descarta códigos inexistentes, rotados o inoperables antes de
+  // abrir la transacción del tenant (el `usuarioId` del coach define el contexto RLS).
+  const coachPrevio = await buscarCoachPublico(ctx.db, codigo);
+
+  if (!coachPrevio || !coachAdmiteCaptacion(coachPrevio)) {
+    throw enlaceNoDisponible();
   }
 
-  if (coach.estadoLicencia !== EstadoLicencia.ACTIVA || !coach.activo) {
-    throw new NotFoundException(
-      'El código de entrenador no es válido o no está disponible. Por favor contacta a tu coach.'
-    );
-  }
-
-  const [existente] = await ctx.db
-    .select()
-    .from(usuarios)
-    .where(eq(usuarios.email, dto.email.toLowerCase().trim()));
-
-  if (existente) {
-    throw new ConflictException(
-      'Este correo ya se encuentra registrado. Si eres tú, inicia sesión o recupera tu contraseña.'
-    );
-  }
-
+  // El hash (costoso) se calcula antes de abrir la transacción: así no alarga el bloqueo de la fila
+  // del entrenador ni retiene una conexión del pool, y un código inválido nunca gasta CPU en él.
   const passwordHash = await ctx.cryptoService.hashPassword(dto.password);
 
-  const { nuevoUsuario, nuevoPerfil } = await ctx.withTenant(
-    { entrenadorId: coach.usuarioId },
+  const { coach, nuevoUsuario, nuevoPerfil } = await ctx.withTenant(
+    { entrenadorId: coachPrevio.usuarioId },
     async (tx) => {
+      // Se vuelve a leer con la fila bloqueada: una pausa, rotación o suspensión ocurrida desde el
+      // filtro previo corta el registro, y los registros concurrentes del mismo coach se serializan.
+      const coach = await buscarCoachPublico(tx, codigo, { bloquear: true });
+
+      if (
+        !coach ||
+        coach.usuarioId !== coachPrevio.usuarioId ||
+        !coachAdmiteCaptacion(coach)
+      ) {
+        throw enlaceNoDisponible();
+      }
+
+      const cupoOcupado = await leerCupoOcupado(tx, coach.usuarioId);
+      if (cupoOcupado >= coach.capacidadMaxima) {
+        throw enlaceNoDisponible();
+      }
+
+      const [existente] = await tx
+        .select()
+        .from(usuarios)
+        .where(eq(usuarios.email, dto.email.toLowerCase().trim()));
+
+      if (existente) {
+        throw new ConflictException(
+          'Este correo ya se encuentra registrado. Si eres tú, inicia sesión o recupera tu contraseña.'
+        );
+      }
+
       const [nuevoUsuario] = await tx
         .insert(usuarios)
         .values({
@@ -139,10 +154,11 @@ export async function registroPublico(
           telefonoWhatsapp: dto.telefonoWhatsapp.trim(),
           modalidad: dto.modalidad,
           estadoActivacion: EstadoAlumno.ACTIVO,
+          origenRegistro: OrigenRegistro.ENLACE,
         })
         .returning();
 
-      return { nuevoUsuario, nuevoPerfil };
+      return { coach, nuevoUsuario, nuevoPerfil };
     }
   );
 

@@ -2,10 +2,10 @@
  * RF-010 Escenario 1 (WU Admin): formulario y payload del alta de entrenadores.
  *
  * Lógica pura extraída de `AdminPage` (sin React ni red): estado inicial del formulario y
- * construcción del cuerpo del `POST /auth/entrenador` (recortes, normalización del
- * `coachCode` y `nombreComercial` solo cuando no está vacío).
+ * construcción del cuerpo del `POST /auth/entrenador` (recortes y `nombreComercial` solo
+ * cuando no está vacío). D17: el código del entrenador ya no se escribe a mano; lo genera
+ * el servidor y llega en la respuesta del alta.
  */
-import { normalizarCoachCode } from './onboarding-links';
 
 /** Campos del formulario de alta de entrenador del panel admin. */
 export interface FormularioAltaEntrenador {
@@ -13,7 +13,6 @@ export interface FormularioAltaEntrenador {
   apellidos: string;
   email: string;
   telefonoContacto: string;
-  coachCode: string;
   nombreComercial: string;
 }
 
@@ -23,7 +22,6 @@ export const FORMULARIO_INICIAL: FormularioAltaEntrenador = {
   apellidos: '',
   email: '',
   telefonoContacto: '',
-  coachCode: '',
   nombreComercial: '',
 };
 
@@ -33,11 +31,10 @@ export interface PayloadAltaEntrenador {
   apellidos: string;
   email: string;
   telefonoContacto: string;
-  coachCode: string;
   nombreComercial?: string;
 }
 
-/** Construye el cuerpo del alta recortando, normalizando el código y omitiendo el comercial vacío. */
+/** Construye el cuerpo del alta recortando y omitiendo el comercial vacío. */
 export function construirPayloadAltaEntrenador(
   formulario: FormularioAltaEntrenador
 ): PayloadAltaEntrenador {
@@ -47,7 +44,6 @@ export function construirPayloadAltaEntrenador(
     apellidos: formulario.apellidos.trim(),
     email: formulario.email.trim(),
     telefonoContacto: formulario.telefonoContacto.trim(),
-    coachCode: normalizarCoachCode(formulario.coachCode),
     ...(nombreComercial ? { nombreComercial } : {}),
   };
 }

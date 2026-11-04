@@ -190,6 +190,9 @@ const PERFIL_COACH: PerfilEntrenadorDTO = {
   estadoLicencia: 'vigente' as unknown as PerfilEntrenadorDTO['estadoLicencia'],
   capacidadMaxima: 50,
   telefonoContacto: '+584149990000',
+  captacionActiva: true,
+  enlaceRotadoEnUtc: null,
+  registrosPorEnlace: 0,
 };
 
 /** ISO UTC del mediodía local de hace `n` días (mediodía = sin dependencia de zona horaria). */
@@ -387,6 +390,26 @@ describe('AlumnosPage · mis alumnos (contrato D)', () => {
     expect(mockCopiar).toHaveBeenCalledWith(
       `${window.location.origin}/onboarding?coach=COACH123`,
     );
+  });
+
+  it('D17 · al abrir el modal "Invitar" se vuelve a consultar /entrenador/perfil para refrescar captación', async () => {
+    montar();
+    await esperarDirectorio();
+
+    const llamadasPerfilIniciales = mockApi.mock.calls.filter(
+      (c) => c[0] === '/entrenador/perfil',
+    ).length;
+    expect(llamadasPerfilIniciales).toBe(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Invitar' }));
+    await screen.findByRole('dialog');
+
+    await waitFor(() => {
+      const llamadasPerfil = mockApi.mock.calls.filter(
+        (c) => c[0] === '/entrenador/perfil',
+      ).length;
+      expect(llamadasPerfil).toBe(2);
+    });
   });
 
   it('D6 · control "Ordenar por": default alta reciente; cambiar envía orden=<valor> y vuelve a página 1', async () => {

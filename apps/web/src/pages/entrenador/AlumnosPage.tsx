@@ -15,7 +15,7 @@
  *   vacío → lista → diálogos.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../context/auth-context';
@@ -49,6 +49,12 @@ export function AlumnosPage() {
 
   const directorio = useDirectorioAlumnos({ isDemoMode });
   const captacion = useEnlaceCaptacion({ isDemoMode });
+  // D17: al abrir el modal «Invitar» se refresca el enlace (otra sesión pudo rotarlo o pausarlo).
+  const { recargarCaptacion } = captacion;
+  useEffect(() => {
+    if (invitacionAbierta) recargarCaptacion();
+  }, [invitacionAbierta, recargarCaptacion]);
+
   const alta = useAltaManualAlumno({
     onAltaExitosa: () => {
       directorio.setPagina(1);
@@ -195,6 +201,14 @@ export function AlumnosPage() {
           copiado={captacion.isCopied}
           errorCopia={captacion.errorCopiaCaptacion}
           onCopiar={captacion.handleCopyLink}
+          captacionActiva={captacion.captacionActiva}
+          registrosPorEnlace={captacion.registrosPorEnlace}
+          rotando={captacion.rotando}
+          cambiandoCaptacion={captacion.cambiandoCaptacion}
+          errorCaptacion={captacion.errorCaptacion}
+          mensajeCaptacion={captacion.mensajeCaptacion}
+          onRotarEnlace={captacion.rotarEnlace}
+          onAlternarCaptacion={captacion.alternarCaptacion}
         />
       )}
 

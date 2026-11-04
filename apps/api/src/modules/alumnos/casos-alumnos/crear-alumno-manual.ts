@@ -5,6 +5,7 @@ import {
   AltaManualAlumnoResultadoDTO,
   EstadoAlumno,
   EstadoUsuario,
+  OrigenRegistro,
   Rol,
 } from '@guachafit/shared';
 import {
@@ -73,6 +74,7 @@ export async function crearAlumnoManual(
         modalidad: dto.modalidad,
         tasaFijadaOverride: dto.tasaFijadaOverride || null,
         estadoActivacion: EstadoAlumno.ACTIVO,
+        origenRegistro: OrigenRegistro.MANUAL,
       })
       .returning();
 

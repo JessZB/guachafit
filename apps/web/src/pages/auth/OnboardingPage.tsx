@@ -8,7 +8,9 @@ import {
 } from '../../lib/formulario-registro';
 import { useValidacionCoach } from '../../components/auth/onboarding/use-validacion-coach';
 import { useRegistroOnboarding } from '../../components/auth/onboarding/use-registro-onboarding';
-import { CodigoCoachBloque } from '../../components/auth/onboarding/CodigoCoachBloque';
+import { CoachVinculado } from '../../components/auth/onboarding/CoachVinculado';
+import { EnlaceRegistroNoValido } from '../../components/auth/onboarding/EnlaceRegistroNoValido';
+import { VerificacionEnlace } from '../../components/auth/onboarding/VerificacionEnlace';
 import { AlertaErrorRegistro } from '../../components/auth/onboarding/AlertaErrorRegistro';
 import { ExitoRegistro } from '../../components/auth/onboarding/ExitoRegistro';
 import { CampoWhatsapp } from '../../components/common/CampoWhatsapp';
@@ -21,6 +23,10 @@ import { ArrowLeft, UserPlus } from 'lucide-react';
  * `?coach_code=`) y se resuelve contra la API pública (`useValidacionCoach`). Solo se
  * permite enviar cuando el código existe y la licencia del coach está vigente; el registro
  * viaja con ESE código validado, no con uno inventado por el cliente.
+ *
+ * D17: el código no se puede escribir ni editar. Sin código o con un código que la API no
+ * resuelve (rotado, captación pausada, cupo lleno) se muestra la página de «enlace no
+ * válido», sin formulario; un fallo de red o de servidor ofrece reintentar.
  */
 export function OnboardingPage() {
   const [searchParams] = useSearchParams();
@@ -30,8 +36,7 @@ export function OnboardingPage() {
     searchParams.get('coach') ?? searchParams.get('coach_code')
   );
 
-  const [coachCode, setCoachCode] = useState(codigoDeUrl);
-  const { estado: estadoCoach, coachInfo } = useValidacionCoach(coachCode);
+  const { estado: estadoCoach, coachInfo, reintentar } = useValidacionCoach(codigoDeUrl);
 
   const [nombres, setNombres] = useState('');
   const [apellidos, setApellidos] = useState('');
@@ -61,7 +66,7 @@ export function OnboardingPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    void registrar(estadoCoach === 'valido' && coachInfo ? coachInfo.coachCode : null, {
+    void registrar(coachInfo ? coachInfo.coachCode : null, {
       nombres,
       apellidos,
       email,
@@ -74,6 +79,12 @@ export function OnboardingPage() {
       modalidad,
     });
   };
+
+  if (estadoCoach === 'vacio') return <EnlaceRegistroNoValido motivo="sin-codigo" />;
+  if (estadoCoach === 'invalido') return <EnlaceRegistroNoValido motivo="invalido" />;
+  if (estadoCoach === 'validando' || estadoCoach === 'error') {
+    return <VerificacionEnlace estado={estadoCoach} onReintentar={reintentar} />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 bg-background text-foreground">
@@ -107,12 +118,7 @@ export function OnboardingPage() {
             <ExitoRegistro />
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
-              <CodigoCoachBloque
-                coachCode={coachCode}
-                estado={estadoCoach}
-                coachInfo={coachInfo}
-                onCambiar={setCoachCode}
-              />
+              {coachInfo && <CoachVinculado coachInfo={coachInfo} />}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
@@ -261,7 +267,7 @@ export function OnboardingPage() {
 
               <button
                 type="submit"
-                disabled={isLoading || estadoCoach !== 'valido'}
+                disabled={isLoading}
                 className="w-full min-h-11 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:brightness-110 active:scale-98 transition-all cursor-pointer disabled:opacity-50 mt-2"
               >
                 {isLoading ? 'Creando tu cuenta...' : 'Crear mi cuenta'}

@@ -9,3 +9,4 @@ export * from './finanzas';
 export * from './cartera';
 export * from './notificaciones';
 export * from './admin';
+export * from './captacion';

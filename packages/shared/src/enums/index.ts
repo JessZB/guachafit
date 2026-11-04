@@ -221,3 +221,12 @@ export enum OrdenDirectorioAlumnos {
   SIN_ENTRENAR = 'sin_entrenar',
   MAYOR_RACHA = 'mayor_racha',
 }
+
+/**
+ * D17: cómo nació el perfil del alumno. `manual` = alta por el entrenador; `enlace` = autorregistro
+ * por el enlace de captación (`perfiles_alumno.origen_registro`, con CHECK en la migración 0025).
+ */
+export enum OrigenRegistro {
+  MANUAL = 'manual',
+  ENLACE = 'enlace',
+}

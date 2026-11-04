@@ -32,7 +32,7 @@ vi.mock('../../lib/api-client', async (importOriginal) => {
   };
 });
 
-import { apiClient } from '../../lib/api-client';
+import { apiClient, ApiError } from '../../lib/api-client';
 import { MENSAJE_COACH_NO_DISPONIBLE } from '../../lib/onboarding-links';
 import { OnboardingPage } from './OnboardingPage';
 
@@ -103,22 +103,27 @@ afterEach(() => {
 });
 
 describe('OnboardingPage caracterizacion (WU-E RF-011)', () => {
-  it('1: sin ?coach= muestra la ayuda, el boton queda deshabilitado y no llama a la API', async () => {
+  it('1: sin ?coach= muestra la página de enlace no válido sin formulario y no llama a la API', async () => {
     mockCoachResuelve();
     renderPagina('/onboarding');
 
     expect(
-      screen.getByText('Pega o escribe el código que te compartió tu entrenador.')
+      screen.getByRole('heading', { level: 1, name: 'Este enlace de registro no es válido' })
     ).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Crear mi cuenta' })).toHaveProperty(
-      'disabled',
-      true
-    );
+    expect(
+      screen.getByText(
+        'Al enlace le falta el código de tu entrenador. Pídele que te comparta su enlace de registro completo.'
+      )
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Ya tengo cuenta · Iniciar sesión' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Crear mi cuenta' })).toBeNull();
+    expect(screen.queryByLabelText('Código de tu entrenador')).toBeNull();
+    expect(document.getElementById('onboarding-coach')).toBeNull();
     await new Promise((r) => setTimeout(r, 600));
     expect(mockApi).not.toHaveBeenCalled();
   });
 
-  it('2: con ?coach= valido resuelve contra GET /alumnos/coach/:code con skipAuth y habilita el envio', async () => {
+  it('2: con ?coach= valido resuelve contra GET /alumnos/coach/:code con skipAuth y habilita el envio sin input de código', async () => {
     mockCoachResuelve();
     renderPagina('/onboarding?coach=coach1');
 
@@ -128,35 +133,57 @@ describe('OnboardingPage caracterizacion (WU-E RF-011)', () => {
       'disabled',
       false
     );
+    expect(screen.queryByLabelText('Código de tu entrenador')).toBeNull();
+    expect(document.getElementById('onboarding-coach')).toBeNull();
   });
 
-  it('3: codigo con formato invalido muestra el mensaje de no disponible sin llamar a la API', async () => {
+  it('3: codigo con formato invalido muestra la página de enlace no válido sin llamar a la API', async () => {
     mockCoachResuelve();
     renderPagina('/onboarding?coach=ab!');
 
-    expect(await screen.findByText(MENSAJE_COACH_NO_DISPONIBLE)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Crear mi cuenta' })).toHaveProperty(
-      'disabled',
-      true
-    );
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Este enlace de registro no es válido' })
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        'El enlace venció, se reemplazó por uno nuevo o no está disponible. Pídele a tu entrenador un enlace nuevo.'
+      )
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Ya tengo cuenta · Iniciar sesión' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Crear mi cuenta' })).toBeNull();
     expect(mockApi).not.toHaveBeenCalled();
   });
 
-  it('4: si el GET del coach falla muestra el mensaje de no disponible y bloquea el envio', async () => {
-    mockApi.mockRejectedValue(new Error('no existe'));
+  it('4: si el GET del coach falla con 404 muestra la página de enlace no válido sin formulario', async () => {
+    mockApi.mockRejectedValue(
+      new ApiError(404, {
+        type: 'about:blank',
+        status: 404,
+        title: 'Not Found',
+        detail: 'El código de entrenador no es válido o no está disponible.',
+        timestampUtc: '2026-11-04T00:00:00.000Z',
+      })
+    );
     renderPagina('/onboarding?coach=XXXX');
 
-    expect(await screen.findByText(MENSAJE_COACH_NO_DISPONIBLE)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Crear mi cuenta' })).toHaveProperty(
-      'disabled',
-      true
-    );
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Este enlace de registro no es válido' })
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        'El enlace venció, se reemplazó por uno nuevo o no está disponible. Pídele a tu entrenador un enlace nuevo.'
+      )
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Ya tengo cuenta · Iniciar sesión' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Crear mi cuenta' })).toBeNull();
   });
 
   it('5: registro exitoso hace POST a /alumnos/registro-publico con skipAuth y el coachCode validado', async () => {
     mockCoachResuelve();
     renderPagina('/onboarding?coach=coach1');
     await esperarCoachValido();
+    expect(screen.queryByLabelText('Código de tu entrenador')).toBeNull();
+    expect(document.getElementById('onboarding-coach')).toBeNull();
     rellenarFormularioValido();
 
     fireEvent.click(screen.getByRole('button', { name: 'Crear mi cuenta' }));
@@ -251,5 +278,7 @@ describe('OnboardingPage caracterizacion (WU-E RF-011)', () => {
 
     await esperarCoachValido();
     expect(mockApi).toHaveBeenCalledWith('/alumnos/coach/COACH1', { skipAuth: true });
+    expect(screen.queryByLabelText('Código de tu entrenador')).toBeNull();
+    expect(document.getElementById('onboarding-coach')).toBeNull();
   });
 });

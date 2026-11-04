@@ -8,12 +8,15 @@
  *
  * Cascarón con `role="dialog"`, `aria-modal` y `aria-labelledby`; Escape y foco los gobierna
  * `useDialogoAccesible` desde el contenedor (el `ref` se adjunta aquí). Cierre con "Cerrar" y backdrop.
+ * D17: con el código cargado se añade `PanelCaptacion` (contador, pausa y rotación del enlace con
+ * confirmación inline).
  * §6: controles de 44px (`min-h-11`), texto ≥ 12px, peso ≤ 700.
  * Presentacional: solo props (R1).
  */
 
 import type { RefObject } from 'react';
 import { Check, Copy, MessageSquare, Share2, X } from 'lucide-react';
+import { PanelCaptacion } from './PanelCaptacion';
 
 export interface ModalEnlaceCaptacionProps {
   refDialogo: RefObject<HTMLDivElement | null>;
@@ -25,6 +28,14 @@ export interface ModalEnlaceCaptacionProps {
   copiado: boolean;
   errorCopia: string | null;
   onCopiar: () => void;
+  captacionActiva: boolean;
+  registrosPorEnlace: number;
+  rotando: boolean;
+  cambiandoCaptacion: boolean;
+  errorCaptacion: string | null;
+  mensajeCaptacion?: string | null;
+  onRotarEnlace: () => void | Promise<void>;
+  onAlternarCaptacion: () => void | Promise<void>;
 }
 
 export function ModalEnlaceCaptacion({
@@ -37,6 +48,14 @@ export function ModalEnlaceCaptacion({
   copiado,
   errorCopia,
   onCopiar,
+  captacionActiva,
+  registrosPorEnlace,
+  rotando,
+  cambiandoCaptacion,
+  errorCaptacion,
+  mensajeCaptacion,
+  onRotarEnlace,
+  onAlternarCaptacion,
 }: ModalEnlaceCaptacionProps) {
   // Con error de carga la descripción queda vacía: el aviso de error ya explica la situación.
   const descripcion = registrationUrl
@@ -139,6 +158,19 @@ export function ModalEnlaceCaptacion({
             </span>
           )}
         </div>
+
+        {coachCode && !isDemoMode && (
+          <PanelCaptacion
+            captacionActiva={captacionActiva}
+            registrosPorEnlace={registrosPorEnlace}
+            rotando={rotando}
+            cambiandoCaptacion={cambiandoCaptacion}
+            errorCaptacion={errorCaptacion}
+            mensajeCaptacion={mensajeCaptacion}
+            onRotarEnlace={onRotarEnlace}
+            onAlternarCaptacion={onAlternarCaptacion}
+          />
+        )}
       </div>
     </div>
   );

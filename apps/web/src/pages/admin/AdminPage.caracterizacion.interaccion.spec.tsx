@@ -197,9 +197,6 @@ function rellenarAltaValida(): void {
   fireEvent.change(screen.getByLabelText('Teléfono de contacto'), {
     target: { value: '+58 412 000 0000' },
   });
-  fireEvent.change(screen.getByLabelText('Código de entrenador'), {
-    target: { value: 'carlos-1' },
-  });
 }
 
 beforeEach(() => {
@@ -388,7 +385,7 @@ describe('AdminPage · caracterización: listado y paginación', () => {
 // ---------------------------------------------------------------------------
 
 describe('AdminPage · caracterización: alta de entrenadores', () => {
-  it('C10 · el formulario expone los 6 campos con sus etiquetas accesibles', async () => {
+  it('C10 · el formulario expone los 5 campos con sus etiquetas accesibles (sin código manual)', async () => {
     montar();
     await esperarListado();
     expect(screen.getByRole('heading', { name: 'Crear entrenador' })).toBeTruthy();
@@ -396,7 +393,7 @@ describe('AdminPage · caracterización: alta de entrenadores', () => {
     expect(screen.getByLabelText('Apellidos')).toBeTruthy();
     expect(screen.getByLabelText('Correo electrónico')).toBeTruthy();
     expect(screen.getByLabelText('Teléfono de contacto')).toBeTruthy();
-    expect(screen.getByLabelText('Código de entrenador')).toBeTruthy();
+    expect(screen.queryByLabelText('Código de entrenador')).toBeNull();
     expect(screen.getByLabelText(/Nombre comercial/)).toBeTruthy();
   });
 
@@ -417,7 +414,6 @@ describe('AdminPage · caracterización: alta de entrenadores', () => {
       apellidos: 'Mendoza',
       email: 'carlos@gym.com',
       telefonoContacto: '+58 412 000 0000',
-      coachCode: 'CARLOS-1',
     });
     // El alta nueva aparece en la lista sin recargar la página: se refetchea.
     await waitFor(() => expect(getsListado().length).toBeGreaterThan(getsAntes), {
@@ -440,7 +436,6 @@ describe('AdminPage · caracterización: alta de entrenadores', () => {
       apellidos: 'Mendoza',
       email: 'carlos@gym.com',
       telefonoContacto: '+58 412 000 0000',
-      coachCode: 'CARLOS-1',
       nombreComercial: 'Carlos Fitness',
     });
   });

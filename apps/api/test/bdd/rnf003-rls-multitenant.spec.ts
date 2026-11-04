@@ -765,6 +765,7 @@ const coachPerfilFinanzas = {
   estadoLicencia: 'activa',
   // RF-010 §6 (CASCADA-COACH): la operabilidad del coach une licencia y cuenta habilitada.
   activo: true,
+  captacionActiva: true,
 };
 
 const usuarioAlumnoFinanzas = { id: ALUMNO_USER_ID, email: 'alumno@guachafit.com' };

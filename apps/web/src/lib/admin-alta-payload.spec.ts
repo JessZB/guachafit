@@ -17,19 +17,17 @@ describe('admin-alta-payload: formulario inicial y payload del alta', () => {
       apellidos: '',
       email: '',
       telefonoContacto: '',
-      coachCode: '',
       nombreComercial: '',
     });
   });
 
-  it('recorta los campos y normaliza el código a mayúsculas sin espacios', () => {
+  it('recorta los campos al construir el payload', () => {
     expect(
       construirPayloadAltaEntrenador({
         nombres: '  Carlos ',
         apellidos: 'Mendoza ',
         email: ' carlos@gym.com ',
         telefonoContacto: ' +58 412 000 0000 ',
-        coachCode: ' carlos-1 ',
         nombreComercial: '',
       })
     ).toEqual({
@@ -37,7 +35,6 @@ describe('admin-alta-payload: formulario inicial y payload del alta', () => {
       apellidos: 'Mendoza',
       email: 'carlos@gym.com',
       telefonoContacto: '+58 412 000 0000',
-      coachCode: 'CARLOS-1',
     });
   });
 
@@ -47,7 +44,6 @@ describe('admin-alta-payload: formulario inicial y payload del alta', () => {
       apellidos: 'Mendoza',
       email: 'carlos@gym.com',
       telefonoContacto: '+58 412 000 0000',
-      coachCode: 'CARLOS-1',
     };
 
     expect(construirPayloadAltaEntrenador({ ...base, nombreComercial: '' })).not.toHaveProperty(
@@ -65,7 +61,6 @@ describe('admin-alta-payload: formulario inicial y payload del alta', () => {
         apellidos: 'Mendoza',
         email: 'carlos@gym.com',
         telefonoContacto: '+58 412 000 0000',
-        coachCode: 'CARLOS-1',
         nombreComercial: '  Carlos Fitness  ',
       })
     ).toEqual({
@@ -73,7 +68,6 @@ describe('admin-alta-payload: formulario inicial y payload del alta', () => {
       apellidos: 'Mendoza',
       email: 'carlos@gym.com',
       telefonoContacto: '+58 412 000 0000',
-      coachCode: 'CARLOS-1',
       nombreComercial: 'Carlos Fitness',
     });
   });
