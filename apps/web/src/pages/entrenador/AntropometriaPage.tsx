@@ -14,7 +14,8 @@ import { useTabsAccesibles } from "../../lib/use-tabs-accesibles";
 import { VisorFoto } from "../../components/common/VisorFoto";
 import { AvisoDatosOffline } from "../../components/common/AvisoDatosOffline";
 import { AvisoErrorRecarga } from "../../components/common/AvisoErrorRecarga";
-import { EstadoCarga } from "../../components/ui/EstadoCarga";
+import { CargaConEsqueleto } from "../../components/ui/CargaConEsqueleto";
+import { EsqueletoListaFilas } from "../../components/ui/esqueletos";
 import { EstadoError } from "../../components/ui/EstadoError";
 import { ComparadorAntropometrico } from "../../components/entrenador/ComparadorAntropometrico";
 import { ColaPendientesAntropometria } from "../../components/entrenador/antropometria/ColaPendientesAntropometria";
@@ -226,7 +227,11 @@ export function AntropometriaPage() {
               )}
 
               {/* Primera carga: estado de carga; nunca el vacío (sería un falso "sin pendientes") */}
-              {isLoading && <EstadoCarga texto="Cargando evaluaciones…" />}
+              {isLoading && (
+                <CargaConEsqueleto texto="Cargando evaluaciones…">
+                  <EsqueletoListaFilas conAvatar filas={3} />
+                </CargaConEsqueleto>
+              )}
 
               {!isLoading && !errorSinDatos && (
                 <ColaPendientesAntropometria

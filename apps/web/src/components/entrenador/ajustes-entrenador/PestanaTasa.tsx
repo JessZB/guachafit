@@ -9,7 +9,8 @@
 import { aTextoEntrada, etiquetaFuenteTasa, tasaGuardadaDe } from '../../../lib/ajustes-entrenador-tasas';
 import { useFormatoNumero } from '../../../lib/use-formato-numero';
 import { TarjetaAjustes } from '../../ajustes/CampoAjustes';
-import { EstadoCarga } from '../../ui/EstadoCarga';
+import { CargaConEsqueleto } from '../../ui/CargaConEsqueleto';
+import { EsqueletoFormulario } from '../../ui/esqueletos';
 import { EstadoError } from '../../ui/EstadoError';
 import { ConversorTasas } from './ConversorTasas';
 import { FormularioTasa } from './FormularioTasa';
@@ -33,7 +34,9 @@ export function PestanaTasa({ tasas }: { tasas: ResultadoTasasCambio }) {
   return (
     <TarjetaAjustes titulo="Tasa de cambio" descripcion="La tasa con la que cobras en bolívares.">
       {tasas.isLoadingTasas ? (
-        <EstadoCarga texto="Cargando tasa…" claseContenedor="min-h-[120px]" />
+        <CargaConEsqueleto texto="Cargando tasa…" claseContenedor="min-h-[120px]">
+          <EsqueletoFormulario campos={3} />
+        </CargaConEsqueleto>
       ) : tasas.tasasError ? (
         <EstadoError
           titulo="No pudimos cargar la tasa"

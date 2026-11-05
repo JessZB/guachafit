@@ -20,7 +20,8 @@ import { useFrescuraOffline } from '../../lib/use-frescura-offline';
 import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import { AvisoErrorRecarga } from '../../components/common/AvisoErrorRecarga';
 import { AsignacionMasivaPlantilla } from '../../components/entrenador/AsignacionMasivaPlantilla';
-import { EstadoCarga } from '../../components/ui/EstadoCarga';
+import { CargaConEsqueleto } from '../../components/ui/CargaConEsqueleto';
+import { EsqueletoRejillaTarjetas } from '../../components/ui/esqueletos';
 import { EstadoError } from '../../components/ui/EstadoError';
 import { EstadoVacio } from '../../components/ui/EstadoVacio';
 import { Dumbbell, SearchX } from 'lucide-react';
@@ -132,7 +133,9 @@ export function PlantillasPage() {
 
       {/* Estados de la lista */}
       {banco.cargandoInicial ? (
-        <EstadoCarga texto="Cargando plantillas…" />
+        <CargaConEsqueleto texto="Cargando plantillas…">
+          <EsqueletoRejillaTarjetas cantidad={6} />
+        </CargaConEsqueleto>
       ) : errorSinDatos ? (
         <EstadoError
           titulo="No se pudieron cargar las plantillas"

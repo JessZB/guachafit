@@ -40,6 +40,8 @@ export interface ReporteHoy {
   reporteEncolado: boolean;
   confirmandoEnvio: boolean;
   formularioBloqueado: boolean;
+  /** `true` desde el montaje hasta que la primera consulta del reporte de hoy resuelve (éxito, vacío o error). */
+  cargandoReporte: boolean;
   existingCheckin: CheckinNutricionalDetalleDTO | null;
   setExistingCheckin: (checkin: CheckinNutricionalDetalleDTO | null) => void;
   errorCargaReporte: ErrorCargaReporte | null;
@@ -77,6 +79,8 @@ export function useReporteHoy(
   // Fallo al consultar el reporte de hoy que NO es "aún no hay reporte": se muestra con reintento.
   const [errorCargaReporte, setErrorCargaReporte] = useState<ErrorCargaReporte | null>(null);
   const [existingCheckin, setExistingCheckin] = useState<CheckinNutricionalDetalleDTO | null>(null);
+  // Carga sin saltos: el formulario espera a la primera respuesta para aparecer ya rehidratado.
+  const [cargandoReporte, setCargandoReporte] = useState(true);
   // RF-012: alumno pausado no puede enviar reportes; la pantalla informativa reemplaza al formulario.
   const [bloqueo, setBloqueo] = useState<BloqueoAlumno | null>(null);
 
@@ -125,6 +129,9 @@ export function useReporteHoy(
       const error = clasificarErrorCargaReporteHoy(err, navigator.onLine);
       setErrorCargaReporte(error);
       despacharReporte({ tipo: 'carga', resultado: error ? 'error' : 'sin-reporte' });
+    } finally {
+      // Todas las ramas (datos, null, error) liberan el esqueleto del formulario.
+      setCargandoReporte(false);
     }
   }, [hoyLocal, timezoneCliente, aplicarCheckinCargado, rehidratar]);
 
@@ -160,6 +167,7 @@ export function useReporteHoy(
     reporteEncolado,
     confirmandoEnvio,
     formularioBloqueado,
+    cargandoReporte,
     existingCheckin,
     setExistingCheckin,
     errorCargaReporte,

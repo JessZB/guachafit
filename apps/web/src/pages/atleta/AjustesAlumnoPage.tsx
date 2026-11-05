@@ -11,6 +11,17 @@ import { MatrizPreferenciasNotificacion } from '../../components/notificaciones/
 import { ZonaHorariaPerfil } from '../../components/common/ZonaHorariaPerfil';
 import { useAuth } from '../../context/auth-context';
 import { HORARIO_VENTANA_CHECKIN } from '../../lib/nutricion-checkin';
+import { CargaConEsqueleto } from '../../components/ui/CargaConEsqueleto';
+import { Skeleton } from '../../components/ui/Skeleton';
+
+// Se declara antes de los párrafos del archivo: el guardián de carga sin saltos prohíbe texto de carga en párrafos.
+function EsperaZonaHoraria() {
+  return (
+    <CargaConEsqueleto texto="Cargando tu zona horaria…" claseContenedor="min-h-14">
+      <Skeleton className="h-14 w-full rounded-xl" />
+    </CargaConEsqueleto>
+  );
+}
 
 function SeccionZonaHoraria() {
   const { user, isDemoMode, actualizarZonaHoraria } = useAuth();
@@ -40,9 +51,7 @@ function SeccionZonaHoraria() {
           onGuardada={(zona) => actualizarZonaHoraria(zona, user.id)}
         />
       ) : (
-        <p role="status" className="text-sm text-muted-foreground">
-          Cargando tu zona horaria…
-        </p>
+        <EsperaZonaHoraria />
       )}
     </section>
   );

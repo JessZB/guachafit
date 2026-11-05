@@ -1,5 +1,6 @@
 import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
-import { EstadoCarga } from '../../components/ui/EstadoCarga';
+import { CargaConEsqueleto } from '../../components/ui/CargaConEsqueleto';
+import { EsqueletoListaFilas, EsqueletoTarjetasKpi } from '../../components/ui/esqueletos';
 import { EstadoError } from '../../components/ui/EstadoError';
 import { useFrescuraOffline } from '../../lib/use-frescura-offline';
 import { FranjaAtencionDashboard } from '../../components/entrenador/dashboard/FranjaAtencionDashboard';
@@ -11,6 +12,7 @@ import { DESTINOS_ENTRENADOR } from '../../lib/etiquetas-dominio';
 export function DashboardPage() {
   const { dashboard, isLoading, error, recargar } = useDashboardComando();
   const { isOnline } = useFrescuraOffline(null);
+  const cargandoResumen = !dashboard && isLoading;
 
   return (
     <div className="space-y-6">
@@ -30,9 +32,7 @@ export function DashboardPage() {
       {dashboard && <AvisoDatosOffline url="/entrenador/dashboard-comando" />}
 
       {/* D2: error honesto con reintento (sin KPIs demo fuera del modo demo) */}
-      {!dashboard && isLoading ? (
-        <EstadoCarga texto="Cargando el resumen" claseContenedor="min-h-[200px]" />
-      ) : !dashboard && error && !isOnline ? (
+      {cargandoResumen ? null : !dashboard && error && !isOnline ? (
         <AvisoDatosOffline variante="sin-datos" />
       ) : !dashboard && error ? (
         <EstadoError
@@ -45,6 +45,19 @@ export function DashboardPage() {
 
       {/* D4 (UX-13): lo que hay que atender hoy; visible también sin datos */}
       <FranjaAtencionDashboard dashboard={dashboard} />
+
+      {/* Carga sin saltos: la franja no se mueve; el esqueleto ocupa el lugar de listas y KPIs */}
+      {cargandoResumen && (
+        <CargaConEsqueleto texto="Cargando el resumen">
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <EsqueletoListaFilas filas={3} />
+              <EsqueletoListaFilas filas={3} />
+            </div>
+            <EsqueletoTarjetasKpi cantidad={3} />
+          </div>
+        </CargaConEsqueleto>
+      )}
 
       {/* Listas de alerta temprana */}
       {dashboard && <ListasAlertaTemprana bandejas={dashboard.bandejasRapidas} />}

@@ -2,7 +2,7 @@
  * Conciliation tray (orchestrator container).
  *
  * Estados honestos (UX-05, §6.6):
- * - carga inicial: `EstadoCarga` anunciado, sin contador ni "Bandeja al Día" falsos;
+ * - carga inicial: `CargaConEsqueleto` anunciado, sin contador ni "Bandeja al Día" falsos;
  * - vacío real: solo con respuesta del servidor sin transacciones;
  * - error sin datos: `EstadoError` a pantalla completa con reintento;
  * - recarga fallida con datos: la lista se conserva y `AvisoErrorRecarga` ofrece reintentar;
@@ -20,7 +20,9 @@ import { CLAVE_PENDIENTES_NAVEGACION } from '../../lib/insignias-pendientes';
 import { Paginacion } from '../../components/common/Paginacion';
 import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import { AvisoErrorRecarga } from '../../components/common/AvisoErrorRecarga';
-import { EstadoCarga } from '../../components/ui/EstadoCarga';
+import { CargaConEsqueleto } from '../../components/ui/CargaConEsqueleto';
+import { Skeleton } from '../../components/ui/Skeleton';
+import { EsqueletoListaFilas } from '../../components/ui/esqueletos';
 import { EstadoError } from '../../components/ui/EstadoError';
 import { useFrescuraOffline } from '../../lib/use-frescura-offline';
 import { useFormatoNumero } from '../../lib/use-formato-numero';
@@ -111,7 +113,12 @@ export function ConciliacionPage() {
           onReintentar={() => bandeja.recargar()}
         />
       ) : !bandeja.tieneDatos ? (
-        <EstadoCarga texto="Cargando la bandeja de pagos" claseContenedor="min-h-[200px]" />
+        <CargaConEsqueleto texto="Cargando la bandeja de pagos" claseContenedor="min-h-[200px]">
+          <div className="space-y-4">
+            <Skeleton className="h-12 w-full rounded-2xl" />
+            <EsqueletoListaFilas filas={4} />
+          </div>
+        </CargaConEsqueleto>
       ) : bandeja.total === 0 ? (
         <BandejaVaciaConciliacion />
       ) : (

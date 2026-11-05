@@ -11,7 +11,8 @@ import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import { BloqueoAlumnoPanel } from '../../components/common/BloqueoAlumnoPanel';
 import { SyncQueuePanel } from '../../components/common/SyncQueuePanel';
 import { RestTimer } from '../../components/common/RestTimer';
-import { EstadoCarga } from '../../components/ui/EstadoCarga';
+import { CargaConEsqueleto } from '../../components/ui/CargaConEsqueleto';
+import { EsqueletoListaFilas } from '../../components/ui/esqueletos';
 import { EstadoError } from '../../components/ui/EstadoError';
 import { VistaPreviaSesion } from '../../components/atleta/VistaPreviaSesion';
 import { ModoFoco } from '../../components/atleta/ModoFoco';
@@ -61,8 +62,12 @@ export function EntrenamientoPage() {
     rpePorEjercicio } = entrenamiento;
 
   if (isLoading && !sesion && !semanaProgreso) {
-    // §M2 de la consolidación: el spinner vive en `ui/EstadoCarga` (con `role="status"`, H-8).
-    return <EstadoCarga claseContenedor="min-h-[50vh]" />;
+    // Carga sin saltos: `role="status"` inmediato y esqueleto visual tras 150 ms (ui/CargaConEsqueleto).
+    return (
+      <CargaConEsqueleto claseContenedor="min-h-[50vh]">
+        <EsqueletoListaFilas />
+      </CargaConEsqueleto>
+    );
   }
 
   // RF-012: pantalla de bloqueo informativa (pausado / suspendido por pago / archivado) en la

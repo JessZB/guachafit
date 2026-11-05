@@ -37,7 +37,8 @@ import { PestanaAntropometriaAlumno } from '../../components/entrenador/alumno-d
 import { ModalControlAntropometrico } from '../../components/entrenador/alumno-detalle/ModalControlAntropometrico';
 import { useGuardarExpediente } from '../../components/entrenador/alumno-detalle/use-guardar-expediente';
 import { useCicloVidaAlumno } from '../../components/entrenador/alumno-detalle/use-ciclo-vida-alumno';
-import { EstadoCarga } from '../../components/ui/EstadoCarga';
+import { CargaConEsqueleto } from '../../components/ui/CargaConEsqueleto';
+import { EsqueletoCabeceraPestanas } from '../../components/ui/esqueletos';
 import { EstadoError } from '../../components/ui/EstadoError';
 import { ArrowLeft } from 'lucide-react';
 
@@ -120,7 +121,13 @@ export function AlumnoDetallePage() {
     planActivoId: expediente.alumno?.planActivoId ?? null,
   });
   const alumno = expediente.alumno;
-  if (expediente.isLoading) return <EstadoCarga texto="Cargando Expediente Deportivo 360°..." />;
+  if (expediente.isLoading) {
+    return (
+      <CargaConEsqueleto texto="Cargando Expediente Deportivo 360°...">
+        <EsqueletoCabeceraPestanas />
+      </CargaConEsqueleto>
+    );
+  }
   const error = expediente.error;
   if (error || !alumno) {
     return (

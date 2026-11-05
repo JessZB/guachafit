@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import type { MiPerfilDTO } from '@guachafit/shared';
 import { resolverUrlApi } from '../../lib/api-client';
 import { AvisoDatosOffline } from '../common/AvisoDatosOffline';
+import { CargaConEsqueleto } from '../ui/CargaConEsqueleto';
+import { EsqueletoFormulario } from '../ui/esqueletos';
 
 /**
  * RF-018: estados de carga del perfil propio, compartidos por las pantallas de Ajustes de todos
@@ -29,10 +31,9 @@ export function ContenidoConPerfil({
 }) {
   if (cargando && !perfil) {
     return (
-      <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Cargando tu perfil…
-      </p>
+      <CargaConEsqueleto texto="Cargando tu perfil…">
+        <EsqueletoFormulario campos={3} />
+      </CargaConEsqueleto>
     );
   }
   if (error || !perfil) {

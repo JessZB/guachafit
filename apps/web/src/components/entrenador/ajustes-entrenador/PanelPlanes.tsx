@@ -12,7 +12,8 @@ import type { PlanMembresiaDetalleDTO } from '@guachafit/shared';
 import { pluralizar } from '../../../lib/pluralizar';
 import { AvisosAjustes } from '../../ajustes/CampoAjustes';
 import { BotonTactil } from '../../ui/BotonTactil';
-import { EstadoCarga } from '../../ui/EstadoCarga';
+import { CargaConEsqueleto } from '../../ui/CargaConEsqueleto';
+import { EsqueletoRejillaTarjetas } from '../../ui/esqueletos';
 import { EstadoError } from '../../ui/EstadoError';
 import { EstadoVacio } from '../../ui/EstadoVacio';
 import { TarjetaPlanComercial } from './TarjetaPlanComercial';
@@ -46,7 +47,11 @@ export function PanelPlanes({
 }: PanelPlanesProps) {
   // Primera carga: indicador en lugar de una lista vacía sin explicación.
   if (isLoadingPlanes && planes.length === 0) {
-    return <EstadoCarga texto="Cargando planes…" />;
+    return (
+      <CargaConEsqueleto texto="Cargando planes…">
+        <EsqueletoRejillaTarjetas cantidad={3} />
+      </CargaConEsqueleto>
+    );
   }
 
   return (

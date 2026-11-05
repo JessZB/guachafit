@@ -228,6 +228,7 @@ describe('NutricionPage · caracterización (ventana y bloqueo)', () => {
 describe('NutricionPage · caracterización (fotos)', () => {
   it('rechaza el formato inválido con aviso y sin agregar nada', async () => {
     renderPagina();
+    await screen.findByRole('button', { name: /Guardar reporte nutricional/ });
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
 
     cambiarArchivos(input, [new File(['texto'], 'nota.txt', { type: 'text/plain' })]);
@@ -239,6 +240,7 @@ describe('NutricionPage · caracterización (fotos)', () => {
 
   it('al intentar la quinta foto avisa del máximo del día', async () => {
     renderPagina();
+    await screen.findByRole('button', { name: /Guardar reporte nutricional/ });
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
 
     cambiarArchivos(input, [fotoJpeg('a.jpg'), fotoJpeg('b.jpg'), fotoJpeg('c.jpg'), fotoJpeg('d.jpg')]);

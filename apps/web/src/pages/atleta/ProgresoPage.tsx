@@ -18,7 +18,8 @@ import { BloqueoAlumnoPanel } from '../../components/common/BloqueoAlumnoPanel';
 import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import { GraficoEvolucion } from '../../components/common/GraficoEvolucion';
 import { VisorFoto } from '../../components/common/VisorFoto';
-import { EstadoCarga } from '../../components/ui/EstadoCarga';
+import { CargaConEsqueleto } from '../../components/ui/CargaConEsqueleto';
+import { EsqueletoTarjetasKpi } from '../../components/ui/esqueletos';
 import { DialogoConfirmacion } from '../../components/common/DialogoConfirmacion';
 import type { EvolucionCorporalDTO, FotoAntropometriaDetalleDTO } from '@guachafit/shared';
 import type { EscenarioDemoAntropometria } from '../../lib/demo-antropometria';
@@ -124,7 +125,11 @@ function ProgresoPageContenido() {
 
   // PRO-01: solo bloquear con spinner de pantalla completa en primera carga sin datos
   if (isLoading && !evolucion) {
-    return <EstadoCarga />;
+    return (
+      <CargaConEsqueleto>
+        <EsqueletoTarjetasKpi cantidad={3} />
+      </CargaConEsqueleto>
+    );
   }
 
   const sinFotos =

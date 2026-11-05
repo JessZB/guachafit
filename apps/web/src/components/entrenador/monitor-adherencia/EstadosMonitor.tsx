@@ -16,12 +16,17 @@
 import { Link } from 'react-router-dom';
 import { ArrowRight, Search, Users } from 'lucide-react';
 import { triggerHaptic } from '../../../lib/haptics';
-import { EstadoCarga } from '../../ui/EstadoCarga';
+import { CargaConEsqueleto } from '../../ui/CargaConEsqueleto';
+import { EsqueletoListaFilas } from '../../ui/esqueletos';
 import { EstadoError } from '../../ui/EstadoError';
 import { EstadoVacio } from '../../ui/EstadoVacio';
 
 export function CargaMonitor() {
-  return <EstadoCarga texto="Cargando monitor de adherencia…" />;
+  return (
+    <CargaConEsqueleto texto="Cargando monitor de adherencia…">
+      <EsqueletoListaFilas filas={5} />
+    </CargaConEsqueleto>
+  );
 }
 
 export function ErrorMonitor({ mensaje, onReintentar }: { mensaje: string; onReintentar: () => void }) {

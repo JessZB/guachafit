@@ -9,6 +9,8 @@ import { useAuth } from '../../context/auth-context';
 import { BloqueoAlumnoPanel } from '../../components/common/BloqueoAlumnoPanel';
 import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import { VisorFoto } from '../../components/common/VisorFoto';
+import { CargaConEsqueleto } from '../../components/ui/CargaConEsqueleto';
+import { EsqueletoFormulario } from '../../components/ui/esqueletos';
 import { ErrorCargaReporteHoy } from '../../components/nutricion/ErrorCargaReporteHoy';
 import { SelectorSemaforo } from '../../components/nutricion/SelectorSemaforo';
 import { useVentanaCheckin } from '../../components/atleta/nutricion/use-ventana-checkin';
@@ -63,7 +65,7 @@ export function NutricionPage() {
   const reporte = useReporteHoy(hoyLocal, timezoneCliente, isDemoMode, user?.id, rehidratar);
   const {
     existingCheckin, reporteRegistradoHoy, reporteEncolado, confirmandoEnvio,
-    formularioBloqueado, fotosEncoladas, errorCargaReporte, mostrarErrorCarga,
+    formularioBloqueado, cargandoReporte, fotosEncoladas, errorCargaReporte, mostrarErrorCarga,
     avisoVisible, errorSemaforo, setErrorSemaforo, grupoSemaforoRef,
     bloqueo, setBloqueo, urlCheckinHoy, cargarReporteHoy,
   } = reporte;
@@ -186,63 +188,73 @@ export function NutricionPage() {
         }
       />
 
-      {/* Semáforo del día: grupo con nombre; cada opción anuncia si está elegida. */}
-      <SelectorSemaforo
-        valor={semaforo}
-        onCambiar={(valor) => {
-          setSemaforo(valor);
-          setErrorSemaforo(null);
-        }}
-        deshabilitado={formularioDeshabilitado}
-        error={errorSemaforo}
-        nota={
-          reporteRegistradoHoy
-            ? 'Tu reporte de hoy ya quedó registrado. Solo lectura; podrás registrar el próximo mañana.'
-            : null
-        }
-        refGrupo={grupoSemaforoRef}
-      />
+      {/* Carga sin saltos: mientras llega el reporte de hoy, el cuerpo del formulario es un
+          esqueleto; al resolver aparece ya rehidratado. */}
+      {cargandoReporte ? (
+        <CargaConEsqueleto texto="Cargando tu reporte de hoy…">
+          <EsqueletoFormulario campos={4} />
+        </CargaConEsqueleto>
+      ) : (
+        <>
+          {/* Semáforo del día: grupo con nombre; cada opción anuncia si está elegida. */}
+          <SelectorSemaforo
+            valor={semaforo}
+            onCambiar={(valor) => {
+              setSemaforo(valor);
+              setErrorSemaforo(null);
+            }}
+            deshabilitado={formularioDeshabilitado}
+            error={errorSemaforo}
+            nota={
+              reporteRegistradoHoy
+                ? 'Tu reporte de hoy ya quedó registrado. Solo lectura; podrás registrar el próximo mañana.'
+                : null
+            }
+            refGrupo={grupoSemaforoRef}
+          />
 
-      {/* Datos opcionales */}
-      <FormularioDatosReporte
-        aguaLitros={aguaLitros}
-        calorias={calorias}
-        proteina={proteina}
-        notas={notas}
-        deshabilitado={formularioDeshabilitado}
-        onCambiarAgua={setAguaLitros}
-        onCambiarCalorias={setCalorias}
-        onCambiarProteina={setProteina}
-        onCambiarNotas={setNotas}
-      />
+          {/* Datos opcionales */}
+          <FormularioDatosReporte
+            aguaLitros={aguaLitros}
+            calorias={calorias}
+            proteina={proteina}
+            notas={notas}
+            deshabilitado={formularioDeshabilitado}
+            onCambiarAgua={setAguaLitros}
+            onCambiarCalorias={setCalorias}
+            onCambiarProteina={setProteina}
+            onCambiarNotas={setNotas}
+          />
 
-      {/* RN-03: diario fotográfico */}
-      <DiarioFotografico
-        fotos={fotosPlatos}
-        isProcesandoFotos={isProcesandoFotos}
-        fotosError={fotosError}
-        formularioBloqueado={formularioBloqueado}
-        inputRef={inputFotosRef}
-        onElegirArchivos={(archivos) => void agregarFotos(archivos)}
-        onQuitarFoto={quitarFoto}
-        onCambiarTipoComida={cambiarTipoComida}
-      />
+          {/* RN-03: diario fotográfico */}
+          <DiarioFotografico
+            fotos={fotosPlatos}
+            isProcesandoFotos={isProcesandoFotos}
+            fotosError={fotosError}
+            formularioBloqueado={formularioBloqueado}
+            inputRef={inputFotosRef}
+            onElegirArchivos={(archivos) => void agregarFotos(archivos)}
+            onQuitarFoto={quitarFoto}
+            onCambiarTipoComida={cambiarTipoComida}
+          />
 
-      {/* Submit + avisos */}
-      <AccionesGuardarReporte
-        isLoading={isLoading}
-        conFotos={fotosPlatos.length > 0}
-        reporteRegistradoHoy={reporteRegistradoHoy}
-        reporteEncolado={reporteEncolado}
-        confirmandoEnvio={confirmandoEnvio}
-        fotosEncoladas={fotosEncoladas}
-        puedeReportar={puedeReportar} zonaPerfil={zonaPerfil}
-        deshabilitado={formularioDeshabilitado}
-        fechaRegistradaTexto={formatFechaLargaCalendario(existingCheckin?.fecha ?? hoyLocal) ?? hoyLocal}
-        aviso={avisoVisible}
-        isDemoMode={isDemoMode}
-        onGuardar={() => void handleSaveCheckin()}
-      />
+          {/* Submit + avisos */}
+          <AccionesGuardarReporte
+            isLoading={isLoading}
+            conFotos={fotosPlatos.length > 0}
+            reporteRegistradoHoy={reporteRegistradoHoy}
+            reporteEncolado={reporteEncolado}
+            confirmandoEnvio={confirmandoEnvio}
+            fotosEncoladas={fotosEncoladas}
+            puedeReportar={puedeReportar} zonaPerfil={zonaPerfil}
+            deshabilitado={formularioDeshabilitado}
+            fechaRegistradaTexto={formatFechaLargaCalendario(existingCheckin?.fecha ?? hoyLocal) ?? hoyLocal}
+            aviso={avisoVisible}
+            isDemoMode={isDemoMode}
+            onGuardar={() => void handleSaveCheckin()}
+          />
+        </>
+      )}
 
       {/* Galería del día (RN-03): visible una vez registrado el reporte */}
       {existingCheckin && existingCheckin.fotosPlatos.length > 0 && (

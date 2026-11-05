@@ -12,7 +12,8 @@ import { FormularioReportePago } from '../../components/atleta/pagos/FormularioR
 import { SubidaComprobantePago } from '../../components/atleta/pagos/SubidaComprobantePago';
 import { PestanaHistorialPagos } from '../../components/atleta/pagos/PestanaHistorialPagos';
 import { ModalComprobantePago } from '../../components/atleta/pagos/ModalComprobantePago';
-import { EstadoCarga } from '../../components/ui/EstadoCarga';
+import { CargaConEsqueleto } from '../../components/ui/CargaConEsqueleto';
+import { EsqueletoTarjetasKpi } from '../../components/ui/esqueletos';
 import { EstadoError } from '../../components/ui/EstadoError';
 import { EstadoVacio } from '../../components/ui/EstadoVacio';
 import { Receipt } from 'lucide-react';
@@ -94,7 +95,11 @@ export function PagosPage() {
   const [modalComprobante, setModalComprobante] = useState<{ url: string | null } | null>(null);
 
   if (isLoading) {
-    return <EstadoCarga />;
+    return (
+      <CargaConEsqueleto>
+        <EsqueletoTarjetasKpi cantidad={3} />
+      </CargaConEsqueleto>
+    );
   }
 
   return (

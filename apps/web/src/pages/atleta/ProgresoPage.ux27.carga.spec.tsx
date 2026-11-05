@@ -55,8 +55,8 @@ vi.mock('../../lib/api-client', () => ({
   resolverUrlApi: vi.fn().mockReturnValue('http://test'),
 }));
 
-vi.mock('../../components/ui/EstadoCarga', () => ({
-  EstadoCarga: () => <div data-testid="estado-carga">Cargando…</div>,
+vi.mock('../../components/ui/CargaConEsqueleto', () => ({
+  CargaConEsqueleto: () => <div data-testid="estado-carga">Cargando…</div>,
 }));
 
 vi.mock('../../components/atleta/progreso/HubProgreso', () => ({

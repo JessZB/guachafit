@@ -15,6 +15,17 @@ vi.mock('../../context/auth-context', () => ({
   useAuth: () => ({ user: { id: '11111111-1111-4111-8111-111111111111' }, isDemoMode: false }),
 }));
 
+vi.mock('../../components/atleta/nutricion/use-reporte-hoy', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../components/atleta/nutricion/use-reporte-hoy')>();
+  return {
+    ...actual,
+    useReporteHoy: (...args: Parameters<typeof actual.useReporteHoy>) => ({
+      ...actual.useReporteHoy(...args),
+      cargandoReporte: false,
+    }),
+  };
+});
+
 beforeAll(() => {
   // 19:00 locales: dentro de la ventana del reporte, para ver el formulario habilitado.
   vi.useFakeTimers({ toFake: ['Date'] });
