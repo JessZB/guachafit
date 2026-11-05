@@ -54,6 +54,29 @@ Lote 112/112 y suite web completa **3.612/3.612**; typecheck y build en 0. Proba
 
 ## 8. Plan de fases
 1. **Transiciones entre módulos** (este ADR).
-2. Carga sin saltos: primitiva `Skeleton` compartida, skeletons con la forma de cada vista y retraso del indicador para no parpadear.
+2. ✅ Carga sin saltos (§9): primitiva `Skeleton` compartida, esqueletos con la forma de cada vista y retraso del indicador de 150 ms. Quedan el fallback de rutas y las metas de Nutrición (ronda 2b).
 3. Botones: estado «cargando» en `BotonTactil`, `focus-visible` global y los 5 botones de envío sin spinner.
 4. Menús y desplegables sin salida animada (menú de cuenta, selector de tamaño de página, menús de acciones).
+
+## 9. Addendum 2026-11-05: fase 2, carga sin saltos (esqueletos)
+
+### 9.1. Decisión
+- **Primitivas** (`components/ui`): `Skeleton` (bloque `aria-hidden` con `animate-pulse`), presets en `esqueletos.tsx` (`EsqueletoTarjetasKpi`, `EsqueletoListaFilas`, `EsqueletoRejillaTarjetas`, `EsqueletoFormulario`, `EsqueletoCabeceraPestanas`; cada uno con `data-esqueleto` y `data-esqueleto-bloque`) y `CargaConEsqueleto`.
+- **`CargaConEsqueleto`** expone **de inmediato** `role="status"` + `aria-busy` + el texto de carga en `sr-only` (lectores de pantalla y specs existentes) y dibuja el esqueleto visual solo tras **150 ms** de carga continua (`useIndicadorRetrasado`): las cargas rápidas no parpadean.
+- **13 vistas** sustituyen su `EstadoCarga` por esqueletos a su medida y con el mismo texto de carga: Entrenamiento, Progreso, Pagos, Dashboard (la franja de atención sigue visible y el esqueleto va debajo), Conciliación, Ficha de alumno, Plantillas, Antropometría, Monitor de adherencia, Ajustes del entrenador (planes y tasa), Ajustes (perfil y seguridad) y zona horaria del alumno.
+- **Nutrición:** `use-reporte-hoy` expone `cargandoReporte` y el cuerpo del formulario se sustituye por un esqueleto hasta que llega el reporte de hoy; el formulario aparece ya rehidratado y no se puede guardar antes de saber si ya existe un reporte.
+- No cambian `CarteraPage` y `AlumnosPage` (ya tenían esqueleto), `CoachMenuPage` (el saludo solo cambia de ancho) ni el fallback de rutas de `AppLayout` (ver §9.3).
+
+### 9.2. Alternativas descartadas
+- Ocultar el texto de carga hasta los 150 ms: rompería los specs y dejaría a los lectores de pantalla sin anuncio.
+- Migrar los 14 hooks de carga propios a react-query para conservar lo cargado: fuera de alcance; solo 4 vistas usan caché.
+- Una altura fija por esqueleto en lugar de `min-h`: el contenido real varía.
+
+### 9.3. Límites y seguimiento
+- **Fallback de rutas** (`AppLayout`, `Suspense`): sigue siendo un spinner «Cargando contenido…». Es lo que se ve la primera vez que se entra a cada módulo (carga del código de la ruta). Pendiente de la ronda 2b.
+- **Sección de metas de Nutrición** (`SeccionMetasNutricionales`): sigue con `EstadoCarga`, así que mientras carga hay dos regiones `role="status"` y un spinner junto al esqueleto del reporte. Pendiente de la ronda 2b.
+- **Nutrición** midió un salto de layout de 0,076 al cargar (reserva de alto del esqueleto frente al formulario real).
+- Sugerencias de la revisión: doble región de estado en Nutrición, contraste sutil del esqueleto en modo oscuro y anuncio de un `role="status"` estático en lectores de pantalla.
+
+### 9.4. Evidencia
+Lote 112/112 y suite web completa **3.700/3.700**; typecheck y build en 0. Revisión de fiabilidad: 0 BLOCKER, 0 WARNING, 3 SUGGESTION. Cinco specs previos solo cambiaron el nombre del componente o ganaron esperas (`EstadosMonitor.estructura`, `NutricionPage.caracterizacion`, `NutricionPage.spec` con el hook mockeado, `ProgresoPage.ux27.carga` y `.url`). Probado en Chrome con la red del API retrasada 1,5 s: los esqueletos del Panel, la ficha de alumno, Pagos y Nutrición aparecen tras 150 ms, sin spinner de vista, y el salto de layout medido fue 0 en casi todas (0,0003 a 0,0006 en dos; 0,076 en Nutrición). En la primera visita de cada módulo se vio el spinner del fallback de rutas, que es el pendiente de §9.3.

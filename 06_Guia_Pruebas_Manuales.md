@@ -539,6 +539,13 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - **Límites conocidos:** Atrás/Adelante del navegador vuelve siempre al inicio de la página; los cambios internos de «Pagos» y «Progreso» (hub ↔ nuevo reporte) no se funden; el foco queda en el enlace pulsado y no se anuncia el cambio de vista.
 
 
+- [ ] **Carga sin saltos (2026-11-05, [[ADR-028-transiciones-entre-modulos-view-transitions]] §9):** con una conexión lenta (DevTools → Network → «Slow 4G»), entra a Panel, ficha de un alumno, Plantillas, Conciliación, Monitor de adherencia y Ajustes (entrenador) y a Entrenamiento, Progreso, Pagos, Nutrición y Ajustes (alumno).
+  - **Esqueleto:** mientras carga aparecen bloques grises con un pulso suave **con la forma de lo que va a llegar** (tarjetas, filas, rejilla o formulario), no un círculo girando; al llegar los datos el contenido ocupa su lugar **sin saltar**.
+  - **Cargas rápidas:** con buena conexión no debe verse ningún parpadeo del esqueleto (solo aparece si la carga pasa de ~0,15 s).
+  - **Panel:** la franja «Atención» sigue visible con «—» y el esqueleto va debajo.
+  - **Nutrición:** mientras carga el reporte de hoy no hay formulario editable ni botón de guardar; al llegar, el formulario sale ya relleno. Se ve todavía el girando de «Cargando tus metas…» (pendiente de la ronda 2b).
+  - **Primera visita a un módulo:** puede verse un instante el girando de «Cargando contenido…» (pendiente de la ronda 2b).
+  - **Lector de pantalla:** el texto «Cargando …» se anuncia desde el primer instante.
 ## 9.1. Errores y mensajes (todos los roles)
 
 - [ ] **Datos inválidos → mensaje claro:** envía un formulario con un dato fuera de rango (p. ej. un peso negativo) → el mensaje **nombra el campo** en español y no muestra textos como "Zod", "uuid", "null" o "token".
