@@ -76,11 +76,11 @@ describe('Guardián · salida animada de modales (contrato D)', () => {
     });
   });
 
-  describe('D3: páginas con modales no confinan fixed (usan animate-fade-in en vez de animate-in)', () => {
-    it.each(PAGINAS_SIN_ANIMATE_IN)('%s no contiene animate-in y contiene animate-fade-in', (paginaRelativa) => {
+  describe('D3: páginas con modales no confinan fixed (no contienen animate-in ni animate-fade-in; entrada delegada a EntradaVista)', () => {
+    it.each(PAGINAS_SIN_ANIMATE_IN)('%s no contiene animate-in ni animate-fade-in', (paginaRelativa) => {
       const contenido = leerArchivoSrc(paginaRelativa);
       expect(contenido).not.toContain('animate-in');
-      expect(contenido).toContain('animate-fade-in');
+      expect(contenido).not.toContain('animate-fade-in');
     });
   });
 });

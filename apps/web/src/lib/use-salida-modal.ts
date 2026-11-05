@@ -12,6 +12,7 @@
  *   clase `CLASES_SALIDA_MODAL`.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { movimientoReducido } from './movimiento-reducido';
 
 export const DURACION_SALIDA_MODAL_MS = 150;
 
@@ -22,11 +23,6 @@ export const DURACION_SALIDA_MODAL_MS = 150;
  */
 export const CLASES_SALIDA_MODAL =
   'data-[saliendo=true]:animate-out data-[saliendo=true]:fade-out data-[saliendo=true]:fill-mode-forwards data-[saliendo=true]:duration-150 data-[saliendo=true]:pointer-events-none';
-
-function movimientoReducido(): boolean {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
 
 export function useSalidaModal(onCerrar: () => void): { saliendo: boolean; cerrar: () => void } {
   const [saliendo, setSaliendo] = useState(false);

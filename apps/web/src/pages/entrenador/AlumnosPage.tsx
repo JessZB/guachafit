@@ -17,6 +17,7 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTransicionVista } from '../../lib/use-transicion-vista';
 import { AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../context/auth-context';
 import { useFrescuraOffline } from '../../lib/use-frescura-offline';
@@ -41,6 +42,7 @@ import { ExitoAltaManualAlumno } from '../../components/entrenador/alumnos/Exito
 
 export function AlumnosPage() {
   const navigate = useNavigate();
+  const viewTransition = useTransicionVista();
   const { isDemoMode } = useAuth();
   const { isOnline } = useFrescuraOffline(null);
   const [viewMode, setViewMode] = useState<ModoVistaDirectorio>('cards');
@@ -63,7 +65,7 @@ export function AlumnosPage() {
 
   const cerrarInvitacion = () => setInvitacionAbierta(false);
 
-  const verExpediente = (id: string) => navigate(`/coach/alumnos/${id}`);
+  const verExpediente = (id: string) => navigate(`/coach/alumnos/${id}`, { viewTransition });
 
   const {
     alumnos,
@@ -87,7 +89,7 @@ export function AlumnosPage() {
   const sinConexionReal = !isDemoMode && !isOnline;
 
   return (
-    <div className="space-y-5 animate-fade-in pb-12">
+    <div className="space-y-5 pb-12">
       <CabeceraAlumnos
         onInvitar={() => setInvitacionAbierta(true)}
         onInscribir={alta.abrirModalInscripcion}

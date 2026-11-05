@@ -3,8 +3,9 @@
    paquete esas clases existen en el código pero no producen ninguna animación (ADR-027). */
 @import "tw-animate-css";
 
-/* Entrada de cada pantalla (`animate-fade-in` en AppLayout). Solo opacidad, sin transform:
-   un transform en <main> rompería el posicionamiento de todo lo `fixed` que haya dentro. */
+/* Entrada de respaldo de cada pantalla (`animate-fade-in` en EntradaVista, solo sin View
+   Transitions). Solo opacidad, sin transform: un transform en el contenedor rompería el
+   posicionamiento de todo lo `fixed` que haya dentro. */
 @theme {
   --animate-fade-in: aparecer 300ms ease-out both;
 
@@ -171,6 +172,53 @@ body {
 @utility safe-area-content-pb {
   /* Contenido scrollable: despeja el bottom nav (6rem) + home indicator. */
   padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* View Transitions entre módulos (mejora progresiva). Cabecera, barra inferior y menú lateral
+   llevan su propio view-transition-name y no se funden; solo el contenido (`contenido`, ver
+   EntradaVista) hace la transición: sale rápido y entra con un fundido y un leve ascenso.
+   La capa `root` no se anima para que el resto de la página no parpadee. Las reglas viven en
+   no-preference: con movimiento reducido el navegador cambia de vista sin animación. */
+@keyframes vista-sale {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes vista-entra {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+  }
+
+  ::view-transition-group(contenido) {
+    animation-duration: 0s;
+  }
+
+  ::view-transition-old(contenido) {
+    animation: vista-sale 120ms ease-in both;
+    mix-blend-mode: normal;
+  }
+
+  ::view-transition-new(contenido) {
+    animation: vista-entra 200ms ease-out both;
+    mix-blend-mode: normal;
+  }
 }
 
 /* Movimiento reducido global (UX-02, T7 de 00_Inbox/Auditoria_UX_Vistas_2026-10-28.md).

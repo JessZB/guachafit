@@ -103,7 +103,7 @@ export function PlantillasPage() {
   const hayDatos = banco.plantillas.length > 0;
 
   return (
-    <div className="space-y-6 animate-fade-in pb-12">
+    <div className="space-y-6 pb-12">
       <CabeceraPlantillas onNueva={formulario.abrirCrear} />
 
       {/* D7: la lista puede venir de la copia guardada cuando no hay conexión */}

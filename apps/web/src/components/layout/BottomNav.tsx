@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { useTransicionVista } from '../../lib/use-transicion-vista';
 import { useAuth } from '../../context/auth-context';
 import {
   Dumbbell,
@@ -28,6 +29,7 @@ interface EnlaceBarra {
 
 export function BottomNav() {
   const { user } = useAuth();
+  const viewTransition = useTransicionVista();
   const pendientes = usePendientesNavegacion();
   const insignias = insigniasPendientes(pendientes);
   const isCoach = user?.rol === 'entrenador';
@@ -62,13 +64,14 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Navegación principal"
-      className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-lg border-t border-border/80 px-4 pt-2 safe-area-pb"
+      className="[view-transition-name:barra-inferior] lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-lg border-t border-border/80 px-4 pt-2 safe-area-pb"
     >
       <div className="flex items-center justify-around max-w-md mx-auto">
         {links.map(({ to, label, icon: Icon, isCenter, insignia }) => (
           <NavLink
             key={to}
             to={to}
+            viewTransition={viewTransition}
             className={({ isActive }) =>
               `relative flex flex-col items-center justify-center py-1 px-4 rounded-2xl transition-all duration-200 min-w-[72px] focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 ${
                 isActive

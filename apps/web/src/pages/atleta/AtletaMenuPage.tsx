@@ -44,7 +44,7 @@ export function AtletaMenuPage() {
   const badgeCuota = badgeEstadoCuota(resumenFinanciero);
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-2xl mx-auto">
       {/* Saludo y Cabecera de bienvenida */}
       <div className="flex items-center justify-between flex-wrap gap-3 min-w-0">
         <div>

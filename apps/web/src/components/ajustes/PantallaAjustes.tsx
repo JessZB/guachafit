@@ -138,7 +138,7 @@ export function PantallaAjustes({
 
   return (
     <div
-      className={`space-y-6 mx-auto pb-24 lg:pb-12 animate-in fade-in duration-200 ${CLASE_ANCHO[ancho]}`}
+      className={`space-y-6 mx-auto pb-24 lg:pb-12 ${CLASE_ANCHO[ancho]}`}
     >
       <div className="flex items-start gap-3">
         <span className="p-2.5 rounded-2xl bg-primary/15 text-primary shrink-0">

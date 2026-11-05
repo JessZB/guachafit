@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useTransicionVista } from '../../../lib/use-transicion-vista';
 import {
   CheckCircle2,
   Clock,
@@ -45,11 +46,13 @@ export function TarjetaAccesoAlumno({
   badgeCuota,
   variante = 'simple',
 }: TarjetaAccesoAlumnoProps) {
+  const viewTransition = useTransicionVista();
   if (variante === 'completa') {
     const IconoBadgeCuota = badgeCuota ? ICONO_TONO_CUOTA[badgeCuota.tono] : null;
 
     return (
       <Link
+        viewTransition={viewTransition}
         to={to}
         className="sm:col-span-2 group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary"
       >
@@ -88,6 +91,7 @@ export function TarjetaAccesoAlumno({
 
   return (
     <Link
+      viewTransition={viewTransition}
       to={to}
       className="group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 hover:border-primary/40 transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary flex flex-col justify-between"
     >

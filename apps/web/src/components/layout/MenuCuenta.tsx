@@ -9,6 +9,7 @@
  */
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Link } from 'react-router-dom';
+import { useTransicionVista } from '../../lib/use-transicion-vista';
 import { Check, Laptop, LogOut, Moon, Settings, Sun, UserRound } from 'lucide-react';
 import { etiquetaRol } from '../../lib/etiquetas-dominio';
 
@@ -45,6 +46,7 @@ export function MenuCuenta({
   onCerrarSesion,
 }: MenuCuentaProps) {
   const etiqueta = etiquetaRol(rol);
+  const viewTransition = useTransicionVista();
 
   return (
     <DropdownMenu.Root>
@@ -68,7 +70,7 @@ export function MenuCuenta({
 
           {rutaAjustes && (
             <DropdownMenu.Item asChild className={`${claseOpcion} text-foreground`}>
-              <Link to={rutaAjustes}>
+              <Link to={rutaAjustes} viewTransition={viewTransition}>
                 <Settings className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 <span>Ajustes</span>
               </Link>

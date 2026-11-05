@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { useTransicionVista } from '../../lib/use-transicion-vista';
 import { useAuth } from '../../context/auth-context';
 import {
   Dumbbell,
@@ -36,6 +37,7 @@ interface EnlaceSidebar {
 
 export function Sidebar() {
   const { user } = useAuth();
+  const viewTransition = useTransicionVista();
   const pendientes = usePendientesNavegacion();
   const insignias = insigniasPendientes(pendientes);
   const isCoach = user?.rol === 'entrenador';
@@ -73,7 +75,7 @@ export function Sidebar() {
   // En desktop la sidebar queda fija bajo el header sticky. 61.5px = altura del header en lg
   // (pt 12 + pb 12 + borde 1 + fila de 36.5px); debe coincidir con Header.tsx.
   return (
-    <aside className="hidden lg:flex flex-col w-64 border-r border-border/80 bg-card/40 p-4 lg:sticky lg:top-[61.5px] lg:self-start lg:h-[calc(100dvh-61.5px)] lg:overflow-y-auto">
+    <aside className="[view-transition-name:menu-lateral] hidden lg:flex flex-col w-64 border-r border-border/80 bg-card/40 p-4 lg:sticky lg:top-[61.5px] lg:self-start lg:h-[calc(100dvh-61.5px)] lg:overflow-y-auto">
       <div className="mb-6 px-3">
         <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           <Activity className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
@@ -88,6 +90,7 @@ export function Sidebar() {
           <NavLink
             key={to}
             to={to}
+            viewTransition={viewTransition}
             className={({ isActive }) =>
               `flex items-start gap-3 p-3 rounded-xl transition-all duration-150 focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 ${
                 isActive

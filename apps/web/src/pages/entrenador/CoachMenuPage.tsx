@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useTransicionVista } from '../../lib/use-transicion-vista';
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -136,6 +137,7 @@ const TARJETAS_MENU: TarjetaMenu[] = [
 ];
 
 export function CoachMenuPage() {
+  const viewTransition = useTransicionVista();
   const { user, isDemoMode } = useAuth();
   const { perfil } = useMiPerfil(user, isDemoMode);
   const insignias = insigniasPendientes(usePendientesNavegacion());
@@ -145,7 +147,7 @@ export function CoachMenuPage() {
   const saludo = primerNombre ? `Hola, ${primerNombre}` : 'Hola';
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-4xl mx-auto">
       {/* Cabecera y saludo */}
       <div>
         <span className="text-xs font-semibold uppercase tracking-wider text-primary flex items-center gap-1.5">
@@ -164,6 +166,7 @@ export function CoachMenuPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Hero operativo: pagos por validar */}
         <Link
+          viewTransition={viewTransition}
           to={DESTINOS_ENTRENADOR.pagosPorValidar.ruta}
           className="sm:col-span-2 lg:col-span-2 group relative block overflow-hidden p-6 rounded-3xl bg-gradient-to-br from-card/90 via-card/60 to-success/10 border-2 border-success/30 hover:border-success/70 transition-all duration-200 shadow-lg hover:shadow-success/5 cursor-pointer active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
         >
@@ -204,6 +207,7 @@ export function CoachMenuPage() {
           const insignia = tarjeta.clave ? insignias[tarjeta.clave] : undefined;
           return (
             <Link
+              viewTransition={viewTransition}
               key={tarjeta.ruta}
               to={tarjeta.ruta}
               className={`group block p-5 rounded-2xl bg-card/60 hover:bg-card/90 border border-border/80 ${tarjeta.claseBorde} transition-all duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 flex flex-col justify-between`}

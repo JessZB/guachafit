@@ -1,6 +1,7 @@
 import { AlertTriangle, ArrowRight, Camera, Receipt, UserX } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useTransicionVista } from '../../../lib/use-transicion-vista';
 import type { DashboardComandoDTO } from '@guachafit/shared';
 import { pluralizar } from '../../../lib/pluralizar';
 
@@ -68,6 +69,7 @@ function construirItems(dashboard: DashboardComandoDTO | null): ItemAtencion[] {
 
 /** Franja «Requiere tu atención»: cuatro enlaces accionables con su cifra real. */
 export function FranjaAtencionDashboard({ dashboard }: FranjaAtencionDashboardProps) {
+  const viewTransition = useTransicionVista();
   return (
     <section className="space-y-3">
       <h2 className="font-bold text-base text-foreground">Requiere tu atención</h2>
@@ -76,6 +78,7 @@ export function FranjaAtencionDashboard({ dashboard }: FranjaAtencionDashboardPr
           const Icono = item.icono;
           return (
             <Link
+              viewTransition={viewTransition}
               key={item.to}
               to={item.to}
               className="flex flex-col gap-2 min-h-11 p-4 sm:p-6 rounded-2xl bg-card border border-border/80 shadow-xs hover:border-primary/40 transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"

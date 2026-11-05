@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useTransicionVista } from '../../../lib/use-transicion-vista';
 import { ArrowRight, LucideIcon } from 'lucide-react';
 
 /** WU20: tope de filas visibles por bandeja de riesgo; el resto se ve en su sección completa. */
@@ -36,6 +37,7 @@ export function ListaRiesgoDashboard({
   textoVacio,
   rutaVerTodos,
 }: ListaRiesgoDashboardProps) {
+  const viewTransition = useTransicionVista();
   return (
     <div className="p-4 sm:p-6 rounded-3xl bg-card border border-border/80 shadow-xs space-y-3">
       <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
@@ -50,6 +52,7 @@ export function ListaRiesgoDashboard({
       <div className="space-y-2">
         {filas.slice(0, TOPE_FILAS_RIESGO).map((fila) => (
           <Link
+            viewTransition={viewTransition}
             key={fila.id}
             to={fila.to}
             className="min-h-11 p-3 rounded-2xl bg-secondary/40 border border-border flex items-center justify-between gap-3 hover:border-primary/40 transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
@@ -67,6 +70,7 @@ export function ListaRiesgoDashboard({
 
       {filas.length > TOPE_FILAS_RIESGO && (
         <Link
+          viewTransition={viewTransition}
           to={rutaVerTodos}
           className="w-full min-h-11 py-2 px-3 rounded-xl bg-secondary/60 hover:bg-secondary text-foreground font-bold text-[11px] flex items-center justify-between transition-colors"
         >

@@ -66,7 +66,7 @@ export function MonitorAdherenciaPage() {
   const sinConexionSinDatos = !isOnline && !hayDatos;
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6">
       {/* Cabecera */}
       <CabeceraMonitor
         resumen={resumen}

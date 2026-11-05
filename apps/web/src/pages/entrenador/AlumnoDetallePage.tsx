@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useTransicionVista } from '../../lib/use-transicion-vista';
 import { useAuth } from '../../context/auth-context';
 import { triggerHaptic } from '../../lib/haptics';
 import { formatearDocumento } from '../../lib/etiquetas-dominio';
@@ -50,6 +51,7 @@ import { ArrowLeft } from 'lucide-react';
 export function AlumnoDetallePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const viewTransition = useTransicionVista();
   const { isDemoMode } = useAuth();
   // WU16: el tab activo vive en `?tab=…`; ausente o inválido cae a `resumen`.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -130,7 +132,7 @@ export function AlumnoDetallePage() {
         />
         <div className="flex items-center justify-center">
           <button
-            onClick={() => navigate('/coach/alumnos')}
+            onClick={() => navigate('/coach/alumnos', { viewTransition })}
             className="min-h-11 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs cursor-pointer"
           >
             Volver al Directorio
@@ -144,12 +146,13 @@ export function AlumnoDetallePage() {
   const semaforo = calcularSemaforoPago(alumno.semaforoPago, tx.finanzas);
   const isArchived = Boolean(alumno.deletedAtUtc);
 
-  // Solo opacidad en la raíz: un transform aquí convertiría la página en el bloque contenedor de los modales `fixed`.
+  // La entrada la da `EntradaVista` (AppLayout): la raíz no lleva animación propia para no convertirse en el bloque contenedor de los modales `fixed`.
   return (
-    <div className="space-y-6 animate-fade-in pb-12">
+    <div className="space-y-6 pb-12">
       <div className="flex items-center justify-between">
         <Link
           to="/coach/alumnos"
+          viewTransition={viewTransition}
           className="inline-flex items-center gap-2 text-xs font-bold text-muted-foreground hover:text-primary transition-colors cursor-pointer"
         >
           <ArrowLeft className="h-4 w-4" />

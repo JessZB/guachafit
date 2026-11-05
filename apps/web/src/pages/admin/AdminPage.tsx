@@ -87,7 +87,7 @@ export function AdminPage() {
   const textoConfirmacion = construirTextoConfirmacion(confirmacion);
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto pb-24 lg:pb-12 animate-fade-in">
+    <div className="space-y-6 max-w-4xl mx-auto pb-24 lg:pb-12">
       <CabeceraAdmin onSolicitarCierre={logoutSeguro.solicitarCierre} />
 
       <AvisosAdmin aviso={aviso} accionError={accionError} />

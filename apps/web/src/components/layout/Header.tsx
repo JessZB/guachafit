@@ -56,7 +56,7 @@ export function Header() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 w-full border-b border-border/80 bg-background/95 backdrop-blur-md px-3 sm:px-8 pb-3 safe-area-pt flex items-center justify-between">
+      <header className="[view-transition-name:cabecera] sticky top-0 z-40 w-full border-b border-border/80 bg-background/95 backdrop-blur-md px-3 sm:px-8 pb-3 safe-area-pt flex items-center justify-between">
         {/* Brand: UX-04 oculta el texto en móvil cuando hay instalación o incidencias; el logo se mantiene */}
         <div className="flex items-center gap-3 min-w-0">
           <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-md shadow-primary/25 shrink-0">

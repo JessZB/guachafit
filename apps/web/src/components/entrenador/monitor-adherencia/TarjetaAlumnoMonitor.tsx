@@ -17,6 +17,7 @@
  */
 
 import { Link } from 'react-router-dom';
+import { useTransicionVista } from '../../../lib/use-transicion-vista';
 import { AlertTriangle, CalendarClock, ChevronRight, Flame, History } from 'lucide-react';
 import type { MonitorAdherenciaSemanalDTO } from '@guachafit/shared';
 import { triggerHaptic } from '../../../lib/haptics';
@@ -36,6 +37,7 @@ export interface TarjetaAlumnoMonitorProps {
 }
 
 export function TarjetaAlumnoMonitor({ alumno, onVerActividad }: TarjetaAlumnoMonitorProps) {
+  const viewTransition = useTransicionVista();
   const conPlan = alumno.tienePlanActivo;
   const etiqueta = etiquetaMonitorAdherencia(alumno);
   const tono = CLASES_TONO[etiqueta.tono];
@@ -97,6 +99,7 @@ export function TarjetaAlumnoMonitor({ alumno, onVerActividad }: TarjetaAlumnoMo
             {ultimaSesion ? `Última sesión: ${ultimaSesion}` : 'Sin sesiones registradas'}
           </span>
           <Link
+            viewTransition={viewTransition}
             to={rutaExpedienteMonitor(alumno.alumnoPerfilId)}
             className="pointer-events-auto relative z-10 min-h-11 min-w-11 flex items-center justify-center p-2 rounded-xl bg-secondary/70 hover:bg-secondary text-muted-foreground hover:text-foreground border border-border/60 transition-colors focus-visible:outline-2 focus-visible:outline-primary"
             title={`Abrir el expediente de ${alumno.nombreCompleto}`}

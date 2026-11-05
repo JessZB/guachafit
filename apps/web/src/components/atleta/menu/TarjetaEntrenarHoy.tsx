@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useTransicionVista } from '../../../lib/use-transicion-vista';
 import {
   Dumbbell,
   Zap,
@@ -39,6 +40,7 @@ export function TarjetaEntrenarHoy({
   cargandoSemana,
   errorSemana,
 }: TarjetaEntrenarHoyProps) {
+  const viewTransition = useTransicionVista();
   const estadoHoy = derivarEstadoEntrenamientoHoy({
     bloqueo,
     cargandoSemana,
@@ -54,6 +56,7 @@ export function TarjetaEntrenarHoy({
 
   return (
     <Link
+      viewTransition={viewTransition}
       to="/app/hoy"
       className="sm:col-span-2 group relative block overflow-hidden p-6 rounded-3xl bg-gradient-to-br from-card/90 via-card/60 to-primary/10 border-2 border-primary/40 hover:border-primary/80 transition-all duration-200 shadow-lg hover:shadow-primary/5 cursor-pointer active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-primary"
     >
