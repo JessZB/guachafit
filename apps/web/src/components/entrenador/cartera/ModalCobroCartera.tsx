@@ -7,11 +7,12 @@
  * UX-08: el monto y el saldo llegan ya formateados (`saldoTexto`, `resumen`); los ids de los
  * campos son únicos por instancia (`useId`) para que dos modales no repitan ids.
  */
-import { useId, type RefObject } from 'react';
+import { useId } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, HandCoins, X } from 'lucide-react';
 import { textoTasaCobro } from '../../../lib/cobro-sala';
 import { fechaCalendarioLocal } from '../../../lib/date-format';
+import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
 import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import { Moneda, type ResumenCarteraDTO } from '@guachafit/shared';
 import type { EstadoCobro } from './useCobroCartera';
@@ -30,7 +31,6 @@ export interface ModalCobroCarteraProps {
   saldoTexto: string;
   /** Lo que se registrará y su equivalente en USD (D1); `null` si no hay conversión válida. */
   resumen: string | null;
-  dialogRef: RefObject<HTMLDivElement | null>;
   onCerrar: () => void;
   onCambiarMonto: (monto: string) => void;
   onCambiarMoneda: (moneda: Moneda) => void;
@@ -51,7 +51,6 @@ export function ModalCobroCartera({
   tasaVigente,
   saldoTexto,
   resumen,
-  dialogRef,
   onCerrar,
   onCambiarMonto,
   onCambiarMoneda,
@@ -59,6 +58,7 @@ export function ModalCobroCartera({
   onRegistrar,
 }: ModalCobroCarteraProps) {
   const { saliendo, cerrar } = useSalidaModal(onCerrar);
+  const refDialogo = useDialogoAccesible({ abierto: true, onCerrar: cerrar });
   const idMonto = useId();
   const idMoneda = useId();
   const idFecha = useId();
@@ -70,7 +70,7 @@ export function ModalCobroCartera({
       className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
-        ref={dialogRef}
+        ref={refDialogo}
         role="dialog"
         aria-modal="true"
         aria-labelledby="cartera-cobro-titulo"

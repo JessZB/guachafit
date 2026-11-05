@@ -4,7 +4,7 @@ import { resolverBloqueoAlumno, type BloqueoAlumno } from '../../../lib/acceso-a
 import { clonarSesionParaEdicion, recalcularCumplimiento } from '../../../lib/sesion-estado';
 import { triggerHaptic } from '../../../lib/haptics';
 import { offlineDb } from '../../../lib/offline-db';
-import { normalizarKgParaContrato } from '../../../lib/weight-unit';
+import { pesoEfectivoKg, pesoVieneDelPlan } from '../../../lib/entrenamiento-peso-plan';
 import {
   construirPayloadSerie,
   revertirSerieRechazada,
@@ -88,7 +88,6 @@ export function useMarcadoSerie(opciones: OpcionesMarcado) {
         triggerHaptic('warning');
         return;
       }
-      const pesoNormalizado = normalizarKgParaContrato(serie.pesoKg);
       const operacion = (ultimaOperacionPorSerie.current.get(serie.id) ?? 0) + 1;
       ultimaOperacionPorSerie.current.set(serie.id, operacion);
 
@@ -114,6 +113,11 @@ export function useMarcadoSerie(opciones: OpcionesMarcado) {
             nextSerie.repsLogradas = serie.repsLogradas;
           }
         }
+
+        // Precarga con el plan: la herencia de arriba mira el peso REAL (`pesoKg`) y por eso gana
+        // sobre el plan de la siguiente. Después, un peso que viajó desde el plan pasa a ser el
+        // peso real de esta serie, para que la fila compacta y el reenvío muestren lo enviado.
+        if (pesoVieneDelPlan(serie)) serie.pesoKg = pesoEfectivoKg(serie);
 
         // Descanso prescrito para este ejercicio (o 90s por defecto)
         const prescrito = updated.ejercicios[ejercicioIndex].descansoPrescritoSegundos || 90;
@@ -150,7 +154,7 @@ export function useMarcadoSerie(opciones: OpcionesMarcado) {
       // Sync or queue outbox batch
       const payload = construirPayloadSerie(
         serie,
-        pesoNormalizado,
+        null, // el peso efectivo (propio o del plan) lo deriva `construirPayloadSerie`
         serie.descansoSegundos ?? null,
         willBeCompleted
       );

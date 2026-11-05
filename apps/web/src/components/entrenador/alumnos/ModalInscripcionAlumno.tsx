@@ -8,26 +8,26 @@
  * R5: conserva `role="dialog"`, `aria-modal`, `aria-labelledby="modal-inscripcion-title"`,
  * título "Inscripción Manual en Sala", botón "Cerrar" y cierre por backdrop
  * (`e.target === e.currentTarget`). El ciclo Escape/Tab/foco lo gobierna
- * `useDialogoAccesible` desde el contenedor (el `ref` se adjunta aquí).
+ * `useDialogoAccesible`, que el propio modal llama con `cerrar` (salida animada) y cuyo `ref` adjunta aquí.
  * §6: cierre de 44px, texto ≥ 12px. Presentacional: solo props (R1).
  */
 
-import type { ReactNode, RefObject } from 'react';
+import type { ReactNode } from 'react';
 import { UserPlus, X } from 'lucide-react';
+import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
 import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 
 export interface ModalInscripcionAlumnoProps {
-  refDialogo: RefObject<HTMLDivElement | null>;
   onCerrar: () => void;
   children: ReactNode;
 }
 
 export function ModalInscripcionAlumno({
-  refDialogo,
   onCerrar,
   children,
 }: ModalInscripcionAlumnoProps) {
   const { saliendo, cerrar } = useSalidaModal(onCerrar);
+  const refDialogo = useDialogoAccesible({ abierto: true, onCerrar: cerrar });
 
   return (
     <div

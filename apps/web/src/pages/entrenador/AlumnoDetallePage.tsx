@@ -6,7 +6,6 @@ import { formatearDocumento } from '../../lib/etiquetas-dominio';
 import {
   aplicarTabEnQuery, parsearTabFichaAlumno, TABS_FICHA_ALUMNO, type TabFichaAlumno,
 } from '../../lib/alumno-detalle-tab';
-import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import { useTabsAccesibles } from '../../lib/use-tabs-accesibles';
 import { SelectorPlantillaAsignacion } from '../../components/entrenador/SelectorPlantillaAsignacion';
 import { PestanaNutricionAlumno } from '../../components/entrenador/alumno-detalle/PestanaNutricionAlumno';
@@ -118,17 +117,6 @@ export function AlumnoDetallePage() {
     selectedPlanId: plan.selectedPlanId, planesCatalogo: expediente.planesCatalogo,
     planActivoId: expediente.alumno?.planActivoId ?? null,
   });
-  // U3b: diálogo accesible (Escape, trampa de Tab, foco inicial y restore).
-  const refModalCobro = useDialogoAccesible({
-    abierto: cobro.isCobroModalOpen, onCerrar: () => cobro.setIsCobroModalOpen(false),
-  });
-  const refModalAntro = useDialogoAccesible({
-    abierto: checkin.isAntroModalOpen, onCerrar: () => checkin.setIsAntroModalOpen(false),
-  });
-  const refModalRutina = useDialogoAccesible({
-    abierto: rutina.isRutinaModalOpen, onCerrar: () => rutina.setIsRutinaModalOpen(false),
-  });
-
   const alumno = expediente.alumno;
   if (expediente.isLoading) return <EstadoCarga texto="Cargando Expediente Deportivo 360°..." />;
   const error = expediente.error;
@@ -249,7 +237,7 @@ export function AlumnoDetallePage() {
 
       {cobro.isCobroModalOpen && (
         <ModalCobroSala
-          cobro={cobro} refDialogo={refModalCobro}
+          cobro={cobro}
           onAsignarPlan={() => {
             cobro.setIsCobroModalOpen(false);
             setEnfocarSelectorPlan(true);
@@ -260,7 +248,7 @@ export function AlumnoDetallePage() {
 
       {checkin.isAntroModalOpen && (
         <ModalControlAntropometrico
-          checkin={checkin} demo={isDemoMode} usuarioId={alumno?.usuarioId} refDialogo={refModalAntro}
+          checkin={checkin} demo={isDemoMode} usuarioId={alumno?.usuarioId}
         />
       )}
 
@@ -272,7 +260,6 @@ export function AlumnoDetallePage() {
             rutina.setIsRutinaModalOpen(false);
             rutina.setRutinaSuccessMsg(null);
           }}
-          refDialogo={refModalRutina}
         />
       )}
 

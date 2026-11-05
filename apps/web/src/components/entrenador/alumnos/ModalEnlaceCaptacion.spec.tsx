@@ -23,7 +23,6 @@ const ERROR_CARGA = 'No se pudo cargar tu enlace de captación. Recarga la pági
 
 function montar(parcial: Partial<Parameters<typeof ModalEnlaceCaptacion>[0]> = {}) {
   const props = {
-    refDialogo: { current: null },
     onCerrar: vi.fn(),
     registrationUrl: null as string | null,
     coachCode: null as string | null,

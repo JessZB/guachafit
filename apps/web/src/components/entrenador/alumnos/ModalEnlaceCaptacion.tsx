@@ -7,20 +7,20 @@
  * para que un lector de pantalla lo anuncie al abrir el diálogo.
  *
  * Cascarón con `role="dialog"`, `aria-modal` y `aria-labelledby`; Escape y foco los gobierna
- * `useDialogoAccesible` desde el contenedor (el `ref` se adjunta aquí). Cierre con "Cerrar" y backdrop.
+ * `useDialogoAccesible`, que el propio modal llama con `cerrar` (salida animada) y cuyo `ref` adjunta aquí.
+ * Cierre con "Cerrar" y backdrop.
  * D17: con el código cargado se añade `PanelCaptacion` (contador, pausa y rotación del enlace con
  * confirmación inline).
  * §6: controles de 44px (`min-h-11`), texto ≥ 12px, peso ≤ 700.
  * Presentacional: solo props (R1).
  */
 
-import type { RefObject } from 'react';
 import { Check, Copy, MessageSquare, Share2, X } from 'lucide-react';
+import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
 import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import { PanelCaptacion } from './PanelCaptacion';
 
 export interface ModalEnlaceCaptacionProps {
-  refDialogo: RefObject<HTMLDivElement | null>;
   onCerrar: () => void;
   registrationUrl: string | null;
   coachCode: string | null;
@@ -40,7 +40,6 @@ export interface ModalEnlaceCaptacionProps {
 }
 
 export function ModalEnlaceCaptacion({
-  refDialogo,
   onCerrar,
   registrationUrl,
   coachCode,
@@ -59,6 +58,7 @@ export function ModalEnlaceCaptacion({
   onAlternarCaptacion,
 }: ModalEnlaceCaptacionProps) {
   const { saliendo, cerrar } = useSalidaModal(onCerrar);
+  const refDialogo = useDialogoAccesible({ abierto: true, onCerrar: cerrar });
   // Con error de carga la descripción queda vacía: el aviso de error ya explica la situación.
   const descripcion = registrationUrl
     ? 'Comparte este enlace con tus prospectos para que se autorregistren y se vinculen automáticamente a tu cartera.'

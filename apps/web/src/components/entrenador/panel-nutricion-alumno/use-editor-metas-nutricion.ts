@@ -9,7 +9,6 @@
  */
 import { useState, type FormEvent } from 'react';
 import { apiClient } from '../../../lib/api-client';
-import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
 import type { FilaRecursoFormulario } from '../../../lib/recursos-pdf';
 import {
   MENSAJE_ESPERA_SUBIDA,
@@ -84,12 +83,6 @@ export function useEditorMetasNutricion({
     }
     setIsModalMetasOpen(false);
   };
-
-  // U3b: el editor de metas es un diálogo accesible (Escape, trampa de Tab, restore de foco).
-  const refModal = useDialogoAccesible({
-    abierto: isModalMetasOpen,
-    onCerrar: solicitarCerrarEditor,
-  });
 
   const cargarFormulario = (formulario: FormularioMetas) => {
     setCalorias(formulario.calorias);
@@ -241,7 +234,6 @@ export function useEditorMetasNutricion({
     textosBorrado,
     solicitarCerrarEditor,
     descartarYCerrarEditor,
-    refModal,
     abrirEditorMetas,
     handleGuardarMetas,
     confirmarBorradoPdfs,

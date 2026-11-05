@@ -19,7 +19,6 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../context/auth-context';
-import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
 import { useFrescuraOffline } from '../../lib/use-frescura-offline';
 import { AvisoDatosOffline } from '../../components/common/AvisoDatosOffline';
 import { Paginacion } from '../../components/common/Paginacion';
@@ -62,10 +61,7 @@ export function AlumnosPage() {
     },
   });
 
-  // U3b: Escape, trampa de Tab, foco inicial y restore del foco al disparador.
-  const refModalInscripcion = useDialogoAccesible({ abierto: alta.isModalOpen, onCerrar: alta.cerrarModal });
   const cerrarInvitacion = () => setInvitacionAbierta(false);
-  const refModalInvitacion = useDialogoAccesible({ abierto: invitacionAbierta, onCerrar: cerrarInvitacion });
 
   const verExpediente = (id: string) => navigate(`/coach/alumnos/${id}`);
 
@@ -192,7 +188,6 @@ export function AlumnosPage() {
       {/* DIÁLOGO: INVITAR (enlace de captación) */}
       {invitacionAbierta && (
         <ModalEnlaceCaptacion
-          refDialogo={refModalInvitacion}
           onCerrar={cerrarInvitacion}
           registrationUrl={captacion.registrationUrl}
           coachCode={captacion.coachCode}
@@ -214,7 +209,7 @@ export function AlumnosPage() {
 
       {/* DIÁLOGO: INSCRIPCIÓN MANUAL EN SALA */}
       {alta.isModalOpen && (
-        <ModalInscripcionAlumno refDialogo={refModalInscripcion} onCerrar={alta.cerrarModal}>
+        <ModalInscripcionAlumno onCerrar={alta.cerrarModal}>
           {alta.alumnoCreado ? (
             <ExitoAltaManualAlumno
               alumnoCreado={alta.alumnoCreado}

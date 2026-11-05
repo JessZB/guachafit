@@ -7,6 +7,7 @@ import type {
 import type { UnidadPeso } from '../../../lib/weight-unit';
 import { formatearPesoDesdeKg } from '../../../lib/weight-unit';
 import { pesoPrescritoConCarga } from '../../../lib/entrenamiento-prescripcion';
+import { pesoEfectivoKg, pesoVieneDelPlan } from '../../../lib/entrenamiento-peso-plan';
 import { descansosRealesEntreSeries } from '../../../lib/sesion-tiempos';
 
 export interface FilaSerieProps {
@@ -74,12 +75,16 @@ export function FilaSerie({
   // D6: rechazo del servidor al guardar la serie (se muestra junto a ella).
   const errorEnvio = inputErrors[`${serie.id}:envio`];
   const errorSerie = errorPeso ?? errorRpe ?? errorReps ?? errorEnvio ?? null;
+  // Precarga con el plan: sin peso propio (`null`) el campo parte del peso prescrito, editable y
+  // enviable; un `''` (el alumno lo borró) no vuelve a mostrar el plan.
+  const pesoEfectivo = pesoEfectivoKg(serie);
   const pesoMostrado =
     borradorPeso !== undefined
       ? borradorPeso
-      : Number(serie.pesoKg) > 0
-      ? formatearPesoDesdeKg(serie.pesoKg, unidadPeso) ?? ''
+      : Number(pesoEfectivo) > 0
+      ? formatearPesoDesdeKg(pesoEfectivo, unidadPeso) ?? ''
       : '';
+  const pesoDelPlan = borradorPeso === undefined && pesoVieneDelPlan(serie);
   const rpeMostrado = borradorRpe !== undefined ? borradorRpe : serie.rpe || '';
   const borradorReps = inputDrafts[claveReps];
   const repsMostradas =
@@ -106,6 +111,7 @@ export function FilaSerie({
       unidadPeso={unidadPeso}
       soloLectura={soloLectura}
       pesoMostrado={pesoMostrado}
+      pesoDelPlan={pesoDelPlan}
       repsMostradas={repsMostradas}
       rpeMostrado={rpeMostrado}
       pesoPrescritoKg={prescritoSerie}

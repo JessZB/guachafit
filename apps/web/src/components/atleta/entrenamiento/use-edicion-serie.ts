@@ -12,6 +12,7 @@ import {
   type UnidadPeso,
 } from '../../../lib/weight-unit';
 import { clonarSesionParaEdicion } from '../../../lib/sesion-estado';
+import { pesoEfectivoKg } from '../../../lib/entrenamiento-peso-plan';
 import { marcarInicioSerieReal } from '../../../lib/sesion-tiempos';
 import { triggerHaptic } from '../../../lib/haptics';
 import { offlineDb } from '../../../lib/offline-db';
@@ -196,9 +197,9 @@ export function useEdicionSerie({ sesion, setSesion, user, isDemoMode }: Opcione
       // RN-01: el stepper avanza en la unidad visible (±2.5 kg / ±5 lb) sin deriva decimal.
       const clave = `${serie.id}:pesoKg`;
       const pasoKg = pasoPesoEnKg(unidadPeso) * (delta < 0 ? -1 : 1);
-      const baseNumerica = serie.pesoKg
-        ? Number(normalizarEntradaDecimal(String(serie.pesoKg)))
-        : 0;
+      // Parte del valor mostrado (el efectivo): sobre el plan, +2,5 kg o +5 lb; sin plan, desde 0.
+      const pesoBase = pesoEfectivoKg(serie);
+      const baseNumerica = pesoBase ? Number(normalizarEntradaDecimal(String(pesoBase))) : 0;
       const actualKg = Number.isFinite(baseNumerica) ? baseNumerica : 0;
       // Lote E3: el stepper tampoco pasa del tope compartido (999 kg).
       const siguienteKg = Math.min(LIMITES_SERIE.pesoKgMax, Math.max(0, actualKg + pasoKg));

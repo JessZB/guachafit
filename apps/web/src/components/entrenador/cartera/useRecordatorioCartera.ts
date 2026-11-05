@@ -12,7 +12,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiClient } from '../../../lib/api-client';
 import { digitosWhatsApp } from '../../../lib/cartera-whatsapp';
-import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
 import { useFormatoNumero } from '../../../lib/use-formato-numero';
 import type {
   FilaCarteraDTO,
@@ -153,13 +152,6 @@ export function useRecordatorioCartera({
     setErrorVistaPrevia(null);
   };
 
-  // U3b: Escape, trampa de Tab, foco inicial y restore del foco al disparador (los dos modales
-  // de la cartera compartían el overlay sin semántica de diálogo).
-  const refModalRecordatorio = useDialogoAccesible({
-    abierto: filaRecordatorio !== null,
-    onCerrar: cerrarModalRecordatorio,
-  });
-
   const handleEnviarRecordatorio = async () => {
     if (!filaRecordatorio) return;
     setEnviandoRecordatorio(true);
@@ -249,7 +241,6 @@ export function useRecordatorioCartera({
     cargandoVistaPrevia,
     errorVistaPrevia,
     reintentarVistaPrevia,
-    refModalRecordatorio,
     abrirRecordatorio,
     cerrarModalRecordatorio,
     handleEnviarRecordatorio,

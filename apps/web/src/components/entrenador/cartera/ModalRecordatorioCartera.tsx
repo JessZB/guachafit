@@ -7,11 +7,12 @@
  * UX-09b: antes de enviar muestra la vista previa (solo lectura) o el motivo por el que no se
  * puede enviar. Los ids son únicos por instancia (`useId`) para que dos modales no repitan ids.
  */
-import { useId, type RefObject } from 'react';
+import { useId } from 'react';
 import { AlertCircle, BellRing, CheckCircle2, Info, X } from 'lucide-react';
 import { tonoResultadoRecordatorio } from '../../../lib/cartera';
 import { urlWhatsApp } from '../../../lib/cartera-whatsapp';
 import { formatFechaHoraLocal } from '../../../lib/date-format';
+import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
 import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import type {
   FilaCarteraDTO,
@@ -33,7 +34,6 @@ export interface ModalRecordatorioCarteraProps {
   onReintentarVistaPrevia: () => void;
   /** Saldo pendiente ya formateado (p. ej. `$50,00 USD · Bs. 3.250,00`). */
   saldoTexto: string;
-  dialogRef: RefObject<HTMLDivElement | null>;
   onCerrar: () => void;
   onEnviar: () => void;
   onCopiar: () => void;
@@ -54,12 +54,12 @@ export function ModalRecordatorioCartera({
   errorVistaPrevia,
   onReintentarVistaPrevia,
   saldoTexto,
-  dialogRef,
   onCerrar,
   onEnviar,
   onCopiar,
 }: ModalRecordatorioCarteraProps) {
   const { saliendo, cerrar } = useSalidaModal(onCerrar);
+  const refDialogo = useDialogoAccesible({ abierto: true, onCerrar: cerrar });
   const idTitulo = useId();
   const idMensajeVistaPrevia = useId();
   const idMensajeEnviado = useId();
@@ -74,7 +74,7 @@ export function ModalRecordatorioCartera({
       className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
-        ref={dialogRef}
+        ref={refDialogo}
         role="dialog"
         aria-modal="true"
         aria-labelledby={idTitulo}

@@ -17,7 +17,6 @@ import {
 import { mensajeConExcedente } from '../../../lib/saldo-a-favor';
 import { esErrorSinPlanAsignado } from '../../../lib/suscripcion-alumno';
 import { fechaCalendarioLocal } from '../../../lib/date-format';
-import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
 import { useFormatoNumero } from '../../../lib/use-formato-numero';
 import { DECIMAL_STRING_REGEX, Moneda, type FilaCarteraDTO } from '@guachafit/shared';
 
@@ -77,11 +76,6 @@ export function useCobroCartera({
   };
 
   const cerrarModalCobro = () => setCobro(null);
-
-  const refModalCobro = useDialogoAccesible({
-    abierto: cobro !== null,
-    onCerrar: cerrarModalCobro,
-  });
 
   const cambiarMonto = (monto: string) =>
     setCobro((actual) => (actual ? { ...actual, monto } : actual));
@@ -181,7 +175,6 @@ export function useCobroCartera({
     errorCobro,
     cobroSinPlan,
     exitoCobro,
-    refModalCobro,
     abrirCobro,
     cerrarModalCobro,
     cambiarMonto,

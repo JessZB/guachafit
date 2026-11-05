@@ -156,7 +156,6 @@ export function PanelNutricionAlumno({
       {/* ------------------------------------------------------------------ */}
       {editor.isModalMetasOpen && (
         <EditorMetasNutricion
-          dialogoRef={editor.refModal}
           calorias={editor.calorias}
           proteina={editor.proteina}
           carbohidratos={editor.carbohidratos}

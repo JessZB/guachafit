@@ -10,7 +10,6 @@
  * El modal se monta con un `RetornoCheckinAntropometrico` de prueba y `demo` activo: no sube fotos
  * ni guarda nada.
  */
-import { createRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { ModalControlAntropometrico } from './ModalControlAntropometrico';
@@ -60,7 +59,6 @@ function elementoModal(overrides: Partial<RetornoCheckinAntropometrico> = {}) {
       checkin={checkinAntropometrico(overrides)}
       demo
       usuarioId="usuario-1"
-      refDialogo={createRef<HTMLDivElement>()}
     />
   );
 }

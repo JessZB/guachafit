@@ -18,7 +18,6 @@ function montar(parcial: Partial<ModalEnlaceCaptacionProps> = {}) {
   const onCerrar = vi.fn();
 
   const props: ModalEnlaceCaptacionProps = {
-    refDialogo: { current: null },
     onCerrar,
     registrationUrl: 'http://localhost:5173/onboarding?coach=COACH1',
     coachCode: 'COACH1',

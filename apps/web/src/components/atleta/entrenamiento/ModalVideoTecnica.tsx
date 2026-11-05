@@ -1,12 +1,11 @@
-import type { RefObject } from 'react';
 import { ExternalLink, Video, X } from 'lucide-react';
 import { obtenerUrlVideoEmbebible } from '../../../lib/entrenamiento-video';
+import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
 import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 
 export interface ModalVideoTecnicaProps {
   video: { url: string; nombre: string };
   onClose: () => void;
-  dialogRef: RefObject<HTMLDivElement | null>;
 }
 
 /**
@@ -14,8 +13,9 @@ export interface ModalVideoTecnicaProps {
  * CANDIDATO (R3 duda): único uso de `obtenerUrlVideoEmbebible`; reusable si otra vista
  * muestra video. Se decide en fase D.
  */
-export function ModalVideoTecnica({ video, onClose, dialogRef }: ModalVideoTecnicaProps) {
+export function ModalVideoTecnica({ video, onClose }: ModalVideoTecnicaProps) {
   const { saliendo, cerrar } = useSalidaModal(onClose);
+  const refDialogo = useDialogoAccesible({ abierto: true, onCerrar: cerrar });
   const embedUrl = obtenerUrlVideoEmbebible(video.url);
 
   return (
@@ -27,7 +27,7 @@ export function ModalVideoTecnica({ video, onClose, dialogRef }: ModalVideoTecni
       className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
-        ref={dialogRef}
+        ref={refDialogo}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-video-title"

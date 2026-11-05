@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { generateIdempotencyKey } from '../../../lib/api-client';
 import { resolverBloqueoAlumno, type BloqueoAlumno } from '../../../lib/acceso-alumno';
 import { clonarSesionParaEdicion } from '../../../lib/sesion-estado';
-import { normalizarKgParaContrato } from '../../../lib/weight-unit';
 import {
   construirPayloadSerie,
   validarSerieParaEnviar,
@@ -97,7 +96,7 @@ export function useTemporizadorDescanso(opciones: OpcionesTemporizador) {
       // D5: el cambio de descanso viaja (o se encola sin conexión) como cualquier serie.
       const payload = construirPayloadSerie(
         serie,
-        normalizarKgParaContrato(serie.pesoKg),
+        null, // el peso efectivo (propio o del plan) lo deriva `construirPayloadSerie`
         newSeconds,
         serie.completada
       );

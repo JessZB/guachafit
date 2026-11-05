@@ -15,7 +15,6 @@
  * B9: Saldo y pantallas bajas: muestra saldoTexto ($50,00 USD); dialog con max-h-[90vh] y overflow-y-auto.
  * B10: Ids únicos: no id="mensaje-recordatorio"; dos modales no repiten ids.
  */
-import { createRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import {
@@ -80,7 +79,6 @@ function montarModal(propsParciales: Partial<PropsModalRecordatorio> = {}) {
     enviando: false,
     copiado: false,
     telefonoWhatsApp: '+58 412-1234567',
-    dialogRef: createRef<HTMLDivElement>(),
     onCerrar: vi.fn(),
     onEnviar: vi.fn(),
     onCopiar: vi.fn(),
@@ -341,7 +339,6 @@ describe('Contrato B · ModalRecordatorioCartera', () => {
         enviando={false}
         copiado={false}
         telefonoWhatsApp="+58 412-7654321"
-        dialogRef={createRef<HTMLDivElement>()}
         onCerrar={vi.fn()}
         onEnviar={vi.fn()}
         onCopiar={vi.fn()}

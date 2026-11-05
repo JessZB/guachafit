@@ -12,7 +12,6 @@
  *
  * El modal se monta con un `RetornoCobroSala` de prueba: no envía nada ni consulta la API.
  */
-import { createRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { Moneda } from '@guachafit/shared';
@@ -58,7 +57,6 @@ function elementoModal(overrides: Partial<RetornoCobroSala> = {}) {
     <ModalCobroSala
       cobro={cobroSala(overrides)}
       onAsignarPlan={vi.fn()}
-      refDialogo={createRef<HTMLDivElement>()}
     />
   );
 }

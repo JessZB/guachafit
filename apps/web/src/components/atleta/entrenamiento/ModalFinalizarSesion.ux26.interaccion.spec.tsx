@@ -8,7 +8,6 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { createRef } from 'react';
 import type { SesionEntrenamientoDetalleDTO } from '@guachafit/shared';
 import { EstadoSesion } from '@guachafit/shared';
 import { ModalFinalizarSesion } from './ModalFinalizarSesion';
@@ -65,7 +64,6 @@ describe('ModalFinalizarSesion · UX-26', () => {
   it('ENT-02: con todas las series completadas muestra resumen de éxito', () => {
     // 2 ejercicios con 2 series completadas cada uno = 4 de 4
     const sesion = crearSesionMock([[true, true], [true, true]]);
-    const dialogRef = createRef<HTMLDivElement>();
 
     render(
       <ModalFinalizarSesion
@@ -79,7 +77,6 @@ describe('ModalFinalizarSesion · UX-26', () => {
         isFinishing={false}
         onClose={vi.fn()}
         onConfirm={vi.fn()}
-        dialogRef={dialogRef}
       />
     );
 
@@ -91,7 +88,6 @@ describe('ModalFinalizarSesion · UX-26', () => {
   it('ENT-02: con series pendientes informa con precisión cuántas se hicieron y cuántas quedan', () => {
     // 4 series en total: 1 completada, 3 pendientes
     const sesion = crearSesionMock([[true, false], [false, false]]);
-    const dialogRef = createRef<HTMLDivElement>();
 
     render(
       <ModalFinalizarSesion
@@ -105,7 +101,6 @@ describe('ModalFinalizarSesion · UX-26', () => {
         isFinishing={false}
         onClose={vi.fn()}
         onConfirm={vi.fn()}
-        dialogRef={dialogRef}
       />
     );
 
@@ -118,7 +113,6 @@ describe('ModalFinalizarSesion · UX-26', () => {
   it('ENT-02: con 1 serie pendiente utiliza el singular gramatical', () => {
     // 3 de 4 completadas
     const sesion = crearSesionMock([[true, true], [true, false]]);
-    const dialogRef = createRef<HTMLDivElement>();
 
     render(
       <ModalFinalizarSesion
@@ -132,7 +126,6 @@ describe('ModalFinalizarSesion · UX-26', () => {
         isFinishing={false}
         onClose={vi.fn()}
         onConfirm={vi.fn()}
-        dialogRef={dialogRef}
       />
     );
 
@@ -144,7 +137,6 @@ describe('ModalFinalizarSesion · UX-26', () => {
 
   it('ENT-09a: los botones de esfuerzo 1-10 no contienen etiquetas inductoras dentro del texto del botón', () => {
     const sesion = crearSesionMock([[true, true]]);
-    const dialogRef = createRef<HTMLDivElement>();
 
     render(
       <ModalFinalizarSesion
@@ -158,7 +150,6 @@ describe('ModalFinalizarSesion · UX-26', () => {
         isFinishing={false}
         onClose={vi.fn()}
         onConfirm={vi.fn()}
-        dialogRef={dialogRef}
       />
     );
 
@@ -173,7 +164,6 @@ describe('ModalFinalizarSesion · UX-26', () => {
 
   it('ENT-09b: con rpeSesion null indica "Sin seleccionar (opcional)" y ningún botón queda marcado como activo', () => {
     const sesion = crearSesionMock([[true, true]]);
-    const dialogRef = createRef<HTMLDivElement>();
 
     render(
       <ModalFinalizarSesion
@@ -187,7 +177,6 @@ describe('ModalFinalizarSesion · UX-26', () => {
         isFinishing={false}
         onClose={vi.fn()}
         onConfirm={vi.fn()}
-        dialogRef={dialogRef}
       />
     );
 
@@ -203,7 +192,6 @@ describe('ModalFinalizarSesion · UX-26', () => {
 
   it('ENT-09b: al pulsar un valor de esfuerzo emite onRpeChange y refleja el valor seleccionado', () => {
     const sesion = crearSesionMock([[true, true]]);
-    const dialogRef = createRef<HTMLDivElement>();
     const onRpeChange = vi.fn();
 
     const { rerender } = render(
@@ -218,7 +206,6 @@ describe('ModalFinalizarSesion · UX-26', () => {
         isFinishing={false}
         onClose={vi.fn()}
         onConfirm={vi.fn()}
-        dialogRef={dialogRef}
       />
     );
 
@@ -243,7 +230,6 @@ describe('ModalFinalizarSesion · UX-26', () => {
         isFinishing={false}
         onClose={vi.fn()}
         onConfirm={vi.fn()}
-        dialogRef={dialogRef}
       />
     );
 
@@ -253,7 +239,6 @@ describe('ModalFinalizarSesion · UX-26', () => {
 
   it('ENT-10: el botón principal tiene type="button", jerarquía text-sm y nombre accesible', () => {
     const sesion = crearSesionMock([[true, true]]);
-    const dialogRef = createRef<HTMLDivElement>();
 
     render(
       <ModalFinalizarSesion
@@ -267,7 +252,6 @@ describe('ModalFinalizarSesion · UX-26', () => {
         isFinishing={false}
         onClose={vi.fn()}
         onConfirm={vi.fn()}
-        dialogRef={dialogRef}
       />
     );
 

@@ -13,9 +13,9 @@
  * §6: 11px mínimo, pesos ≤ 700, tokens con variante oscura, estados honestos.
  */
 import { useRef } from 'react';
-import type React from 'react';
 import { AlertCircle, CheckCircle2, Dumbbell, X } from 'lucide-react';
 import { pluralizar } from '../../../lib/pluralizar';
+import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
 import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import { DialogoConfirmacion } from '../../common/DialogoConfirmacion';
 import { ContenidoRutinaSemanal } from './ContenidoRutinaSemanal';
@@ -29,7 +29,6 @@ export interface ModalRutinaSemanalProps {
   demo: boolean;
   onCerrar: () => void;
   onCerrarYLiberarExito: () => void;
-  refDialogo: React.RefObject<HTMLDivElement | null>;
 }
 
 export function ModalRutinaSemanal({
@@ -39,7 +38,6 @@ export function ModalRutinaSemanal({
   demo,
   onCerrar,
   onCerrarYLiberarExito,
-  refDialogo,
 }: ModalRutinaSemanalProps) {
   const {
     bloquesRutinaEdit,
@@ -62,6 +60,8 @@ export function ModalRutinaSemanal({
     if (liberar) onCerrarYLiberarExito();
     else onCerrar();
   });
+  // Escape y la trampa de foco pasan por `cerrar` (rama ordinaria: `liberarExitoRef` queda en false).
+  const refDialogo = useDialogoAccesible({ abierto: true, onCerrar: cerrar });
   const cerrarLiberandoExito = () => {
     liberarExitoRef.current = true;
     cerrar();

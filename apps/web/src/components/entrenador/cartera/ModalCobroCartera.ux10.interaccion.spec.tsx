@@ -63,7 +63,6 @@ describe('Contrato D4 · ModalCobroCartera (UX-10)', () => {
         sinTasa={false}
         saldoTexto="$50,00 USD"
         resumen={null}
-        dialogRef={{ current: null }}
         onCerrar={vi.fn()}
         onCambiarMonto={vi.fn()}
         onCambiarMoneda={vi.fn()}

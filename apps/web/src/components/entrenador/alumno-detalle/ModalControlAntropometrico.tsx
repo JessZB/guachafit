@@ -16,10 +16,10 @@
  * §6: 11px mínimo, pesos ≤ 700, tokens con variante oscura, error honesto (`role="alert"`).
  */
 import { useId } from 'react';
-import type React from 'react';
 import { AlertCircle, Scale, X } from 'lucide-react';
 import { SelectorFotosCheckin } from '../../antropometria/SelectorFotosCheckin';
 import { filtrarEntradaPesoCorporal } from '../../../lib/entrada-numerica';
+import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
 import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import type { RetornoCheckinAntropometrico } from './use-checkin-antropometrico';
 
@@ -28,14 +28,12 @@ export interface ModalControlAntropometricoProps {
   /** En la demostración no se suben fotos. */
   demo: boolean;
   usuarioId: string | undefined;
-  refDialogo: React.RefObject<HTMLDivElement | null>;
 }
 
 export function ModalControlAntropometrico({
   checkin,
   demo,
   usuarioId,
-  refDialogo,
 }: ModalControlAntropometricoProps) {
   const {
     antroPeso: peso,
@@ -60,6 +58,7 @@ export function ModalControlAntropometrico({
   const fotosSubiendo = fotosAntro.subiendo;
   const onCerrar = () => setIsAntroModalOpen(false);
   const { saliendo, cerrar } = useSalidaModal(onCerrar);
+  const refDialogo = useDialogoAccesible({ abierto: true, onCerrar: cerrar });
   const idBase = useId();
   const idTitulo = `${idBase}-titulo`;
   const idPeso = `${idBase}-peso`;

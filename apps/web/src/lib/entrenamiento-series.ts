@@ -1,4 +1,5 @@
 import type { SerieRegistroDetalleDTO, SesionEntrenamientoDetalleDTO } from '@guachafit/shared';
+import { pesoEfectivoKg } from './entrenamiento-peso-plan';
 import { normalizarKgParaContrato, validarReps, validarRpe } from './weight-unit';
 
 /** Valida una serie completa antes de enviarla/encolarla (contrato RegistrarSerieSchema). */
@@ -78,13 +79,19 @@ export function revertirSerieRechazada(
  * Construye el batch de una serie para `PUT /sesiones/:id/series`.
  * Unifica las dos construcciones que vivían en la página (cambio de descanso y
  * marcado): mismo objeto, mismos nombres de campo, mismo orden.
+ *
+ * El peso enviado es SIEMPRE el efectivo de la serie (el propio, o el del plan si el alumno no
+ * lo tocó) normalizado al contrato; un peso vaciado viaja como `null` (RN-01: es opcional). El
+ * segundo parámetro se conserva por compatibilidad de firma y se ignora.
  */
 export function construirPayloadSerie(
   serie: SerieRegistroDetalleDTO,
-  pesoKgNormalizado: string | null,
+  _pesoKgNormalizado: string | null,
   descansoSegundos: number | null | undefined,
   completada: boolean
 ): { series: [PayloadSerie] } {
+  const pesoNormalizado = normalizarKgParaContrato(pesoEfectivoKg(serie));
+  const pesoKgNormalizado = pesoNormalizado === '' ? null : pesoNormalizado;
   return {
     series: [
       {

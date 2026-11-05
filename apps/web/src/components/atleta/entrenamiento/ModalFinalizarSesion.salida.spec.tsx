@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { createRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { SesionEntrenamientoDetalleDTO } from '@guachafit/shared';
@@ -37,7 +36,6 @@ describe('ModalFinalizarSesion · salida animada (contrato C)', () => {
       ejercicios: [],
     } as unknown as SesionEntrenamientoDetalleDTO;
 
-    const dialogRef = createRef<HTMLDivElement>();
     const onClose = vi.fn();
     const onConfirm = vi.fn();
     const onRpeChange = vi.fn();
@@ -56,7 +54,6 @@ describe('ModalFinalizarSesion · salida animada (contrato C)', () => {
         isFinishing={false}
         onClose={onClose}
         onConfirm={onConfirm}
-        dialogRef={dialogRef}
       />
     );
 

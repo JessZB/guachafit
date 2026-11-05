@@ -15,24 +15,22 @@
  * §6: 11px mínimo, pesos ≤ 700, tokens con variante oscura, error honesto (`role="alert"`).
  */
 import { useId } from 'react';
-import type React from 'react';
 import { Moneda } from '@guachafit/shared';
 import { AlertCircle, CheckCircle2, DollarSign, X } from 'lucide-react';
 import { fechaCalendarioLocal } from '../../../lib/date-format';
 import { textoTasaCobro } from '../../../lib/cobro-sala';
+import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
 import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import type { RetornoCobroSala } from './use-cobro-sala';
 
 export interface ModalCobroSalaProps {
   cobro: RetornoCobroSala;
   onAsignarPlan: () => void;
-  refDialogo: React.RefObject<HTMLDivElement | null>;
 }
 
 export function ModalCobroSala({
   cobro,
   onAsignarPlan,
-  refDialogo,
 }: ModalCobroSalaProps) {
   const {
     cobroMonto: monto,
@@ -54,6 +52,7 @@ export function ModalCobroSala({
   } = cobro;
   const onCerrar = () => setIsCobroModalOpen(false);
   const { saliendo, cerrar } = useSalidaModal(onCerrar);
+  const refDialogo = useDialogoAccesible({ abierto: true, onCerrar: cerrar });
   const idBase = useId();
   const idTitulo = `${idBase}-titulo`;
   const idMonto = `${idBase}-monto`;

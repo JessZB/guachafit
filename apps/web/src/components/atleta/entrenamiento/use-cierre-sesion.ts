@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { ApiError, generateIdempotencyKey } from '../../../lib/api-client';
 import { resolverBloqueoAlumno, type BloqueoAlumno } from '../../../lib/acceso-alumno';
-import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
 import { triggerHaptic } from '../../../lib/haptics';
 import { estimarCumpleRachaPorVolumen } from '../../../lib/racha';
 import {
@@ -66,17 +65,6 @@ export function useCierreSesion(opciones: OpcionesCierre) {
 
   // RF-001 Escenario 5: cierre de sesión vacía (descansado / incompleto)
   const [isEmptyCloseModalOpen, setIsEmptyCloseModalOpen] = useState(false);
-
-  // U3b: los modales comparten el mismo contrato de diálogo accesible (Escape, trampa de
-  // Tab, foco inicial y restore del foco al disparador).
-  const refModalFinalizar = useDialogoAccesible({
-    abierto: isFinishModalOpen,
-    onCerrar: () => setIsFinishModalOpen(false),
-  });
-  const refModalCierreVacio = useDialogoAccesible({
-    abierto: isEmptyCloseModalOpen,
-    onCerrar: () => setIsEmptyCloseModalOpen(false),
-  });
 
   // RN-02: feedback real de la finalización (nunca afirmar racha sin respaldo de la API)
   const [finishFeedback, setFinishFeedback] = useState<FeedbackCierre | null>(null);
@@ -226,7 +214,5 @@ export function useCierreSesion(opciones: OpcionesCierre) {
     setPendienteSync,
     handleOpenFinishModal,
     confirmFinishSession,
-    refModalFinalizar,
-    refModalCierreVacio,
   };
 }

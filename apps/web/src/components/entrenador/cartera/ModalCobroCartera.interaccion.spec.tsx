@@ -15,7 +15,6 @@
  * - C8: Pantallas bajas: el role="dialog" incluye max-h-[90vh] y overflow-y-auto.
  * - C9: Saldo formateado: el saldo pendiente muestra saldoTexto (p. ej. "$50,00 USD"), no la cadena cruda.
  */
-import { createRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { EstadoCuota, Moneda, type FilaCarteraDTO } from '@guachafit/shared';
@@ -74,7 +73,6 @@ function fixtureCobro(parcial: Partial<EstadoCobro> = {}): EstadoCobro {
 }
 
 function montarModal(propsParciales: Partial<PropsModalCobro> = {}) {
-  const dialogRef = createRef<HTMLDivElement>();
   const propsPorDefecto: PropsModalCobro = {
     cobro: fixtureCobro(),
     error: null,
@@ -83,7 +81,6 @@ function montarModal(propsParciales: Partial<PropsModalCobro> = {}) {
     sinPlan: false,
     sinTasa: false,
     tasaVigente: '36.50',
-    dialogRef,
     onCerrar: vi.fn(),
     onCambiarMonto: vi.fn(),
     onCambiarMoneda: vi.fn(),
@@ -170,7 +167,6 @@ describe('ModalCobroCartera · Contrato C (COB-18, COB-19, COB-26)', () => {
           enviando: false,
           sinPlan: false,
           sinTasa: false,
-          dialogRef: createRef(),
           onCerrar: vi.fn(),
           onCambiarMonto: vi.fn(),
           onCambiarMoneda: vi.fn(),
@@ -190,7 +186,6 @@ describe('ModalCobroCartera · Contrato C (COB-18, COB-19, COB-26)', () => {
           enviando: false,
           sinPlan: false,
           sinTasa: false,
-          dialogRef: createRef(),
           onCerrar: vi.fn(),
           onCambiarMonto: vi.fn(),
           onCambiarMoneda: vi.fn(),

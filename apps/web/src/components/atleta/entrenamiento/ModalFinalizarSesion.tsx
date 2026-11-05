@@ -1,10 +1,10 @@
-import type { RefObject } from 'react';
 import { AlertTriangle, Award, CheckCircle2, Timer, X } from 'lucide-react';
 import type { SesionEntrenamientoDetalleDTO } from '@guachafit/shared';
 import { describirEsfuerzo } from '../../../lib/entrenamiento-textos';
 import { formatearSegundos } from '../../../lib/sesion-tiempos';
 import { resumirDescansos } from '../../../lib/entrenamiento-descansos';
 import { triggerHaptic } from '../../../lib/haptics';
+import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
 import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 
 export interface ModalFinalizarSesionProps {
@@ -18,7 +18,6 @@ export interface ModalFinalizarSesionProps {
   isFinishing: boolean;
   onClose: () => void;
   onConfirm: () => void;
-  dialogRef: RefObject<HTMLDivElement | null>;
 }
 
 /** Modal de finalización y feedback al entrenador (ÚNICO: RPE 1–10 + molestias + notas). */
@@ -33,9 +32,9 @@ export function ModalFinalizarSesion({
   isFinishing,
   onClose,
   onConfirm,
-  dialogRef,
 }: ModalFinalizarSesionProps) {
   const { saliendo, cerrar } = useSalidaModal(onClose);
+  const refDialogo = useDialogoAccesible({ abierto: true, onCerrar: cerrar });
   const resumenDescansos = resumirDescansos(sesion.ejercicios);
 
   const totalSeries = sesion.ejercicios.reduce(
@@ -57,7 +56,7 @@ export function ModalFinalizarSesion({
       className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
-        ref={dialogRef}
+        ref={refDialogo}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-finish-title"

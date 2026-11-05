@@ -1,13 +1,12 @@
-import type { RefObject } from 'react';
 import { AlertTriangle, Coffee, X } from 'lucide-react';
 import { TipoCierreSesion } from '@guachafit/shared';
+import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
 import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 
 export interface ModalCierreVacioProps {
   isFinishing: boolean;
   onClose: () => void;
   onConfirm: (tipo: TipoCierreSesion) => void;
-  dialogRef: RefObject<HTMLDivElement | null>;
 }
 
 /**
@@ -15,8 +14,9 @@ export interface ModalCierreVacioProps {
  * CANDIDATO (R3 duda): similitud con `common/DialogoConfirmacion.tsx` sin encaje 1:1
  * (2 opciones + cancelar). Se decide en fase D.
  */
-export function ModalCierreVacio({ isFinishing, onClose, onConfirm, dialogRef }: ModalCierreVacioProps) {
+export function ModalCierreVacio({ isFinishing, onClose, onConfirm }: ModalCierreVacioProps) {
   const { saliendo, cerrar } = useSalidaModal(onClose);
+  const refDialogo = useDialogoAccesible({ abierto: true, onCerrar: cerrar });
 
   return (
     <div
@@ -27,7 +27,7 @@ export function ModalCierreVacio({ isFinishing, onClose, onConfirm, dialogRef }:
       className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
-        ref={dialogRef}
+        ref={refDialogo}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-empty-close-title"

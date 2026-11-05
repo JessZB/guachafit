@@ -28,6 +28,11 @@ function combinarSerie(
   // el del servidor en vez de mostrar o reenviar un dato que el API rechazaría.
   if (valorLocalPresente(local.pesoKg) && typeof local.pesoKg === 'string' && esPesoKgValido(local.pesoKg)) {
     copia.pesoKg = local.pesoKg;
+  } else if (local.pesoKg === '' && (servidor.pesoKg === null || servidor.pesoKg === undefined)) {
+    // Precarga con el plan: un '' local es "el alumno borró el peso a propósito". Si el servidor
+    // aún no tiene peso, se respeta para que el plan no reaparezca al recargar. Con un peso del
+    // servidor, el '' local sigue sin borrarlo (arriba).
+    copia.pesoKg = '';
   }
   if (
     valorLocalPresente(local.repsLogradas) &&

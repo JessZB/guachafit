@@ -26,6 +26,7 @@ export function FilaSerieEdicion({
   unidadPeso,
   soloLectura,
   pesoMostrado,
+  pesoDelPlan = false,
   repsMostradas,
   rpeMostrado,
   pesoPrescritoKg,
@@ -47,6 +48,8 @@ export function FilaSerieEdicion({
   soloLectura: boolean;
   /** Texto del campo: el borrador si existe o el valor guardado ya formateado. */
   pesoMostrado: string;
+  /** `true` mientras el valor del campo viene del plan y el alumno aún no lo ha tocado. */
+  pesoDelPlan?: boolean;
   repsMostradas: string;
   rpeMostrado: string;
   /** Peso del plan en kg (texto del contrato), o `null` si la serie no trae uno con carga. */
@@ -120,8 +123,13 @@ export function FilaSerieEdicion({
               placeholder={unidadPeso}
               aria-label={`Peso real en ${unidadPeso}, serie ${serie.numeroSerie}`}
               aria-invalid={Boolean(errorPeso)}
-              className={`w-full min-w-0 text-center py-2 px-1 bg-transparent text-base font-mono font-bold text-foreground focus:outline-hidden ${
-                errorPeso ? 'text-destructive' : ''
+              data-origen-peso={pesoDelPlan ? 'plan' : undefined}
+              className={`w-full min-w-0 text-center py-2 px-1 bg-transparent text-base font-mono font-bold focus:outline-hidden ${
+                errorPeso
+                  ? 'text-destructive'
+                  : pesoDelPlan
+                    ? 'text-muted-foreground'
+                    : 'text-foreground'
               }`}
             />
             <button

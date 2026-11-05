@@ -6,7 +6,7 @@
  * formulario. Presentacional (R1): recibe el formulario y callbacks, no pide
  * datos. El estado y el guardado viven en `use-editor-metas-nutricion`.
  */
-import type { FormEvent, RefObject } from 'react';
+import type { FormEvent } from 'react';
 import { CampoMeta } from '../CampoMeta';
 import { FilaRecursoEditor } from '../FilaRecursoEditor';
 import { AvisosEditorMetas } from '../AvisosEditorMetas';
@@ -15,11 +15,11 @@ import {
   LIMITE_RECURSOS_EDUCATIVOS,
   type FilaRecursoFormulario,
 } from '../../../lib/recursos-pdf';
+import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
 import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import { Loader2, Plus, X } from 'lucide-react';
 
 export function EditorMetasNutricion({
-  dialogoRef,
   calorias,
   proteina,
   carbohidratos,
@@ -41,7 +41,6 @@ export function EditorMetasNutricion({
   onCerrar,
   onGuardar,
 }: {
-  dialogoRef: RefObject<HTMLDivElement | null>;
   calorias: string;
   proteina: string;
   carbohidratos: string;
@@ -64,6 +63,7 @@ export function EditorMetasNutricion({
   onGuardar: (e: FormEvent) => void;
 }) {
   const { saliendo, cerrar } = useSalidaModal(onCerrar);
+  const refDialogo = useDialogoAccesible({ abierto: true, onCerrar: cerrar });
 
   return (
     <div
@@ -74,7 +74,7 @@ export function EditorMetasNutricion({
       className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-150 ${CLASES_SALIDA_MODAL}`}
     >
       <div
-        ref={dialogoRef}
+        ref={refDialogo}
         role="dialog"
         aria-modal="true"
         aria-labelledby="editor-metas-nutricion-titulo"

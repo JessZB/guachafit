@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { createRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import type { SesionEntrenamientoDetalleDTO } from '@guachafit/shared';
@@ -32,7 +31,6 @@ describe('ModalFinalizarSesion · tamaño de texto accesible y prevención de zo
         isFinishing={false}
         onClose={vi.fn()}
         onConfirm={vi.fn()}
-        dialogRef={createRef()}
       />
     );
 
@@ -78,7 +76,6 @@ describe('ModalFinalizarSesion · tamaño de texto accesible y prevención de zo
         isFinishing={false}
         onClose={vi.fn()}
         onConfirm={vi.fn()}
-        dialogRef={createRef()}
       />
     );
 

@@ -49,10 +49,10 @@ export function EntrenamientoPage() {
     posicionFocoVigente, renderFilaSerie, handleHacerAhora } = entrenamiento;
   // Cierre y modales.
   const { handleOpenFinishModal, pendienteSync, finishFeedback, handleRepetirBloque,
-    isFinishModalOpen, setIsFinishModalOpen, confirmFinishSession, refModalFinalizar,
+    isFinishModalOpen, setIsFinishModalOpen, confirmFinishSession,
     rpeSesion, setRpeSesion, molestia, setMolestia, notasCoachInput, setNotasCoachInput,
     isFinishing, isEmptyCloseModalOpen, setIsEmptyCloseModalOpen, confirmEmptyClose,
-    refModalCierreVacio, videoModal, setVideoModal, refModalVideo } = entrenamiento;
+    videoModal, setVideoModal } = entrenamiento;
   // Acciones, cola offline y mapas.
   const { handleEntrenarBloqueHoy, handleStartSession, isStarting, handleAbrirVideo,
     syncSummaryLabel, syncRejected, syncState, setIsSyncPanelOpen, isSyncPanelOpen,
@@ -237,7 +237,6 @@ export function EntrenamientoPage() {
           isFinishing={isFinishing}
           onClose={() => setIsFinishModalOpen(false)}
           onConfirm={confirmFinishSession}
-          dialogRef={refModalFinalizar}
         />
       )}
       </>
@@ -249,7 +248,6 @@ export function EntrenamientoPage() {
           isFinishing={isFinishing}
           onClose={() => setIsEmptyCloseModalOpen(false)}
           onConfirm={confirmEmptyClose}
-          dialogRef={refModalCierreVacio}
         />
       )}
 
@@ -258,7 +256,6 @@ export function EntrenamientoPage() {
         <ModalVideoTecnica
           video={videoModal}
           onClose={() => setVideoModal(null)}
-          dialogRef={refModalVideo}
         />
       )}
 

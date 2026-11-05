@@ -67,7 +67,6 @@ export function CarteraPage() {
     cargandoVistaPrevia,
     errorVistaPrevia,
     reintentarVistaPrevia,
-    refModalRecordatorio,
     abrirRecordatorio,
     cerrarModalRecordatorio,
     handleEnviarRecordatorio,
@@ -91,7 +90,6 @@ export function CarteraPage() {
     errorCobro,
     cobroSinPlan,
     exitoCobro,
-    refModalCobro,
     abrirCobro,
     cerrarModalCobro,
     cambiarMonto,
@@ -223,7 +221,6 @@ export function CarteraPage() {
           errorVistaPrevia={errorVistaPrevia}
           onReintentarVistaPrevia={reintentarVistaPrevia}
           saldoTexto={saldoTextoRecordatorio}
-          dialogRef={refModalRecordatorio}
           onCerrar={cerrarModalRecordatorio}
           onEnviar={handleEnviarRecordatorio}
           onCopiar={copiarMensaje}
@@ -242,7 +239,6 @@ export function CarteraPage() {
           tasaVigente={resumen?.tasaVigente}
           resumen={resumenCobro}
           saldoTexto={saldoTexto}
-          dialogRef={refModalCobro}
           onCerrar={cerrarModalCobro}
           onCambiarMonto={cambiarMonto}
           onCambiarMoneda={cambiarMoneda}
