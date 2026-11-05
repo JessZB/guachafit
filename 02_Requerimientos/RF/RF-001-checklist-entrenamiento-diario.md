@@ -379,6 +379,11 @@ Then el botón flotante no aparece
 - Serie y cierre: `enterKeyHint` y selección al enfocar en peso, repeticiones y esfuerzo; notas del cierre a 16 px. Se rechaza `aria-pressed` en «Listo» (el `aria-label` ya expresa el estado).
 - Evidencia: lote 99/99, web 3.471/3.471, typecheck y build en 0; revisión de fiabilidad sin BLOCKER ni WARNING.
 
+### 7.23. Escape animado en todos los modales y precarga del peso con el plan (2026-11-04, [[ADR-027-cronometro-descanso-tiempo-absoluto-borrador-series]] §10)
+- Escape pasa por la salida de 150 ms también en los 11 modales que lo gestionaban en el padre (el hook de diálogo pasa al modal). Límite: en `EditorMetasNutricion` con cambios, el editor se apaga y reaparece con la confirmación de descarte.
+- **Precarga del peso (decisión del dueño, complementa RN-01):** el peso de una serie pendiente sin tocar parte del peso del plan como valor real, editable y enviable; vaciarlo lo envía sin peso (`null`) y el plan no vuelve; la herencia de la serie anterior gana al plan. Se acepta que un peso no confirmado entre en el volumen si el alumno marca sin mirar.
+- Evidencia: lote 74/74, web 3.545/3.545, typecheck y build en 0; revisión de fiabilidad sin BLOCKER ni WARNING; prueba en Chrome.
+
 ### Pendiente
 - Ninguno abierto de §7.10. El uso desde varias pestañas o dispositivos queda como límite documentado (ver §7.17 y §7.21).
-- Seguimientos de §7.21: los de «No verificado y fuera de alcance» arriba, las asimetrías de Escape de §7.22 (ADR-027 §9.2), y la prueba en un móvil real y en un iPhone (panel con el teclado, modales tras navegar, movimiento, vibración y audio). Quedan fuera de este lote por ser de producto: precarga del peso con el plan, repeticiones prellenadas con el objetivo y desmarcar una serie con deshacer.
+- Seguimientos de §7.21: los de «No verificado y fuera de alcance» arriba, el parpadeo de Escape en `EditorMetasNutricion` con cambios y el de `ModalPlantilla` (§7.23, ADR-027 §10.1), y la prueba en un móvil real y en un iPhone (panel con el teclado, modales tras navegar, movimiento, vibración y audio). Quedan por decidir (producto): repeticiones prellenadas con el objetivo y desmarcar una serie con deshacer.
