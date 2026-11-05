@@ -156,3 +156,25 @@ Lote **99/99**; suite web completa **3.471/3.471**; typecheck y build en 0 (JSON
 
 ### 10.3. Evidencia
 Lote 74/74 y suite web completa **3.545/3.545**; typecheck y build en 0. Revisión de fiabilidad: 0 BLOCKER, 0 WARNING, 2 SUGGESTION (los límites de arriba). Probado en Chrome con la sesión de `andres.perez`: precarga de 75 kg con atributo y tono, tecleo, «+», vaciado, fila compacta tras marcar y API con `75.00`; Escape, X y fondo de `ModalFinalizarSesion` y de «Cobro directo en sala» pasan por `data-saliendo` y desaparecen antes de ~310 ms; el panel del cronómetro se pliega al enfocar el peso. La primera pasada del navegador dio resultados antiguos porque había un **service worker de una prueba anterior** (`/sw.js`, cachés `workbox-precache` y `api-cache`) sirviendo código viejo; se desregistró y se repitió.
+
+## 11. Addendum 2026-11-04: aviso «Serie N completada · Deshacer» y bloqueo corto de «Listo»
+
+### 11.1. Problema y decisión
+- Al marcar una serie no había confirmación visible, y en modo foco la serie siguiente aparece **en el mismo sitio** que el botón de la anterior: un toque doble o un rebote marcaba la siguiente sin querer. Propuesta del dueño: un mensaje de serie completada.
+- **Franja** (`AvisoSerieCompletada`): «Serie N completada» con botón «Deshacer», en flujo normal encima de la vista (foco y lista), `role="status"`, entrada solo de opacidad. Dura 6 s (`DURACION_AVISO_SERIE_MS`) y la sustituye el siguiente marcado. «Deshacer» desmarca esa serie, oculta la franja y **cierra el cronómetro de descanso** si es el de esa serie. Cierra además el pendiente de «desmarcar con deshacer».
+- **Bloqueo de 600 ms** (`useBloqueoMarcado`): tras completar una serie, los botones «Marcar serie N como completada» de series pendientes quedan `disabled` y `handleToggleSet` ignora **sin ningún efecto** (ni error inline, ni háptico, ni envío) un nuevo intento de COMPLETAR. Desmarcar nunca se bloquea. Es la medida que **evita** el marcado accidental; la franja es la que permite corregirlo.
+- **Visibilidad derivada:** la franja solo se muestra mientras la serie del aviso conserve su `id` y siga completada (cambiar de bloque o desmarcar por otra vía la oculta en ese render, sin efectos).
+
+### 11.2. Alternativas descartadas
+- Diálogo de confirmación por serie: ralentiza cada serie con las manos ocupadas.
+- Retrasar la aparición de la siguiente serie: castiga al que marca bien y no frena el toque doble.
+- Bloqueo por botón sin guardia en el manejador: un evento sintético o el teclado lo saltarían.
+
+### 11.3. Límites aceptados
+- **Foco tras «Deshacer»** (SUGGESTION): la franja se desmonta y el foco cae al `body`; no se mueve al botón de la serie desmarcada porque, en la lista, el número de serie no identifica el botón sin un ancla por `id`.
+- **Ref asignada en render** (`avisoVigente`, SUGGESTION): patrón ya usado en el módulo; se mantiene.
+- Tras «Deshacer», volver a completar la misma serie se ignora hasta que pasen los 600 ms del marcado anterior.
+- Los 6 s de la franja pueden quedarse cortos para un lector de pantalla; el texto se anuncia al aparecer (`role="status"`).
+
+### 11.4. Evidencia
+Lote 9/9 y suite web completa **3.572/3.572**; typecheck y build en 0. Revisión de fiabilidad: 0 BLOCKER, 2 WARNING (franja de una sesión anterior y efectos previos al bloqueo con datos inválidos: **corregidos** con visibilidad derivada y moviendo la guarda al inicio, con tests de regresión) y 2 SUGGESTION (arriba). Cuatro specs previos que marcaban series de corrido (`EntrenamientoPage.foco/orden/rechazo/vista`) solo ganaron esperas de 600 ms. Probado en Chrome con `andres.perez`: franja con «Serie 1 completada» y «Deshacer», serie 2 deshabilitada a los 100 ms y habilitada a los 900 ms (el clic sobre ella no marcó), franja visible hasta los 5 s y ausente a los 6 s, doble clic sin marcar dos series y desmarcar desde la lista oculta la franja; «Deshacer» comprobado con clic desde JavaScript (la franja expiró antes del clic real por la latencia de las herramientas).

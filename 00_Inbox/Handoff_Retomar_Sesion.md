@@ -78,4 +78,4 @@ Los ítems marcados **[verificar]** salen de la lectura de la auditoría y no se
 
 ## Botón flotante del cronómetro y animaciones (`24d506f` y `4a84375`)
 41. **Probar en un móvil real** lo no verificado (guía de pruebas, sección 1): modal abierto justo tras navegar, panel plegado con el teclado, aspecto del movimiento, iOS, vibración, audio y pantalla bloqueada.
-42. Seguimientos tras `b0f9042` (RF-001 §7.23, [[ADR-027-cronometro-descanso-tiempo-absoluto-borrador-series]] §10): hechos el Escape animado en los 11 modales y la precarga del peso con el plan. Quedan el parpadeo de Escape en `EditorMetasNutricion` con cambios y, de producto, las repeticiones prellenadas y desmarcar con deshacer.
+42. Seguimientos (RF-001 §7.23 y §7.24, [[ADR-027-cronometro-descanso-tiempo-absoluto-borrador-series]] §10 y §11): hechos el Escape animado, la precarga del peso, la franja «Serie N completada · Deshacer» y el bloqueo de 600 ms. Quedan el parpadeo de Escape en `EditorMetasNutricion` con cambios y, de producto, las repeticiones prellenadas.
