@@ -18,18 +18,10 @@ tags:
 
 Repo/vault: C:\Users\jesus\OneDrive\Documentos\Obsidian Vault\Trabajo\GUACHAFIT (rama main, sin push).
 
-## Flujo (00_Reglas_Desarrollo_SDD.md §7)
-- Claude escribe la producción y el doc-sync. OpenCode escribe los tests y hace las revisiones, a partir de prompts en `.opencode-prompts/<NN>-<lote>-<tipo>.md`.
-- Yo ejecuto cada prompt en la TUI de OpenCode.
-- Ciclo por lote:
-  1. tests en rojo;
-  2. implementación;
-  3. verificación;
-  4. revisión (un enfoque; los cuatro si hay riesgo alto);
-  5. corrección;
-  6. validación;
-  7. commit de código y commit `docs(vault)`;
-  8. borrar los prompts del lote.
+## Flujo (00_Reglas_Desarrollo_SDD.md §7, vigente desde 2026-10-18)
+- Claude Code orquesta y valida; no escribe producción ni tests. Un subagente explorador (Haiku 5.5) mapea el código; un subagente escritor (Sonnet 5.5, `effort: high`) escribe la producción; los **agentes externos** (`agy` con Gemini flash, lanzados con la orquestación de Orca desde `.external-agents/lanzar.sh`) escriben los tests y hacen verificaciones y revisiones, con el JSON de Vitest como evidencia.
+- Ciclo por lote: tests en rojo → implementación → verificación → revisión (un enfoque; los cuatro si hay riesgo alto) → corrección y validación → commit de código y commit `docs(vault)` → borrar prompts y reportes de `.external-agents/`.
+- Un agente externo no puede llamar «ajeno» o «flaky» a una regresión sin repetirla y adjuntar el resultado, y debe declarar los fallos en su resumen: se contrasta siempre con el JSON.
 
 ## Antes de empezar
 1. Engram: si hay otra sesión abierta en este repo, registra un id propio con `mem_session_start` y pásalo como `session_id` en cada escritura. Si no, las escrituras fallan con "multiple active runtime sessions".
@@ -39,33 +31,22 @@ Repo/vault: C:\Users\jesus\OneDrive\Documentos\Obsidian Vault\Trabajo\GUACHAFIT 
 
 ## Pendientes, en este orden
 1. ✅ **Revisión de fiabilidad del lote E7** y ✅ **test de la rama "no cerrar" del cronómetro**: hechos en `7ca9fcf`, con dos hallazgos corregidos (ver RF-001 §7.15). Siguiente: el punto 3.
-3. ✅ Hecho en `f4bcda1` (RF-001 §7.16): `FilaSerieEdicion` extraída, con su spec de interacción.
+2. ✅ Hecho en `f4bcda1` (RF-001 §7.16): `FilaSerieEdicion` extraída, con su spec de interacción.
 4. ✅ **Carrera de orden de los envíos** (RF-001 §7.17, lote E9): hecha en `a4371fe`, con [[ADR-024-orden-envios-sesion-entrenamiento]]. Un envío directo en vuelo retiene lo posterior de su sesión; todo lo encolado lleva la hora de la acción; plazo de 15 s para el directo; un rechazo tardío de un toque ya superado no revierte ni avisa (opción A del dueño, 2026-10-15). Límite: orden garantizado dentro de la misma pestaña. La rama `wip/e9-orden-envios-rojo` ya no hace falta.
 5. ✅ **Unificar `SelectorPlantillaAsignacion` y `AsignacionMasivaPlantilla`** (RF-017 RN-03, lote E10): hecho en `7817765`. Decisión del dueño, opción B: la masiva pasa a 3 pasos (elegir alumnos, revisar y ajustar, confirmar), con ajustes comunes a todos los alumnos y el paso de revisión compartido. Tras un fallo ambiguo el intento queda congelado (opción A). **No quedan pendientes en este handoff.**
 6. ✅ **Cronómetro de descanso con tiempo absoluto y borrador de series** (RF-001 RN-06 a RN-08 y §7.21, [[ADR-027-cronometro-descanso-tiempo-absoluto-borrador-series]]): hecho en `8bcfa95` (2026-11-04). Estado del fin absoluto en `localStorage` por sesión, widget accesible, aviso que suena una vez, claves purgadas en logout y cambio de usuario, y lo tecleado en series pendientes se recupera al recargar.
 7. ✅ **Botón flotante del cronómetro y animaciones de entrada** (RF-001 RN-06, escenario 9 y §7.21, [[ADR-027-cronometro-descanso-tiempo-absoluto-borrador-series]] §8): hecho en `24d506f` (dependencia `tw-animate-css@1.4.0` e `index.css`) y `4a84375` (botón flotante), 2026-11-04, local y pendiente de push. El acceso al cronómetro deja de ser el botón «Descanso» de la cabecera: es un botón flotante con tres estados (reposo, píldora y panel), visible solo con la sesión en curso y sin modal propio abierto. Efecto global: todos los modales y vistas con `animate-in` ahora se animan al entrar. Evidencia: lote 88/88, web **3.372/3.372**, typecheck y build sin errores; revisión de fiabilidad con 0 BLOCKER.
-8. **Pendientes del botón flotante y las animaciones (sin empezar, a decidir con el dueño):**
-   - **Probar en un móvil real** lo no verificado: (1) modales `fixed inset-0` sin portal confinados por el `transform` de `animate-in` si se abren dentro de ~300 ms tras cargar `AlumnoDetallePage`, `AlumnosPage`, `PagosPage` o `ModalPlanComercial`; (2) el panel expandido (~300 px) tapando el input que se edita con el teclado abierto; (3) el aspecto real del movimiento, iOS, la vibración y el audio. Pasos en la guía de pruebas, sección 1.
-   - Plegar el panel al enfocar un input, o declarar `interactive-widget` en `index.html`.
-   - Portalizar esos modales o evitar el `transform` en las páginas con `animate-in`.
-   - `animate-out` y salida animada de los modales (hoy se desmontan de golpe al cerrar).
-   - Deshabilitar «Restar 15 segundos» con el descanso terminado y avisar de la pantalla bloqueada también en la píldora (ya figuraban en el punto 9).
-9. **Seguimientos del lote del cronómetro con tiempo absoluto (sin empezar, a decidir con el dueño):**
-   - Precarga del peso con el plan; repeticiones prellenadas con el objetivo (se envía `repsLogradas ?? repsObjetivo`, un dato que parece real).
-   - Desmarcar una serie sin confirmación ni deshacer.
-   - `enterKeyHint` y seleccionar el contenido al enfocar los inputs de peso, repeticiones y esfuerzo.
-   - Campo de notas del modal de cierre con `text-xs` (zoom en iOS) y etiquetas de 11 px.
-   - `aria-pressed` en «Listo».
-   - Deshabilitar «Restar 15 segundos» con el descanso ya terminado.
-   - Avisar también en la píldora (no solo en el panel) que con la pantalla bloqueada no suena.
-   - **Probar el cronómetro y el borrador en un iPhone real** (vibración inexistente, audio condicionado al gesto y al interruptor de silencio, JavaScript congelado con la pantalla bloqueada): hoy no está verificado. Pasos en la guía de pruebas, sección 1.
-   - Auditoría de contraste de los controles nuevos (no medida).
-   - Descartado por YAGNI: sincronizar el cronómetro entre pestañas.
+8. ✅ **Salida animada de los modales y ajustes de UI del entrenamiento** (RF-001 §7.22, [[ADR-027-cronometro-descanso-tiempo-absoluto-borrador-series]] §9): hecho en `41cca53` (2026-11-04, local y pendiente de push). `useSalidaModal` en los 27 modales (150 ms; síncrono con movimiento reducido o sin `matchMedia`), páginas con modales con entrada solo de opacidad, panel del cronómetro plegado al enfocar un campo, `interactive-widget`, «Restar 15 segundos» deshabilitado al terminar, aviso de pantalla bloqueada en la píldora, `enterKeyHint` y selección al enfocar, notas del cierre a 16 px. Evidencia: lote 99/99, web **3.471/3.471**, typecheck y build en 0. Rechazado: `aria-pressed` en «Listo».
+9. **Pendientes, a decidir con el dueño (sin empezar):**
+   - **Probar en un móvil real y en un iPhone** (pasos en la guía de pruebas, sección 1): modal abierto justo tras navegar, panel plegado con el teclado, aspecto del movimiento, vibración, audio y pantalla bloqueada.
+   - **Escape instantáneo** en los 11 modales cuyo `useDialogoAccesible` vive en el padre (lista en ADR-027 §9.2) y `ModalPlantilla`, que solo anima «Salir sin guardar».
+   - **De producto, no de UI:** precarga del peso con el plan; repeticiones prellenadas con el objetivo (hoy se envía `repsLogradas ?? repsObjetivo`, un dato que parece real); desmarcar una serie con deshacer.
+   - Auditoría de contraste de los controles nuevos (no medida). Descartado por YAGNI: sincronizar el cronómetro entre pestañas.
 
 ## Estado de partida
 - Lotes E1–E7 cerrados:
   - E1 `77c1990`; E2 `c6a0e34`/`05d42bd`; E3 `8af2673`/`c194caa`; E4 `e440587`/`bb42b55`;
   - E5 `dfc3e51`/`0194fcb` (ADR-021); E6 `9192fef`/`3c68eed`; E7 `63369d7`.
-- Web 1575/1575, typecheck y build limpios (2026-10-12). Tras el cronómetro (`8bcfa95`, 2026-11-04): web **3329/3329**, typecheck y build sin errores. Tras el botón flotante (`24d506f` y `4a84375`, 2026-11-04): web **3.372/3.372**, typecheck y build sin errores.
+- Web 1575/1575, typecheck y build limpios (2026-10-12). Tras el cronómetro (`8bcfa95`, 2026-11-04): web **3329/3329**, typecheck y build sin errores. Tras el botón flotante (`24d506f` y `4a84375`): web 3.372/3.372. Tras la salida animada de modales (`41cca53`, 2026-11-04): web **3.471/3.471**, typecheck y build sin errores.
 - Convenciones nuevas en 00_Reglas_Desarrollo_SDD.md: §6.12 (peso máximo 700) y §6.13 (entrada numérica filtrada).
 ```

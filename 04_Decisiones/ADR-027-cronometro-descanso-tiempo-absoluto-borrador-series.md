@@ -118,3 +118,22 @@ Lote **88/88**; suite web completa **3.372/3.372**; typecheck y build sin errore
 - **`transform` de `animate-in` y elementos `fixed`:** `animate-in` aplica un `transform` mientras dura la entrada (unos 300 ms), y eso crea un bloque contenedor para los descendientes `fixed`. Un modal `fixed inset-0` **sin portal**, colgado de una página con `animate-in fade-in duration-300`, quedaría confinado si se abre dentro de esa ventana. El revisor citó `AlumnoDetallePage`, `AlumnosPage`, `PagosPage` y `ModalPlanComercial`. No se comprobó en dispositivo.
 - **Teclado móvil:** el panel expandido (unos 300 px) puede tapar el input que se edita cuando sube el teclado; `index.html` no declara `interactive-widget`. Seguimiento posible: plegar el panel al enfocar un input.
 - **Dispositivo:** el aspecto real del movimiento, iOS, la vibración y el audio no se probaron en un iPhone.
+
+## 9. Addendum 2026-11-04: salida animada de modales y pendientes de UI
+
+### 9.1. Decisión
+- **`useSalidaModal`** (`apps/web/src/lib/use-salida-modal.ts`): al cerrar, el fondo del modal (`fixed inset-0`) se apaga 150 ms con `animate-out` y solo entonces se llama al cierre real; el modal sigue montado mientras tanto (`data-saliendo`, `pointer-events-none`). Se aplica a los 27 modales con `fixed inset-0`.
+- **Sin retraso cuando no hay animación:** si el sistema pide movimiento reducido o el entorno no tiene `window.matchMedia` (jsdom), `cerrar()` llama al cierre de forma síncrona. Así los specs existentes no cambian y quien pide menos movimiento no espera.
+- **Confinamiento por `transform` resuelto en origen:** las raíces de `AlumnoDetallePage`, `AlumnosPage`, `PagosPage`, `ProgresoPage`, `PlantillasPage`, `MonitorAdherenciaPage` y `AdminPage` (más tres contenedores internos de `PagosPage` y `ProgresoPage`) pasan de `animate-in fade-in` a `animate-fade-in` (solo opacidad). Ninguna usaba `slide` ni `zoom`. Un guardián (`modales-salida-animada.spec.ts`) exige que no vuelvan a llevar `animate-in`.
+- **Cronómetro:** el panel expandido se pliega a píldora cuando el foco entra en un `input`, `textarea` o `select` ajeno al widget (`usePlegarAlEnfocarCampo`); `index.html` declara `interactive-widget=resizes-content`; «Restar 15 segundos» se deshabilita con el descanso terminado; la píldora lleva el aviso de pantalla bloqueada como texto accesible (no visible, para seguir discreta).
+- **Serie y cierre:** peso y repeticiones con `enterKeyHint="next"`, esfuerzo con `done`, y los tres seleccionan su contenido al enfocar; las notas del modal de cierre pasan de `text-xs` a `text-base` (evita el zoom de iOS) y las etiquetas de 11 px a `text-xs`.
+
+### 9.2. Límites aceptados
+- **Escape instantáneo en 10 modales** cuyo `useDialogoAccesible` vive en el padre (`ModalFinalizarSesion`, `ModalCierreVacio`, `ModalVideoTecnica`, `ModalInscripcionAlumno`, `ModalEnlaceCaptacion`, `ModalCobroSala`, `ModalControlAntropometrico`, `ModalRutinaSemanal`, `ModalRecordatorioCartera`, `ModalCobroCartera`, `EditorMetasNutricion`): fondo, X y Cancelar animan; Escape cierra al instante. Unificarlo exige mover el hook al modal o pasar el cierre al padre.
+- **`ModalPlantilla`** solo anima «Salir sin guardar»: su `onCerrar` decide en el padre si abre la confirmación o cierra, y retrasarlo haría que el modal se apagara y reapareciera.
+- Acciones (guardar, confirmar, «Sincronizar», «No volver a mostrar») y navegaciones siguen inmediatas.
+- **Rechazado `aria-pressed` en «Listo»:** su `aria-label` ya expresa el estado («Marcar serie N como completada/pendiente»); añadirlo duplicaría el anuncio.
+- **No verificado en dispositivo:** el plegado del panel con el teclado real (`interactive-widget` solo lo respeta Chrome Android), el movimiento en un móvil y iOS.
+
+### 9.3. Evidencia
+Lote **99/99**; suite web completa **3.471/3.471**; typecheck y build en 0 (JSON en el cierre del lote). Revisión de fiabilidad: 0 BLOCKER, 0 WARNING, 4 SUGGESTION (las asimetrías de §9.2). Dos defectos de los specs del lote (un matcher sin el espacio de `+30 s` y lecturas de archivo con `node:fs` que rompían typecheck y build) los detectó la verificación y se corrigieron antes del cierre. Un test del `DashboardPage` falló una vez en la pasada concurrente y pasó 7/7 aislado; en la pasada final de la suite pasó.

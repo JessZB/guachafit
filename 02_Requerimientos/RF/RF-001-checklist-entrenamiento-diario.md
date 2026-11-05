@@ -372,6 +372,13 @@ Then el botón flotante no aparece
     3. El aspecto real del movimiento, iOS, la vibración y el audio no se probaron en un iPhone.
   - **Seguimientos:** plegar el panel al enfocar un input o declarar `interactive-widget`; portalizar esos modales o evitar el `transform` de la entrada; `animate-out` y salida de los modales; y los de la lista anterior (deshabilitar «Restar 15 segundos» con el descanso terminado y avisar en la píldora de la pantalla bloqueada).
 
+### 7.22. Salida animada de los modales y ajustes de móvil del entrenamiento (`41cca53`, 2026-11-04, [[ADR-027-cronometro-descanso-tiempo-absoluto-borrador-series]] §9)
+- Los 27 modales con `fixed inset-0` se cierran con una salida de 150 ms (`useSalidaModal`); sin animación (movimiento reducido o sin `matchMedia`) el cierre es síncrono. Escape queda instantáneo en los modales cuyo hook de diálogo vive en el padre, y `ModalPlantilla` solo anima «Salir sin guardar» (ADR-027 §9.2).
+- Las raíces de las páginas con modales entran solo con opacidad (`animate-fade-in`), así que el `transform` de `animate-in` ya no confina los modales `fixed`.
+- Cronómetro: el panel se pliega a píldora al enfocar un campo de texto ajeno; «Restar 15 segundos» se deshabilita con el descanso terminado; la píldora anuncia como texto accesible que con la pantalla bloqueada no avisa; `interactive-widget=resizes-content` en el viewport.
+- Serie y cierre: `enterKeyHint` y selección al enfocar en peso, repeticiones y esfuerzo; notas del cierre a 16 px. Se rechaza `aria-pressed` en «Listo» (el `aria-label` ya expresa el estado).
+- Evidencia: lote 99/99, web 3.471/3.471, typecheck y build en 0; revisión de fiabilidad sin BLOCKER ni WARNING.
+
 ### Pendiente
 - Ninguno abierto de §7.10. El uso desde varias pestañas o dispositivos queda como límite documentado (ver §7.17 y §7.21).
-- Seguimientos de §7.21: los listados arriba en «No verificado y fuera de alcance», los del botón flotante (plegar el panel con el teclado, modales dentro de páginas con `animate-in`, `animate-out` en los modales) y la prueba en un iPhone real.
+- Seguimientos de §7.21: los de «No verificado y fuera de alcance» arriba, las asimetrías de Escape de §7.22 (ADR-027 §9.2), y la prueba en un móvil real y en un iPhone (panel con el teclado, modales tras navegar, movimiento, vibración y audio). Quedan fuera de este lote por ser de producto: precarga del peso con el plan, repeticiones prellenadas con el objetivo y desmarcar una serie con deshacer.
