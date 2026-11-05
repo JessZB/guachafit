@@ -39,18 +39,24 @@ Repo/vault: C:\Users\jesus\OneDrive\Documentos\Obsidian Vault\Trabajo\GUACHAFIT 
 8. ✅ **Salida animada de los modales y ajustes de UI del entrenamiento** (RF-001 §7.22, [[ADR-027-cronometro-descanso-tiempo-absoluto-borrador-series]] §9): hecho en `41cca53` (2026-11-04, local y pendiente de push). `useSalidaModal` en los 27 modales (150 ms; síncrono con movimiento reducido o sin `matchMedia`), páginas con modales con entrada solo de opacidad, panel del cronómetro plegado al enfocar un campo, `interactive-widget`, «Restar 15 segundos» deshabilitado al terminar, aviso de pantalla bloqueada en la píldora, `enterKeyHint` y selección al enfocar, notas del cierre a 16 px. Evidencia: lote 99/99, web **3.471/3.471**, typecheck y build en 0. Rechazado: `aria-pressed` en «Listo».
 9. ✅ **Escape animado en los 11 modales y precarga del peso con el plan** (RF-001 §7.23, [[ADR-027-cronometro-descanso-tiempo-absoluto-borrador-series]] §10): hecho en `b0f9042` (2026-11-04, local y pendiente de push). Evidencia: lote 74/74, web **3.545/3.545**, typecheck y build en 0, revisión sin BLOCKER ni WARNING, prueba en Chrome.
 10. ✅ **Aviso «Serie N completada · Deshacer» y bloqueo de 600 ms de «Listo»** (RF-001 §7.24, [[ADR-027-cronometro-descanso-tiempo-absoluto-borrador-series]] §11): hecho en el commit de 2026-11-04 posterior a `b0f9042` (local y pendiente de push). Evidencia: lote 9/9, web **3.572/3.572**, typecheck y build en 0, revisión con 2 WARNING corregidos, prueba en Chrome.
-11. **Pendientes, a decidir con el dueño (sin empezar):**
-   - **Probar en un móvil real y en un iPhone** (guía de pruebas, sección 1): el toque doble real, la franja y su anuncio, modal justo tras navegar, panel plegado con el teclado, movimiento, vibración, audio y pantalla bloqueada.
-   - **Parpadeo de Escape** en `EditorMetasNutricion` con cambios (y `ModalPlantilla`, que no anima el cierre normal): exponer «hay cambios» al modal.
+11. ✅ **Fase 1 del plan de transiciones y carga: View Transitions entre módulos** ([[ADR-028-transiciones-entre-modulos-view-transitions]]): hecho en `4147202` (2026-11-05, local y pendiente de push). Evidencia: lote 112/112, web **3.612/3.612**, typecheck y build en 0, revisión de fiabilidad sin BLOCKER ni WARNING, prueba en Chrome.
+12. **Plan de transiciones y carga, fases siguientes (aprobado el orden por el dueño, sin empezar):**
+   - **Fase 2 — carga sin saltos:** primitiva `Skeleton` compartida; skeletons con la forma real en las 10 vistas con spinner de 300 px (AlumnoDetalle, Progreso, Pagos, Plantillas, Monitor, Ajustes, Dashboard, Conciliación, Antropometría, Entrenamiento); indicador con retraso de ~150 ms; arreglar «Hola → Hola, Nombre» (`CoachMenuPage`), el formulario vacío de `NutricionPage` y el texto plano de `AjustesAlumnoPage`. Mantener lo cargado donde ya hay caché (react-query); migrar los 14 hooks propios a react-query queda fuera.
+   - **Fase 3 — botones:** `BotonTactil` con prop de carga (`Loader2` y `aria-busy`); `focus-visible` global; los 5 botones de envío sin spinner (`LoginPage`, `RecuperarPage`, `RestablecerPage`, `OnboardingPage`, `ActivacionPage`); «Reintentar» sin feedback (`ContenidoConPerfil`, `EstadoConfirmacionCorreo`); 104 de 266 botones sin transición ni estado `active`.
+   - **Fase 4 — menús sin salida animada:** `MenuCuenta`, `Paginacion` (selector de tamaño), `MenuAccionesAlumno`, `MenuAccionesFilaCartera`, `PanelCatalogo`.
+   - Límites de la fase 1 (ADR-028 §6): Atrás/Adelante vuelve al inicio; foco y anuncio del cambio de vista; sub-vistas internas de Pagos y Progreso sin fundido.
+13. **Pendientes anteriores, a decidir con el dueño (sin empezar):**
+   - **Probar en un móvil real y en un iPhone** (guía de pruebas, sección 1 y sección 9): toque doble real, franja y su anuncio, modal justo tras navegar, panel plegado con el teclado, movimiento, vibración, audio y pantalla bloqueada.
+   - **Parpadeo de Escape** en `EditorMetasNutricion` con cambios (y `ModalPlantilla`): exponer «hay cambios» al modal.
    - **De producto:** repeticiones prellenadas con el objetivo (hoy se envía `repsLogradas ?? repsObjetivo`).
    - **Deuda:** el segundo parámetro ignorado de `construirPayloadSerie`; foco que cae al `body` tras «Deshacer»; la ref `avisoVigente` asignada en render (ADR-027 §10.2 y §11.3).
    - **Datos de prueba:** la sesión de `andres.perez` quedó en curso con las series pendientes (algunas con `pesoKg` `0.00` o `75.00`); para restaurar, volver a ejecutar el seed o reiniciar la sesión.
-   - Auditoría de contraste de los controles nuevos (franja incluida; no medida). Descartado por YAGNI: sincronizar el cronómetro entre pestañas.
+   - Auditoría de contraste de los controles nuevos. Descartado por YAGNI: sincronizar el cronómetro entre pestañas.
 
 ## Estado de partida
 - Lotes E1–E7 cerrados:
   - E1 `77c1990`; E2 `c6a0e34`/`05d42bd`; E3 `8af2673`/`c194caa`; E4 `e440587`/`bb42b55`;
   - E5 `dfc3e51`/`0194fcb` (ADR-021); E6 `9192fef`/`3c68eed`; E7 `63369d7`.
-- Web 1575/1575, typecheck y build limpios (2026-10-12). Tras el cronómetro (`8bcfa95`, 2026-11-04): web **3329/3329**, typecheck y build sin errores. Tras el botón flotante (`24d506f` y `4a84375`): web 3.372/3.372. Tras la salida animada de modales (`41cca53`): web 3.471/3.471. Tras el Escape animado y el peso del plan (`b0f9042`, 2026-11-04): web **3.545/3.545**, typecheck y build sin errores.
+- Web 1575/1575, typecheck y build limpios (2026-10-12). Tras el cronómetro (`8bcfa95`, 2026-11-04): web **3329/3329**, typecheck y build sin errores. Tras el botón flotante (`24d506f` y `4a84375`): web 3.372/3.372. Tras la salida animada de modales (`41cca53`): web 3.471/3.471. Tras el Escape animado y el peso del plan (`b0f9042`): web 3.545/3.545. Tras las View Transitions (`4147202`, 2026-11-05): web **3.612/3.612**, typecheck y build sin errores.
 - Convenciones nuevas en 00_Reglas_Desarrollo_SDD.md: §6.12 (peso máximo 700) y §6.13 (entrada numérica filtrada).
 ```

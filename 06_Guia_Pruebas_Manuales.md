@@ -529,6 +529,14 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - Sin conexión y con pendientes, el botón de sincronización muestra el número en el móvil y el lector de pantalla dice "Sin conexión…".
 - [ ] **Campos de Ajustes en el iPhone (desde 2026-10-28, UX-03):** en Ajustes → Perfil y en Correo y contraseña, toca un campo en un iPhone o en DevTools con un iPhone emulado: la pantalla **no se amplía** al enfocarlo. Deja un campo con error (por ejemplo, un teléfono inválido) y guarda: el error se lee junto al campo y el lector de pantalla lo anuncia.
 - [ ] **Peso de letra moderado (desde 2026-10-10):** en ninguna pantalla hay textos "ultranegros". Títulos, cifras y etiquetas se ven en negrita normal (700 como máximo), tanto en el tema claro como en el oscuro y en el móvil.
+- [ ] **Transiciones entre módulos (2026-11-05, [[ADR-028-transiciones-entre-modulos-view-transitions]]):** en Chrome o Edge (y Safari 18+), con alumno, entrenador y administrador, en escritorio y en un móvil.
+  - **Cambio de módulo:** navega con la barra inferior (móvil) o el menú lateral (escritorio) entre Menú, Panel, Alumnos, Cartera, Pagos, etc. → solo el **contenido** se funde (sale rápido y entra con un leve ascenso); la cabecera y la barra inferior **no parpadean ni se mueven**.
+  - **Scroll:** baja por una lista larga y cambia de módulo → la nueva vista empieza **arriba del todo**.
+  - **Modales tras navegar:** abre un modal justo después de cambiar de módulo → cubre **toda la pantalla** (cabecera y barras incluidas) y queda centrado.
+  - **Movimiento reducido:** activa «Reducir movimiento» en el sistema → el cambio de módulo es instantáneo, sin fundido.
+  - **Navegador sin soporte (p. ej. Safari anterior a 18):** el contenido entra con un fundido simple (respaldo) al cambiar de módulo.
+  - **Límites conocidos:** Atrás/Adelante del navegador vuelve siempre al inicio de la página; los cambios internos de «Pagos» y «Progreso» (hub ↔ nuevo reporte) no se funden; el foco queda en el enlace pulsado y no se anuncia el cambio de vista.
+
 
 ## 9.1. Errores y mensajes (todos los roles)
 
