@@ -546,6 +546,13 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - **Nutrición:** mientras carga el reporte de hoy no hay formulario editable ni botón de guardar; al llegar, el formulario sale ya relleno. Las metas también cargan con esqueleto (ya no hay círculo girando).
   - **Primera visita a un módulo:** mientras se descarga el código de la pantalla se ve un esqueleto de página (título y tarjetas), no un círculo girando.
   - **Lector de pantalla:** el texto «Cargando …» se anuncia desde el primer instante.
+- [ ] **Botones y menús (2026-11-05, [[ADR-028-transiciones-entre-modulos-view-transitions]] §10):**
+  - **Botones de envío:** en Login, Recuperar contraseña, Restablecer, Registro (onboarding) y Activación, al enviar el botón se apaga y muestra un **círculo girando** junto a «Entrando...», «Enviando...», etc.
+  - **Foco con teclado:** con la tecla Tab, cada botón y enlace muestra un **anillo visible** al enfocarse.
+  - **Pulsar un botón:** cualquier botón se hunde un poco al pulsarlo y los cambios de color son suaves (no instantáneos).
+  - **Menús:** el menú de cuenta, el selector «filas por página», los menús de acciones de alumno y de fila de cartera, y el panel de crear ejercicio se **desvanecen** al cerrarse (Escape, tocar fuera o elegir una opción), sin quedarse a medias ni duplicar la acción elegida.
+  - **Crear ejercicio rápido:** al guardarlo, el panel se cierra sin desvanecerse (es un límite conocido); si falla, el formulario queda abierto.
+  - **Reducir movimiento:** todo lo anterior es instantáneo.
 ## 9.1. Errores y mensajes (todos los roles)
 
 - [ ] **Datos inválidos → mensaje claro:** envía un formulario con un dato fuera de rango (p. ej. un peso negativo) → el mensaje **nombra el campo** en español y no muestra textos como "Zod", "uuid", "null" o "token".

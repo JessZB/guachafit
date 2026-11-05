@@ -55,8 +55,8 @@ Lote 112/112 y suite web completa **3.612/3.612**; typecheck y build en 0. Proba
 ## 8. Plan de fases
 1. **Transiciones entre módulos** (este ADR).
 2. ✅ Carga sin saltos (§9): primitiva `Skeleton` compartida, esqueletos con la forma de cada vista y retraso del indicador de 150 ms. La ronda 2b cerró el fallback de rutas y las metas de Nutrición (§9.5).
-3. Botones: estado «cargando» en `BotonTactil`, `focus-visible` global y los 5 botones de envío sin spinner.
-4. Menús y desplegables sin salida animada (menú de cuenta, selector de tamaño de página, menús de acciones).
+3. ✅ Botones (§10): estado «cargando» en `BotonTactil`, `focus-visible` y transición globales y los 5 botones de envío con spinner.
+4. ✅ Menús y desplegables con salida animada (§10): menú de cuenta, selector de tamaño de página, menús de acciones y panel del catálogo.
 
 ## 9. Addendum 2026-11-05: fase 2, carga sin saltos (esqueletos)
 
@@ -86,3 +86,22 @@ Lote 112/112 y suite web completa **3.700/3.700**; typecheck y build en 0. Revis
 - `SeccionMetasNutricionales` usa `CargaConEsqueleto` («Cargando tus metas…», `min-h-[300px]`, tres tarjetas KPI) en lugar de `EstadoCarga`.
 - Evidencia: lote 220/220 y suite web completa **3.713/3.713**; typecheck y build en 0; un spec previo (`NutricionPage.ux23`) solo ganó esperas. No se auditó si queda algún otro spinner de carga de vista fuera de las 13 vistas migradas (por ejemplo, el `PublicFallback` del router público o spinners de secciones menores).
 - Pendiente: el salto de layout de 0,076 medido en Nutrición (reserva de alto del esqueleto frente al formulario real) y el contraste del esqueleto en modo oscuro; ninguno de los dos se midió con instrumentos en dispositivo.
+
+## 10. Addendum 2026-11-05: fases 3 y 4 (botones con estado de carga y menús con salida animada)
+
+### 10.1. Decisión
+- **`BotonTactil` con `cargando`:** el botón queda `disabled`, con `aria-busy="true"` y un spinner antes del contenido; no dispara `onClick`.
+- **Botones de envío** de Login, Recuperar, Restablecer, Onboarding y Activación: `aria-busy`, `disabled` y spinner junto al texto de estado que ya tenían (el texto va ahora en un `<span>`). No se migraron a `BotonTactil` porque su tamaño de letra y forma cambiarían el aspecto de esas pantallas. Se conservaron los puntos suspensivos «...» de sus textos porque los specs los buscan.
+- **«Reintentar»** de `ContenidoConPerfil` y `EstadoConfirmacionCorreo` pasa a `BotonTactil` (hereda transición y estado de pulsación).
+- **Regla base global** en `index.css` (`@layer base`): `:focus-visible` con anillo visible en todo, transición de 150 ms en `button` y leve escala (`scale: 0.98`) al pulsar. Sustituye migrar uno a uno los 104 botones sin feedback; las utilidades de cada componente siguen mandando por capa y el movimiento reducido ya anula las duraciones. No lleva test (es visual).
+- **Menús con salida animada** (`CLASES_SALIDA_POPOVER` en `lib/use-salida-modal.ts`, 100 ms): `MenuCuenta`, el selector de filas de `Paginacion`, `MenuAccionesAlumno` y `MenuAccionesFilaCartera` (Radix `DropdownMenu` controlados) y `PanelCatalogo`. Cualquier camino de cierre (Escape, clic fuera, elegir opción, el botón que abre) pasa por `cerrar`; la opción elegida se ejecuta una vez y de inmediato, y el menú no responde a más clics mientras sale. Sin `matchMedia` o con movimiento reducido el cierre es síncrono.
+
+### 10.2. Límites
+- **`PanelCatalogo`:** al enviar el creador rápido con una función asíncrona, el panel no anima su salida: el padre lo cierra como antes porque, si la creación falla, el formulario debe quedar abierto (decisión D4). Animarlo exigiría que el padre exponga el resultado del alta.
+- **Radix** ignora `pointer-events-none` en `Content` (pone `pointer-events` inline): el bloqueo real durante la salida lo dan las guardas del código.
+- **Escala al pulsar:** se usa la propiedad `scale` y no `transform`, para no componerse con los `active:scale-*` de las utilidades de Tailwind v4.
+- **Sin verificar a ojo:** el aspecto de la regla global (anillo de foco, transición y escala en todos los botones) y las cinco salidas de menú no se vieron en un navegador en este lote.
+- **Tests:** solo de comportamiento (3 specs nuevos), por decisión del dueño; sin guardianes de texto de archivos ni aserciones de clases.
+
+### 10.3. Evidencia
+Lote 623/623 y suite web completa **3.732/3.732**; typecheck y build en 0. Un spec previo (`AccionesFilaCartera.interaccion`) solo ganó la espera del desmontaje animado. Este lote no pasó por revisión de fiabilidad aparte ni por prueba en Chrome (recorte pedido por el dueño para acortar el ciclo).
