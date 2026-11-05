@@ -54,7 +54,7 @@ Lote 112/112 y suite web completa **3.612/3.612**; typecheck y build en 0. Proba
 
 ## 8. Plan de fases
 1. **Transiciones entre módulos** (este ADR).
-2. ✅ Carga sin saltos (§9): primitiva `Skeleton` compartida, esqueletos con la forma de cada vista y retraso del indicador de 150 ms. Quedan el fallback de rutas y las metas de Nutrición (ronda 2b).
+2. ✅ Carga sin saltos (§9): primitiva `Skeleton` compartida, esqueletos con la forma de cada vista y retraso del indicador de 150 ms. La ronda 2b cerró el fallback de rutas y las metas de Nutrición (§9.5).
 3. Botones: estado «cargando» en `BotonTactil`, `focus-visible` global y los 5 botones de envío sin spinner.
 4. Menús y desplegables sin salida animada (menú de cuenta, selector de tamaño de página, menús de acciones).
 
@@ -73,10 +73,16 @@ Lote 112/112 y suite web completa **3.612/3.612**; typecheck y build en 0. Proba
 - Una altura fija por esqueleto en lugar de `min-h`: el contenido real varía.
 
 ### 9.3. Límites y seguimiento
-- **Fallback de rutas** (`AppLayout`, `Suspense`): sigue siendo un spinner «Cargando contenido…». Es lo que se ve la primera vez que se entra a cada módulo (carga del código de la ruta). Pendiente de la ronda 2b.
-- **Sección de metas de Nutrición** (`SeccionMetasNutricionales`): sigue con `EstadoCarga`, así que mientras carga hay dos regiones `role="status"` y un spinner junto al esqueleto del reporte. Pendiente de la ronda 2b.
+- ~~**Fallback de rutas** (`AppLayout`, `Suspense`) con spinner~~: resuelto en la ronda 2b (§9.5).
+- ~~**Sección de metas de Nutrición** con `EstadoCarga`~~: resuelto en la ronda 2b (§9.5). Mientras carga siguen existiendo dos regiones `role="status"` (reporte y metas), cada una con su texto.
 - **Nutrición** midió un salto de layout de 0,076 al cargar (reserva de alto del esqueleto frente al formulario real).
 - Sugerencias de la revisión: doble región de estado en Nutrición, contraste sutil del esqueleto en modo oscuro y anuncio de un `role="status"` estático en lectores de pantalla.
 
 ### 9.4. Evidencia
 Lote 112/112 y suite web completa **3.700/3.700**; typecheck y build en 0. Revisión de fiabilidad: 0 BLOCKER, 0 WARNING, 3 SUGGESTION. Cinco specs previos solo cambiaron el nombre del componente o ganaron esperas (`EstadosMonitor.estructura`, `NutricionPage.caracterizacion`, `NutricionPage.spec` con el hook mockeado, `ProgresoPage.ux27.carga` y `.url`). Probado en Chrome con la red del API retrasada 1,5 s: los esqueletos del Panel, la ficha de alumno, Pagos y Nutrición aparecen tras 150 ms, sin spinner de vista, y el salto de layout medido fue 0 en casi todas (0,0003 a 0,0006 en dos; 0,076 en Nutrición). En la primera visita de cada módulo se vio el spinner del fallback de rutas, que es el pendiente de §9.3.
+
+### 9.5. Ronda 2b (2026-11-05): fallback de rutas y metas de Nutrición
+- Preset `EsqueletoPagina` (título, subtítulo y tres tarjetas) para el `Suspense` de `AppLayout`: en la primera visita a cada módulo (carga del código de la ruta) el texto «Cargando contenido…» sigue disponible de inmediato y a los 150 ms aparece el esqueleto de página en lugar del spinner. Misma reserva de alto (`min-h-[50vh]`).
+- `SeccionMetasNutricionales` usa `CargaConEsqueleto` («Cargando tus metas…», `min-h-[300px]`, tres tarjetas KPI) en lugar de `EstadoCarga`.
+- Evidencia: lote 220/220 y suite web completa **3.713/3.713**; typecheck y build en 0; un spec previo (`NutricionPage.ux23`) solo ganó esperas. No se auditó si queda algún otro spinner de carga de vista fuera de las 13 vistas migradas (por ejemplo, el `PublicFallback` del router público o spinners de secciones menores).
+- Pendiente: el salto de layout de 0,076 medido en Nutrición (reserva de alto del esqueleto frente al formulario real) y el contraste del esqueleto en modo oscuro; ninguno de los dos se midió con instrumentos en dispositivo.

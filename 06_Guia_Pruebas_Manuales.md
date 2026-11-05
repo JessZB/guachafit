@@ -543,8 +543,8 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - **Esqueleto:** mientras carga aparecen bloques grises con un pulso suave **con la forma de lo que va a llegar** (tarjetas, filas, rejilla o formulario), no un círculo girando; al llegar los datos el contenido ocupa su lugar **sin saltar**.
   - **Cargas rápidas:** con buena conexión no debe verse ningún parpadeo del esqueleto (solo aparece si la carga pasa de ~0,15 s).
   - **Panel:** la franja «Atención» sigue visible con «—» y el esqueleto va debajo.
-  - **Nutrición:** mientras carga el reporte de hoy no hay formulario editable ni botón de guardar; al llegar, el formulario sale ya relleno. Se ve todavía el girando de «Cargando tus metas…» (pendiente de la ronda 2b).
-  - **Primera visita a un módulo:** puede verse un instante el girando de «Cargando contenido…» (pendiente de la ronda 2b).
+  - **Nutrición:** mientras carga el reporte de hoy no hay formulario editable ni botón de guardar; al llegar, el formulario sale ya relleno. Las metas también cargan con esqueleto (ya no hay círculo girando).
+  - **Primera visita a un módulo:** mientras se descarga el código de la pantalla se ve un esqueleto de página (título y tarjetas), no un círculo girando.
   - **Lector de pantalla:** el texto «Cargando …» se anuncia desde el primer instante.
 ## 9.1. Errores y mensajes (todos los roles)
 
