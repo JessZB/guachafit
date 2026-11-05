@@ -1,6 +1,7 @@
 import type { RefObject } from 'react';
 import { AlertTriangle, Coffee, X } from 'lucide-react';
 import { TipoCierreSesion } from '@guachafit/shared';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 
 export interface ModalCierreVacioProps {
   isFinishing: boolean;
@@ -15,12 +16,15 @@ export interface ModalCierreVacioProps {
  * (2 opciones + cancelar). Se decide en fase D.
  */
 export function ModalCierreVacio({ isFinishing, onClose, onConfirm, dialogRef }: ModalCierreVacioProps) {
+  const { saliendo, cerrar } = useSalidaModal(onClose);
+
   return (
     <div
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) cerrar();
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
         ref={dialogRef}
@@ -49,7 +53,7 @@ export function ModalCierreVacio({ isFinishing, onClose, onConfirm, dialogRef }:
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={cerrar}
             aria-label="Cerrar"
             className="min-h-11 min-w-11 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground transition-colors cursor-pointer"
           >
@@ -85,7 +89,7 @@ export function ModalCierreVacio({ isFinishing, onClose, onConfirm, dialogRef }:
 
         <button
           type="button"
-          onClick={onClose}
+          onClick={cerrar}
           className="w-full min-h-11 py-2.5 rounded-2xl bg-transparent text-muted-foreground hover:text-foreground text-xs font-bold transition-colors cursor-pointer"
         >
           Cancelar

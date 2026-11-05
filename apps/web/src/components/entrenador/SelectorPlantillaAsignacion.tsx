@@ -12,6 +12,7 @@
 import type { AsignacionPlantillaResponseDTO, PlantillaRutinaResumenDTO } from '@guachafit/shared';
 import { useAuth } from '../../context/auth-context';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../lib/use-salida-modal';
 import { textoConfirmacionReemplazo } from '../../lib/asignacion-masiva';
 import { DialogoConfirmacion } from '../common/DialogoConfirmacion';
 import { CabeceraPasos } from './selector-plantilla-asignacion/CabeceraPasos';
@@ -48,7 +49,8 @@ export function SelectorPlantillaAsignacion({
 
   // U3b: Escape, trampa de Tab y restore del foco; el foco inicial sigue en el buscador
   // (`autoFocus`), por eso el hook no lo reasigna.
-  const refDialogo = useDialogoAccesible({ onCerrar, enfocarAlAbrir: false });
+  const { saliendo, cerrar } = useSalidaModal(onCerrar);
+  const refDialogo = useDialogoAccesible({ onCerrar: cerrar, enfocarAlAbrir: false });
 
   const seleccionarPlantilla = (resumen: PlantillaRutinaResumenDTO) => {
     if (plantillas.cargandoDetalleId) return;
@@ -62,9 +64,10 @@ export function SelectorPlantillaAsignacion({
   return (
     <div
       onClick={(e) => {
-        if (e.target === e.currentTarget) onCerrar();
+        if (e.target === e.currentTarget) cerrar();
       }}
-      className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
         ref={refDialogo}
@@ -80,7 +83,7 @@ export function SelectorPlantillaAsignacion({
           paso={asignacion.paso}
           indicePaso={asignacion.indicePaso}
           tituloRef={asignacion.refTituloPaso}
-          onCerrar={onCerrar}
+          onCerrar={cerrar}
         />
 
         {/* Contenido del paso */}
@@ -149,7 +152,7 @@ export function SelectorPlantillaAsignacion({
               : undefined
           }
           botonCerrarRef={asignacion.refBotonCerrar}
-          onCerrar={onCerrar}
+          onCerrar={cerrar}
           onAtras={() =>
             asignacion.setPaso(asignacion.paso === 'confirmar' ? 'revisar' : 'elegir')
           }

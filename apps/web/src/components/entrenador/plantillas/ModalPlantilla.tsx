@@ -22,6 +22,7 @@ import {
   type PlantillaRutinaDTO,
 } from '@guachafit/shared';
 import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import type { BloqueEdicion } from '../../../lib/rutina-bloques';
 import { DialogoConfirmacion } from '../../common/DialogoConfirmacion';
 import { BloquesRutinaEditor, type DatosEjercicioNuevo } from '../BloquesRutinaEditor';
@@ -99,12 +100,17 @@ export function ModalPlantilla({
 
   const guardadoBloqueado = !isOnline && !isDemoMode;
 
+  // `onCerrar` es la decisión del padre (puede abrir la confirmación en vez de cerrar), así que
+  // solo la salida que de verdad cierra («Salir sin guardar») se anima.
+  const { saliendo, cerrar: salirAnimado } = useSalidaModal(onSalirSinGuardar);
+
   return (
     <div
       onClick={(e) => {
         if (e.target === e.currentTarget) onCerrar();
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
         ref={refModalPlantilla}
@@ -214,7 +220,7 @@ export function ModalPlantilla({
         textoCancelar="Seguir editando"
         variante="peligro"
         onCancelar={onSeguirEditando}
-        onConfirmar={onSalirSinGuardar}
+        onConfirmar={salirAnimado}
       />
     </div>
   );

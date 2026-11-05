@@ -16,6 +16,7 @@
 
 import type { RefObject } from 'react';
 import { Check, Copy, MessageSquare, Share2, X } from 'lucide-react';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import { PanelCaptacion } from './PanelCaptacion';
 
 export interface ModalEnlaceCaptacionProps {
@@ -57,6 +58,7 @@ export function ModalEnlaceCaptacion({
   onRotarEnlace,
   onAlternarCaptacion,
 }: ModalEnlaceCaptacionProps) {
+  const { saliendo, cerrar } = useSalidaModal(onCerrar);
   // Con error de carga la descripción queda vacía: el aviso de error ya explica la situación.
   const descripcion = registrationUrl
     ? 'Comparte este enlace con tus prospectos para que se autorregistren y se vinculen automáticamente a tu cartera.'
@@ -69,9 +71,10 @@ export function ModalEnlaceCaptacion({
   return (
     <div
       onClick={(e) => {
-        if (e.target === e.currentTarget) onCerrar();
+        if (e.target === e.currentTarget) cerrar();
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
         ref={refDialogo}
@@ -90,7 +93,7 @@ export function ModalEnlaceCaptacion({
           </div>
           <button
             type="button"
-            onClick={onCerrar}
+            onClick={cerrar}
             aria-label="Cerrar"
             className="min-h-11 min-w-11 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
           >

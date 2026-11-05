@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, HandCoins, X } from 'lucide-react';
 import { textoTasaCobro } from '../../../lib/cobro-sala';
 import { fechaCalendarioLocal } from '../../../lib/date-format';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import { Moneda, type ResumenCarteraDTO } from '@guachafit/shared';
 import type { EstadoCobro } from './useCobroCartera';
 import { CampoAjustes } from '../../ajustes/CampoAjustes';
@@ -57,13 +58,17 @@ export function ModalCobroCartera({
   onCambiarFecha,
   onRegistrar,
 }: ModalCobroCarteraProps) {
+  const { saliendo, cerrar } = useSalidaModal(onCerrar);
   const idMonto = useId();
   const idMoneda = useId();
   const idFecha = useId();
   const sufijoMoneda = cobro.moneda === Moneda.VES ? 'Bs.' : 'USD';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
+    <div
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
+    >
       <div
         ref={dialogRef}
         role="dialog"
@@ -81,7 +86,7 @@ export function ModalCobroCartera({
           </div>
           <button
             type="button"
-            onClick={onCerrar}
+            onClick={cerrar}
             className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
             aria-label="Cerrar registro de cobro"
           >
@@ -186,7 +191,7 @@ export function ModalCobroCartera({
         )}
 
         <div className="flex items-center gap-2 pt-1">
-          <BotonTactil variante="secundaria" onClick={onCerrar} className="flex-1">
+          <BotonTactil variante="secundaria" onClick={cerrar} className="flex-1">
             {exito ? 'Cerrar' : 'Cancelar'}
           </BotonTactil>
           {!exito && (

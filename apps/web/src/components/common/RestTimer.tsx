@@ -5,6 +5,7 @@ import { RestTimerFab } from './RestTimerFab';
 import { RestTimerPildora } from './RestTimerPildora';
 import { RestTimerPanel } from './RestTimerPanel';
 import { useCapaSalienteCronometro } from './use-capa-saliente-cronometro';
+import { usePlegarAlEnfocarCampo } from './use-plegar-al-enfocar-campo';
 
 export { DURACION_SALIDA_CRONOMETRO_MS } from './use-capa-saliente-cronometro';
 
@@ -35,6 +36,7 @@ export function RestTimer({ cronometro, visible, onAbrirEnPausa }: RestTimerProp
   const [abiertoPorBoton, setAbiertoPorBoton] = useState(false);
   const [previo, setPrevio] = useState({ abierto, serieId });
   const botonRef = useRef<HTMLButtonElement>(null);
+  const anclaRef = useRef<HTMLDivElement>(null);
   const devolverFoco = useRef(false);
 
   // Cada descanso nuevo (otra serie, abrir o cerrar) arranca como píldora, salvo si lo abrió el
@@ -84,6 +86,12 @@ export function RestTimer({ cronometro, visible, onAbrirEnPausa }: RestTimerProp
 
   const estado = !visible ? null : !abierto ? 'fab' : expandido ? 'panel' : 'pildora';
 
+  // El teclado de un campo externo taparía el panel: se pliega a píldora mientras se escribe.
+  usePlegarAlEnfocarCampo(estado === 'panel', anclaRef, () => {
+    setExpandido(false);
+    setEnfocarPanel(false);
+  });
+
   return createPortal(
     <>
       {/* Siempre montada y fuera de las capas animadas o `inert`: anuncia el fin del descanso aunque
@@ -94,6 +102,7 @@ export function RestTimer({ cronometro, visible, onAbrirEnPausa }: RestTimerProp
 
       {estado && (
         <div
+          ref={anclaRef}
           data-estado={estado}
           className="fixed z-[45] max-w-[calc(100vw-2rem)] right-[calc(1rem_+_env(safe-area-inset-right,0px))] bottom-[calc(5.5rem_+_env(safe-area-inset-bottom,0px))] lg:right-6 lg:bottom-6"
         >

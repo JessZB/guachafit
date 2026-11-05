@@ -1,8 +1,10 @@
+import { useId } from 'react';
 import { Pause, Play, Timer, X } from 'lucide-react';
 import { triggerHaptic } from '../../lib/haptics';
 import { formatearRestante } from '../../lib/cronometro-descanso';
 import type { CronometroDescanso } from '../atleta/entrenamiento/use-cronometro-descanso';
 import { AnilloProgreso } from './RestTimerAnillo';
+import { AVISO_PANTALLA_BLOQUEADA } from './rest-timer-textos';
 
 interface RestTimerPildoraProps {
   cronometro: CronometroDescanso;
@@ -13,6 +15,7 @@ interface RestTimerPildoraProps {
 export function RestTimerPildora({ cronometro, onExpandir }: RestTimerPildoraProps) {
   const { restanteMs, duracionMs, pausado, terminado, pausar, reanudar, cerrar } = cronometro;
   const progreso = duracionMs > 0 ? 1 - restanteMs / duracionMs : 1;
+  const idAviso = useId();
 
   return (
     <div
@@ -27,6 +30,7 @@ export function RestTimerPildora({ cronometro, onExpandir }: RestTimerPildoraPro
           onExpandir();
         }}
         aria-label="Expandir cronómetro"
+        aria-describedby={idAviso}
         title="Expandir cronómetro"
         className="min-h-11 min-w-11 flex items-center gap-2 pr-1 rounded-full cursor-pointer hover:opacity-80 transition-opacity focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       >
@@ -42,6 +46,9 @@ export function RestTimerPildora({ cronometro, onExpandir }: RestTimerPildoraPro
           </span>
         </span>
       </button>
+      <span id={idAviso} className="sr-only">
+        {AVISO_PANTALLA_BLOQUEADA}
+      </span>
 
       {!terminado && (
         <button

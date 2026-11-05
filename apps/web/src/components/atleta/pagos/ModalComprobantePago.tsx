@@ -19,6 +19,7 @@
 import { useEffect, useState } from 'react';
 import { Image as ImageIcon, Receipt, ShieldCheck, X } from 'lucide-react';
 import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import { COMPROBANTE_DEMO_URL } from '../../../lib/pagos-adaptadores';
 
 export interface ComprobantePagoVisible {
@@ -38,9 +39,10 @@ export function ModalComprobantePago({
   onCerrar,
 }: ModalComprobantePagoProps) {
   // U3b: el visor es un diálogo real (Escape, trampa de Tab, restore del foco).
+  const { saliendo, cerrar } = useSalidaModal(onCerrar);
   const refDialogo = useDialogoAccesible({
     abierto: comprobante !== null,
-    onCerrar,
+    onCerrar: cerrar,
   });
   const [imagenError, setImagenError] = useState(false);
 
@@ -53,7 +55,10 @@ export function ModalComprobantePago({
   if (!comprobante) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/85 backdrop-blur-md">
+    <div
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/85 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
+    >
       <div
         ref={refDialogo}
         role="dialog"
@@ -70,7 +75,7 @@ export function ModalComprobantePago({
             </h3>
           </div>
           <button
-            onClick={onCerrar}
+            onClick={cerrar}
             aria-label="Cerrar comprobante de pago"
             className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
           >
@@ -123,7 +128,7 @@ export function ModalComprobantePago({
             )}
           </span>
           <button
-            onClick={onCerrar}
+            onClick={cerrar}
             className="py-2 px-4 rounded-xl bg-secondary text-foreground text-xs font-bold hover:bg-secondary/80 transition-colors cursor-pointer"
           >
             Cerrar

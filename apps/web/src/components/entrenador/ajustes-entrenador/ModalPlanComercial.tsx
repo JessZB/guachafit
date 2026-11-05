@@ -11,6 +11,7 @@ import { CreditCard, X } from 'lucide-react';
 import type { PlanMembresiaDetalleDTO } from '@guachafit/shared';
 import { triggerHaptic } from '../../../lib/haptics';
 import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import { pluralizar } from '../../../lib/pluralizar';
 import type { DatosFormularioPlan } from '../../../lib/ajustes-entrenador-planes';
 import {
@@ -100,9 +101,11 @@ export function ModalPlanComercial({
   // Tras un guardado con éxito no hay nada que perder: cualquier cierre es directo.
   const bloqueado = isSubmitting || Boolean(successMsg);
 
+  const { saliendo, cerrar } = useSalidaModal(onCerrar);
+
   function intentarCerrar() {
     if (hayCambios && !successMsg) setConfirmandoCierre(true);
-    else onCerrar();
+    else cerrar();
   }
 
   // U3b: semántica de diálogo, Escape, trampa de Tab y restore del foco.
@@ -145,7 +148,8 @@ export function ModalPlanComercial({
       onClick={(e) => {
         if (e.target === e.currentTarget) intentarCerrar();
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
         ref={refModalPlan}
@@ -298,7 +302,7 @@ export function ModalPlanComercial({
         textoCancelar="Seguir editando"
         variante="peligro"
         onCancelar={() => setConfirmandoCierre(false)}
-        onConfirmar={onCerrar}
+        onConfirmar={cerrar}
       />
     </div>
   );

@@ -9,6 +9,7 @@
  */
 import { AlertTriangle } from 'lucide-react';
 import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import { TEXTO_ADVERTENCIA_FINANZAS } from '../../../lib/preferencias-notificacion';
 
 export interface DialogoConfirmacionFinanzasProps {
@@ -24,9 +25,10 @@ export function DialogoConfirmacionFinanzas({
   onCancelar,
   onConfirmar,
 }: DialogoConfirmacionFinanzasProps) {
+  const { saliendo, cerrar } = useSalidaModal(onCancelar);
   const refModalConfirmacion = useDialogoAccesible({
     abierto,
-    onCerrar: onCancelar,
+    onCerrar: cerrar,
   });
 
   if (!abierto) return null;
@@ -34,9 +36,10 @@ export function DialogoConfirmacionFinanzas({
   return (
     <div
       onClick={(evento) => {
-        if (evento.target === evento.currentTarget) onCancelar();
+        if (evento.target === evento.currentTarget) cerrar();
       }}
-      className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-[80] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
         ref={refModalConfirmacion}
@@ -69,7 +72,7 @@ export function DialogoConfirmacionFinanzas({
         <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 border-t border-border/70">
           <button
             type="button"
-            onClick={onCancelar}
+            onClick={cerrar}
             className="h-11 sm:h-9 px-4 rounded-xl bg-secondary border border-border text-foreground font-bold text-xs hover:bg-secondary/70 active:scale-95 transition-all cursor-pointer"
           >
             Mantener canales activos

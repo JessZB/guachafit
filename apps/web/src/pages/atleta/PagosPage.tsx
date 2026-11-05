@@ -98,7 +98,7 @@ export function PagosPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto pb-24 lg:pb-12 animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-2xl mx-auto pb-24 lg:pb-12 animate-fade-in">
       <CabeceraPagos tasaEfectiva={tasa?.tasaEfectiva} etiquetaSinTasa={etiquetaSinTasa} />
 
       {/* RF-006 RN-05: saldo a favor del alumno */}
@@ -127,7 +127,7 @@ export function PagosPage() {
       {/* VISTA 1: HUB PRINCIPAL (Divulgación Progresiva - Nivel 1)                  */}
       {/* ========================================================================= */}
       {vistaActiva === 'hub' && (
-        <div className="space-y-5 animate-in fade-in duration-150">
+        <div className="space-y-5 animate-fade-in">
           {/* Tarjeta de Resumen de Saldo */}
           <TarjetaResumenCuota
             cuota={cuota}

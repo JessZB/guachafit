@@ -9,6 +9,7 @@ import React, { useState } from 'react';
 import { Camera, ImageOff, RefreshCw, ShieldCheck, X } from 'lucide-react';
 import type { FotoAntropometriaDetalleDTO, FotoComidaDetalleDTO } from '@guachafit/shared';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../lib/use-salida-modal';
 import { formatFechaLargaCalendario } from '../../lib/date-format';
 import { etiquetaAngulo } from '../../lib/comparador-fotos';
 import { etiquetaTipoComida } from '../../lib/nutricion-metas';
@@ -40,7 +41,8 @@ function etiquetaDeFoto(foto: FotoVisor, etiqueta?: string): string {
 }
 
 export function VisorFoto({ foto, fecha, onCerrar, etiqueta }: VisorFotoProps) {
-  const refDialogo = useDialogoAccesible({ onCerrar });
+  const { saliendo, cerrar } = useSalidaModal(onCerrar);
+  const refDialogo = useDialogoAccesible({ onCerrar: cerrar });
   const [fallo, setFallo] = useState(false);
   const [intento, setIntento] = useState(0);
   const url = urlDeFoto(foto);
@@ -50,7 +52,10 @@ export function VisorFoto({ foto, fecha, onCerrar, etiqueta }: VisorFotoProps) {
   const tituloToma = etiquetaDeFoto(foto, etiqueta);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/85 backdrop-blur-sm animate-in fade-in duration-150">
+    <div
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/85 backdrop-blur-sm animate-in fade-in duration-150 ${CLASES_SALIDA_MODAL}`}
+    >
       <div
         ref={refDialogo}
         role="dialog"
@@ -68,7 +73,7 @@ export function VisorFoto({ foto, fecha, onCerrar, etiqueta }: VisorFotoProps) {
           </div>
           <button
             type="button"
-            onClick={onCerrar}
+            onClick={cerrar}
             aria-label="Cerrar foto"
             className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl bg-secondary text-foreground hover:bg-secondary/80 active:scale-95 transition-all cursor-pointer"
           >

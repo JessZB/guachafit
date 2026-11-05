@@ -19,6 +19,7 @@ import { processOutboxQueue, subscribeToSyncStatus, type SyncStatusState } from 
 import { formatFechaHoraLocal } from '../../lib/date-format';
 import { describirRechazoCola } from '../../lib/mensajes-error';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../lib/use-salida-modal';
 
 interface SyncQueuePanelProps {
   open: boolean;
@@ -53,7 +54,8 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
 
   // U3b: Escape, trampa de Tab, foco inicial y restore del foco al cerrar.
-  const refDialogo = useDialogoAccesible({ abierto: open, onCerrar: onClose });
+  const { saliendo, cerrar } = useSalidaModal(onClose);
+  const refDialogo = useDialogoAccesible({ abierto: open, onCerrar: cerrar });
 
   const isSyncing = syncState.isSyncing;
 
@@ -120,9 +122,10 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
   return (
     <div
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) cerrar();
       }}
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-[60] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
         ref={refDialogo}
@@ -159,7 +162,7 @@ export function SyncQueuePanel({ open, onClose }: SyncQueuePanelProps) {
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={cerrar}
             aria-label="Cerrar cambios por enviar"
             className="min-h-11 min-w-11 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground transition-colors cursor-pointer shrink-0"
           >

@@ -38,6 +38,7 @@ import { formatFechaCalendario, formatFechaHoraLocal } from '../../../lib/date-f
 import { pluralizar } from '../../../lib/pluralizar';
 import { etiquetaEstadoSesion, etiquetaMonitorAdherencia } from '../../../lib/adherencia';
 import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import { DetalleSesionEntrenamiento } from '../DetalleSesionEntrenamiento';
 import {
   CLASES_TONO,
@@ -65,7 +66,8 @@ export function ModalActividadAlumno({ alumno, isDemoMode, onCerrar }: ModalActi
   } = useHistorialActividad({ alumno, isDemoMode });
 
   // U3b: Escape, trampa de Tab, foco inicial y restore del foco al disparador (antes duplicado aquí).
-  const refDialogo = useDialogoAccesible({ onCerrar });
+  const { saliendo, cerrar } = useSalidaModal(onCerrar);
+  const refDialogo = useDialogoAccesible({ onCerrar: cerrar });
 
   const etiquetaAlumno = etiquetaMonitorAdherencia(alumno);
   const tonoAlumno = CLASES_TONO[etiquetaAlumno.tono];
@@ -79,9 +81,10 @@ export function ModalActividadAlumno({ alumno, isDemoMode, onCerrar }: ModalActi
   return (
     <div
       onClick={(evento) => {
-        if (evento.target === evento.currentTarget) onCerrar();
+        if (evento.target === evento.currentTarget) cerrar();
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
         ref={refDialogo}
@@ -108,7 +111,7 @@ export function ModalActividadAlumno({ alumno, isDemoMode, onCerrar }: ModalActi
           </div>
           <button
             type="button"
-            onClick={onCerrar}
+            onClick={cerrar}
             className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
             title="Cerrar"
             aria-label="Cerrar la actividad del alumno"

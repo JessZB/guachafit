@@ -9,6 +9,7 @@ import {
   type EventoInstalacionDiferida,
 } from '../../lib/pwa-instalacion';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../lib/use-salida-modal';
 
 interface NavigatorStandalone extends Navigator {
   standalone?: boolean;
@@ -32,14 +33,16 @@ interface InstructivoInstalacionProps {
 function InstructivoInstalacion({ onClose, onNoVolverAMostrar }: InstructivoInstalacionProps) {
   // U3b: Escape, trampa de Tab y restore del foco. El foco inicial lo conserva `autoFocus`
   // sobre "Entendido" (acción principal), por eso el hook no lo reasigna.
-  const refDialogo = useDialogoAccesible({ onCerrar: onClose, enfocarAlAbrir: false });
+  const { saliendo, cerrar } = useSalidaModal(onClose);
+  const refDialogo = useDialogoAccesible({ onCerrar: cerrar, enfocarAlAbrir: false });
 
   return (
     <div
       onClick={(evento) => {
-        if (evento.target === evento.currentTarget) onClose();
+        if (evento.target === evento.currentTarget) cerrar();
       }}
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-[60] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
         ref={refDialogo}
@@ -66,7 +69,7 @@ function InstructivoInstalacion({ onClose, onNoVolverAMostrar }: InstructivoInst
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={cerrar}
             aria-label="Cerrar instructivo de instalación"
             className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground transition-colors cursor-pointer shrink-0"
           >
@@ -112,7 +115,7 @@ function InstructivoInstalacion({ onClose, onNoVolverAMostrar }: InstructivoInst
           <button
             type="button"
             autoFocus
-            onClick={onClose}
+            onClick={cerrar}
             className="py-2 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-sm shadow-primary/25 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
           >
             Entendido

@@ -156,8 +156,9 @@ export function AlumnoDetallePage() {
   const semaforo = calcularSemaforoPago(alumno.semaforoPago, tx.finanzas);
   const isArchived = Boolean(alumno.deletedAtUtc);
 
+  // Solo opacidad en la raíz: un transform aquí convertiría la página en el bloque contenedor de los modales `fixed`.
   return (
-    <div className="space-y-6 animate-in fade-in duration-300 pb-12">
+    <div className="space-y-6 animate-fade-in pb-12">
       <div className="flex items-center justify-between">
         <Link
           to="/coach/alumnos"

@@ -3,6 +3,7 @@ import { triggerHaptic } from '../../lib/haptics';
 import { formatearRestante } from '../../lib/cronometro-descanso';
 import { formatearSegundos } from '../../lib/sesion-tiempos';
 import type { CronometroDescanso } from '../atleta/entrenamiento/use-cronometro-descanso';
+import { AVISO_PANTALLA_BLOQUEADA } from './rest-timer-textos';
 
 interface RestTimerPanelProps {
   cronometro: CronometroDescanso;
@@ -118,9 +119,10 @@ export function RestTimerPanel({
               triggerHaptic('light');
               ajustar(-15);
             }}
+            disabled={terminado}
             aria-label="Restar 15 segundos"
             title="Restar 15 segundos"
-            className={BOTON_SECUNDARIO}
+            className={`${BOTON_SECUNDARIO} disabled:opacity-50 disabled:cursor-not-allowed`}
           >
             <Minus className="h-3.5 w-3.5" aria-hidden="true" />
             {formatearSegundos(15)}
@@ -181,7 +183,7 @@ export function RestTimerPanel({
       </div>
 
       <p className="mt-3 text-xs text-muted-foreground text-center">
-        Con la pantalla bloqueada no podemos avisarte
+        {AVISO_PANTALLA_BLOQUEADA}
       </p>
     </div>
   );

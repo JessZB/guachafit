@@ -20,6 +20,7 @@ import type React from 'react';
 import { AlertCircle, Scale, X } from 'lucide-react';
 import { SelectorFotosCheckin } from '../../antropometria/SelectorFotosCheckin';
 import { filtrarEntradaPesoCorporal } from '../../../lib/entrada-numerica';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import type { RetornoCheckinAntropometrico } from './use-checkin-antropometrico';
 
 export interface ModalControlAntropometricoProps {
@@ -58,6 +59,7 @@ export function ModalControlAntropometrico({
   } = checkin;
   const fotosSubiendo = fotosAntro.subiendo;
   const onCerrar = () => setIsAntroModalOpen(false);
+  const { saliendo, cerrar } = useSalidaModal(onCerrar);
   const idBase = useId();
   const idTitulo = `${idBase}-titulo`;
   const idPeso = `${idBase}-peso`;
@@ -69,9 +71,10 @@ export function ModalControlAntropometrico({
   return (
     <div
       onClick={(e) => {
-        if (e.target === e.currentTarget) onCerrar();
+        if (e.target === e.currentTarget) cerrar();
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
         ref={refDialogo}
@@ -90,7 +93,7 @@ export function ModalControlAntropometrico({
           </div>
           <button
             type="button"
-            onClick={onCerrar}
+            onClick={cerrar}
             aria-label="Cerrar control antropométrico"
             className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
           >

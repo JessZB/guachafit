@@ -1,6 +1,7 @@
 import type { RefObject } from 'react';
 import { ExternalLink, Video, X } from 'lucide-react';
 import { obtenerUrlVideoEmbebible } from '../../../lib/entrenamiento-video';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 
 export interface ModalVideoTecnicaProps {
   video: { url: string; nombre: string };
@@ -14,14 +15,16 @@ export interface ModalVideoTecnicaProps {
  * muestra video. Se decide en fase D.
  */
 export function ModalVideoTecnica({ video, onClose, dialogRef }: ModalVideoTecnicaProps) {
+  const { saliendo, cerrar } = useSalidaModal(onClose);
   const embedUrl = obtenerUrlVideoEmbebible(video.url);
 
   return (
     <div
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) cerrar();
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
         ref={dialogRef}
@@ -50,7 +53,7 @@ export function ModalVideoTecnica({ video, onClose, dialogRef }: ModalVideoTecni
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={cerrar}
             aria-label="Cerrar video demostrativo"
             className="min-h-11 min-w-11 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground transition-colors cursor-pointer"
           >

@@ -7,6 +7,7 @@
 import React from 'react';
 import { AlertTriangle, Loader2, LogOut, RefreshCw, X } from 'lucide-react';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../lib/use-salida-modal';
 
 export interface DialogoLogoutPendientesProps {
   abierto: boolean;
@@ -28,9 +29,10 @@ export function DialogoLogoutPendientes({
   onSincronizar,
 }: DialogoLogoutPendientesProps) {
   // Mientras se sincroniza, Escape no cierra: evita dejar la operación a medias.
+  const { saliendo, cerrar } = useSalidaModal(onCancelar);
   const refDialogo = useDialogoAccesible({
     abierto,
-    onCerrar: onCancelar,
+    onCerrar: cerrar,
     cerrarConEscape: !sincronizando,
   });
 
@@ -39,7 +41,10 @@ export function DialogoLogoutPendientes({
   const etiquetaCambios = pendientes === 1 ? 'cambio' : 'cambios';
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200">
+    <div
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-[70] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
+    >
       <div
         ref={refDialogo}
         role="dialog"
@@ -63,7 +68,7 @@ export function DialogoLogoutPendientes({
           </div>
           <button
             type="button"
-            onClick={onCancelar}
+            onClick={cerrar}
             disabled={sincronizando}
             aria-label="Cancelar y volver a la aplicación"
             className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground transition-colors cursor-pointer shrink-0 disabled:opacity-50"
@@ -101,7 +106,7 @@ export function DialogoLogoutPendientes({
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={onCancelar}
+              onClick={cerrar}
               disabled={sincronizando}
               className="py-2.5 px-4 rounded-xl bg-secondary text-foreground border border-border font-bold text-xs hover:bg-secondary/80 active:scale-98 transition-all cursor-pointer disabled:opacity-60"
             >

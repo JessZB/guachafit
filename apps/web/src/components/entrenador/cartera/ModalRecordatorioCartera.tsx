@@ -12,6 +12,7 @@ import { AlertCircle, BellRing, CheckCircle2, Info, X } from 'lucide-react';
 import { tonoResultadoRecordatorio } from '../../../lib/cartera';
 import { urlWhatsApp } from '../../../lib/cartera-whatsapp';
 import { formatFechaHoraLocal } from '../../../lib/date-format';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import type {
   FilaCarteraDTO,
   RecordatorioManualResultadoDTO,
@@ -58,6 +59,7 @@ export function ModalRecordatorioCartera({
   onEnviar,
   onCopiar,
 }: ModalRecordatorioCarteraProps) {
+  const { saliendo, cerrar } = useSalidaModal(onCerrar);
   const idTitulo = useId();
   const idMensajeVistaPrevia = useId();
   const idMensajeEnviado = useId();
@@ -67,7 +69,10 @@ export function ModalRecordatorioCartera({
   const puedeEnviar = vistaPrevia?.puedeEnviar === true && !enviando && !cargandoVistaPrevia;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
+    <div
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
+    >
       <div
         ref={dialogRef}
         role="dialog"
@@ -85,7 +90,7 @@ export function ModalRecordatorioCartera({
           </div>
           <button
             type="button"
-            onClick={onCerrar}
+            onClick={cerrar}
             className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
             aria-label="Cerrar recordatorio"
           >
@@ -232,7 +237,7 @@ export function ModalRecordatorioCartera({
         )}
 
         <div className="flex items-center gap-2 pt-1">
-          <BotonTactil variante="secundaria" onClick={onCerrar} className="flex-1">
+          <BotonTactil variante="secundaria" onClick={cerrar} className="flex-1">
             {resultado ? 'Cerrar' : 'Cancelar'}
           </BotonTactil>
           {!resultado && (

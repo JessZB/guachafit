@@ -15,6 +15,7 @@ import {
   LIMITE_RECURSOS_EDUCATIVOS,
   type FilaRecursoFormulario,
 } from '../../../lib/recursos-pdf';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import { Loader2, Plus, X } from 'lucide-react';
 
 export function EditorMetasNutricion({
@@ -62,12 +63,15 @@ export function EditorMetasNutricion({
   onCerrar: () => void;
   onGuardar: (e: FormEvent) => void;
 }) {
+  const { saliendo, cerrar } = useSalidaModal(onCerrar);
+
   return (
     <div
       onClick={(e) => {
-        if (e.target === e.currentTarget) onCerrar();
+        if (e.target === e.currentTarget) cerrar();
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-150"
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-150 ${CLASES_SALIDA_MODAL}`}
     >
       <div
         ref={dialogoRef}
@@ -88,7 +92,7 @@ export function EditorMetasNutricion({
           </div>
           <button
             type="button"
-            onClick={onCerrar}
+            onClick={cerrar}
             aria-label="Cerrar editor de metas"
             className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl bg-secondary text-foreground hover:bg-secondary/80 cursor-pointer"
           >
@@ -149,7 +153,7 @@ export function EditorMetasNutricion({
           <div className="flex items-center justify-end gap-2 pt-1">
             <button
               type="button"
-              onClick={onCerrar}
+              onClick={cerrar}
               className="min-h-11 px-4 rounded-xl bg-secondary border border-border text-foreground text-xs font-bold hover:bg-secondary/70 cursor-pointer"
             >
               Cerrar

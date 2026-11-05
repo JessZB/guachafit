@@ -29,6 +29,7 @@ import {
   textoNoLeidas,
 } from '../../lib/notificaciones-in-app';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../lib/use-salida-modal';
 import { ICONO_CATEGORIA, TONO_CATEGORIA } from './estilos-categoria';
 
 export interface PanelNotificacionesProps {
@@ -140,7 +141,8 @@ export function PanelNotificaciones({
   onAbrirNotificacion,
 }: PanelNotificacionesProps) {
   // Escape, trampa de Tab, foco inicial y restore al cerrar (mismo patrón de SyncQueuePanel).
-  const refDialogo = useDialogoAccesible({ abierto, onCerrar });
+  const { saliendo, cerrar } = useSalidaModal(onCerrar);
+  const refDialogo = useDialogoAccesible({ abierto, onCerrar: cerrar });
 
   if (!abierto) return null;
 
@@ -151,9 +153,10 @@ export function PanelNotificaciones({
   return (
     <div
       onClick={(evento) => {
-        if (evento.target === evento.currentTarget) onCerrar();
+        if (evento.target === evento.currentTarget) cerrar();
       }}
-      className="fixed inset-0 z-[70]"
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-[70] ${CLASES_SALIDA_MODAL}`}
     >
       <div
         ref={refDialogo}
@@ -176,7 +179,7 @@ export function PanelNotificaciones({
           </div>
           <button
             type="button"
-            onClick={onCerrar}
+            onClick={cerrar}
             aria-label="Cerrar notificaciones"
             className="h-11 w-11 sm:h-9 sm:w-9 -m-2 inline-flex items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer shrink-0 focus-visible:outline-2 focus-visible:outline-primary"
           >

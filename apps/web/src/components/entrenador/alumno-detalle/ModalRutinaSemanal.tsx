@@ -12,9 +12,11 @@
  *
  * §6: 11px mínimo, pesos ≤ 700, tokens con variante oscura, estados honestos.
  */
+import { useRef } from 'react';
 import type React from 'react';
 import { AlertCircle, CheckCircle2, Dumbbell, X } from 'lucide-react';
 import { pluralizar } from '../../../lib/pluralizar';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import { DialogoConfirmacion } from '../../common/DialogoConfirmacion';
 import { ContenidoRutinaSemanal } from './ContenidoRutinaSemanal';
 import type { RetornoRutinaAlumno } from './use-rutina-alumno';
@@ -52,13 +54,27 @@ export function ModalRutinaSemanal({
     guardarRutinaPrescrita,
   } = rutina;
 
+  // El botón «Cerrar» además libera el aviso de éxito: marca la variante y se resuelve al cerrar.
+  const liberarExitoRef = useRef(false);
+  const { saliendo, cerrar } = useSalidaModal(() => {
+    const liberar = liberarExitoRef.current;
+    liberarExitoRef.current = false;
+    if (liberar) onCerrarYLiberarExito();
+    else onCerrar();
+  });
+  const cerrarLiberandoExito = () => {
+    liberarExitoRef.current = true;
+    cerrar();
+  };
+
   return (
     <>
       <div
         onClick={(e) => {
-          if (e.target === e.currentTarget) onCerrar();
+          if (e.target === e.currentTarget) cerrar();
         }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+        data-saliendo={saliendo || undefined}
+        className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
       >
         <div
           ref={refDialogo}
@@ -83,7 +99,7 @@ export function ModalRutinaSemanal({
             </div>
             <button
               type="button"
-              onClick={onCerrar}
+              onClick={cerrar}
               aria-label="Cerrar asignación de rutina"
               className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer"
             >
@@ -127,7 +143,7 @@ export function ModalRutinaSemanal({
               <button
                 type="button"
                 disabled={isSavingRutina}
-                onClick={onCerrarYLiberarExito}
+                onClick={cerrarLiberandoExito}
                 className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs cursor-pointer disabled:opacity-50"
               >
                 Cerrar

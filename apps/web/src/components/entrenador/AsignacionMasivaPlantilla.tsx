@@ -16,6 +16,7 @@
 import type { PlantillaRutinaResumenDTO } from '@guachafit/shared';
 import { useAuth } from '../../context/auth-context';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../lib/use-salida-modal';
 import {
   MENSAJE_ASIGNACION_INCIERTA,
   textoConfirmacionReemplazo,
@@ -52,9 +53,10 @@ export function AsignacionMasivaPlantilla({ plantilla, onCerrar }: AsignacionMas
     isDemoMode,
   });
 
+  const { saliendo, cerrar } = useSalidaModal(onCerrar);
   const refDialogo = useDialogoAccesible({
     onCerrar: () => {
-      if (!envio.isAsignando) onCerrar();
+      if (!envio.isAsignando) cerrar();
     },
   });
 
@@ -84,9 +86,10 @@ export function AsignacionMasivaPlantilla({ plantilla, onCerrar }: AsignacionMas
   return (
     <div
       onClick={(evento) => {
-        if (evento.target === evento.currentTarget && !envio.isAsignando) onCerrar();
+        if (evento.target === evento.currentTarget && !envio.isAsignando) cerrar();
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
         ref={refDialogo}
@@ -100,7 +103,7 @@ export function AsignacionMasivaPlantilla({ plantilla, onCerrar }: AsignacionMas
           <CabeceraAsignacion
             nombrePlantilla={plantilla.nombre}
             cerrarDeshabilitado={envio.isAsignando}
-            onCerrar={onCerrar}
+            onCerrar={cerrar}
           />
           {!envio.resultados && (
             <IndicadorPasos
@@ -117,7 +120,7 @@ export function AsignacionMasivaPlantilla({ plantilla, onCerrar }: AsignacionMas
             <ResultadoAsignacion
               resultados={envio.resultados}
               exitosos={envio.exitosos}
-              onCerrar={onCerrar}
+              onCerrar={cerrar}
             />
           ) : paso === 'alumnos' ? (
             <ListaAlumnosAsignacion
@@ -176,7 +179,7 @@ export function AsignacionMasivaPlantilla({ plantilla, onCerrar }: AsignacionMas
             isAsignando={envio.isAsignando}
             atrasDeshabilitado={envio.intentoCongelado}
             puedeAvanzar={puedeAvanzar}
-            onCerrar={onCerrar}
+            onCerrar={cerrar}
             onAtras={pasos.retroceder}
             onAvanzar={pasos.avanzar}
             onConfirmar={confirmar}

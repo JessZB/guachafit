@@ -91,7 +91,7 @@ export function AlumnosPage() {
   const sinConexionReal = !isDemoMode && !isOnline;
 
   return (
-    <div className="space-y-5 animate-in fade-in duration-300 pb-12">
+    <div className="space-y-5 animate-fade-in pb-12">
       <CabeceraAlumnos
         onInvitar={() => setInvitacionAbierta(true)}
         onInscribir={alta.abrirModalInscripcion}

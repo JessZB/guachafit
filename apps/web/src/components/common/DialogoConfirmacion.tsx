@@ -9,6 +9,7 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { useDialogoAccesible } from '../../lib/use-dialogo-accesible';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../lib/use-salida-modal';
 
 export interface DialogoConfirmacionProps {
   abierto: boolean;
@@ -40,10 +41,11 @@ export function DialogoConfirmacion({
   onCancelar,
   onConfirmar,
 }: DialogoConfirmacionProps) {
+  const { saliendo, cerrar } = useSalidaModal(onCancelar);
   const refDialogo = useDialogoAccesible({
     abierto,
     onCerrar: () => {
-      if (!procesando) onCancelar();
+      if (!procesando) cerrar();
     },
   });
 
@@ -58,10 +60,11 @@ export function DialogoConfirmacion({
     <div
       onClick={(evento) => {
         if (evento.target === evento.currentTarget && !procesando) {
-          onCancelar();
+          cerrar();
         }
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
         ref={refDialogo}
@@ -78,7 +81,7 @@ export function DialogoConfirmacion({
         <div className="flex items-center justify-end gap-2">
           <button
             type="button"
-            onClick={onCancelar}
+            onClick={cerrar}
             disabled={procesando}
             className="min-h-11 px-3 py-2 rounded-xl border border-border text-muted-foreground text-xs font-semibold hover:text-foreground transition-colors cursor-pointer disabled:opacity-50"
           >

@@ -9,6 +9,7 @@
 import { useId } from 'react';
 import { AlertCircle, Loader2, X } from 'lucide-react';
 import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 
 export interface ModalRechazoConciliacionProps {
   alumno: string;
@@ -32,15 +33,19 @@ export function ModalRechazoConciliacion({
   onConfirmar,
 }: ModalRechazoConciliacionProps) {
   const idMotivo = useId();
+  const { saliendo, cerrar } = useSalidaModal(onCerrar);
   const refModalRechazo = useDialogoAccesible({
     abierto: true,
     onCerrar: () => {
-      if (!procesando) onCerrar();
+      if (!procesando) cerrar();
     },
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
+    <div
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
+    >
       <div
         ref={refModalRechazo}
         role="dialog"
@@ -61,7 +66,7 @@ export function ModalRechazoConciliacion({
           </div>
           <button
             type="button"
-            onClick={onCerrar}
+            onClick={cerrar}
             disabled={procesando}
             aria-label="Cerrar rechazo de pago"
             className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground disabled:opacity-50"
@@ -109,7 +114,7 @@ export function ModalRechazoConciliacion({
         <div className="flex items-center gap-2 pt-2">
           <button
             type="button"
-            onClick={onCerrar}
+            onClick={cerrar}
             disabled={procesando}
             className="min-h-11 flex-1 py-2 rounded-xl bg-secondary hover:bg-secondary/80 font-bold text-xs text-foreground"
           >

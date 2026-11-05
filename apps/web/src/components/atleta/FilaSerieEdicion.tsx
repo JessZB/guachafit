@@ -114,6 +114,8 @@ export function FilaSerieEdicion({
                 const filtrado = filtrarEntradaPeso(numero, pesoMostrado, unidadPeso);
                 if (filtrado !== pesoMostrado) onCambiar('pesoKg', filtrado);
               }}
+              onFocus={(e) => e.currentTarget.select()}
+              enterKeyHint="next"
               onBlur={() => onSalirPeso()}
               placeholder={unidadPeso}
               aria-label={`Peso real en ${unidadPeso}, serie ${serie.numeroSerie}`}
@@ -169,6 +171,8 @@ export function FilaSerieEdicion({
                 const filtrado = filtrarEntradaReps(nuevo, repsMostradas);
                 if (filtrado !== repsMostradas) onCambiar('repsLogradas', filtrado);
               }}
+              onFocus={(e) => e.currentTarget.select()}
+              enterKeyHint="next"
               onBlur={() => onSalirReps()}
               aria-label={`Repeticiones hechas, serie ${serie.numeroSerie}`}
               aria-invalid={Boolean(errorReps)}
@@ -205,6 +209,8 @@ export function FilaSerieEdicion({
               const filtrado = filtrarEntradaRpe(e.target.value, rpeMostrado);
               if (filtrado !== rpeMostrado) onCambiar('rpe', filtrado);
             }}
+            onFocus={(e) => e.currentTarget.select()}
+            enterKeyHint="done"
             onBlur={() => onSalirRpe()}
             placeholder="8.5"
             aria-label={`Esfuerzo de 1 a 10, serie ${serie.numeroSerie}`}

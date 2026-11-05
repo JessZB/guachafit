@@ -5,6 +5,7 @@ import { describirEsfuerzo } from '../../../lib/entrenamiento-textos';
 import { formatearSegundos } from '../../../lib/sesion-tiempos';
 import { resumirDescansos } from '../../../lib/entrenamiento-descansos';
 import { triggerHaptic } from '../../../lib/haptics';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 
 export interface ModalFinalizarSesionProps {
   sesion: SesionEntrenamientoDetalleDTO;
@@ -34,6 +35,7 @@ export function ModalFinalizarSesion({
   onConfirm,
   dialogRef,
 }: ModalFinalizarSesionProps) {
+  const { saliendo, cerrar } = useSalidaModal(onClose);
   const resumenDescansos = resumirDescansos(sesion.ejercicios);
 
   const totalSeries = sesion.ejercicios.reduce(
@@ -49,9 +51,10 @@ export function ModalFinalizarSesion({
   return (
     <div
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) cerrar();
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
         ref={dialogRef}
@@ -76,7 +79,7 @@ export function ModalFinalizarSesion({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={cerrar}
             aria-label="Cerrar sin finalizar"
             className="min-h-11 min-w-11 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground transition-colors cursor-pointer"
           >
@@ -202,7 +205,7 @@ export function ModalFinalizarSesion({
             value={notasCoachInput}
             onChange={(e) => onNotasChange(e.target.value)}
             placeholder="Ej: Tuve que usar mancuernas porque la barra estaba ocupada. Sentí buena energía en sentadillas..."
-            className="w-full p-3 rounded-2xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:border-primary resize-none"
+            className="w-full p-3 rounded-2xl bg-background border border-border text-base text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:border-primary resize-none"
           />
         </div>
 
@@ -213,13 +216,13 @@ export function ModalFinalizarSesion({
               <Timer className="h-4 w-4 text-primary" />
               <div>
                 <span className="font-bold text-foreground block">Descanso promedio</span>
-                <span className="text-[11px] text-muted-foreground">Planificado: {formatearSegundos(resumenDescansos.avgPrescrito)}</span>
+                <span className="text-xs text-muted-foreground">Planificado: {formatearSegundos(resumenDescansos.avgPrescrito)}</span>
               </div>
             </div>
             <div className="text-right">
               <span className="font-mono font-bold text-sm text-foreground">{formatearSegundos(resumenDescansos.avgReal)}</span>
               <span
-                className={`text-[11px] font-bold block ${
+                className={`text-xs font-bold block ${
                   resumenDescansos.diff > 15
                     ? 'text-warning'
                     : resumenDescansos.diff < -15

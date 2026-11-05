@@ -10,6 +10,7 @@ import { Moneda, type TransaccionPagoDetalleDTO } from '@guachafit/shared';
 import { etiquetaMetodoPago } from '../../../lib/conciliacion-filtros';
 import { formatFechaCalendario } from '../../../lib/date-format';
 import { useDialogoAccesible } from '../../../lib/use-dialogo-accesible';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 import { useFormatoNumero } from '../../../lib/use-formato-numero';
 import { COMPROBANTE_DEMO_URL } from '../../../lib/conciliacion-demo';
 import { BotonTactil } from '../../ui/BotonTactil';
@@ -33,16 +34,20 @@ export function VisorComprobanteConciliacion({
   onRechazar,
   onAprobar,
 }: VisorComprobanteConciliacionProps) {
+  const { saliendo, cerrar } = useSalidaModal(onCerrar);
   const refModalComprobante = useDialogoAccesible({
     abierto: true,
-    onCerrar,
+    onCerrar: cerrar,
   });
   const { formatMonto } = useFormatoNumero();
   // Sin monto válido formatMonto devuelve '—': no se antepone el signo.
   const abonoUsd = formatMonto(tx.montoEquivalenteUsd, 'USD', { conCodigo: true });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/85 backdrop-blur-md">
+    <div
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/85 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
+    >
       <div
         ref={refModalComprobante}
         role="dialog"
@@ -71,7 +76,7 @@ export function VisorComprobanteConciliacion({
           </div>
           <button
             type="button"
-            onClick={onCerrar}
+            onClick={cerrar}
             aria-label="Cerrar comprobante de pago"
             className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
           >

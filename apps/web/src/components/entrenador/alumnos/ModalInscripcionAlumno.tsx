@@ -14,6 +14,7 @@
 
 import type { ReactNode, RefObject } from 'react';
 import { UserPlus, X } from 'lucide-react';
+import { CLASES_SALIDA_MODAL, useSalidaModal } from '../../../lib/use-salida-modal';
 
 export interface ModalInscripcionAlumnoProps {
   refDialogo: RefObject<HTMLDivElement | null>;
@@ -26,12 +27,15 @@ export function ModalInscripcionAlumno({
   onCerrar,
   children,
 }: ModalInscripcionAlumnoProps) {
+  const { saliendo, cerrar } = useSalidaModal(onCerrar);
+
   return (
     <div
       onClick={(e) => {
-        if (e.target === e.currentTarget) onCerrar();
+        if (e.target === e.currentTarget) cerrar();
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
         ref={refDialogo}
@@ -50,7 +54,7 @@ export function ModalInscripcionAlumno({
           </div>
           <button
             type="button"
-            onClick={onCerrar}
+            onClick={cerrar}
             aria-label="Cerrar"
             className="min-h-11 min-w-11 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer"
           >

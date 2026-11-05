@@ -8,6 +8,7 @@
  */
 import type { ControlAntropometricoDetalleDTO } from "@guachafit/shared";
 import { useDialogoAccesible } from "../../../lib/use-dialogo-accesible";
+import { CLASES_SALIDA_MODAL, useSalidaModal } from "../../../lib/use-salida-modal";
 import { AlertCircle, X } from "lucide-react";
 
 interface ModalRechazoAntropometriaProps {
@@ -31,14 +32,16 @@ export function ModalRechazoAntropometria({
   onCerrar,
   onConfirmar,
 }: ModalRechazoAntropometriaProps) {
-  const refModalRechazo = useDialogoAccesible({ abierto: true, onCerrar });
+  const { saliendo, cerrar } = useSalidaModal(onCerrar);
+  const refModalRechazo = useDialogoAccesible({ abierto: true, onCerrar: cerrar });
 
   return (
     <div
       onClick={(e) => {
-        if (e.target === e.currentTarget && !isRechazando) onCerrar();
+        if (e.target === e.currentTarget && !isRechazando) cerrar();
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+      data-saliendo={saliendo || undefined}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
         ref={refModalRechazo}
@@ -60,7 +63,7 @@ export function ModalRechazoAntropometria({
           </div>
           <button
             type="button"
-            onClick={onCerrar}
+            onClick={cerrar}
             disabled={isRechazando}
             aria-label="Cerrar rechazo"
             className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground cursor-pointer disabled:opacity-50"
@@ -108,7 +111,7 @@ export function ModalRechazoAntropometria({
         <div className="flex items-center justify-end gap-2 pt-1">
           <button
             type="button"
-            onClick={onCerrar}
+            onClick={cerrar}
             disabled={isRechazando}
             className="min-h-11 py-2.5 px-4 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
           >

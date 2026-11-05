@@ -133,7 +133,7 @@ function ProgresoPageContenido() {
     evolucion.evaluaciones.every((item) => item.fotos.length === 0);
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto pb-24 lg:pb-12 animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-2xl mx-auto pb-24 lg:pb-12 animate-fade-in">
       {/* Cabecera Principal */}
       <div className="flex items-center justify-between">
         <div>
@@ -197,7 +197,7 @@ function ProgresoPageContenido() {
       {/* VISTA 2: FORMULARIO DE CHECK-IN ENFOCADO                                    */}
       {/* ========================================================================= */}
       {vistaActiva === 'nuevo' && (
-        <div className="space-y-5 animate-in fade-in duration-150">
+        <div className="space-y-5 animate-fade-in">
           <EncabezadoSeccionProgreso
             variante="formulario"
             onVolver={handleVolverFormulario}
@@ -234,7 +234,7 @@ function ProgresoPageContenido() {
       {/* VISTA 3: HISTORIAL Y EVOLUCIÓN CRONOLÓGICA                                */}
       {/* ========================================================================= */}
       {vistaActiva === 'evolucion' && (
-        <div className="space-y-5 animate-in fade-in duration-150">
+        <div className="space-y-5 animate-fade-in">
           <EncabezadoSeccionProgreso
             variante="evolucion"
             onVolver={() => setVistaActiva('hub')}
