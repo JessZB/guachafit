@@ -2,7 +2,8 @@
  * Ola 4 · U4 — confirmación de logout con mutaciones sin sincronizar.
  *
  * Diálogo accesible (Escape + trampa de Tab + restore del foco vía `useDialogoAccesible`).
- * No se cierra al hacer clic afuera: cerrar sesión con pérdida exige una acción explícita.
+ * Un clic fuera del panel equivale a «Cancelar y volver a la aplicación» (nunca cierra sesión ni
+ * sincroniza); mientras se sincroniza no hay cierre.
  */
 import React from 'react';
 import { AlertTriangle, Loader2, LogOut, RefreshCw, X } from 'lucide-react';
@@ -43,6 +44,9 @@ export function DialogoLogoutPendientes({
   return (
     <div
       data-saliendo={saliendo || undefined}
+      onClick={(evento) => {
+        if (evento.target === evento.currentTarget && !sincronizando) cerrar();
+      }}
       className={`fixed inset-0 z-[70] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div

@@ -46,6 +46,9 @@ export function VisorComprobanteConciliacion({
   return (
     <div
       data-saliendo={saliendo || undefined}
+      onClick={(evento) => {
+        if (evento.target === evento.currentTarget) cerrar();
+      }}
       className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/85 backdrop-blur-md animate-in fade-in duration-200 ${CLASES_SALIDA_MODAL}`}
     >
       <div
