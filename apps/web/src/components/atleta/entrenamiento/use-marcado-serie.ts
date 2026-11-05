@@ -17,6 +17,7 @@ import {
 import type { MutableRefObject } from 'react';
 import type { PosicionFoco } from '../../../lib/modo-foco';
 import type { EnviarOEncolarFn } from './use-envio-sesion';
+import type { AvisoSerieCompletada } from './use-aviso-serie-completada';
 
 interface OpcionesMarcado {
   sesion: SesionEntrenamientoDetalleDTO | null;
@@ -41,6 +42,12 @@ interface OpcionesMarcado {
   enviarOEncolar: EnviarOEncolarFn;
   posicionFocoVigente: MutableRefObject<PosicionFoco | null>;
   serieDelCronometroVigente: MutableRefObject<{ ejercicioIndex: number; serieIndex: number } | null>;
+  /** Bloqueo corto de «Listo» tras marcar: `estaBloqueado()` ignora un nuevo marcado (no el desmarcado). */
+  bloqueoMarcado: { activar: () => void; estaBloqueado: () => boolean };
+  /** Se avisa al completar una serie con éxito local (alimenta la franja «Deshacer»). */
+  alCompletarSerie: (aviso: AvisoSerieCompletada) => void;
+  /** Se avisa al desmarcar una serie o al revertirla por rechazo: su franja deja de tener sentido. */
+  alDesmarcarSerie: (serieId: string) => void;
 }
 
 /** Marcar/desmarcar serie con reversión ante rechazo del servidor (D6). */
@@ -62,7 +69,11 @@ export function useMarcadoSerie(opciones: OpcionesMarcado) {
     enviarOEncolar,
     posicionFocoVigente,
     serieDelCronometroVigente,
+    bloqueoMarcado,
+    alCompletarSerie,
+    alDesmarcarSerie,
   } = opciones;
+  const { activar: activarBloqueo, estaBloqueado } = bloqueoMarcado;
   // Lote E9 (guarda G): última operación de marcado emitida por serie. Un rechazo tardío solo
   // revierte la serie si su operación sigue siendo la última; si se volvió a tocar, manda la
   // intención más nueva.
@@ -75,6 +86,10 @@ export function useMarcadoSerie(opciones: OpcionesMarcado) {
       const updated = clonarSesionParaEdicion(sesion);
       const serie = updated.ejercicios[ejercicioIndex].series[serieIndex];
       const willBeCompleted = !serie.completada;
+      // Bloqueo corto tras marcar: un nuevo marcado dentro de la ventana se ignora sin NINGÚN
+      // efecto (ni error inline, ni háptico, ni contador de operación, ni envío ni mutación).
+      // Desmarcar nunca se bloquea.
+      if (willBeCompleted && estaBloqueado()) return;
       // D6: copia previa para revertir si el servidor rechaza la serie (4xx con conexión).
       const serieAntes: SerieRegistroDetalleDTO = { ...serie };
       const porcentajeAntes = sesion.porcentajeCumplimiento;
@@ -133,6 +148,17 @@ export function useMarcadoSerie(opciones: OpcionesMarcado) {
       Object.assign(updated, recalcularCumplimiento(updated));
 
       setSesion(updated);
+      if (willBeCompleted) {
+        activarBloqueo();
+        alCompletarSerie({
+          serieId: serie.id,
+          ejercicioIndex,
+          serieIndex,
+          numeroSerie: serie.numeroSerie,
+        });
+      } else {
+        alDesmarcarSerie(serie.id);
+      }
 
       // WU3b: al marcar la serie, el texto en edición se reemplaza por el valor canónico persistido.
       limpiarBorrador(`${serie.id}:pesoKg`);
@@ -187,6 +213,8 @@ export function useMarcadoSerie(opciones: OpcionesMarcado) {
       // porcentaje y la racha se recalculan desde el estado ACTUAL, no desde la instantánea.
       const sigueVigente = ultimaOperacionPorSerie.current.get(serie.id) === operacion;
       if (sigueVigente) {
+        // La serie vuelve a pendiente: su franja «Deshacer» ya no aplica.
+        if (willBeCompleted) alDesmarcarSerie(serie.id);
         setSesion((actual) => {
           if (!actual || actual.id !== updated.id) return actual;
           const base = revertirSerieRechazada(actual, {
@@ -243,6 +271,10 @@ export function useMarcadoSerie(opciones: OpcionesMarcado) {
       enviarOEncolar,
       posicionFocoVigente,
       serieDelCronometroVigente,
+      estaBloqueado,
+      activarBloqueo,
+      alCompletarSerie,
+      alDesmarcarSerie,
     ]
   );
 

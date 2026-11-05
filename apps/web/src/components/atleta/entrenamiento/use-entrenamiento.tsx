@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from '../../../context/auth-context';
 import { useZonaPerfil } from '../../../lib/use-zona-perfil';
 import { type BloqueoAlumno } from '../../../lib/acceso-alumno';
@@ -17,6 +17,8 @@ import { useTemporizadorDescanso } from './use-temporizador-descanso';
 import { useVistaSesion } from './use-vista-sesion';
 import { useIniciarSerie } from './use-iniciar-serie';
 import { useMarcadoSerie } from './use-marcado-serie';
+import { useBloqueoMarcado } from './use-bloqueo-marcado';
+import { useAvisoSerieCompletada } from './use-aviso-serie-completada';
 import { useVideoTecnica } from './use-video-tecnica';
 import { useColaOffline } from './use-cola-offline';
 import { useEstadoSesion } from './use-estado-sesion';
@@ -99,6 +101,29 @@ export function useEntrenamiento() {
   });
   // Con la sesión planificada no hay descanso que medir: se cierra por `cerrar()` (serieId → null).
   const vista = useVistaSesion({ sesion, onSesionPlanificada: temporizador.cerrarCronometro });
+  // Tras marcar una serie: bloqueo corto de «Listo» y franja «Serie N completada · Deshacer».
+  const bloqueoMarcado = useBloqueoMarcado();
+  const avisoSerie = useAvisoSerieCompletada();
+  const { aviso: avisoEnEstado, mostrar: mostrarAviso, ocultar: ocultarAviso } = avisoSerie;
+  // Ref para que `alDesmarcarSerie` sea estable y siempre lea el aviso del estado real.
+  const avisoVigente = useRef(avisoEnEstado);
+  avisoVigente.current = avisoEnEstado;
+  // Derivado sin efectos: la franja solo se muestra mientras su serie siga siendo la misma y
+  // completada (un cambio de bloque/sesión o de estado por otra vía la deja fuera al instante;
+  // el auto-ocultado de 6 s limpia después el estado).
+  const serieDelAviso = avisoEnEstado
+    ? sesion?.ejercicios[avisoEnEstado.ejercicioIndex]?.series[avisoEnEstado.serieIndex]
+    : undefined;
+  const avisoSerieCompletada =
+    avisoEnEstado && serieDelAviso?.id === avisoEnEstado.serieId && serieDelAviso.completada
+      ? avisoEnEstado
+      : null;
+  const alDesmarcarSerie = useCallback(
+    (serieId: string) => {
+      if (avisoVigente.current?.serieId === serieId) ocultarAviso();
+    },
+    [ocultarAviso]
+  );
   const marcado = useMarcadoSerie({
     sesion,
     setSesion,
@@ -116,6 +141,9 @@ export function useEntrenamiento() {
     enviarOEncolar: envio.enviarOEncolar,
     posicionFocoVigente: vista.posicionFocoVigente,
     serieDelCronometroVigente: vista.serieDelCronometroVigente,
+    bloqueoMarcado,
+    alCompletarSerie: mostrarAviso,
+    alDesmarcarSerie,
   });
   const inicio = useIniciarSerie({
     sesion,
@@ -147,6 +175,21 @@ export function useEntrenamiento() {
     vista.setVistaEnCurso('foco');
   };
 
+  /**
+   * «Deshacer» de la franja: desmarca la serie recién completada (el bloqueo solo ignora completar),
+   * oculta la franja y, si el cronómetro abierto era el de esa serie, lo cierra.
+   */
+  const deshacerSerieCompletada = () => {
+    const aviso = avisoSerieCompletada;
+    if (!aviso) return;
+    const serieActual = sesion?.ejercicios[aviso.ejercicioIndex]?.series[aviso.serieIndex];
+    if (serieActual?.id === aviso.serieId && serieActual.completada) {
+      void marcado.handleToggleSet(aviso.ejercicioIndex, aviso.serieIndex);
+    }
+    ocultarAviso();
+    if (temporizador.cronometro.serieId === aviso.serieId) temporizador.cerrarCronometro();
+  };
+
   /** Lote E5: fila de una serie, compartida por el modo foco y la lista completa. */
   const renderFilaSerie = (ejIdx: number, sIdx: number): ReactNode => {
     if (!sesion) return null;
@@ -170,6 +213,7 @@ export function useEntrenamiento() {
         onSalirRpe={edicion.handleBlurRpe}
         onMarcar={marcado.handleToggleSet}
         onIniciar={inicio.handleIniciarSerie}
+        marcadoBloqueado={bloqueoMarcado.bloqueado}
       />
     );
   };
@@ -244,5 +288,6 @@ export function useEntrenamiento() {
     rangoHorarioSesion: estado.rangoHorarioSesion,
     posicionFocoVigente: vista.posicionFocoVigente,
     handleHacerAhora, renderFilaSerie,
+    avisoSerieCompletada, deshacerSerieCompletada,
   };
 }

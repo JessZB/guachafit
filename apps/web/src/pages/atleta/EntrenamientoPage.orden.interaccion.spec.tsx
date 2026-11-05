@@ -293,11 +293,17 @@ async function abrirListaCompleta(): Promise<void> {
   await screen.findByRole('button', { name: 'Volver al enfoque' }, { timeout: 5000 });
 }
 
-function marcarSerieEnEjercicio(nombreEjercicio: string, numeroSerie: number): void {
+async function marcarSerieEnEjercicio(nombreEjercicio: string, numeroSerie: number): Promise<void> {
   const tarjeta = tarjetaDe(nombreEjercicio);
-  fireEvent.click(
-    within(tarjeta).getByRole('button', { name: `Marcar serie ${numeroSerie} como completada` })
-  );
+  const selector = () =>
+    within(tarjeta).getByRole('button', {
+      name: `Marcar serie ${numeroSerie} como completada`,
+    }) as HTMLButtonElement;
+  await waitFor(() => {
+    const boton = selector();
+    expect(boton.disabled).toBe(false);
+  });
+  fireEvent.click(selector());
 }
 
 function desmarcarSerieEnEjercicio(nombreEjercicio: string, numeroSerie: number): void {
@@ -340,7 +346,7 @@ describe('EntrenamientoPage · orden de los envíos de una sesión', () => {
     render(<EntrenamientoPage />);
     await abrirListaCompleta();
 
-    marcarSerieEnEjercicio('Sentadilla', 1);
+    await marcarSerieEnEjercicio('Sentadilla', 1);
     await waitFor(() => expect(pendientes.has(clavePut('s-1', true))).toBe(true), {
       timeout: 5000,
     });
@@ -369,7 +375,7 @@ describe('EntrenamientoPage · orden de los envíos de una sesión', () => {
     render(<EntrenamientoPage />);
     await abrirListaCompleta();
 
-    marcarSerieEnEjercicio('Sentadilla', 1);
+    await marcarSerieEnEjercicio('Sentadilla', 1);
     await waitFor(() => expect(pendientes.has(clavePut('s-1', true))).toBe(true), {
       timeout: 5000,
     });
@@ -405,9 +411,9 @@ describe('EntrenamientoPage · orden de los envíos de una sesión', () => {
     render(<EntrenamientoPage />);
     await abrirListaCompleta();
 
-    marcarSerieEnEjercicio('Sentadilla', 1);
+    await marcarSerieEnEjercicio('Sentadilla', 1);
     await waitFor(() => expect(putsSerie()).toHaveLength(1), { timeout: 5000 });
-    marcarSerieEnEjercicio('Sentadilla', 2);
+    await marcarSerieEnEjercicio('Sentadilla', 2);
     await waitFor(() => expect(pendientes.has(clavePut('s-2', true))).toBe(true), {
       timeout: 5000,
     });
@@ -434,7 +440,7 @@ describe('EntrenamientoPage · orden de los envíos de una sesión', () => {
     render(<EntrenamientoPage />);
     await abrirListaCompleta();
 
-    marcarSerieEnEjercicio('Sentadilla', 1);
+    await marcarSerieEnEjercicio('Sentadilla', 1);
     await waitFor(() => expect(pendientes.has(clavePut('s-1', true))).toBe(true), {
       timeout: 5000,
     });
@@ -479,11 +485,11 @@ describe('EntrenamientoPage · orden de los envíos de una sesión', () => {
     render(<EntrenamientoPage />);
     await abrirListaCompleta();
 
-    marcarSerieEnEjercicio('Sentadilla', 1);
+    await marcarSerieEnEjercicio('Sentadilla', 1);
     await waitFor(() => expect(pendientes.has(clavePut('s-1', true))).toBe(true), {
       timeout: 5000,
     });
-    marcarSerieEnEjercicio('Sentadilla', 2);
+    await marcarSerieEnEjercicio('Sentadilla', 2);
     // Con el diseño el marcado de s-2 se encola detrás del PUT de s-1 en vuelo.
     await waitFor(
       async () => {
@@ -516,7 +522,7 @@ describe('EntrenamientoPage · orden de los envíos de una sesión', () => {
     render(<EntrenamientoPage />);
     await abrirListaCompleta();
 
-    marcarSerieEnEjercicio('Sentadilla', 1);
+    await marcarSerieEnEjercicio('Sentadilla', 1);
     await waitFor(() => expect(putsSerie()).toHaveLength(1), { timeout: 5000 });
 
     expect(putsSerie()).toEqual([{ serieId: 's-1', completada: true }]);

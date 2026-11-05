@@ -421,9 +421,11 @@ describe('EntrenamientoPage · rama "no cerrar" del cronómetro (contrato 4)', (
 
     // Serie B (Sentadilla 2): el cronómetro vigente pasa a ser el suyo.
     const seccionB = screen.getByRole('region', { name: 'Entrenamiento en foco' });
-    fireEvent.click(
-      within(seccionB).getByRole('button', { name: 'Marcar serie 2 como completada' })
-    );
+    const botonSerie2 = within(seccionB).getByRole('button', {
+      name: 'Marcar serie 2 como completada',
+    }) as HTMLButtonElement;
+    await waitFor(() => expect(botonSerie2.disabled).toBe(false));
+    fireEvent.click(botonSerie2);
     await screen.findByText(/Ejercicio 2 de 2 · Serie 1 de 1/, undefined, { timeout: 5000 });
     expect(
       screen.getByRole('button', { name: 'Cerrar cronómetro de descanso' })

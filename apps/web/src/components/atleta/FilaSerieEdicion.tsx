@@ -42,6 +42,7 @@ export function FilaSerieEdicion({
   onSalirRpe,
   onMarcar,
   onIniciar,
+  marcadoBloqueado = false,
 }: {
   serie: SerieRegistroDetalleDTO;
   unidadPeso: UnidadPeso;
@@ -68,6 +69,8 @@ export function FilaSerieEdicion({
   onSalirRpe: () => void;
   onMarcar: () => void;
   onIniciar: () => void;
+  /** Ventana corta tras marcar otra serie: «Listo» de una serie pendiente no responde (desmarcar sí). */
+  marcadoBloqueado?: boolean;
 }) {
   const pasoVisible = pasoPesoEnUnidad(unidadPeso);
   return (
@@ -237,10 +240,10 @@ export function FilaSerieEdicion({
           <div className="flex sm:justify-center">
             <button
               type="button"
-              disabled={soloLectura}
+              disabled={soloLectura || (marcadoBloqueado && !serie.completada)}
               onClick={() => onMarcar()}
               aria-label={`Marcar serie ${serie.numeroSerie} como ${serie.completada ? 'pendiente' : 'completada'}`}
-              className={`h-12 w-12 sm:h-11 sm:w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary ${
+              className={`h-12 w-12 sm:h-11 sm:w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary ${
                 serie.completada
                   ? 'bg-success-strong text-white shadow-md shadow-success-strong/25 scale-105'
                   : 'bg-background border-2 border-border text-muted-foreground hover:border-primary'

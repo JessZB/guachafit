@@ -15,7 +15,7 @@
  */
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const sesionMock = vi.hoisted(() => ({
   usuario: {
@@ -182,11 +182,21 @@ describe('EntrenamientoPage · vista previa en modo demo (C4)', () => {
 
     // Queda pendiente: vuelve el botón de completar en esa fila y no hay fila compacta.
     expect(filaCompactaSerie1()).toBeNull();
-    const recompletar = screen.queryAllByRole('button', { name: 'Marcar serie 1 como completada' })[0];
-    expect(recompletar).toBeDefined();
+    const selectorRecompletar = () =>
+      screen.queryAllByRole('button', { name: 'Marcar serie 1 como completada' })[0] as
+        | HTMLButtonElement
+        | undefined;
+    expect(selectorRecompletar()).toBeDefined();
+
+    // Esperar a que pase el bloqueo de 600 ms del marcado anterior antes de volver a marcar
+    await waitFor(() => {
+      const btn = selectorRecompletar();
+      expect(btn).toBeDefined();
+      expect(btn?.disabled).toBe(false);
+    });
 
     // Al volver a marcarla, se compacta de nuevo.
-    fireEvent.click(recompletar as HTMLElement);
+    fireEvent.click(selectorRecompletar() as HTMLElement);
     expect(filaCompactaSerie1()).not.toBeNull();
   }, 15000);
 });

@@ -27,6 +27,7 @@ import { CtaFinalizarSesion } from '../../components/atleta/entrenamiento/CtaFin
 import { ResumenSesionFinalizada } from '../../components/atleta/entrenamiento/ResumenSesionFinalizada';
 import { ListaCompletaEjercicios } from '../../components/atleta/entrenamiento/ListaCompletaEjercicios';
 import { ModalFinalizarSesion } from '../../components/atleta/entrenamiento/ModalFinalizarSesion';
+import { AvisoSerieCompletada } from '../../components/atleta/entrenamiento/AvisoSerieCompletada';
 import { ModalCierreVacio } from '../../components/atleta/entrenamiento/ModalCierreVacio';
 import { ModalVideoTecnica } from '../../components/atleta/entrenamiento/ModalVideoTecnica';
 import { useEntrenamiento } from '../../components/atleta/entrenamiento/use-entrenamiento';
@@ -46,7 +47,8 @@ export function EntrenamientoPage() {
   // Sesión en curso.
   const { isCompleted, isInProgress, isOmitted, rangoHorarioSesion, unidadPeso,
     cronometro, cronometroVisible, abrirCronometroEnPausa, handleCambiarUnidad, vistaEnCurso, setVistaEnCurso,
-    posicionFocoVigente, renderFilaSerie, handleHacerAhora } = entrenamiento;
+    posicionFocoVigente, renderFilaSerie, handleHacerAhora,
+    avisoSerieCompletada, deshacerSerieCompletada } = entrenamiento;
   // Cierre y modales.
   const { handleOpenFinishModal, pendienteSync, finishFeedback, handleRepetirBloque,
     isFinishModalOpen, setIsFinishModalOpen, confirmFinishSession,
@@ -187,6 +189,14 @@ export function EntrenamientoPage() {
           />
         )}
       </div>
+
+      {/* Franja temporal tras marcar una serie (modo foco y lista); no aparece en la vista previa ni al terminar. */}
+      {avisoSerieCompletada && isInProgress && (
+        <AvisoSerieCompletada
+          numeroSerie={avisoSerieCompletada.numeroSerie}
+          onDeshacer={deshacerSerieCompletada}
+        />
+      )}
 
       {/* Lote E4: antes de iniciar, vista previa sin inputs; después, las tarjetas de registro. */}
       {isPlanned ? (

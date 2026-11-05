@@ -37,6 +37,8 @@ export interface FilaSerieProps {
   onSalirRpe: (serieId: string) => void;
   onMarcar: (ejercicioIndex: number, serieIndex: number) => void;
   onIniciar: (ejercicioIndex: number, serieIndex: number) => void;
+  /** Bloqueo corto de «Listo» de las series pendientes tras marcar una serie. */
+  marcadoBloqueado?: boolean;
 }
 
 /**
@@ -60,6 +62,7 @@ export function FilaSerie({
   onSalirRpe,
   onMarcar,
   onIniciar,
+  marcadoBloqueado = false,
 }: FilaSerieProps) {
   const ejercicioSesion = sesion.ejercicios[ejercicioIndex];
   const serie: SerieRegistroDetalleDTO = ejercicioSesion.series[serieIndex];
@@ -127,6 +130,7 @@ export function FilaSerie({
       onSalirRpe={() => onSalirRpe(serie.id)}
       onMarcar={() => onMarcar(ejercicioIndex, serieIndex)}
       onIniciar={() => onIniciar(ejercicioIndex, serieIndex)}
+      marcadoBloqueado={marcadoBloqueado}
     />
   );
 }

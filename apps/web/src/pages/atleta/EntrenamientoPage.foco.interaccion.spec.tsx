@@ -15,7 +15,7 @@
  */
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 const sesionMock = vi.hoisted(() => ({
   usuario: {
@@ -73,12 +73,18 @@ function pulsarBoton(nombre: string | RegExp): void {
   fireEvent.click(boton as HTMLElement);
 }
 
-/** Marca la primera serie `numeroSerie` pendiente que aparece en pantalla. */
-function marcarPrimeraSeriePendiente(numeroSerie: number): void {
-  const boton = screen.queryAllByRole('button', {
-    name: `Marcar serie ${numeroSerie} como completada`,
-  })[0];
-  expect(boton).toBeDefined();
+/** Marca la primera serie `numeroSerie` pendiente que aparece en pantalla, esperando que esté habilitada si viene de un marcado previo. */
+async function marcarPrimeraSeriePendiente(numeroSerie: number): Promise<void> {
+  const selector = () =>
+    screen.queryAllByRole('button', {
+      name: `Marcar serie ${numeroSerie} como completada`,
+    })[0] as HTMLButtonElement | undefined;
+  await waitFor(() => {
+    const boton = selector();
+    expect(boton).toBeDefined();
+    expect(boton?.disabled).toBe(false);
+  });
+  const boton = selector();
   fireEvent.click(boton as HTMLElement);
 }
 
@@ -111,7 +117,7 @@ describe('EntrenamientoPage · modo foco en modo demo (C3)', () => {
   it('marcar la serie actual mueve el foco a la serie 2 y deja un solo input de peso', async () => {
     await renderizarDemoEIniciar();
 
-    marcarPrimeraSeriePendiente(1);
+    await marcarPrimeraSeriePendiente(1);
 
     expect(screen.queryByText(/Serie 2 de/)).not.toBeNull();
 
@@ -124,7 +130,7 @@ describe('EntrenamientoPage · modo foco en modo demo (C3)', () => {
     await renderizarDemoEIniciar();
 
     for (let numeroSerie = 1; numeroSerie <= SERIES_POR_EJERCICIO[0]; numeroSerie++) {
-      marcarPrimeraSeriePendiente(numeroSerie);
+      await marcarPrimeraSeriePendiente(numeroSerie);
     }
 
     expect(screen.queryByText(/Ejercicio 2 de/)).not.toBeNull();
@@ -132,7 +138,7 @@ describe('EntrenamientoPage · modo foco en modo demo (C3)', () => {
 
   it('"Ver entrenamiento completo" muestra la serie hecha compacta, "Volver al enfoque" y "Hacer ahora"', async () => {
     await renderizarDemoEIniciar();
-    marcarPrimeraSeriePendiente(1);
+    await marcarPrimeraSeriePendiente(1);
 
     pulsarBoton('Ver entrenamiento completo');
 
@@ -161,7 +167,7 @@ describe('EntrenamientoPage · modo foco en modo demo (C3)', () => {
 
     for (const totalSeries of SERIES_POR_EJERCICIO) {
       for (let numeroSerie = 1; numeroSerie <= totalSeries; numeroSerie++) {
-        marcarPrimeraSeriePendiente(numeroSerie);
+        await marcarPrimeraSeriePendiente(numeroSerie);
       }
     }
 
@@ -187,7 +193,7 @@ describe('EntrenamientoPage · modo foco en modo demo (C3)', () => {
     expect(nombreSiguiente).toBe('Curl con Barra Z de Pie');
 
     for (let numeroSerie = 1; numeroSerie <= SERIES_POR_EJERCICIO[2]; numeroSerie++) {
-      marcarPrimeraSeriePendiente(numeroSerie);
+      await marcarPrimeraSeriePendiente(numeroSerie);
     }
 
     expect(screen.queryAllByText(/Ejercicio 4 de \d+/).length).toBeGreaterThan(0);
@@ -197,7 +203,7 @@ describe('EntrenamientoPage · modo foco en modo demo (C3)', () => {
   // Lote E5 · validación: desmarcar desde la lista devuelve el foco a la serie pendiente (H5).
   it('desmarcar la serie 1 desde la lista devuelve el foco a "Ejercicio 1 · Serie 1"', async () => {
     await renderizarDemoEIniciar();
-    marcarPrimeraSeriePendiente(1);
+    await marcarPrimeraSeriePendiente(1);
 
     pulsarBoton('Ver entrenamiento completo');
     const fila = filaCompactaSerie1();
