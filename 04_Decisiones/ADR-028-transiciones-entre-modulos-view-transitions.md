@@ -105,3 +105,22 @@ Lote 112/112 y suite web completa **3.700/3.700**; typecheck y build en 0. Revis
 
 ### 10.3. Evidencia
 Lote 623/623 y suite web completa **3.732/3.732**; typecheck y build en 0. Un spec previo (`AccionesFilaCartera.interaccion`) solo ganó la espera del desmontaje animado. Este lote no pasó por revisión de fiabilidad aparte ni por prueba en Chrome (recorte pedido por el dueño para acortar el ciclo).
+
+## 11. Addendum 2026-11-05: la ficha del alumno carga en paralelo
+
+### 11.1. Diagnóstico
+- **Nutrición (0,076):** no se reprodujo. En Chrome, con la API retrasada entre 0,6 y 1,5 s y navegando dentro de la app, el salto de layout fue 0; una carga completa dio 0 en la repetición. Se deja sin tocar (además está por debajo del umbral de 0,1).
+- **Ficha del alumno:** `cargarExpediente` (`use-expediente-alumno.ts`) hacía unas 9 peticiones encadenadas con `await` tras el perfil y `isLoading` solo bajaba al terminar la última: la espera era la suma de todas (con 1,5 s simulados por petición, ~30 s).
+
+### 11.2. Decisión (opción A)
+- El perfil sigue primero (da el `usuarioId`). Después salen en paralelo, con `Promise.allSettled`, siete tareas: transacciones, catálogo de planes, overrides → suscripción (en orden, la suscripción necesita los overrides), última sesión → historial (en orden, mismo dominio), catálogo de ejercicios, rutina activa y controles.
+- `isLoading` baja en el `finally` cuando todas terminan: el esqueleto dura lo que la petición más lenta, no la suma. No cambia lo que ve el usuario ni se añaden estados de carga por pestaña.
+- Alternativa descartada por ahora (B): mostrar la ficha en cuanto llega el perfil y cargar por pestaña. Se siente más rápido pero exige estados parciales y evitar el «sin registros» prematuro.
+
+### 11.3. Límites
+- El aviso de carga (`plan.notificarAvisoCarga`) es un solo texto: si fallan a la vez varias peticiones gana la que llega última (antes lo decidía el orden fijo).
+- Se protegen con `vigente()` los setters propios del hook (planes, última sesión, catálogo, rutina). Los cargadores de transacciones, overrides, suscripción, historial y controles pueden seguir escribiendo estado de una carga superada, como ya ocurría (protegerlos exige tocar esos hooks).
+- Los tiempos no se midieron en navegador con una sesión de entrenador: el diagnóstico de la cascada es por lectura del código y la cifra de ~30 s viene de la prueba anterior de la fase 2.
+
+### 11.4. Evidencia
+Spec nuevo de comportamiento `AlumnoDetallePage.carga-paralela.interaccion.spec.tsx` (3 tests): sin cascada tras el perfil, el estado de carga dura hasta la última petición y un fallo aislado no bloquea la ficha; falla contra el código anterior y pasa con el actual. Ficha y componentes `alumno-detalle`: 31 archivos, 280 tests en verde; typecheck en 0. No se ejecutó la suite web completa ni revisión aparte (alcance acotado por el dueño).

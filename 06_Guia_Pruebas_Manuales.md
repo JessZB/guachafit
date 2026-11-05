@@ -545,6 +545,7 @@ Con Docker Desktop arriba; se hacen desde la raíz del repositorio. Usa un rol *
   - **Panel:** la franja «Atención» sigue visible con «—» y el esqueleto va debajo.
   - **Nutrición:** mientras carga el reporte de hoy no hay formulario editable ni botón de guardar; al llegar, el formulario sale ya relleno. Las metas también cargan con esqueleto (ya no hay círculo girando).
   - **Primera visita a un módulo:** mientras se descarga el código de la pantalla se ve un esqueleto de página (título y tarjetas), no un círculo girando.
+  - **Ficha de un alumno (2026-11-05, [[ADR-028-transiciones-entre-modulos-view-transitions]] §11):** con «Slow 4G» y en la pestaña Network, las peticiones de la ficha (planes, sesiones, catálogo de ejercicios, rutina, transacciones, controles) salen **a la vez** tras la del perfil, no una detrás de otra; el esqueleto dura lo que la más lenta y la ficha aparece completa. Con una petición bloqueada (p. ej. `/finanzas/planes` en «Block request URL») la ficha igualmente carga y muestra el aviso «No se pudo cargar el catálogo de planes.».
   - **Lector de pantalla:** el texto «Cargando …» se anuncia desde el primer instante.
 - [ ] **Botones y menús (2026-11-05, [[ADR-028-transiciones-entre-modulos-view-transitions]] §10):**
   - **Botones de envío:** en Login, Recuperar contraseña, Restablecer, Registro (onboarding) y Activación, al enviar el botón se apaga y muestra un **círculo girando** junto a «Entrando...», «Enviando...», etc.
