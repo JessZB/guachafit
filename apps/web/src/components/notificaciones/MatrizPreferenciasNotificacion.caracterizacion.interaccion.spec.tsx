@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Characterization of the CURRENT behavior of `MatrizPreferenciasNotificacion`.
  *

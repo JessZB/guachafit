@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote E8 (RF-001) · borrador de repeticiones en la página real SIN modo demo.
  * La sesión de hoy llega EN_PROGRESO y `PUT /sesiones/{id}/series` responde con

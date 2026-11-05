@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Prompt 82 (Ola 3, módulo `grafico-evolucion`): caracterización del comportamiento ACTUAL
  * de `GraficoEvolucion` sobre el código SIN TOCAR.

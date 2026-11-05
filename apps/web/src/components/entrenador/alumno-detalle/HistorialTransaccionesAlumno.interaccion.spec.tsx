@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote 01 (ficha del alumno) · L2.2 — cabecera del historial de transacciones.
  *

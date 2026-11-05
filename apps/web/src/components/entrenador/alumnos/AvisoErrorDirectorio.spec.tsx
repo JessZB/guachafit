@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote "Mis alumnos" (F3) · spec del aviso inline de error del directorio.
  *

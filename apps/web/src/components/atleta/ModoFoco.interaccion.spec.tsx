@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote E5 (RF-001) · contrato C2: componente `ModoFoco` (foco de la serie actual, jsdom).
  *

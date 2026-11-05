@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-12 · MetricCard badge unificado con BadgeEstado (Contrato M1–M3).
  */

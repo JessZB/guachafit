@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-25 (Fase Roja / TDD) · Contratos de accesibilidad táctil y visualización para FilaSerieEdicion:
  * - ENT-07: Área táctil mínima w-11 en steppers de peso (sin clases sm:w-9 que encojan en desktop)

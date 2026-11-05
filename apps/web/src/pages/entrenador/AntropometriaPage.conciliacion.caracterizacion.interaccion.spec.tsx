@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Prompt 80 (Ola 3, modulo `antropometria`) - tests de caracterizacion.
  *

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * M5-L1B (contrato E): cobro en sala de la ficha del alumno.
  *

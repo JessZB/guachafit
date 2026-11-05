@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Precarga del peso con el plan en EntrenamientoPage (RF-001).
  * Sesión en progreso con dos series pendientes del mismo ejercicio,

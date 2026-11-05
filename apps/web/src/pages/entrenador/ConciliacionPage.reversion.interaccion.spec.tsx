@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * RF-007 (lote web): confirmación antes de aprobar en la bandeja de conciliación
  * (`ConciliacionPage`).

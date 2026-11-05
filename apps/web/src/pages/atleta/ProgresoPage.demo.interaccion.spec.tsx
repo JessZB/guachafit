@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * RNF-001 / RF-003 · contrato 9 (prompt 01, implementación ya en verde): en modo demo el check-in
  * del alumno se simula en local — nunca llama al API real — y la pantalla de éxito lo declara.

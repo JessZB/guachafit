@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Spec 3 · Sidebar.insignias.interaccion.spec.tsx
  * Contratos SI1–SI2: insignias de pendientes en la navegación lateral del entrenador.

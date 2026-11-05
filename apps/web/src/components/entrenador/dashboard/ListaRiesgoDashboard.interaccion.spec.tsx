@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-12 · Componente ListaRiesgoDashboard (Contrato L1–L4).
  */

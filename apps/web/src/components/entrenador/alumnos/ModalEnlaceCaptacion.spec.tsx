@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote "Mis alumnos" (F4) · spec del diálogo "Invitar" (enlace de captación).
  *

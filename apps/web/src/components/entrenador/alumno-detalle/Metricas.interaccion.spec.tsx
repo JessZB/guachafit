@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote 01 (ficha del alumno) · L2.6 y L2.7 — métricas de la ficha.
  *

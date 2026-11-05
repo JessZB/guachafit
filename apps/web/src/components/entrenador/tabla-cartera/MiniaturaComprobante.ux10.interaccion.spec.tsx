@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 05 · UX-10 · R4 · MiniaturaComprobante con url={null}.
  */

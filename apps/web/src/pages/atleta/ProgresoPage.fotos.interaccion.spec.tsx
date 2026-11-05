@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * RF-003 "fotos del check-in" · ProgresoPage (contrato 17: UI de fotos y envío CON foto).
  *

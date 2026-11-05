@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote E4 (RF-001) · contrato C3: fila compacta de una serie completada.
  *

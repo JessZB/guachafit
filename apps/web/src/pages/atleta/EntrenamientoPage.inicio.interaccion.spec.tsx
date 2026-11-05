@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote E4 (RF-001) · caso de página SIN modo demo: inicio rechazado con 4xx (H1/H6).
  *

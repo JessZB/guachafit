@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote UX-01 (RF-001, ADR-021) · Cronómetro de descanso inteligente y borrador de series.
  *

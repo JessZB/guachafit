@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Specs de comportamiento UX-22 (ALU-07, D8): hook `useReportePago`.
  * Contratos:

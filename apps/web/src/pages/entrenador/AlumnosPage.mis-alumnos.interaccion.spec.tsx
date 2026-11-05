@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote "Mis alumnos" (contrato D, prompt `.external-agents/01-mis-alumnos-tests.md`).
  *

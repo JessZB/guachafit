@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 · UX-10 · Contratos B1, B2, B3, B6 · TarjetaTransaccionConciliacion.
  *

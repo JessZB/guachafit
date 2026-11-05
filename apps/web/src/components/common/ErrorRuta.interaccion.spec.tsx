@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Prompt 54, ER1 — componente `ErrorRuta` (fase verde: import estático).
  *

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-13 · Dashboard «qué atender hoy» (Contrato P1–P6).
  */

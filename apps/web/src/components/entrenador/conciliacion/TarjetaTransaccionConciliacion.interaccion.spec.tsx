@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote UX-07a · Contrato B: TarjetaTransaccionConciliacion (COB-09, COB-10).
  *

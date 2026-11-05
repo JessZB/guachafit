@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote E8 (RF-001) · spec del componente presentacional `FilaSerieEdicion`.
  * Renderiza con props controladas y handlers `vi.fn()`; fija los contratos de

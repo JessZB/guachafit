@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * M5-L1B (contrato D): la ficha del alumno toma el plan de la SUSCRIPCIÓN.
  *

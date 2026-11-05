@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote E5 (RF-001) · contrato C3: integración del modo foco en `EntrenamientoPage` (modo demo).
  *

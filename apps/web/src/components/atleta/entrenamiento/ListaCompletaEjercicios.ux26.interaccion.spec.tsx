@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-26 (Fase Roja / TDD) · Contratos para ListaCompletaEjercicios:
  * - ENT-03: Botón de finalizar entrenamiento al final de la lista completa para no tener que volver arriba tras la última serie

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 · UX-07b · FilaCartera: celda, situación, tarjeta y tabla (Contrato F).
  *

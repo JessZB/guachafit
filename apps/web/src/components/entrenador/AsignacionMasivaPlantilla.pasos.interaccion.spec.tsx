@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote E10 (RF-017 RN-03) · tests del masivo en 3 pasos con ajustes comunes.
  *
@@ -211,7 +211,7 @@ describe('AsignacionMasivaPlantilla pasos (E10) · M1–M4', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
-    expect(onCerrar).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onCerrar).toHaveBeenCalledTimes(1));
   });
 
   it('M2 · con ≥1 alumno, "Siguiente" lleva al paso 2 con los días y ejercicios de la plantilla', async () => {
@@ -537,7 +537,7 @@ describe('AsignacionMasivaPlantilla pasos (E10) · M9–M12', () => {
     expect(screen.queryByPlaceholderText('Buscar por nombre...')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Listo' }));
-    expect(onCerrar).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onCerrar).toHaveBeenCalledTimes(1));
   });
 
   it('M12 · si falla la carga del detalle, el alert aparece solo en el paso 2 con "Reintentar"; "Siguiente" se deshabilita y "Reintentar" lo recupera', async () => {

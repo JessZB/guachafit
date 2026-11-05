@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 08 · EntrenamientoPage.aviso-serie · contrato E (fase roja).
  *
@@ -390,30 +390,37 @@ describe('EntrenamientoPage · Contrato E · Aviso de serie completada y bloqueo
   });
 
   it('(f) con matchMedia ausente no cambia nada de lo anterior (los tests no mockean matchMedia)', async () => {
-    expect(window.matchMedia).toBeUndefined();
+    const originalMatchMedia = window.matchMedia;
+    delete (window as any).matchMedia;
 
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    configurarApiSesion();
-    renderPagina();
+    try {
+      expect(window.matchMedia).toBeUndefined();
 
-    const seccion = await screen.findByRole('region', { name: 'Entrenamiento en foco' });
-    fireEvent.click(
-      within(seccion).getByRole('button', { name: 'Marcar serie 1 como completada' })
-    );
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      configurarApiSesion();
+      renderPagina();
 
-    await waitFor(() => expect(llamadasPutSeries.length).toBeGreaterThan(0));
+      const seccion = await screen.findByRole('region', { name: 'Entrenamiento en foco' });
+      fireEvent.click(
+        within(seccion).getByRole('button', { name: 'Marcar serie 1 como completada' })
+      );
 
-    const aviso = buscarAvisoSerie(1);
-    expect(aviso).toBeDefined();
+      await waitFor(() => expect(llamadasPutSeries.length).toBeGreaterThan(0));
 
-    const botonSerie2 = within(seccion).getByRole('button', {
-      name: 'Marcar serie 2 como completada',
-    }) as HTMLButtonElement;
-    expect(botonSerie2.disabled).toBe(true);
+      const aviso = buscarAvisoSerie(1);
+      expect(aviso).toBeDefined();
 
-    await act(async () => {
-      vi.advanceTimersByTime(600);
-    });
-    expect(botonSerie2.disabled).toBe(false);
+      const botonSerie2 = within(seccion).getByRole('button', {
+        name: 'Marcar serie 2 como completada',
+      }) as HTMLButtonElement;
+      expect(botonSerie2.disabled).toBe(true);
+
+      await act(async () => {
+        vi.advanceTimersByTime(600);
+      });
+      expect(botonSerie2.disabled).toBe(false);
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
   });
 });

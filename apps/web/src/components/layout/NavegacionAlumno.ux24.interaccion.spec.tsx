@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Spec de interacción UX-24 · Navegación del Alumno (Fase Roja TDD).
  * Contrato NAV-01: accesibilidad de BottomNav y AppLayout para el alumno.

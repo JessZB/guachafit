@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-15 · TarjetaControlPendiente: contratos móviles, jerarquía y acciones (SEG-21, SEG-22, SEG-24).
  *

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote E5 (RF-001) · validación de las correcciones de la revisión 29 · rechazo 4xx de una serie
  * SIN modo demo (H1/H2): la sesión de hoy llega EN_PROGRESO y `PUT /sesiones/{id}/series`

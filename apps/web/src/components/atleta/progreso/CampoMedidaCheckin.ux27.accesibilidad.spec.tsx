@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-27: Tests RED para PRO-03 (accesibilidad aria en campos de medida check-in).
  *

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote 01 (ficha del alumno) · L2.1 — badges de pago y activación.
  *

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * RF-018 P1/P2/P3 · regresión: interacción real de la pantalla "Ajustes" del alumno.
  *

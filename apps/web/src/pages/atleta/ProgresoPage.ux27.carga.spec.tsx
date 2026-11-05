@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-27: Tests RED para PRO-01 (carga honesta de la evolución corporal).
  *

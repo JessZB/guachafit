@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * RF-018 P1 · regresión: interacción real de la pantalla "Ajustes" del entrenador.
  *

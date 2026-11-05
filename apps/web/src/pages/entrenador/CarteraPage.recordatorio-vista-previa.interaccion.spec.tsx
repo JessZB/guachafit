@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 · UX-09b · CarteraPage: recordatorio con vista previa y navegación a conciliación (Contratos A1–A7 y C1).
  *

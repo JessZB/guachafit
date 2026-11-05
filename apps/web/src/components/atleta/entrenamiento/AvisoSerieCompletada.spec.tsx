@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 08 · AvisoSerieCompletada · contrato C (fase roja).
  *

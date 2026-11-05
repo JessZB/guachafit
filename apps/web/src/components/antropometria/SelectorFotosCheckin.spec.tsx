@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * RF-003 "fotos del check-in" · componente `SelectorFotosCheckin` (contratos 11-16 y estados de S-01).
  *

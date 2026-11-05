@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Prompt 73 (Ola 2, módulo `cartera`): caracterización del comportamiento ACTUAL de
  * `CarteraPage` en las zonas SIN cobertura de los 4 specs existentes (todos cubren el modal

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * D17 · RF-011: Spec del componente `PanelCaptacion`.
  *

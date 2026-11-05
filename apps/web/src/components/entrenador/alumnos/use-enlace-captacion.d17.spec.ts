@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * D17 · RF-011: Hook `useEnlaceCaptacion` con rotación, pausa/reanudación y contador.
  * Contratos: d17-contratos.md §4.4

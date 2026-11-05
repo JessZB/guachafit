@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Prompt 83 (Ola 3) · tests de caracterización de `AsignacionMasivaPlantilla`.
  *
@@ -117,7 +117,7 @@ describe('AsignacionMasivaPlantilla caracterización · modo demo', () => {
     expect(mockApi).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
-    expect(onCerrar).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onCerrar).toHaveBeenCalledTimes(1));
   });
 
   it('2. con ≥1 alumno "Siguiente" lleva al paso 2 con los días y ejercicios de la plantilla', async () => {
@@ -176,7 +176,7 @@ describe('AsignacionMasivaPlantilla caracterización · modo demo', () => {
     expect(screen.queryByPlaceholderText('Buscar por nombre...')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Listo' }));
-    expect(onCerrar).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onCerrar).toHaveBeenCalledTimes(1));
   });
 
   it('5. en el paso 3, "Reemplazar" pide confirmación con el nombre del único alumno; "Cancelar" se queda en el paso 3 sin asignar', async () => {
@@ -233,10 +233,10 @@ describe('AsignacionMasivaPlantilla caracterización · modo demo', () => {
     await screen.findByText(NOMBRE_1);
 
     fireEvent.click(screen.getByRole('button', { name: 'Cerrar asignación a alumnos' }));
-    expect(onCerrar).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onCerrar).toHaveBeenCalledTimes(1));
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
-    expect(onCerrar).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(onCerrar).toHaveBeenCalledTimes(2));
   });
 });
 

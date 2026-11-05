@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 11 · EntrenamientoPage.aviso-serie.fiabilidad · correcciones H-01 y H-02.
  *

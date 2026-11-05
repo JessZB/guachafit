@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 · UX-09b · useFiltrosConciliacion con búsqueda inicial (Contrato C2).
  *

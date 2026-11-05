@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote E9 (RF-001 §7.10) · contrato del plazo del envío directo (41-H1).
  *

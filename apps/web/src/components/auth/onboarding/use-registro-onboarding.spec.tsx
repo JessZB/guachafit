@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Prompt 86 (Ola 3) · spec del hook `useRegistroOnboarding` (mismo mecanismo que el
  * contenedor original: validaciones locales, POST con `skipAuth`, redireccion a `/login`).

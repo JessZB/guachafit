@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Specs del lote UX-29 (ALU-26: hora actual en zona horaria y sección de ajustes sin título redundante).
  */

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Spec 2 · InsigniaConteo.spec.tsx
  * Contratos IC1–IC3 para el componente de insignias con conteo accesible.

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote UX-05 · Contrato C: Cartera honesta (carga, aviso sin tasa, errores, recarga y cobro).
  *

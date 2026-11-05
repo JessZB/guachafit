@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Prompt 86 (Ola 3) · spec del hook `useValidacionCoach` (mismo mecanismo que el
  * contenedor original: debounce de 400ms + `apiClient` con `skipAuth`, sin providers).

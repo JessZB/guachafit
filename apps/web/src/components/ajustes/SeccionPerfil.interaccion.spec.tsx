@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * RF-018 · regresión: interacción de la sección "Perfil".
  *

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-26 (Fase Roja / TDD) · Contratos para useCierreSesion:
  * - ENT-09b: rpeSesion arranca en null; al finalizar sin seleccionar no inventa [RPE: 8/10]

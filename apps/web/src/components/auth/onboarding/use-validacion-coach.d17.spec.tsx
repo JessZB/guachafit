@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * D17 · RF-011: Hook `useValidacionCoach` con estado de error diferenciado y reintento.
  * Contratos: d17-contratos.md §4.2

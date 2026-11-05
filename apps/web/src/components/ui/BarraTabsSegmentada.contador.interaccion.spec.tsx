@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 · UX-07b · BarraTabsSegmentada: indicador de contador (Contrato A).
  *

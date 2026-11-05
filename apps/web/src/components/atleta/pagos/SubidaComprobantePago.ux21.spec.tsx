@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Specs de comportamiento UX-21: subida accesible de comprobante (`SubidaComprobantePago.tsx`).
  * Contratos C3 y C4: botón accesible para adjuntar, aria-describedby, aria-label en botón quitar y contenedor role="alert" para errores de archivo.

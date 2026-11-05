@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 06 · Ficha del alumno (L7 · cabecera) · verificación de la página (L7.9).
  *

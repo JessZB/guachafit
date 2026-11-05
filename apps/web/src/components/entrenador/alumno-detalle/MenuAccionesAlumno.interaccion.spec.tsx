@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 07 · Ficha del alumno (L7 · cabecera) · menú "Más acciones" (en verde).
  *

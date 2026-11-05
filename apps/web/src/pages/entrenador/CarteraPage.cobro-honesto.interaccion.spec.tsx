@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 · UX-08 · useCobroCartera vía CarteraPage: cobro en efectivo honesto (Contrato B).
  *

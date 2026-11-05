@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 pendientes (fase roja) · Contratos C1-C7: aviso sin conexión en "Mis alumnos".
  *

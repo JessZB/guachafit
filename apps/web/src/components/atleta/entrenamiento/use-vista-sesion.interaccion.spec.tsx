@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Prompt 118 · carrera entre el clic en "Ver entrenamiento completo" y el efecto
  * que repone la vista de foco (`use-vista-sesion.ts`, efecto sobre `[sesion?.id]`).

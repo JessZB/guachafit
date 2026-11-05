@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Prompt 72 (Ola 2, módulo `monitor-adherencia`) · tests de caracterización.
  *

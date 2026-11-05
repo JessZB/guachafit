@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-25 (Fase Roja / TDD) · Contratos de interacción y accesibilidad para ChipsBloquesSemana:
  * - ENT-04: "Hoy" en bloque sugerido real vs "Consultando" en bloque activo diferente

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Prompt 49 (fase B0) · tests de caracterización del directorio de alumnos (`AlumnosPage`).
  *

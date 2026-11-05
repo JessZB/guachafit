@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-19 · Specs de interacción: Pestaña «Tasa» en Ajustes del entrenador (Fase roja).
  * Contratos TS1 a TS16.

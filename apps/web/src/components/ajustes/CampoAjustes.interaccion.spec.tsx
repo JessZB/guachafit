@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 · UX-03 · Specs de interacción para CampoAjustes ampliado (Contrato B) y SelectAjustes (Contrato C).
  *

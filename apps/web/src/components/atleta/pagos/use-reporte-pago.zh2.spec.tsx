@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * ZH-2: tests en fase roja para `useReportePago`.
  * Contrato 5:

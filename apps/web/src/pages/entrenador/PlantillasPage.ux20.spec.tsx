@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-20 · Contrato C2 (CFG-20): PlantillasPage (carga honesta, recarga y avisos).
  *

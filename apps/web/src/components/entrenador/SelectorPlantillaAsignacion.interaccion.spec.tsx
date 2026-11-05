@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote E6 · C2: interacción del selector de plantilla en 3 pasos (modo demo).
  *

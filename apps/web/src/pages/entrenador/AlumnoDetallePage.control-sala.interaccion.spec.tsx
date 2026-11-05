@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * RF-003 "fotos del check-in" · contrato 18 (opcional): el modal "Registrar control" de
  * `AlumnoDetallePage` contiene `SelectorFotosCheckin` y el POST `/antropometria/checkin` lleva

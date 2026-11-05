@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 · Mis alumnos (flecha de la tarjeta) · contrato T1-T4.
  *

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-20 · Contrato C3 (CFG-22): FiltrosPlantillas (contador con aria-live).
  *

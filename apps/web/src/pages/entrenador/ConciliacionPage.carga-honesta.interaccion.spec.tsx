@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote UX-05 · Contrato B: Conciliación honesta (carga, vacío, errores, recarga y afirmaciones).
  *

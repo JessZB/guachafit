@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 06 · entrenamiento-ux · Contrato 6:
  * Tras un vencimiento forzado de sesión (cerrarSesionPorVencimiento),

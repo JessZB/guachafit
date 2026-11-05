@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-13 · FranjaAtencionDashboard (Contrato F1–F5).
  */

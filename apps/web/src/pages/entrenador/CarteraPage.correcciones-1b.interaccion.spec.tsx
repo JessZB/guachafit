@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * M5-L1B · correcciones 1B (web) — validación de contratos V7 (Control de Cobros), V8 y V9.
  *

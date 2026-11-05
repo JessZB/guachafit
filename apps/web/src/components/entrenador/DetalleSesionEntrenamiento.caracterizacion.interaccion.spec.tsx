@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * DetalleSesionEntrenamiento · caracterización de interacción (Ola 3, prompt 87).
  *

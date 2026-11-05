@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Spec de `lib/use-formato-numero.ts` (§6.17 de `00_Reglas_Desarrollo_SDD.md`).
  *

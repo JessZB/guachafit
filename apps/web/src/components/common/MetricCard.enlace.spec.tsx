@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-13 · MetricCard enlace opcional (Contrato K1–K3).
  */

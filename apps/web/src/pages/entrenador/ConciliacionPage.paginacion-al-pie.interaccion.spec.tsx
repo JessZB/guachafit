@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote UX-07a · Contrato D: Paginación al pie en ConciliacionPage (COB-12).
  *

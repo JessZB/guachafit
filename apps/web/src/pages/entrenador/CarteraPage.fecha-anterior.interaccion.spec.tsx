@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * RF-009/RF-007 (pagos con fecha anterior): contrato 7 — modal "Registrar cobro" de Control de
  * Cobros (`CarteraPage`).

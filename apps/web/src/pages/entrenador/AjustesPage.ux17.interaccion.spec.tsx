@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-17 · Regresión e interacción: Ajustes del entrenador sobre PantallaAjustes (Contratos AJ1–AJ6).
  */

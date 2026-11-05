@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Prompt 48 (fase C): spec de interacción del átomo `ChipFiltro`.
  *

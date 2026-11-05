@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-15 · AntropometriaPage: contratos de carga honesta, avisos y accesibilidad (SEG-20, SEG-22, SEG-23).
  *

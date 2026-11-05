@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 · UX-10 · Contrato A4 · Jerarquía de títulos (EstadoVacio, EstadoError, BandejaVaciaConciliacion, SinResultadosConciliacion).
  *

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 · UX-07b · AccionesFilaCartera: acciones por fila táctiles y menú en móvil (Contrato E).
  *

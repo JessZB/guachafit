@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 · UX-08 · ConciliacionPage: feedback y avisos de aprobación/rechazo (Contrato D).
  *

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote E4 (RF-001) · contrato C4: integración de la vista previa y la fila compacta en
  * `EntrenamientoPage`, en modo demo (sesión `d2` en estado PLANIFICADA).

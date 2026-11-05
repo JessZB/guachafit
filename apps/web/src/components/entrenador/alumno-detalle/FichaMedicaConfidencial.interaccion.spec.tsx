@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 · Ficha del alumno (L1.3) · tarjeta de salud editable.
  *

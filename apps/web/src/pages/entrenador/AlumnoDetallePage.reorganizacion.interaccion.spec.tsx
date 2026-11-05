@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 · Ficha del alumno (L6 · reorganización por tab) · tests (fase roja).
  *

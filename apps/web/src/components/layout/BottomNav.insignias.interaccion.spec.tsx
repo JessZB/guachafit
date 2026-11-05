@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Spec 4 · BottomNav.insignias.interaccion.spec.tsx
  * Contratos BI1–BI2: insignias de pendientes en la barra inferior del entrenador.

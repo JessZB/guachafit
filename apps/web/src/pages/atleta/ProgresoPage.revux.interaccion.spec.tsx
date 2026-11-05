@@ -1,6 +1,6 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 vi.setConfig({ testTimeout: 20000 });
 
@@ -147,7 +147,7 @@ describe('ProgresoPage · REVUX (G2)', () => {
     fireEvent.click(botonContinuar);
 
     // Diálogo cerrado y el valor escrito se conserva
-    expect(screen.queryByText('¿Descartar cambios sin guardar?')).toBeNull();
+    await waitFor(() => expect(screen.queryByText('¿Descartar cambios sin guardar?')).toBeNull());
     expect((screen.getByLabelText('Peso (kg)') as HTMLInputElement).value).toBe('75.50');
   });
 

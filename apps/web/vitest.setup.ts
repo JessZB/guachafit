@@ -13,3 +13,9 @@
  * hereden desde su creación (doble garantía: local y CI).
  */
 process.env.TZ = 'America/Caracas';
+
+// Stubs de entorno comunes para happy-dom (APIs de ventana estándar que happy-dom no define por defecto)
+if (typeof window !== 'undefined' && typeof window.alert === 'undefined') {
+  window.alert = () => {};
+}
+

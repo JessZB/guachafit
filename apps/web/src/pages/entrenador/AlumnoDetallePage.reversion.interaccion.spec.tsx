@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * RF-007 (lote web): estado y reversión de pagos en la ficha del alumno
  * (`AlumnoDetallePage`, pestaña de finanzas → historial de transacciones).

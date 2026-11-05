@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 · UX-10 · Contrato A1 · EncabezadoConciliacion.
  *

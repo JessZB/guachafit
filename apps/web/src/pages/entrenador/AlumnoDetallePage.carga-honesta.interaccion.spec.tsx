@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 · Ficha del alumno (L5 · carga honesta y recarga silenciosa) · fase roja.
  *

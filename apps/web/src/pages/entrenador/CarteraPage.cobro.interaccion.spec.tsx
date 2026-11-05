@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * M5-L1B (contrato F): cobro en el tablero de Control de Cobros (`CarteraPage`).
  *

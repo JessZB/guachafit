@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * D17 · RF-011: Página / componente de enlace de registro no válido.
  * Contratos: d17-contratos.md §4.1

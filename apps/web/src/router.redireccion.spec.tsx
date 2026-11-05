@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * RF-018 RN-09 · regresión: `/app/preferencias` redirige a `/app/ajustes?tab=notificaciones`.
  *

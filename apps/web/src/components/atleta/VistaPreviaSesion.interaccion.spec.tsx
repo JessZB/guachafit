@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote E4 (RF-001) · contrato C2: vista previa de solo lectura antes de iniciar.
  *

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * B0 · caracterización del módulo `alumno-detalle`: pestaña `entrenamiento` + modal de rutina.
  *

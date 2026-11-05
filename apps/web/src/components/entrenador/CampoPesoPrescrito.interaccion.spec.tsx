@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote E3 · C5 (fase roja): interacción del campo de peso prescrito del entrenador.
  *

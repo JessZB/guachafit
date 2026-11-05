@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Specs del lote UX-29 (Pulido del alumno: fechas, copy y flex-wrap en Pagos).
  *

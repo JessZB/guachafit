@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * ER1 (prompt 54) — fase verde: raíz sin `path` + `errorElement` y preservación de rutas.
  *

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-28: Tests RED para PRO-04 (aviso y bloqueo sin conexión en el check-in antropométrico, D9).
  *

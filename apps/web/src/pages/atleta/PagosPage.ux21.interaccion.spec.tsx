@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Specs de integración UX-21: `PagosPage.tsx`.
  * Cubre contratos C5 (selector accesible), C6 (corregir y reenviar), C7 (type="button") y C1/C3 (integración).

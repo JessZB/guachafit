@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Characterization: tray filters, honest states, and receipt viewer (`ConciliacionPage`).
  *

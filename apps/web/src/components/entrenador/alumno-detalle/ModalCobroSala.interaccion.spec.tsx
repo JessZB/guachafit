@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Ficha del alumno · `ModalCobroSala` (fase roja L3.1–L3.3).
  *

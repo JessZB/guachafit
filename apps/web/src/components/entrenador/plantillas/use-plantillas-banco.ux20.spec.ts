@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-20 · Contrato C1 (CFG-20): hook usePlantillasBanco (recarga honesta y estados).
  *

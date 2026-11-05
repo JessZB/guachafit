@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-18 · Contratos de interacción: PanelPlanes (PP1–PP4).
  */

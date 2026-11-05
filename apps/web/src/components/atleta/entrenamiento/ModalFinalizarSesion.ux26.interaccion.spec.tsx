@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-26 (Fase Roja / TDD) · Contratos de interacción y accesibilidad para ModalFinalizarSesion:
  * - ENT-02: Resumen honesto de series completadas y pendientes (role="status")

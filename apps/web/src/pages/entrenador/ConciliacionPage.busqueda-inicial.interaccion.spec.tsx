@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 · UX-09b · ConciliacionPage con búsqueda inicial desde ?q= (Contrato C3).
  *

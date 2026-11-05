@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote UX-07a · Contrato A: FiltrosConciliacion (COB-05, COB-12).
  *

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-25 (Fase Roja / TDD) · Contratos de accesibilidad táctil para CampoMedidaCheckin:
  * - PRO-02: Altura táctil mínima en inputs de check-in antropométrico (min-h-11, ≥44px)

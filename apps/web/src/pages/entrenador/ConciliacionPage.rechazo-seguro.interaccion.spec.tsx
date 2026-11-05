@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote UX-06 · Rechazo seguro en Bandeja de Conciliación (COB-02, COB-03 y COB-06).
  *

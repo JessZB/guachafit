@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * ZH-2 (revisión): tests de las correcciones de `useReportePago`.
  * Contrato:

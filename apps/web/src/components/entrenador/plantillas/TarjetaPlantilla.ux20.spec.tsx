@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-20 · Contratos C4 (CFG-24) y C5 (CFG-25): TarjetaPlantilla.
  *

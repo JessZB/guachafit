@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-12 · Hook useDashboardComando (Contrato H1–H7).
  */

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * RF-007 (lote web): pago revertido en el historial del alumno (`PagosPage`).
  *

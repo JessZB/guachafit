@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Prompt 74 (Ola 2, módulo `bloques-rutina-editor`) · specs de caracterización.
  *

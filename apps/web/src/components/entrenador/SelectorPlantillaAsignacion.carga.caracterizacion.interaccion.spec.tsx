@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Prompt 71 (caracterización, fuera de demo): fija el comportamiento ACTUAL del
  * `SelectorPlantillaAsignacion` en las rutas con red, inalcanzables en demo

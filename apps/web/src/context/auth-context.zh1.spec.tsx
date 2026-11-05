@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Specs ZH-1 · Envío de zonaDispositivo en login (Fase roja TDD).
  * Contrato D: auth-context incluye zonaDispositivo en POST /auth/login y adopta usuario.zonaHoraria.

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * RF-018 RN-05 · regresión: interacción de la pantalla pública /confirmar-correo.
  *

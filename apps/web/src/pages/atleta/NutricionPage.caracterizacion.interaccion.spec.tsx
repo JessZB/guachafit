@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Módulo 6 · Nutrición — caracterización de interacción (fase B, prompt 56).
  *

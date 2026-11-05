@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 08 · useBloqueoMarcado · contrato A (fase roja).
  *

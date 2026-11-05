@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-26 (Fase Roja / TDD) · Contratos para CtaFinalizarSesion:
  * - ENT-03: Soporte parametrizable para variante 'hero' (con reloj y mensaje) y 'final-lista' (compacto con aria-label diferenciado)

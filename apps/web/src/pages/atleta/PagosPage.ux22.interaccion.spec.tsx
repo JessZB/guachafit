@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Specs de integración UX-22: `PagosPage.tsx`.
  * Contratos:

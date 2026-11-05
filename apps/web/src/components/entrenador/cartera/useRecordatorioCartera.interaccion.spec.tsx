@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 · UX-09b · useRecordatorioCartera (Contratos A8 y A9).
  *
@@ -118,10 +118,12 @@ describe('Contrato A8–A9 · useRecordatorioCartera con renderHook', () => {
   describe('A9 · Sin temporizadores huérfanos', () => {
     beforeEach(() => {
       vi.useFakeTimers();
-      Object.assign(navigator, {
-        clipboard: {
+      Object.defineProperty(navigator, 'clipboard', {
+        value: {
           writeText: vi.fn().mockResolvedValue(undefined),
         },
+        configurable: true,
+        writable: true,
       });
     });
 

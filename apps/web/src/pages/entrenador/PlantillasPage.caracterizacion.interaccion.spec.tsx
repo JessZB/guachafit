@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Prompt 50 (fase B0) · tests de caracterización del banco de plantillas (M8).
  *
@@ -23,7 +23,7 @@
  * Consultas solo por rol, label o texto accesible. Nunca por clases ni estructura interna.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import {
   NivelObjetivoPlantilla,
@@ -391,7 +391,7 @@ describe('PlantillasPage caracterización · modo demo (§6.2 puntos 1–9, 11)'
 
     // Seguir editando conserva el diálogo y el texto.
     fireEvent.click(screen.getByRole('button', { name: 'Seguir editando' }));
-    expect(screen.queryByText('¿Salir sin guardar?')).toBeNull();
+    await waitFor(() => expect(screen.queryByText('¿Salir sin guardar?')).toBeNull());
     expect((screen.getByLabelText('Nombre de la plantilla') as HTMLInputElement).value).toBe(
       'Borrador sin guardar'
     );
@@ -404,7 +404,7 @@ describe('PlantillasPage caracterización · modo demo (§6.2 puntos 1–9, 11)'
     expect(screen.getByText('¿Salir sin guardar?')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Salir sin guardar' }));
-    expect(screen.queryByRole('dialog')).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('10. desactivar pide confirmación inline (Cancelar la cierra); confirmar marca "Desactivada" y Reactivar revierte, sin API', async () => {

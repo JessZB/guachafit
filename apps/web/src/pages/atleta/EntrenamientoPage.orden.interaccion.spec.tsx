@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote E9 (RF-001 §7.10) · contratos P1–P6 del orden de los envíos de una sesión.
  *

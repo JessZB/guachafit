@@ -1,9 +1,9 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-18 · Contratos de interacción: ModalPlanComercial (MP1–MP9).
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { PlanMembresiaDetalleDTO } from '@guachafit/shared';
 import { ModalPlanComercial } from './ModalPlanComercial';
 
@@ -157,7 +157,7 @@ describe('ModalPlanComercial · interacción (UX-18)', () => {
     expect(alerta.textContent).toContain('Fallo de red');
   });
 
-  it('MP5 · Cambios sin guardar', () => {
+  it('MP5 · Cambios sin guardar', async () => {
     const onCerrar = vi.fn();
     const { unmount } = render(
       <ModalPlanComercial
@@ -171,7 +171,7 @@ describe('ModalPlanComercial · interacción (UX-18)', () => {
 
     // 1. Sin cambios, Escape llama a onCerrar
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(onCerrar).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onCerrar).toHaveBeenCalledTimes(1));
     unmount();
 
     // 2. Tras escribir en el nombre, Escape NO llama a onCerrar y aparece confirmación
@@ -202,7 +202,7 @@ describe('ModalPlanComercial · interacción (UX-18)', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
     const botonSalir = screen.getByRole('button', { name: /salir sin guardar/i });
     fireEvent.click(botonSalir);
-    expect(onCerrarConCambios).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onCerrarConCambios).toHaveBeenCalledTimes(1));
   });
 
   it('MP6 · Quitar beneficio accesible', () => {
@@ -227,7 +227,7 @@ describe('ModalPlanComercial · interacción (UX-18)', () => {
     expect(screen.queryByText('Nutrición')).toBeNull();
   });
 
-  it('MP7 · Tras el éxito no hay reenvío ni falsa alarma', () => {
+  it('MP7 · Tras el éxito no hay reenvío ni falsa alarma', async () => {
     const onCerrar = vi.fn();
     render(
       <ModalPlanComercial
@@ -247,7 +247,7 @@ describe('ModalPlanComercial · interacción (UX-18)', () => {
     expect((botonEnviar as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(onCerrar).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onCerrar).toHaveBeenCalledTimes(1));
     expect(screen.queryByText(/salir sin guardar/i)).toBeNull();
   });
 
@@ -294,7 +294,7 @@ describe('ModalPlanComercial · interacción (UX-18)', () => {
     expect(primerArg.precioBaseUsd).toBe('1234567');
   });
 
-  it('MP9 · Precarga al editar', () => {
+  it('MP9 · Precarga al editar', async () => {
     const onCerrar = vi.fn();
     render(
       <ModalPlanComercial
@@ -310,7 +310,7 @@ describe('ModalPlanComercial · interacción (UX-18)', () => {
     expect((campoPrecio as HTMLInputElement).value).toBe('30,00');
 
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(onCerrar).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onCerrar).toHaveBeenCalledTimes(1));
     expect(screen.queryByText(/salir sin guardar/i)).toBeNull();
   });
 });

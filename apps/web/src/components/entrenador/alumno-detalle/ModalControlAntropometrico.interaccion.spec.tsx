@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Ficha del alumno · `ModalControlAntropometrico` (fase roja L3.1–L3.3).
  *

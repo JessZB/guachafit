@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Specs ZH-1 · Componente de aviso de zona horaria discrepante (Fase roja TDD).
  * Contrato B: AvisoZonaDiscrepante.

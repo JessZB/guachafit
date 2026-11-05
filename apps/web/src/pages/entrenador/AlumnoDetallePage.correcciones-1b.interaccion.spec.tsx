@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * M5-L1B · correcciones 1B (web) — validación de contratos V1–V6, V10 y V11 en la ficha, más los
  * R1–R3 de la 2.ª ronda de validación (08).

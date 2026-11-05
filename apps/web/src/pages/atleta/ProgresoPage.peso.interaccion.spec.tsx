@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote E7 · C3.4 (fase roja): el peso corporal del check-in del alumno filtra al teclear.
  *

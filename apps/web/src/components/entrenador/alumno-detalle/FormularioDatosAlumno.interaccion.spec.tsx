@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Ficha del alumno · `FormularioDatosAlumno` (fase roja L1.5 + L3.1–L3.4).
  *

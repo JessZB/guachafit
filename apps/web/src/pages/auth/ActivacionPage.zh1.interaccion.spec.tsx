@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Specs ZH-1 · Envío de zonaDispositivo en activación de cuenta (Fase roja TDD).
  * Contrato E: ActivacionPage incluye zonaDispositivo en POST /auth/invitacion/establecer-password.

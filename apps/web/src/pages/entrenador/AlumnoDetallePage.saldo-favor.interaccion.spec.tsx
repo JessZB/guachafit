@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * RF-006 RN-05 (lote web, prompt 01): excedente del cobro en sala y saldo a favor en la ficha
  * del alumno (`AlumnoDetallePage`).

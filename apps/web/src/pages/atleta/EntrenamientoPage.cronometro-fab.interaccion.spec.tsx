@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 08 · cronometro-fab · tests de integración para EntrenamientoPage (contrato C).
  *

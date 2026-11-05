@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Specs de comportamiento UX-21: formulario de reporte de pago (`FormularioReportePago.tsx`).
  * Contratos C2 y C3: asociación accesible label/input (htmlFor/id) y atributos aria para errores.

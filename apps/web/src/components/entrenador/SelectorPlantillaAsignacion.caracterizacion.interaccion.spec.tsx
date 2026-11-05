@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Prompt 71 (caracterización, modo demo): fija el comportamiento ACTUAL del
  * `SelectorPlantillaAsignacion` en las zonas sin cobertura del spec existente
@@ -8,7 +8,7 @@
  * `@testing-library/user-event` no está instalado: se usa `fireEvent`.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../context/auth-context', () => ({
@@ -109,7 +109,7 @@ describe('SelectorPlantillaAsignacion · caracterización: cierre', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Cerrar selector de plantilla' }));
 
-    expect(onCerrar).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onCerrar).toHaveBeenCalledTimes(1));
   });
 
   it('el clic en el fondo invoca onCerrar', async () => {
@@ -120,7 +120,7 @@ describe('SelectorPlantillaAsignacion · caracterización: cierre', () => {
     expect(fondo).not.toBeNull();
     fireEvent.click(fondo as HTMLElement);
 
-    expect(onCerrar).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onCerrar).toHaveBeenCalledTimes(1));
   });
 });
 
@@ -175,7 +175,9 @@ describe('SelectorPlantillaAsignacion · caracterización: confirmación', () =>
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
 
-    expect(screen.queryByRole('button', { name: 'Sí, reemplazar' })).toBeNull();
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Sí, reemplazar' })).toBeNull();
+    });
     expect(screen.queryByRole('status')).toBeNull();
     expect(screen.getByText('Paso 3 de 3 · Confirmar')).toBeTruthy();
   });

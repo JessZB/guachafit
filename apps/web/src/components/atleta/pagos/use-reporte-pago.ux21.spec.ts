@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Specs de comportamiento UX-21: hook de reporte de pago (`use-reporte-pago.ts`).
  * Contratos C1 y C6: monto vacío inicial, validación de monto, normalización en POST y corrección de pagos rechazados.

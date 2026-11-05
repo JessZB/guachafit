@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Prompt 85 (Ola 3, modulo `tabla-cartera`): caracterizacion del comportamiento
  * ACTUAL de `TablaCartera` en las zonas SIN cobertura del spec existente

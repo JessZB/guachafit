@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote UX-14 (SEG-12 a SEG-19) · Contrato de CabeceraMonitor.
  *

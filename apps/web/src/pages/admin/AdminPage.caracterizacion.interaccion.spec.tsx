@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Prompt 81 (Ola 3, módulo `admin`) · tests de caracterización de `AdminPage`.
  *

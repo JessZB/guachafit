@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote E7 · C3.2/C3.3 (fase roja): sesión EN_PROGRESO servida desde la caché Dexie sin conexión
  * y pegado de un peso con unidad en el modo foco.

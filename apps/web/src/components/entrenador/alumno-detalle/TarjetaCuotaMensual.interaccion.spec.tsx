@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote 01 (ficha del alumno) · L2.2 y L2.5 — tarjeta de la cuota mensual.
  *

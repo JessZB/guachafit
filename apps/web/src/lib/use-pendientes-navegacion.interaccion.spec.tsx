@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Spec 1 · use-pendientes-navegacion.interaccion.spec.tsx
  * Contratos PN1–PN5 para el hook de pendientes de navegación.

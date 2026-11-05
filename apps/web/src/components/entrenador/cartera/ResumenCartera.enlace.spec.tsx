@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-13 · Validación: corrección R1 en ResumenCartera.
  */

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote UX-11 · Carga honesta del Dashboard del entrenador (SEG-01, SEG-02, SEG-06).
  *

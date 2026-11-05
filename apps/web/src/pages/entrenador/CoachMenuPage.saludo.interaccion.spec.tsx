@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Spec 5 · CoachMenuPage.saludo.interaccion.spec.tsx
  * Contratos MS1–MS4: saludo con nombre real, remoción de insignias decorativas y datos vivos.

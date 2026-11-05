@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * D17 · RF-010 / Superadmin: Alta de entrenador sin campo coachCode manual.
  * Contratos: d17-contratos.md §4.5

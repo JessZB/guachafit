@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote UX-14 (SEG-19) · Contrato de prop etiqueta en Paginacion.
  *

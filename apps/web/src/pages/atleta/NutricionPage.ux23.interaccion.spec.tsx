@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Módulo 6 · Nutrición — integración UX-23 (Fase roja TDD).
  * Cubre contratos ALU-16, ALU-17, ALU-18, ALU-19 y ALU-21.

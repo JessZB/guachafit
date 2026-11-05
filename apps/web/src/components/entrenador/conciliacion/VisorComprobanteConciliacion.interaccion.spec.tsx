@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Lote UX-07a · Contrato C: VisorComprobanteConciliacion (COB-07, COB-08).
  *
@@ -12,7 +12,7 @@
  * - C7: Cerrar: botón "Cerrar comprobante de pago" con min-h-11, min-w-11 y llama a onCerrar.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
   EstadoConciliacion,
   MetodoPago,
@@ -194,7 +194,7 @@ describe('VisorComprobanteConciliacion · Contrato C (COB-07, COB-08)', () => {
     expect(screen.queryByRole('button', { name: /Rechazar Pago/i })).toBeNull();
   });
 
-  it('C7 · botón cerrar se llama "Cerrar comprobante de pago", tiene min-h-11 y min-w-11, y llama a onCerrar', () => {
+  it('C7 · botón cerrar se llama "Cerrar comprobante de pago", tiene min-h-11 y min-w-11, y llama a onCerrar', async () => {
     const { onCerrar } = montarVisor();
 
     const botonCerrar = screen.getByRole('button', {
@@ -205,7 +205,7 @@ describe('VisorComprobanteConciliacion · Contrato C (COB-07, COB-08)', () => {
     expect(clases).toContain('min-w-11');
 
     fireEvent.click(botonCerrar);
-    expect(onCerrar).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onCerrar).toHaveBeenCalledTimes(1));
 
     expect(
       screen.queryByRole('button', { name: /Cerrar auditoría de comprobante/i })

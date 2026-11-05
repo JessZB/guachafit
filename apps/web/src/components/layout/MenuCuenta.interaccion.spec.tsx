@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 01 · UX-04 · Specs de interacción para MenuCuenta (Contrato B).
  *

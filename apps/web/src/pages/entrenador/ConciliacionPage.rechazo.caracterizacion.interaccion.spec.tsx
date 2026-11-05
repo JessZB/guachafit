@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Characterization: rejection flow of the conciliation tray (`ConciliacionPage`).
  *

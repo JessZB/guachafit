@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Ficha del alumno · `TarjetaPlanTarifaAlumno` (fase roja L1.4 + L3.1, L3.2 y L3.4).
  *

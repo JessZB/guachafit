@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * RF-006 RN-05 (lote web, prompt 01): saldo a favor en la vista del alumno (`PagosPage`).
  *

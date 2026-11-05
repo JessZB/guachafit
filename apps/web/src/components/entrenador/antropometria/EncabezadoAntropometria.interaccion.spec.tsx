@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * UX-15 · EncabezadoAntropometria: contratos táctiles y accesibles (SEG-20).
  *

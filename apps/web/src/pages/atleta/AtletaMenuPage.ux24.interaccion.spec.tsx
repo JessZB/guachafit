@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Spec de interacción UX-24 · Menú del Alumno (Fase Roja TDD).
  * Cubre contratos MEN-02, MEN-03, MEN-04, MEN-05 y MEN-06.

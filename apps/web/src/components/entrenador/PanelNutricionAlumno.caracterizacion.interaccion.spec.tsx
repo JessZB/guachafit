@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * PanelNutricionAlumno · caracterización de interacción (Ola 2, prompt 70).
  *
@@ -159,6 +159,7 @@ describe('PanelNutricionAlumno · caracterización (demo: editor de metas)', () 
 
     expect(await screen.findByText('¿Salir sin guardar?')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Seguir editando' }));
+    await waitFor(() => expect(screen.queryByText('¿Salir sin guardar?')).toBeNull());
     expect(screen.getByRole('dialog')).toBeTruthy();
   });
 

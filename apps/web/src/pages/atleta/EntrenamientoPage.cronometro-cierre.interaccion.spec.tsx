@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * 06 · entrenamiento-ux · tests de robustez para EntrenamientoPage:
  * - Cierre del cronómetro al terminar la sesión (COMPLETADA / OMITIDA y modal de finalizar).

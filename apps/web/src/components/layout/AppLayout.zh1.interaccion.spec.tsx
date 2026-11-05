@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Specs ZH-1 · Integración de AvisoZonaDiscrepante en AppLayout (Fase roja TDD).
  * Contrato C: AppLayout renderiza el aside dentro del main y tras el Outlet.

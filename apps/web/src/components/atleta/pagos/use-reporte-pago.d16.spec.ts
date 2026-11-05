@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * D16 / Ítem 22: Caracterización de comportamiento de useReportePago frente a ausencia o fallo de tasa.
  */

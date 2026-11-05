@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * Prompt 86 (Ola 3, modulo `onboarding`) · specs de caracterizacion de `OnboardingPage`.
  *

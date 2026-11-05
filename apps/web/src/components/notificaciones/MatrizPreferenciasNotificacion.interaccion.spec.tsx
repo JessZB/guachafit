@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /**
  * RF-018 P2 · regresión: guardado de la matriz de preferencias de notificación.
  *
