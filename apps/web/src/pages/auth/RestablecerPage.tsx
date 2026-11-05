@@ -14,7 +14,7 @@ import {
   esEnlaceRecuperacionInvalido,
   leerTokenDeBusqueda,
 } from '../../lib/recuperacion-password';
-import { ArrowLeft, Dumbbell, Eye, EyeOff, KeyRound, Lock, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Dumbbell, Eye, EyeOff, KeyRound, Loader2, Lock, ShieldAlert } from 'lucide-react';
 
 /**
  * Pantalla pública para elegir una nueva contraseña con el enlace de recuperación
@@ -184,9 +184,11 @@ export function RestablecerPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full min-h-11 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:brightness-110 active:scale-98 transition-all cursor-pointer disabled:opacity-50"
+                aria-busy={isLoading ? true : undefined}
+                className="w-full min-h-11 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
-                {isLoading ? 'Guardando...' : 'Guardar nueva contraseña'}
+                {isLoading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                <span>{isLoading ? 'Guardando...' : 'Guardar nueva contraseña'}</span>
               </button>
             </form>
           )}

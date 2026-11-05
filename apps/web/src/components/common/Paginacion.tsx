@@ -11,9 +11,10 @@
  * Accesible: `<nav aria-label="Paginación">`, botones con `aria-label` en español, la página
  * activa lleva `aria-current="page"` y los controles se deshabilitan mientras `cargando`.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Check, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CLASES_SALIDA_POPOVER, useSalidaModal } from '../../lib/use-salida-modal';
 import {
   clampPagina,
   rangoPaginas,
@@ -63,8 +64,15 @@ function SelectorFilasPorPagina({
   deshabilitado: boolean;
   onCambiarTamano: (tamano: number) => void;
 }) {
+  // Desplegable controlado: todo cierre pasa por `cerrar` (salida animada) antes de desmontarse.
+  const [abierto, setAbierto] = useState(false);
+  const { saliendo, cerrar } = useSalidaModal(() => setAbierto(false));
+
   return (
-    <DropdownMenu.Root>
+    <DropdownMenu.Root
+      open={abierto}
+      onOpenChange={(siguiente) => (siguiente ? setAbierto(true) : cerrar())}
+    >
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
@@ -81,14 +89,17 @@ function SelectorFilasPorPagina({
         <DropdownMenu.Content
           align="end"
           sideOffset={6}
-          className="z-50 min-w-36 rounded-2xl border border-border bg-card p-1.5 shadow-xl animate-in fade-in zoom-in-95 duration-150"
+          data-saliendo={saliendo || undefined}
+          className={`z-50 min-w-36 rounded-2xl border border-border bg-card p-1.5 shadow-xl animate-in fade-in zoom-in-95 duration-150 ${CLASES_SALIDA_POPOVER}`}
         >
           <DropdownMenu.Label className="px-2 py-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
             Filas por página
           </DropdownMenu.Label>
           <DropdownMenu.RadioGroup
             value={String(tamano)}
-            onValueChange={(valor) => onCambiarTamano(Number(valor))}
+            onValueChange={(valor) => {
+              if (!saliendo) onCambiarTamano(Number(valor));
+            }}
           >
             {TAMANOS_PAGINA.map((opcion) => (
               <DropdownMenu.RadioItem

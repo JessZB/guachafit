@@ -14,7 +14,7 @@ import { VerificacionEnlace } from '../../components/auth/onboarding/Verificacio
 import { AlertaErrorRegistro } from '../../components/auth/onboarding/AlertaErrorRegistro';
 import { ExitoRegistro } from '../../components/auth/onboarding/ExitoRegistro';
 import { CampoWhatsapp } from '../../components/common/CampoWhatsapp';
-import { ArrowLeft, UserPlus } from 'lucide-react';
+import { ArrowLeft, Loader2, UserPlus } from 'lucide-react';
 
 /**
  * WU-E (RF-011 RN-06/RN-07): autorregistro público mediante deep link del coach.
@@ -268,9 +268,11 @@ export function OnboardingPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full min-h-11 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:brightness-110 active:scale-98 transition-all cursor-pointer disabled:opacity-50 mt-2"
+                aria-busy={isLoading ? true : undefined}
+                className="w-full min-h-11 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
               >
-                {isLoading ? 'Creando tu cuenta...' : 'Crear mi cuenta'}
+                {isLoading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                <span>{isLoading ? 'Creando tu cuenta...' : 'Crear mi cuenta'}</span>
               </button>
             </form>
           )}

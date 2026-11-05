@@ -8,7 +8,7 @@ import {
   normalizarCorreoRecuperacion,
   validarCorreoRecuperacion,
 } from '../../lib/recuperacion-password';
-import { ArrowLeft, Dumbbell, Mail, MailCheck } from 'lucide-react';
+import { ArrowLeft, Dumbbell, Loader2, Mail, MailCheck } from 'lucide-react';
 
 /**
  * Pantalla pública "¿Olvidaste tu contraseña?".
@@ -123,9 +123,11 @@ export function RecuperarPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full min-h-11 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:brightness-110 active:scale-98 transition-all cursor-pointer disabled:opacity-50"
+                aria-busy={isLoading ? true : undefined}
+                className="w-full min-h-11 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
-                {isLoading ? 'Enviando...' : 'Enviarme el enlace'}
+                {isLoading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                <span>{isLoading ? 'Enviando...' : 'Enviarme el enlace'}</span>
               </button>
             </form>
           )}

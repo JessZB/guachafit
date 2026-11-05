@@ -12,8 +12,10 @@
  *
  * §6: disparador y opciones táctiles `min-h-11`, foco visible, tokens semánticos y texto ≥ 11px.
  */
+import { useState } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { BellRing, MoreVertical, UserRound } from 'lucide-react';
+import { CLASES_SALIDA_POPOVER, useSalidaModal } from '../../../lib/use-salida-modal';
 
 export interface MenuAccionesFilaCarteraProps {
   nombre: string;
@@ -34,8 +36,19 @@ export function MenuAccionesFilaCartera({
   puedeVerFicha,
   onVerFicha,
 }: MenuAccionesFilaCarteraProps) {
+  // Menú controlado: todo cierre pasa por `cerrar` (salida animada) antes de desmontarse.
+  const [abierto, setAbierto] = useState(false);
+  const { saliendo, cerrar } = useSalidaModal(() => setAbierto(false));
+  // La acción se ejecuta al instante, pero no se repite si el menú ya está saliendo.
+  const elegir = (accion: () => void) => () => {
+    if (!saliendo) accion();
+  };
+
   return (
-    <DropdownMenu.Root>
+    <DropdownMenu.Root
+      open={abierto}
+      onOpenChange={(siguiente) => (siguiente ? setAbierto(true) : cerrar())}
+    >
       <DropdownMenu.Trigger asChild>
         <button type="button" aria-label={`Más acciones para ${nombre}`} className={claseTrigger}>
           <MoreVertical className="h-4 w-4" aria-hidden="true" />
@@ -45,10 +58,11 @@ export function MenuAccionesFilaCartera({
         <DropdownMenu.Content
           align="end"
           sideOffset={6}
-          className="z-50 min-w-52 rounded-xl border border-border bg-card p-1.5 shadow-md animate-in fade-in zoom-in-95 duration-150 motion-reduce:animate-none"
+          data-saliendo={saliendo || undefined}
+          className={`z-50 min-w-52 rounded-xl border border-border bg-card p-1.5 shadow-md animate-in fade-in zoom-in-95 duration-150 motion-reduce:animate-none ${CLASES_SALIDA_POPOVER}`}
         >
           {onRecordatorio && (
-            <DropdownMenu.Item className={claseOpcion} onSelect={() => onRecordatorio()}>
+            <DropdownMenu.Item className={claseOpcion} onSelect={elegir(onRecordatorio)}>
               <BellRing className="h-4 w-4 text-primary" aria-hidden="true" />
               <span>Enviar recordatorio</span>
             </DropdownMenu.Item>
@@ -56,7 +70,7 @@ export function MenuAccionesFilaCartera({
           <DropdownMenu.Item
             className={claseOpcion}
             disabled={!puedeVerFicha}
-            onSelect={() => onVerFicha()}
+            onSelect={elegir(onVerFicha)}
           >
             <UserRound className="h-4 w-4" aria-hidden="true" />
             <span>Ver ficha</span>

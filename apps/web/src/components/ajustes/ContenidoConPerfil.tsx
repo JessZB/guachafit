@@ -3,6 +3,7 @@ import { RefreshCw } from 'lucide-react';
 import type { MiPerfilDTO } from '@guachafit/shared';
 import { resolverUrlApi } from '../../lib/api-client';
 import { AvisoDatosOffline } from '../common/AvisoDatosOffline';
+import { BotonTactil } from '../ui/BotonTactil';
 import { CargaConEsqueleto } from '../ui/CargaConEsqueleto';
 import { EsqueletoFormulario } from '../ui/esqueletos';
 
@@ -42,14 +43,10 @@ export function ContenidoConPerfil({
         <p role="alert" className="text-sm font-semibold text-destructive">
           {error ?? 'No pudimos cargar tu perfil.'}
         </p>
-        <button
-          type="button"
-          onClick={onReintentar}
-          className="min-h-11 px-4 rounded-xl bg-secondary text-foreground text-sm font-bold hover:bg-secondary/80 flex items-center gap-2"
-        >
+        <BotonTactil variante="secundaria" onClick={onReintentar}>
           <RefreshCw className="h-4 w-4" />
           Reintentar
-        </button>
+        </BotonTactil>
       </div>
     );
   }

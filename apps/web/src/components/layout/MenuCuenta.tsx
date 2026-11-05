@@ -7,9 +7,11 @@
  * §6: disparador y opciones táctiles `min-h-11`, foco visible, tokens semánticos, texto ≥ 11px
  * y pesos ≤ 700.
  */
+import { useState } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Link } from 'react-router-dom';
 import { useTransicionVista } from '../../lib/use-transicion-vista';
+import { CLASES_SALIDA_POPOVER, useSalidaModal } from '../../lib/use-salida-modal';
 import { Check, Laptop, LogOut, Moon, Settings, Sun, UserRound } from 'lucide-react';
 import { etiquetaRol } from '../../lib/etiquetas-dominio';
 
@@ -47,9 +49,15 @@ export function MenuCuenta({
 }: MenuCuentaProps) {
   const etiqueta = etiquetaRol(rol);
   const viewTransition = useTransicionVista();
+  // Menú controlado: todo cierre pasa por `cerrar` (salida animada) y solo entonces se desmonta.
+  const [abierto, setAbierto] = useState(false);
+  const { saliendo, cerrar } = useSalidaModal(() => setAbierto(false));
 
   return (
-    <DropdownMenu.Root>
+    <DropdownMenu.Root
+      open={abierto}
+      onOpenChange={(siguiente) => (siguiente ? setAbierto(true) : cerrar())}
+    >
       <DropdownMenu.Trigger asChild>
         <button type="button" aria-label="Cuenta" title="Cuenta" className={claseDisparador}>
           <UserRound className="h-4 w-4" aria-hidden="true" />
@@ -59,7 +67,8 @@ export function MenuCuenta({
         <DropdownMenu.Content
           align="end"
           sideOffset={6}
-          className="z-50 min-w-52 rounded-2xl border border-border bg-card p-1.5 shadow-xl animate-in fade-in zoom-in-95 duration-150 motion-reduce:animate-none"
+          data-saliendo={saliendo || undefined}
+          className={`z-50 min-w-52 rounded-2xl border border-border bg-card p-1.5 shadow-xl animate-in fade-in zoom-in-95 duration-150 motion-reduce:animate-none ${CLASES_SALIDA_POPOVER}`}
         >
           <div className="px-2.5 py-2 space-y-0.5">
             <p className="text-xs font-semibold text-foreground break-all">{email}</p>
@@ -82,7 +91,9 @@ export function MenuCuenta({
           </DropdownMenu.Label>
           <DropdownMenu.RadioGroup
             value={tema}
-            onValueChange={(valor) => onCambiarTema(valor as TemaInterfaz)}
+            onValueChange={(valor) => {
+              if (!saliendo) onCambiarTema(valor as TemaInterfaz);
+            }}
           >
             {OPCIONES_TEMA.map(({ valor, etiqueta: etiquetaTema, Icono }) => (
               <DropdownMenu.RadioItem key={valor} value={valor} className={`${claseOpcion} justify-between text-foreground`}>
@@ -101,7 +112,9 @@ export function MenuCuenta({
 
           <DropdownMenu.Item
             className={`${claseOpcion} text-destructive data-[highlighted]:bg-destructive/10`}
-            onSelect={() => onCerrarSesion()}
+            onSelect={() => {
+              if (!saliendo) onCerrarSesion();
+            }}
           >
             <LogOut className="h-4 w-4" aria-hidden="true" />
             <span>Cerrar sesión</span>

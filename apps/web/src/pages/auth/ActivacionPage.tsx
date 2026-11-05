@@ -10,7 +10,7 @@ import {
 } from '../../lib/onboarding-links';
 import { MENSAJE_ERROR_GENERICO } from '../../lib/mensajes-error';
 import { obtenerTimezoneDispositivo } from '../../lib/date-format';
-import { Dumbbell, ArrowLeft, CheckCircle2, KeyRound, Lock, ShieldAlert } from 'lucide-react';
+import { Dumbbell, ArrowLeft, CheckCircle2, KeyRound, Loader2, Lock, ShieldAlert } from 'lucide-react';
 
 /**
  * WU-E (RF-011 RN-05): pantalla pública de activación de credenciales.
@@ -229,9 +229,11 @@ export function ActivacionPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full min-h-11 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:brightness-110 active:scale-98 transition-all cursor-pointer disabled:opacity-50"
+                aria-busy={isLoading ? true : undefined}
+                className="w-full min-h-11 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
-                {isLoading ? 'Creando contraseña...' : 'Crear contraseña'}
+                {isLoading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                <span>{isLoading ? 'Creando contraseña...' : 'Crear contraseña'}</span>
               </button>
             </form>
           )}

@@ -10,6 +10,11 @@
  *   `use-dialogo-accesible.ts`).
  * - El elemento de fondo (`fixed inset-0`) debe llevar `data-saliendo={saliendo || undefined}` y la
  *   clase `CLASES_SALIDA_MODAL`.
+ * - Menús y desplegables (Radix DropdownMenu controlado, formularios plegables): el elemento raíz
+ *   del popover lleva `data-saliendo={saliendo || undefined}` y `CLASES_SALIDA_POPOVER`. Todo
+ *   cierre del propio componente (Escape, clic fuera, elegir opción, el botón que lo abre) pasa
+ *   por `cerrar`; la acción de la opción se ejecuta al instante (sin esperar la salida) y se
+ *   ignora si `saliendo` ya es `true`.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { movimientoReducido } from './movimiento-reducido';
@@ -23,6 +28,15 @@ export const DURACION_SALIDA_MODAL_MS = 150;
  */
 export const CLASES_SALIDA_MODAL =
   'data-[saliendo=true]:animate-out data-[saliendo=true]:fade-out data-[saliendo=true]:fill-mode-forwards data-[saliendo=true]:duration-150 data-[saliendo=true]:pointer-events-none';
+
+/**
+ * Salida de un popover (menú, desplegable): fundido con un leve encogimiento, algo más corto que
+ * `DURACION_SALIDA_MODAL_MS` para que termine antes del cierre real. `data-[state=closed]:animate-none`
+ * evita que Radix (Presence) vea volver la animación de entrada en el render del cierre, cuando
+ * `data-saliendo` ya se apagó: sin ella el menú reaparecería un instante antes de desmontarse.
+ */
+export const CLASES_SALIDA_POPOVER =
+  'data-[saliendo=true]:animate-out data-[saliendo=true]:fade-out data-[saliendo=true]:zoom-out-95 data-[saliendo=true]:fill-mode-forwards data-[saliendo=true]:duration-100 data-[saliendo=true]:pointer-events-none data-[state=closed]:animate-none';
 
 export function useSalidaModal(onCerrar: () => void): { saliendo: boolean; cerrar: () => void } {
   const [saliendo, setSaliendo] = useState(false);

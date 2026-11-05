@@ -20,6 +20,7 @@ import type React from 'react';
 import { AlertCircle, FolderPlus, Plus, Search } from 'lucide-react';
 import type { EjercicioCatalogoDetalleDTO } from '@guachafit/shared';
 import { triggerHaptic } from '../../../lib/haptics';
+import { CLASES_SALIDA_POPOVER, useSalidaModal } from '../../../lib/use-salida-modal';
 
 export const GRUPOS_MUSCULARES = ['Todos', 'Pecho', 'Espalda', 'Piernas', 'Hombros', 'Brazos', 'Core'];
 
@@ -45,7 +46,11 @@ interface PanelCatalogoProps {
   creacion: EstadoCreacionEjercicio;
   onCambiarCreacionAbierta: (abierto: boolean) => void;
   onCambiarCreacion: (cambios: Partial<EstadoCreacionEjercicio>) => void;
-  onCrear: (e: React.FormEvent) => void;
+  /**
+   * Alta del ejercicio. Si devuelve una promesa, el padre decide cuándo cerrar el formulario (queda
+   * abierto si la creación falla); si es síncrona, el formulario sale con animación al enviar.
+   */
+  onCrear: (e: React.FormEvent) => void | Promise<unknown>;
   onAgregarEjercicio: (nombre: string, ejercicioId?: string) => void;
   /** Copy variants (defaults: Plantillas copy). */
   sectionTitle?: string;
@@ -86,6 +91,19 @@ export function PanelCatalogo({
   emptyCreateLabel = 'Crear ejercicio nuevo',
   addButtonAccessibleName,
 }: PanelCatalogoProps) {
+  // El formulario de creación rápida se pliega con salida animada: todo cierre pasa por `cerrar`.
+  const { saliendo, cerrar } = useSalidaModal(() => onCambiarCreacionAbierta(false));
+
+  const enviarCreacion = (e: React.FormEvent) => {
+    if (saliendo) {
+      e.preventDefault();
+      return;
+    }
+    const resultado = onCrear(e);
+    // Con un alta asíncrona no se cierra aquí: si falla, el formulario debe seguir abierto.
+    if (!(resultado instanceof Promise)) cerrar();
+  };
+
   return (
     <div className="p-4 rounded-2xl bg-secondary/30 border border-border/80 space-y-3">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -97,7 +115,7 @@ export function PanelCatalogo({
         {puedeCrear && (
           <button
             type="button"
-            onClick={() => onCambiarCreacionAbierta(!creacion.abierto)}
+            onClick={() => (creacion.abierto ? cerrar() : onCambiarCreacionAbierta(true))}
             aria-expanded={creacion.abierto}
             className="min-h-11 text-xs font-bold text-primary hover:underline cursor-pointer flex items-center gap-1 self-start sm:self-auto"
           >
@@ -109,8 +127,9 @@ export function PanelCatalogo({
 
       {creacion.abierto && puedeCrear && (
         <form
-          onSubmit={onCrear}
-          className="p-3 rounded-xl bg-card border border-primary/30 space-y-3 animate-in zoom-in-95 duration-150"
+          onSubmit={enviarCreacion}
+          data-saliendo={saliendo || undefined}
+          className={`p-3 rounded-xl bg-card border border-primary/30 space-y-3 animate-in zoom-in-95 duration-150 ${CLASES_SALIDA_POPOVER}`}
         >
           <span className="text-[11px] font-bold text-primary uppercase tracking-wide block">
             {createFormTitle}
@@ -159,7 +178,7 @@ export function PanelCatalogo({
           <div className="flex justify-end gap-2">
             <button
               type="button"
-              onClick={() => onCambiarCreacionAbierta(false)}
+              onClick={cerrar}
               className="min-h-11 px-3 py-1 rounded-lg bg-secondary text-muted-foreground text-xs cursor-pointer"
             >
               Cancelar

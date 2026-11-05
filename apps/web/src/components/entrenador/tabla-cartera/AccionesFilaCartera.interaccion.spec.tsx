@@ -16,7 +16,7 @@
  */
 import type { ComponentType } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { EstadoCuota, type FilaCarteraDTO, type PestanaCarteraDTO } from '@guachafit/shared';
 import { AccionesFilaCartera } from './AccionesFilaCartera';
 
@@ -172,7 +172,10 @@ describe('AccionesFilaCartera · Contrato E (COB-19, COB-20, D3)', () => {
     fireEvent.click(itemRecordatorio);
     expect(onRecordatorio).toHaveBeenCalledTimes(1);
 
-    // Radix cierra el menú tras el clic; reabrimos con foco en el disparador y ArrowDown
+    // Radix cierra el menú tras el clic (salida animada 150 ms); esperamos a que se desmonte antes de reabrir
+    await waitFor(() => {
+      expect(screen.queryByRole('menu')).toBeNull();
+    });
     botonMas.focus();
     fireEvent.keyDown(botonMas, { key: 'ArrowDown', code: 'ArrowDown' });
     const menuReabierto = await screen.findByRole('menu');

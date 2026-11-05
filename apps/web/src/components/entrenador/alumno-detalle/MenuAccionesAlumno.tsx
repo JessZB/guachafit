@@ -10,9 +10,11 @@
  *
  * §6: trigger y opciones táctiles `min-h-11`, foco visible, tokens semánticos y texto ≥ 11px.
  */
+import { useState } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { DollarSign, MoreHorizontal, PauseCircle, PlayCircle, Trash2 } from 'lucide-react';
 import { EstadoAlumno } from '@guachafit/shared';
+import { CLASES_SALIDA_POPOVER, useSalidaModal } from '../../../lib/use-salida-modal';
 
 interface MenuAccionesAlumnoProps {
   estado: EstadoAlumno;
@@ -33,9 +35,19 @@ export function MenuAccionesAlumno({
 }: MenuAccionesAlumnoProps) {
   const esActivo = estado === EstadoAlumno.ACTIVO;
   const puedeSuspender = estado !== EstadoAlumno.SUSPENDIDO_PAGO;
+  // Menú controlado: todo cierre pasa por `cerrar` (salida animada) antes de desmontarse.
+  const [abierto, setAbierto] = useState(false);
+  const { saliendo, cerrar } = useSalidaModal(() => setAbierto(false));
+  // La acción se ejecuta al instante, pero no se repite si el menú ya está saliendo.
+  const elegir = (accion: () => void) => () => {
+    if (!saliendo) accion();
+  };
 
   return (
-    <DropdownMenu.Root>
+    <DropdownMenu.Root
+      open={abierto}
+      onOpenChange={(siguiente) => (siguiente ? setAbierto(true) : cerrar())}
+    >
       <DropdownMenu.Trigger asChild>
         <button type="button" className={claseTrigger}>
           <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
@@ -46,12 +58,13 @@ export function MenuAccionesAlumno({
         <DropdownMenu.Content
           align="end"
           sideOffset={6}
-          className="z-50 min-w-52 rounded-xl border border-border bg-card p-1.5 shadow-md animate-in fade-in zoom-in-95 duration-150 motion-reduce:animate-none"
+          data-saliendo={saliendo || undefined}
+          className={`z-50 min-w-52 rounded-xl border border-border bg-card p-1.5 shadow-md animate-in fade-in zoom-in-95 duration-150 motion-reduce:animate-none ${CLASES_SALIDA_POPOVER}`}
         >
           {esActivo ? (
             <DropdownMenu.Item
               className={`${claseOpcion} text-foreground data-[highlighted]:bg-secondary`}
-              onSelect={() => onCambiarEstado(EstadoAlumno.INACTIVO_PAUSADO)}
+              onSelect={elegir(() => onCambiarEstado(EstadoAlumno.INACTIVO_PAUSADO))}
               title="Pausar alumno temporalmente por viaje o lesión"
             >
               <PauseCircle className="h-4 w-4 text-warning" aria-hidden="true" />
@@ -60,7 +73,7 @@ export function MenuAccionesAlumno({
           ) : (
             <DropdownMenu.Item
               className={`${claseOpcion} text-foreground data-[highlighted]:bg-secondary`}
-              onSelect={() => onCambiarEstado(EstadoAlumno.ACTIVO)}
+              onSelect={elegir(() => onCambiarEstado(EstadoAlumno.ACTIVO))}
               title="Reactivar alumno"
             >
               <PlayCircle className="h-4 w-4 text-success" aria-hidden="true" />
@@ -71,7 +84,7 @@ export function MenuAccionesAlumno({
           {puedeSuspender && (
             <DropdownMenu.Item
               className={`${claseOpcion} text-foreground data-[highlighted]:bg-secondary`}
-              onSelect={() => onCambiarEstado(EstadoAlumno.SUSPENDIDO_PAGO)}
+              onSelect={elegir(() => onCambiarEstado(EstadoAlumno.SUSPENDIDO_PAGO))}
               title="Suspender la planificación por mensualidad pendiente"
             >
               <DollarSign className="h-4 w-4 text-warning" aria-hidden="true" />
@@ -83,7 +96,7 @@ export function MenuAccionesAlumno({
 
           <DropdownMenu.Item
             className={`${claseOpcion} text-destructive data-[highlighted]:bg-destructive/10`}
-            onSelect={() => onArchivar()}
+            onSelect={elegir(onArchivar)}
             title="Archivar alumno (sus datos se conservan)"
           >
             <Trash2 className="h-4 w-4" aria-hidden="true" />

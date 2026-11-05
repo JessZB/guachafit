@@ -1,3 +1,4 @@
+import { BotonTactil } from '../ui/BotonTactil';
 import {
   mensajeConfirmacionCorreo,
   type EstadoErrorConfirmacionCorreo,
@@ -57,13 +58,9 @@ export function EstadoConfirmacionCorreo({
       </p>
       <div className="flex flex-wrap gap-2">
         {onReintentar && (
-          <button
-            type="button"
-            onClick={onReintentar}
-            className="min-h-11 px-4 rounded-xl bg-secondary text-foreground text-sm font-bold hover:bg-secondary/80 cursor-pointer"
-          >
+          <BotonTactil variante="secundaria" onClick={onReintentar}>
             Reintentar
-          </button>
+          </BotonTactil>
         )}
         {irAlLogin}
       </div>
