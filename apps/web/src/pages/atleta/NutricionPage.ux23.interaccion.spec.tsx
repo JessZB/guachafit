@@ -5,7 +5,7 @@
  */
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { createElement } from 'react';
 import { NutricionPage } from './NutricionPage';
@@ -211,6 +211,7 @@ describe('NutricionPage · UX-23 interacción', () => {
 
       const { container } = renderPagina();
       await screen.findByText('Mi Comida de Hoy');
+      await waitFor(() => expect(container.querySelector('#nutricion-agua')).not.toBeNull());
 
       const inputAgua = container.querySelector('#nutricion-agua') as HTMLInputElement;
       const inputCalorias = container.querySelector('#nutricion-calorias') as HTMLInputElement;
@@ -279,6 +280,7 @@ describe('NutricionPage · UX-23 interacción', () => {
     it('vincula el contador de caracteres de notas mediante aria-describedby y lo actualiza al escribir', async () => {
       const { container } = renderPagina();
       await screen.findByText('Mi Comida de Hoy');
+      await waitFor(() => expect(container.querySelector('#nutricion-notas')).not.toBeNull());
 
       const inputNotas = container.querySelector('#nutricion-notas') as HTMLTextAreaElement;
       expect(inputNotas).toBeDefined();

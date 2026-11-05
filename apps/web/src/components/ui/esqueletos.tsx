@@ -100,6 +100,33 @@ export function EsqueletoFormulario({ campos = 4 }: { campos?: number }) {
   );
 }
 
+export function EsqueletoPagina() {
+  return (
+    <div data-esqueleto="pagina" aria-hidden="true" className="space-y-6">
+      <div className="space-y-3">
+        <div data-esqueleto-bloque>
+          <Skeleton className="h-7 w-1/3" />
+        </div>
+        <div data-esqueleto-bloque>
+          <Skeleton className="h-4 w-1/2" />
+        </div>
+      </div>
+      <div className="space-y-4">
+        {rango(3).map((indice) => (
+          <div
+            key={indice}
+            data-esqueleto-bloque
+            className={`min-h-[104px] p-5 space-y-3 ${TARJETA}`}
+          >
+            <Skeleton className="h-4 w-2/5" />
+            <Skeleton className="h-3 w-3/5" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function EsqueletoCabeceraPestanas() {
   return (
     <div data-esqueleto="cabecera-pestanas" aria-hidden="true" className="space-y-6">

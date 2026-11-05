@@ -4,12 +4,13 @@
  * Extraído de `pages/atleta/NutricionPage.tsx` (SL2, fase B): carga/error/vacío + objetivos +
  * recursos. La grilla vive en `GrillaObjetivosMetas` y la tolerancia en `ToleranciaDelDia`.
  *
- * Átomos de la consolidación (48 §M6): `ui/EstadoCarga` y `ui/EstadoError` en lugar de las
+ * Átomos de la consolidación (48 §M6): `ui/CargaConEsqueleto` (antes `ui/EstadoCarga`) y `ui/EstadoError` en lugar de las
  * copias locales (el error suma `role="alert"`, como el gemelo del entrenador).
  * §6: reintento `min-h-11` vía `BotonTactil`, textos ≥11px, estados honestos.
  */
 import { AlertTriangle, ExternalLink, Target } from 'lucide-react';
-import { EstadoCarga } from '../../ui/EstadoCarga';
+import { CargaConEsqueleto } from '../../ui/CargaConEsqueleto';
+import { EsqueletoTarjetasKpi } from '../../ui/esqueletos';
 import { EstadoError } from '../../ui/EstadoError';
 import { metasConfiguradas, type ObjetivoMeta } from '../../../lib/nutricion-metas';
 import type { MetasNutricionalesDetalleDTO } from '@guachafit/shared';
@@ -40,7 +41,11 @@ export function SeccionMetasNutricionales({
         <h2 className="font-bold text-sm text-foreground">Tus objetivos nutricionales</h2>
       </div>
 
-      {isCargandoMetas && <EstadoCarga texto="Cargando tus metas…" />}
+      {isCargandoMetas && (
+        <CargaConEsqueleto texto="Cargando tus metas…" claseContenedor="min-h-[300px]">
+          <EsqueletoTarjetasKpi cantidad={3} />
+        </CargaConEsqueleto>
+      )}
 
       {metasError && (
         <EstadoError mensaje={metasError} textoReintentar="Reintentar" onReintentar={onReintentarMetas} />

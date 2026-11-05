@@ -5,7 +5,8 @@ import { Header } from './Header';
 import { BottomNav } from './BottomNav';
 import { Sidebar } from './Sidebar';
 import { ActualizacionDisponible } from '../common/ActualizacionDisponible';
-import { EstadoCarga } from '../ui/EstadoCarga';
+import { CargaConEsqueleto } from '../ui/CargaConEsqueleto';
+import { EsqueletoPagina } from '../ui/esqueletos';
 import { AvisoZonaDiscrepante } from './AvisoZonaDiscrepante';
 import { EntradaVista } from './EntradaVista';
 import { useAuth } from '../../context/auth-context';
@@ -49,7 +50,9 @@ export function AppLayout() {
           <EntradaVista>
             <Suspense
               fallback={
-                <EstadoCarga texto="Cargando contenido…" claseContenedor="min-h-[50vh] w-full" />
+                <CargaConEsqueleto texto="Cargando contenido…" claseContenedor="min-h-[50vh] w-full">
+                  <EsqueletoPagina />
+                </CargaConEsqueleto>
               }
             >
               <Outlet />
