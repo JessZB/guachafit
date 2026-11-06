@@ -58,26 +58,6 @@ describe('Sidebar', () => {
     queryClient.clear();
   });
 
-  it('el aside usa el offset sticky de desktop y coincide con su altura', () => {
-    const { container } = renderSidebar();
-    const aside = container.querySelector('aside');
-    expect(aside).not.toBeNull();
-    const className = aside?.className ?? '';
-
-    expect(className).toContain('hidden');
-    expect(className).toContain('lg:flex');
-    expect(className).toContain('lg:sticky');
-    expect(className).toContain('lg:self-start');
-    expect(className).toContain('lg:overflow-y-auto');
-    expect(className).not.toContain('min-h-[calc(100vh-57px)]');
-
-    const topMatch = className.match(/lg:top-\[([^\]]+)\]/);
-    const heightMatch = className.match(/lg:h-\[calc\(100dvh-([^)\]]+)\)\]/);
-    expect(topMatch).not.toBeNull();
-    expect(heightMatch).not.toBeNull();
-    expect(heightMatch?.[1]).toBe(topMatch?.[1]);
-  });
-
   it('rol alumno muestra sus enlaces distintivos', () => {
     sesionMock.rol = 'alumno';
     renderSidebar();

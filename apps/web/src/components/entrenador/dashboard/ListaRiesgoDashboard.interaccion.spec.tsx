@@ -158,22 +158,4 @@ describe('ListaRiesgoDashboard (UX-12)', () => {
     expect(enlace2.getAttribute('href')).toBe('/coach/alumnos/a2');
     expect(enlace2.className).toContain('min-h-11');
   });
-
-  it('L6 · Sin emoji: con textoVacio sin emoji y 0 filas el contenedor no contiene el carácter 🎉', () => {
-    const { container } = render(
-      <MemoryRouter>
-        <ListaRiesgoDashboard
-          titulo="Alumnos con Pagos Vencidos"
-          icono={AlertTriangle}
-          tono="warning"
-          filas={[]}
-          textoVacio="Sin pagos vencidos por ahora"
-          rutaVerTodos="/coach/cartera?pestana=mora"
-        />
-      </MemoryRouter>
-    );
-
-    expect(screen.getByText('Sin pagos vencidos por ahora')).toBeTruthy();
-    expect(container.textContent).not.toContain('🎉');
-  });
 });

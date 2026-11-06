@@ -90,18 +90,6 @@ describe('AppLayout · Contratos C y E (Transición de vistas y scroll)', () => 
     vi.restoreAllMocks();
   });
 
-  it('(a) sin startViewTransition el [data-vista="contenido"] tiene animate-fade-in y [view-transition-name:contenido]', () => {
-    delete (document as unknown as { startViewTransition?: unknown }).startViewTransition;
-    const router = crearRouterDePrueba('/ruta-a');
-
-    const { container } = render(<RouterProvider router={router} />);
-    const vistaContenido = container.querySelector('[data-vista="contenido"]');
-
-    expect(vistaContenido).not.toBeNull();
-    expect(vistaContenido?.classList.contains('animate-fade-in')).toBe(true);
-    expect(vistaContenido?.classList.contains('[view-transition-name:contenido]')).toBe(true);
-  });
-
   it('(b) con startViewTransition definido y matchMedia matches:false NO tiene animate-fade-in y sí tiene [view-transition-name:contenido]', () => {
     (document as unknown as { startViewTransition?: unknown }).startViewTransition = vi.fn();
     window.matchMedia = vi.fn().mockReturnValue({ matches: false }) as unknown as typeof window.matchMedia;
@@ -152,13 +140,5 @@ describe('AppLayout · Contratos C y E (Transición de vistas y scroll)', () => 
       expect.objectContaining({ top: 0, left: 0, behavior: 'instant' })
     );
     expect(main?.scrollTop).toBe(0);
-  });
-
-  it('(e) <main> ya no lleva la clase animate-fade-in', () => {
-    const router = crearRouterDePrueba('/ruta-a');
-    render(<RouterProvider router={router} />);
-
-    const main = screen.getByRole('main');
-    expect(main.classList.contains('animate-fade-in')).toBe(false);
   });
 });

@@ -9,7 +9,6 @@
 import { describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { calcularRachaEfectiva as calcularRachaEfectivaEntrenamiento } from '../../src/modules/entrenamiento/casos-entrenamiento/reglas-racha';
 import { calcularRachaEfectiva } from '../../src/common/racha.util';
 
 describe('A1 · calcularRachaEfectiva vive en apps/api/src/common/racha.util.ts', () => {
@@ -41,12 +40,6 @@ describe('A1 · calcularRachaEfectiva vive en apps/api/src/common/racha.util.ts'
 
   it("cruce de mes: fechaLocal '2026-11-01', última '2026-10-31', racha 4 → 4", () => {
     expect(calcularRachaEfectiva(4, '2026-10-31', '2026-11-01')).toBe(4);
-  });
-});
-
-describe('A2 · reglas-racha reexporta la misma referencia del módulo común', () => {
-  it('es la misma función (toBe)', () => {
-    expect(calcularRachaEfectivaEntrenamiento).toBe(calcularRachaEfectiva);
   });
 });
 

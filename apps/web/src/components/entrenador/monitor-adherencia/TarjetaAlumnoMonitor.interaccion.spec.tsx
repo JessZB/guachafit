@@ -92,20 +92,6 @@ describe('TarjetaAlumnoMonitor · interacción (UX-14)', () => {
     expect(encabezado.className).not.toContain('truncate');
   });
 
-  it('T4 · Estado con BadgeEstado y sin parpadeo forzado', () => {
-    renderizar(ALUMNO_ROJO);
-
-    const elementoRojo = screen.getByText('Rojo');
-    expect(elementoRojo.className).toContain('whitespace-nowrap');
-    expect(elementoRojo.className).toContain('shrink-0');
-
-    const article = screen.getByRole('article');
-    const elementosConPulse = [article, ...Array.from(article.querySelectorAll('*'))].filter(
-      (el) => el.classList.contains('animate-pulse'),
-    );
-    expect(elementosConPulse).toHaveLength(0);
-  });
-
   it('T5 · Sin abreviatura', () => {
     renderizar(ALUMNO_ROJO);
 

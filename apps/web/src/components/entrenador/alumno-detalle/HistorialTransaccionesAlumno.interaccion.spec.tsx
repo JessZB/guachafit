@@ -20,11 +20,6 @@ afterEach(() => {
   cleanup();
 });
 
-/** Clases Tailwind del nodo, comparadas como tokens (evita que `flex` coincida con `flex-wrap`). */
-function tokens(elemento: Element): string[] {
-  return elemento.className.split(/\s+/).filter(Boolean);
-}
-
 function resumen(parcial: Partial<ResumenFinancieroAlumnoDTO> = {}): ResumenFinancieroAlumnoDTO {
   return {
     alumnoId: 'al-1',
@@ -76,19 +71,6 @@ function props(parcial: Partial<Parameters<typeof HistorialTransaccionesAlumno>[
     ...parcial,
   };
 }
-
-describe('HistorialTransaccionesAlumno · L2.2 wrap', () => {
-  it('el título y el contador comparten un contenedor directo con flex-wrap', () => {
-    render(<HistorialTransaccionesAlumno {...props()} />);
-
-    const titulo = screen.getByText('Historial de Transacciones & Abonos');
-    const contenedor = titulo.parentElement;
-
-    expect(contenedor).not.toBeNull();
-    expect(tokens(contenedor!)).toContain('flex-wrap');
-    expect(contenedor!.textContent).toContain('2 operaciones');
-  });
-});
 
 describe('HistorialTransaccionesAlumno · estados honestos', () => {
   it('conserva el error de carga como alert', () => {

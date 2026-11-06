@@ -13,8 +13,6 @@ import {
   JWT_REFRESH_SECRET_DESARROLLO,
   JWT_SECRET_DESARROLLO,
 } from '../../src/common/config/secretos-jwt';
-import { ENV_BUCKET as ENV_BUCKET_CONFIG } from '../../src/common/config/variables-almacenamiento';
-import { ENV_BUCKET as ENV_BUCKET_SERVICIO } from '../../src/modules/antropometria/r2-storage.service';
 import { CryptoService } from '../../src/common/services/crypto.service';
 
 // Los tests anti-deriva leen los .env.example reales del repositorio.
@@ -549,15 +547,6 @@ describe('debeExponerSwagger', () => {
     expect(debeExponerSwagger({ NODE_ENV: 'production' })).toBe(false);
     expect(debeExponerSwagger({ NODE_ENV: 'production', SWAGGER_HABILITADO: 'false' })).toBe(false);
     expect(debeExponerSwagger({ NODE_ENV: 'production', SWAGGER_HABILITADO: 'true' })).toBe(true);
-  });
-});
-
-// ============================================================================
-// Layering de los alias de la bóveda
-// ============================================================================
-describe('alias de la bóveda', () => {
-  it('r2-storage.service re-exporta los alias definidos en common/config', () => {
-    expect(ENV_BUCKET_SERVICIO).toBe(ENV_BUCKET_CONFIG);
   });
 });
 

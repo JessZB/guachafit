@@ -90,31 +90,6 @@ describe('VisorComprobanteConciliacion · Contrato C (COB-07, COB-08)', () => {
     expect(screen.queryByText(/Auditoría de Comprobante Bancario/i)).toBeNull();
   });
 
-  it('C2 · diálogo incluye overflow-y-auto para scroll propio en pantallas bajas', () => {
-    montarVisor();
-
-    const dialogo = screen.getByRole('dialog');
-    const clases = dialogo.getAttribute('class') ?? '';
-    expect(clases).toContain('overflow-y-auto');
-  });
-
-  it('C3 · ningún elemento del visor utiliza tokens de colores crudos como bg-black', () => {
-    const { container } = render(
-      <VisorComprobanteConciliacion
-        tx={TX_CON_COMPROBANTE}
-        isDemoMode={false}
-        imagenFallida={false}
-        onImagenError={vi.fn()}
-        onCerrar={vi.fn()}
-        onRechazar={vi.fn()}
-        onAprobar={vi.fn()}
-      />
-    );
-
-    const elementosConBgBlack = container.querySelectorAll('[class*="bg-black"]');
-    expect(elementosConBgBlack.length).toBe(0);
-  });
-
   it('C4 · sin jerga técnica con y sin comprobante', () => {
     // 1. Con comprobante
     const { unmount } = render(

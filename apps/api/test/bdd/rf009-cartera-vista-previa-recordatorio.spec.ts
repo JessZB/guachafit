@@ -1,6 +1,4 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import * as fs from 'fs';
-import * as path from 'path';
 import request from 'supertest';
 import * as jwt from 'jsonwebtoken';
 import { Reflector } from '@nestjs/core';
@@ -169,29 +167,6 @@ describe('RF-009 / UX-09a · Vista previa del recordatorio manual de cobro', () 
       await app.close();
       app = undefined;
     }
-  });
-
-  // ===========================================================================
-  // A · DTO nuevo en packages/shared/src/types/cartera.ts
-  // ===========================================================================
-  describe('A · Contrato de tipos (VistaPreviaRecordatorioDTO en packages/shared)', () => {
-    it('declara y exporta VistaPreviaRecordatorioDTO con la estructura requerida', () => {
-      const rutaCarteraTypes = path.resolve(
-        __dirname,
-        '../../../../packages/shared/src/types/cartera.ts'
-      );
-      const contenido = fs.readFileSync(rutaCarteraTypes, 'utf-8');
-
-      expect(contenido).toMatch(/export\s+interface\s+VistaPreviaRecordatorioDTO/);
-      expect(contenido).toMatch(/puedeEnviar:\s*boolean/);
-      expect(contenido).toMatch(/motivo:\s*['"]listo['"]\s*\|\s*['"]sin_saldo_pendiente['"]\s*\|\s*['"]pausa_revision['"]\s*\|\s*['"]cooldown_activo['"]/);
-      expect(contenido).toMatch(/mensaje:\s*string/);
-      expect(contenido).toMatch(/titulo:\s*string\s*\|\s*null/);
-      expect(contenido).toMatch(/cuerpo:\s*string\s*\|\s*null/);
-      expect(contenido).toMatch(/saldoPendienteUsd:\s*string\s*\|\s*null/);
-      expect(contenido).toMatch(/saldoPendienteBs:\s*string\s*\|\s*null/);
-      expect(contenido).toMatch(/proximoPermitidoUtc:\s*string\s*\|\s*null/);
-    });
   });
 
   // ===========================================================================

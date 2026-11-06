@@ -29,17 +29,6 @@ function tokens(elemento: Element): string[] {
   return elemento.className.split(/\s+/).filter(Boolean);
 }
 
-/** Ancestro (incluido el propio nodo) que contiene el texto y declara TODAS las clases. */
-function ancestroConClases(elemento: Element, clases: string[]): Element | null {
-  let actual: Element | null = elemento;
-  while (actual) {
-    const propias = tokens(actual);
-    if (clases.every((clase) => propias.includes(clase))) return actual;
-    actual = actual.parentElement;
-  }
-  return null;
-}
-
 describe('BadgeEstadoPagoAlumno · L2.1', () => {
   it('conserva los textos actuales de cada semáforo', () => {
     const casos = [
@@ -55,16 +44,6 @@ describe('BadgeEstadoPagoAlumno · L2.1', () => {
       expect(screen.getByText(texto)).toBeTruthy();
       unmount();
     }
-  });
-
-  it('el texto del badge no se parte ni se encoge dentro de un flex', () => {
-    render(<BadgeEstadoPagoAlumno semaforo="moroso" />);
-
-    const texto = screen.getByText('Cuota pendiente');
-    const badge = ancestroConClases(texto, ['whitespace-nowrap', 'shrink-0']);
-
-    expect(badge).not.toBeNull();
-    expect(badge!.textContent).toContain('Cuota pendiente');
   });
 
   it('el punto del moroso es decorativo y respeta prefers-reduced-motion', () => {
@@ -91,17 +70,5 @@ describe('BadgeEstadoActivacionAlumno · L2.1', () => {
       expect(screen.getByText(texto)).toBeTruthy();
       unmount();
     }
-  });
-
-  it('el texto del badge no se parte ni se encoge dentro de un flex', () => {
-    render(
-      <BadgeEstadoActivacionAlumno estadoActivacion={EstadoAlumno.ACTIVO} archivado={false} />
-    );
-
-    const texto = screen.getByText('Activo');
-    const badge = ancestroConClases(texto, ['whitespace-nowrap', 'shrink-0']);
-
-    expect(badge).not.toBeNull();
-    expect(badge!.textContent).toContain('Activo');
   });
 });

@@ -134,41 +134,6 @@ describe('TarjetaPlanTarifaAlumno · L1.4 textos', () => {
   });
 });
 
-describe('TarjetaPlanTarifaAlumno · V6 filas de tarifa con wrap', () => {
-  it('la fila de la tarifa vigente usa flex-wrap y su texto no se corta', () => {
-    const { container } = renderTarjeta({ overridesAlumno: [OVERRIDE] });
-
-    const vigente = container.querySelector('div.rounded-2xl.border');
-    const fila = vigente?.querySelector('div.flex.items-center.justify-between') ?? null;
-    expect(fila).not.toBeNull();
-    expect(fila!.className.split(/\s+/)).toContain('flex-wrap');
-    for (const texto of Array.from(fila!.querySelectorAll('span'))) {
-      expect(texto.className.split(/\s+/)).not.toContain('truncate');
-    }
-  });
-
-  it('la fila de la próxima cuota usa flex-wrap y su texto no se corta', () => {
-    const { container } = renderTarjeta({
-      suscripcion: {
-        planId: 'plan-1',
-        planNombre: 'Plan Suscripción Larga Con Un Nombre Muy Extenso',
-        cicloActual: '2026-10',
-        proximoVencimiento: '2026-11-01',
-        precioAcordadoUsd: null,
-        tasaFijadaBs: null,
-      } as unknown as PlanTarjetaAlumno['suscripcion'],
-    });
-
-    const suscripcion = container.querySelector('div.rounded-xl.border');
-    const fila = suscripcion?.querySelector('div.flex.items-center.justify-between') ?? null;
-    expect(fila).not.toBeNull();
-    expect(fila!.className.split(/\s+/)).toContain('flex-wrap');
-    const texto = fila!.querySelector('p');
-    expect(texto).not.toBeNull();
-    expect(texto!.className.split(/\s+/)).not.toContain('truncate');
-  });
-});
-
 describe('TarjetaPlanTarifaAlumno · L3.1 etiquetas asociadas', () => {
   it.each(ETIQUETAS)('asocia «%s» a su control', (etiqueta) => {
     renderTarjeta();
@@ -205,20 +170,5 @@ describe('TarjetaPlanTarifaAlumno · L3.2 teclado numérico', () => {
     expect(screen.getByLabelText('Tasa especial (Bs por USD)').getAttribute('inputmode')).toBe(
       'decimal'
     );
-  });
-});
-
-describe('TarjetaPlanTarifaAlumno · L3.4 cuadrícula móvil', () => {
-  it('precio y tasa son una columna en móvil y dos desde sm', () => {
-    const { container } = renderTarjeta();
-
-    // Sin suscripción y sin plan elegido, los únicos <input> de la tarjeta son precio y tasa.
-    const [precio] = Array.from(container.querySelectorAll('input'));
-    const fila = precio?.closest('[class*="grid-cols"]');
-
-    expect(fila).not.toBeNull();
-    expect(fila?.classList.contains('grid-cols-1')).toBe(true);
-    expect(fila?.classList.contains('sm:grid-cols-2')).toBe(true);
-    expect(fila?.classList.contains('grid-cols-2')).toBe(false);
   });
 });

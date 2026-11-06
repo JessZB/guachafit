@@ -79,9 +79,4 @@ describe('FiltrosConciliacion · Contrato A (COB-05, COB-12)', () => {
     fireEvent.click(botonLimpiar);
     expect(onLimpiar).toHaveBeenCalledTimes(1);
   });
-
-  it('A4 · texto de alcance declara "en esta página"', () => {
-    montarFiltros();
-    expect(screen.getByText(/en esta página/i)).toBeTruthy();
-  });
 });

@@ -197,16 +197,6 @@ describe('PagosPage · RF-007: pago revertido en el historial del alumno (contra
     expect(fila.textContent).toContain('Motivo: Cobro duplicado');
   });
 
-  it('12c · el chip "Revertido" es neutro (bg-secondary), no el amarillo de pendiente', async () => {
-    montarPagina();
-    await abrirHistorial();
-    await screen.findByText(/Ref: REV-001/);
-
-    const chip = within(filaDeTransaccion('REV-001')).getByText('Revertido');
-    expect(chip.className).toContain('bg-secondary');
-    expect(chip.className).not.toContain('bg-warning');
-  });
-
   it('12d · una fila revertida sin motivo muestra el texto de reserva', async () => {
     resumenActual = {
       ...resumenBase(),

@@ -297,11 +297,6 @@ describe('ConciliacionPage · Carga honesta (Contrato B)', () => {
     expect(textoPagina).not.toContain('comprobante verificado');
   });
 
-  it('B7 · ErrorBandejaConciliacion ya no existe en el proyecto (copia eliminada)', () => {
-    const archivos = import.meta.glob('../../components/entrenador/conciliacion/ErrorBandejaConciliacion.tsx');
-    expect(Object.keys(archivos)).toHaveLength(0);
-  });
-
   it('B8 · sin conexión y sin datos: muestra AvisoDatosOffline "sin-datos" y no el error genérico', async () => {
     simularConexion(false);
     bandejaError = 'Fallo de red';

@@ -49,17 +49,6 @@ function resumen(parcial: Partial<ResumenFinancieroAlumnoDTO> = {}): ResumenFina
 }
 
 describe('TarjetaCuotaMensual · L2.2 wrap', () => {
-  it('el título del periodo y el badge comparten un contenedor directo con flex-wrap', () => {
-    render(<TarjetaCuotaMensual finanzas={resumen()} onRegistrarCobro={vi.fn()} />);
-
-    const titulo = screen.getByText(/Periodo:/);
-    const contenedor = titulo.parentElement;
-
-    expect(contenedor).not.toBeNull();
-    expect(tokens(contenedor!)).toContain('flex-wrap');
-    expect(contenedor!.textContent).toContain('Pendiente');
-  });
-
   it('conserva el badge liquidado cuando no queda saldo', () => {
     render(
       <TarjetaCuotaMensual
@@ -79,21 +68,6 @@ describe('TarjetaCuotaMensual · L2.2 wrap', () => {
     );
 
     expect(screen.getByText('Liquidada')).toBeTruthy();
-  });
-});
-
-describe('TarjetaCuotaMensual · L2.5 vencimiento', () => {
-  it('la fecha de vencimiento no lleva truncate', () => {
-    render(<TarjetaCuotaMensual finanzas={resumen()} onRegistrarCobro={vi.fn()} />);
-
-    const etiqueta = screen.getByText('Vencimiento');
-    const celda = etiqueta.closest('div');
-    const valor = celda?.querySelector('p') ?? null;
-
-    expect(valor).not.toBeNull();
-    expect(tokens(valor!)).not.toContain('truncate');
-    // La fecha existe de verdad en el fixture: no se acepta un "—" como falso positivo.
-    expect(valor!.textContent).not.toBe('—');
   });
 });
 

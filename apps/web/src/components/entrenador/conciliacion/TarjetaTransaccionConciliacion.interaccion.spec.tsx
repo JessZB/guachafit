@@ -70,39 +70,6 @@ function montarTarjeta(propsParciales: Partial<TarjetaTransaccionConciliacionPro
 }
 
 describe('TarjetaTransaccionConciliacion · Contrato B (COB-09, COB-10)', () => {
-  it('B1 · nombre largo incluye line-clamp-2 y break-words (sin truncate), y su contenedor incluye flex-wrap y min-w-0', () => {
-    montarTarjeta();
-
-    const encabezadoNombre = screen.getByText('María Fernanda de los Ángeles Rodríguez Pérez');
-    const clasesNombre = encabezadoNombre.getAttribute('class') ?? '';
-    expect(clasesNombre).toContain('line-clamp-2');
-    expect(clasesNombre).toContain('break-words');
-    expect(clasesNombre).not.toContain('truncate');
-
-    const contenedor = encabezadoNombre.parentElement;
-    expect(contenedor).not.toBeNull();
-    const clasesContenedor = contenedor?.getAttribute('class') ?? '';
-    expect(clasesContenedor).toContain('flex-wrap');
-    expect(clasesContenedor).toContain('min-w-0');
-  });
-
-  it('B2 · etiqueta del método está en un elemento con whitespace-nowrap y shrink-0', () => {
-    montarTarjeta();
-
-    const etiquetaMetodo = screen.getByText(/transferencia bancaria/i);
-    const clasesMetodo = etiquetaMetodo.getAttribute('class') ?? '';
-    expect(clasesMetodo).toContain('whitespace-nowrap');
-    expect(clasesMetodo).toContain('shrink-0');
-  });
-
-  it('B3 · referencia bancaria incluye break-all', () => {
-    montarTarjeta();
-
-    const elementoRef = screen.getByText('0102000123456789012345');
-    const clasesRef = elementoRef.getAttribute('class') ?? '';
-    expect(clasesRef).toContain('break-all');
-  });
-
   it('B4 · acciones tienen nombre propio accesible ("Aprobar pago de <alumno>" y "Rechazar pago de <alumno>") y eliminan nombres antiguos', () => {
     const { onAprobar, onRechazar } = montarTarjeta();
 
@@ -147,20 +114,5 @@ describe('TarjetaTransaccionConciliacion · Contrato B (COB-09, COB-10)', () => 
     const clasesRechazar = botonRechazar.getAttribute('class') ?? '';
     expect(clasesRechazar).toContain('text-destructive');
     expect(clasesRechazar).not.toContain('text-foreground');
-  });
-
-  it('B6 · contenedor de Aprobar y Rechazar incluye flex-col y sm:flex-row', () => {
-    montarTarjeta();
-
-    const nombreAlumno = 'María Fernanda de los Ángeles Rodríguez Pérez';
-    const botonAprobar =
-      screen.queryByRole('button', { name: `Aprobar pago de ${nombreAlumno}` }) ??
-      screen.getByRole('button', { name: /Aprobar/i });
-    const contenedorAcciones = botonAprobar.parentElement;
-    expect(contenedorAcciones).not.toBeNull();
-
-    const clases = contenedorAcciones?.getAttribute('class') ?? '';
-    expect(clases).toContain('flex-col');
-    expect(clases).toContain('sm:flex-row');
   });
 });

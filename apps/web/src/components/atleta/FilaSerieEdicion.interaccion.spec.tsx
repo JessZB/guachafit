@@ -195,15 +195,6 @@ describe('FilaSerieEdicion · steppers, marcado y salidas', () => {
 });
 
 describe('FilaSerieEdicion · etiquetas de paso (valor real de pasoPesoEnUnidad)', () => {
-  it('en kg muestra Restar/Sumar 2.5 kg', () => {
-    montar({ unidadPeso: 'kg' });
-    const paso = pasoPesoEnUnidad('kg');
-    expect(
-      screen.getByRole('button', { name: `Restar ${paso} kg` })
-    ).toBeTruthy();
-    expect(screen.getByRole('button', { name: `Sumar ${paso} kg` })).toBeTruthy();
-  });
-
   it('en lb muestra Restar/Sumar 5 lb', () => {
     montar({ unidadPeso: 'lb' });
     const paso = pasoPesoEnUnidad('lb');

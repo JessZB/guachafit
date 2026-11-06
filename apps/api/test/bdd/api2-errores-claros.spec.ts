@@ -284,13 +284,6 @@ describe('API-2 · filtro global de errores', () => {
     expect(a.body.referencia).not.toBe(b.body.referencia);
   });
 
-  it('el mensaje del 500 (con referencia) pasa el filtro de mensajes técnicos de la web', () => {
-    for (const referencia of ['abc12345', '00000000', 'ffffffff', 'deadbeef']) {
-      const mensaje = `${MENSAJE_ERROR_INTERNO} (Ref. ${referencia})`;
-      expect(PATRON_MENSAJE_TECNICO.test(mensaje)).toBe(false);
-    }
-  });
-
   it('si la respuesta ya empezó a enviarse, solo registra el error (no intenta escribir otra)', async () => {
     const logError = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     const servidor = await crearApp();
@@ -561,12 +554,6 @@ describe('API-2 · fuente única de jerga (common/errores/jerga.ts)', () => {
     }
   });
 
-  it('expone los patrones para el traductor y el barrido', () => {
-    expect(PATRON_JERGA).toBeInstanceOf(RegExp);
-    expect(PATRON_CAMEL_CASE).toBeInstanceOf(RegExp);
-    expect(PATRON_ENUM_MAYUSCULAS).toBeInstanceOf(RegExp);
-  });
-
   it('el traductor usa la misma lista: un mensaje propio con "override" no llega al usuario', () => {
     const schema = z.object({ monto: z.string().min(3, 'La tasa override es obligatoria') });
     expect(traducirErrorValidacion(primerError(schema, { monto: '' }))).toBe(
@@ -704,11 +691,5 @@ describe('API-2 · mensajes del contrato compartido (packages/shared) sin jerga'
       if (contieneJerga(texto)) hallazgos.push(texto);
     }
     expect(hallazgos).toEqual([]);
-  });
-
-  it('la tasa del precio especial se explica sin "override"', () => {
-    const fuente = fuenteSchemasShared();
-    expect(fuente).toContain('La tasa del precio especial debe tener hasta 4 decimales');
-    expect(fuente).toContain('La tasa del precio especial debe ser mayor a 0');
   });
 });

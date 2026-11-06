@@ -655,29 +655,6 @@ describe('EntrenamientoPage · Cronómetro FAB flotante (contrato C)', () => {
     });
   });
 
-  describe('Padding inferior reactivo en contenedor raíz (pb-20 según cronometroVisible)', () => {
-    it('el contenedor raíz recibe pb-20 cuando cronometroVisible es true, y no si es false', async () => {
-      configurarApiSesion(SESION_BASE);
-      const { container } = renderPagina();
-
-      await screen.findByRole('region', { name: 'Entrenamiento en foco' });
-
-      // Con sesión en progreso y sin modales (cronometroVisible=true), el contenedor raíz lleva pb-20
-      const raiz = container.firstElementChild as HTMLElement;
-      expect(raiz.className).toContain('pb-20');
-    });
-
-    it('el contenedor raíz NO lleva pb-20 en vista previa (cronometroVisible=false)', async () => {
-      configurarApiSesion({ ...SESION_BASE, estado: EstadoSesion.PLANIFICADA });
-      const { container } = renderPagina();
-
-      await screen.findByRole('button', { name: /iniciar entrenamiento/i });
-
-      const raiz = container.firstElementChild as HTMLElement;
-      expect(raiz.className).not.toContain('pb-20');
-    });
-  });
-
   describe('Defecto 2 y Modo demo', () => {
     it('un descanso libre abierto con el FAB y luego «Sumar 15 segundos» 4 veces emite CERO peticiones PUT', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });

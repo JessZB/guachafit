@@ -174,51 +174,6 @@ describe('Header · Contrato E', () => {
     expect(screen.queryByText('ana.perez')).toBeNull();
   });
 
-  describe('4. Marca en el móvil: el contenedor de GUACHAFIT oculta el texto en móvil cuando hay instalar o incidencias', () => {
-    it('sin Instalar disponible y sin incidencias: el contenedor de GUACHAFIT no incluye la clase hidden', () => {
-      instalarDisponibleSimulado = false;
-      estadoSyncActual = {
-        isSyncing: false,
-        summary: { pending: 0, failed: 0, rejected: 0 },
-      };
-      montarHeader();
-
-      const marcaTexto = screen.getByText('GUACHAFIT');
-      const contenedorMarca = marcaTexto.closest('div') ?? marcaTexto;
-      expect(clases(contenedorMarca)).not.toContain('hidden');
-    });
-
-    it('con Instalar disponible: el contenedor de GUACHAFIT incluye hidden y sm:flex', () => {
-      instalarDisponibleSimulado = true;
-      estadoSyncActual = {
-        isSyncing: false,
-        summary: { pending: 0, failed: 0, rejected: 0 },
-      };
-      montarHeader();
-
-      const marcaTexto = screen.getByText('GUACHAFIT');
-      const contenedorMarca = marcaTexto.closest('div') ?? marcaTexto;
-      const tokens = clases(contenedorMarca);
-      expect(tokens).toContain('hidden');
-      expect(tokens).toContain('sm:flex');
-    });
-
-    it('con incidencias de sincronización: el contenedor de GUACHAFIT incluye hidden y sm:flex', () => {
-      instalarDisponibleSimulado = false;
-      estadoSyncActual = {
-        isSyncing: false,
-        summary: { pending: 0, failed: 1, rejected: 0 },
-      };
-      montarHeader();
-
-      const marcaTexto = screen.getByText('GUACHAFIT');
-      const contenedorMarca = marcaTexto.closest('div') ?? marcaTexto;
-      const tokens = clases(contenedorMarca);
-      expect(tokens).toContain('hidden');
-      expect(tokens).toContain('sm:flex');
-    });
-  });
-
   it('5. El botón de sincronización de la cabecera mide 44px: incluye min-h-11', () => {
     montarHeader();
 

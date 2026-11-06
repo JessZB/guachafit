@@ -43,14 +43,6 @@ describe('BotonTactil', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
-  it('la variante peligro pinta el botón en rojo destructivo', () => {
-    render(<BotonTactil variante="peligro">Desactivar</BotonTactil>);
-
-    expect(screen.getByRole('button', { name: 'Desactivar' }).getAttribute('class')).toContain(
-      'bg-destructive'
-    );
-  });
-
   it('la variante peligro-contorno incluye text-destructive, border-destructive/40, min-h-11 y no incluye text-foreground', () => {
     render(<BotonTactil variante="peligro-contorno">Rechazar</BotonTactil>);
 

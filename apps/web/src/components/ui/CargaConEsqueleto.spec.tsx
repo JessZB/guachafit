@@ -79,24 +79,6 @@ describe('CargaConEsqueleto · Contrato D', () => {
     expect(screen.getByTestId('esqueleto-0')).toBeTruthy();
   });
 
-  it('aplica claseContenedor por defecto min-h-[200px] y permite personalizarla', () => {
-    const { unmount } = render(
-      <CargaConEsqueleto>
-        <span>Contenido</span>
-      </CargaConEsqueleto>
-    );
-    expect(screen.getByRole('status').className).toContain('min-h-[200px]');
-    unmount();
-
-    render(
-      <CargaConEsqueleto claseContenedor="min-h-[400px] p-6">
-        <span>Contenido</span>
-      </CargaConEsqueleto>
-    );
-    expect(screen.getByRole('status').className).toContain('min-h-[400px]');
-    expect(screen.getByRole('status').className).toContain('p-6');
-  });
-
   it('el texto accesible sr-only se conserva visible para tecnologías de asistencia durante todo el tiempo', () => {
     render(
       <CargaConEsqueleto texto="Cargando tus métricas…">

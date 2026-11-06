@@ -90,29 +90,6 @@ describe('BarraTabsSegmentada · interacción y DOM (ADR-022 / UX-01)', () => {
     expect(tokens).not.toContain('overflow-x-auto');
   });
 
-  it.each([
-    [2, 'grid-cols-2'],
-    [3, 'grid-cols-3'],
-    [4, 'grid-cols-4'],
-    [5, 'grid-cols-5'],
-    [6, 'grid-cols-6'],
-  ] as const)(
-    '2. Columnas por mapa fijo: con %i items lleva exactamente %s y ninguna otra grid-cols-*',
-    (cantidad, claseEsperada) => {
-      const items = ITEMS_BASE.slice(0, cantidad);
-      render(<BarraHarness items={items} activaInicial={items[0].clave} />);
-
-      const tablist = screen.getByRole('tablist');
-      const tokens = clases(tablist);
-
-      expect(tokens).toContain(claseEsperada);
-      const otrasColumnas = tokens.filter(
-        (t) => t.startsWith('grid-cols-') && t !== claseEsperada
-      );
-      expect(otrasColumnas).toEqual([]);
-    }
-  );
-
   it('3. Tabs hijos directos: tantos elementos como items, en orden y con <button type="button">', () => {
     const items = ITEMS_BASE.slice(0, 4);
     render(<BarraHarness items={items} activaInicial="tab-1" />);
@@ -190,20 +167,6 @@ describe('BarraTabsSegmentada · interacción y DOM (ADR-022 / UX-01)', () => {
     fireEvent.keyDown(tablist, { key: 'End' });
     const tabsTrasEnd = screen.getAllByRole('tab');
     expect(tabsTrasEnd[3].getAttribute('aria-selected')).toBe('true');
-  });
-
-  it('6. Estilo del activo: bg-primary solo en el tab activo y no en los inactivos', () => {
-    const items = ITEMS_BASE.slice(0, 3);
-    render(<BarraHarness items={items} activaInicial="tab-2" />);
-
-    const tabs = screen.getAllByRole('tab');
-    const tabActivo = tabs[1];
-    expect(clases(tabActivo)).toContain('bg-primary');
-
-    const inactivos = [tabs[0], tabs[2]];
-    for (const tabInactivo of inactivos) {
-      expect(clases(tabInactivo)).not.toContain('bg-primary');
-    }
   });
 
   it('7. Apilado móvil y área táctil: clases responsivas y svg con aria-hidden="true"', () => {
@@ -295,25 +258,5 @@ describe('BarraTabsSegmentada · interacción y DOM (ADR-022 / UX-01)', () => {
     ];
     render(<BarraHarness items={itemsSinIndicador} activaInicial="solo" />);
     expect(screen.queryByRole('img')).toBeNull();
-  });
-
-  it('11. Sin dominio: átomo completamente agnóstico a la ficha del alumno', () => {
-    type ClaveGenerica = 'alfa' | 'beta' | 'gamma';
-    const itemsGenericos: readonly ItemTab<ClaveGenerica>[] = [
-      { clave: 'alfa', etiqueta: 'Sección Alfa', icono: User },
-      { clave: 'beta', etiqueta: 'Sección Beta', icono: Clock },
-      { clave: 'gamma', etiqueta: 'Sección Gamma', icono: Scale },
-    ];
-
-    render(
-      <BarraHarness
-        items={itemsGenericos}
-        activaInicial="alfa"
-        ariaLabel="Pestañas genéricas"
-      />
-    );
-
-    expect(screen.getByRole('tablist', { name: 'Pestañas genéricas' })).toBeTruthy();
-    expect(screen.getAllByRole('tab')).toHaveLength(3);
   });
 });

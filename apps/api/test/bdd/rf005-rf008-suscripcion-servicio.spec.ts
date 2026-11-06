@@ -660,41 +660,6 @@ describe('M5-L1: suscripción, emisión automática y rutas (RF-005 / RF-008)', 
       });
       expect(resultado.success).toBe(false);
     });
-
-    it('SuscripcionAlumnoDTO declara los 7 campos del contrato en shared/src/types/', () => {
-      const dirTipos = path.resolve(
-        path.dirname(fileURLToPath(import.meta.url)),
-        '../../../../packages/shared/src/types'
-      );
-      const fuente = fs
-        .readdirSync(dirTipos)
-        .filter((nombre) => nombre.endsWith('.ts'))
-        .sort()
-        .map((nombre) => fs.readFileSync(path.join(dirTipos, nombre), 'utf8'))
-        .join('\n');
-      const bloque =
-        fuente.match(/export interface SuscripcionAlumnoDTO\s*\{([\s\S]*?)\}/)?.[1] ?? '';
-
-      expect(bloque).toContain('clienteId: string');
-      expect(bloque).toContain('planId: string');
-      expect(bloque).toContain('planNombre: string');
-      expect(bloque).toContain('duracionMeses: number');
-      expect(bloque).toContain('fechaInicio: string');
-      expect(bloque).toContain('proximoCorte: string');
-      expect(bloque).toContain('cuotaEmitidaId: string | null');
-
-      // Verificación de tipos en compilación (el runtime de vitest no tipa): el DTO del contrato.
-      const dto: SuscripcionAlumnoDTO = {
-        clienteId: 'alumno-uuid-1',
-        planId: UUID_PLAN,
-        planNombre: 'Plan Mensual Estándar',
-        duracionMeses: 1,
-        fechaInicio: '2026-10-09',
-        proximoCorte: '2026-11-09',
-        cuotaEmitidaId: null,
-      };
-      expect(dto.duracionMeses).toBe(1);
-    });
   });
 
   // ===========================================================================

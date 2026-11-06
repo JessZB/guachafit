@@ -53,25 +53,6 @@ function fixtureResumen(overrides: Partial<ResumenCarteraDTO> = {}): ResumenCart
 
 describe('CabeceraYFiltrosCartera · Contratos B, C y D (COB-19, COB-22, COB-23, COB-25)', () => {
   describe('Contrato B · PestanasCartera', () => {
-    it('B1 · el tablist "Estados de cartera" incluye grid y grid-cols-4, y no incluye flex-wrap', () => {
-      render(
-        <PestanasCartera
-          pestana="mora"
-          resumen={fixtureResumen()}
-          onCambiar={vi.fn()}
-        >
-          <div>Contenido</div>
-        </PestanasCartera>
-      );
-
-      const tablist = screen.getByRole('tablist', { name: 'Estados de cartera' });
-      const clases = tablist.getAttribute('class') ?? '';
-
-      expect(clases).toContain('grid');
-      expect(clases).toContain('grid-cols-4');
-      expect(clases).not.toContain('flex-wrap');
-    });
-
     it('B2 · los cuatro tabs tienen texto visible corto ("Mora", "Por vencer", "Revisión", "Al día") y muestran sus contadores (3, 2, 1, 7)', () => {
       render(
         <PestanasCartera

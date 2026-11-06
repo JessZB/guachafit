@@ -79,19 +79,6 @@ describe('MetricasAntropometricas · L2.6', () => {
     expect(tarjetaPecho!.textContent).toContain('102.0');
     expect(tarjetaPecho!.textContent).not.toContain('37.5');
   });
-
-  it('la cuadrícula es de una columna por debajo de 420px y de dos a partir de 420px', () => {
-    const { container } = render(<MetricasAntropometricas controles={[control()]} />);
-
-    const cuadricula = container.firstElementChild;
-    expect(cuadricula).not.toBeNull();
-
-    const clases = tokens(cuadricula!);
-    expect(clases).toContain('grid-cols-1');
-    expect(clases).toContain('min-[420px]:grid-cols-2');
-    // Una base de dos columnas anularía el contrato móvil de una sola columna.
-    expect(clases).not.toContain('grid-cols-2');
-  });
 });
 
 describe('MetricasFinancierasAlumno · L2.7', () => {

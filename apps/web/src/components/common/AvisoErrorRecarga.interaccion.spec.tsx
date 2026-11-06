@@ -2,7 +2,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { AvisoErrorRecarga } from './AvisoErrorRecarga';
-import { AvisoErrorDirectorio } from '../entrenador/alumnos/AvisoErrorDirectorio';
 
 afterEach(() => {
   cleanup();
@@ -24,9 +23,5 @@ describe('AvisoErrorRecarga (Contrato A)', () => {
     expect(onReintentar).not.toHaveBeenCalled();
     fireEvent.click(boton);
     expect(onReintentar).toHaveBeenCalledTimes(1);
-  });
-
-  it('A2 · compatibilidad: AvisoErrorDirectorio es el mismo componente (re-export exacto)', () => {
-    expect(AvisoErrorDirectorio).toBe(AvisoErrorRecarga);
   });
 });

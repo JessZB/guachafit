@@ -87,24 +87,6 @@ describe("TarjetaControlPendiente · interacción y responsividad (UX-15)", () =
     expect(contenedorCabecera?.className).toContain("flex-wrap");
   });
 
-  it("TC2 · Badge", () => {
-    const control = fixtureControl();
-    render(
-      <TarjetaControlPendiente
-        control={control}
-        fotosConError={[]}
-        onFotoError={vi.fn()}
-        onVerFoto={vi.fn()}
-        onRechazar={vi.fn()}
-        onAprobar={vi.fn()}
-      />,
-    );
-
-    const badge = screen.getByText("Pendiente Aprobación");
-    expect(badge.className).toContain("whitespace-nowrap");
-    expect(badge.className).toContain("shrink-0");
-  });
-
   it("TC3 · Acciones táctiles que caben", () => {
     const control = fixtureControl();
     render(

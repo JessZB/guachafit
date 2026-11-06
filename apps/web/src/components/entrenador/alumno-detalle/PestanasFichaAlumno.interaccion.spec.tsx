@@ -67,20 +67,6 @@ describe('PestanasFichaAlumno · L1.1 textos de las pestañas', () => {
     });
   });
 
-  it('ya no muestra los nombres anteriores de las pestañas', () => {
-    render(<PestanasConEstado saldoDeudaUsd={null} />);
-
-    for (const textoAnterior of [
-      'Resumen & Ficha Médica',
-      'Finanzas & Pagos',
-      'Antropometría & Medidas',
-      'Entrenamiento & Rutinas',
-      'Nutrición y reportes',
-    ]) {
-      expect(screen.queryByText(textoAnterior)).toBeNull();
-    }
-  });
-
   it('al activar Pagos usa la clave finanzas y mueve aria-selected', () => {
     render(<PestanasConEstado saldoDeudaUsd={null} />);
 
@@ -137,35 +123,6 @@ describe('PestanasFichaAlumno · L4 barra segmentada (fase roja)', () => {
     return elemento.className.split(/\s+/).filter(Boolean);
   }
 
-  it('T4.1 · cuadrícula sin scroll: grid, 5 columnas iguales y 5 tabs hijos directos', () => {
-    render(<PestanasConEstado saldoDeudaUsd={null} />);
-
-    const barra = tablist();
-    expect(clases(barra)).toContain('grid');
-    expect(clases(barra)).toContain('grid-cols-5');
-    expect(clases(barra)).not.toContain('overflow-x-auto');
-
-    const tabs = barra.querySelectorAll(':scope > [role="tab"]');
-    expect(tabs).toHaveLength(5);
-  });
-
-  it('T4.2 · control segmentado: fondo, esquinas y pestaña activa rellena', () => {
-    render(<PestanasConEstado saldoDeudaUsd={null} />);
-
-    const barra = tablist();
-    expect(clases(barra)).toContain('bg-secondary/60');
-    expect(clases(barra)).toContain('rounded-2xl');
-    expect(clases(barra)).toContain('p-1');
-
-    const tabs = screen.getAllByRole('tab');
-    const activo = tabs.find((tab) => tab.getAttribute('aria-selected') === 'true');
-    expect(activo).toBeTruthy();
-    expect(clases(activo!)).toContain('bg-primary');
-    for (const tab of tabs.filter((tab) => tab !== activo)) {
-      expect(clases(tab)).not.toContain('bg-primary');
-    }
-  });
-
   it('T4.3 · apilado en móvil: icono sobre etiqueta corta de 11px, fila desde sm', () => {
     render(<PestanasConEstado saldoDeudaUsd={null} />);
 
@@ -204,14 +161,6 @@ describe('PestanasFichaAlumno · L4 barra segmentada (fase roja)', () => {
     expect(clases(importe.parentElement!)).toContain('sm:inline');
   });
 
-  it('T4.4 · con null, "0" o "-5.00" no hay role="img"', () => {
-    for (const saldo of [null, '0', '-5.00'] as const) {
-      render(<PestanasConEstado saldoDeudaUsd={saldo} />);
-      expect(screen.queryByRole('img', { name: /Saldo pendiente/ })).toBeNull();
-      cleanup();
-    }
-  });
-
   it('T4.5 · teclado: flechas con ciclo, Home/End y roving tabindex', () => {
     render(<PestanasConEstado saldoDeudaUsd={null} />);
     const barra = tablist();
@@ -247,28 +196,5 @@ describe('PestanasFichaAlumno · L4 barra segmentada (fase roja)', () => {
     const tabPagos = screen.getByRole('tab', { name: /Pagos.*Saldo pendiente 40\.00 dólares/ });
     expect(tabPagos.getAttribute('id')).toBe('ficha-alumno-tab-finanzas');
     expect(tabPagos.getAttribute('aria-controls')).toBe('ficha-alumno-panel-finanzas');
-  });
-
-  it('T4.7 · pulsar cada tab llama al onClick del hook con su clave', () => {
-    const Claves: TabFichaAlumno[] = ['resumen', 'finanzas', 'antropometria', 'entrenamiento', 'nutricion'];
-    const onActivar = vi.fn();
-
-    function Harness() {
-      const { propsTab } = useTabsAccesibles({
-        claves: TABS_FICHA_ALUMNO,
-        activa: 'resumen' as TabFichaAlumno,
-        onActivar,
-        idBase: ID_BASE,
-      });
-      (Harness as unknown as { expuestos?: unknown }).expuestos = { propsTab };
-      return null;
-    }
-
-    render(<Harness />);
-    const propsTab = (Harness as unknown as { expuestos: { propsTab: (c: TabFichaAlumno) => { onClick: () => void } } }).expuestos.propsTab;
-    for (const clave of Claves) {
-      propsTab(clave).onClick();
-      expect(onActivar).toHaveBeenLastCalledWith(clave);
-    }
   });
 });

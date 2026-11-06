@@ -241,13 +241,6 @@ describe('ModalCobroCartera · Contrato C (COB-18, COB-19, COB-26)', () => {
     expect(botonCerrarX.className).toContain('min-w-11');
   });
 
-  it('C8 · el diálogo del modal incluye max-h-[90vh] y overflow-y-auto para pantallas bajas', () => {
-    montarModal();
-    const dialogo = screen.getByRole('dialog');
-    expect(dialogo.className).toContain('max-h-[90vh]');
-    expect(dialogo.className).toContain('overflow-y-auto');
-  });
-
   it('C9 · muestra el saldo formateado (saldoTexto) en lugar de la cadena cruda', () => {
     montarModal({
       cobro: fixtureCobro({

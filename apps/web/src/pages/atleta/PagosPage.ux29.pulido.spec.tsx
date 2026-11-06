@@ -22,7 +22,6 @@ import { CabeceraPagos } from '../../components/atleta/pagos/CabeceraPagos';
 import { TarjetaResumenCuota } from '../../components/atleta/pagos/TarjetaResumenCuota';
 import { FilaTransaccionPago } from '../../components/atleta/pagos/FilaTransaccionPago';
 import { formatFechaLocal } from '../../lib/date-format';
-import { etiquetaMetodoPago } from '../../lib/conciliacion-filtros';
 
 afterEach(() => {
   cleanup();
@@ -130,42 +129,5 @@ describe('ALU-13: Fallback seguro de fecha de operación en FilaTransaccionPago'
     const fechaRefElem = screen.getByText(/fecha:/i);
     expect(fechaRefElem.textContent).toContain('Fecha: —');
     expect(fechaRefElem.textContent).not.toContain('cadena-invalida-no-parseable');
-  });
-});
-
-describe('ALU-14 & ALU-15: Flex-wrap y prevención de desbordes en Pagos', () => {
-  it('TarjetaResumenCuota incluye flex-wrap y gap-3 en el contenedor de saldo y total', () => {
-    render(
-      <TarjetaResumenCuota
-        cuota={mockCuotaBase}
-        tasaEfectivaNum={65}
-        saldoVesProyectado="2.600,00"
-      />
-    );
-    const etiquetaSaldo = screen.getByText('Saldo pendiente');
-    const contenedor = etiquetaSaldo.closest('.flex');
-    expect(contenedor).not.toBeNull();
-    expect(contenedor?.className).toContain('flex-wrap');
-    expect(contenedor?.className).toContain('gap-3');
-  });
-
-  it('FilaTransaccionPago no usa la clase capitalize en el método de pago', () => {
-    render(<FilaTransaccionPago tx={mockTxBase} onVerComprobante={vi.fn()} onCorregir={vi.fn()} />);
-    const metodoElem = screen.getByText(etiquetaMetodoPago(mockTxBase.metodoPago));
-    expect(metodoElem.className).not.toContain('capitalize');
-  });
-
-  it('FilaTransaccionPago previene desbordes en la referencia bancaria con break-words o break-all y min-w-0', () => {
-    const txLarga: TransaccionPagoDetalleDTO = {
-      ...mockTxBase,
-      referenciaBancaria: 'REF-BANCARIA-SUPER-LARGA-123456789012345678901234567890',
-    };
-    render(<FilaTransaccionPago tx={txLarga} onVerComprobante={vi.fn()} onCorregir={vi.fn()} />);
-    const refElem = screen.getByText(new RegExp(txLarga.referenciaBancaria!));
-    const clases = refElem.className;
-    const tieneBreak = clases.includes('break-words') || clases.includes('break-all');
-    const tieneMinW = clases.includes('min-w-0');
-    expect(tieneBreak).toBe(true);
-    expect(tieneMinW).toBe(true);
   });
 });

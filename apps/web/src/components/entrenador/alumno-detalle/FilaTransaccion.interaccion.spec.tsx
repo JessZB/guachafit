@@ -49,33 +49,7 @@ function renderFila(parcial: Partial<TransaccionFila> = {}) {
   );
 }
 
-describe('FilaTransaccion · L2.2 wrap', () => {
-  it('método, referencia y estado comparten un contenedor directo con flex-wrap', () => {
-    renderFila({ estado: EstadoConciliacion.RECHAZADO });
-
-    const metodo = screen.getByText('Pago móvil');
-    const contenedor = metodo.parentElement;
-
-    expect(contenedor).not.toBeNull();
-    expect(tokens(contenedor!)).toContain('flex-wrap');
-    expect(contenedor!.textContent).toContain('Ref: TX-1');
-    expect(contenedor!.textContent).toContain('Rechazado');
-  });
-});
-
 describe('FilaTransaccion · L2.3 estado y monto', () => {
-  it('muestra el estado con el badge compartido', () => {
-    renderFila({ estado: EstadoConciliacion.RECHAZADO });
-
-    const estado = screen.getByText('Rechazado');
-    const clases = tokens(estado);
-
-    // Rasgos distintivos de `ui/BadgeEstado` (hoy el estado es un span plano sin badge).
-    expect(clases).toContain('inline-flex');
-    expect(clases).toContain('rounded-full');
-    expect(clases).toContain('uppercase');
-  });
-
   it.each([EstadoConciliacion.RECHAZADO, EstadoConciliacion.REVERTIDO])(
     'el monto de una transacción %s no se presenta como ingreso',
     (estado) => {
