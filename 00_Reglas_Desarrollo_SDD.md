@@ -297,3 +297,27 @@ Cada encargo incluye: el objetivo y la decisión del dueño; los tests o contrat
 - **Sin Orca:** no hay `lanzar.sh` ni Runs. Los prompts siguen en `.external-agents/<NN>-<lote>-<tipo>.md` y los reportes en `.external-agents/reportes/`; el subagente recibe «Lee y ejecuta el prompt … y deja el reporte en la ruta que indica».
 - **Engram:** si las herramientas MCP `mem_*` no están disponibles, se usa la CLI (verificada el 2026-11-01): `engram search "<texto>"` y `engram save <título> <contenido> --type <tipo> --project guachafit`.
 - **Mismas prohibiciones** que en §7.1: ningún subagente lee `.env`, hace commit ni push; los escritores no tocan specs ni los testers producción.
+
+---
+
+## 🧪 9. Política de tests: solo los necesarios (desde 2026-11-06)
+
+> Decisión del dueño tras auditar 119 specs (1.008 tests): cerca de uno de cada cinco validaba estructura («¿se usa tal clase, tal import, tal componente?») y no comportamiento. Esta sección **prevalece** sobre cualquier ciclo de §2.2 o §7.3 que pida «tests de todo»: el ciclo por lote sigue igual, pero el prompt `tests` solo pide los que cumplan esta política.
+
+**Se escribe un test cuando protege**, y solo entonces:
+1. **Comportamiento observable:** entrada → salida, o una interacción con efecto visible o anunciado (clic, teclado, foco, error, carga honesta).
+2. **Un contrato de datos, seguridad o dinero:** cálculos, validaciones, permisos, aislamiento por tenant, restricciones de migraciones.
+3. **Un bug que ya ocurrió:** un test de regresión por bug (no tres), con el síntoma en el nombre o en un comentario.
+
+**No se escriben tests sobre:**
+- el **texto de un archivo fuente** (`?raw`, `import.meta.glob`, `readFileSync`, `node:fs`), imports, existencia de archivos o conteo de líneas;
+- **clases CSS/Tailwind puramente visuales** (`rounded-*`, `animate-*`, `bg-*`, `min-h-*` como única aserción);
+- **conteos de bloques**, atributos `data-*` creados solo para el test, o snapshots sin significado;
+- «**se usa** el componente/hook X»: lo que importa es lo que el usuario ve y puede hacer.
+
+**Reglas de apoyo:**
+- Un **hook o utilidad compartida** se prueba una vez. Cada componente que lo usa prueba su **cableado en un solo caso observable** (p. ej. el menú sigue montado 150 ms tras Escape); eso no es redundante.
+- Una **invariante que solo puede vigilarse leyendo un archivo** (viewport meta, un único bloque `prefers-reduced-motion: reduce`, una combinación de colores sin contraste) lleva **un único guardián**, con un comentario del bug o requisito que previene. Si es posible, se convierte en regla de lint.
+- Un requisito de **accesibilidad vigilado por clase** (área táctil de 44 px, `text-base` contra el zoom de iOS) es decisión del dueño: se mantiene un solo test por requisito, no uno por componente.
+- Un cambio **puramente visual** puede quedar **sin test**: se declara en el ADR/guía de pruebas manuales qué debe mirar el dueño.
+- **Antes de añadir** un test, comprueba que otro no ya cubre el mismo sujeto. Menos tests y mejores: cada uno debe poder fallar por una razón que le importe al usuario.

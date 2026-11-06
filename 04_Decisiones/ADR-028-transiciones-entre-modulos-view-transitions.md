@@ -124,3 +124,8 @@ Lote 623/623 y suite web completa **3.732/3.732**; typecheck y build en 0. Un sp
 
 ### 11.4. Evidencia
 Spec nuevo de comportamiento `AlumnoDetallePage.carga-paralela.interaccion.spec.tsx` (3 tests): sin cascada tras el perfil, el estado de carga dura hasta la última petición y un fallo aislado no bloquea la ficha; falla contra el código anterior y pasa con el actual. Ficha y componentes `alumno-detalle`: 31 archivos, 280 tests en verde; typecheck en 0. No se ejecutó la suite web completa ni revisión aparte (alcance acotado por el dueño).
+
+### 11.5. Corrección de la evidencia (2026-11-06)
+- La carga en paralelo subió `use-expediente-alumno.ts` de 386 a 421 líneas y rompió el tope de 400 que vigila `tamano-archivos.spec`. No se vio en su momento porque solo se ejecutaron los specs de la ficha, no la suite web completa: lo que §11.4 llamó «sin regresiones» era una verificación parcial.
+- Corregido extrayendo el bloque paralelo a `cargar-listados-expediente.ts` (154 líneas); el hook quedó en 338. Sin cambio de comportamiento. Verificación con suite web completa: **441 archivos, 3.594/3.594 tests**; typecheck y build en 0.
+- Lección: un cambio en código de producción se verifica con la suite completa del paquete antes de dar el lote por bueno, aunque se acote el número de tests nuevos.
