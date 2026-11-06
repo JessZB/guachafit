@@ -318,6 +318,6 @@ Cada encargo incluye: el objetivo y la decisión del dueño; los tests o contrat
 **Reglas de apoyo:**
 - Un **hook o utilidad compartida** se prueba una vez. Cada componente que lo usa prueba su **cableado en un solo caso observable** (p. ej. el menú sigue montado 150 ms tras Escape); eso no es redundante.
 - Una **invariante que solo puede vigilarse leyendo un archivo** (viewport meta, un único bloque `prefers-reduced-motion: reduce`, una combinación de colores sin contraste) lleva **un único guardián**, con un comentario del bug o requisito que previene. Si es posible, se convierte en regla de lint.
-- Un requisito de **accesibilidad vigilado por clase** (área táctil de 44 px, `text-base` contra el zoom de iOS) es decisión del dueño: se mantiene un solo test por requisito, no uno por componente.
+- Un requisito de **accesibilidad vigilado por clase** (área táctil de 44 px, `text-base` contra el zoom de iOS) se **mantiene** (decisión del dueño, 2026-11-06): cada componente que fija su propio tamaño lleva su test, porque el de otro componente no lo cubre. No se añaden tests de este tipo a componentes que heredan el tamaño de uno compartido ya probado.
 - Un cambio **puramente visual** puede quedar **sin test**: se declara en el ADR/guía de pruebas manuales qué debe mirar el dueño.
 - **Antes de añadir** un test, comprueba que otro no ya cubre el mismo sujeto. Menos tests y mejores: cada uno debe poder fallar por una razón que le importe al usuario.
